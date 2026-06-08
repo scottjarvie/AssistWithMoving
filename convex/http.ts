@@ -1,9 +1,16 @@
-import { verifyWebhook } from "@clerk/backend/webhooks";
 import { anyApi, httpRouter } from "convex/server";
 import type { FunctionReference } from "convex/server";
 
 import { httpAction } from "./_generated/server";
-import { normalizeClerkUser } from "./lib/clerk";
+import {
+  ClerkWebhookPayloadError,
+  normalizeClerkOrganization,
+  normalizeClerkOrganizationFromMembership,
+  normalizeClerkOrganizationMembership,
+  normalizeClerkPublicUserFromMembership,
+  normalizeClerkUser,
+  verifyClerkWebhookRequest,
+} from "./lib/clerk";
 
 const http = httpRouter();
 
@@ -33,6 +40,26 @@ const internalMutations = anyApi as unknown as {
       "mutation",
       "internal",
       { clerkUserId: string }
+    >;
+    upsertOrganizationFromWebhook: FunctionReference<
+      "mutation",
+      "internal",
+      ReturnType<typeof normalizeClerkOrganization>
+    >;
+    disableOrganizationFromWebhook: FunctionReference<
+      "mutation",
+      "internal",
+      { clerkOrganizationId: string }
+    >;
+    upsertOrganizationMembershipFromWebhook: FunctionReference<
+      "mutation",
+      "internal",
+      ReturnType<typeof normalizeClerkOrganizationMembership>
+    >;
+    disableOrganizationMembershipFromWebhook: FunctionReference<
+      "mutation",
+      "internal",
+      { clerkOrganizationMembershipId: string }
     >;
   };
 };
@@ -80,7 +107,7 @@ http.route({
 
     let event;
     try {
-      event = await verifyWebhook(request, { signingSecret });
+      event = await verifyClerkWebhookRequest(request, signingSecret);
     } catch {
       await ctx.runMutation(internalMutations.audit.record, {
         actorType: "system",
@@ -110,6 +137,91 @@ http.route({
       await ctx.runMutation(internalMutations.clerkUsers.disableFromWebhook, {
         clerkUserId: event.data.id,
       });
+
+      return Response.json({ ok: true, handled: event.type });
+    }
+
+    if (
+      event.type === "organization.created" ||
+      event.type === "organization.updated"
+    ) {
+      await ctx.runMutation(
+        internalMutations.clerkUsers.upsertOrganizationFromWebhook,
+        normalizeClerkOrganization(event.data)
+      );
+
+      return Response.json({ ok: true, handled: event.type });
+    }
+
+    if (event.type === "organization.deleted") {
+      if (!event.data.id) {
+        return new Response("Deleted organization payload is missing an id.", {
+          status: 400,
+        });
+      }
+
+      await ctx.runMutation(
+        internalMutations.clerkUsers.disableOrganizationFromWebhook,
+        {
+          clerkOrganizationId: event.data.id,
+        }
+      );
+
+      return Response.json({ ok: true, handled: event.type });
+    }
+
+    if (
+      event.type === "organizationMembership.created" ||
+      event.type === "organizationMembership.updated"
+    ) {
+      try {
+        const organization = normalizeClerkOrganizationFromMembership(event.data);
+        const publicUser = normalizeClerkPublicUserFromMembership(event.data);
+
+        if (organization) {
+          await ctx.runMutation(
+            internalMutations.clerkUsers.upsertOrganizationFromWebhook,
+            organization
+          );
+        }
+
+        if (publicUser) {
+          await ctx.runMutation(
+            internalMutations.clerkUsers.upsertFromWebhook,
+            publicUser
+          );
+        }
+
+        await ctx.runMutation(
+          internalMutations.clerkUsers.upsertOrganizationMembershipFromWebhook,
+          normalizeClerkOrganizationMembership(event.data)
+        );
+      } catch (error) {
+        if (error instanceof ClerkWebhookPayloadError) {
+          return new Response(error.message, { status: 400 });
+        }
+        throw error;
+      }
+
+      return Response.json({ ok: true, handled: event.type });
+    }
+
+    if (event.type === "organizationMembership.deleted") {
+      if (!event.data.id) {
+        return new Response(
+          "Deleted organization membership payload is missing an id.",
+          {
+            status: 400,
+          }
+        );
+      }
+
+      await ctx.runMutation(
+        internalMutations.clerkUsers.disableOrganizationMembershipFromWebhook,
+        {
+          clerkOrganizationMembershipId: event.data.id,
+        }
+      );
 
       return Response.json({ ok: true, handled: event.type });
     }

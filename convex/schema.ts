@@ -18,6 +18,11 @@ export const membershipStatus = v.union(
   v.literal("disabled")
 );
 
+export const clerkOrganizationStatus = v.union(
+  v.literal("active"),
+  v.literal("deleted")
+);
+
 export const moveRole = v.union(
   v.literal("owner"),
   v.literal("admin"),
@@ -516,6 +521,37 @@ export default defineSchema({
     .index("by_clerk_user_id", ["clerkUserId"])
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
+
+  clerkOrganizations: defineTable({
+    clerkOrganizationId: v.string(),
+    name: v.string(),
+    slug: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    status: clerkOrganizationStatus,
+    linkedHouseholdId: v.optional(v.id("households")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    sourceUpdatedAt: v.optional(v.number()),
+  })
+    .index("by_clerk_organization_id", ["clerkOrganizationId"])
+    .index("by_status", ["status"])
+    .index("by_linked_household", ["linkedHouseholdId"]),
+
+  clerkOrganizationMemberships: defineTable({
+    clerkOrganizationMembershipId: v.string(),
+    clerkOrganizationId: v.string(),
+    clerkUserId: v.string(),
+    userId: v.optional(v.id("users")),
+    rawRole: v.string(),
+    status: membershipStatus,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    sourceUpdatedAt: v.optional(v.number()),
+  })
+    .index("by_clerk_membership_id", ["clerkOrganizationMembershipId"])
+    .index("by_clerk_org_user", ["clerkOrganizationId", "clerkUserId"])
+    .index("by_org_status", ["clerkOrganizationId", "status"])
+    .index("by_user_status", ["userId", "status"]),
 
   accountExportJobs: defineTable({
     userId: v.id("users"),
