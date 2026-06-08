@@ -1,7 +1,21 @@
 import { v } from "convex/values";
+import {
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import type { Doc } from "./_generated/dataModel";
-import { mutation, type MutationCtx, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  type MutationCtx,
+  query,
+} from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
   documentationProfileTypeValidator,
@@ -16,6 +30,10 @@ import {
 } from "./lib/moveFields";
 import { redactPhotoForVisibility } from "./lib/photoVisibility";
 import { requireMovePermission } from "./lib/permissions";
+
+const allowedPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+const maxPhotoUploadBytes = 25 * 1024 * 1024;
+const uploadSessionTtlMs = 15 * 60 * 1000;
 
 const derivativeRefsValidator = v.object({
   thumb: v.optional(v.string()),
@@ -55,6 +73,82 @@ const photoUpdateArgs = {
   mimeType: v.optional(v.string()),
   sizeBytes: v.optional(v.number()),
 };
+
+const uploadSessionIdValidator = v.id("photoUploadSessions");
+
+function requireB2Config() {
+  const endpoint = process.env.B2_ENDPOINT;
+  const region = process.env.B2_REGION ?? "us-west-004";
+  const bucketName = process.env.B2_BUCKET_NAME;
+  const applicationKeyId = process.env.B2_APPLICATION_KEY_ID;
+  const applicationKey = process.env.B2_APPLICATION_KEY;
+
+  if (!endpoint || !bucketName || !applicationKeyId || !applicationKey) {
+    throw new Error("Backblaze B2 is not configured.");
+  }
+
+  return {
+    endpoint,
+    region,
+    bucketName,
+    applicationKeyId,
+    applicationKey,
+  };
+}
+
+function b2Client() {
+  const config = requireB2Config();
+
+  return new S3Client({
+    region: config.region,
+    endpoint: config.endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: config.applicationKeyId,
+      secretAccessKey: config.applicationKey,
+    },
+  });
+}
+
+function fileExtensionForMimeType(mimeType: string) {
+  switch (mimeType) {
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    default:
+      throw new Error("Unsupported image type.");
+  }
+}
+
+function assertUploadFileShape({
+  mimeType,
+  sizeBytes,
+}: {
+  mimeType: string;
+  sizeBytes: number;
+}) {
+  if (!allowedPhotoMimeTypes.includes(mimeType)) {
+    throw new Error("Unsupported image type.");
+  }
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxPhotoUploadBytes) {
+    throw new Error("Image must be under 25 MB.");
+  }
+}
+
+function uploadObjectKey({
+  moveId,
+  mimeType,
+}: {
+  moveId: string;
+  mimeType: string;
+}) {
+  return `moves/${moveId}/photos/${crypto.randomUUID()}.${fileExtensionForMimeType(
+    mimeType
+  )}`;
+}
 
 async function assertPhotoTargets(
   ctx: MutationCtx,
@@ -202,17 +296,153 @@ export const listReviewQueue = query({
   },
 });
 
-export const createMetadata = mutation({
+export const initUpload = action({
   args: {
     householdId: v.id("households"),
     moveId: v.id("moves"),
-    ...photoWriteArgs,
-    originalStorageKey: v.string(),
-    originalBucket: v.string(),
-    width: v.number(),
-    height: v.number(),
+    itemId: v.optional(v.id("items")),
+    boxId: v.optional(v.id("boxes")),
+    room: v.optional(v.string()),
     mimeType: v.string(),
     sizeBytes: v.number(),
+  },
+  handler: async (ctx, args): Promise<{
+    uploadSessionId: string;
+    uploadUrl: string;
+    method: "PUT";
+    headers: { "Content-Type": string };
+    expiresAt: number;
+  }> => {
+    assertUploadFileShape(args);
+
+    const config = requireB2Config();
+    const objectKey = uploadObjectKey({
+      moveId: args.moveId,
+      mimeType: args.mimeType,
+    });
+    const expiresAt = Date.now() + uploadSessionTtlMs;
+    const uploadSessionId = await ctx.runMutation(
+      internal.photos.createUploadSession,
+      {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        itemId: args.itemId,
+        boxId: args.boxId,
+        room: args.room,
+        originalStorageKey: objectKey,
+        originalBucket: config.bucketName,
+        expectedMimeType: args.mimeType,
+        expectedSizeBytes: args.sizeBytes,
+        expiresAt,
+      }
+    );
+
+    const uploadUrl = await getSignedUrl(
+      b2Client(),
+      new PutObjectCommand({
+        Bucket: config.bucketName,
+        Key: objectKey,
+        ContentType: args.mimeType,
+        ContentLength: args.sizeBytes,
+      }),
+      { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
+    );
+
+    return {
+      uploadSessionId,
+      uploadUrl,
+      method: "PUT",
+      headers: { "Content-Type": args.mimeType },
+      expiresAt,
+    };
+  },
+});
+
+export const finalizeUpload = action({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    uploadSessionId: uploadSessionIdValidator,
+    width: v.number(),
+    height: v.number(),
+    originalHash: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    photoType: v.optional(photoTypeValidator),
+    privacyLevel: v.optional(photoPrivacyLevelValidator),
+    visibilityScope: v.optional(photoVisibilityScopeValidator),
+    source: v.optional(photoSourceValidator),
+    exifHandlingStatus: v.optional(exifHandlingStatusValidator),
+    confidence: v.optional(estimateConfidenceValidator),
+    notes: v.optional(v.string()),
+    verificationStatus: v.optional(photoVerificationStatusValidator),
+    capturedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    const config = requireB2Config();
+    const session = await ctx.runQuery(internal.photos.getUploadSession, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      uploadSessionId: args.uploadSessionId,
+    });
+
+    try {
+      const head = await b2Client().send(
+        new HeadObjectCommand({
+          Bucket: config.bucketName,
+          Key: session.originalStorageKey,
+        })
+      );
+      if (head.ContentLength !== session.expectedSizeBytes) {
+        throw new Error("Uploaded object size does not match the session.");
+      }
+      if (
+        head.ContentType &&
+        head.ContentType !== session.expectedMimeType
+      ) {
+        throw new Error("Uploaded object type does not match the session.");
+      }
+    } catch (error) {
+      await ctx.runMutation(internal.photos.markUploadSessionFailed, {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        uploadSessionId: args.uploadSessionId,
+      });
+      throw error;
+    }
+
+    return await ctx.runMutation(internal.photos.completeUploadSession, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      uploadSessionId: args.uploadSessionId,
+      width: args.width,
+      height: args.height,
+      originalHash: args.originalHash,
+      caption: args.caption,
+      photoType: args.photoType,
+      privacyLevel: args.privacyLevel,
+      visibilityScope: args.visibilityScope,
+      source: args.source,
+      exifHandlingStatus: args.exifHandlingStatus,
+      confidence: args.confidence,
+      notes: args.notes,
+      verificationStatus: args.verificationStatus,
+      capturedAt: args.capturedAt,
+    });
+  },
+});
+
+export const createUploadSession = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.optional(v.id("items")),
+    boxId: v.optional(v.id("boxes")),
+    room: v.optional(v.string()),
+    originalStorageKey: v.string(),
+    originalBucket: v.string(),
+    expectedMimeType: v.string(),
+    expectedSizeBytes: v.number(),
+    expiresAt: v.number(),
   },
   handler: async (ctx, args) => {
     const { actor } = await requireMovePermission(
@@ -222,28 +452,146 @@ export const createMetadata = mutation({
       "inventory:edit"
     );
     if (actor.type !== "user") {
-      throw new Error("API-key photo metadata creation is not implemented yet.");
+      throw new Error("API-key photo uploads are not implemented yet.");
     }
+    assertUploadFileShape({
+      mimeType: args.expectedMimeType,
+      sizeBytes: args.expectedSizeBytes,
+    });
     await assertPhotoTargets(ctx, args);
 
     const now = Date.now();
-    const photoId = await ctx.db.insert("itemPhotos", {
+    return await ctx.db.insert("photoUploadSessions", {
       householdId: args.householdId,
       moveId: args.moveId,
       itemId: args.itemId,
       boxId: args.boxId,
       room: normalizeOptionalText(args.room),
-      claimId: normalizeOptionalText(args.claimId),
-      documentationProfileTypes: args.documentationProfileTypes ?? [],
       originalStorageKey: args.originalStorageKey,
       originalBucket: args.originalBucket,
+      expectedMimeType: args.expectedMimeType,
+      expectedSizeBytes: args.expectedSizeBytes,
+      status: "authorized",
+      expiresAt: args.expiresAt,
+      createdByUserId: actor.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const getUploadSession = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    uploadSessionId: uploadSessionIdValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit"
+    );
+    const session = await ctx.db.get(args.uploadSessionId);
+    if (
+      !session ||
+      session.householdId !== args.householdId ||
+      session.moveId !== args.moveId ||
+      session.status !== "authorized" ||
+      session.expiresAt < Date.now()
+    ) {
+      throw new Error("Upload session is not active.");
+    }
+
+    return session;
+  },
+});
+
+export const markUploadSessionFailed = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    uploadSessionId: uploadSessionIdValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit"
+    );
+    const session = await ctx.db.get(args.uploadSessionId);
+    if (
+      session &&
+      session.householdId === args.householdId &&
+      session.moveId === args.moveId
+    ) {
+      await ctx.db.patch(args.uploadSessionId, {
+        status: "failed",
+        updatedAt: Date.now(),
+      });
+    }
+  },
+});
+
+export const completeUploadSession = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    uploadSessionId: uploadSessionIdValidator,
+    width: v.number(),
+    height: v.number(),
+    originalHash: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    photoType: v.optional(photoTypeValidator),
+    privacyLevel: v.optional(photoPrivacyLevelValidator),
+    visibilityScope: v.optional(photoVisibilityScopeValidator),
+    source: v.optional(photoSourceValidator),
+    exifHandlingStatus: v.optional(exifHandlingStatusValidator),
+    confidence: v.optional(estimateConfidenceValidator),
+    notes: v.optional(v.string()),
+    verificationStatus: v.optional(photoVerificationStatusValidator),
+    capturedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit"
+    );
+    if (actor.type !== "user") {
+      throw new Error("API-key photo upload finalization is not implemented yet.");
+    }
+
+    const session = await ctx.db.get(args.uploadSessionId);
+    if (
+      !session ||
+      session.householdId !== args.householdId ||
+      session.moveId !== args.moveId ||
+      session.status !== "authorized" ||
+      session.expiresAt < Date.now()
+    ) {
+      throw new Error("Upload session is not active.");
+    }
+
+    const now = Date.now();
+    const photoId = await ctx.db.insert("itemPhotos", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      itemId: session.itemId,
+      boxId: session.boxId,
+      room: session.room,
+      documentationProfileTypes: [],
+      originalStorageKey: session.originalStorageKey,
+      originalBucket: session.originalBucket,
       originalHash: normalizeOptionalText(args.originalHash),
-      derivativeRefs: args.derivativeRefs ?? {},
-      cloudflareImageId: normalizeOptionalText(args.cloudflareImageId),
+      derivativeRefs: {},
       width: args.width,
       height: args.height,
-      mimeType: args.mimeType,
-      sizeBytes: args.sizeBytes,
+      mimeType: session.expectedMimeType,
+      sizeBytes: session.expectedSizeBytes,
       caption: normalizeOptionalText(args.caption),
       photoType: args.photoType ?? "other",
       privacyLevel: args.privacyLevel ?? "normal",
@@ -253,10 +601,16 @@ export const createMetadata = mutation({
       confidence: args.confidence ?? "none",
       notes: normalizeOptionalText(args.notes),
       verificationStatus: args.verificationStatus ?? "unreviewed",
-      aiProcessed: args.aiProcessed ?? false,
+      aiProcessed: false,
       capturedAt: args.capturedAt,
       uploadedByUserId: actor.userId,
       createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch(args.uploadSessionId, {
+      status: "completed",
+      completedPhotoId: photoId,
       updatedAt: now,
     });
 
@@ -272,12 +626,41 @@ export const createMetadata = mutation({
       metadata: {
         photoType: args.photoType ?? "other",
         privacyLevel: args.privacyLevel ?? "normal",
-        itemId: args.itemId,
-        boxId: args.boxId,
+        itemId: session.itemId,
+        boxId: session.boxId,
       },
     });
 
     return photoId;
+  },
+});
+
+export const cancelUploadSession = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    uploadSessionId: uploadSessionIdValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit"
+    );
+    const session = await ctx.db.get(args.uploadSessionId);
+    if (
+      !session ||
+      session.householdId !== args.householdId ||
+      session.moveId !== args.moveId ||
+      session.status !== "authorized"
+    ) {
+      return;
+    }
+    await ctx.db.patch(args.uploadSessionId, {
+      status: "cancelled",
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -368,6 +751,50 @@ export const updateEvidence = mutation({
       objectTable: "itemPhotos",
       objectId: args.photoId,
       metadata: { changedKeys: Object.keys(patch) },
+    });
+  },
+});
+
+export const archive = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit"
+    );
+    if (actor.type !== "user") {
+      throw new Error("API-key photo deletion is not implemented yet.");
+    }
+
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId
+    ) {
+      throw new Error("Photo not found.");
+    }
+
+    await ctx.db.patch(args.photoId, {
+      archivedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "photo",
+      action: "photo.archived",
+      objectTable: "itemPhotos",
+      objectId: args.photoId,
     });
   },
 });

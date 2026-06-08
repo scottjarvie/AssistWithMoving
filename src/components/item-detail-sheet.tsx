@@ -12,6 +12,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -659,6 +660,14 @@ export function ItemDetailSheet({
                     value={item.requiresPersonalTransport ? "Personal" : "None"}
                   />
                 </div>
+
+                <PhotoUploadControl
+                  householdId={householdId}
+                  moveId={moveId}
+                  itemId={item._id}
+                  room={item.room}
+                  label="Item photo"
+                />
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Review flags">

@@ -13,6 +13,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -286,6 +287,16 @@ function BoxCard({
         onChange={(event) => setDescription(event.target.value)}
         placeholder="Description or handling notes"
       />
+
+      <div className="mt-3">
+        <PhotoUploadControl
+          householdId={householdId}
+          moveId={moveId}
+          boxId={box._id}
+          room={box.room}
+          label="Box photo"
+        />
+      </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
         <select

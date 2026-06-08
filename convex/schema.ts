@@ -553,6 +553,32 @@ export default defineSchema({
     .index("by_move_privacy", ["moveId", "privacyLevel"])
     .index("by_household", ["householdId"]),
 
+  photoUploadSessions: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.optional(v.id("items")),
+    boxId: v.optional(v.id("boxes")),
+    room: v.optional(v.string()),
+    originalStorageKey: v.string(),
+    originalBucket: v.string(),
+    expectedMimeType: v.string(),
+    expectedSizeBytes: v.number(),
+    status: v.union(
+      v.literal("authorized"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+      v.literal("failed")
+    ),
+    expiresAt: v.number(),
+    createdByUserId: v.id("users"),
+    completedPhotoId: v.optional(v.id("itemPhotos")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_expires", ["expiresAt"])
+    .index("by_household", ["householdId"]),
+
   items: defineTable({
     householdId: v.id("households"),
     moveId: v.id("moves"),
