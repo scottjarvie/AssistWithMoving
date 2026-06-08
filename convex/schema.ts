@@ -468,6 +468,17 @@ const exportJobStatus = v.union(
   v.literal("expired")
 );
 
+const accountExportJobStatus = v.union(
+  v.literal("completed"),
+  v.literal("expired")
+);
+
+const accountDeletionRequestStatus = v.union(
+  v.literal("pending"),
+  v.literal("cancelled"),
+  v.literal("completed")
+);
+
 const exportJobType = v.union(
   v.literal("inventory"),
   v.literal("boxes"),
@@ -491,6 +502,39 @@ export default defineSchema({
     .index("by_clerk_user_id", ["clerkUserId"])
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
+
+  accountExportJobs: defineTable({
+    userId: v.id("users"),
+    status: accountExportJobStatus,
+    format: v.literal("json"),
+    filename: v.string(),
+    artifactText: v.optional(v.string()),
+    sizeBytes: v.optional(v.number()),
+    summary: v.any(),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+    expiresAt: v.number(),
+  })
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_status", ["status"])
+    .index("by_expires", ["expiresAt"]),
+
+  accountDeletionRequests: defineTable({
+    userId: v.id("users"),
+    status: accountDeletionRequestStatus,
+    requestedAt: v.number(),
+    scheduledDeletionAt: v.number(),
+    cancelledAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    revokedApiKeyCount: v.optional(v.number()),
+    revokedShareLinkCount: v.optional(v.number()),
+    disabledMembershipCount: v.optional(v.number()),
+    disabledMoveGrantCount: v.optional(v.number()),
+    completedSummary: v.optional(v.any()),
+  })
+    .index("by_user_status", ["userId", "status"])
+    .index("by_status", ["status"])
+    .index("by_scheduled", ["scheduledDeletionAt"]),
 
   households: defineTable({
     name: v.string(),

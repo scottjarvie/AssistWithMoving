@@ -1,5 +1,6 @@
 import { KeyRound, Shield, SlidersHorizontal } from "lucide-react";
 
+import { AccountPrivacyControls } from "@/components/account-privacy-controls";
 import { ApiKeyManager } from "@/components/api-key-manager";
 import {
   Card,
@@ -52,6 +53,9 @@ export default function SettingsPage() {
       </div>
       <div className="mt-6">
         <ApiKeyManager />
+      </div>
+      <div className="mt-6">
+        <AccountPrivacyControls />
       </div>
     </div>
   );
