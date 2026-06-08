@@ -11,6 +11,7 @@
 import type * as audit from "../audit.js";
 import type * as boxes from "../boxes.js";
 import type * as clerkUsers from "../clerkUsers.js";
+import type * as estimates from "../estimates.js";
 import type * as health from "../health.js";
 import type * as households from "../households.js";
 import type * as http from "../http.js";
@@ -18,6 +19,7 @@ import type * as items from "../items.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_clerk from "../lib/clerk.js";
+import type * as lib_estimateEngine from "../lib/estimateEngine.js";
 import type * as lib_moveFields from "../lib/moveFields.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_photoDelivery from "../lib/photoDelivery.js";
@@ -43,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   audit: typeof audit;
   boxes: typeof boxes;
   clerkUsers: typeof clerkUsers;
+  estimates: typeof estimates;
   health: typeof health;
   households: typeof households;
   http: typeof http;
@@ -50,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
   "lib/clerk": typeof lib_clerk;
+  "lib/estimateEngine": typeof lib_estimateEngine;
   "lib/moveFields": typeof lib_moveFields;
   "lib/permissions": typeof lib_permissions;
   "lib/photoDelivery": typeof lib_photoDelivery;
