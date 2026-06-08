@@ -85,6 +85,10 @@ type ExportJobSummary = {
   createdAt: number;
 };
 
+type RecentExportJob = ExportJobSummary & {
+  moveId: Id<"moves">;
+};
+
 type ExportJobType =
   | "inventory"
   | "boxes"
@@ -167,6 +171,7 @@ export function DocumentationPacketBuilder({
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [downloadExportJobId, setDownloadExportJobId] =
     useState<Id<"exportJobs"> | null>(null);
+  const [recentExports, setRecentExports] = useState<RecentExportJob[]>([]);
   const lastDownloadedExportJobId = useRef<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -211,6 +216,19 @@ export function DocumentationPacketBuilder({
   const missingMoveProfiles = selectedProfileTypes.filter(
     (type) => !activeProfiles.some((profile) => profile.type === type)
   );
+  const displayedExportJobs = useMemo(() => {
+    const jobs = new Map<string, ExportJobSummary>();
+    for (const job of recentExports) {
+      if (moveId && job.moveId !== moveId) continue;
+      jobs.set(String(job.exportJobId), job);
+    }
+    for (const job of exportJobs ?? []) {
+      jobs.set(String(job.exportJobId), job);
+    }
+    return Array.from(jobs.values())
+      .sort((first, second) => second.createdAt - first.createdAt)
+      .slice(0, 8);
+  }, [exportJobs, moveId, recentExports]);
   const preview = selectedProfile
     ? summarizeDocumentationProfile({
         ...selectedProfile,
@@ -378,6 +396,19 @@ export function DocumentationPacketBuilder({
         documentationProfileId:
           type === "documentationProfile" ? selectedProfile?._id : undefined,
       });
+      setRecentExports((current) => [
+        {
+          exportJobId: result.exportJobId as Id<"exportJobs">,
+          type,
+          format: "csv",
+          status: "completed",
+          filename: result.filename,
+          rowCount: result.rowCount,
+          createdAt: Date.now(),
+          moveId,
+        },
+        ...current,
+      ]);
       setDownloadExportJobId(result.exportJobId as Id<"exportJobs">);
       setMessage(`CSV export created with ${result.rowCount} rows.`);
     } catch (error) {
@@ -666,10 +697,10 @@ export function DocumentationPacketBuilder({
                     </div>
                   </div>
                   <div className="mt-3 space-y-2">
-                    {exportJobs === undefined ? (
+                    {exportJobs === undefined && !recentExports.length ? (
                       <Skeleton className="h-8 w-full" />
-                    ) : exportJobs.length ? (
-                      exportJobs.map((job) => (
+                    ) : displayedExportJobs.length ? (
+                      displayedExportJobs.map((job) => (
                         <div
                           key={job.exportJobId}
                           className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs"
