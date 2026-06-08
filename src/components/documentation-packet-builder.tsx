@@ -30,6 +30,7 @@ import {
   type ShareLinkRole,
 } from "@/lib/documentation-packets";
 import { buildPcsPacketPath } from "@/lib/pcs-packet";
+import { buildEmployerPacketPath } from "@/lib/employer-packet";
 import {
   documentationProfileOptions,
   type DocumentationProfileType,
@@ -604,6 +605,33 @@ export function DocumentationPacketBuilder({
                           })}
                         >
                           Mover owner
+                        </Link>
+                      </Button>
+                    </>
+                  ) : null}
+                  {selectedProfile.type === "employerRelocation" &&
+                  householdId &&
+                  moveId ? (
+                    <>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildEmployerPacketPath({
+                            householdId,
+                            moveId,
+                          })}
+                        >
+                          Employer packet
+                        </Link>
+                      </Button>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildEmployerPacketPath({
+                            householdId,
+                            moveId,
+                            mode: "owner",
+                          })}
+                        >
+                          Employer owner
                         </Link>
                       </Button>
                     </>
