@@ -4,10 +4,14 @@ import {
   batchUpsertItems,
   createApiConfig,
   createItem,
+  createTransportResource,
+  createTransportZone,
   getCapacityReport,
   getMoveSummary,
   movingManifestRequest,
   searchInventory,
+  updateTransportResource,
+  updateTransportZone,
 } from "../../mcp-server/movingmanifest-api.mjs";
 
 describe("MovingManifest MCP API client", () => {
@@ -194,6 +198,135 @@ describe("MovingManifest MCP API client", () => {
       totalEstimatedWeightLb: 1200,
       resourceReports: [],
     });
+  });
+
+  it("creates transport resources through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { resource: { resourceId: "resource1" } } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createTransportResource(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        presetKey: "militaryMovers",
+        name: "HHG shipment",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/resources"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          presetKey: "militaryMovers",
+          name: "HHG shipment",
+        }),
+      }
+    );
+  });
+
+  it("updates transport resources through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { resourceId: "resource1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateTransportResource(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        resourceId: "resource1",
+        capacity: { maxWeightLb: 1000 },
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/resources/resource1"),
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          resourceId: "resource1",
+          capacity: { maxWeightLb: 1000 },
+        }),
+      }
+    );
+  });
+
+  it("creates and updates transport zones through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { zone: { zoneId: "zone1" } } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await createTransportZone(config, {
+      moveId: "move1",
+      resourceId: "resource1",
+      name: "Door area",
+    });
+    await updateTransportZone(config, {
+      moveId: "move1",
+      zoneId: "zone1",
+      preferredTags: ["access soon"],
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/moves/move1/zones"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          resourceId: "resource1",
+          name: "Door area",
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/zones/zone1"),
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          zoneId: "zone1",
+          preferredTags: ["access soon"],
+        }),
+      }
+    );
   });
 
   it("dry-runs item creation without calling the API", async () => {

@@ -35,7 +35,7 @@ API keys can include these scopes:
 | Scope | Allows |
 | --- | --- |
 | `moves/read` | List and read move records. |
-| `moves/write` | Update move metadata. |
+| `moves/write` | Update move metadata and create/update transport resources and zones. |
 | `inventory/read` | Read items, boxes, assignments, and photo metadata. |
 | `inventory/write` | Create/update items, boxes, and assignments. |
 | `photos/write` | Start and finalize photo upload sessions. |
@@ -215,6 +215,54 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/assignments \
   -d '{ "boxId": "BOX_ID", "itemId": "ITEM_ID", "quantity": 1 }'
 ```
 
+Create a transport resource from a preset:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/resources \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-resource-001" \
+  -d '{ "presetKey": "militaryMovers", "name": "HHG shipment" }'
+```
+
+Preset keys include `boxTruck`, `pickupTruck`, `trailer7x16`,
+`personalVehicle`, `professionalMovers`, `militaryMovers`, `storageUnit`,
+`sell`, `donate`, `dump`, `freeGiveaway`, and `unknown`. Preset creation also
+creates the preset's default zones.
+
+Create a custom transport resource:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/resources \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-resource-002" \
+  -d '{
+    "type": "storage",
+    "name": "10x20 storage unit",
+    "capacity": { "maxVolumeCuFt": 1600 },
+    "rules": ["keep aisle clear", "front zone is access soon"]
+  }'
+```
+
+Create a resource zone:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/zones \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-zone-001" \
+  -d '{
+    "resourceId": "RESOURCE_ID",
+    "name": "Door area",
+    "preferredTags": ["access soon", "first night"]
+  }'
+```
+
+Resource and zone writes require `moves/write`. They are auditable and support
+idempotency like other non-GET API requests. Destructive archive/delete endpoints
+are intentionally not part of the public API yet.
+
 Get a capacity report:
 
 ```bash
@@ -365,6 +413,10 @@ Available MCP tools:
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
 | `start_photo_upload` | Start a photo upload session and return presigned upload information. |
 | `list_transport_resources` | List resources and zones for load planning. |
+| `create_transport_resource` | Create a transport resource from a preset or custom fields, with `dryRun` support. |
+| `update_transport_resource` | Update resource metadata, capacity, rules, and sort order, with `dryRun` support. |
+| `create_transport_zone` | Create a zone inside a resource, with `dryRun` support. |
+| `update_transport_zone` | Update zone metadata, capacity, preferred tags, resource, and sort order, with `dryRun` support. |
 | `get_capacity_report` | Fetch move, box, resource, and zone capacity estimates and warning counts. |
 | `list_documentation_profiles` | List scoped documentation profiles. |
 | `create_export` | Create a CSV export. |
@@ -377,6 +429,7 @@ Recommended MCP key scopes depend on the intended agent:
 | --- | --- |
 | Read-only helper | `moves/read`, `inventory/read`, `exports/read` |
 | Inventory intake helper | `moves/read`, `inventory/read`, `inventory/write` |
+| Load planning helper | `moves/read`, `moves/write`, `inventory/read`, `inventory/write` |
 | Photo intake helper | `moves/read`, `inventory/read`, `photos/write` |
 | Documentation helper | `moves/read`, `inventory/read`, `exports/read`, `exports/create` |
 

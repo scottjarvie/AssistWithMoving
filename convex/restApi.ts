@@ -28,8 +28,13 @@ import {
   normalizeBoxCode,
   normalizeItemName,
   normalizeOptionalText,
+  normalizeRuleList,
+  normalizeSortOrder,
   normalizedSearchName,
+  transportResourcePresetKeys,
+  transportResourceTypes,
 } from "./lib/moveFields";
+import { getTransportResourcePreset } from "./lib/transportPresets";
 import {
   bearerToken,
   paginate,
@@ -320,36 +325,19 @@ async function routeRequest(
     return await routeCapacityReport(ctx, auth, move);
   }
 
-  if (nested === "resources" && args.method === "GET") {
-    const resources = await ctx.db
-      .query("transportResources")
-      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
-      .collect();
-    return restOk(
-      paginate(
-        resources.filter((entry) => !entry.archivedAt).map((entry) => ({
-          ...entry,
-          resourceId: entry._id,
-        })),
-        args.query
-      )
+  if (nested === "resources") {
+    return await routeTransportResources(
+      ctx,
+      args,
+      auth,
+      moveId,
+      nestedId,
+      segments[4]
     );
   }
 
-  if (nested === "zones" && args.method === "GET") {
-    const zones = await ctx.db
-      .query("transportZones")
-      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
-      .collect();
-    return restOk(
-      paginate(
-        zones.filter((entry) => !entry.archivedAt).map((entry) => ({
-          ...entry,
-          zoneId: entry._id,
-        })),
-        args.query
-      )
-    );
+  if (nested === "zones") {
+    return await routeTransportZones(ctx, args, auth, moveId, nestedId);
   }
 
   if (nested === "items") {
@@ -722,6 +710,201 @@ async function routeCapacityReport(
       itemEstimates: itemEstimates.slice(0, 100),
       generatedAt: Date.now(),
     },
+  });
+}
+
+async function routeTransportResources(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  resourceIdSegment?: string,
+  actionSegment?: string
+) {
+  if (actionSegment === "zones" && resourceIdSegment) {
+    await requireApiTransportResource(
+      ctx,
+      auth.householdId,
+      moveId,
+      resourceIdSegment
+    );
+    if (args.method === "GET") {
+      const zones = await ctx.db
+        .query("transportZones")
+        .withIndex("by_resource_sort", (q) =>
+          q.eq("resourceId", resourceIdSegment as Id<"transportResources">)
+        )
+        .collect();
+      return restOk(
+        paginate(
+          zones
+            .filter((zone) => zone.householdId === auth.householdId)
+            .filter((zone) => !zone.archivedAt)
+            .map((zone) => safeTransportZone(zone)),
+          args.query
+        )
+      );
+    }
+    if (args.method === "POST") {
+      const body = bodyObject(args.body);
+      const zoneId = await createApiTransportZone(ctx, auth, moveId, {
+        ...body,
+        resourceId: resourceIdSegment,
+      });
+      const zone = await ctx.db.get(zoneId);
+      await auditApiWrite(
+        ctx,
+        auth,
+        moveId,
+        "transport_zone.api_created",
+        "transportZones",
+        zoneId,
+        { resourceId: resourceIdSegment, name: zone?.name }
+      );
+      return restOk({ data: { zone: zone ? safeTransportZone(zone) : { zoneId } } }, 201);
+    }
+  }
+
+  if (args.method === "GET" && !resourceIdSegment) {
+    const resources = await ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect();
+    return restOk(
+      paginate(
+        resources
+          .filter((entry) => entry.householdId === auth.householdId)
+          .filter((entry) => !entry.archivedAt)
+          .map((entry) => safeTransportResource(entry)),
+        args.query
+      )
+    );
+  }
+
+  if (args.method === "GET" && resourceIdSegment && !actionSegment) {
+    const resource = await requireApiTransportResource(
+      ctx,
+      auth.householdId,
+      moveId,
+      resourceIdSegment
+    );
+    return restOk({ data: safeTransportResource(resource) });
+  }
+
+  if (args.method === "POST" && !resourceIdSegment) {
+    return await createApiTransportResource(ctx, args, auth, moveId);
+  }
+
+  if (args.method === "PATCH" && resourceIdSegment && !actionSegment) {
+    const resource = await requireApiTransportResource(
+      ctx,
+      auth.householdId,
+      moveId,
+      resourceIdSegment
+    );
+    const patch = transportResourcePatch(args.body);
+    await ctx.db.patch(resource._id, patch);
+    const updated = await ctx.db.get(resource._id);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "transport_resource.api_updated",
+      "transportResources",
+      resource._id,
+      { changedKeys: Object.keys(patch) }
+    );
+    return restOk({
+      data: updated ? safeTransportResource(updated) : { resourceId: resource._id },
+    });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Resource route not found.",
+  });
+}
+
+async function routeTransportZones(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  zoneIdSegment?: string
+) {
+  if (args.method === "GET" && !zoneIdSegment) {
+    const zones = await ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect();
+    return restOk(
+      paginate(
+        zones
+          .filter((entry) => entry.householdId === auth.householdId)
+          .filter((entry) => !entry.archivedAt)
+          .map((entry) => safeTransportZone(entry)),
+        args.query
+      )
+    );
+  }
+
+  if (args.method === "GET" && zoneIdSegment) {
+    const zone = await requireApiTransportZone(
+      ctx,
+      auth.householdId,
+      moveId,
+      zoneIdSegment
+    );
+    return restOk({ data: safeTransportZone(zone) });
+  }
+
+  if (args.method === "POST" && !zoneIdSegment) {
+    const zoneId = await createApiTransportZone(
+      ctx,
+      auth,
+      moveId,
+      bodyObject(args.body)
+    );
+    const zone = await ctx.db.get(zoneId);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "transport_zone.api_created",
+      "transportZones",
+      zoneId,
+      { resourceId: zone?.resourceId, name: zone?.name }
+    );
+    return restOk({ data: { zone: zone ? safeTransportZone(zone) : { zoneId } } }, 201);
+  }
+
+  if (args.method === "PATCH" && zoneIdSegment) {
+    const zone = await requireApiTransportZone(
+      ctx,
+      auth.householdId,
+      moveId,
+      zoneIdSegment
+    );
+    const patch = await transportZonePatch(ctx, auth.householdId, moveId, args.body);
+    await ctx.db.patch(zone._id, patch);
+    const updated = await ctx.db.get(zone._id);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "transport_zone.api_updated",
+      "transportZones",
+      zone._id,
+      { changedKeys: Object.keys(patch) }
+    );
+    return restOk({ data: updated ? safeTransportZone(updated) : { zoneId: zone._id } });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Zone route not found.",
   });
 }
 
@@ -1289,6 +1472,44 @@ async function requireApiBox(
   return box;
 }
 
+async function requireApiTransportResource(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  resourceIdSegment: string
+) {
+  const resource = await ctx.db.get(
+    resourceIdSegment as Id<"transportResources">
+  );
+  if (
+    !resource ||
+    resource.householdId !== householdId ||
+    resource.moveId !== moveId ||
+    resource.archivedAt
+  ) {
+    throw new Error("Transport resource not found.");
+  }
+  return resource;
+}
+
+async function requireApiTransportZone(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  zoneIdSegment: string
+) {
+  const zone = await ctx.db.get(zoneIdSegment as Id<"transportZones">);
+  if (
+    !zone ||
+    zone.householdId !== householdId ||
+    zone.moveId !== moveId ||
+    zone.archivedAt
+  ) {
+    throw new Error("Transport zone not found.");
+  }
+  return zone;
+}
+
 async function requireApiDocumentationProfile(
   ctx: MutationCtx,
   args: {
@@ -1501,6 +1722,143 @@ function artifactForApiExport(job: Doc<"exportJobs">) {
     artifactText: job.artifactText,
     encoding: "utf-8",
   };
+}
+
+async function createApiTransportResource(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const body = bodyObject(args.body);
+  const presetKey = parseTransportResourcePresetKey(body.presetKey);
+  const now = Date.now();
+
+  if (presetKey) {
+    const preset = getTransportResourcePreset(presetKey);
+    const resourceId = await ctx.db.insert("transportResources", {
+      householdId: auth.householdId,
+      moveId,
+      type: preset.type,
+      name: normalizeOptionalText(asString(body.name)) ?? preset.name,
+      description: normalizeOptionalText(asString(body.description)) ?? preset.description,
+      capacity: parseCapacity(body.capacity) ?? preset.capacity,
+      rules: normalizeRuleList(parseStringArray(body.rules) ?? preset.rules),
+      sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
+      createdByUserId: auth.createdByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const zoneIds = [];
+    for (const [index, zone] of preset.zones.entries()) {
+      zoneIds.push(
+        await ctx.db.insert("transportZones", {
+          householdId: auth.householdId,
+          moveId,
+          resourceId,
+          name: zone.name,
+          description: zone.description,
+          capacity: {},
+          preferredTags: normalizeRuleList(zone.preferredTags ?? []),
+          sortOrder: now + index,
+          createdByUserId: auth.createdByUserId,
+          createdAt: now,
+          updatedAt: now,
+        })
+      );
+    }
+    const [resource, zones] = await Promise.all([
+      ctx.db.get(resourceId),
+      Promise.all(zoneIds.map((zoneId) => ctx.db.get(zoneId))),
+    ]);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "transport_resource.api_preset_created",
+      "transportResources",
+      resourceId,
+      { presetKey, type: preset.type, zoneCount: zoneIds.length }
+    );
+    return restOk(
+      {
+        data: {
+          resource: resource ? safeTransportResource(resource) : { resourceId },
+          zones: zones
+            .filter((zone): zone is Doc<"transportZones"> => Boolean(zone))
+            .map((zone) => safeTransportZone(zone)),
+        },
+      },
+      201
+    );
+  }
+
+  const type = parseTransportResourceType(body.type);
+  if (!type) {
+    throw new Error("type is required unless presetKey is provided.");
+  }
+  const name = normalizeOptionalText(asString(body.name));
+  if (!name) {
+    throw new Error("name is required.");
+  }
+  const resourceId = await ctx.db.insert("transportResources", {
+    householdId: auth.householdId,
+    moveId,
+    type,
+    name,
+    description: normalizeOptionalText(asString(body.description)),
+    capacity: parseCapacity(body.capacity) ?? {},
+    rules: normalizeRuleList(parseStringArray(body.rules) ?? []),
+    sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const resource = await ctx.db.get(resourceId);
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "transport_resource.api_created",
+    "transportResources",
+    resourceId,
+    { type, name }
+  );
+  return restOk(
+    { data: { resource: resource ? safeTransportResource(resource) : { resourceId } } },
+    201
+  );
+}
+
+async function createApiTransportZone(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  body: Record<string, unknown>
+) {
+  const resourceId = optionalString(body.resourceId);
+  if (!resourceId) {
+    throw new Error("resourceId is required.");
+  }
+  await requireApiTransportResource(ctx, auth.householdId, moveId, resourceId);
+  const name = normalizeOptionalText(asString(body.name));
+  if (!name) {
+    throw new Error("name is required.");
+  }
+  const now = Date.now();
+  return await ctx.db.insert("transportZones", {
+    householdId: auth.householdId,
+    moveId,
+    resourceId: resourceId as Id<"transportResources">,
+    name,
+    description: normalizeOptionalText(asString(body.description)),
+    capacity: parseCapacity(body.capacity) ?? {},
+    preferredTags: normalizeRuleList(parseStringArray(body.preferredTags) ?? []),
+    sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 async function createApiItem(
@@ -1775,6 +2133,68 @@ function movePatch(body: unknown): Partial<Doc<"moves">> {
   return patch;
 }
 
+function transportResourcePatch(body: unknown): Partial<Doc<"transportResources">> {
+  const input = bodyObject(body);
+  const patch: Partial<Doc<"transportResources">> = { updatedAt: Date.now() };
+  if (input.type !== undefined) {
+    const type = parseTransportResourceType(input.type);
+    if (!type) throw new Error("Invalid transport resource type.");
+    patch.type = type;
+  }
+  if (input.name !== undefined) {
+    const name = normalizeOptionalText(asString(input.name));
+    if (!name) throw new Error("name cannot be empty.");
+    patch.name = name;
+  }
+  if (input.description !== undefined) {
+    patch.description = normalizeOptionalText(asString(input.description));
+  }
+  if (input.capacity !== undefined) {
+    patch.capacity = parseCapacity(input.capacity) ?? {};
+  }
+  if (input.rules !== undefined) {
+    patch.rules = normalizeRuleList(parseStringArray(input.rules) ?? []);
+  }
+  if (input.sortOrder !== undefined) {
+    patch.sortOrder = normalizeSortOrder(optionalNumber(input.sortOrder));
+  }
+  return patch;
+}
+
+async function transportZonePatch(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  body: unknown
+): Promise<Partial<Doc<"transportZones">>> {
+  const input = bodyObject(body);
+  const patch: Partial<Doc<"transportZones">> = { updatedAt: Date.now() };
+  if (input.resourceId !== undefined) {
+    const resourceId = optionalString(input.resourceId);
+    if (!resourceId) throw new Error("resourceId cannot be empty.");
+    await requireApiTransportResource(ctx, householdId, moveId, resourceId);
+    patch.resourceId = resourceId as Id<"transportResources">;
+  }
+  if (input.name !== undefined) {
+    const name = normalizeOptionalText(asString(input.name));
+    if (!name) throw new Error("name cannot be empty.");
+    patch.name = name;
+  }
+  if (input.description !== undefined) {
+    patch.description = normalizeOptionalText(asString(input.description));
+  }
+  if (input.capacity !== undefined) {
+    patch.capacity = parseCapacity(input.capacity) ?? {};
+  }
+  if (input.preferredTags !== undefined) {
+    patch.preferredTags = normalizeRuleList(parseStringArray(input.preferredTags) ?? []);
+  }
+  if (input.sortOrder !== undefined) {
+    patch.sortOrder = normalizeSortOrder(optionalNumber(input.sortOrder));
+  }
+  return patch;
+}
+
 function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
   const input = bodyObject(body);
   const patch: Partial<Doc<"items">> = {
@@ -1919,6 +2339,68 @@ function parseBoxStatus(value: unknown) {
 function parseExportJobType(value: unknown) {
   return includesLiteral(restExportJobTypes, value)
     ? (value as ExportJobType)
+    : undefined;
+}
+
+function parseTransportResourceType(value: unknown) {
+  return includesLiteral(transportResourceTypes, value)
+    ? (value as Doc<"transportResources">["type"])
+    : undefined;
+}
+
+function parseTransportResourcePresetKey(value: unknown) {
+  return includesLiteral(transportResourcePresetKeys, value)
+    ? (value as (typeof transportResourcePresetKeys)[number])
+    : undefined;
+}
+
+function parseCapacity(value: unknown):
+  | Doc<"transportResources">["capacity"]
+  | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const input = value as Record<string, unknown>;
+  const capacity: Doc<"transportResources">["capacity"] = {};
+  const maxWeightLb = optionalNumber(input.maxWeightLb);
+  const maxVolumeCuFt = optionalNumber(input.maxVolumeCuFt);
+  const maxItemCount = optionalNumber(input.maxItemCount);
+  if (maxWeightLb !== undefined) capacity.maxWeightLb = maxWeightLb;
+  if (maxVolumeCuFt !== undefined) capacity.maxVolumeCuFt = maxVolumeCuFt;
+  if (maxItemCount !== undefined) capacity.maxItemCount = maxItemCount;
+  if (input.weightIsUnlimited !== undefined) {
+    capacity.weightIsUnlimited = Boolean(input.weightIsUnlimited);
+  }
+  if (input.volumeIsUnlimited !== undefined) {
+    capacity.volumeIsUnlimited = Boolean(input.volumeIsUnlimited);
+  }
+
+  if (
+    input.dimensions &&
+    typeof input.dimensions === "object" &&
+    !Array.isArray(input.dimensions)
+  ) {
+    const dimensionsInput = input.dimensions as Record<string, unknown>;
+    const dimensions: NonNullable<
+      Doc<"transportResources">["capacity"]["dimensions"]
+    > = {};
+    const lengthIn = optionalNumber(dimensionsInput.lengthIn);
+    const widthIn = optionalNumber(dimensionsInput.widthIn);
+    const heightIn = optionalNumber(dimensionsInput.heightIn);
+    if (lengthIn !== undefined) dimensions.lengthIn = lengthIn;
+    if (widthIn !== undefined) dimensions.widthIn = widthIn;
+    if (heightIn !== undefined) dimensions.heightIn = heightIn;
+    if (Object.keys(dimensions).length) {
+      capacity.dimensions = dimensions;
+    }
+  }
+
+  return capacity;
+}
+
+function parseStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
     : undefined;
 }
 

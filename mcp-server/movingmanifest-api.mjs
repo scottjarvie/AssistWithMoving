@@ -213,6 +213,65 @@ export async function listTransportResources(config, input) {
   return { resources, zones };
 }
 
+export async function createTransportResource(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: { path: `/moves/${input.moveId}/resources`, body: input },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/resources`,
+    body: input,
+  });
+}
+
+export async function updateTransportResource(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/resources/${input.resourceId}`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "PATCH",
+    path: `/moves/${input.moveId}/resources/${input.resourceId}`,
+    body: input,
+  });
+}
+
+export async function createTransportZone(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: { path: `/moves/${input.moveId}/zones`, body: input },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/zones`,
+    body: input,
+  });
+}
+
+export async function updateTransportZone(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: { path: `/moves/${input.moveId}/zones/${input.zoneId}`, body: input },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "PATCH",
+    path: `/moves/${input.moveId}/zones/${input.zoneId}`,
+    body: input,
+  });
+}
+
 export async function getCapacityReport(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/capacity-report`,

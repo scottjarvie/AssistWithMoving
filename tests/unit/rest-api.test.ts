@@ -62,6 +62,30 @@ describe("REST API helpers", () => {
     expect(
       requiredScopesForRestRoute({
         method: "POST",
+        segments: ["moves", "move1", "resources"],
+      })
+    ).toEqual(["moves/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "PATCH",
+        segments: ["moves", "move1", "resources", "resource1"],
+      })
+    ).toEqual(["moves/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "zones"],
+      })
+    ).toEqual(["moves/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "resources", "resource1", "zones"],
+      })
+    ).toEqual(["moves/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
         segments: ["uploads", "init"],
       })
     ).toEqual(["photos/write"]);

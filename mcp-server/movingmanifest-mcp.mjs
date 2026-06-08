@@ -11,6 +11,8 @@ import {
   createBox,
   createExport,
   createItem,
+  createTransportResource,
+  createTransportZone,
   downloadExport,
   getCapacityReport,
   getMoveSummary,
@@ -22,8 +24,25 @@ import {
   startPhotoUpload,
   textResult,
   toolErrorResult,
+  updateTransportResource,
+  updateTransportZone,
   updateItem,
 } from "./movingmanifest-api.mjs";
+
+const capacityInputSchema = z.object({
+  maxWeightLb: z.number().nonnegative().optional(),
+  maxVolumeCuFt: z.number().nonnegative().optional(),
+  maxItemCount: z.number().int().nonnegative().optional(),
+  dimensions: z
+    .object({
+      lengthIn: z.number().nonnegative().optional(),
+      widthIn: z.number().nonnegative().optional(),
+      heightIn: z.number().nonnegative().optional(),
+    })
+    .optional(),
+  weightIsUnlimited: z.boolean().optional(),
+  volumeIsUnlimited: z.boolean().optional(),
+});
 
 export function createMovingManifestMcpServer(apiConfig) {
   const target = new McpServer({
@@ -239,6 +258,81 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listTransportResources(apiConfig, input),
+  });
+
+  registerTool(target, "create_transport_resource", {
+    title: "Create transport resource",
+    description:
+      "Create a truck, trailer, mover channel, storage unit, disposal, sale, donation, or custom transport resource. Use presetKey for built-in resource templates.",
+    inputSchema: {
+      moveId: z.string(),
+      presetKey: z.string().optional(),
+      type: z.string().optional(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      capacity: capacityInputSchema.optional(),
+      rules: z.array(z.string()).optional(),
+      sortOrder: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createTransportResource(apiConfig, input),
+  });
+
+  registerTool(target, "update_transport_resource", {
+    title: "Update transport resource",
+    description:
+      "Update a transport resource's name, description, type, capacity, rules, or sort order.",
+    inputSchema: {
+      moveId: z.string(),
+      resourceId: z.string(),
+      type: z.string().optional(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      capacity: capacityInputSchema.optional(),
+      rules: z.array(z.string()).optional(),
+      sortOrder: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => updateTransportResource(apiConfig, input),
+  });
+
+  registerTool(target, "create_transport_zone", {
+    title: "Create transport zone",
+    description:
+      "Create a zone inside a transport resource, such as cab, trailer front, storage doorway, donation pickup, or claimed giveaway.",
+    inputSchema: {
+      moveId: z.string(),
+      resourceId: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+      capacity: capacityInputSchema.optional(),
+      preferredTags: z.array(z.string()).optional(),
+      sortOrder: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createTransportZone(apiConfig, input),
+  });
+
+  registerTool(target, "update_transport_zone", {
+    title: "Update transport zone",
+    description:
+      "Update a transport zone's resource, name, description, capacity, preferred tags, or sort order.",
+    inputSchema: {
+      moveId: z.string(),
+      zoneId: z.string(),
+      resourceId: z.string().optional(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      capacity: capacityInputSchema.optional(),
+      preferredTags: z.array(z.string()).optional(),
+      sortOrder: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => updateTransportZone(apiConfig, input),
   });
 
   registerTool(target, "get_capacity_report", {
