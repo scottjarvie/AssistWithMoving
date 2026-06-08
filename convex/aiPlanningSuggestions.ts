@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { assertAiUsageAllowed } from "./lib/aiUsage";
 import { estimateItem, sumEstimateValues } from "./lib/estimateEngine";
 import {
   estimateConfidenceValidator,
@@ -108,6 +109,15 @@ export const createForMove = mutation({
     const activeBoxes = boxes.filter((box) => !box.archivedAt);
     const activeResources = resources.filter((resource) => !resource.archivedAt);
     const activeZones = zones.filter((zone) => !zone.archivedAt);
+
+    await assertAiUsageAllowed(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      userId: actor.userId,
+      inputSizeBytes: activeItems.length * 256 + activeBoxes.length * 256,
+      estimatedCents: 0,
+    });
+
     const generated = [];
 
     for (const item of activeItems.slice(0, 150)) {

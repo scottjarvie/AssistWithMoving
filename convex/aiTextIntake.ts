@@ -4,6 +4,10 @@ import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
+  assertAiUsageAllowed,
+  inputBytesFromText,
+} from "./lib/aiUsage";
+import {
   itemDispositionValidator,
   itemFragilityValidator,
   normalizeBoxCode,
@@ -97,6 +101,14 @@ export const createFromText = mutation({
     if (!sourceText) {
       throw new Error("Text intake needs source text.");
     }
+
+    await assertAiUsageAllowed(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      userId: actor.userId,
+      inputSizeBytes: inputBytesFromText(sourceText),
+      estimatedCents: 0,
+    });
 
     const parsed = parseTextIntakeSuggestions(sourceText).slice(0, 80);
     if (!parsed.length) {

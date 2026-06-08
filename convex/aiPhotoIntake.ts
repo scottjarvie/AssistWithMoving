@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { aiUsageLimits, assertAiUsageAllowed } from "./lib/aiUsage";
 import {
   itemDispositionValidator,
   itemFragilityValidator,
@@ -98,6 +99,9 @@ export const createForPhoto = mutation({
     if (!canUsePhotoDerivativeForAi(photo)) {
       throw new Error("Photo privacy or derivative status does not allow AI intake.");
     }
+    if (photo.sizeBytes > aiUsageLimits.maxPhotoInputBytes) {
+      throw new Error("Photo is too large for AI intake.");
+    }
 
     const existingPending = await ctx.db
       .query("aiPhotoSuggestions")
@@ -111,6 +115,14 @@ export const createForPhoto = mutation({
         suggestionIds: existingPending.map((suggestion) => suggestion._id),
       };
     }
+
+    await assertAiUsageAllowed(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      userId: actor.userId,
+      inputSizeBytes: photo.sizeBytes,
+      estimatedCents: 0,
+    });
 
     const duplicatePhotoIds = await duplicatePhotoIdsForMove(ctx, photo);
     const suggestions = suggestFromPhotoIntake({

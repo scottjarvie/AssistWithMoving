@@ -737,7 +737,9 @@ export default defineSchema({
     .index("by_move_created", ["moveId", "createdAt"])
     .index("by_move_status", ["moveId", "status"])
     .index("by_household_status", ["householdId", "status"])
+    .index("by_household_created", ["householdId", "createdAt"])
     .index("by_created_by", ["createdByUserId"])
+    .index("by_created_by_created", ["createdByUserId", "createdAt"])
     .index("by_status_updated", ["status", "updatedAt"]),
 
   aiTextSuggestions: defineTable({

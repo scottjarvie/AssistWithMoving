@@ -12,6 +12,10 @@ import {
 import { recordAuditEvent } from "./lib/audit";
 import { runAiProvider } from "./lib/aiProvider";
 import {
+  assertAiUsageAllowed,
+  estimatedCentsForDeterministicJob,
+} from "./lib/aiUsage";
+import {
   aiJobModalityValidator,
   aiJobReviewStatusValidator,
   aiJobTypeValidator,
@@ -108,6 +112,15 @@ export const create = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key AI job creation is not implemented yet.");
     }
+
+    await assertAiUsageAllowed(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      userId: actor.userId,
+      inputSizeBytes:
+        typeof args.inputSummary === "string" ? args.inputSummary.length : 0,
+      estimatedCents: estimatedCentsForDeterministicJob(args.maxCostCents),
+    });
 
     const now = Date.now();
     const aiJobId = await ctx.db.insert("aiJobs", {
