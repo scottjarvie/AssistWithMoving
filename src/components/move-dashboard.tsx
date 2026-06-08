@@ -51,6 +51,10 @@ import {
   type PcsDependentStatus,
   type PcsShipmentType,
 } from "@/lib/move-presets";
+import {
+  transportResourcePresetOptions,
+  type TransportResourcePresetKey,
+} from "@/lib/transport-presets";
 
 export function MoveDashboard() {
   const { user } = useUser();
@@ -59,10 +63,16 @@ export function MoveDashboard() {
   const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
   const createHousehold = useMutation(api.households.create);
   const createMove = useMutation(api.moves.create);
+  const createTransportResourceFromPreset = useMutation(
+    api.transportResources.createFromPreset
+  );
 
   const [householdName, setHouseholdName] = useState("My household");
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
+  const [selectedMoveId, setSelectedMoveId] = useState<Id<"moves"> | null>(
+    null
+  );
   const [moveTitle, setMoveTitle] = useState("");
   const [moveType, setMoveType] = useState<MoveType>("pcs");
   const [documentationProfileTypes, setDocumentationProfileTypes] = useState<
@@ -86,6 +96,8 @@ export function MoveDashboard() {
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [saving, setSaving] = useState(false);
+  const [addingPreset, setAddingPreset] =
+    useState<TransportResourcePresetKey | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -112,6 +124,13 @@ export function MoveDashboard() {
     [moves]
   );
 
+  const firstMove = activeMoves[0];
+  const moveId = selectedMoveId ?? firstMove?._id ?? null;
+  const selectedMove = activeMoves.find((move) => move._id === moveId);
+  const resourcesWithZones = useQuery(
+    api.transportResources.listForMoveWithZones,
+    householdId && moveId ? { householdId, moveId } : "skip"
+  );
   const selectedPacketCount = documentationProfileTypes.length;
 
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
@@ -142,7 +161,7 @@ export function MoveDashboard() {
 
     try {
       const parsedWeightAllowance = Number(moveLevelWeightAllowanceLb);
-      await createMove({
+      const id = await createMove({
         householdId,
         title: moveTitle,
         type: moveType,
@@ -176,6 +195,7 @@ export function MoveDashboard() {
       setMoveTitle("");
       setOrigin("");
       setDestination("");
+      setSelectedMoveId(id);
       setPcsOrdersNumber("");
       setMoveLevelWeightAllowanceLb("");
       setMessage("Move created.");
@@ -186,9 +206,32 @@ export function MoveDashboard() {
     }
   }
 
+  async function handleAddResourcePreset(presetKey: TransportResourcePresetKey) {
+    if (!householdId || !moveId) {
+      return;
+    }
+
+    setAddingPreset(presetKey);
+    setMessage(null);
+
+    try {
+      await createTransportResourceFromPreset({
+        householdId,
+        moveId,
+        presetKey,
+      });
+      setMessage("Resource preset added.");
+    } catch {
+      setMessage("Could not add that resource preset yet.");
+    } finally {
+      setAddingPreset(null);
+    }
+  }
+
   const loadingIdentity = currentUser === undefined;
   const loadingHouseholds = currentUser && households === undefined;
   const loadingMoves = householdId && moves === undefined;
+  const loadingResources = moveId && resourcesWithZones === undefined;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -230,9 +273,9 @@ export function MoveDashboard() {
         />
         <Metric
           label="Resources"
-          value="0"
+          value={resourcesWithZones?.length ?? 0}
           icon={Archive}
-          note="add after move setup"
+          note="selected move"
         />
         <Metric
           label="Packets"
@@ -534,42 +577,154 @@ export function MoveDashboard() {
                 <Skeleton className="h-10 w-3/4" />
               </div>
             ) : activeMoves.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Move</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Profiles</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Route</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <div className="space-y-3">
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={moveId ?? ""}
+                  onChange={(event) =>
+                    setSelectedMoveId(event.target.value as Id<"moves">)
+                  }
+                >
                   {activeMoves.map((move) => (
-                    <TableRow key={move._id}>
-                      <TableCell className="font-medium">{move.title}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{move.type}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {move.documentationProfileTypes?.length ?? 0}
-                      </TableCell>
-                      <TableCell>{move.status}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {[move.origin, move.destination]
-                          .filter(Boolean)
-                          .join(" -> ") || "not set"}
-                      </TableCell>
-                    </TableRow>
+                    <option key={move._id} value={move._id}>
+                      {move.title}
+                    </option>
                   ))}
-                </TableBody>
-              </Table>
+                </select>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Move</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Profiles</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Route</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeMoves.map((move) => (
+                      <TableRow key={move._id}>
+                        <TableCell className="font-medium">{move.title}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{move.type}</Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {move.documentationProfileTypes?.length ?? 0}
+                        </TableCell>
+                        <TableCell>{move.status}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {[move.origin, move.destination]
+                            .filter(Boolean)
+                            .join(" -> ") || "not set"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
               <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
                 Create the first move to unlock resources, zones, inventory, AI
                 planning, and documentation packet setup.
               </div>
             )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Transport resources</CardTitle>
+            <CardDescription>
+              Presets create useful default zones for{" "}
+              {selectedMove?.title ?? "the selected move"}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {transportResourcePresetOptions.map(([key, label, detail]) => (
+                <Button
+                  key={key}
+                  type="button"
+                  variant="outline"
+                  className="h-auto justify-start whitespace-normal p-3 text-left"
+                  disabled={!moveId || addingPreset !== null}
+                  onClick={() => void handleAddResourcePreset(key)}
+                >
+                  <span>
+                    <span className="block text-sm font-medium">{label}</span>
+                    <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                      {detail}
+                    </span>
+                  </span>
+                </Button>
+              ))}
+            </div>
+
+            {loadingResources ? (
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-4/5" />
+              </div>
+            ) : resourcesWithZones?.length ? (
+              <div className="grid gap-3 xl:grid-cols-2">
+                {resourcesWithZones.map(({ resource, zones }) => (
+                  <div
+                    key={resource._id}
+                    className="rounded-md border border-border p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{resource.name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {resource.description ?? resource.type}
+                        </p>
+                      </div>
+                      <Badge variant="outline">{resource.type}</Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {zones.map((zone) => (
+                        <Badge key={zone._id} variant="secondary">
+                          {zone.name}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {resource.rules.length
+                        ? resource.rules.join(" · ")
+                        : "No resource rules yet"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                Add trucks, trailers, movers, storage, sell/donate/dump/free,
+                or unknown resources to start the load plan.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Capacity posture</CardTitle>
+            <CardDescription>
+              Resource caps are planning limits, while PCS allowances stay on
+              the move.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Trucks and trailers get weight/volume defaults. Mover, storage,
+              sell, donate, dump, free, and unknown buckets can be unlimited for
+              app planning.
+            </p>
+            <p>
+              Capacity warnings become meaningful after inventory, boxes, and
+              assignments land.
+            </p>
           </CardContent>
         </Card>
       </section>

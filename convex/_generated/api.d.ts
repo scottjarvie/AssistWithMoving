@@ -19,6 +19,7 @@ import type * as lib_clerk from "../lib/clerk.js";
 import type * as lib_moveFields from "../lib/moveFields.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_roles from "../lib/roles.js";
+import type * as lib_transportPresets from "../lib/transportPresets.js";
 import type * as movePeople from "../movePeople.js";
 import type * as moves from "../moves.js";
 import type * as transportResources from "../transportResources.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   "lib/moveFields": typeof lib_moveFields;
   "lib/permissions": typeof lib_permissions;
   "lib/roles": typeof lib_roles;
+  "lib/transportPresets": typeof lib_transportPresets;
   movePeople: typeof movePeople;
   moves: typeof moves;
   transportResources: typeof transportResources;

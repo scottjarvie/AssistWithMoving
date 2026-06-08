@@ -112,11 +112,13 @@ export const transportResourceType = v.union(
   v.literal("trailer"),
   v.literal("personalVehicle"),
   v.literal("professionalMovers"),
+  v.literal("militaryMovers"),
   v.literal("storage"),
   v.literal("dump"),
   v.literal("sell"),
   v.literal("donate"),
   v.literal("free"),
+  v.literal("freeGiveaway"),
   v.literal("unknown"),
   v.literal("custom")
 );

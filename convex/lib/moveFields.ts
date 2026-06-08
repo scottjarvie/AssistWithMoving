@@ -16,13 +16,30 @@ export const transportResourceTypes = [
   "trailer",
   "personalVehicle",
   "professionalMovers",
+  "militaryMovers",
   "storage",
   "dump",
   "sell",
   "donate",
   "free",
+  "freeGiveaway",
   "unknown",
   "custom",
+] as const;
+
+export const transportResourcePresetKeys = [
+  "boxTruck",
+  "pickupTruck",
+  "trailer7x16",
+  "personalVehicle",
+  "professionalMovers",
+  "militaryMovers",
+  "storageUnit",
+  "sell",
+  "donate",
+  "dump",
+  "freeGiveaway",
+  "unknown",
 ] as const;
 
 export const documentationProfileTypes = [
@@ -188,13 +205,30 @@ export const transportResourceTypeValidator = v.union(
   v.literal("trailer"),
   v.literal("personalVehicle"),
   v.literal("professionalMovers"),
+  v.literal("militaryMovers"),
   v.literal("storage"),
   v.literal("dump"),
   v.literal("sell"),
   v.literal("donate"),
   v.literal("free"),
+  v.literal("freeGiveaway"),
   v.literal("unknown"),
   v.literal("custom")
+);
+
+export const transportResourcePresetKeyValidator = v.union(
+  v.literal("boxTruck"),
+  v.literal("pickupTruck"),
+  v.literal("trailer7x16"),
+  v.literal("personalVehicle"),
+  v.literal("professionalMovers"),
+  v.literal("militaryMovers"),
+  v.literal("storageUnit"),
+  v.literal("sell"),
+  v.literal("donate"),
+  v.literal("dump"),
+  v.literal("freeGiveaway"),
+  v.literal("unknown")
 );
 
 export const movePersonRoleValidator = v.union(
