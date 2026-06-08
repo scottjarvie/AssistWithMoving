@@ -296,6 +296,7 @@ export default defineSchema({
   })
     .index("by_household_time", ["householdId", "createdAt"])
     .index("by_move_time", ["moveId", "createdAt"])
+    .index("by_object_time", ["objectTable", "objectId", "createdAt"])
     .index("by_actor_user_time", ["actorUserId", "createdAt"])
     .index("by_category_time", ["category", "createdAt"]),
 

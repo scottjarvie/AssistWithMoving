@@ -21,11 +21,13 @@ import {
   Columns3,
   ListFilter,
   PackagePlus,
+  PanelRightOpen,
   Search,
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { Id } from "../../convex/_generated/dataModel";
+import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,37 +52,11 @@ import {
   inventorySavedFilters,
   type InventoryFilterKey,
 } from "@/lib/inventory-filters";
-
-type InventoryItem = Doc<"items">;
-type ItemPatch = {
-  status?: InventoryItem["status"];
-  disposition?: InventoryItem["disposition"];
-  needsReview?: boolean;
-  requiresPersonalTransport?: boolean;
-};
-
-const itemDispositionOptions = [
-  "undecided",
-  "take",
-  "sell",
-  "donate",
-  "dump",
-  "free",
-  "storage",
-  "mover",
-  "personalTransport",
-] as const;
-
-const itemStatusOptions = [
-  "draft",
-  "active",
-  "packed",
-  "loaded",
-  "delivered",
-  "missing",
-  "damaged",
-  "archived",
-] as const;
+import {
+  itemDispositionOptions,
+  itemStatusOptions,
+} from "@/lib/inventory-options";
+import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 
 const visibleDefaultColumns: VisibilityState = {
   category: true,
@@ -113,6 +89,10 @@ export function InventoryTable({
   const [columnVisibility, setColumnVisibility] =
     useState<VisibilityState>(visibleDefaultColumns);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(
+    null
+  );
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const items = useQuery(
     api.items.listForMove,
@@ -124,6 +104,10 @@ export function InventoryTable({
   const filteredItems = useMemo(
     () => filterInventoryItems(items ?? [], savedFilter, search),
     [items, savedFilter, search]
+  );
+  const selectedItem = useMemo(
+    () => items?.find((item) => item._id === selectedItemId) ?? null,
+    [items, selectedItemId]
   );
 
   async function handleCreateItem(event: FormEvent<HTMLFormElement>) {
@@ -164,7 +148,7 @@ export function InventoryTable({
   }
 
   const patchItem = useCallback(
-    async (item: InventoryItem, patch: ItemPatch) => {
+    async (item: InventoryItem, patch: InventoryItemPatch) => {
       if (!householdId || !moveId) {
         return;
       }
@@ -179,7 +163,7 @@ export function InventoryTable({
     [householdId, moveId, updateItem]
   );
 
-  async function handleBulkPatch(patch: ItemPatch) {
+  async function handleBulkPatch(patch: InventoryItemPatch) {
     const selectedItems = table
       .getSelectedRowModel()
       .rows.map((row) => row.original);
@@ -235,6 +219,26 @@ export function InventoryTable({
             </p>
           </div>
         ),
+      },
+      {
+        id: "details",
+        header: "",
+        cell: ({ row }) => (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setSelectedItemId(row.original._id);
+              setDetailOpen(true);
+            }}
+          >
+            <PanelRightOpen aria-hidden="true" />
+            Details
+          </Button>
+        ),
+        enableSorting: false,
+        enableHiding: false,
       },
       {
         accessorKey: "room",
@@ -381,7 +385,8 @@ export function InventoryTable({
   const loadingItems = moveId && items === undefined;
 
   return (
-    <Card>
+    <>
+      <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -642,6 +647,23 @@ export function InventoryTable({
           </div>
         </div>
       </CardContent>
-    </Card>
+      </Card>
+      <ItemDetailSheet
+        key={selectedItem?._id ?? "no-item-selected"}
+        householdId={householdId}
+        moveId={moveId}
+        item={selectedItem}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onSave={async (patch) => {
+          if (!selectedItem) {
+            return;
+          }
+
+          await patchItem(selectedItem, patch);
+          setMessage("Item details saved.");
+        }}
+      />
+    </>
   );
 }

@@ -2,7 +2,10 @@ import { v } from "convex/values";
 
 import { internalMutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
-import { requireHouseholdPermission } from "./lib/permissions";
+import {
+  requireHouseholdPermission,
+  requireMovePermission,
+} from "./lib/permissions";
 
 export const record = internalMutation({
   args: {
@@ -54,5 +57,37 @@ export const listForHousehold = query({
       )
       .order("desc")
       .take(args.limit ?? 50);
+  },
+});
+
+export const listForObject = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    objectTable: v.string(),
+    objectId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read"
+    );
+
+    const limit = Math.min(Math.max(args.limit ?? 10, 1), 50);
+    const entries = await ctx.db
+      .query("auditLogs")
+      .withIndex("by_object_time", (q) =>
+        q.eq("objectTable", args.objectTable).eq("objectId", args.objectId)
+      )
+      .order("desc")
+      .take(limit);
+
+    return entries.filter(
+      (entry) =>
+        entry.householdId === args.householdId && entry.moveId === args.moveId
+    );
   },
 });
