@@ -20,3 +20,12 @@ test("workspace preview is protected for signed-out users", async ({ page }) => 
     page.getByRole("heading", { name: "Sign in to MovingManifest" })
   ).toBeVisible();
 });
+
+test("public share links fail safely without requiring sign-in", async ({ page }) => {
+  await page.goto("/share/not-a-real-token");
+
+  await expect(page).not.toHaveURL(/\/sign-in/);
+  await expect(
+    page.getByRole("heading", { name: "Share link unavailable" })
+  ).toBeVisible();
+});

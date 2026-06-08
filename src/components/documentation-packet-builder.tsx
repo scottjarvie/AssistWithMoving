@@ -36,6 +36,7 @@ import {
   buildSubManifestPath,
   subManifestKindForProfileType,
 } from "@/lib/sub-manifest";
+import { buildPublicSharePath } from "@/lib/share-links";
 import {
   documentationProfileOptions,
   type DocumentationProfileType,
@@ -399,6 +400,8 @@ export function DocumentationPacketBuilder({
       setBusy(null);
     }
   }
+
+  const createdSharePath = createdToken ? buildPublicSharePath(createdToken) : null;
 
   return (
     <Card id="documentation-packets">
@@ -901,9 +904,19 @@ export function DocumentationPacketBuilder({
                     </Button>
                   </div>
                   {createdToken ? (
-                    <p className="mt-3 break-all rounded-md bg-muted p-3 font-mono text-xs">
-                      {createdToken}
-                    </p>
+                    <div className="mt-3 grid gap-2 rounded-md bg-muted p-3 text-xs">
+                      <p className="break-all font-mono">{createdToken}</p>
+                      {createdSharePath ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="break-all font-mono text-muted-foreground">
+                            {createdSharePath}
+                          </span>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={createdSharePath}>Open share link</Link>
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
 

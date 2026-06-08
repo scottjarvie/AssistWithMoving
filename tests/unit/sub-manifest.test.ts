@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isSubManifestItem,
+  publicSubManifestKindForProfileType as convexPublicSubManifestKindForProfileType,
   shouldShowSubManifestOwnerFields,
   subManifestDisclaimer,
   subManifestDispositionFilter,
@@ -13,7 +14,9 @@ import {
   formatSubManifestCurrency,
   subManifestFilename,
   subManifestKindForProfileType as clientSubManifestKindForProfileType,
+  publicSubManifestKindForProfileType,
 } from "@/lib/sub-manifest";
+import { buildPublicSharePath, buildPublicShareUrl } from "@/lib/share-links";
 
 describe("sub-manifest helpers", () => {
   it("maps profile types to manifest kinds", () => {
@@ -23,6 +26,13 @@ describe("sub-manifest helpers", () => {
     expect(clientSubManifestKindForProfileType("storageInventory")).toBe(
       "storage"
     );
+    expect(publicSubManifestKindForProfileType("donationPickup")).toBe("donation");
+    expect(publicSubManifestKindForProfileType("sellOrGiveaway")).toBe("sellFree");
+    expect(publicSubManifestKindForProfileType("pcsMove")).toBe(null);
+    expect(convexPublicSubManifestKindForProfileType("storageInventory")).toBe(
+      "storage"
+    );
+    expect(convexPublicSubManifestKindForProfileType("loadCrew")).toBe(null);
   });
 
   it("filters items by disposition and excludes archived status", () => {
@@ -51,6 +61,17 @@ describe("sub-manifest helpers", () => {
     expect(subManifestTitle("donation")).toBe("Donation pickup manifest");
     expect(subManifestTitle("sellFree")).toBe("Sell / giveaway manifest");
     expect(subManifestDisclaimer("storage")).toContain("storage manifest");
+  });
+});
+
+describe("public share paths", () => {
+  it("builds encoded public share paths and URLs", () => {
+    expect(buildPublicSharePath(" share/token+with space ")).toBe(
+      "/share/share%2Ftoken%2Bwith%20space"
+    );
+    expect(
+      buildPublicShareUrl("token-123", "https://movingmanifest.com")
+    ).toBe("https://movingmanifest.com/share/token-123");
   });
 });
 

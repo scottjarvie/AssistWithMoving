@@ -37,6 +37,17 @@ export function subManifestKindForProfileType(
   }
 }
 
+export function publicSubManifestKindForProfileType(profileType: string) {
+  if (
+    profileType === "donationPickup" ||
+    profileType === "sellOrGiveaway" ||
+    profileType === "storageInventory"
+  ) {
+    return subManifestKindForProfileType(profileType);
+  }
+  return null;
+}
+
 export function formatSubManifestCurrency(cents: number | undefined) {
   if (typeof cents !== "number") return "Hidden";
   return `$${(cents / 100).toFixed(2)}`;

@@ -57,6 +57,7 @@ type ShareLinkAccessResult = {
     "view" | "download" | "statusUpdate" | "comment" | "uploadEvidence"
   >;
   expiresAt: number;
+  label?: string;
 };
 
 const internalMutations = anyApi as unknown as {
@@ -72,6 +73,17 @@ const internalMutations = anyApi as unknown as {
       "internal",
       { tokenHash: string; accessMetadata?: unknown },
       ShareLinkAccessResult
+    >;
+  };
+};
+
+const internalQueries = anyApi as unknown as {
+  subManifests: {
+    getForShareLink: FunctionReference<
+      "query",
+      "internal",
+      ShareLinkAccessResult,
+      unknown
     >;
   };
 };
@@ -180,6 +192,29 @@ export const resolveToken = action({
         accessMetadata: args.accessMetadata,
       }
     );
+  },
+});
+
+export const resolvePublicView = action({
+  args: {
+    token: v.string(),
+    accessMetadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const tokenHash = await hashShareToken(args.token);
+    const access = await ctx.runMutation(
+      internalMutations.shareLinks.recordAccessByTokenHash,
+      {
+        tokenHash,
+        accessMetadata: args.accessMetadata,
+      }
+    );
+
+    if (!access.allowedActions.includes("view")) {
+      throw new Error("Share link does not allow viewing.");
+    }
+
+    return await ctx.runQuery(internalQueries.subManifests.getForShareLink, access);
   },
 });
 
@@ -326,6 +361,7 @@ export const recordAccessByTokenHash = internalMutation({
       role: link.role,
       allowedActions: link.allowedActions,
       expiresAt: link.expiresAt,
+      label: link.label,
     };
   },
 });

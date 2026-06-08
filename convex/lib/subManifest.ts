@@ -29,6 +29,17 @@ export function subManifestKindForProfileType(
   }
 }
 
+export function publicSubManifestKindForProfileType(profileType: string) {
+  if (
+    profileType === "donationPickup" ||
+    profileType === "sellOrGiveaway" ||
+    profileType === "storageInventory"
+  ) {
+    return subManifestKindForProfileType(profileType);
+  }
+  return null;
+}
+
 export function subManifestDispositionFilter(kind: SubManifestKind) {
   switch (kind) {
     case "donation":

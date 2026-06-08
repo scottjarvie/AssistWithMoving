@@ -1,11 +1,13 @@
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import { internalQuery, query } from "./_generated/server";
 import { estimateItem, roundEstimate } from "./lib/estimateEngine";
 import { requireMovePermission } from "./lib/permissions";
 import {
   isSubManifestItem,
+  publicSubManifestKindForProfileType,
   shouldShowSubManifestOwnerFields,
   subManifestDisclaimer,
   subManifestDispositionFilter,
@@ -47,220 +49,354 @@ export const getForMove = query({
       "documentation:read"
     );
 
-    const mode: SubManifestMode = args.mode ?? "recipient";
-    const kind: SubManifestKind = args.kind;
-    const showOwnerFields = shouldShowSubManifestOwnerFields(mode);
-
-    const [move, items, boxes, boxItems, photos, resources, zones, profiles] =
-      await Promise.all([
-        ctx.db.get(args.moveId),
-        ctx.db
-          .query("items")
-          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("boxes")
-          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("boxItems")
-          .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("itemPhotos")
-          .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("transportResources")
-          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("transportZones")
-          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("documentationProfiles")
-          .withIndex("by_move_type", (q) =>
-            q.eq("moveId", args.moveId).eq("type", profileTypeForKind(kind))
-          )
-          .collect(),
-      ]);
-
-    if (!move || move.householdId !== args.householdId) {
-      throw new Error("Move not found.");
-    }
-
-    const activeItems = items.filter((item) => !item.deletedAt);
-    const activeBoxes = boxes.filter((box) => !box.archivedAt);
-    const activePhotos = photos.filter((photo) => !photo.archivedAt);
-    const profile = profiles.find((entry) => entry.status === "active");
-    const boxById = new Map(activeBoxes.map((box) => [box._id, box]));
-    const resourceNameById = new Map(
-      resources.map((resource) => [resource._id, resource.name])
-    );
-    const zoneNameById = new Map(zones.map((zone) => [zone._id, zone.name]));
-    const boxTrailByItemId = buildBoxTrailByItemId({
-      memberships: boxItems,
-      boxById,
-      resourceNameById,
-      zoneNameById,
+    return await buildSubManifest(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      kind: args.kind,
+      mode: args.mode ?? "recipient",
     });
-    const photosByItemId = groupPhotosByItemId(activePhotos);
+  },
+});
 
-    const manifestItems = activeItems
-      .filter((item) => isSubManifestItem(item, kind))
-      .map((item) => {
-        const estimate = estimateItem(item);
-        const itemPhotos = photosByItemId.get(item._id) ?? [];
-
-        return {
-          itemId: item._id,
-          name: item.name,
-          description: item.description,
-          room: item.room,
-          destinationRoom: item.destinationRoom,
-          category: item.category,
-          disposition: item.disposition,
-          status: item.status,
-          condition: item.condition,
-          quantity: item.quantity,
-          estimatedWeightLb: estimate.weight?.value,
-          estimatedVolumeCuFt: estimate.volume?.value,
-          photoCount: itemPhotos.length,
-          photoEvidence: itemPhotos.map((photo) =>
-            photoMetadataForPacket(photo, showOwnerFields)
-          ),
-          boxTrail: boxTrailByItemId.get(item._id) ?? [],
-          listing: listingFieldsForKind(kind, item, itemPhotos.length),
-          owner:
-            showOwnerFields
-              ? {
-                  valueCents: item.valueCents,
-                  replacementValueCents: item.replacementValueCents,
-                  serialNumber: item.serialNumber,
-                  modelNumber: item.modelNumber,
-                  privateNotes: item.privateNotes,
-                  reviewFlags: item.reviewFlags,
-                  planningDefaultKeys: item.planningDefaultKeys,
-                  aiSummary: item.aiSummary,
-                  aiTags: item.aiTags,
-                }
-              : undefined,
-        };
-      });
-
-    const statusBuckets = new Map<string, ManifestBucket>();
-    const dispositionBuckets = new Map<string, ManifestBucket>();
-    const roomBuckets = new Map<string, ManifestBucket>();
-
-    for (const item of manifestItems) {
-      addManifestBucket(statusBuckets, item.status, item.status, item, showOwnerFields);
-      addManifestBucket(
-        dispositionBuckets,
-        item.disposition,
-        item.disposition,
-        item,
-        showOwnerFields
-      );
-      addManifestBucket(
-        roomBuckets,
-        item.room ?? "unset",
-        item.room ?? "Unset",
-        item,
-        showOwnerFields
-      );
+export const getForShareLink = internalQuery({
+  args: {
+    shareLinkId: v.id("shareLinks"),
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    documentationProfileId: v.optional(v.id("documentationProfiles")),
+    scope: v.union(v.literal("move"), v.literal("profile")),
+    role: v.union(
+      v.literal("owner"),
+      v.literal("admin"),
+      v.literal("editor"),
+      v.literal("packer"),
+      v.literal("viewer"),
+      v.literal("guest")
+    ),
+    allowedActions: v.array(
+      v.union(
+        v.literal("view"),
+        v.literal("download"),
+        v.literal("statusUpdate"),
+        v.literal("comment"),
+        v.literal("uploadEvidence")
+      )
+    ),
+    expiresAt: v.number(),
+    label: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!args.documentationProfileId) {
+      return {
+        status: "unsupported" as const,
+        reason: "This share link is not tied to a documentation profile yet.",
+        shareLink: publicShareLinkMetadata(args),
+      };
     }
 
-    const includedBoxIds = new Set(
-      manifestItems.flatMap((item) => item.boxTrail.map((box) => box.boxId))
-    );
-    const manifestBoxes = activeBoxes
-      .filter((box) => includedBoxIds.has(box._id))
-      .map((box) => ({
-        boxId: box._id,
-        code: box.code,
-        label: box.label,
-        room: box.room,
-        destinationRoom: box.destinationRoom,
-        status: box.status,
-        assignedResource: box.assignedResourceId
-          ? resourceNameById.get(box.assignedResourceId)
-          : undefined,
-        assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
-        estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
-        estimatedVolumeCuFt: box.estimatedVolumeCuFt,
-      }));
+    const profile = await ctx.db.get(args.documentationProfileId);
+    if (
+      !profile ||
+      profile.householdId !== args.householdId ||
+      profile.moveId !== args.moveId ||
+      profile.status !== "active"
+    ) {
+      throw new Error("Documentation profile not found.");
+    }
+
+    const kind = publicSubManifestKindForProfileType(profile.type);
+    if (!kind) {
+      return {
+        status: "unsupported" as const,
+        reason: `${profile.name} links are created, but public rendering for this packet type is not enabled yet.`,
+        shareLink: publicShareLinkMetadata(args),
+        profile: publicProfileMetadata(profile),
+      };
+    }
+
+    const packet = await buildSubManifest(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      kind,
+      mode: "recipient",
+      documentationProfileId: args.documentationProfileId,
+    });
 
     return {
-      kind,
-      mode,
-      generatedAt: Date.now(),
-      title: subManifestTitle(kind),
-      disclaimer: subManifestDisclaimer(kind),
-      profile:
-        profile
-          ? {
-              profileId: profile._id,
-              name: profile.name,
-              includedFields: profile.includedFields,
-              imageRule: profile.imageRule,
-              filters: profile.filters,
-            }
-          : undefined,
-      move: {
-        moveId: move._id,
-        title: move.title,
-        type: move.type,
-        origin: move.origin,
-        destination: move.destination,
-        dateStart: move.dateStart,
-        dateEnd: move.dateEnd,
-        notes: showOwnerFields ? move.notes : undefined,
-      },
-      visibility: {
-        ownerPrivateFieldsShown: showOwnerFields,
-        valuesHidden: !showOwnerFields,
-        serialsHidden: !showOwnerFields,
-        privateNotesHidden: !showOwnerFields,
-        rawStorageHidden: true,
-      },
-      filters: {
-        dispositions: subManifestDispositionFilter(kind),
-      },
-      summary: {
-        itemCount: manifestItems.length,
-        quantity: manifestItems.reduce((total, item) => total + item.quantity, 0),
-        boxCount: manifestBoxes.length,
-        photoCount: manifestItems.reduce((total, item) => total + item.photoCount, 0),
-        estimatedWeightLb: roundEstimate(
-          manifestItems.reduce(
-            (total, item) => total + (item.estimatedWeightLb ?? 0),
-            0
-          )
-        ),
-        estimatedVolumeCuFt: roundEstimate(
-          manifestItems.reduce(
-            (total, item) => total + (item.estimatedVolumeCuFt ?? 0),
-            0
-          )
-        ),
-        totalValueCents: showOwnerFields
-          ? manifestItems.reduce(
-              (total, item) => total + (item.owner?.valueCents ?? 0),
-              0
-            )
-          : undefined,
-      },
-      sections: {
-        statusTotals: Array.from(statusBuckets.values()),
-        dispositionTotals: Array.from(dispositionBuckets.values()),
-        roomTotals: Array.from(roomBuckets.values()),
-        boxes: manifestBoxes,
-        items: manifestItems,
-      },
+      status: "ready" as const,
+      kind: "subManifest" as const,
+      shareLink: publicShareLinkMetadata(args),
+      profile: publicProfileMetadata(profile),
+      packet,
     };
   },
 });
+
+async function buildSubManifest(
+  ctx: QueryCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    kind: SubManifestKind;
+    mode: SubManifestMode;
+    documentationProfileId?: Id<"documentationProfiles">;
+  }
+) {
+  const mode = args.mode;
+  const kind = args.kind;
+  const showOwnerFields = shouldShowSubManifestOwnerFields(mode);
+
+  const [move, items, boxes, boxItems, photos, resources, zones, profiles] =
+    await Promise.all([
+      ctx.db.get(args.moveId),
+      ctx.db
+        .query("items")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("boxes")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("boxItems")
+        .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("transportResources")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("transportZones")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      args.documentationProfileId
+        ? Promise.resolve([])
+        : ctx.db
+            .query("documentationProfiles")
+            .withIndex("by_move_type", (q) =>
+              q.eq("moveId", args.moveId).eq("type", profileTypeForKind(kind))
+            )
+            .collect(),
+    ]);
+
+  if (!move || move.householdId !== args.householdId) {
+    throw new Error("Move not found.");
+  }
+
+  const activeItems = items.filter((item) => !item.deletedAt);
+  const activeBoxes = boxes.filter((box) => !box.archivedAt);
+  const activePhotos = photos.filter((photo) => !photo.archivedAt);
+  const profile = args.documentationProfileId
+    ? await ctx.db.get(args.documentationProfileId)
+    : profiles.find((entry) => entry.status === "active");
+  const boxById = new Map(activeBoxes.map((box) => [box._id, box]));
+  const resourceNameById = new Map(
+    resources.map((resource) => [resource._id, resource.name])
+  );
+  const zoneNameById = new Map(zones.map((zone) => [zone._id, zone.name]));
+  const boxTrailByItemId = buildBoxTrailByItemId({
+    memberships: boxItems,
+    boxById,
+    resourceNameById,
+    zoneNameById,
+  });
+  const photosByItemId = groupPhotosByItemId(activePhotos);
+
+  const manifestItems = activeItems
+    .filter((item) => isSubManifestItem(item, kind))
+    .map((item) => {
+      const estimate = estimateItem(item);
+      const itemPhotos = photosByItemId.get(item._id) ?? [];
+
+      return {
+        itemId: item._id,
+        name: item.name,
+        description: item.description,
+        room: item.room,
+        destinationRoom: item.destinationRoom,
+        category: item.category,
+        disposition: item.disposition,
+        status: item.status,
+        condition: item.condition,
+        quantity: item.quantity,
+        estimatedWeightLb: estimate.weight?.value,
+        estimatedVolumeCuFt: estimate.volume?.value,
+        photoCount: itemPhotos.length,
+        photoEvidence: itemPhotos.map((photo) =>
+          photoMetadataForPacket(photo, showOwnerFields)
+        ),
+        boxTrail: boxTrailByItemId.get(item._id) ?? [],
+        listing: listingFieldsForKind(kind, item, itemPhotos.length),
+        owner:
+          showOwnerFields
+            ? {
+                valueCents: item.valueCents,
+                replacementValueCents: item.replacementValueCents,
+                serialNumber: item.serialNumber,
+                modelNumber: item.modelNumber,
+                privateNotes: item.privateNotes,
+                reviewFlags: item.reviewFlags,
+                planningDefaultKeys: item.planningDefaultKeys,
+                aiSummary: item.aiSummary,
+                aiTags: item.aiTags,
+              }
+            : undefined,
+      };
+    });
+
+  const statusBuckets = new Map<string, ManifestBucket>();
+  const dispositionBuckets = new Map<string, ManifestBucket>();
+  const roomBuckets = new Map<string, ManifestBucket>();
+
+  for (const item of manifestItems) {
+    addManifestBucket(statusBuckets, item.status, item.status, item, showOwnerFields);
+    addManifestBucket(
+      dispositionBuckets,
+      item.disposition,
+      item.disposition,
+      item,
+      showOwnerFields
+    );
+    addManifestBucket(
+      roomBuckets,
+      item.room ?? "unset",
+      item.room ?? "Unset",
+      item,
+      showOwnerFields
+    );
+  }
+
+  const includedBoxIds = new Set(
+    manifestItems.flatMap((item) => item.boxTrail.map((box) => box.boxId))
+  );
+  const manifestBoxes = activeBoxes
+    .filter((box) => includedBoxIds.has(box._id))
+    .map((box) => ({
+      boxId: box._id,
+      code: box.code,
+      label: box.label,
+      room: box.room,
+      destinationRoom: box.destinationRoom,
+      status: box.status,
+      assignedResource: box.assignedResourceId
+        ? resourceNameById.get(box.assignedResourceId)
+        : undefined,
+      assignedZone: box.assignedZoneId
+        ? zoneNameById.get(box.assignedZoneId)
+        : undefined,
+      estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
+      estimatedVolumeCuFt: box.estimatedVolumeCuFt,
+    }));
+
+  return {
+    kind,
+    mode,
+    generatedAt: Date.now(),
+    title: subManifestTitle(kind),
+    disclaimer: subManifestDisclaimer(kind),
+    profile:
+      profile
+        ? {
+            profileId: profile._id,
+            name: profile.name,
+            includedFields: profile.includedFields,
+            imageRule: profile.imageRule,
+            filters: profile.filters,
+          }
+        : undefined,
+    move: {
+      moveId: move._id,
+      title: move.title,
+      type: move.type,
+      origin: move.origin,
+      destination: move.destination,
+      dateStart: move.dateStart,
+      dateEnd: move.dateEnd,
+      notes: showOwnerFields ? move.notes : undefined,
+    },
+    visibility: {
+      ownerPrivateFieldsShown: showOwnerFields,
+      valuesHidden: !showOwnerFields,
+      serialsHidden: !showOwnerFields,
+      privateNotesHidden: !showOwnerFields,
+      rawStorageHidden: true,
+    },
+    filters: {
+      dispositions: subManifestDispositionFilter(kind),
+    },
+    summary: {
+      itemCount: manifestItems.length,
+      quantity: manifestItems.reduce((total, item) => total + item.quantity, 0),
+      boxCount: manifestBoxes.length,
+      photoCount: manifestItems.reduce((total, item) => total + item.photoCount, 0),
+      estimatedWeightLb: roundEstimate(
+        manifestItems.reduce(
+          (total, item) => total + (item.estimatedWeightLb ?? 0),
+          0
+        )
+      ),
+      estimatedVolumeCuFt: roundEstimate(
+        manifestItems.reduce(
+          (total, item) => total + (item.estimatedVolumeCuFt ?? 0),
+          0
+        )
+      ),
+      totalValueCents: showOwnerFields
+        ? manifestItems.reduce(
+            (total, item) => total + (item.owner?.valueCents ?? 0),
+            0
+          )
+        : undefined,
+    },
+    sections: {
+      statusTotals: Array.from(statusBuckets.values()),
+      dispositionTotals: Array.from(dispositionBuckets.values()),
+      roomTotals: Array.from(roomBuckets.values()),
+      boxes: manifestBoxes,
+      items: manifestItems,
+    },
+  };
+}
+
+function publicShareLinkMetadata(args: {
+  shareLinkId: Id<"shareLinks">;
+  scope: "move" | "profile";
+  role: "owner" | "admin" | "editor" | "packer" | "viewer" | "guest";
+  allowedActions: Array<
+    "view" | "download" | "statusUpdate" | "comment" | "uploadEvidence"
+  >;
+  expiresAt: number;
+  label?: string;
+}) {
+  return {
+    shareLinkId: args.shareLinkId,
+    scope: args.scope,
+    role: args.role,
+    allowedActions: args.allowedActions,
+    expiresAt: args.expiresAt,
+    label: args.label,
+    canDownload: args.allowedActions.includes("download"),
+    canStatusUpdate: args.allowedActions.includes("statusUpdate"),
+    canComment: args.allowedActions.includes("comment"),
+    canUploadEvidence: args.allowedActions.includes("uploadEvidence"),
+  };
+}
+
+function publicProfileMetadata(profile: Doc<"documentationProfiles">) {
+  return {
+    profileId: profile._id,
+    type: profile.type,
+    name: profile.name,
+    includedFields: profile.includedFields,
+    imageRule: profile.imageRule,
+    filters: profile.filters,
+    disclaimer: profile.disclaimer,
+  };
+}
 
 function profileTypeForKind(kind: SubManifestKind) {
   switch (kind) {
