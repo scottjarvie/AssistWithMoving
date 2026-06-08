@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -25,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { buildLoadPlanPacketPath } from "@/lib/load-plan-packet";
 import { cn } from "@/lib/utils";
 
 type BoxRecord = NonNullable<
@@ -238,9 +240,35 @@ export function LoadPlannerBoard({
               warnings stay visible.
             </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{boxes?.length ?? 0} boxes</Badge>
             <Badge variant="outline">{allUnboxedItems.length} unpacked queue</Badge>
+            {householdId && moveId ? (
+              <>
+                <Button asChild size="sm" variant="outline">
+                  <Link
+                    href={buildLoadPlanPacketPath({
+                      householdId,
+                      moveId,
+                      mode: "crew",
+                    })}
+                  >
+                    Crew packet
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link
+                    href={buildLoadPlanPacketPath({
+                      householdId,
+                      moveId,
+                      mode: "owner",
+                    })}
+                  >
+                    Owner packet
+                  </Link>
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
       </CardHeader>
