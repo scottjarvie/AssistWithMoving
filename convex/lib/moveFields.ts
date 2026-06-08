@@ -111,6 +111,7 @@ export const itemFragilities = ["low", "medium", "high"] as const;
 export const itemCreatedViaValues = [
   "manual",
   "bulkImport",
+  "textAI",
   "photoAI",
   "api",
   "mcp",
@@ -203,6 +204,15 @@ export const aiJobModalities = ["text", "vision", "structured"] as const;
 export const aiJobReviewStatuses = [
   "unreviewed",
   "accepted",
+  "edited",
+  "rejected",
+] as const;
+
+export const aiTextSuggestionTypes = ["item", "box"] as const;
+
+export const aiTextSuggestionStatuses = [
+  "pending",
+  "approved",
   "edited",
   "rejected",
 ] as const;
@@ -469,6 +479,7 @@ export const itemFragilityValidator = v.union(
 export const itemCreatedViaValidator = v.union(
   v.literal("manual"),
   v.literal("bulkImport"),
+  v.literal("textAI"),
   v.literal("photoAI"),
   v.literal("api"),
   v.literal("mcp")
@@ -565,6 +576,18 @@ export const aiJobModalityValidator = v.union(
 export const aiJobReviewStatusValidator = v.union(
   v.literal("unreviewed"),
   v.literal("accepted"),
+  v.literal("edited"),
+  v.literal("rejected")
+);
+
+export const aiTextSuggestionTypeValidator = v.union(
+  v.literal("item"),
+  v.literal("box")
+);
+
+export const aiTextSuggestionStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
   v.literal("edited"),
   v.literal("rejected")
 );

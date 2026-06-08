@@ -197,6 +197,7 @@ export const itemFragility = v.union(
 export const itemCreatedVia = v.union(
   v.literal("manual"),
   v.literal("bulkImport"),
+  v.literal("textAI"),
   v.literal("photoAI"),
   v.literal("api"),
   v.literal("mcp")
@@ -293,6 +294,18 @@ export const aiJobModality = v.union(
 export const aiJobReviewStatus = v.union(
   v.literal("unreviewed"),
   v.literal("accepted"),
+  v.literal("edited"),
+  v.literal("rejected")
+);
+
+export const aiTextSuggestionType = v.union(
+  v.literal("item"),
+  v.literal("box")
+);
+
+export const aiTextSuggestionStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
   v.literal("edited"),
   v.literal("rejected")
 );
@@ -699,6 +712,54 @@ export default defineSchema({
     .index("by_household_status", ["householdId", "status"])
     .index("by_created_by", ["createdByUserId"])
     .index("by_status_updated", ["status", "updatedAt"]),
+
+  aiTextSuggestions: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    aiJobId: v.id("aiJobs"),
+    type: aiTextSuggestionType,
+    status: aiTextSuggestionStatus,
+    sourceText: v.string(),
+    sourceLine: v.string(),
+    sourceIndex: v.number(),
+    confidence: estimateConfidence,
+    reasoning: v.string(),
+    itemDraft: v.optional(
+      v.object({
+        name: v.string(),
+        room: v.optional(v.string()),
+        destinationRoom: v.optional(v.string()),
+        category: v.optional(v.string()),
+        disposition: itemDisposition,
+        quantity: v.number(),
+        description: v.optional(v.string()),
+        suggestedBoxLabel: v.optional(v.string()),
+        fragility: v.optional(itemFragility),
+        highValue: v.optional(v.boolean()),
+        planningDefaultKeys: v.optional(v.array(planningDefaultKey)),
+      })
+    ),
+    boxDraft: v.optional(
+      v.object({
+        code: v.optional(v.string()),
+        label: v.string(),
+        room: v.optional(v.string()),
+        destinationRoom: v.optional(v.string()),
+        description: v.optional(v.string()),
+      })
+    ),
+    approvedItemId: v.optional(v.id("items")),
+    approvedBoxId: v.optional(v.id("boxes")),
+    reviewedByUserId: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_job", ["aiJobId"])
+    .index("by_household_status", ["householdId", "status"]),
 
   items: defineTable({
     householdId: v.id("households"),

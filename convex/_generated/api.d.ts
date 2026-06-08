@@ -9,6 +9,7 @@
  */
 
 import type * as aiJobs from "../aiJobs.js";
+import type * as aiTextIntake from "../aiTextIntake.js";
 import type * as audit from "../audit.js";
 import type * as boxes from "../boxes.js";
 import type * as clerkUsers from "../clerkUsers.js";
@@ -29,6 +30,7 @@ import type * as lib_photoDelivery from "../lib/photoDelivery.js";
 import type * as lib_photoVisibility from "../lib/photoVisibility.js";
 import type * as lib_planningDefaults from "../lib/planningDefaults.js";
 import type * as lib_roles from "../lib/roles.js";
+import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
 import type * as movePeople from "../movePeople.js";
 import type * as movePlanningDefaults from "../movePlanningDefaults.js";
@@ -46,6 +48,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   aiJobs: typeof aiJobs;
+  aiTextIntake: typeof aiTextIntake;
   audit: typeof audit;
   boxes: typeof boxes;
   clerkUsers: typeof clerkUsers;
@@ -66,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   "lib/photoVisibility": typeof lib_photoVisibility;
   "lib/planningDefaults": typeof lib_planningDefaults;
   "lib/roles": typeof lib_roles;
+  "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;
   movePeople: typeof movePeople;
   movePlanningDefaults: typeof movePlanningDefaults;
