@@ -81,6 +81,50 @@ export const documentationProfileType = v.union(
   v.literal("loadCrew")
 );
 
+export const documentationFieldKey = v.union(
+  v.literal("moveSummary"),
+  v.literal("pcsFields"),
+  v.literal("rooms"),
+  v.literal("items"),
+  v.literal("boxes"),
+  v.literal("loadAssignments"),
+  v.literal("photos"),
+  v.literal("estimatedValues"),
+  v.literal("purchaseValues"),
+  v.literal("serialNumbers"),
+  v.literal("privateNotes"),
+  v.literal("conditionAndDamage"),
+  v.literal("auditSummary")
+);
+
+export const documentationImageRule = v.union(
+  v.literal("none"),
+  v.literal("thumbsOnly"),
+  v.literal("reviewedEvidence"),
+  v.literal("allAllowed")
+);
+
+export const documentationProfileStatus = v.union(
+  v.literal("draft"),
+  v.literal("active"),
+  v.literal("archived")
+);
+
+export const shareLinkScope = v.union(v.literal("move"), v.literal("profile"));
+
+export const shareLinkStatus = v.union(
+  v.literal("active"),
+  v.literal("revoked")
+);
+
+export const shareLinkAction = v.union(
+  v.literal("view"),
+  v.literal("download"),
+  v.literal("statusUpdate"),
+  v.literal("comment"),
+  v.literal("uploadEvidence")
+);
+
 export const pcsBranch = v.union(
   v.literal("army"),
   v.literal("navy"),
@@ -380,6 +424,21 @@ const photoDerivativeStatus = v.union(
   v.literal("failed")
 );
 
+const documentationFilters = v.object({
+  dispositions: v.optional(v.array(itemDisposition)),
+  statuses: v.optional(v.array(itemStatus)),
+  planningDefaultKeys: v.optional(v.array(planningDefaultKey)),
+  room: v.optional(v.string()),
+  destinationRoom: v.optional(v.string()),
+});
+
+const exportHistoryEntry = v.object({
+  exportJobId: v.optional(v.string()),
+  format: v.union(v.literal("pdf"), v.literal("csv"), v.literal("print")),
+  createdByUserId: v.optional(v.id("users")),
+  createdAt: v.number(),
+});
+
 export default defineSchema({
   users: defineTable({
     clerkUserId: v.string(),
@@ -438,6 +497,56 @@ export default defineSchema({
     .index("by_move_user", ["moveId", "userId"])
     .index("by_user_status", ["userId", "status"])
     .index("by_household_move", ["householdId", "moveId"]),
+
+  documentationProfiles: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    type: documentationProfileType,
+    name: v.string(),
+    status: documentationProfileStatus,
+    includedFields: v.array(documentationFieldKey),
+    imageRule: documentationImageRule,
+    filters: documentationFilters,
+    allowedActions: v.array(shareLinkAction),
+    disclaimer: v.optional(v.string()),
+    ownerNotes: v.optional(v.string()),
+    exportHistory: v.array(exportHistoryEntry),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.optional(v.id("users")),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_type", ["moveId", "type"])
+    .index("by_household_status", ["householdId", "status"]),
+
+  shareLinks: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    documentationProfileId: v.optional(v.id("documentationProfiles")),
+    scope: shareLinkScope,
+    tokenHash: v.string(),
+    tokenPreview: v.string(),
+    label: v.optional(v.string()),
+    role: householdRole,
+    status: shareLinkStatus,
+    allowedActions: v.array(shareLinkAction),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+    accessCount: v.number(),
+    lastAccessedAt: v.optional(v.number()),
+    lastAccessMetadata: v.optional(v.any()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_profile_status", ["documentationProfileId", "status"])
+    .index("by_household_status", ["householdId", "status"])
+    .index("by_expires", ["expiresAt"]),
 
   auditLogs: defineTable({
     householdId: v.optional(v.id("households")),
