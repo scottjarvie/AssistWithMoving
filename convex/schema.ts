@@ -144,6 +144,62 @@ export const planningDefaultHandling = v.union(
   v.literal("moverAllowedWithReview")
 );
 
+export const itemDisposition = v.union(
+  v.literal("undecided"),
+  v.literal("take"),
+  v.literal("sell"),
+  v.literal("donate"),
+  v.literal("dump"),
+  v.literal("free"),
+  v.literal("storage"),
+  v.literal("mover"),
+  v.literal("personalTransport")
+);
+
+export const itemStatus = v.union(
+  v.literal("draft"),
+  v.literal("active"),
+  v.literal("packed"),
+  v.literal("loaded"),
+  v.literal("delivered"),
+  v.literal("missing"),
+  v.literal("damaged"),
+  v.literal("archived")
+);
+
+export const itemCondition = v.union(
+  v.literal("unknown"),
+  v.literal("new"),
+  v.literal("excellent"),
+  v.literal("good"),
+  v.literal("fair"),
+  v.literal("poor"),
+  v.literal("damaged")
+);
+
+export const estimateConfidence = v.union(
+  v.literal("none"),
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high"),
+  v.literal("manual"),
+  v.literal("actual")
+);
+
+export const itemFragility = v.union(
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high")
+);
+
+export const itemCreatedVia = v.union(
+  v.literal("manual"),
+  v.literal("bulkImport"),
+  v.literal("photoAI"),
+  v.literal("api"),
+  v.literal("mcp")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -343,5 +399,61 @@ export default defineSchema({
   })
     .index("by_move_sort", ["moveId", "sortOrder"])
     .index("by_move_key", ["moveId", "key"])
+    .index("by_household", ["householdId"]),
+
+  items: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    name: v.string(),
+    normalizedName: v.string(),
+    description: v.optional(v.string()),
+    room: v.optional(v.string()),
+    destinationRoom: v.optional(v.string()),
+    category: v.optional(v.string()),
+    subcategory: v.optional(v.string()),
+    ownerPersonId: v.optional(v.id("movePeople")),
+    disposition: itemDisposition,
+    status: itemStatus,
+    quantity: v.number(),
+    condition: itemCondition,
+    valueCents: v.optional(v.number()),
+    replacementValueCents: v.optional(v.number()),
+    serialNumber: v.optional(v.string()),
+    modelNumber: v.optional(v.string()),
+    dimensionsIn: v.optional(dimensionsIn),
+    estimatedWeightLb: v.optional(v.number()),
+    estimatedWeightLowLb: v.optional(v.number()),
+    estimatedWeightHighLb: v.optional(v.number()),
+    actualWeightLb: v.optional(v.number()),
+    estimatedVolumeCuFt: v.optional(v.number()),
+    estimatedPackedVolumeCuFt: v.optional(v.number()),
+    weightConfidence: estimateConfidence,
+    volumeConfidence: estimateConfidence,
+    fragility: itemFragility,
+    stackable: v.boolean(),
+    hazardousFlag: v.boolean(),
+    highValue: v.boolean(),
+    requiresPersonalTransport: v.boolean(),
+    planningDefaultKeys: v.array(planningDefaultKey),
+    needsReview: v.boolean(),
+    reviewFlags: v.array(v.string()),
+    privateNotes: v.optional(v.string()),
+    aiSummary: v.optional(v.string()),
+    aiTags: v.array(v.string()),
+    createdVia: itemCreatedVia,
+    reviewedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_disposition", ["moveId", "disposition"])
+    .index("by_move_room", ["moveId", "room"])
+    .index("by_move_category", ["moveId", "category"])
+    .index("by_move_needs_review", ["moveId", "needsReview"])
+    .index("by_move_high_value", ["moveId", "highValue"])
+    .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_household", ["householdId"]),
 });

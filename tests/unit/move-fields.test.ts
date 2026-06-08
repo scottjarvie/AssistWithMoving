@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   defaultDocumentationProfilesForMoveType,
   normalizeDocumentationProfileTypes,
+  normalizeItemName,
   normalizeOptionalText,
   normalizeRuleList,
   normalizeSortOrder,
+  normalizedSearchName,
 } from "../../convex/lib/moveFields";
 
 describe("move field helpers", () => {
@@ -47,5 +49,14 @@ describe("move field helpers", () => {
       "insuranceClaim",
       "personalFullRecord",
     ]);
+  });
+
+  it("normalizes inventory item names for display and search", () => {
+    expect(normalizeItemName("  Sony   Camera   Bag  ")).toBe(
+      "Sony Camera Bag"
+    );
+    expect(normalizedSearchName("  Sony   Camera   Bag  ")).toBe(
+      "sony camera bag"
+    );
   });
 });

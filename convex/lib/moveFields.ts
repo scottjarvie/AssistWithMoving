@@ -63,6 +63,58 @@ export const planningDefaultHandlings = [
   "moverAllowedWithReview",
 ] as const;
 
+export const itemDispositions = [
+  "undecided",
+  "take",
+  "sell",
+  "donate",
+  "dump",
+  "free",
+  "storage",
+  "mover",
+  "personalTransport",
+] as const;
+
+export const itemStatuses = [
+  "draft",
+  "active",
+  "packed",
+  "loaded",
+  "delivered",
+  "missing",
+  "damaged",
+  "archived",
+] as const;
+
+export const itemConditions = [
+  "unknown",
+  "new",
+  "excellent",
+  "good",
+  "fair",
+  "poor",
+  "damaged",
+] as const;
+
+export const estimateConfidences = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "manual",
+  "actual",
+] as const;
+
+export const itemFragilities = ["low", "medium", "high"] as const;
+
+export const itemCreatedViaValues = [
+  "manual",
+  "bulkImport",
+  "photoAI",
+  "api",
+  "mcp",
+] as const;
+
 export const documentationProfileTypes = [
   "personalFullRecord",
   "pcsMove",
@@ -272,6 +324,70 @@ export const planningDefaultHandlingValidator = v.union(
   v.literal("restrictedReview"),
   v.literal("moverAllowedWithReview")
 );
+
+export const itemDispositionValidator = v.union(
+  v.literal("undecided"),
+  v.literal("take"),
+  v.literal("sell"),
+  v.literal("donate"),
+  v.literal("dump"),
+  v.literal("free"),
+  v.literal("storage"),
+  v.literal("mover"),
+  v.literal("personalTransport")
+);
+
+export const itemStatusValidator = v.union(
+  v.literal("draft"),
+  v.literal("active"),
+  v.literal("packed"),
+  v.literal("loaded"),
+  v.literal("delivered"),
+  v.literal("missing"),
+  v.literal("damaged"),
+  v.literal("archived")
+);
+
+export const itemConditionValidator = v.union(
+  v.literal("unknown"),
+  v.literal("new"),
+  v.literal("excellent"),
+  v.literal("good"),
+  v.literal("fair"),
+  v.literal("poor"),
+  v.literal("damaged")
+);
+
+export const estimateConfidenceValidator = v.union(
+  v.literal("none"),
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high"),
+  v.literal("manual"),
+  v.literal("actual")
+);
+
+export const itemFragilityValidator = v.union(
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high")
+);
+
+export const itemCreatedViaValidator = v.union(
+  v.literal("manual"),
+  v.literal("bulkImport"),
+  v.literal("photoAI"),
+  v.literal("api"),
+  v.literal("mcp")
+);
+
+export function normalizeItemName(name: string) {
+  return name.trim().replace(/\s+/g, " ").slice(0, 160);
+}
+
+export function normalizedSearchName(name: string) {
+  return normalizeItemName(name).toLowerCase();
+}
 
 export const movePersonRoleValidator = v.union(
   v.literal("owner"),

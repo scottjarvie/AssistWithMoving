@@ -879,7 +879,7 @@ export function MoveDashboard() {
                   ["Moves", "schema and basic create/list are live", "MOVE-11"],
                   ["PCS presets", "structured fields and profiles", "MOVE-12"],
                   ["Resources", "schema and create/list are live", "MOVE-13"],
-                  ["Inventory", "awaiting item schema", "MOVE-15"],
+                  ["Inventory", "item schema/functions are live", "MOVE-16"],
                   ["Packets", "audit/visibility foundation ready", "MOVE-37"],
                 ].map(([surface, status, issue]) => (
                   <TableRow key={surface}>
