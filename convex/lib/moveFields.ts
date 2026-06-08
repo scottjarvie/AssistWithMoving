@@ -25,6 +25,50 @@ export const transportResourceTypes = [
   "custom",
 ] as const;
 
+export const documentationProfileTypes = [
+  "personalFullRecord",
+  "pcsMove",
+  "movingCompany",
+  "employerRelocation",
+  "insuranceClaim",
+  "donationPickup",
+  "sellOrGiveaway",
+  "storageInventory",
+  "loadCrew",
+] as const;
+
+export const pcsBranches = [
+  "army",
+  "navy",
+  "airForce",
+  "marineCorps",
+  "coastGuard",
+  "spaceForce",
+  "noaa",
+  "publicHealthService",
+  "other",
+] as const;
+
+export const pcsShipmentTypes = [
+  "hhg",
+  "ppm",
+  "partialPpm",
+  "storage",
+  "mixed",
+  "other",
+] as const;
+
+export const pcsDependentStatuses = [
+  "withDependents",
+  "withoutDependents",
+  "unknown",
+] as const;
+
+export function normalizeOptionalText(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, 2000) : undefined;
+}
+
 export function normalizeRuleList(rules: string[]) {
   return Array.from(
     new Set(
@@ -34,6 +78,41 @@ export function normalizeRuleList(rules: string[]) {
         .map((rule) => rule.slice(0, 160))
     )
   );
+}
+
+export function normalizeDocumentationProfileTypes(
+  profileTypes: readonly (typeof documentationProfileTypes)[number][] | undefined
+) {
+  if (!profileTypes?.length) {
+    return [];
+  }
+
+  const allowed = new Set(documentationProfileTypes);
+  return Array.from(
+    new Set(profileTypes.filter((type) => allowed.has(type)))
+  );
+}
+
+export function defaultDocumentationProfilesForMoveType(
+  type: (typeof moveTypes)[number]
+) {
+  switch (type) {
+    case "pcs":
+      return ["pcsMove", "movingCompany", "loadCrew"] as const;
+    case "local":
+    case "longDistance":
+      return ["movingCompany", "loadCrew"] as const;
+    case "storage":
+      return ["storageInventory", "movingCompany"] as const;
+    case "estate":
+      return ["donationPickup", "sellOrGiveaway", "storageInventory"] as const;
+    case "decluttering":
+      return ["donationPickup", "sellOrGiveaway"] as const;
+    case "claimsInventory":
+      return ["insuranceClaim", "personalFullRecord"] as const;
+    case "other":
+      return ["personalFullRecord"] as const;
+  }
 }
 
 export function normalizeSortOrder(sortOrder: number | undefined) {
@@ -63,6 +142,45 @@ export const moveStatusValidator = v.union(
 export const unitSystemValidator = v.union(
   v.literal("imperial"),
   v.literal("metric")
+);
+
+export const documentationProfileTypeValidator = v.union(
+  v.literal("personalFullRecord"),
+  v.literal("pcsMove"),
+  v.literal("movingCompany"),
+  v.literal("employerRelocation"),
+  v.literal("insuranceClaim"),
+  v.literal("donationPickup"),
+  v.literal("sellOrGiveaway"),
+  v.literal("storageInventory"),
+  v.literal("loadCrew")
+);
+
+export const pcsBranchValidator = v.union(
+  v.literal("army"),
+  v.literal("navy"),
+  v.literal("airForce"),
+  v.literal("marineCorps"),
+  v.literal("coastGuard"),
+  v.literal("spaceForce"),
+  v.literal("noaa"),
+  v.literal("publicHealthService"),
+  v.literal("other")
+);
+
+export const pcsShipmentTypeValidator = v.union(
+  v.literal("hhg"),
+  v.literal("ppm"),
+  v.literal("partialPpm"),
+  v.literal("storage"),
+  v.literal("mixed"),
+  v.literal("other")
+);
+
+export const pcsDependentStatusValidator = v.union(
+  v.literal("withDependents"),
+  v.literal("withoutDependents"),
+  v.literal("unknown")
 );
 
 export const transportResourceTypeValidator = v.union(

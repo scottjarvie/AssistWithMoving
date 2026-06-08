@@ -3,8 +3,15 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
+  defaultDocumentationProfilesForMoveType,
+  documentationProfileTypeValidator,
   moveStatusValidator,
   moveTypeValidator,
+  normalizeDocumentationProfileTypes,
+  normalizeOptionalText,
+  pcsBranchValidator,
+  pcsDependentStatusValidator,
+  pcsShipmentTypeValidator,
   unitSystemValidator,
 } from "./lib/moveFields";
 import {
@@ -41,10 +48,18 @@ export const create = mutation({
     dateStart: v.optional(v.string()),
     dateEnd: v.optional(v.string()),
     unitSystem: v.optional(unitSystemValidator),
+    documentationProfileTypes: v.optional(
+      v.array(documentationProfileTypeValidator)
+    ),
     moveLevelWeightAllowanceLb: v.optional(v.number()),
-    pcsBranch: v.optional(v.string()),
-    pcsShipmentType: v.optional(v.string()),
+    pcsBranch: v.optional(pcsBranchValidator),
+    pcsRankPayGrade: v.optional(v.string()),
+    pcsDependentStatus: v.optional(pcsDependentStatusValidator),
+    pcsShipmentType: v.optional(pcsShipmentTypeValidator),
     pcsOrdersNumber: v.optional(v.string()),
+    pcsAllowanceNotes: v.optional(v.string()),
+    pcsTransportationOfficeNotes: v.optional(v.string()),
+    pcsRestrictedItemsNotes: v.optional(v.string()),
     proGearNotes: v.optional(v.string()),
     notes: v.optional(v.string()),
   },
@@ -59,22 +74,35 @@ export const create = mutation({
     }
 
     const now = Date.now();
+    const documentationProfileTypes = args.documentationProfileTypes?.length
+      ? normalizeDocumentationProfileTypes(args.documentationProfileTypes)
+      : [...defaultDocumentationProfilesForMoveType(args.type)];
     const moveId = await ctx.db.insert("moves", {
       householdId: args.householdId,
       title: args.title.trim(),
       type: args.type,
       status: "planning",
-      origin: args.origin,
-      destination: args.destination,
-      dateStart: args.dateStart,
-      dateEnd: args.dateEnd,
+      origin: normalizeOptionalText(args.origin),
+      destination: normalizeOptionalText(args.destination),
+      dateStart: normalizeOptionalText(args.dateStart),
+      dateEnd: normalizeOptionalText(args.dateEnd),
       unitSystem: args.unitSystem ?? "imperial",
+      documentationProfileTypes,
       moveLevelWeightAllowanceLb: args.moveLevelWeightAllowanceLb,
       pcsBranch: args.pcsBranch,
+      pcsRankPayGrade: normalizeOptionalText(args.pcsRankPayGrade),
+      pcsDependentStatus: args.pcsDependentStatus,
       pcsShipmentType: args.pcsShipmentType,
-      pcsOrdersNumber: args.pcsOrdersNumber,
-      proGearNotes: args.proGearNotes,
-      notes: args.notes,
+      pcsOrdersNumber: normalizeOptionalText(args.pcsOrdersNumber),
+      pcsAllowanceNotes: normalizeOptionalText(args.pcsAllowanceNotes),
+      pcsTransportationOfficeNotes: normalizeOptionalText(
+        args.pcsTransportationOfficeNotes
+      ),
+      pcsRestrictedItemsNotes: normalizeOptionalText(
+        args.pcsRestrictedItemsNotes
+      ),
+      proGearNotes: normalizeOptionalText(args.proGearNotes),
+      notes: normalizeOptionalText(args.notes),
       createdByUserId: actor.userId,
       createdAt: now,
       updatedAt: now,
@@ -89,7 +117,11 @@ export const create = mutation({
       action: "move.created",
       objectTable: "moves",
       objectId: moveId,
-      metadata: { title: args.title.trim(), type: args.type },
+      metadata: {
+        title: args.title.trim(),
+        type: args.type,
+        documentationProfileTypes,
+      },
     });
 
     return moveId;
@@ -106,7 +138,19 @@ export const updateBasics = mutation({
     destination: v.optional(v.string()),
     dateStart: v.optional(v.string()),
     dateEnd: v.optional(v.string()),
+    documentationProfileTypes: v.optional(
+      v.array(documentationProfileTypeValidator)
+    ),
     moveLevelWeightAllowanceLb: v.optional(v.number()),
+    pcsBranch: v.optional(pcsBranchValidator),
+    pcsRankPayGrade: v.optional(v.string()),
+    pcsDependentStatus: v.optional(pcsDependentStatusValidator),
+    pcsShipmentType: v.optional(pcsShipmentTypeValidator),
+    pcsOrdersNumber: v.optional(v.string()),
+    pcsAllowanceNotes: v.optional(v.string()),
+    pcsTransportationOfficeNotes: v.optional(v.string()),
+    pcsRestrictedItemsNotes: v.optional(v.string()),
+    proGearNotes: v.optional(v.string()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -118,14 +162,30 @@ export const updateBasics = mutation({
     );
 
     await ctx.db.patch(args.moveId, {
-      title: args.title?.trim(),
+      title: normalizeOptionalText(args.title),
       status: args.status,
-      origin: args.origin,
-      destination: args.destination,
-      dateStart: args.dateStart,
-      dateEnd: args.dateEnd,
+      origin: normalizeOptionalText(args.origin),
+      destination: normalizeOptionalText(args.destination),
+      dateStart: normalizeOptionalText(args.dateStart),
+      dateEnd: normalizeOptionalText(args.dateEnd),
+      documentationProfileTypes: args.documentationProfileTypes
+        ? normalizeDocumentationProfileTypes(args.documentationProfileTypes)
+        : undefined,
       moveLevelWeightAllowanceLb: args.moveLevelWeightAllowanceLb,
-      notes: args.notes,
+      pcsBranch: args.pcsBranch,
+      pcsRankPayGrade: normalizeOptionalText(args.pcsRankPayGrade),
+      pcsDependentStatus: args.pcsDependentStatus,
+      pcsShipmentType: args.pcsShipmentType,
+      pcsOrdersNumber: normalizeOptionalText(args.pcsOrdersNumber),
+      pcsAllowanceNotes: normalizeOptionalText(args.pcsAllowanceNotes),
+      pcsTransportationOfficeNotes: normalizeOptionalText(
+        args.pcsTransportationOfficeNotes
+      ),
+      pcsRestrictedItemsNotes: normalizeOptionalText(
+        args.pcsRestrictedItemsNotes
+      ),
+      proGearNotes: normalizeOptionalText(args.proGearNotes),
+      notes: normalizeOptionalText(args.notes),
       updatedAt: Date.now(),
     });
 

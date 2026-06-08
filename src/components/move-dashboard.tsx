@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -37,25 +38,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-const moveTypeOptions = [
-  ["pcs", "Military PCS"],
-  ["local", "Local move"],
-  ["longDistance", "Long-distance"],
-  ["storage", "Storage inventory"],
-  ["estate", "Estate / cleanout"],
-  ["decluttering", "Decluttering"],
-  ["claimsInventory", "Claims inventory"],
-  ["other", "Other"],
-] as const;
-
-const packetTypes = [
-  "PCS / PPM support",
-  "Moving company load list",
-  "Employer relocation",
-  "Claims evidence",
-  "Storage manifest",
-];
+import {
+  defaultDocumentationProfilesForMoveType,
+  documentationProfileOptions,
+  moveTypeOptions,
+  pcsBranchOptions,
+  pcsDependentStatusOptions,
+  pcsShipmentTypeOptions,
+  type DocumentationProfileType,
+  type MoveType,
+  type PcsBranch,
+  type PcsDependentStatus,
+  type PcsShipmentType,
+} from "@/lib/move-presets";
 
 export function MoveDashboard() {
   const { user } = useUser();
@@ -69,9 +64,25 @@ export function MoveDashboard() {
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const [moveTitle, setMoveTitle] = useState("");
-  const [moveType, setMoveType] = useState<(typeof moveTypeOptions)[number][0]>(
-    "pcs"
+  const [moveType, setMoveType] = useState<MoveType>("pcs");
+  const [documentationProfileTypes, setDocumentationProfileTypes] = useState<
+    DocumentationProfileType[]
+  >(defaultDocumentationProfilesForMoveType("pcs"));
+  const [pcsBranch, setPcsBranch] = useState<PcsBranch | "">("");
+  const [pcsShipmentType, setPcsShipmentType] = useState<PcsShipmentType | "">(
+    "mixed"
   );
+  const [pcsDependentStatus, setPcsDependentStatus] =
+    useState<PcsDependentStatus>("unknown");
+  const [pcsRankPayGrade, setPcsRankPayGrade] = useState("");
+  const [pcsOrdersNumber, setPcsOrdersNumber] = useState("");
+  const [moveLevelWeightAllowanceLb, setMoveLevelWeightAllowanceLb] =
+    useState("");
+  const [pcsAllowanceNotes, setPcsAllowanceNotes] = useState("");
+  const [proGearNotes, setProGearNotes] = useState("");
+  const [pcsTransportationOfficeNotes, setPcsTransportationOfficeNotes] =
+    useState("");
+  const [pcsRestrictedItemsNotes, setPcsRestrictedItemsNotes] = useState("");
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [saving, setSaving] = useState(false);
@@ -101,6 +112,8 @@ export function MoveDashboard() {
     [moves]
   );
 
+  const selectedPacketCount = documentationProfileTypes.length;
+
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -128,6 +141,7 @@ export function MoveDashboard() {
     setMessage(null);
 
     try {
+      const parsedWeightAllowance = Number(moveLevelWeightAllowanceLb);
       await createMove({
         householdId,
         title: moveTitle,
@@ -135,10 +149,35 @@ export function MoveDashboard() {
         origin: origin || undefined,
         destination: destination || undefined,
         unitSystem: "imperial",
+        documentationProfileTypes,
+        moveLevelWeightAllowanceLb:
+          Number.isFinite(parsedWeightAllowance) && parsedWeightAllowance > 0
+            ? parsedWeightAllowance
+            : undefined,
+        pcsBranch: moveType === "pcs" && pcsBranch ? pcsBranch : undefined,
+        pcsShipmentType:
+          moveType === "pcs" && pcsShipmentType ? pcsShipmentType : undefined,
+        pcsDependentStatus:
+          moveType === "pcs" ? pcsDependentStatus : undefined,
+        pcsRankPayGrade:
+          moveType === "pcs" ? pcsRankPayGrade || undefined : undefined,
+        pcsOrdersNumber:
+          moveType === "pcs" ? pcsOrdersNumber || undefined : undefined,
+        pcsAllowanceNotes:
+          moveType === "pcs" ? pcsAllowanceNotes || undefined : undefined,
+        proGearNotes: moveType === "pcs" ? proGearNotes || undefined : undefined,
+        pcsTransportationOfficeNotes:
+          moveType === "pcs"
+            ? pcsTransportationOfficeNotes || undefined
+            : undefined,
+        pcsRestrictedItemsNotes:
+          moveType === "pcs" ? pcsRestrictedItemsNotes || undefined : undefined,
       });
       setMoveTitle("");
       setOrigin("");
       setDestination("");
+      setPcsOrdersNumber("");
+      setMoveLevelWeightAllowanceLb("");
       setMessage("Move created.");
     } catch {
       setMessage("Could not create the move yet.");
@@ -177,10 +216,30 @@ export function MoveDashboard() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Moves" value={activeMoves.length} icon={Truck} note="active records" />
-        <Metric label="Households" value={households?.length ?? 0} icon={Home} note="you can access" />
-        <Metric label="Resources" value="0" icon={Archive} note="add after move setup" />
-        <Metric label="Packets" value={packetTypes.length} icon={FileStack} note="planned profiles" />
+        <Metric
+          label="Moves"
+          value={activeMoves.length}
+          icon={Truck}
+          note="active records"
+        />
+        <Metric
+          label="Households"
+          value={households?.length ?? 0}
+          icon={Home}
+          note="you can access"
+        />
+        <Metric
+          label="Resources"
+          value="0"
+          icon={Archive}
+          note="add after move setup"
+        />
+        <Metric
+          label="Packets"
+          value={documentationProfileOptions.length}
+          icon={FileStack}
+          note="profile types"
+        />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -246,7 +305,7 @@ export function MoveDashboard() {
                 New move
               </CardTitle>
               <CardDescription>
-                Choose the workflow now; detailed presets come next.
+                Choose the workflow and recipient packet defaults up front.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -260,9 +319,13 @@ export function MoveDashboard() {
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={moveType}
-                  onChange={(event) =>
-                    setMoveType(event.target.value as typeof moveType)
-                  }
+                  onChange={(event) => {
+                    const nextMoveType = event.target.value as MoveType;
+                    setMoveType(nextMoveType);
+                    setDocumentationProfileTypes(
+                      defaultDocumentationProfilesForMoveType(nextMoveType)
+                    );
+                  }}
                   disabled={!householdId}
                 >
                   {moveTypeOptions.map(([value, label]) => (
@@ -285,10 +348,162 @@ export function MoveDashboard() {
                     disabled={!householdId}
                   />
                 </div>
+                {moveType === "pcs" ? (
+                  <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+                    <div>
+                      <p className="text-sm font-medium">PCS details</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Track what you know, then verify allowances,
+                        restrictions, and required forms with the current
+                        transportation office or official guidance.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <select
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={pcsBranch}
+                        onChange={(event) =>
+                          setPcsBranch(event.target.value as PcsBranch | "")
+                        }
+                        disabled={!householdId}
+                      >
+                        <option value="">Branch</option>
+                        {pcsBranchOptions.map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={pcsShipmentType}
+                        onChange={(event) =>
+                          setPcsShipmentType(
+                            event.target.value as PcsShipmentType
+                          )
+                        }
+                        disabled={!householdId}
+                      >
+                        {pcsShipmentTypeOptions.map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        value={pcsRankPayGrade}
+                        onChange={(event) =>
+                          setPcsRankPayGrade(event.target.value)
+                        }
+                        placeholder="Rank / pay grade"
+                        disabled={!householdId}
+                      />
+                      <select
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={pcsDependentStatus}
+                        onChange={(event) =>
+                          setPcsDependentStatus(
+                            event.target.value as PcsDependentStatus
+                          )
+                        }
+                        disabled={!householdId}
+                      >
+                        {pcsDependentStatusOptions.map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        value={pcsOrdersNumber}
+                        onChange={(event) =>
+                          setPcsOrdersNumber(event.target.value)
+                        }
+                        placeholder="Orders number"
+                        disabled={!householdId}
+                      />
+                      <Input
+                        inputMode="numeric"
+                        value={moveLevelWeightAllowanceLb}
+                        onChange={(event) =>
+                          setMoveLevelWeightAllowanceLb(event.target.value)
+                        }
+                        placeholder="Official allowance lb"
+                        disabled={!householdId}
+                      />
+                    </div>
+                    <Textarea
+                      value={pcsAllowanceNotes}
+                      onChange={(event) =>
+                        setPcsAllowanceNotes(event.target.value)
+                      }
+                      placeholder="Allowance notes"
+                      disabled={!householdId}
+                    />
+                    <Textarea
+                      value={proGearNotes}
+                      onChange={(event) => setProGearNotes(event.target.value)}
+                      placeholder="Pro gear / PBP&E notes"
+                      disabled={!householdId}
+                    />
+                    <Textarea
+                      value={pcsTransportationOfficeNotes}
+                      onChange={(event) =>
+                        setPcsTransportationOfficeNotes(event.target.value)
+                      }
+                      placeholder="Transportation office notes"
+                      disabled={!householdId}
+                    />
+                    <Textarea
+                      value={pcsRestrictedItemsNotes}
+                      onChange={(event) =>
+                        setPcsRestrictedItemsNotes(event.target.value)
+                      }
+                      placeholder="Restricted item notes"
+                      disabled={!householdId}
+                    />
+                  </div>
+                ) : null}
+                <div className="space-y-2 rounded-md border border-border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Documentation profiles</p>
+                    <Badge variant="secondary">
+                      {selectedPacketCount} selected
+                    </Badge>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {documentationProfileOptions.map(([value, label]) => (
+                      <label
+                        key={value}
+                        className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-3.5 accent-primary"
+                          checked={documentationProfileTypes.includes(value)}
+                          disabled={!householdId}
+                          onChange={(event) => {
+                            setDocumentationProfileTypes((current) =>
+                              event.target.checked
+                                ? Array.from(new Set([...current, value]))
+                                : current.filter((profile) => profile !== value)
+                            );
+                          }}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={!householdId || !moveTitle.trim() || saving}
+                  disabled={
+                    !householdId ||
+                    !moveTitle.trim() ||
+                    !documentationProfileTypes.length ||
+                    saving
+                  }
                 >
                   <Plus aria-hidden="true" />
                   Create move
@@ -324,6 +539,7 @@ export function MoveDashboard() {
                   <TableRow>
                     <TableHead>Move</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Profiles</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Route</TableHead>
                   </TableRow>
@@ -335,9 +551,14 @@ export function MoveDashboard() {
                       <TableCell>
                         <Badge variant="outline">{move.type}</Badge>
                       </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {move.documentationProfileTypes?.length ?? 0}
+                      </TableCell>
                       <TableCell>{move.status}</TableCell>
                       <TableCell className="text-right text-muted-foreground">
-                        {[move.origin, move.destination].filter(Boolean).join(" -> ") || "not set"}
+                        {[move.origin, move.destination]
+                          .filter(Boolean)
+                          .join(" -> ") || "not set"}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -374,7 +595,7 @@ export function MoveDashboard() {
               <TableBody>
                 {[
                   ["Moves", "schema and basic create/list are live", "MOVE-11"],
-                  ["PCS presets", "mode fields exist; preset rules next", "MOVE-12"],
+                  ["PCS presets", "structured fields and profiles", "MOVE-12"],
                   ["Resources", "schema and create/list are live", "MOVE-13"],
                   ["Inventory", "awaiting item schema", "MOVE-15"],
                   ["Packets", "audit/visibility foundation ready", "MOVE-37"],
@@ -400,7 +621,7 @@ export function MoveDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            {packetTypes.map((packet) => (
+            {documentationProfileOptions.map(([, packet]) => (
               <div
                 key={packet}
                 className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"

@@ -68,6 +68,45 @@ export const moveStatus = v.union(
 
 export const unitSystem = v.union(v.literal("imperial"), v.literal("metric"));
 
+export const documentationProfileType = v.union(
+  v.literal("personalFullRecord"),
+  v.literal("pcsMove"),
+  v.literal("movingCompany"),
+  v.literal("employerRelocation"),
+  v.literal("insuranceClaim"),
+  v.literal("donationPickup"),
+  v.literal("sellOrGiveaway"),
+  v.literal("storageInventory"),
+  v.literal("loadCrew")
+);
+
+export const pcsBranch = v.union(
+  v.literal("army"),
+  v.literal("navy"),
+  v.literal("airForce"),
+  v.literal("marineCorps"),
+  v.literal("coastGuard"),
+  v.literal("spaceForce"),
+  v.literal("noaa"),
+  v.literal("publicHealthService"),
+  v.literal("other")
+);
+
+export const pcsShipmentType = v.union(
+  v.literal("hhg"),
+  v.literal("ppm"),
+  v.literal("partialPpm"),
+  v.literal("storage"),
+  v.literal("mixed"),
+  v.literal("other")
+);
+
+export const pcsDependentStatus = v.union(
+  v.literal("withDependents"),
+  v.literal("withoutDependents"),
+  v.literal("unknown")
+);
+
 export const transportResourceType = v.union(
   v.literal("truck"),
   v.literal("trailer"),
@@ -191,10 +230,16 @@ export default defineSchema({
     dateStart: v.optional(v.string()),
     dateEnd: v.optional(v.string()),
     unitSystem,
+    documentationProfileTypes: v.optional(v.array(documentationProfileType)),
     moveLevelWeightAllowanceLb: v.optional(v.number()),
-    pcsBranch: v.optional(v.string()),
-    pcsShipmentType: v.optional(v.string()),
+    pcsBranch: v.optional(pcsBranch),
+    pcsRankPayGrade: v.optional(v.string()),
+    pcsDependentStatus: v.optional(pcsDependentStatus),
+    pcsShipmentType: v.optional(pcsShipmentType),
     pcsOrdersNumber: v.optional(v.string()),
+    pcsAllowanceNotes: v.optional(v.string()),
+    pcsTransportationOfficeNotes: v.optional(v.string()),
+    pcsRestrictedItemsNotes: v.optional(v.string()),
     proGearNotes: v.optional(v.string()),
     notes: v.optional(v.string()),
     createdByUserId: v.id("users"),
