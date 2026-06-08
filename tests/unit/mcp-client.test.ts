@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  addItemsToBox,
   batchUpsertItems,
   applyAssignments,
   attachPhoto,
@@ -14,6 +15,7 @@ import {
   getCapacityReport,
   getMoveSummary,
   movingManifestRequest,
+  removeItemFromBox,
   searchInventory,
   suggestAssignments,
   updateTransportResource,
@@ -490,6 +492,67 @@ describe("MovingManifest MCP API client", () => {
             },
           ],
         }),
+      }
+    );
+  });
+
+  it("assigns items to boxes through the top-level box contents API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { assignmentId: "assignment1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await addItemsToBox(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        boxId: "box1",
+        items: [{ itemId: "item1", quantity: 1, notes: "Top tray" }],
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/boxes/box1/items"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          itemId: "item1",
+          quantity: 1,
+          notes: "Top tray",
+        }),
+      }
+    );
+  });
+
+  it("removes box item assignments through the top-level box contents API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { deleted: true, assignmentId: "assignment1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await removeItemFromBox(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1", boxId: "box1", itemId: "item1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/boxes/box1/items/item1?moveId=move1"),
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "idempotency-key": expect.any(String),
+        },
       }
     );
   });

@@ -212,16 +212,28 @@ export async function createBox(config, input) {
 
 export async function addItemsToBox(config, input) {
   if (input.dryRun) {
-    return { dryRun: true, assignments: input.items };
+    return {
+      dryRun: true,
+      requests: input.items.map((item) => ({
+        method: "POST",
+        path: `/boxes/${input.boxId}/items`,
+        body: {
+          moveId: input.moveId,
+          itemId: item.itemId,
+          quantity: item.quantity,
+          notes: item.notes,
+        },
+      })),
+    };
   }
   const results = [];
   for (const item of input.items) {
     results.push(
       await movingManifestRequest(config, {
         method: "POST",
-        path: `/moves/${input.moveId}/assignments`,
+        path: `/boxes/${input.boxId}/items`,
         body: {
-          boxId: input.boxId,
+          moveId: input.moveId,
           itemId: item.itemId,
           quantity: item.quantity,
           notes: item.notes,
@@ -230,6 +242,24 @@ export async function addItemsToBox(config, input) {
     );
   }
   return { data: results };
+}
+
+export async function removeItemFromBox(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "DELETE",
+        path: `/boxes/${input.boxId}/items/${input.itemId}`,
+        query: { moveId: input.moveId },
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "DELETE",
+    path: `/boxes/${input.boxId}/items/${input.itemId}`,
+    query: { moveId: input.moveId },
+  });
 }
 
 export async function suggestAssignments(config, input) {

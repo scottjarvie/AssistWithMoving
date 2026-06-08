@@ -25,6 +25,7 @@ import {
   listExports,
   listMoves,
   listTransportResources,
+  removeItemFromBox,
   searchInventory,
   startPhotoUpload,
   suggestAssignments,
@@ -290,6 +291,20 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (input) => addItemsToBox(apiConfig, input),
+  });
+
+  registerTool(target, "remove_item_from_box", {
+    title: "Remove item from box",
+    description:
+      "Remove one item-to-box assignment without deleting the inventory item. Set dryRun true to preview the request without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      boxId: z.string(),
+      itemId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (input) => removeItemFromBox(apiConfig, input),
   });
 
   registerTool(target, "suggest_assignments", {

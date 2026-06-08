@@ -308,7 +308,7 @@ async function routeRequest(
     return await routeTopLevelItem(ctx, args, auth, moveIdSegment);
   }
   if (resource === "boxes") {
-    return await routeTopLevelBox(ctx, args, auth, moveIdSegment);
+    return await routeTopLevelBox(ctx, args, auth, moveIdSegment, nested, nestedId);
   }
   if (resource === "photos") {
     return await routeTopLevelPhoto(ctx, args, auth, moveIdSegment, nested);
@@ -1756,7 +1756,9 @@ async function routeTopLevelBox(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  boxIdSegment?: string
+  boxIdSegment?: string,
+  nestedSegment?: string,
+  nestedIdSegment?: string
 ) {
   if (!boxIdSegment) {
     return restError({ status: 404, code: "not_found", message: "Box not found." });
@@ -1764,6 +1766,14 @@ async function routeTopLevelBox(
   const box = await requireApiBoxById(ctx, auth.householdId, boxIdSegment);
   assertApiObjectMoveAccess(auth, box.moveId);
   assertRequestedMoveMatches(args, box.moveId, "Box not found.");
+
+  if (nestedSegment === "items") {
+    return await routeTopLevelBoxItems(ctx, args, auth, box, nestedIdSegment);
+  }
+
+  if (nestedSegment) {
+    return restError({ status: 404, code: "not_found", message: "Box route not found." });
+  }
 
   if (args.method === "GET") {
     return restOk({ data: safeBox(box) });
@@ -1786,6 +1796,96 @@ async function routeTopLevelBox(
   }
 
   return restError({ status: 404, code: "not_found", message: "Box route not found." });
+}
+
+async function routeTopLevelBoxItems(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  box: Doc<"boxes">,
+  itemIdSegment?: string
+) {
+  if (args.method === "POST" && !itemIdSegment) {
+    const body = bodyObject(args.body);
+    const itemId = String(body.itemId ?? "") as Id<"items">;
+    const item = await requireApiItem(ctx, auth.householdId, box.moveId, itemId);
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("boxItems")
+      .withIndex("by_item", (q) => q.eq("itemId", item._id))
+      .collect();
+    const current = existing.find((entry) => entry.moveId === box.moveId);
+    const patch = {
+      boxId: box._id,
+      quantity: positiveNumber(body.quantity) ?? 1,
+      notes: normalizeOptionalText(asString(body.notes)),
+      updatedAt: now,
+    };
+
+    if (current) {
+      await ctx.db.patch(current._id, patch);
+      await auditApiWrite(
+        ctx,
+        auth,
+        box.moveId,
+        "assignment.api_upserted",
+        "boxItems",
+        current._id,
+        { route: "top_level_box", boxId: box._id, itemId: item._id }
+      );
+      return restOk({ data: { assignmentId: current._id } });
+    }
+
+    const assignmentId = await ctx.db.insert("boxItems", {
+      householdId: auth.householdId,
+      moveId: box.moveId,
+      itemId: item._id,
+      ...patch,
+      createdAt: now,
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      box.moveId,
+      "assignment.api_upserted",
+      "boxItems",
+      assignmentId,
+      { route: "top_level_box", boxId: box._id, itemId: item._id }
+    );
+    return restOk({ data: { assignmentId } }, 201);
+  }
+
+  if (args.method === "DELETE" && itemIdSegment) {
+    const item = await requireApiItem(ctx, auth.householdId, box.moveId, itemIdSegment);
+    const assignments = await ctx.db
+      .query("boxItems")
+      .withIndex("by_item", (q) => q.eq("itemId", item._id))
+      .collect();
+    const assignment = assignments.find(
+      (entry) => entry.moveId === box.moveId && entry.boxId === box._id
+    );
+    if (!assignment) {
+      throw new Error("Assignment not found.");
+    }
+
+    await ctx.db.delete(assignment._id);
+    await auditApiWrite(
+      ctx,
+      auth,
+      box.moveId,
+      "assignment.api_deleted",
+      "boxItems",
+      assignment._id,
+      { route: "top_level_box", boxId: box._id, itemId: item._id }
+    );
+    return restOk({ data: { deleted: true, assignmentId: assignment._id } });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Box item route not found.",
+  });
 }
 
 async function routeTopLevelPhoto(

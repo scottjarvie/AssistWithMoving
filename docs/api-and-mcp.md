@@ -51,8 +51,9 @@ and export state in one response.
 Top-level object aliases such as `/items/{itemId}`, `/boxes/{boxId}`, and
 `/photos/{photoId}/attach` still validate object ownership server-side. For
 move-restricted keys, include `moveId` in the JSON body or query string so the
-key can be authenticated before the object is loaded. `DELETE /items/{itemId}`
-must pass `moveId` as a query parameter because DELETE bodies are not parsed.
+key can be authenticated before the object is loaded. Top-level `DELETE`
+aliases, including `/items/{itemId}` and `/boxes/{boxId}/items/{itemId}`, must
+pass `moveId` as a query parameter because DELETE bodies are not parsed.
 
 ## Errors
 
@@ -283,6 +284,29 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/assignments \
   -H "Idempotency-Key: assign-item-001" \
   -d '{ "boxId": "BOX_ID", "itemId": "ITEM_ID", "quantity": 1 }'
 ```
+
+The equivalent top-level box contents alias is:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/boxes/BOX_ID/items \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: assign-box-item-001" \
+  -d '{ "moveId": "MOVE_ID", "itemId": "ITEM_ID", "quantity": 1, "notes": "Top tray" }'
+```
+
+Remove an item from a box without deleting the inventory item:
+
+```bash
+curl -X DELETE "https://movingmanifest.com/api/v1/boxes/BOX_ID/items/ITEM_ID?moveId=MOVE_ID" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Idempotency-Key: remove-box-item-001"
+```
+
+Box content writes require `inventory/write`. `POST /boxes/{boxId}/items`
+upserts the item-to-box assignment for that move. `DELETE
+/boxes/{boxId}/items/{itemId}` removes only the box assignment; it does not
+delete the item.
 
 Suggest box-to-resource assignments:
 
@@ -546,6 +570,7 @@ Available MCP tools:
 | `delete_item` | Soft-delete one item, with `dryRun` support. |
 | `create_box` | Create a box, with `dryRun` support. |
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
+| `remove_item_from_box` | Remove one item-to-box assignment without deleting the item, with `dryRun` support. |
 | `suggest_assignments` | Generate deterministic box-to-resource/zone suggestions without writing. |
 | `apply_assignments` | Apply explicit box-to-resource/zone assignments, with API-side `dryRun` validation. |
 | `start_photo_upload` | Start a photo upload session and return presigned upload information. |
