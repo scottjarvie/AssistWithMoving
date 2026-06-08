@@ -18,6 +18,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
+import { InventoryTable } from "@/components/inventory-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -758,6 +759,10 @@ export function MoveDashboard() {
             </p>
           </CardContent>
         </Card>
+      </section>
+
+      <section>
+        <InventoryTable householdId={householdId} moveId={moveId} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
