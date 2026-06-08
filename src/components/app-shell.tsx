@@ -6,12 +6,12 @@ import {
   FileStack,
   Images,
   LayoutDashboard,
-  LockKeyhole,
   Settings,
   ShieldCheck,
   Truck,
 } from "lucide-react";
 
+import { AuthControls } from "@/components/auth-controls";
 import { BrandMark } from "@/components/brand-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,12 +95,7 @@ export function AppShell({
                   Settings
                 </Link>
               </Button>
-              <Button asChild size="sm">
-                <Link href="/sign-in">
-                  <LockKeyhole aria-hidden="true" />
-                  Sign in
-                </Link>
-              </Button>
+              <AuthControls />
             </div>
           </div>
         </header>

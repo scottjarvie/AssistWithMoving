@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConvexAuthStatus } from "@/components/convex-auth-status";
 
 const metrics = [
   { label: "Items", value: "428", icon: PackageCheck, note: "312 reviewed" },
@@ -63,6 +64,7 @@ export default function DashboardPage() {
             </Badge>
           </div>
         </div>
+        <ConvexAuthStatus />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

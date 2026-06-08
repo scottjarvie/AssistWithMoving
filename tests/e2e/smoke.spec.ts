@@ -12,11 +12,9 @@ test("home page presents the MovingManifest product", async ({ page }) => {
   await expect(page.getByRole("link", { name: /Open workspace preview/i })).toBeVisible();
 });
 
-test("workspace preview route loads foundation shell", async ({ page }) => {
+test("workspace preview is protected for signed-out users", async ({ page }) => {
   await page.goto("/app/dashboard");
 
-  await expect(
-    page.getByRole("heading", { name: "MovingManifest workspace preview" })
-  ).toBeVisible();
-  await expect(page.getByText("Packet defaults")).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in/);
+  await expect(page.getByText("MovingManifest")).toBeVisible();
 });
