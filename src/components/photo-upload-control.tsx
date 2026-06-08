@@ -47,8 +47,7 @@ export function PhotoUploadControl({
   const abortControllerRef = useRef<AbortController | null>(null);
   const uploadSessionRef = useRef<Id<"photoUploadSessions"> | null>(null);
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const selectedFile = event.target.files?.[0] ?? null;
+  function acceptSelectedFile(selectedFile: File | null) {
     setProgress(0);
     setStatus(null);
     setUploadSessionId(null);
@@ -67,6 +66,10 @@ export function PhotoUploadControl({
     }
 
     setFile(selectedFile);
+  }
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    acceptSelectedFile(event.target.files?.[0] ?? null);
   }
 
   async function handleUpload() {
@@ -206,7 +209,14 @@ export function PhotoUploadControl({
       status === "Upload cancelled.");
 
   return (
-    <div className="rounded-md border border-border p-3">
+    <div
+      className="rounded-md border border-border p-3"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        acceptSelectedFile(event.dataTransfer.files?.[0] ?? null);
+      }}
+    >
       <div className="mb-2 flex items-center gap-2 text-sm font-medium">
         <Camera className="size-4 text-primary" aria-hidden="true" />
         {label}
@@ -215,6 +225,7 @@ export function PhotoUploadControl({
         <Input
           type="file"
           accept="image/jpeg,image/png,image/webp"
+          capture="environment"
           disabled={!householdId || !moveId || uploading}
           onChange={handleFileChange}
         />

@@ -318,6 +318,83 @@ export const listReviewQueue = query({
   },
 });
 
+export const evidenceSummary = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read"
+    );
+    const [photos, items] = await Promise.all([
+      ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("items")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+    ]);
+    const activePhotos = photos.filter((photo) => !photo.archivedAt);
+    const itemPhotoCounts = activePhotos.reduce<Record<string, number>>(
+      (counts, photo) => {
+        if (photo.itemId) {
+          counts[photo.itemId] = (counts[photo.itemId] ?? 0) + 1;
+        }
+        return counts;
+      },
+      {}
+    );
+    const activeItems = items.filter((item) => !item.deletedAt);
+    const evidenceGaps = activeItems
+      .filter(
+        (item) =>
+          (item.highValue ||
+            item.requiresPersonalTransport ||
+            item.planningDefaultKeys.includes("highValue") ||
+            item.planningDefaultKeys.includes("sensitive") ||
+            item.planningDefaultKeys.includes("irreplaceable")) &&
+          !itemPhotoCounts[item._id]
+      )
+      .slice(0, 12)
+      .map((item) => ({
+        itemId: item._id,
+        name: item.name,
+        room: item.room,
+        highValue: item.highValue,
+        requiresPersonalTransport: item.requiresPersonalTransport,
+        planningDefaultKeys: item.planningDefaultKeys,
+      }));
+
+    return {
+      photoCount: activePhotos.length,
+      unassignedCount: activePhotos.filter(
+        (photo) => !photo.itemId && !photo.boxId && !photo.room
+      ).length,
+      needsReviewCount: activePhotos.filter(
+        (photo) => photo.verificationStatus === "needsReview"
+      ).length,
+      sensitiveCount: activePhotos.filter(
+        (photo) => photo.privacyLevel !== "normal"
+      ).length,
+      pendingDerivativeCount: activePhotos.filter(
+        (photo) => photo.derivativeStatus === "pending"
+      ).length,
+      failedDerivativeCount: activePhotos.filter(
+        (photo) => photo.derivativeStatus === "failed"
+      ).length,
+      highValueItemCount: activeItems.filter((item) => item.highValue).length,
+      highValueWithoutPhotoCount: evidenceGaps.length,
+      evidenceGaps,
+    };
+  },
+});
+
 export const initUpload = action({
   args: {
     householdId: v.id("households"),

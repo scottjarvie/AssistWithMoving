@@ -20,6 +20,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { BoxManager } from "@/components/box-manager";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
 import { InventoryTable } from "@/components/inventory-table";
+import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -769,6 +770,8 @@ export function MoveDashboard() {
       <section>
         <BoxManager householdId={householdId} moveId={moveId} />
       </section>
+
+      <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
