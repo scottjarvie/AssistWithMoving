@@ -39,6 +39,12 @@ export function AppShell({
 }) {
   return (
     <div className="min-h-screen bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        Skip to main content
+      </a>
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-sidebar/75 px-4 py-5 backdrop-blur xl:block">
         <BrandMark />
         <nav aria-label="Primary" className="mt-8 space-y-1">
@@ -100,7 +106,9 @@ export function AppShell({
             </div>
           </div>
         </header>
-        <main>{children}</main>
+        <main id="main-content" tabIndex={-1} aria-label="Workspace content">
+          {children}
+        </main>
       </div>
     </div>
   );

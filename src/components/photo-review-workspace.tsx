@@ -290,6 +290,7 @@ export function PhotoReviewWorkspace({
                         <select
                           className="h-8 rounded-md border border-input bg-background px-2"
                           value={photo.privacyLevel}
+                          aria-label={`Privacy level for ${photo.caption ?? photo._id}`}
                           onChange={(event) =>
                             void updatePhotoPrivacy(photo, {
                               privacyLevel: event.target
@@ -306,6 +307,7 @@ export function PhotoReviewWorkspace({
                         <select
                           className="h-8 rounded-md border border-input bg-background px-2"
                           value={photo.visibilityScope}
+                          aria-label={`Visibility scope for ${photo.caption ?? photo._id}`}
                           onChange={(event) =>
                             void updatePhotoPrivacy(photo, {
                               visibilityScope: event.target

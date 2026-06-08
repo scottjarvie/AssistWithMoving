@@ -226,6 +226,7 @@ export function PhotoUploadControl({
           type="file"
           accept="image/jpeg,image/png,image/webp"
           capture="environment"
+          aria-label={label}
           disabled={!householdId || !moveId || uploading}
           onChange={handleFileChange}
         />
@@ -234,6 +235,7 @@ export function PhotoUploadControl({
           disabled={uploading}
           onChange={(event) => setCaption(event.target.value)}
           placeholder="Caption"
+          aria-label="Photo caption"
         />
         <div className="flex items-center gap-2">
           <Button
@@ -277,7 +279,13 @@ export function PhotoUploadControl({
         </div>
       ) : null}
       {status ? (
-        <p className="mt-2 text-xs text-muted-foreground">{status}</p>
+        <p
+          className="mt-2 text-xs text-muted-foreground"
+          role="status"
+          aria-live="polite"
+        >
+          {status}
+        </p>
       ) : null}
     </div>
   );

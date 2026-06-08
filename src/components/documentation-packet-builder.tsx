@@ -441,6 +441,7 @@ export function DocumentationPacketBuilder({
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm"
             value={profileType}
+            aria-label="Documentation profile type"
             onChange={(event) =>
               setProfileType(event.target.value as DocumentationProfileType)
             }
@@ -461,7 +462,11 @@ export function DocumentationPacketBuilder({
         </div>
 
         {message ? (
-          <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+          <p
+            className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
             {message}
           </p>
         ) : null}
@@ -510,6 +515,7 @@ export function DocumentationPacketBuilder({
                   <select
                     className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                     value={effectiveImageRule}
+                    aria-label="Documentation image rule"
                     onChange={(event) => {
                       ensureDraftLoaded(selectedProfile);
                       setDraftImageRule(
@@ -869,6 +875,7 @@ export function DocumentationPacketBuilder({
                     <select
                       className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                       value={linkRole}
+                      aria-label="Share link role"
                       onChange={(event) =>
                         setLinkRole(event.target.value as ShareLinkRole)
                       }

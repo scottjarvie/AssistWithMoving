@@ -335,6 +335,7 @@ export function LoadPlannerBoard({
               <select
                 className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 value={targetResourceId}
+                aria-label="Bulk assignment resource"
                 onChange={(event) => {
                   setTargetResourceId(event.target.value);
                   setTargetZoneId("");
@@ -350,6 +351,7 @@ export function LoadPlannerBoard({
               <select
                 className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 value={targetZoneId}
+                aria-label="Bulk assignment zone"
                 disabled={!targetResourceId}
                 onChange={(event) => setTargetZoneId(event.target.value)}
               >
@@ -364,6 +366,7 @@ export function LoadPlannerBoard({
                 value={overrideReason}
                 onChange={(event) => setOverrideReason(event.target.value)}
                 placeholder="Override reason when warnings are expected"
+                aria-label="Assignment override reason"
               />
               <div className="grid grid-cols-2 gap-2">
                 <Button
@@ -397,7 +400,11 @@ export function LoadPlannerBoard({
         </div>
 
         {message ? (
-          <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+          <p
+            className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
             {message}
           </p>
         ) : null}

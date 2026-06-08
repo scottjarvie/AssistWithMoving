@@ -444,6 +444,7 @@ export function MoveDayView({
                     value={lookup}
                     onChange={(event) => setLookup(event.target.value)}
                     placeholder="Scan or type a box code, room, destination, or status"
+                    aria-label="Move Day box lookup"
                     inputMode="search"
                     autoCapitalize="characters"
                   />
@@ -551,7 +552,11 @@ export function MoveDayView({
         </div>
 
         {message ? (
-          <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+          <p
+            className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
             {message}
           </p>
         ) : null}
@@ -750,6 +755,7 @@ function MoveDayBoxCard({
             disabled={updating}
             onChange={(event) => onSetExceptionNote(event.target.value)}
             placeholder="Damage, missing item context, customer instruction, or mover note"
+            aria-label={`Exception note for ${box.code}`}
           />
           <div className="mt-2 flex justify-end">
             <Button

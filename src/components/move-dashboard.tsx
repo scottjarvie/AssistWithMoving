@@ -362,6 +362,7 @@ export function MoveDashboard() {
                   <select
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={householdId ?? ""}
+                    aria-label="Selected household"
                     onChange={(event) =>
                       setSelectedHouseholdId(
                         event.target.value as Id<"households">
@@ -385,6 +386,7 @@ export function MoveDashboard() {
                     value={householdName}
                     onChange={(event) => setHouseholdName(event.target.value)}
                     placeholder="Household name"
+                    aria-label="Household name"
                   />
                   <Button type="submit" size="sm" disabled={saving}>
                     <Plus aria-hidden="true" />
@@ -411,11 +413,13 @@ export function MoveDashboard() {
                   value={moveTitle}
                   onChange={(event) => setMoveTitle(event.target.value)}
                   placeholder="Move title"
+                  aria-label="Move title"
                   disabled={!householdId}
                 />
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={moveType}
+                  aria-label="Move type"
                   onChange={(event) => {
                     const nextMoveType = event.target.value as MoveType;
                     setMoveType(nextMoveType);
@@ -436,12 +440,14 @@ export function MoveDashboard() {
                     value={origin}
                     onChange={(event) => setOrigin(event.target.value)}
                     placeholder="Origin"
+                    aria-label="Move origin"
                     disabled={!householdId}
                   />
                   <Input
                     value={destination}
                     onChange={(event) => setDestination(event.target.value)}
                     placeholder="Destination"
+                    aria-label="Move destination"
                     disabled={!householdId}
                   />
                 </div>
@@ -459,6 +465,7 @@ export function MoveDashboard() {
                       <select
                         className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         value={pcsBranch}
+                        aria-label="Military branch"
                         onChange={(event) =>
                           setPcsBranch(event.target.value as PcsBranch | "")
                         }
@@ -474,6 +481,7 @@ export function MoveDashboard() {
                       <select
                         className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         value={pcsShipmentType}
+                        aria-label="PCS shipment type"
                         onChange={(event) =>
                           setPcsShipmentType(
                             event.target.value as PcsShipmentType
@@ -493,11 +501,13 @@ export function MoveDashboard() {
                           setPcsRankPayGrade(event.target.value)
                         }
                         placeholder="Rank / pay grade"
+                        aria-label="Rank or pay grade"
                         disabled={!householdId}
                       />
                       <select
                         className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                         value={pcsDependentStatus}
+                        aria-label="PCS dependent status"
                         onChange={(event) =>
                           setPcsDependentStatus(
                             event.target.value as PcsDependentStatus
@@ -517,6 +527,7 @@ export function MoveDashboard() {
                           setPcsOrdersNumber(event.target.value)
                         }
                         placeholder="Orders number"
+                        aria-label="Orders number"
                         disabled={!householdId}
                       />
                       <Input
@@ -526,6 +537,7 @@ export function MoveDashboard() {
                           setMoveLevelWeightAllowanceLb(event.target.value)
                         }
                         placeholder="Official allowance lb"
+                        aria-label="Official weight allowance in pounds"
                         disabled={!householdId}
                       />
                     </div>
@@ -535,12 +547,14 @@ export function MoveDashboard() {
                         setPcsAllowanceNotes(event.target.value)
                       }
                       placeholder="Allowance notes"
+                      aria-label="Allowance notes"
                       disabled={!householdId}
                     />
                     <Textarea
                       value={proGearNotes}
                       onChange={(event) => setProGearNotes(event.target.value)}
                       placeholder="Pro gear / PBP&E notes"
+                      aria-label="Pro gear notes"
                       disabled={!householdId}
                     />
                     <Textarea
@@ -549,6 +563,7 @@ export function MoveDashboard() {
                         setPcsTransportationOfficeNotes(event.target.value)
                       }
                       placeholder="Transportation office notes"
+                      aria-label="Transportation office notes"
                       disabled={!householdId}
                     />
                     <Textarea
@@ -557,6 +572,7 @@ export function MoveDashboard() {
                         setPcsRestrictedItemsNotes(event.target.value)
                       }
                       placeholder="Restricted item notes"
+                      aria-label="Restricted item notes"
                       disabled={!householdId}
                     />
                   </div>
@@ -606,7 +622,13 @@ export function MoveDashboard() {
                   Create move
                 </Button>
                 {message ? (
-                  <p className="text-xs text-muted-foreground">{message}</p>
+                  <p
+                    className="text-xs text-muted-foreground"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {message}
+                  </p>
                 ) : null}
               </form>
             </CardContent>
@@ -632,10 +654,11 @@ export function MoveDashboard() {
               </div>
             ) : activeMoves.length ? (
               <div className="space-y-3">
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={moveId ?? ""}
-                  onChange={(event) =>
+                  <select
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={moveId ?? ""}
+                    aria-label="Selected move"
+                    onChange={(event) =>
                     setSelectedMoveId(event.target.value as Id<"moves">)
                   }
                 >

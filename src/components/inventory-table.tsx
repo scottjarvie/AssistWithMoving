@@ -294,6 +294,7 @@ export function InventoryTable({
           <select
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
             value={row.original.status}
+            aria-label={`Status for ${row.original.name}`}
             onChange={(event) =>
               void patchItem(row.original, {
                 status: event.target.value as InventoryItem["status"],
@@ -315,6 +316,7 @@ export function InventoryTable({
           <select
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
             value={row.original.disposition}
+            aria-label={`Disposition for ${row.original.name}`}
             onChange={(event) =>
               void patchItem(row.original, {
                 disposition: event.target
@@ -415,23 +417,27 @@ export function InventoryTable({
             value={newItemName}
             onChange={(event) => setNewItemName(event.target.value)}
             placeholder="Item name"
+            aria-label="New item name"
             disabled={!moveId}
           />
           <Input
             value={newItemRoom}
             onChange={(event) => setNewItemRoom(event.target.value)}
             placeholder="Room"
+            aria-label="New item room"
             disabled={!moveId}
           />
           <Input
             value={newItemCategory}
             onChange={(event) => setNewItemCategory(event.target.value)}
             placeholder="Category"
+            aria-label="New item category"
             disabled={!moveId}
           />
           <select
             className="h-8 rounded-md border border-input bg-background px-2 text-sm"
             value={newItemDisposition}
+            aria-label="New item disposition"
             disabled={!moveId}
             onChange={(event) =>
               setNewItemDisposition(
@@ -468,11 +474,13 @@ export function InventoryTable({
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search items, rooms, categories, status"
+                  aria-label="Search inventory"
                 />
               </div>
               <select
                 className="h-8 rounded-md border border-input bg-background px-2 text-sm"
                 value={savedFilter}
+                aria-label="Saved inventory filter"
                 onChange={(event) =>
                   setSavedFilter(event.target.value as InventoryFilterKey)
                 }
@@ -647,7 +655,11 @@ export function InventoryTable({
             </div>
 
             {message ? (
-              <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+              <p
+                className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
                 {message}
               </p>
             ) : null}

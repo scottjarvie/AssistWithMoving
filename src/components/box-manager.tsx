@@ -234,16 +234,28 @@ function BoxCard({
       </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        <Input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Label" />
-        <Input value={room} onChange={(event) => setRoom(event.target.value)} placeholder="Room" />
+        <Input
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          placeholder="Label"
+          aria-label="Box label"
+        />
+        <Input
+          value={room}
+          onChange={(event) => setRoom(event.target.value)}
+          placeholder="Room"
+          aria-label="Box room"
+        />
         <Input
           value={destinationRoom}
           onChange={(event) => setDestinationRoom(event.target.value)}
           placeholder="Destination room"
+          aria-label="Box destination room"
         />
         <select
           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           value={status}
+          aria-label="Box status"
           onChange={(event) => setStatus(event.target.value as typeof status)}
         >
           {boxStatusOptions.map((option) => (
@@ -257,22 +269,26 @@ function BoxCard({
           value={estimatedWeightLb}
           onChange={(event) => setEstimatedWeightLb(event.target.value)}
           placeholder="Estimated lb"
+          aria-label="Estimated box weight in pounds"
         />
         <Input
           inputMode="decimal"
           value={actualWeightLb}
           onChange={(event) => setActualWeightLb(event.target.value)}
           placeholder="Actual lb"
+          aria-label="Actual box weight in pounds"
         />
         <Input
           inputMode="decimal"
           value={estimatedVolumeCuFt}
           onChange={(event) => setEstimatedVolumeCuFt(event.target.value)}
           placeholder="Cu ft"
+          aria-label="Estimated box volume in cubic feet"
         />
         <select
           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           value={assignedResourceId}
+          aria-label="Assigned transport resource"
           onChange={(event) => {
             setAssignedResourceId(event.target.value);
             setAssignedZoneId("");
@@ -288,6 +304,7 @@ function BoxCard({
         <select
           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           value={assignedZoneId}
+          aria-label="Assigned transport zone"
           disabled={!assignedResourceId}
           onChange={(event) => setAssignedZoneId(event.target.value)}
         >
@@ -313,6 +330,7 @@ function BoxCard({
         value={assignmentOverrideReason}
         onChange={(event) => setAssignmentOverrideReason(event.target.value)}
         placeholder="Override reason for load warnings"
+        aria-label="Assignment override reason"
       />
 
       {(box.assignmentWarnings?.length ?? 0) ||
@@ -339,6 +357,7 @@ function BoxCard({
         value={description}
         onChange={(event) => setDescription(event.target.value)}
         placeholder="Description or handling notes"
+        aria-label="Box description or handling notes"
       />
 
       <div className="mt-3">
@@ -362,6 +381,7 @@ function BoxCard({
         <select
           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           value={selectedItemId}
+          aria-label="Item to add to box"
           onChange={(event) => setSelectedItemId(event.target.value)}
         >
           <option value="">Add item</option>
