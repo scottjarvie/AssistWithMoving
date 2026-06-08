@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { ArrowLeft, Download, Printer, ShieldCheck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -38,9 +38,10 @@ export function PrintablePcsPacket({
   moveId?: string;
   mode?: PcsPacketMode;
 }) {
+  const auth = useConvexAuth();
   const packet = useQuery(
     api.pcsPackets.getForMove,
-    householdId && moveId
+    householdId && moveId && auth.isAuthenticated
       ? {
           householdId: householdId as Id<"households">,
           moveId: moveId as Id<"moves">,
@@ -125,7 +126,29 @@ export function PrintablePcsPacket({
         </div>
       </div>
 
-      {!packet ? (
+      {auth.isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-4/5" />
+        </div>
+      ) : !auth.isAuthenticated ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign in required</CardTitle>
+            <CardDescription>
+              Sign in before exporting a PCS packet for this move.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/sign-in">
+                <ShieldCheck aria-hidden="true" />
+                Sign in
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !packet ? (
         <div className="space-y-2">
           <Skeleton className="h-40 w-full" />
           <Skeleton className="h-40 w-4/5" />

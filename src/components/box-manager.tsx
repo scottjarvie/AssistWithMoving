@@ -397,13 +397,18 @@ function BoxCard({
         </Button>
       </div>
 
-      <div className="mt-3 rounded-md border border-border">
+      <div
+        className="mt-3 rounded-md border border-border"
+        role="list"
+        aria-label={`Contents for ${box.code}`}
+      >
         {contents.length ? (
           <div className="divide-y divide-border">
             {contents.map((entry) =>
               entry ? (
                 <div
                   key={entry.membership._id}
+                  role="listitem"
                   className="flex items-center justify-between gap-2 p-2 text-sm"
                 >
                   <span>
@@ -426,7 +431,9 @@ function BoxCard({
             )}
           </div>
         ) : (
-          <div className="p-3 text-sm text-muted-foreground">No contents yet.</div>
+          <div role="listitem" className="p-3 text-sm text-muted-foreground">
+            No contents yet.
+          </div>
         )}
       </div>
 

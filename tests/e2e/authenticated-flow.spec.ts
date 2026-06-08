@@ -108,6 +108,39 @@ test.describe("authenticated product flow", () => {
     await createBoxForm.getByRole("button", { name: "Create" }).click();
     await expect(page.getByRole("cell", { name: boxCode })).toBeVisible();
 
+    const boxManager = page
+      .getByRole("heading", { name: "Box manager", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await boxManager.getByLabel("Item to add to box").selectOption({
+      label: itemName,
+    });
+    await boxManager.getByRole("button", { name: "Add" }).click();
+    await expect(
+      boxManager
+        .getByRole("list", { name: `Contents for ${boxCode}` })
+        .getByText(itemName)
+    ).toBeVisible({ timeout: 30_000 });
+
+    const loadPlanner = page
+      .getByRole("heading", { name: "Load planner", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(loadPlanner.getByLabel(`Select ${boxCode}`)).toBeVisible({
+      timeout: 30_000,
+    });
+    await loadPlanner.getByLabel(`Select ${boxCode}`).check();
+    await loadPlanner
+      .getByLabel("Bulk assignment resource")
+      .selectOption({ label: "Military movers / HHG" });
+    await loadPlanner
+      .getByLabel("Bulk assignment zone")
+      .selectOption({ label: "HHG boxes" });
+    await loadPlanner
+      .getByRole("button", { name: "Assign", exact: true })
+      .click();
+    await expect(
+      loadPlanner.getByText("1 box assignment updated.")
+    ).toBeVisible({ timeout: 30_000 });
+
     const documentationPackets = page
       .getByRole("heading", { name: "Documentation packets", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
@@ -121,6 +154,24 @@ test.describe("authenticated product flow", () => {
     await expect(
       documentationPackets.getByRole("button", { name: "Inventory CSV" })
     ).toBeEnabled({ timeout: 30_000 });
+    await documentationPackets
+      .getByRole("button", { name: "Inventory CSV" })
+      .click();
+    await expect(
+      documentationPackets.getByText(
+        /movingmanifest-inventory\.csv - completed - \d+ rows/
+      )
+    ).toBeVisible({ timeout: 30_000 });
+
+    await expect(
+      documentationPackets.getByRole("button", { name: "Create link token" })
+    ).toBeEnabled({ timeout: 30_000 });
+    await documentationPackets
+      .getByRole("button", { name: "Create link token" })
+      .click();
+    await expect(
+      documentationPackets.getByRole("button", { name: "Revoke" }).first()
+    ).toBeVisible({ timeout: 30_000 });
 
     await expect(
       page.getByRole("heading", { name: "Inventory", exact: true })
@@ -134,5 +185,18 @@ test.describe("authenticated product flow", () => {
     await expect(
       page.getByRole("heading", { name: "Documentation packets", exact: true })
     ).toBeVisible();
+
+    const pcsPacketHref = await documentationPackets
+      .getByRole("link", { name: "PCS packet" })
+      .getAttribute("href");
+    expect(pcsPacketHref).toBeTruthy();
+    await page.goto(pcsPacketHref!);
+    await expect(
+      page.getByRole("heading", {
+        name: "MovingManifest PCS Support Packet",
+        exact: true,
+      })
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(moveTitle)).toBeVisible({ timeout: 30_000 });
   });
 });
