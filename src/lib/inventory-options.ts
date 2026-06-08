@@ -14,6 +14,7 @@ export const itemStatusOptions = [
   "draft",
   "active",
   "packed",
+  "staged",
   "loaded",
   "delivered",
   "missing",

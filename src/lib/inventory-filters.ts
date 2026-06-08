@@ -57,7 +57,7 @@ export const inventorySavedFilters: {
   {
     key: "packedOrLoaded",
     label: "Packed / loaded",
-    description: "Items already packed or loaded.",
+    description: "Items already packed, staged, or loaded.",
   },
 ];
 
@@ -97,7 +97,7 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
       case "sellDonateDumpFree":
         return ["sell", "donate", "dump", "free"].includes(item.disposition);
       case "packedOrLoaded":
-        return ["packed", "loaded"].includes(item.status);
+        return ["packed", "staged", "loaded"].includes(item.status);
     }
   });
 }

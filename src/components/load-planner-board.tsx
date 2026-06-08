@@ -787,7 +787,9 @@ function matchesPlannerFilter(
         entry?.item.planningDefaultKeys.includes("firstNight")
       );
     case "notPacked":
-      return !["sealed", "loaded", "delivered"].includes(record.box.status);
+      return !["sealed", "staged", "loaded", "delivered"].includes(
+        record.box.status
+      );
   }
 }
 

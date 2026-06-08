@@ -25,6 +25,7 @@ const navItems = [
   { href: "/app/dashboard#boxes", label: "Boxes", icon: Archive },
   { href: "/app/dashboard#photos", label: "Photos", icon: Images },
   { href: "/app/dashboard#load-plan", label: "Load Plan", icon: Truck },
+  { href: "/app/dashboard#move-day", label: "Move Day", icon: ClipboardList },
   { href: "/app/dashboard#documents", label: "Packets", icon: FileStack },
   { href: "/app/dashboard#ai", label: "AI Review", icon: Bot },
 ] as const;
