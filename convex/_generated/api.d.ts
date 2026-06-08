@@ -63,6 +63,7 @@ import type * as lib_planningSuggestions from "../lib/planningSuggestions.js";
 import type * as lib_publicPackets from "../lib/publicPackets.js";
 import type * as lib_restApi from "../lib/restApi.js";
 import type * as lib_roles from "../lib/roles.js";
+import type * as lib_shareLinks from "../lib/shareLinks.js";
 import type * as lib_subManifest from "../lib/subManifest.js";
 import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
@@ -146,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicPackets": typeof lib_publicPackets;
   "lib/restApi": typeof lib_restApi;
   "lib/roles": typeof lib_roles;
+  "lib/shareLinks": typeof lib_shareLinks;
   "lib/subManifest": typeof lib_subManifest;
   "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;

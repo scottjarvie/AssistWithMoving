@@ -121,6 +121,9 @@ export function requiredScopesForRestRoute({
     if (segments.includes("exports")) {
       return ["exports/read"];
     }
+    if (segments.includes("share-links")) {
+      return ["exports/read"];
+    }
     if (segments.includes("documentation-profiles")) {
       return ["exports/read"];
     }
@@ -137,6 +140,9 @@ export function requiredScopesForRestRoute({
   }
   if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
     if (segments.includes("exports")) {
+      return ["exports/create"];
+    }
+    if (segments.includes("share-links")) {
       return ["exports/create"];
     }
     if (segments.includes("documentation-profiles")) {

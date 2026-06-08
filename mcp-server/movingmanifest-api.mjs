@@ -408,6 +408,53 @@ export async function downloadExport(config, input) {
   });
 }
 
+export async function listShareLinks(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/share-links`,
+    query: { limit: input.limit, status: input.status },
+  });
+}
+
+export async function createShareLink(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/share-links`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/share-links`,
+    body: {
+      documentationProfileId: input.documentationProfileId,
+      scope: input.scope,
+      label: input.label,
+      role: input.role,
+      allowedActions: input.allowedActions,
+      expiresAt: input.expiresAt,
+    },
+  });
+}
+
+export async function revokeShareLink(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "DELETE",
+        path: `/moves/${input.moveId}/share-links/${input.shareLinkId}`,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "DELETE",
+    path: `/moves/${input.moveId}/share-links/${input.shareLinkId}`,
+  });
+}
+
 function removeUndefined(value) {
   if (Array.isArray(value)) return value.map(removeUndefined);
   if (!value || typeof value !== "object") return value;

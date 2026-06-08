@@ -20,6 +20,7 @@ import {
   type ExportJobType,
   type ExportVisibility,
 } from "./lib/exportRows";
+import type { ShareLinkAction } from "./lib/documentation";
 import {
   estimateItem,
   roundEstimate,
@@ -52,6 +53,12 @@ import {
   transportResourcePresetKeys,
   transportResourceTypes,
 } from "./lib/moveFields";
+import {
+  createGeneratedShareLink,
+  revokeShareLinkRecord,
+  safeShareLinkMetadata,
+  type ShareLinkRole,
+} from "./lib/shareLinks";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
@@ -73,6 +80,23 @@ const restExportJobTypes = [
   "boxes",
   "assignments",
   "documentationProfile",
+] as const;
+const restShareLinkStatuses = ["active", "revoked"] as const;
+const restShareLinkScopes = ["move", "profile"] as const;
+const restShareLinkRoles = [
+  "owner",
+  "admin",
+  "editor",
+  "packer",
+  "viewer",
+  "guest",
+] as const;
+const restShareLinkActions = [
+  "view",
+  "download",
+  "statusUpdate",
+  "comment",
+  "uploadEvidence",
 ] as const;
 const restEstimateConfidences = [
   "none",
@@ -399,6 +423,9 @@ async function routeRequest(
   if (nested === "exports") {
     return await routeExports(ctx, args, auth, moveId, nestedId, segments[4]);
   }
+  if (nested === "share-links") {
+    return await routeShareLinks(ctx, args, auth, moveId, nestedId, segments[4]);
+  }
   if (nested === "photos" && args.method === "GET") {
     const photos = await ctx.db
       .query("itemPhotos")
@@ -445,6 +472,7 @@ async function routeMoveSummary(
     photos,
     documentationProfiles,
     exportJobs,
+    shareLinks,
   ] = await Promise.all([
     ctx.db
       .query("transportResources")
@@ -482,6 +510,10 @@ async function routeMoveSummary(
       .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
       .order("desc")
       .collect(),
+    ctx.db
+      .query("shareLinks")
+      .withIndex("by_move_status", (q) => q.eq("moveId", move._id))
+      .collect(),
   ]);
 
   const activeResources = resources.filter(
@@ -506,6 +538,9 @@ async function routeMoveSummary(
   const visibleExportJobs = exportJobs.filter(
     (job) => job.householdId === auth.householdId
   );
+  const visibleShareLinks = shareLinks.filter(
+    (link) => link.householdId === auth.householdId
+  );
   const visibleAssignments = assignments.filter(
     (assignment) => assignment.householdId === auth.householdId
   );
@@ -525,6 +560,7 @@ async function routeMoveSummary(
         safeDocumentationProfile(profile)
       ),
       exports: visibleExportJobs.map((job) => safeExportJob(job)),
+      shareLinks: visibleShareLinks.map((link) => safeApiShareLink(link)),
       counts: {
         resources: activeResources.length,
         zones: activeZones.length,
@@ -534,6 +570,7 @@ async function routeMoveSummary(
         photos: visiblePhotos.length,
         documentationProfiles: activeDocumentationProfiles.length,
         exports: visibleExportJobs.length,
+        shareLinks: visibleShareLinks.length,
       },
       generatedAt: Date.now(),
     },
@@ -1730,6 +1767,111 @@ async function routeExports(
   });
 }
 
+async function routeShareLinks(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  shareLinkIdSegment?: string,
+  actionSegment?: string
+) {
+  if (args.method === "GET" && !shareLinkIdSegment) {
+    const links = await ctx.db
+      .query("shareLinks")
+      .withIndex("by_move_status", (q) => q.eq("moveId", moveId))
+      .collect();
+    const status = parseShareLinkStatus(args.query.status);
+    return restOk(
+      paginate(
+        links
+          .filter(
+            (link) =>
+              link.householdId === auth.householdId &&
+              (!status || link.status === status)
+          )
+          .map((link) => safeApiShareLink(link)),
+        args.query
+      )
+    );
+  }
+
+  if (args.method === "GET" && shareLinkIdSegment && !actionSegment) {
+    const link = await requireApiShareLink(
+      ctx,
+      auth.householdId,
+      moveId,
+      shareLinkIdSegment
+    );
+    return restOk({ data: safeApiShareLink(link) });
+  }
+
+  if (args.method === "POST" && !shareLinkIdSegment) {
+    const body = bodyObject(args.body);
+    const documentationProfileId = optionalString(body.documentationProfileId) as
+      | Id<"documentationProfiles">
+      | undefined;
+    const expiresAt =
+      optionalNumber(body.expiresAt) ?? Date.now() + 30 * 24 * 60 * 60 * 1000;
+    const result = await createGeneratedShareLink(
+      ctx,
+      {
+        householdId: auth.householdId,
+        moveId,
+        documentationProfileId,
+        scope:
+          parseShareLinkScope(body.scope) ??
+          (documentationProfileId ? "profile" : "move"),
+        label: normalizeOptionalText(asString(body.label)),
+        role: parseShareLinkRole(body.role) ?? "guest",
+        allowedActions: parseShareLinkActions(body.allowedActions),
+        expiresAt,
+      },
+      {
+        type: "apiKey",
+        apiKeyId: auth.apiKeyId,
+        userId: auth.createdByUserId,
+      }
+    );
+    return restOk(
+      {
+        data: {
+          ...result,
+          url: `/share/${result.token}`,
+          expiresAt,
+        },
+      },
+      201
+    );
+  }
+
+  if (
+    shareLinkIdSegment &&
+    ((args.method === "DELETE" && !actionSegment) ||
+      (args.method === "POST" && actionSegment === "revoke"))
+  ) {
+    const link = await revokeShareLinkRecord(
+      ctx,
+      {
+        householdId: auth.householdId,
+        moveId,
+        shareLinkId: shareLinkIdSegment as Id<"shareLinks">,
+      },
+      {
+        type: "apiKey",
+        apiKeyId: auth.apiKeyId,
+        userId: auth.createdByUserId,
+      }
+    );
+    return restOk({ data: { revoked: true, shareLink: safeApiShareLink(link) } });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Share link route not found.",
+  });
+}
+
 async function routeTopLevelItem(
   ctx: MutationCtx,
   args: RestRequestInput,
@@ -2206,6 +2348,19 @@ async function requireApiExportJob(
   return job;
 }
 
+async function requireApiShareLink(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  shareLinkIdSegment: string
+) {
+  const link = await ctx.db.get(shareLinkIdSegment as Id<"shareLinks">);
+  if (!link || link.householdId !== householdId || link.moveId !== moveId) {
+    throw new Error("Share link not found.");
+  }
+  return link;
+}
+
 function requiredQueryMoveId(query: Record<string, string>) {
   if (!query.moveId) {
     throw new Error("moveId query parameter is required.");
@@ -2400,6 +2555,27 @@ function safeExportJob(job: Doc<"exportJobs">) {
     createdAt: job.createdAt,
     completedAt: job.completedAt,
     expiresAt: job.expiresAt,
+  };
+}
+
+function safeApiShareLink(link: Doc<"shareLinks">) {
+  const safe = safeShareLinkMetadata(link);
+  return {
+    shareLinkId: safe._id,
+    moveId: safe.moveId,
+    documentationProfileId: safe.documentationProfileId,
+    scope: safe.scope,
+    tokenPreview: safe.tokenPreview,
+    label: safe.label,
+    role: safe.role,
+    status: safe.status,
+    allowedActions: safe.allowedActions,
+    expiresAt: safe.expiresAt,
+    revokedAt: safe.revokedAt,
+    accessCount: safe.accessCount,
+    lastAccessedAt: safe.lastAccessedAt,
+    createdAt: safe.createdAt,
+    updatedAt: safe.updatedAt,
   };
 }
 
@@ -3375,6 +3551,45 @@ function parseExportJobType(value: unknown) {
   return includesLiteral(restExportJobTypes, value)
     ? (value as ExportJobType)
     : undefined;
+}
+
+function parseShareLinkStatus(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(restShareLinkStatuses, value)) {
+    throw new Error("Unsupported share link status.");
+  }
+  return value as (typeof restShareLinkStatuses)[number];
+}
+
+function parseShareLinkScope(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(restShareLinkScopes, value)) {
+    throw new Error("Unsupported share link scope.");
+  }
+  return value as (typeof restShareLinkScopes)[number];
+}
+
+function parseShareLinkRole(value: unknown): ShareLinkRole | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(restShareLinkRoles, value)) {
+    throw new Error("Unsupported share link role.");
+  }
+  return value as ShareLinkRole;
+}
+
+function parseShareLinkActions(value: unknown): ShareLinkAction[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error("allowedActions must be an array.");
+  }
+  const actions: ShareLinkAction[] = [];
+  for (const action of value) {
+    if (!includesLiteral(restShareLinkActions, action)) {
+      throw new Error("Unsupported share link action.");
+    }
+    actions.push(action as ShareLinkAction);
+  }
+  return Array.from(new Set(actions));
 }
 
 function parseTransportResourceType(value: unknown) {

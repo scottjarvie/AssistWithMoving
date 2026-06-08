@@ -176,6 +176,24 @@ describe("REST API helpers", () => {
     expect(
       requiredScopesForRestRoute({
         method: "GET",
+        segments: ["moves", "move1", "share-links"],
+      })
+    ).toEqual(["exports/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "share-links"],
+      })
+    ).toEqual(["exports/create"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "DELETE",
+        segments: ["moves", "move1", "share-links", "share1"],
+      })
+    ).toEqual(["exports/create"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
         segments: ["exports", "export1"],
       })
     ).toEqual(["exports/read"]);

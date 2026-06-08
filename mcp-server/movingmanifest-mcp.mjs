@@ -24,8 +24,10 @@ import {
   listDocumentationProfiles,
   listExports,
   listMoves,
+  listShareLinks,
   listTransportResources,
   removeItemFromBox,
+  revokeShareLink,
   searchInventory,
   startPhotoUpload,
   suggestAssignments,
@@ -34,6 +36,7 @@ import {
   updateTransportResource,
   updateTransportZone,
   updateItem,
+  createShareLink,
 } from "./movingmanifest-api.mjs";
 
 const capacityInputSchema = z.object({
@@ -533,6 +536,56 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => downloadExport(apiConfig, input),
+  });
+
+  registerTool(target, "list_share_links", {
+    title: "List share links",
+    description:
+      "List safe metadata for documentation share links. Raw tokens are never returned from this list.",
+    inputSchema: {
+      moveId: z.string(),
+      status: z.enum(["active", "revoked"]).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listShareLinks(apiConfig, input),
+  });
+
+  registerTool(target, "create_share_link", {
+    title: "Create share link",
+    description:
+      "Create a scoped documentation share link. The raw token is returned only once in the create response; store it carefully.",
+    inputSchema: {
+      moveId: z.string(),
+      documentationProfileId: z.string().optional(),
+      scope: z.enum(["move", "profile"]).optional(),
+      label: z.string().optional(),
+      role: z
+        .enum(["owner", "admin", "editor", "packer", "viewer", "guest"])
+        .optional(),
+      allowedActions: z
+        .array(
+          z.enum(["view", "download", "statusUpdate", "comment", "uploadEvidence"])
+        )
+        .optional(),
+      expiresAt: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createShareLink(apiConfig, input),
+  });
+
+  registerTool(target, "revoke_share_link", {
+    title: "Revoke share link",
+    description:
+      "Revoke a documentation share link so the public token can no longer be used.",
+    inputSchema: {
+      moveId: z.string(),
+      shareLinkId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (input) => revokeShareLink(apiConfig, input),
   });
 }
 

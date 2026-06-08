@@ -8,14 +8,17 @@ import {
   createApiConfig,
   createItem,
   createMove,
+  createShareLink,
   createTransportResource,
   createTransportZone,
   deleteItem,
   getApiContext,
   getCapacityReport,
   getMoveSummary,
+  listShareLinks,
   movingManifestRequest,
   removeItemFromBox,
+  revokeShareLink,
   searchInventory,
   suggestAssignments,
   updateTransportResource,
@@ -678,6 +681,78 @@ describe("MovingManifest MCP API client", () => {
           privacyLevel: "reportVisible",
           caption: "Pre-move condition.",
         }),
+      }
+    );
+  });
+
+  it("lists, creates, and revokes share links through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { shareLinkId: "share1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listShareLinks(config, {
+      moveId: "move1",
+      status: "active",
+      limit: 10,
+    });
+    await createShareLink(config, {
+      moveId: "move1",
+      documentationProfileId: "profile1",
+      label: "PCS packet",
+      role: "guest",
+      allowedActions: ["view", "download"],
+      expiresAt: 1780876800000,
+    });
+    await revokeShareLink(config, {
+      moveId: "move1",
+      shareLinkId: "share1",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL(
+        "https://example.com/api/v1/moves/move1/share-links?limit=10&status=active"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/share-links"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          documentationProfileId: "profile1",
+          label: "PCS packet",
+          role: "guest",
+          allowedActions: ["view", "download"],
+          expiresAt: 1780876800000,
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL("https://example.com/api/v1/moves/move1/share-links/share1"),
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "idempotency-key": expect.any(String),
+        },
       }
     );
   });

@@ -767,10 +767,12 @@ export default defineSchema({
     expiresAt: v.number(),
     revokedAt: v.optional(v.number()),
     revokedByUserId: v.optional(v.id("users")),
+    revokedByApiKeyId: v.optional(v.id("apiKeys")),
     accessCount: v.number(),
     lastAccessedAt: v.optional(v.number()),
     lastAccessMetadata: v.optional(v.any()),
     createdByUserId: v.id("users"),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

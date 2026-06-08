@@ -39,8 +39,8 @@ API keys can include these scopes:
 | `inventory/read` | Read items, boxes, assignments, and photo metadata. |
 | `inventory/write` | Create/update items, boxes, and assignments. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
-| `exports/read` | List profiles/exports and read unexpired export artifacts. |
-| `exports/create` | Create export jobs. |
+| `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
+| `exports/create` | Create export jobs and create/revoke documentation share links. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
@@ -487,7 +487,7 @@ curl -X POST https://movingmanifest.com/api/v1/photos/finalize \
 The finalize step verifies the uploaded object size and MIME type before it
 creates the photo record.
 
-## Documentation Profiles and Exports
+## Documentation Profiles, Exports, and Share Links
 
 List documentation profiles:
 
@@ -534,6 +534,42 @@ to their `expiresAt` value. Generic inventory exports omit value, serial, and
 private note fields. Documentation-profile exports include only fields allowed
 by the selected profile.
 
+List safe share-link metadata:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Create a documentation share link:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: share-link-001" \
+  -d '{
+    "documentationProfileId": "DOCUMENTATION_PROFILE_ID",
+    "scope": "profile",
+    "label": "PCS packet for transportation office",
+    "role": "guest",
+    "allowedActions": ["view", "download"],
+    "expiresAt": 1780876800000
+  }'
+```
+
+The create response includes the raw `token` and `/share/{token}` URL once.
+List responses only include safe metadata such as `shareLinkId`, `tokenPreview`,
+status, scope, allowed actions, expiration, and access counts.
+
+Revoke a share link:
+
+```bash
+curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE_LINK_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Idempotency-Key: share-link-revoke-001"
+```
+
 ## MCP Server
 
 The local MCP server wraps the REST API. It does not connect directly to Convex
@@ -575,7 +611,7 @@ Available MCP tools:
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
-| `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, documentation profiles, and export jobs. |
+| `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, documentation profiles, export jobs, and share-link metadata. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
@@ -598,6 +634,9 @@ Available MCP tools:
 | `create_export` | Create a CSV export. |
 | `list_exports` | List export jobs. |
 | `download_export` | Return an unexpired export artifact as text. |
+| `list_share_links` | List safe share-link metadata. |
+| `create_share_link` | Create a scoped documentation share link, with `dryRun` support. |
+| `revoke_share_link` | Revoke a documentation share link, with `dryRun` support. |
 
 Recommended MCP key scopes depend on the intended agent:
 

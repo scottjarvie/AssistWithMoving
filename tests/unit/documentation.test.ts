@@ -8,6 +8,7 @@ import {
   normalizeShareLinkActions,
   shareTokenPreview,
 } from "../../convex/lib/documentation";
+import { safeShareLinkMetadata } from "../../convex/lib/shareLinks";
 
 describe("documentation profile defaults", () => {
   it("keeps PCS packets focused on military documentation needs", () => {
@@ -79,5 +80,28 @@ describe("share link helpers", () => {
     expect(
       normalizeShareLinkActions(["download", "comment"], ["view", "download"])
     ).toEqual(["download"]);
+  });
+
+  it("keeps token hashes out of share link list summaries", () => {
+    const summary = safeShareLinkMetadata({
+      _id: "share1",
+      householdId: "household1",
+      moveId: "move1",
+      documentationProfileId: "profile1",
+      scope: "profile",
+      tokenHash: "hash-that-should-not-leave-convex",
+      tokenPreview: "abc12345",
+      role: "guest",
+      status: "active",
+      allowedActions: ["view"],
+      expiresAt: Date.UTC(2026, 6, 8),
+      accessCount: 0,
+      createdByUserId: "user1",
+      createdAt: Date.UTC(2026, 5, 8),
+      updatedAt: Date.UTC(2026, 5, 8),
+    } as Parameters<typeof safeShareLinkMetadata>[0]);
+
+    expect(summary.tokenPreview).toBe("abc12345");
+    expect("tokenHash" in summary).toBe(false);
   });
 });
