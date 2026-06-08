@@ -16,6 +16,7 @@
     "test:e2e": "playwright test",
     "verify:launch": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e",
     "doctor:launch": "node scripts/launch-readiness.mjs",
+    "doctor:storage": "node --no-warnings --env-file=.env.local scripts/storage-readiness.mjs",
     "mcp": "node ./mcp-server/movingmanifest-mcp.mjs",
     "seed": "node scripts/seed.mjs"
   },
