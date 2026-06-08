@@ -1,0 +1,213 @@
+import { spawn } from "node:child_process";
+
+const strict = process.argv.includes("--strict");
+const environment = envArg() ?? "production";
+const results = [];
+
+const requiredGroups = [
+  {
+    label: "app routing env",
+    keys: ["NEXT_PUBLIC_APP_URL"],
+    issue: "MOVE-59",
+  },
+  {
+    label: "Clerk production env names",
+    keys: [
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY",
+      "CLERK_JWT_ISSUER_DOMAIN",
+      "CLERK_FRONTEND_API_URL",
+      "NEXT_PUBLIC_CLERK_SIGN_IN_URL",
+      "NEXT_PUBLIC_CLERK_SIGN_UP_URL",
+      "NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL",
+      "NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL",
+    ],
+    issue: "MOVE-63",
+  },
+  {
+    label: "Convex production env names",
+    keys: [
+      "NEXT_PUBLIC_CONVEX_URL",
+      "CONVEX_DEPLOYMENT",
+      "CONVEX_HTTP_ACTIONS_URL",
+    ],
+    issue: "MOVE-59",
+  },
+  {
+    label: "Backblaze B2 production env names",
+    keys: [
+      "B2_APPLICATION_KEY_ID",
+      "B2_APPLICATION_KEY",
+      "B2_BUCKET_NAME",
+      "B2_ENDPOINT",
+      "B2_REGION",
+    ],
+    optionalKeys: ["B2_BUCKET_ID"],
+    issue: "MOVE-66",
+  },
+  {
+    label: "admin access env",
+    keys: ["ADMIN_EMAILS"],
+    issue: "MOVE-62",
+  },
+];
+
+const alternativeGroups = [
+  {
+    label: "Clerk webhook signing env",
+    alternatives: ["CLERK_WEBHOOK_SIGNING_SECRET", "CLERK_WEBHOOK_SECRET"],
+    issue: "MOVE-68",
+  },
+];
+
+function envArg() {
+  const index = process.argv.indexOf("--environment");
+  if (index === -1) return undefined;
+  return process.argv[index + 1];
+}
+
+function record(status, label, detail) {
+  results.push({ status, label, detail });
+}
+
+function run(command, args) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("close", (code) => {
+      resolve({ code, stdout, stderr });
+    });
+    child.on("error", (error) => {
+      resolve({ code: 1, stdout, stderr: error.message });
+    });
+  });
+}
+
+function parseEnvNames(output) {
+  const names = new Set();
+  for (const line of output.split(/\r?\n/)) {
+    const match = line.trim().match(/^([A-Z][A-Z0-9_]+)\s+/);
+    if (match) {
+      names.add(match[1]);
+    }
+  }
+  return names;
+}
+
+function summarizeNames(names) {
+  return `${names.size} env var name${names.size === 1 ? "" : "s"} visible`;
+}
+
+function checkRequiredGroups(names) {
+  for (const group of requiredGroups) {
+    const missing = group.keys.filter((key) => !names.has(key));
+    const optionalMissing = (group.optionalKeys ?? []).filter(
+      (key) => !names.has(key)
+    );
+
+    if (missing.length) {
+      record(
+        "blocked",
+        group.label,
+        `missing ${missing.join(", ")}; tracked by ${group.issue}`
+      );
+      continue;
+    }
+
+    record(
+      "pass",
+      group.label,
+      optionalMissing.length
+        ? `required names present; optional missing ${optionalMissing.join(", ")}`
+        : "all expected names present"
+    );
+  }
+}
+
+function checkAlternativeGroups(names) {
+  for (const group of alternativeGroups) {
+    const present = group.alternatives.filter((key) => names.has(key));
+    if (present.length) {
+      record("pass", group.label, `present as ${present.join(" or ")}`);
+      continue;
+    }
+
+    record(
+      "blocked",
+      group.label,
+      `missing one of ${group.alternatives.join(", ")}; tracked by ${group.issue}`
+    );
+  }
+}
+
+async function main() {
+  const response = await run("npx", ["vercel", "env", "ls", environment]);
+  if (response.code !== 0) {
+    record(
+      "fail",
+      "Vercel env list",
+      response.stderr.trim() || `vercel env ls exited ${response.code}`
+    );
+    return;
+  }
+
+  const names = parseEnvNames(response.stdout);
+  if (names.size === 0) {
+    record("fail", "Vercel env list", "no env var names were parsed");
+    return;
+  }
+
+  record("pass", "Vercel env list", `${environment}: ${summarizeNames(names)}`);
+  checkRequiredGroups(names);
+  checkAlternativeGroups(names);
+  record(
+    "warn",
+    "encrypted value validation",
+    "Vercel env ls exposes names only; live key mode and secret values remain validated by runtime doctors"
+  );
+}
+
+await main();
+
+const counts = results.reduce(
+  (acc, result) => {
+    acc[result.status] += 1;
+    return acc;
+  },
+  { pass: 0, warn: 0, blocked: 0, fail: 0 }
+);
+
+for (const result of results) {
+  const label =
+    result.status === "pass"
+      ? "PASS"
+      : result.status === "warn"
+        ? "WARN"
+        : result.status === "blocked"
+          ? "BLOCKED"
+          : "FAIL";
+  console.log(`${label} ${result.label}: ${result.detail}`);
+}
+
+console.log(
+  `Vercel env readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
+);
+console.log(
+  strict
+    ? "Strict mode: failures and blockers exit nonzero."
+    : "Default mode: only Vercel CLI/list failures exit nonzero. Use --strict for launch gating."
+);
+
+if (counts.fail > 0 || (strict && counts.blocked > 0)) {
+  process.exitCode = 1;
+}
