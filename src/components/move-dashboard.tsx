@@ -24,6 +24,7 @@ import { AiReviewQueue } from "@/components/ai-review-queue";
 import { AiTextIntake } from "@/components/ai-text-intake";
 import { BoxManager } from "@/components/box-manager";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
+import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
 import { EstimateSummary } from "@/components/estimate-summary";
 import { InventoryTable } from "@/components/inventory-table";
 import { LoadPlannerBoard } from "@/components/load-planner-board";
@@ -782,6 +783,12 @@ export function MoveDashboard() {
       <LoadPlannerBoard householdId={householdId} moveId={moveId} />
 
       <MoveDayView householdId={householdId} moveId={moveId} />
+
+      <DocumentationPacketBuilder
+        householdId={householdId}
+        moveId={moveId}
+        selectedProfileTypes={selectedMove?.documentationProfileTypes ?? []}
+      />
 
       <section>
         <BoxManager householdId={householdId} moveId={moveId} />
