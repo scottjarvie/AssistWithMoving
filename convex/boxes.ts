@@ -156,6 +156,47 @@ export const listForMove = query({
   },
 });
 
+export const get = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    boxId: v.id("boxes"),
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read"
+    );
+
+    const box = await ctx.db.get(args.boxId);
+    if (
+      !box ||
+      box.householdId !== args.householdId ||
+      box.moveId !== args.moveId ||
+      box.archivedAt
+    ) {
+      return null;
+    }
+
+    const contents = await boxContents(ctx, box);
+    const itemCount = contents.reduce(
+      (sum, entry) => sum + (entry?.membership.quantity ?? 0),
+      0
+    );
+    const contentsEstimatedWeightLb = contents.reduce(
+      (sum, entry) =>
+        sum +
+        (entry?.item.estimatedWeightLb ?? 0) *
+          (entry?.membership.quantity ?? 1),
+      0
+    );
+
+    return { box, contents, itemCount, contentsEstimatedWeightLb };
+  },
+});
+
 export const create = mutation({
   args: {
     householdId: v.id("households"),

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -32,6 +33,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  buildBoxLabelSheetPath,
+  buildBoxLookupPath,
+} from "@/lib/box-labels";
 import { boxStatusOptions } from "@/lib/box-options";
 import {
   formatOptionalNumber,
@@ -181,10 +186,31 @@ function BoxCard({
             {box.label ?? box.description ?? "Unlabeled box"}
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" disabled>
-          <Printer aria-hidden="true" />
-          Label
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link
+              href={buildBoxLookupPath({
+                householdId,
+                moveId,
+                boxId: box._id,
+              })}
+            >
+              <Boxes aria-hidden="true" />
+              Lookup
+            </Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link
+              href={buildBoxLabelSheetPath({
+                householdId,
+                moveId,
+              })}
+            >
+              <Printer aria-hidden="true" />
+              Labels
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -399,7 +425,17 @@ export function BoxManager({
               Create box codes, track contents, and keep room/load status current.
             </CardDescription>
           </div>
-          <Badge variant="secondary">{visibleBoxes.length} boxes</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">{visibleBoxes.length} boxes</Badge>
+            {householdId && moveId ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={buildBoxLabelSheetPath({ householdId, moveId })}>
+                  <Printer aria-hidden="true" />
+                  Print labels
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
