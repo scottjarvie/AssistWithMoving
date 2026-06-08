@@ -288,6 +288,12 @@ const photoDerivativeRefs = v.object({
   full: v.optional(v.string()),
 });
 
+const photoDerivativeStatus = v.union(
+  v.literal("pending"),
+  v.literal("ready"),
+  v.literal("failed")
+);
+
 export default defineSchema({
   users: defineTable({
     clerkUserId: v.string(),
@@ -522,6 +528,9 @@ export default defineSchema({
     originalBucket: v.string(),
     originalHash: v.optional(v.string()),
     derivativeRefs: photoDerivativeRefs,
+    derivativeStatus: v.optional(photoDerivativeStatus),
+    derivativeError: v.optional(v.string()),
+    derivativesUpdatedAt: v.optional(v.number()),
     cloudflareImageId: v.optional(v.string()),
     width: v.number(),
     height: v.number(),

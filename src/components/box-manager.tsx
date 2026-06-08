@@ -13,6 +13,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -295,6 +296,13 @@ function BoxCard({
           boxId={box._id}
           room={box.room}
           label="Box photo"
+        />
+      </div>
+      <div className="mt-3">
+        <PhotoEvidenceStrip
+          householdId={householdId}
+          moveId={moveId}
+          boxId={box._id}
         />
       </div>
 

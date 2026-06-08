@@ -20,6 +20,7 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_clerk from "../lib/clerk.js";
 import type * as lib_moveFields from "../lib/moveFields.js";
 import type * as lib_permissions from "../lib/permissions.js";
+import type * as lib_photoDelivery from "../lib/photoDelivery.js";
 import type * as lib_photoVisibility from "../lib/photoVisibility.js";
 import type * as lib_planningDefaults from "../lib/planningDefaults.js";
 import type * as lib_roles from "../lib/roles.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "lib/clerk": typeof lib_clerk;
   "lib/moveFields": typeof lib_moveFields;
   "lib/permissions": typeof lib_permissions;
+  "lib/photoDelivery": typeof lib_photoDelivery;
   "lib/photoVisibility": typeof lib_photoVisibility;
   "lib/planningDefaults": typeof lib_planningDefaults;
   "lib/roles": typeof lib_roles;

@@ -12,6 +12,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -667,6 +668,11 @@ export function ItemDetailSheet({
                   itemId={item._id}
                   room={item.room}
                   label="Item photo"
+                />
+                <PhotoEvidenceStrip
+                  householdId={householdId}
+                  moveId={moveId}
+                  itemId={item._id}
                 />
 
                 <div className="grid gap-3 md:grid-cols-2">

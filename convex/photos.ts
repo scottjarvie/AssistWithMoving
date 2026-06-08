@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import {
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -17,6 +18,11 @@ import {
   query,
 } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import {
+  selectDerivativeRef,
+  shouldUseOriginalFallback,
+  type PhotoDisplayVariant,
+} from "./lib/photoDelivery";
 import {
   documentationProfileTypeValidator,
   estimateConfidenceValidator,
@@ -75,6 +81,14 @@ const photoUpdateArgs = {
 };
 
 const uploadSessionIdValidator = v.id("photoUploadSessions");
+const displayUrlTtlSeconds = 5 * 60;
+const photoDisplayVariantValidator = v.union(
+  v.literal("thumb"),
+  v.literal("card"),
+  v.literal("detail"),
+  v.literal("full"),
+  v.literal("original")
+);
 
 function requireB2Config() {
   const endpoint = process.env.B2_ENDPOINT;
@@ -431,6 +445,72 @@ export const finalizeUpload = action({
   },
 });
 
+export const getDisplayUrl = action({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+    variant: photoDisplayVariantValidator,
+  },
+  handler: async (ctx, args): Promise<{
+    url: string;
+    expiresAt: number;
+    requestedVariant: PhotoDisplayVariant;
+    servedVariant: PhotoDisplayVariant | "originalFallback";
+    derivativeStatus?: "pending" | "ready" | "failed";
+    width: number;
+    height: number;
+    mimeType: string;
+  }> => {
+    const { photo, visibility } = await ctx.runQuery(
+      internal.photos.getPhotoForDelivery,
+      {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        photoId: args.photoId,
+      }
+    );
+    const selected =
+      args.variant === "original"
+        ? null
+        : selectDerivativeRef(photo.derivativeRefs, args.variant);
+    const canUseOriginal = visibility.sensitivePhotos;
+
+    if (
+      !selected &&
+      !shouldUseOriginalFallback({
+        canViewOriginal: canUseOriginal,
+      })
+    ) {
+      throw new Error("Photo variant is not available for this role.");
+    }
+
+    const config = requireB2Config();
+    const key = selected?.ref ?? photo.originalStorageKey;
+    const url = await getSignedUrl(
+      b2Client(),
+      new GetObjectCommand({
+        Bucket: config.bucketName,
+        Key: key,
+      }),
+      { expiresIn: displayUrlTtlSeconds }
+    );
+
+    return {
+      url,
+      expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+      requestedVariant: args.variant,
+      servedVariant:
+        selected?.variant ??
+        (args.variant === "original" ? "original" : "originalFallback"),
+      derivativeStatus: photo.derivativeStatus,
+      width: photo.width,
+      height: photo.height,
+      mimeType: photo.mimeType,
+    };
+  },
+});
+
 export const createUploadSession = internalMutation({
   args: {
     householdId: v.id("households"),
@@ -505,6 +585,36 @@ export const getUploadSession = internalQuery({
     }
 
     return session;
+  },
+});
+
+export const getPhotoForDelivery = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+  },
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read"
+    );
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      throw new Error("Photo not found.");
+    }
+
+    return {
+      photo,
+      visibility: policy.visibility,
+    };
   },
 });
 
@@ -588,6 +698,7 @@ export const completeUploadSession = internalMutation({
       originalBucket: session.originalBucket,
       originalHash: normalizeOptionalText(args.originalHash),
       derivativeRefs: {},
+      derivativeStatus: "pending",
       width: args.width,
       height: args.height,
       mimeType: session.expectedMimeType,
