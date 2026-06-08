@@ -152,6 +152,8 @@ export function registerTools(target, apiConfig) {
     inputSchema: {
       moveId: z.string(),
       name: z.string().min(1),
+      externalSource: z.string().optional(),
+      externalId: z.string().optional(),
       description: z.string().optional(),
       room: z.string().optional(),
       destinationRoom: z.string().optional(),
@@ -182,6 +184,8 @@ export function registerTools(target, apiConfig) {
         .array(
           z.object({
             itemId: z.string().optional(),
+            externalSource: z.string().optional(),
+            externalId: z.string().optional(),
             name: z.string().optional(),
             description: z.string().optional(),
             room: z.string().optional(),
@@ -218,6 +222,8 @@ export function registerTools(target, apiConfig) {
     inputSchema: {
       moveId: z.string(),
       itemId: z.string(),
+      externalSource: z.string().optional(),
+      externalId: z.string().optional(),
       name: z.string().optional(),
       description: z.string().optional(),
       room: z.string().optional(),

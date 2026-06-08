@@ -204,6 +204,43 @@ describe("MovingManifest MCP API client", () => {
     });
   });
 
+  it("keeps external source keys on item create requests", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { itemId: "item1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createItem(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        externalSource: "spreadsheet:garage-walkthrough",
+        externalId: "row-42",
+        name: "Lamp",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/items"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          externalSource: "spreadsheet:garage-walkthrough",
+          externalId: "row-42",
+          name: "Lamp",
+        }),
+      }
+    );
+  });
+
   it("sends batch item upserts to the API for backend validation", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -225,7 +262,14 @@ describe("MovingManifest MCP API client", () => {
       {
         moveId: "move1",
         dryRun: true,
-        items: [{ name: "Lamp" }, { itemId: "item1", status: "packed" }],
+        items: [
+          {
+            externalSource: "spreadsheet:garage-walkthrough",
+            externalId: "row-42",
+            name: "Lamp",
+          },
+          { itemId: "item1", status: "packed" },
+        ],
       }
     );
 
@@ -240,7 +284,14 @@ describe("MovingManifest MCP API client", () => {
         },
         body: JSON.stringify({
           dryRun: true,
-          items: [{ name: "Lamp" }, { itemId: "item1", status: "packed" }],
+          items: [
+            {
+              externalSource: "spreadsheet:garage-walkthrough",
+              externalId: "row-42",
+              name: "Lamp",
+            },
+            { itemId: "item1", status: "packed" },
+          ],
         }),
       }
     );

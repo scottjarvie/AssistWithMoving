@@ -1238,6 +1238,8 @@ export default defineSchema({
     moveId: v.id("moves"),
     name: v.string(),
     normalizedName: v.string(),
+    externalSource: v.optional(v.string()),
+    externalId: v.optional(v.string()),
     description: v.optional(v.string()),
     room: v.optional(v.string()),
     destinationRoom: v.optional(v.string()),
@@ -1287,5 +1289,6 @@ export default defineSchema({
     .index("by_move_needs_review", ["moveId", "needsReview"])
     .index("by_move_high_value", ["moveId", "highValue"])
     .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_household", ["householdId"]),
 });

@@ -219,19 +219,32 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/items/batch-upsert 
   -d '{
     "dryRun": true,
     "items": [
-      { "name": "Desk lamp", "room": "Office", "quantity": 1 },
+      {
+        "externalSource": "spreadsheet:garage-walkthrough",
+        "externalId": "row-42",
+        "name": "Desk lamp",
+        "room": "Office",
+        "quantity": 1
+      },
       { "itemId": "ITEM_ID", "status": "packed", "needsReview": false }
     ]
   }'
 ```
 
 Rows with `itemId` update existing items. Rows without `itemId` create new
-items and require `name`. Batches are limited to 100 rows and return per-row
-results with `succeeded`, `failed`, and `results` fields. Use `dryRun: true` to
-validate a batch without writing, then retry with the same rows and a new
-idempotency key when ready to commit. This endpoint does not yet implement a
-third-party external-key sync model. If any row fails validation, the response
-uses HTTP `207` and includes the failed row details.
+items and require `name`, unless they include a matching `externalSource` and
+`externalId` pair already known for the same move. In that case, the row updates
+the existing item and returns `matchedBy: "externalKey"`. Batches are limited to
+100 rows and return per-row results with `succeeded`, `failed`, and `results`
+fields. Use `dryRun: true` to validate a batch without writing, then retry with
+the same rows and a new idempotency key when ready to commit. If any row fails
+validation, the response uses HTTP `207` and includes the failed row details.
+
+External source keys are optional but useful for importer and agent
+reconciliation. `externalSource` should name the upstream system or import
+stream, while `externalId` should identify the upstream row or object. The pair
+is scoped to one MovingManifest move. Direct item create/update requests may also
+set or clear the pair; providing only one side is rejected.
 
 Update an item through the top-level alias:
 

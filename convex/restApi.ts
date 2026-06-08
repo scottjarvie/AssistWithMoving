@@ -1111,15 +1111,24 @@ async function routeItems(
 
   if (args.method === "POST" && !itemIdSegment) {
     const body = bodyObject(args.body);
+    await assertExternalItemKeyAvailable(ctx, auth.householdId, moveId, body);
     const { itemId, name } = await createApiItem(ctx, auth, moveId, body);
     await auditApiWrite(ctx, auth, moveId, "item.api_created", "items", itemId, {
       name,
+      externalSource: externalItemKeyFromInput(body)?.externalSource,
     });
     return restOk({ data: { itemId } }, 201);
   }
 
   if (args.method === "PATCH" && itemIdSegment) {
     const item = await requireApiItem(ctx, auth.householdId, moveId, itemIdSegment);
+    await assertExternalItemKeyAvailable(
+      ctx,
+      auth.householdId,
+      moveId,
+      args.body,
+      item._id
+    );
     const patch = itemPatch(args.body, auth.createdByUserId);
     await ctx.db.patch(item._id, patch);
     await auditApiWrite(ctx, auth, moveId, "item.api_updated", "items", item._id, {
@@ -1158,11 +1167,30 @@ async function routeBatchUpsertItems(
   const results = [];
   for (const [index, row] of rows.entries()) {
     const input = bodyObject(row);
-    const itemId = optionalString(input.itemId);
+    let itemId = optionalString(input.itemId);
     try {
+      const externalKey = externalItemKeyFromInput(input);
+      const externalMatch =
+        !itemId && externalKey
+          ? await findApiItemByExternalKey(ctx, auth.householdId, moveId, externalKey)
+          : null;
+      itemId = itemId ?? externalMatch?._id;
       if (itemId) {
         const item = await requireApiItem(ctx, auth.householdId, moveId, itemId);
         const patch = itemPatch(input, auth.createdByUserId);
+        if (
+          externalKey &&
+          (item.externalSource !== externalKey.externalSource ||
+            item.externalId !== externalKey.externalId)
+        ) {
+          await assertExternalItemKeyAvailable(
+            ctx,
+            auth.householdId,
+            moveId,
+            input,
+            item._id
+          );
+        }
         if (!dryRun) {
           await ctx.db.patch(item._id, patch);
           await auditApiWrite(
@@ -1180,7 +1208,10 @@ async function routeBatchUpsertItems(
           ok: true,
           action: "update",
           itemId: item._id,
+          externalSource: item.externalSource ?? externalKey?.externalSource,
+          externalId: item.externalId ?? externalKey?.externalId,
           changedKeys: Object.keys(patch),
+          matchedBy: externalMatch ? "externalKey" : "itemId",
           dryRun,
         });
         continue;
@@ -1216,6 +1247,8 @@ async function routeBatchUpsertItems(
         action: "create",
         itemId: created.itemId,
         name: created.name,
+        externalSource: created.externalSource,
+        externalId: created.externalId,
         dryRun,
       });
     } catch (error) {
@@ -2232,6 +2265,8 @@ function safeItem(item: Doc<"items">) {
   return {
     itemId: item._id,
     name: item.name,
+    externalSource: item.externalSource,
+    externalId: item.externalId,
     description: item.description,
     room: item.room,
     destinationRoom: item.destinationRoom,
@@ -2617,11 +2652,14 @@ async function createApiItem(
 ) {
   const now = Date.now();
   const name = normalizeItemName(String(body.name ?? ""));
+  const externalKey = externalItemKeyFromInput(body);
   const itemId = await ctx.db.insert("items", {
     householdId: auth.householdId,
     moveId,
     name,
     normalizedName: normalizedSearchName(name),
+    externalSource: externalKey?.externalSource,
+    externalId: externalKey?.externalId,
     description: normalizeOptionalText(asString(body.description)),
     room: normalizeOptionalText(asString(body.room)),
     destinationRoom: normalizeOptionalText(asString(body.destinationRoom)),
@@ -2657,7 +2695,7 @@ async function createApiItem(
     updatedAt: now,
   });
 
-  return { itemId, name };
+  return { itemId, name, ...externalKey };
 }
 
 async function createApiCsvExport(
@@ -2980,6 +3018,11 @@ function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
   }
   if (input.highValue !== undefined) patch.highValue = Boolean(input.highValue);
   if (input.needsReview !== undefined) patch.needsReview = Boolean(input.needsReview);
+  if (input.externalSource !== undefined || input.externalId !== undefined) {
+    const externalKey = externalItemKeyFromInput(input);
+    patch.externalSource = externalKey?.externalSource;
+    patch.externalId = externalKey?.externalId;
+  }
   return patch;
 }
 
@@ -3152,6 +3195,73 @@ function asString(value: unknown) {
 
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeExternalKeyPart(value: unknown, label: string) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") {
+    throw new Error(`${label} must be a string when provided.`);
+  }
+  const normalized = normalizeOptionalText(value);
+  return normalized ? normalized.slice(0, 160) : undefined;
+}
+
+function externalItemKeyFromInput(input: Record<string, unknown>) {
+  const hasSource = input.externalSource !== undefined;
+  const hasId = input.externalId !== undefined;
+  if (!hasSource && !hasId) return null;
+
+  const externalSource = normalizeExternalKeyPart(
+    input.externalSource,
+    "externalSource"
+  );
+  const externalId = normalizeExternalKeyPart(input.externalId, "externalId");
+  if (!externalSource && !externalId) return null;
+  if (!externalSource || !externalId) {
+    throw new Error("externalSource and externalId must be provided together.");
+  }
+  return { externalSource, externalId };
+}
+
+async function findApiItemByExternalKey(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  externalKey: { externalSource: string; externalId: string }
+) {
+  const item = await ctx.db
+    .query("items")
+    .withIndex("by_move_external_key", (q) =>
+      q
+        .eq("moveId", moveId)
+        .eq("externalSource", externalKey.externalSource)
+        .eq("externalId", externalKey.externalId)
+    )
+    .collect();
+  return (
+    item.find((entry) => entry.householdId === householdId && !entry.deletedAt) ??
+    null
+  );
+}
+
+async function assertExternalItemKeyAvailable(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  input: unknown,
+  allowedItemId?: Id<"items">
+) {
+  const externalKey = externalItemKeyFromInput(bodyObject(input));
+  if (!externalKey) return;
+  const existing = await findApiItemByExternalKey(
+    ctx,
+    householdId,
+    moveId,
+    externalKey
+  );
+  if (existing && existing._id !== allowedItemId) {
+    throw new Error("External source key already exists for this move.");
+  }
 }
 
 function parseMoveStatus(value: unknown) {
@@ -3400,6 +3510,8 @@ function errorStatus(error: unknown) {
   if (message.includes("invalid api key") || message.includes("bearer")) return 401;
   if (message.includes("not allowed") || message.includes("scope")) return 403;
   if (message.includes("not found")) return 404;
-  if (message.includes("idempotency")) return 409;
+  if (message.includes("idempotency") || message.includes("already exists")) {
+    return 409;
+  }
   return 400;
 }
