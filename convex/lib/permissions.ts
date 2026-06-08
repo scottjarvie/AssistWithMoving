@@ -1,4 +1,4 @@
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
   AuthorizationError,
@@ -34,7 +34,7 @@ export type PermissionPolicy = {
   visibility: ReturnType<typeof visibilityForHouseholdRole>;
 };
 
-type MoveId = Doc<"moveRoleGrants">["moveId"];
+type MoveId = Id<"moves">;
 
 export async function resolveUserActor(ctx: QueryCtx | MutationCtx) {
   const user = await requireCurrentUser(ctx);

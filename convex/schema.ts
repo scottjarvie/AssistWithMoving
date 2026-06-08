@@ -48,6 +48,62 @@ export const auditCategory = v.union(
   v.literal("system")
 );
 
+export const moveType = v.union(
+  v.literal("pcs"),
+  v.literal("local"),
+  v.literal("longDistance"),
+  v.literal("storage"),
+  v.literal("estate"),
+  v.literal("decluttering"),
+  v.literal("claimsInventory"),
+  v.literal("other")
+);
+
+export const moveStatus = v.union(
+  v.literal("planning"),
+  v.literal("active"),
+  v.literal("completed"),
+  v.literal("archived")
+);
+
+export const unitSystem = v.union(v.literal("imperial"), v.literal("metric"));
+
+export const transportResourceType = v.union(
+  v.literal("truck"),
+  v.literal("trailer"),
+  v.literal("personalVehicle"),
+  v.literal("professionalMovers"),
+  v.literal("storage"),
+  v.literal("dump"),
+  v.literal("sell"),
+  v.literal("donate"),
+  v.literal("free"),
+  v.literal("unknown"),
+  v.literal("custom")
+);
+
+export const movePersonRole = v.union(
+  v.literal("owner"),
+  v.literal("householdMember"),
+  v.literal("helper"),
+  v.literal("mover"),
+  v.literal("contact")
+);
+
+const dimensionsIn = v.object({
+  lengthIn: v.optional(v.number()),
+  widthIn: v.optional(v.number()),
+  heightIn: v.optional(v.number()),
+});
+
+const capacity = v.object({
+  maxWeightLb: v.optional(v.number()),
+  maxVolumeCuFt: v.optional(v.number()),
+  dimensions: v.optional(dimensionsIn),
+  weightIsUnlimited: v.optional(v.boolean()),
+  volumeIsUnlimited: v.optional(v.boolean()),
+});
+
 export default defineSchema({
   users: defineTable({
     clerkUserId: v.string(),
@@ -124,4 +180,82 @@ export default defineSchema({
     .index("by_move_time", ["moveId", "createdAt"])
     .index("by_actor_user_time", ["actorUserId", "createdAt"])
     .index("by_category_time", ["category", "createdAt"]),
+
+  moves: defineTable({
+    householdId: v.id("households"),
+    title: v.string(),
+    type: moveType,
+    status: moveStatus,
+    origin: v.optional(v.string()),
+    destination: v.optional(v.string()),
+    dateStart: v.optional(v.string()),
+    dateEnd: v.optional(v.string()),
+    unitSystem,
+    moveLevelWeightAllowanceLb: v.optional(v.number()),
+    pcsBranch: v.optional(v.string()),
+    pcsShipmentType: v.optional(v.string()),
+    pcsOrdersNumber: v.optional(v.string()),
+    proGearNotes: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_household_status", ["householdId", "status"])
+    .index("by_household_type", ["householdId", "type"])
+    .index("by_created_by", ["createdByUserId"]),
+
+  movePeople: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    name: v.string(),
+    role: movePersonRole,
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    sortOrder: v.number(),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_household", ["householdId"]),
+
+  transportResources: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    type: transportResourceType,
+    name: v.string(),
+    description: v.optional(v.string()),
+    capacity,
+    rules: v.array(v.string()),
+    sortOrder: v.number(),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_move_type", ["moveId", "type"])
+    .index("by_household", ["householdId"]),
+
+  transportZones: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    resourceId: v.id("transportResources"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    capacity,
+    preferredTags: v.array(v.string()),
+    sortOrder: v.number(),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_resource_sort", ["resourceId", "sortOrder"])
+    .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_household", ["householdId"]),
 });

@@ -7,6 +7,7 @@ import { requireHouseholdPermission } from "./lib/permissions";
 export const record = internalMutation({
   args: {
     householdId: v.optional(v.id("households")),
+    moveId: v.optional(v.id("moves")),
     actorType: v.union(
       v.literal("user"),
       v.literal("apiKey"),

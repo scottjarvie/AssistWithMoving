@@ -9,6 +9,7 @@ export type AuditMetadata = Record<string, unknown>;
 
 export type AuditEventInput = {
   householdId?: Id<"households">;
+  moveId?: Id<"moves">;
   actorType: "user" | "apiKey" | "system" | "webhook";
   actorUserId?: Id<"users">;
   actorApiKeyId?: string;
