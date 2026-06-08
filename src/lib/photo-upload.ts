@@ -6,9 +6,25 @@ export const allowedPhotoMimeTypes = [
 
 export const maxPhotoUploadBytes = 25 * 1024 * 1024;
 
+export const photoDerivativeSpecs = [
+  { variant: "thumb", maxSide: 200, quality: 0.78 },
+  { variant: "card", maxSide: 600, quality: 0.82 },
+  { variant: "detail", maxSide: 1200, quality: 0.86 },
+  { variant: "full", maxSide: 2400, quality: 0.9 },
+] as const;
+
 export type PhotoUploadValidation = {
   ok: boolean;
   message?: string;
+};
+
+export type PhotoDerivativeUpload = {
+  variant: (typeof photoDerivativeSpecs)[number]["variant"];
+  blob: Blob;
+  mimeType: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
 };
 
 export function validatePhotoUploadFile(file: Pick<File, "type" | "size">) {
@@ -57,6 +73,84 @@ export function imageDimensions(file: File) {
   });
 }
 
+export function fitWithin({
+  width,
+  height,
+  maxSide,
+}: {
+  width: number;
+  height: number;
+  maxSide: number;
+}) {
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+  quality: number
+) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, mimeType, quality);
+  });
+}
+
+export async function createImageDerivatives(file: File) {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("Could not read image."));
+      image.src = url;
+    });
+
+    const derivatives: PhotoDerivativeUpload[] = [];
+    for (const spec of photoDerivativeSpecs) {
+      const dimensions = fitWithin({
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        maxSide: spec.maxSide,
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = dimensions.width;
+      canvas.height = dimensions.height;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Could not create image derivative.");
+      }
+      context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
+
+      let mimeType = "image/webp";
+      let blob = await canvasToBlob(canvas, mimeType, spec.quality);
+      if (!blob) {
+        mimeType = "image/jpeg";
+        blob = await canvasToBlob(canvas, mimeType, spec.quality);
+      }
+      if (!blob) {
+        throw new Error("Could not create image derivative.");
+      }
+
+      derivatives.push({
+        variant: spec.variant,
+        blob,
+        mimeType,
+        sizeBytes: blob.size,
+        width: dimensions.width,
+        height: dimensions.height,
+      });
+    }
+
+    return derivatives;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export function uploadFileWithProgress({
   file,
   uploadUrl,
@@ -64,7 +158,7 @@ export function uploadFileWithProgress({
   onProgress,
   signal,
 }: {
-  file: File;
+  file: Blob;
   uploadUrl: string;
   contentType: string;
   onProgress: (progress: number) => void;

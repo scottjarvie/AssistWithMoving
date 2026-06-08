@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fitWithin,
   maxPhotoUploadBytes,
   validatePhotoUploadFile,
 } from "@/lib/photo-upload";
@@ -30,5 +31,16 @@ describe("photo upload validation", () => {
         size: maxPhotoUploadBytes + 1,
       }).ok
     ).toBe(false);
+  });
+
+  it("fits derivative dimensions within a max side without upscaling", () => {
+    expect(fitWithin({ width: 4000, height: 2000, maxSide: 1000 })).toEqual({
+      width: 1000,
+      height: 500,
+    });
+    expect(fitWithin({ width: 640, height: 480, maxSide: 1200 })).toEqual({
+      width: 640,
+      height: 480,
+    });
   });
 });

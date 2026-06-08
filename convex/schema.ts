@@ -288,6 +288,13 @@ const photoDerivativeRefs = v.object({
   full: v.optional(v.string()),
 });
 
+const photoDerivativeVariant = v.union(
+  v.literal("thumb"),
+  v.literal("card"),
+  v.literal("detail"),
+  v.literal("full")
+);
+
 const photoDerivativeStatus = v.union(
   v.literal("pending"),
   v.literal("ready"),
@@ -572,6 +579,19 @@ export default defineSchema({
     originalBucket: v.string(),
     expectedMimeType: v.string(),
     expectedSizeBytes: v.number(),
+    derivativeUploads: v.optional(
+      v.array(
+        v.object({
+          variant: photoDerivativeVariant,
+          storageKey: v.string(),
+          bucket: v.string(),
+          expectedMimeType: v.string(),
+          expectedSizeBytes: v.number(),
+          width: v.number(),
+          height: v.number(),
+        })
+      )
+    ),
     status: v.union(
       v.literal("authorized"),
       v.literal("completed"),

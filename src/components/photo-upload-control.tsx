@@ -9,6 +9,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  createImageDerivatives,
   fileSha256Hex,
   imageDimensions,
   uploadFileWithProgress,
@@ -82,9 +83,10 @@ export function PhotoUploadControl({
     let activeUploadSessionId: Id<"photoUploadSessions"> | null = null;
 
     try {
-      const [{ width, height }, originalHash] = await Promise.all([
+      const [{ width, height }, originalHash, derivatives] = await Promise.all([
         imageDimensions(file),
         fileSha256Hex(file),
+        createImageDerivatives(file),
       ]);
       const session = await initUpload({
         householdId,
@@ -94,6 +96,13 @@ export function PhotoUploadControl({
         room,
         mimeType: file.type,
         sizeBytes: file.size,
+        derivatives: derivatives.map((derivative) => ({
+          variant: derivative.variant,
+          mimeType: derivative.mimeType,
+          sizeBytes: derivative.sizeBytes,
+          width: derivative.width,
+          height: derivative.height,
+        })),
       });
       activeUploadSessionId =
         session.uploadSessionId as Id<"photoUploadSessions">;
@@ -104,9 +113,32 @@ export function PhotoUploadControl({
         file,
         uploadUrl: session.uploadUrl,
         contentType: session.headers["Content-Type"],
-        onProgress: setProgress,
+        onProgress: (nextProgress) =>
+          setProgress(Math.round(nextProgress * 0.7)),
         signal: abortController.signal,
       });
+      for (const derivativeUpload of session.derivativeUploads) {
+        const derivative = derivatives.find(
+          (entry) => entry.variant === derivativeUpload.variant
+        );
+        if (!derivative) {
+          throw new Error("Derivative upload is missing.");
+        }
+        const derivativeIndex = session.derivativeUploads.indexOf(derivativeUpload);
+        await uploadFileWithProgress({
+          file: derivative.blob,
+          uploadUrl: derivativeUpload.uploadUrl,
+          contentType: derivativeUpload.headers["Content-Type"],
+          onProgress: (nextProgress) => {
+            const derivativeProgress =
+              (derivativeIndex + nextProgress / 100) /
+              session.derivativeUploads.length;
+            setProgress(Math.round(70 + derivativeProgress * 25));
+          },
+          signal: abortController.signal,
+        });
+      }
+      setProgress(96);
 
       await finalizeUpload({
         householdId,

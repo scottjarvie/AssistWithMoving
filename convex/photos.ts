@@ -82,6 +82,12 @@ const photoUpdateArgs = {
 
 const uploadSessionIdValidator = v.id("photoUploadSessions");
 const displayUrlTtlSeconds = 5 * 60;
+const photoDerivativeVariantValidator = v.union(
+  v.literal("thumb"),
+  v.literal("card"),
+  v.literal("detail"),
+  v.literal("full")
+);
 const photoDisplayVariantValidator = v.union(
   v.literal("thumb"),
   v.literal("card"),
@@ -155,11 +161,13 @@ function assertUploadFileShape({
 function uploadObjectKey({
   moveId,
   mimeType,
+  prefix = "photos",
 }: {
   moveId: string;
   mimeType: string;
+  prefix?: string;
 }) {
-  return `moves/${moveId}/photos/${crypto.randomUUID()}.${fileExtensionForMimeType(
+  return `moves/${moveId}/${prefix}/${crypto.randomUUID()}.${fileExtensionForMimeType(
     mimeType
   )}`;
 }
@@ -319,21 +327,54 @@ export const initUpload = action({
     room: v.optional(v.string()),
     mimeType: v.string(),
     sizeBytes: v.number(),
+    derivatives: v.optional(
+      v.array(
+        v.object({
+          variant: photoDerivativeVariantValidator,
+          mimeType: v.string(),
+          sizeBytes: v.number(),
+          width: v.number(),
+          height: v.number(),
+        })
+      )
+    ),
   },
   handler: async (ctx, args): Promise<{
     uploadSessionId: string;
     uploadUrl: string;
     method: "PUT";
     headers: { "Content-Type": string };
+    derivativeUploads: Array<{
+      variant: "thumb" | "card" | "detail" | "full";
+      uploadUrl: string;
+      method: "PUT";
+      headers: { "Content-Type": string };
+    }>;
     expiresAt: number;
   }> => {
     assertUploadFileShape(args);
+    for (const derivative of args.derivatives ?? []) {
+      assertUploadFileShape({
+        mimeType: derivative.mimeType,
+        sizeBytes: derivative.sizeBytes,
+      });
+    }
 
     const config = requireB2Config();
     const objectKey = uploadObjectKey({
       moveId: args.moveId,
       mimeType: args.mimeType,
     });
+    const derivativeUploads =
+      args.derivatives?.map((derivative) => ({
+        ...derivative,
+        storageKey: uploadObjectKey({
+          moveId: args.moveId,
+          mimeType: derivative.mimeType,
+          prefix: "photo-derivatives",
+        }),
+        bucket: config.bucketName,
+      })) ?? [];
     const expiresAt = Date.now() + uploadSessionTtlMs;
     const uploadSessionId = await ctx.runMutation(
       internal.photos.createUploadSession,
@@ -347,6 +388,15 @@ export const initUpload = action({
         originalBucket: config.bucketName,
         expectedMimeType: args.mimeType,
         expectedSizeBytes: args.sizeBytes,
+        derivativeUploads: derivativeUploads.map((derivative) => ({
+          variant: derivative.variant,
+          storageKey: derivative.storageKey,
+          bucket: derivative.bucket,
+          expectedMimeType: derivative.mimeType,
+          expectedSizeBytes: derivative.sizeBytes,
+          width: derivative.width,
+          height: derivative.height,
+        })),
         expiresAt,
       }
     );
@@ -361,12 +411,30 @@ export const initUpload = action({
       }),
       { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
     );
+    const signedDerivativeUploads = await Promise.all(
+      derivativeUploads.map(async (derivative) => ({
+        variant: derivative.variant,
+        uploadUrl: await getSignedUrl(
+          b2Client(),
+          new PutObjectCommand({
+            Bucket: config.bucketName,
+            Key: derivative.storageKey,
+            ContentType: derivative.mimeType,
+            ContentLength: derivative.sizeBytes,
+          }),
+          { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
+        ),
+        method: "PUT" as const,
+        headers: { "Content-Type": derivative.mimeType },
+      }))
+    );
 
     return {
       uploadSessionId,
       uploadUrl,
       method: "PUT",
       headers: { "Content-Type": args.mimeType },
+      derivativeUploads: signedDerivativeUploads,
       expiresAt,
     };
   },
@@ -414,6 +482,23 @@ export const finalizeUpload = action({
         head.ContentType !== session.expectedMimeType
       ) {
         throw new Error("Uploaded object type does not match the session.");
+      }
+      for (const derivative of session.derivativeUploads ?? []) {
+        const derivativeHead = await b2Client().send(
+          new HeadObjectCommand({
+            Bucket: derivative.bucket,
+            Key: derivative.storageKey,
+          })
+        );
+        if (derivativeHead.ContentLength !== derivative.expectedSizeBytes) {
+          throw new Error("Uploaded derivative size does not match the session.");
+        }
+        if (
+          derivativeHead.ContentType &&
+          derivativeHead.ContentType !== derivative.expectedMimeType
+        ) {
+          throw new Error("Uploaded derivative type does not match the session.");
+        }
       }
     } catch (error) {
       await ctx.runMutation(internal.photos.markUploadSessionFailed, {
@@ -522,6 +607,19 @@ export const createUploadSession = internalMutation({
     originalBucket: v.string(),
     expectedMimeType: v.string(),
     expectedSizeBytes: v.number(),
+    derivativeUploads: v.optional(
+      v.array(
+        v.object({
+          variant: photoDerivativeVariantValidator,
+          storageKey: v.string(),
+          bucket: v.string(),
+          expectedMimeType: v.string(),
+          expectedSizeBytes: v.number(),
+          width: v.number(),
+          height: v.number(),
+        })
+      )
+    ),
     expiresAt: v.number(),
   },
   handler: async (ctx, args) => {
@@ -551,6 +649,7 @@ export const createUploadSession = internalMutation({
       originalBucket: args.originalBucket,
       expectedMimeType: args.expectedMimeType,
       expectedSizeBytes: args.expectedSizeBytes,
+      derivativeUploads: args.derivativeUploads,
       status: "authorized",
       expiresAt: args.expiresAt,
       createdByUserId: actor.userId,
@@ -687,6 +786,16 @@ export const completeUploadSession = internalMutation({
     }
 
     const now = Date.now();
+    const derivativeRefs = (session.derivativeUploads ?? []).reduce<
+      Doc<"itemPhotos">["derivativeRefs"]
+    >((refs, derivative) => {
+      refs[derivative.variant] = derivative.storageKey;
+      return refs;
+    }, {});
+    const derivativeStatus =
+      session.derivativeUploads && session.derivativeUploads.length > 0
+        ? "ready"
+        : "pending";
     const photoId = await ctx.db.insert("itemPhotos", {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -697,8 +806,9 @@ export const completeUploadSession = internalMutation({
       originalStorageKey: session.originalStorageKey,
       originalBucket: session.originalBucket,
       originalHash: normalizeOptionalText(args.originalHash),
-      derivativeRefs: {},
-      derivativeStatus: "pending",
+      derivativeRefs,
+      derivativeStatus,
+      derivativesUpdatedAt: derivativeStatus === "ready" ? now : undefined,
       width: args.width,
       height: args.height,
       mimeType: session.expectedMimeType,
