@@ -310,6 +310,21 @@ export const aiTextSuggestionStatus = v.union(
   v.literal("rejected")
 );
 
+export const aiPhotoSuggestionType = v.union(
+  v.literal("item"),
+  v.literal("box"),
+  v.literal("boxContents"),
+  v.literal("duplicateCandidate"),
+  v.literal("evidenceGap")
+);
+
+export const aiPhotoSuggestionStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("edited"),
+  v.literal("rejected")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -758,6 +773,54 @@ export default defineSchema({
   })
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_job", ["aiJobId"])
+    .index("by_household_status", ["householdId", "status"]),
+
+  aiPhotoSuggestions: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+    aiJobId: v.id("aiJobs"),
+    type: aiPhotoSuggestionType,
+    status: aiPhotoSuggestionStatus,
+    sourceDerivativeVariant: photoDerivativeVariant,
+    sourceSummary: v.string(),
+    confidence: estimateConfidence,
+    reasoning: v.string(),
+    itemDraft: v.optional(
+      v.object({
+        name: v.string(),
+        room: v.optional(v.string()),
+        category: v.optional(v.string()),
+        disposition: itemDisposition,
+        quantity: v.number(),
+        description: v.optional(v.string()),
+        suggestedBoxLabel: v.optional(v.string()),
+        fragility: v.optional(itemFragility),
+        highValue: v.optional(v.boolean()),
+        planningDefaultKeys: v.optional(v.array(planningDefaultKey)),
+      })
+    ),
+    boxDraft: v.optional(
+      v.object({
+        code: v.optional(v.string()),
+        label: v.string(),
+        room: v.optional(v.string()),
+        description: v.optional(v.string()),
+      })
+    ),
+    duplicatePhotoIds: v.optional(v.array(v.id("itemPhotos"))),
+    approvedItemId: v.optional(v.id("items")),
+    approvedBoxId: v.optional(v.id("boxes")),
+    reviewedByUserId: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_photo_status", ["photoId", "status"])
     .index("by_job", ["aiJobId"])
     .index("by_household_status", ["householdId", "status"]),
 

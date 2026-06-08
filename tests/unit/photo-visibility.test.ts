@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Doc } from "../../convex/_generated/dataModel";
 import {
   canDownloadOriginalPhoto,
+  canUsePhotoDerivativeForAi,
   canViewPhotoAssets,
   redactPhotoForVisibility,
 } from "../../convex/lib/photoVisibility";
@@ -113,5 +114,34 @@ describe("photo visibility", () => {
     expect(redacted.originalBucket).toBe("movingmanifest");
     expect(redacted.derivativeRefs).toEqual(basePhoto.derivativeRefs);
     expect(redacted.notes).toBe("private notes");
+  });
+
+  it("only allows non-sensitive derivatives for AI intake", () => {
+    expect(
+      canUsePhotoDerivativeForAi({
+        ...basePhoto,
+        derivativeStatus: "ready",
+      })
+    ).toBe(true);
+    expect(
+      canUsePhotoDerivativeForAi({
+        ...basePhoto,
+        privacyLevel: "sensitive",
+        derivativeStatus: "ready",
+      })
+    ).toBe(false);
+    expect(
+      canUsePhotoDerivativeForAi({
+        ...basePhoto,
+        visibilityScope: "private",
+        derivativeStatus: "ready",
+      })
+    ).toBe(false);
+    expect(
+      canUsePhotoDerivativeForAi({
+        ...basePhoto,
+        derivativeStatus: "pending",
+      })
+    ).toBe(false);
   });
 });

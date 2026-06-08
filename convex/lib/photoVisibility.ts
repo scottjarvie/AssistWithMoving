@@ -39,6 +39,29 @@ export function canDownloadOriginalPhoto(
   return photo.visibilityScope !== "documentationScoped" && visibility.sensitivePhotos;
 }
 
+export function canUsePhotoDerivativeForAi(
+  photo: Pick<
+    Doc<"itemPhotos">,
+    "privacyLevel" | "visibilityScope" | "derivativeRefs" | "derivativeStatus"
+  >
+) {
+  if (photo.visibilityScope === "private") {
+    return false;
+  }
+  if (
+    photo.privacyLevel === "claimOnly" ||
+    photo.privacyLevel === "sensitive" ||
+    photo.privacyLevel === "hiddenFromGuests" ||
+    photo.privacyLevel === "private"
+  ) {
+    return false;
+  }
+  if (photo.derivativeStatus && photo.derivativeStatus !== "ready") {
+    return false;
+  }
+  return Boolean(photo.derivativeRefs.card ?? photo.derivativeRefs.detail);
+}
+
 export function redactPhotoForVisibility(
   photo: Doc<"itemPhotos">,
   visibility: PhotoVisibilityPolicy

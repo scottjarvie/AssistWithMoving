@@ -18,6 +18,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { AiJobMonitor } from "@/components/ai-job-monitor";
+import { AiPhotoIntake } from "@/components/ai-photo-intake";
 import { AiTextIntake } from "@/components/ai-text-intake";
 import { BoxManager } from "@/components/box-manager";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
@@ -783,6 +784,8 @@ export function MoveDashboard() {
       </section>
 
       <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
+
+      <AiPhotoIntake householdId={householdId} moveId={moveId} />
 
       <AiTextIntake householdId={householdId} moveId={moveId} />
 
