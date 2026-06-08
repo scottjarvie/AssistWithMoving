@@ -200,6 +200,17 @@ export const itemCreatedVia = v.union(
   v.literal("mcp")
 );
 
+export const boxStatus = v.union(
+  v.literal("open"),
+  v.literal("packing"),
+  v.literal("sealed"),
+  v.literal("loaded"),
+  v.literal("delivered"),
+  v.literal("missing"),
+  v.literal("damaged"),
+  v.literal("archived")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -400,6 +411,48 @@ export default defineSchema({
   })
     .index("by_move_sort", ["moveId", "sortOrder"])
     .index("by_move_key", ["moveId", "key"])
+    .index("by_household", ["householdId"]),
+
+  boxes: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    code: v.string(),
+    label: v.optional(v.string()),
+    room: v.optional(v.string()),
+    destinationRoom: v.optional(v.string()),
+    description: v.optional(v.string()),
+    status: boxStatus,
+    dimensionsIn: v.optional(dimensionsIn),
+    estimatedWeightLb: v.optional(v.number()),
+    actualWeightLb: v.optional(v.number()),
+    estimatedVolumeCuFt: v.optional(v.number()),
+    assignedResourceId: v.optional(v.id("transportResources")),
+    assignedZoneId: v.optional(v.id("transportZones")),
+    sealedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_code", ["moveId", "code"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_assigned_resource", ["assignedResourceId"])
+    .index("by_household", ["householdId"]),
+
+  boxItems: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    boxId: v.id("boxes"),
+    itemId: v.id("items"),
+    quantity: v.number(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_box", ["boxId"])
+    .index("by_item", ["itemId"])
+    .index("by_move", ["moveId"])
     .index("by_household", ["householdId"]),
 
   items: defineTable({

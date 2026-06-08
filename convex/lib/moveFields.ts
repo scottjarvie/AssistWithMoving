@@ -115,6 +115,17 @@ export const itemCreatedViaValues = [
   "mcp",
 ] as const;
 
+export const boxStatuses = [
+  "open",
+  "packing",
+  "sealed",
+  "loaded",
+  "delivered",
+  "missing",
+  "damaged",
+  "archived",
+] as const;
+
 export const documentationProfileTypes = [
   "personalFullRecord",
   "pcsMove",
@@ -381,12 +392,33 @@ export const itemCreatedViaValidator = v.union(
   v.literal("mcp")
 );
 
+export const boxStatusValidator = v.union(
+  v.literal("open"),
+  v.literal("packing"),
+  v.literal("sealed"),
+  v.literal("loaded"),
+  v.literal("delivered"),
+  v.literal("missing"),
+  v.literal("damaged"),
+  v.literal("archived")
+);
+
 export function normalizeItemName(name: string) {
   return name.trim().replace(/\s+/g, " ").slice(0, 160);
 }
 
 export function normalizedSearchName(name: string) {
   return normalizeItemName(name).toLowerCase();
+}
+
+export function normalizeBoxCode(code: string) {
+  return code
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .slice(0, 24);
 }
 
 export const movePersonRoleValidator = v.union(

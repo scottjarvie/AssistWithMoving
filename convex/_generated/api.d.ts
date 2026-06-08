@@ -9,6 +9,7 @@
  */
 
 import type * as audit from "../audit.js";
+import type * as boxes from "../boxes.js";
 import type * as clerkUsers from "../clerkUsers.js";
 import type * as health from "../health.js";
 import type * as households from "../households.js";
@@ -37,6 +38,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   audit: typeof audit;
+  boxes: typeof boxes;
   clerkUsers: typeof clerkUsers;
   health: typeof health;
   households: typeof households;
