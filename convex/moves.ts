@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   defaultDocumentationProfilesForMoveType,
   documentationProfileTypeValidator,
@@ -73,6 +74,11 @@ export const create = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key move creation is not implemented yet.");
     }
+
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "activeMoves",
+    });
 
     const now = Date.now();
     const documentationProfileTypes = args.documentationProfileTypes?.length

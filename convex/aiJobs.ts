@@ -10,6 +10,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { assertHouseholdEntitlement } from "./lib/billing";
 import { runAiProvider } from "./lib/aiProvider";
 import {
   assertAiUsageAllowed,
@@ -112,6 +113,11 @@ export const create = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key AI job creation is not implemented yet.");
     }
+
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "aiJobsMonthly",
+    });
 
     await assertAiUsageAllowed(ctx, {
       householdId: args.householdId,

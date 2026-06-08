@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   assignmentCsvRows,
   boxCsvRows,
@@ -39,6 +40,11 @@ export const createCsv = mutation({
     if (policy.actor.type !== "user") {
       throw new Error("API-key export creation is not implemented yet.");
     }
+
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "exportJobsMonthly",
+    });
 
     const [move, items, boxes, boxItems, resources, zones] = await Promise.all([
       ctx.db.get(args.moveId),

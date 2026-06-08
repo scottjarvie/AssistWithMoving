@@ -12,7 +12,7 @@ export default defineConfig({
     command: "npm run build && npm run start",
     url: "http://localhost:3827",
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: 240_000,
   },
   projects: [
     {

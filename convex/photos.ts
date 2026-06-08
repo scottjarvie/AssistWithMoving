@@ -18,6 +18,7 @@ import {
   query,
 } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   selectDerivativeRef,
   type PhotoDisplayVariant,
@@ -992,6 +993,16 @@ export const completeUploadSession = internalMutation({
     ) {
       throw new Error("Upload session is not active.");
     }
+
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "photoCount",
+    });
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "photoStorageBytes",
+      increment: session.expectedSizeBytes,
+    });
 
     const now = Date.now();
     const derivativeRefs = (session.derivativeUploads ?? []).reduce<

@@ -16,5 +16,7 @@ test("workspace preview is protected for signed-out users", async ({ page }) => 
   await page.goto("/app/dashboard");
 
   await expect(page).toHaveURL(/\/sign-in/);
-  await expect(page.getByText("MovingManifest")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Sign in to MovingManifest" })
+  ).toBeVisible();
 });

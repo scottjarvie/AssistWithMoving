@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   apiKeyPrefix,
   apiKeyPreview,
@@ -71,6 +72,11 @@ export const create = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key management requires a user actor.");
     }
+
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "activeApiKeys",
+    });
 
     await assertMoveRestriction(ctx, args);
     const scopes = normalizeApiKeyScopes(args.scopes);

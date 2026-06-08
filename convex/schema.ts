@@ -479,6 +479,20 @@ const accountDeletionRequestStatus = v.union(
   v.literal("completed")
 );
 
+const billingTier = v.union(
+  v.literal("free"),
+  v.literal("launch"),
+  v.literal("plus"),
+  v.literal("pro"),
+  v.literal("unlimited")
+);
+
+const billingProvider = v.union(
+  v.literal("none"),
+  v.literal("stripe"),
+  v.literal("vercelMarketplace")
+);
+
 const exportJobType = v.union(
   v.literal("inventory"),
   v.literal("boxes"),
@@ -547,6 +561,28 @@ export default defineSchema({
   })
     .index("by_key_environment", ["key", "environment"])
     .index("by_environment", ["environment"]),
+
+  householdBillingProfiles: defineTable({
+    householdId: v.id("households"),
+    tier: billingTier,
+    provider: billingProvider,
+    providerCustomerId: v.optional(v.string()),
+    providerSubscriptionId: v.optional(v.string()),
+    status: v.union(
+      v.literal("none"),
+      v.literal("trialing"),
+      v.literal("active"),
+      v.literal("pastDue"),
+      v.literal("cancelled")
+    ),
+    note: v.optional(v.string()),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household", ["householdId"])
+    .index("by_tier", ["tier"])
+    .index("by_provider", ["provider"]),
 
   households: defineTable({
     name: v.string(),

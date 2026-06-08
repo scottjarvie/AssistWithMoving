@@ -5,6 +5,7 @@ import type { MutationCtx } from "./_generated/server";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { anyApi, type FunctionReference } from "convex/server";
 import { recordAuditEvent } from "./lib/audit";
+import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   assertShareLinkActive,
   generateShareToken,
@@ -205,6 +206,11 @@ export const createWithTokenHash = internalMutation({
     if (actor.type !== "user") {
       throw new Error("API-key share link creation is not implemented yet.");
     }
+
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "activeShareLinks",
+    });
 
     const now = Date.now();
     if (args.expiresAt <= now) {
