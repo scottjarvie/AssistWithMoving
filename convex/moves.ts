@@ -18,6 +18,7 @@ import {
   requireHouseholdPermission,
   requireMovePermission,
 } from "./lib/permissions";
+import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 
 export const listForHousehold = query({
   args: {
@@ -107,6 +108,10 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    const planningDefaultIds = await insertMissingMovePlanningDefaults(ctx, {
+      householdId: args.householdId,
+      moveId,
+    });
 
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
@@ -121,6 +126,7 @@ export const create = mutation({
         title: args.title.trim(),
         type: args.type,
         documentationProfileTypes,
+        planningDefaultCount: planningDefaultIds.length,
       },
     });
 

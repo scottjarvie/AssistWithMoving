@@ -123,6 +123,27 @@ export const transportResourceType = v.union(
   v.literal("custom")
 );
 
+export const planningDefaultKey = v.union(
+  v.literal("firstNight"),
+  v.literal("doNotLetMoversTouch"),
+  v.literal("highValue"),
+  v.literal("documents"),
+  v.literal("medication"),
+  v.literal("electronics"),
+  v.literal("sensitive"),
+  v.literal("fragile"),
+  v.literal("irreplaceable"),
+  v.literal("restrictedReview")
+);
+
+export const planningDefaultHandling = v.union(
+  v.literal("personalTransport"),
+  v.literal("keepAccessible"),
+  v.literal("evidenceRequired"),
+  v.literal("restrictedReview"),
+  v.literal("moverAllowedWithReview")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -304,5 +325,23 @@ export default defineSchema({
   })
     .index("by_resource_sort", ["resourceId", "sortOrder"])
     .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_household", ["householdId"]),
+
+  movePlanningDefaults: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    key: planningDefaultKey,
+    label: v.string(),
+    description: v.string(),
+    handling: planningDefaultHandling,
+    sensitiveByDefault: v.boolean(),
+    recommendedResourceTypes: v.array(transportResourceType),
+    documentationProfileTypes: v.array(documentationProfileType),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_move_key", ["moveId", "key"])
     .index("by_household", ["householdId"]),
 });

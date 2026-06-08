@@ -42,6 +42,27 @@ export const transportResourcePresetKeys = [
   "unknown",
 ] as const;
 
+export const planningDefaultKeys = [
+  "firstNight",
+  "doNotLetMoversTouch",
+  "highValue",
+  "documents",
+  "medication",
+  "electronics",
+  "sensitive",
+  "fragile",
+  "irreplaceable",
+  "restrictedReview",
+] as const;
+
+export const planningDefaultHandlings = [
+  "personalTransport",
+  "keepAccessible",
+  "evidenceRequired",
+  "restrictedReview",
+  "moverAllowedWithReview",
+] as const;
+
 export const documentationProfileTypes = [
   "personalFullRecord",
   "pcsMove",
@@ -229,6 +250,27 @@ export const transportResourcePresetKeyValidator = v.union(
   v.literal("dump"),
   v.literal("freeGiveaway"),
   v.literal("unknown")
+);
+
+export const planningDefaultKeyValidator = v.union(
+  v.literal("firstNight"),
+  v.literal("doNotLetMoversTouch"),
+  v.literal("highValue"),
+  v.literal("documents"),
+  v.literal("medication"),
+  v.literal("electronics"),
+  v.literal("sensitive"),
+  v.literal("fragile"),
+  v.literal("irreplaceable"),
+  v.literal("restrictedReview")
+);
+
+export const planningDefaultHandlingValidator = v.union(
+  v.literal("personalTransport"),
+  v.literal("keepAccessible"),
+  v.literal("evidenceRequired"),
+  v.literal("restrictedReview"),
+  v.literal("moverAllowedWithReview")
 );
 
 export const movePersonRoleValidator = v.union(
