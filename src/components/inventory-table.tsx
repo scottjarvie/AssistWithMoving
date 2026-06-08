@@ -27,6 +27,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { BulkInventoryIntake } from "@/components/bulk-inventory-intake";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -400,6 +401,12 @@ export function InventoryTable({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <BulkInventoryIntake
+          householdId={householdId}
+          moveId={moveId}
+          onCreated={setMessage}
+        />
+
         <form
           className="grid gap-2 md:grid-cols-[minmax(0,1.2fr)_160px_160px_170px_auto]"
           onSubmit={handleCreateItem}
