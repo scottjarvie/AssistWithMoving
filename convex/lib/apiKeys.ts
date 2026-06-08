@@ -23,6 +23,8 @@ export type ApiKeyVerificationInput = {
 };
 
 const textEncoder = new TextEncoder();
+const generatedKeyPrefix = "mmk_";
+const generatedLookupPrefixLength = 14;
 
 export function normalizeApiKeyScopes(scopes: ApiKeyScope[]) {
   const allowed = new Set(apiKeyScopes);
@@ -35,8 +37,17 @@ export function apiKeyPreview(rawKey: string) {
 }
 
 export function apiKeyPrefix(rawKey: string) {
-  const [, prefix] = rawKey.split("_");
-  if (!prefix) {
+  if (!rawKey.startsWith(generatedKeyPrefix)) {
+    throw new Error("Invalid API key format.");
+  }
+
+  const prefixStart = generatedKeyPrefix.length;
+  const prefixEnd = prefixStart + generatedLookupPrefixLength;
+  const prefix = rawKey.slice(prefixStart, prefixEnd);
+  if (
+    prefix.length !== generatedLookupPrefixLength ||
+    rawKey[prefixEnd] !== "_"
+  ) {
     throw new Error("Invalid API key format.");
   }
   return prefix;
@@ -45,7 +56,7 @@ export function apiKeyPrefix(rawKey: string) {
 export function generateApiKeySecret() {
   const prefix = randomTokenPart(10);
   const secret = randomTokenPart(32);
-  return `mmk_${prefix}_${secret}`;
+  return `${generatedKeyPrefix}${prefix}_${secret}`;
 }
 
 export async function hashApiKey(rawKey: string) {

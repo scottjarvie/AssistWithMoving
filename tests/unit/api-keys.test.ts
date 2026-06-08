@@ -18,10 +18,20 @@ import { apiKeyStatusLabel, formatApiKeyDate } from "@/lib/api-keys";
 describe("api key primitives", () => {
   it("generates previewable keys with lookup prefixes", () => {
     const rawKey = generateApiKeySecret();
+    const lookupPrefix = rawKey.slice("mmk_".length, "mmk_".length + 14);
 
     expect(rawKey).toMatch(/^mmk_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+$/);
-    expect(apiKeyPrefix(rawKey)).toBe(rawKey.split("_")[1]);
+    expect(apiKeyPrefix(rawKey)).toBe(lookupPrefix);
     expect(apiKeyPreview(rawKey)).toContain("...");
+  });
+
+  it("parses generated lookup prefixes even when the prefix contains underscores", () => {
+    const rawKey = "mmk_ab_cd-efghijkl_secret-with_underscores";
+
+    expect(apiKeyPrefix(rawKey)).toBe("ab_cd-efghijkl");
+    expect(() => apiKeyPrefix("mmk_prefix_secret")).toThrow(
+      "Invalid API key format."
+    );
   });
 
   it("hashes and verifies without storing the raw secret", async () => {
