@@ -8,9 +8,12 @@
  * @module
  */
 
+import type * as clerkUsers from "../clerkUsers.js";
 import type * as health from "../health.js";
 import type * as households from "../households.js";
+import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_clerk from "../lib/clerk.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as users from "../users.js";
@@ -22,9 +25,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  clerkUsers: typeof clerkUsers;
   health: typeof health;
   households: typeof households;
+  http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/clerk": typeof lib_clerk;
   "lib/permissions": typeof lib_permissions;
   "lib/roles": typeof lib_roles;
   users: typeof users;
