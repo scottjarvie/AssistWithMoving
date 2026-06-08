@@ -4,8 +4,10 @@ import {
   addItemsToBox,
   batchUpsertItems,
   applyAssignments,
+  archiveDocumentationProfile,
   attachPhoto,
   createApiConfig,
+  createDocumentationProfile,
   createItem,
   createMove,
   createShareLink,
@@ -15,12 +17,14 @@ import {
   getApiContext,
   getCapacityReport,
   getMoveSummary,
+  listDocumentationProfiles,
   listShareLinks,
   movingManifestRequest,
   removeItemFromBox,
   revokeShareLink,
   searchInventory,
   suggestAssignments,
+  updateDocumentationProfile,
   updateTransportResource,
   updateTransportZone,
 } from "../../mcp-server/movingmanifest-api.mjs";
@@ -681,6 +685,104 @@ describe("MovingManifest MCP API client", () => {
           privacyLevel: "reportVisible",
           caption: "Pre-move condition.",
         }),
+      }
+    );
+  });
+
+  it("lists, creates, updates, and archives documentation profiles through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { documentationProfileId: "profile1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listDocumentationProfiles(config, {
+      moveId: "move1",
+      status: "active",
+      limit: 5,
+    });
+    await createDocumentationProfile(config, {
+      moveId: "move1",
+      type: "pcsMove",
+      name: "PCS packet",
+      includedFields: ["moveSummary", "pcsFields", "items"],
+      imageRule: "reviewedEvidence",
+      allowedActions: ["view", "download"],
+    });
+    await updateDocumentationProfile(config, {
+      moveId: "move1",
+      documentationProfileId: "profile1",
+      filters: { statuses: ["damaged", "missing"] },
+      allowedActions: ["view", "download", "uploadEvidence"],
+    });
+    await archiveDocumentationProfile(config, {
+      moveId: "move1",
+      documentationProfileId: "profile1",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL(
+        "https://example.com/api/v1/moves/move1/documentation-profiles?limit=5&status=active"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/documentation-profiles"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          type: "pcsMove",
+          name: "PCS packet",
+          includedFields: ["moveSummary", "pcsFields", "items"],
+          imageRule: "reviewedEvidence",
+          allowedActions: ["view", "download"],
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL(
+        "https://example.com/api/v1/moves/move1/documentation-profiles/profile1"
+      ),
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          filters: { statuses: ["damaged", "missing"] },
+          allowedActions: ["view", "download", "uploadEvidence"],
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      new URL(
+        "https://example.com/api/v1/moves/move1/documentation-profiles/profile1"
+      ),
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "idempotency-key": expect.any(String),
+        },
       }
     );
   });

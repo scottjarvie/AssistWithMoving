@@ -496,6 +496,43 @@ curl https://movingmanifest.com/api/v1/moves/MOVE_ID/documentation-profiles \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
+Create a documentation profile:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/documentation-profiles \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: profile-001" \
+  -d '{
+    "type": "pcsMove",
+    "name": "PCS transportation office packet",
+    "includedFields": ["moveSummary", "pcsFields", "items", "boxes", "photos"],
+    "imageRule": "reviewedEvidence",
+    "allowedActions": ["view", "download"]
+  }'
+```
+
+Update a documentation profile:
+
+```bash
+curl -X PATCH https://movingmanifest.com/api/v1/moves/MOVE_ID/documentation-profiles/DOCUMENTATION_PROFILE_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: profile-update-001" \
+  -d '{
+    "filters": { "statuses": ["damaged", "missing"] },
+    "allowedActions": ["view", "download", "uploadEvidence"]
+  }'
+```
+
+Archive a documentation profile:
+
+```bash
+curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/documentation-profiles/DOCUMENTATION_PROFILE_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Idempotency-Key: profile-archive-001"
+```
+
 Create a CSV export:
 
 ```bash
@@ -631,6 +668,9 @@ Available MCP tools:
 | `update_transport_zone` | Update zone metadata, capacity, preferred tags, resource, and sort order, with `dryRun` support. |
 | `get_capacity_report` | Fetch move, box, resource, and zone capacity estimates and warning counts. |
 | `list_documentation_profiles` | List scoped documentation profiles. |
+| `create_documentation_profile` | Create a scoped documentation profile, with `dryRun` support. |
+| `update_documentation_profile` | Update a documentation profile, with `dryRun` support. |
+| `archive_documentation_profile` | Archive a documentation profile, with `dryRun` support. |
 | `create_export` | Create a CSV export. |
 | `list_exports` | List export jobs. |
 | `download_export` | Return an unexpired export artifact as text. |

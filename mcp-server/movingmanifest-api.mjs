@@ -380,7 +380,77 @@ export async function getCapacityReport(config, input) {
 export async function listDocumentationProfiles(config, input) {
   return await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/documentation-profiles`,
-    query: { limit: input.limit },
+    query: { limit: input.limit, status: input.status },
+  });
+}
+
+export async function createDocumentationProfile(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/documentation-profiles`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/documentation-profiles`,
+    body: {
+      type: input.type,
+      status: input.status,
+      name: input.name,
+      includedFields: input.includedFields,
+      imageRule: input.imageRule,
+      filters: input.filters,
+      allowedActions: input.allowedActions,
+      disclaimer: input.disclaimer,
+      ownerNotes: input.ownerNotes,
+    },
+  });
+}
+
+export async function updateDocumentationProfile(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/documentation-profiles/${input.documentationProfileId}`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "PATCH",
+    path: `/moves/${input.moveId}/documentation-profiles/${input.documentationProfileId}`,
+    body: {
+      type: input.type,
+      status: input.status,
+      name: input.name,
+      includedFields: input.includedFields,
+      imageRule: input.imageRule,
+      filters: input.filters,
+      allowedActions: input.allowedActions,
+      disclaimer: input.disclaimer,
+      ownerNotes: input.ownerNotes,
+    },
+  });
+}
+
+export async function archiveDocumentationProfile(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "DELETE",
+        path: `/moves/${input.moveId}/documentation-profiles/${input.documentationProfileId}`,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "DELETE",
+    path: `/moves/${input.moveId}/documentation-profiles/${input.documentationProfileId}`,
   });
 }
 

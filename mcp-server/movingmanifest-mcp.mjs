@@ -9,8 +9,10 @@ import {
   applyAssignments,
   batchUpsertItems,
   attachPhoto,
+  archiveDocumentationProfile,
   createApiConfig,
   createBox,
+  createDocumentationProfile,
   createExport,
   createItem,
   createMove,
@@ -33,6 +35,7 @@ import {
   suggestAssignments,
   textResult,
   toolErrorResult,
+  updateDocumentationProfile,
   updateTransportResource,
   updateTransportZone,
   updateItem,
@@ -52,6 +55,102 @@ const capacityInputSchema = z.object({
     .optional(),
   weightIsUnlimited: z.boolean().optional(),
   volumeIsUnlimited: z.boolean().optional(),
+});
+
+const documentationProfileTypeSchema = z.enum([
+  "personalFullRecord",
+  "pcsMove",
+  "movingCompany",
+  "employerRelocation",
+  "insuranceClaim",
+  "donationPickup",
+  "sellOrGiveaway",
+  "storageInventory",
+  "loadCrew",
+]);
+
+const documentationFieldSchema = z.enum([
+  "moveSummary",
+  "pcsFields",
+  "rooms",
+  "items",
+  "boxes",
+  "loadAssignments",
+  "photos",
+  "estimatedValues",
+  "purchaseValues",
+  "serialNumbers",
+  "privateNotes",
+  "conditionAndDamage",
+  "auditSummary",
+]);
+
+const documentationImageRuleSchema = z.enum([
+  "none",
+  "thumbsOnly",
+  "reviewedEvidence",
+  "allAllowed",
+]);
+
+const documentationStatusSchema = z.enum(["draft", "active", "archived"]);
+
+const shareLinkActionSchema = z.enum([
+  "view",
+  "download",
+  "statusUpdate",
+  "comment",
+  "uploadEvidence",
+]);
+
+const documentationFiltersSchema = z.object({
+  dispositions: z
+    .array(
+      z.enum([
+        "undecided",
+        "take",
+        "sell",
+        "donate",
+        "dump",
+        "free",
+        "storage",
+        "mover",
+        "personalTransport",
+      ])
+    )
+    .optional(),
+  statuses: z
+    .array(
+      z.enum([
+        "draft",
+        "active",
+        "packed",
+        "staged",
+        "loaded",
+        "delivered",
+        "missing",
+        "damaged",
+        "archived",
+      ])
+    )
+    .optional(),
+  planningDefaultKeys: z
+    .array(
+      z.enum([
+        "firstNight",
+        "doNotLetMoversTouch",
+        "highValue",
+        "documents",
+        "medication",
+        "electronics",
+        "sensitive",
+        "fragile",
+        "irreplaceable",
+        "restrictedReview",
+      ])
+    )
+    .optional(),
+  room: z.string().optional(),
+  destinationRoom: z.string().optional(),
 });
 
 export function createMovingManifestMcpServer(apiConfig) {
@@ -494,13 +593,69 @@ export function registerTools(target, apiConfig) {
 
   registerTool(target, "list_documentation_profiles", {
     title: "List documentation profiles",
-    description: "List active scoped documentation profiles for a move.",
+    description: "List scoped documentation profiles for a move.",
     inputSchema: {
       moveId: z.string(),
+      status: documentationStatusSchema.optional(),
       limit: z.number().int().min(1).max(100).optional(),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listDocumentationProfiles(apiConfig, input),
+  });
+
+  registerTool(target, "create_documentation_profile", {
+    title: "Create documentation profile",
+    description:
+      "Create a scoped packet profile for PCS, movers, employers, claims, donation, sell/free, storage, or load crew workflows.",
+    inputSchema: {
+      moveId: z.string(),
+      type: documentationProfileTypeSchema,
+      status: z.enum(["draft", "active"]).optional(),
+      name: z.string().optional(),
+      includedFields: z.array(documentationFieldSchema).optional(),
+      imageRule: documentationImageRuleSchema.optional(),
+      filters: documentationFiltersSchema.optional(),
+      allowedActions: z.array(shareLinkActionSchema).optional(),
+      disclaimer: z.string().optional(),
+      ownerNotes: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createDocumentationProfile(apiConfig, input),
+  });
+
+  registerTool(target, "update_documentation_profile", {
+    title: "Update documentation profile",
+    description:
+      "Update selected documentation profile settings such as fields, filters, image rules, status, or allowed share-link actions.",
+    inputSchema: {
+      moveId: z.string(),
+      documentationProfileId: z.string(),
+      type: documentationProfileTypeSchema.optional(),
+      status: documentationStatusSchema.optional(),
+      name: z.string().optional(),
+      includedFields: z.array(documentationFieldSchema).optional(),
+      imageRule: documentationImageRuleSchema.optional(),
+      filters: documentationFiltersSchema.optional(),
+      allowedActions: z.array(shareLinkActionSchema).optional(),
+      disclaimer: z.string().optional(),
+      ownerNotes: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => updateDocumentationProfile(apiConfig, input),
+  });
+
+  registerTool(target, "archive_documentation_profile", {
+    title: "Archive documentation profile",
+    description: "Archive a documentation profile so it is hidden from default lists.",
+    inputSchema: {
+      moveId: z.string(),
+      documentationProfileId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (input) => archiveDocumentationProfile(apiConfig, input),
   });
 
   registerTool(target, "create_export", {
