@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { FileText, Link2, RefreshCw, ShieldCheck } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   type ShareLinkAction,
   type ShareLinkRole,
 } from "@/lib/documentation-packets";
+import { buildPcsPacketPath } from "@/lib/pcs-packet";
 import {
   documentationProfileOptions,
   type DocumentationProfileType,
@@ -548,6 +550,31 @@ export function DocumentationPacketBuilder({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  {selectedProfile.type === "pcsMove" && householdId && moveId ? (
+                    <>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildPcsPacketPath({
+                            householdId,
+                            moveId,
+                          })}
+                        >
+                          PCS packet
+                        </Link>
+                      </Button>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildPcsPacketPath({
+                            householdId,
+                            moveId,
+                            mode: "owner",
+                          })}
+                        >
+                          PCS owner
+                        </Link>
+                      </Button>
+                    </>
+                  ) : null}
                   <Button
                     type="button"
                     disabled={busy === "save" || !effectiveFields.length}
