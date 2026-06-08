@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "movingmanifest": {
+      "command": "node",
+      "args": ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"],
+      "env": {
+        "MOVINGMANIFEST_API_BASE_URL": "https://movingmanifest.com/api/v1",
+        "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
+      }
+    }
+  }
+}
