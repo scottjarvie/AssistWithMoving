@@ -33,6 +33,10 @@ import { buildClaimPacketPath } from "@/lib/claim-packet";
 import { buildPcsPacketPath } from "@/lib/pcs-packet";
 import { buildEmployerPacketPath } from "@/lib/employer-packet";
 import {
+  buildSubManifestPath,
+  subManifestKindForProfileType,
+} from "@/lib/sub-manifest";
+import {
   documentationProfileOptions,
   type DocumentationProfileType,
 } from "@/lib/move-presets";
@@ -660,6 +664,41 @@ export function DocumentationPacketBuilder({
                           })}
                         >
                           Claim owner
+                        </Link>
+                      </Button>
+                    </>
+                  ) : null}
+                  {(selectedProfile.type === "donationPickup" ||
+                    selectedProfile.type === "sellOrGiveaway" ||
+                    selectedProfile.type === "storageInventory") &&
+                  householdId &&
+                  moveId ? (
+                    <>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildSubManifestPath({
+                            householdId,
+                            moveId,
+                            kind: subManifestKindForProfileType(
+                              selectedProfile.type
+                            ),
+                          })}
+                        >
+                          Sub-manifest
+                        </Link>
+                      </Button>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildSubManifestPath({
+                            householdId,
+                            moveId,
+                            kind: subManifestKindForProfileType(
+                              selectedProfile.type
+                            ),
+                            mode: "owner",
+                          })}
+                        >
+                          Sub-manifest owner
                         </Link>
                       </Button>
                     </>
