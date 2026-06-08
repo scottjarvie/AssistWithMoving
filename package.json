@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "verify:launch": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e",
     "mcp": "node ./mcp-server/movingmanifest-mcp.mjs",
     "seed": "node scripts/seed.mjs"
   },
