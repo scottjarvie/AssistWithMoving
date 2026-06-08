@@ -9,6 +9,7 @@ import {
   applyAssignments,
   batchUpsertItems,
   attachPhoto,
+  archiveMovePerson,
   archiveDocumentationProfile,
   createApiConfig,
   createBox,
@@ -16,6 +17,7 @@ import {
   createExport,
   createItem,
   createMove,
+  createMovePerson,
   createTransportResource,
   createTransportZone,
   deleteItem,
@@ -28,6 +30,7 @@ import {
   listDocumentationProfiles,
   listExports,
   listMoves,
+  listMovePeople,
   listPlanningSuggestions,
   listShareLinks,
   listTransportResources,
@@ -40,6 +43,7 @@ import {
   textResult,
   toolErrorResult,
   updateDocumentationProfile,
+  updateMovePerson,
   updateTransportResource,
   updateTransportZone,
   updateItem,
@@ -135,6 +139,14 @@ const planningApprovalSchema = z.object({
   assignmentDraft: planningAssignmentDraftSchema.optional(),
   assignmentOverrideReason: z.string().optional(),
 });
+
+const movePersonRoleSchema = z.enum([
+  "owner",
+  "householdMember",
+  "helper",
+  "mover",
+  "contact",
+]);
 
 const shareLinkActionSchema = z.enum([
   "view",
@@ -596,6 +608,70 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listTransportResources(apiConfig, input),
+  });
+
+  registerTool(target, "list_move_people", {
+    title: "List move people",
+    description:
+      "List move people and contact records such as household members, helpers, movers, transportation offices, employer contacts, and adjusters.",
+    inputSchema: {
+      moveId: z.string(),
+      includeArchived: z.boolean().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listMovePeople(apiConfig, input),
+  });
+
+  registerTool(target, "create_move_person", {
+    title: "Create move person",
+    description:
+      "Create a person/contact record for a move. Use this for household members, helpers, movers, PCS offices, employer relocation contacts, insurance adjusters, storage contacts, and pickup contacts.",
+    inputSchema: {
+      moveId: z.string(),
+      name: z.string(),
+      role: movePersonRoleSchema.optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      notes: z.string().optional(),
+      sortOrder: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createMovePerson(apiConfig, input),
+  });
+
+  registerTool(target, "update_move_person", {
+    title: "Update move person",
+    description:
+      "Update a move person/contact record's name, role, email, phone, notes, sort order, or archivedAt state.",
+    inputSchema: {
+      moveId: z.string(),
+      personId: z.string(),
+      name: z.string().optional(),
+      role: movePersonRoleSchema.optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      notes: z.string().optional(),
+      sortOrder: z.number().optional(),
+      archivedAt: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => updateMovePerson(apiConfig, input),
+  });
+
+  registerTool(target, "archive_move_person", {
+    title: "Archive move person",
+    description:
+      "Archive a move person/contact record without deleting history. Set dryRun true to preview.",
+    inputSchema: {
+      moveId: z.string(),
+      personId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (input) => archiveMovePerson(apiConfig, input),
   });
 
   registerTool(target, "create_transport_resource", {

@@ -182,9 +182,55 @@ curl https://movingmanifest.com/api/v1/moves/MOVE_ID/summary \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-The summary response includes the move, resources, zones, items, boxes,
-assignments, photo metadata, documentation profiles, export jobs, counts, and a
-`generatedAt` timestamp. It omits storage keys and original photo URLs.
+The summary response includes the move, resources, zones, people/contacts,
+items, boxes, assignments, photo metadata, planning suggestions, documentation
+profiles, export jobs, share-link metadata, counts, and a `generatedAt`
+timestamp. It omits storage keys and original photo URLs.
+
+List move people and contacts:
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/people?limit=50" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Create a move contact:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/people \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-move-contact-001" \
+  -d '{
+    "name": "Transportation Office",
+    "role": "contact",
+    "email": "office@example.test",
+    "notes": "PCS counseling contact"
+  }'
+```
+
+Move people require `moves/read` for list/read and `moves/write` for
+create/update/archive. Roles are `owner`, `householdMember`, `helper`, `mover`,
+and `contact`. Use contacts for PCS transportation offices, moving company
+coordinators, employer relocation contacts, insurance adjusters, storage
+facilities, donation/sale pickup contacts, and household helpers.
+
+Update or archive a move contact:
+
+```bash
+curl -X PATCH https://movingmanifest.com/api/v1/moves/MOVE_ID/people/PERSON_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: update-move-contact-001" \
+  -d '{ "phone": "555-0100" }'
+
+curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/people/PERSON_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Idempotency-Key: archive-move-contact-001"
+```
+
+Archive is soft: the contact is hidden from normal list results but retained for
+history and audit. Add `includeArchived=true` to list/read archived contacts.
 
 List items:
 
@@ -712,7 +758,7 @@ Available MCP tools:
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
-| `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
+| `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
@@ -730,6 +776,10 @@ Available MCP tools:
 | `start_photo_upload` | Start a photo upload session and return presigned upload information. |
 | `attach_photo` | Attach/update photo evidence metadata after upload finalization, with `dryRun` support. |
 | `list_transport_resources` | List resources and zones for load planning. |
+| `list_move_people` | List move people/contact records, with optional archived records. |
+| `create_move_person` | Create a move person/contact record, with `dryRun` support. |
+| `update_move_person` | Update a move person/contact record, with `dryRun` support. |
+| `archive_move_person` | Soft-archive a move person/contact record, with `dryRun` support. |
 | `create_transport_resource` | Create a transport resource from a preset or custom fields, with `dryRun` support. |
 | `update_transport_resource` | Update resource metadata, capacity, rules, and sort order, with `dryRun` support. |
 | `create_transport_zone` | Create a zone inside a resource, with `dryRun` support. |

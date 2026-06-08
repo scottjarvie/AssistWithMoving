@@ -127,6 +127,9 @@ export function requiredScopesForRestRoute({
     if (segments.includes("documentation-profiles")) {
       return ["exports/read"];
     }
+    if (segments.includes("people")) {
+      return ["moves/read"];
+    }
     if (segments.includes("items") || segments.includes("boxes")) {
       return ["inventory/read"];
     }
@@ -150,6 +153,9 @@ export function requiredScopesForRestRoute({
     }
     if (segments.includes("documentation-profiles")) {
       return ["exports/create"];
+    }
+    if (segments.includes("people")) {
+      return ["moves/write"];
     }
     if (segments.includes("items") || segments.includes("boxes")) {
       return ["inventory/write"];

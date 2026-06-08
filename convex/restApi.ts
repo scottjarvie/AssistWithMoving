@@ -125,6 +125,13 @@ const restPlanningSuggestionStatuses = [
   "edited",
   "rejected",
 ] as const;
+const restMovePersonRoles = [
+  "owner",
+  "householdMember",
+  "helper",
+  "mover",
+  "contact",
+] as const;
 const maxBatchUpsertItems = 100;
 
 export const handle = internalMutation({
@@ -427,6 +434,10 @@ async function routeRequest(
     return await routeTransportZones(ctx, args, auth, moveId, nestedId);
   }
 
+  if (nested === "people") {
+    return await routeMovePeople(ctx, args, auth, moveId, nestedId);
+  }
+
   if (nested === "items") {
     return await routeItems(ctx, args, auth, moveId, nestedId);
   }
@@ -502,6 +513,7 @@ async function routeMoveSummary(
   const [
     resources,
     zones,
+    people,
     items,
     boxes,
     assignments,
@@ -517,6 +529,10 @@ async function routeMoveSummary(
       .collect(),
     ctx.db
       .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("movePeople")
       .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
       .collect(),
     ctx.db
@@ -564,6 +580,9 @@ async function routeMoveSummary(
   const activeZones = zones.filter(
     (zone) => zone.householdId === auth.householdId && !zone.archivedAt
   );
+  const activePeople = people.filter(
+    (person) => person.householdId === auth.householdId && !person.archivedAt
+  );
   const activeItems = items.filter(
     (item) => item.householdId === auth.householdId && !item.deletedAt
   );
@@ -595,6 +614,7 @@ async function routeMoveSummary(
       move: safeMove(move),
       resources: activeResources.map((resource) => safeTransportResource(resource)),
       zones: activeZones.map((zone) => safeTransportZone(zone)),
+      people: activePeople.map((person) => safeMovePerson(person)),
       items: activeItems.map((item) => safeItem(item)),
       boxes: activeBoxes.map((box) => safeBox(box)),
       assignments: visibleAssignments.map((assignment) =>
@@ -612,6 +632,7 @@ async function routeMoveSummary(
       counts: {
         resources: activeResources.length,
         zones: activeZones.length,
+        people: activePeople.length,
         items: activeItems.length,
         boxes: activeBoxes.length,
         assignments: visibleAssignments.length,
@@ -1152,6 +1173,133 @@ async function routeTransportZones(
     status: 404,
     code: "not_found",
     message: "Zone route not found.",
+  });
+}
+
+async function routeMovePeople(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  personIdSegment?: string
+) {
+  if (args.method === "GET" && !personIdSegment) {
+    const includeArchived = args.query.includeArchived === "true";
+    const people = await ctx.db
+      .query("movePeople")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect();
+    return restOk(
+      paginate(
+        people
+          .filter((person) => person.householdId === auth.householdId)
+          .filter((person) => includeArchived || !person.archivedAt)
+          .map((person) => safeMovePerson(person)),
+        args.query
+      )
+    );
+  }
+
+  if (args.method === "GET" && personIdSegment) {
+    const person = await requireApiMovePerson(
+      ctx,
+      auth.householdId,
+      moveId,
+      personIdSegment,
+      args.query.includeArchived === "true"
+    );
+    return restOk({ data: safeMovePerson(person) });
+  }
+
+  if (args.method === "POST" && !personIdSegment) {
+    const body = bodyObject(args.body);
+    const name = normalizeOptionalText(asString(body.name));
+    if (!name) {
+      throw new Error("name is required.");
+    }
+    const role = parseMovePersonRole(body.role) ?? "contact";
+    const now = Date.now();
+    const personId = await ctx.db.insert("movePeople", {
+      householdId: auth.householdId,
+      moveId,
+      name,
+      role,
+      email: normalizeOptionalText(asString(body.email)),
+      phone: normalizeOptionalText(asString(body.phone)),
+      notes: normalizeOptionalText(asString(body.notes)),
+      sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
+      createdByUserId: auth.createdByUserId,
+      createdByApiKeyId: auth.apiKeyId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const person = await ctx.db.get(personId);
+    await auditApiMovePerson(ctx, auth, moveId, "move_person.api_created", personId, {
+      role,
+      name,
+    });
+    return restOk(
+      { data: person ? safeMovePerson(person) : { personId } },
+      201
+    );
+  }
+
+  if (args.method === "PATCH" && personIdSegment) {
+    const person = await requireApiMovePerson(
+      ctx,
+      auth.householdId,
+      moveId,
+      personIdSegment,
+      true
+    );
+    const patch = movePersonPatch(args.body, auth);
+    await ctx.db.patch(person._id, patch);
+    const updated = await ctx.db.get(person._id);
+    await auditApiMovePerson(
+      ctx,
+      auth,
+      moveId,
+      "move_person.api_updated",
+      person._id,
+      { changedKeys: Object.keys(patch) }
+    );
+    return restOk({
+      data: updated ? safeMovePerson(updated) : { personId: person._id },
+    });
+  }
+
+  if (args.method === "DELETE" && personIdSegment) {
+    const person = await requireApiMovePerson(
+      ctx,
+      auth.householdId,
+      moveId,
+      personIdSegment,
+      true
+    );
+    const now = Date.now();
+    await ctx.db.patch(person._id, {
+      archivedAt: person.archivedAt ?? now,
+      updatedByUserId: auth.createdByUserId,
+      updatedByApiKeyId: auth.apiKeyId,
+      updatedAt: now,
+    });
+    await auditApiMovePerson(
+      ctx,
+      auth,
+      moveId,
+      "move_person.api_archived",
+      person._id
+    );
+    const updated = await ctx.db.get(person._id);
+    return restOk({
+      data: updated ? safeMovePerson(updated) : { personId: person._id },
+    });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Move people route not found.",
   });
 }
 
@@ -2605,6 +2753,25 @@ async function requireApiBoxById(
   return box;
 }
 
+async function requireApiMovePerson(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  personIdSegment: string,
+  includeArchived = false
+) {
+  const person = await ctx.db.get(personIdSegment as Id<"movePeople">);
+  if (
+    !person ||
+    person.householdId !== householdId ||
+    person.moveId !== moveId ||
+    (!includeArchived && person.archivedAt)
+  ) {
+    throw new Error("Move person not found.");
+  }
+  return person;
+}
+
 async function requireApiPhotoById(
   ctx: MutationCtx,
   householdId: Id<"households">,
@@ -2815,6 +2982,21 @@ function safeBox(box: Doc<"boxes">) {
     assignmentHardBlocks: box.assignmentHardBlocks,
     createdAt: box.createdAt,
     updatedAt: box.updatedAt,
+  };
+}
+
+function safeMovePerson(person: Doc<"movePeople">) {
+  return {
+    personId: person._id,
+    name: person.name,
+    role: person.role,
+    email: person.email,
+    phone: person.phone,
+    notes: person.notes,
+    sortOrder: person.sortOrder,
+    archivedAt: person.archivedAt,
+    createdAt: person.createdAt,
+    updatedAt: person.updatedAt,
   };
 }
 
@@ -3532,6 +3714,44 @@ async function transportZonePatch(
   return patch;
 }
 
+function movePersonPatch(
+  body: unknown,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+): Partial<Doc<"movePeople">> {
+  const input = bodyObject(body);
+  const patch: Partial<Doc<"movePeople">> = {
+    updatedByUserId: auth.createdByUserId,
+    updatedByApiKeyId: auth.apiKeyId,
+    updatedAt: Date.now(),
+  };
+  if (input.name !== undefined) {
+    const name = normalizeOptionalText(asString(input.name));
+    if (!name) throw new Error("name cannot be empty.");
+    patch.name = name;
+  }
+  if (input.role !== undefined) {
+    const role = parseMovePersonRole(input.role);
+    if (!role) throw new Error("Invalid move person role.");
+    patch.role = role;
+  }
+  if (input.email !== undefined) {
+    patch.email = normalizeOptionalText(asString(input.email));
+  }
+  if (input.phone !== undefined) {
+    patch.phone = normalizeOptionalText(asString(input.phone));
+  }
+  if (input.notes !== undefined) {
+    patch.notes = normalizeOptionalText(asString(input.notes));
+  }
+  if (input.sortOrder !== undefined) {
+    patch.sortOrder = normalizeSortOrder(optionalNumber(input.sortOrder));
+  }
+  if (input.archivedAt !== undefined) {
+    patch.archivedAt = optionalNumber(input.archivedAt);
+  }
+  return patch;
+}
+
 function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
   const input = bodyObject(body);
   const patch: Partial<Doc<"items">> = {
@@ -3738,6 +3958,27 @@ async function auditApiDocumentationProfile(
   });
 }
 
+async function auditApiMovePerson(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  action: string,
+  personId: Id<"movePeople">,
+  metadata?: Record<string, unknown>
+) {
+  await recordAuditEvent(ctx, {
+    householdId: auth.householdId,
+    moveId,
+    actorType: "apiKey",
+    actorApiKeyId: auth.actor.apiKeyId,
+    category: "household",
+    action,
+    objectTable: "movePeople",
+    objectId: personId,
+    metadata,
+  });
+}
+
 function bodyObject(body: unknown): Record<string, unknown> {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return {};
@@ -3891,6 +4132,12 @@ function parseCondition(value: unknown) {
 function parseBoxStatus(value: unknown) {
   return includesLiteral(boxStatuses, value)
     ? (value as Doc<"boxes">["status"])
+    : undefined;
+}
+
+function parseMovePersonRole(value: unknown) {
+  return includesLiteral(restMovePersonRoles, value)
+    ? (value as Doc<"movePeople">["role"])
     : undefined;
 }
 

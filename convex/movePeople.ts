@@ -46,9 +46,7 @@ export const create = mutation({
       args.moveId,
       "household:edit"
     );
-    if (actor.type !== "user") {
-      throw new Error("API-key people creation is not implemented yet.");
-    }
+    if (actor.type !== "user") throw new Error("Signed-in user context required.");
     const now = Date.now();
     const personId = await ctx.db.insert("movePeople", {
       householdId: args.householdId,

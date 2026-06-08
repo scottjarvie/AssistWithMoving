@@ -5,12 +5,14 @@ import {
   approvePlanningSuggestions,
   batchUpsertItems,
   applyAssignments,
+  archiveMovePerson,
   archiveDocumentationProfile,
   attachPhoto,
   createApiConfig,
   createDocumentationProfile,
   createItem,
   createMove,
+  createMovePerson,
   createShareLink,
   createTransportResource,
   createTransportZone,
@@ -20,6 +22,7 @@ import {
   getCapacityReport,
   getMoveSummary,
   listDocumentationProfiles,
+  listMovePeople,
   listPlanningSuggestions,
   listShareLinks,
   movingManifestRequest,
@@ -29,6 +32,7 @@ import {
   searchInventory,
   suggestAssignments,
   updateDocumentationProfile,
+  updateMovePerson,
   updateTransportResource,
   updateTransportZone,
 } from "../../mcp-server/movingmanifest-api.mjs";
@@ -339,6 +343,94 @@ describe("MovingManifest MCP API client", () => {
       totalEstimatedWeightLb: 1200,
       resourceReports: [],
     });
+  });
+
+  it("lists, creates, updates, and archives move people through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { personId: "person1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listMovePeople(config, {
+      moveId: "move1",
+      includeArchived: true,
+      limit: 25,
+    });
+    await createMovePerson(config, {
+      moveId: "move1",
+      name: "Transportation Office",
+      role: "contact",
+      email: "office@example.test",
+      notes: "PCS counseling contact",
+    });
+    await updateMovePerson(config, {
+      moveId: "move1",
+      personId: "person1",
+      phone: "555-0100",
+    });
+    await archiveMovePerson(config, {
+      moveId: "move1",
+      personId: "person1",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL(
+        "https://example.com/api/v1/moves/move1/people?limit=25&includeArchived=true"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/people"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          name: "Transportation Office",
+          role: "contact",
+          email: "office@example.test",
+          notes: "PCS counseling contact",
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL("https://example.com/api/v1/moves/move1/people/person1"),
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ phone: "555-0100" }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      new URL("https://example.com/api/v1/moves/move1/people/person1"),
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "idempotency-key": expect.any(String),
+        },
+      }
+    );
   });
 
   it("creates transport resources through the API", async () => {

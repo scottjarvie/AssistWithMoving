@@ -380,6 +380,81 @@ export async function listTransportResources(config, input) {
   return { resources, zones };
 }
 
+export async function listMovePeople(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/people`,
+    query: {
+      limit: input.limit,
+      includeArchived: input.includeArchived,
+    },
+  });
+}
+
+export async function createMovePerson(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/people`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/people`,
+    body: {
+      name: input.name,
+      role: input.role,
+      email: input.email,
+      phone: input.phone,
+      notes: input.notes,
+      sortOrder: input.sortOrder,
+    },
+  });
+}
+
+export async function updateMovePerson(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/people/${input.personId}`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "PATCH",
+    path: `/moves/${input.moveId}/people/${input.personId}`,
+    body: {
+      name: input.name,
+      role: input.role,
+      email: input.email,
+      phone: input.phone,
+      notes: input.notes,
+      sortOrder: input.sortOrder,
+      archivedAt: input.archivedAt,
+    },
+  });
+}
+
+export async function archiveMovePerson(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "DELETE",
+        path: `/moves/${input.moveId}/people/${input.personId}`,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "DELETE",
+    path: `/moves/${input.moveId}/people/${input.personId}`,
+  });
+}
+
 export async function createTransportResource(config, input) {
   if (input.dryRun) {
     return {
