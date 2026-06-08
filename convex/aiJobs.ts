@@ -271,7 +271,11 @@ export const execute = action({
     maxOutputTokens: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Id<"aiJobs">> => {
-    const job = await ctx.runMutation(internal.aiJobs.startExecution, args);
+    const job = await ctx.runMutation(internal.aiJobs.startExecution, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      aiJobId: args.aiJobId,
+    });
     try {
       const result = await runAiProvider({
         jobId: args.aiJobId,

@@ -177,11 +177,7 @@ export function PhotoUploadControl({
           uploadSessionId: activeUploadSessionId,
         });
       }
-      setStatus(
-        error instanceof DOMException && error.name === "AbortError"
-          ? "Upload cancelled."
-          : "Upload failed. Retry when ready."
-      );
+      setStatus(photoUploadFailureMessage(error));
     } finally {
       abortControllerRef.current = null;
       setUploading(false);
@@ -205,8 +201,8 @@ export function PhotoUploadControl({
   const canRetry =
     file &&
     !uploading &&
-    (status === "Upload failed. Retry when ready." ||
-      status === "Upload cancelled.");
+    Boolean(status) &&
+    status !== "Photo uploaded.";
 
   return (
     <div
@@ -289,4 +285,29 @@ export function PhotoUploadControl({
       ) : null}
     </div>
   );
+}
+
+function photoUploadFailureMessage(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "Upload cancelled.";
+  }
+
+  const message = error instanceof Error ? error.message : "";
+  if (
+    /Backblaze B2 is not configured|NoSuchBucket|bad_auth_token|SignatureDoesNotMatch/i.test(
+      message
+    )
+  ) {
+    return "Photo storage is not configured. Retry after setup is fixed.";
+  }
+
+  if (
+    /CORS|Failed to fetch|NetworkError|Upload failed|status 403|status 404/i.test(
+      message
+    )
+  ) {
+    return "Photo storage rejected the upload. Check bucket CORS, credentials, and retry.";
+  }
+
+  return "Upload failed. Retry when ready.";
 }

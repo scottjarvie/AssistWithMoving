@@ -209,6 +209,7 @@ export function AiTextIntake({
             value={sourceText}
             onChange={(event) => setSourceText(event.target.value)}
             placeholder="Garage: two bikes, red toolbox, camping tent"
+            aria-label="AI text intake source"
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button

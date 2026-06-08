@@ -361,6 +361,7 @@ export function PhotoReviewWorkspace({
               value={room}
               onChange={(event) => setRoom(event.target.value)}
               placeholder="Room or area"
+              aria-label="Room or area"
               disabled={!householdId || !moveId}
             />
             <PhotoUploadControl

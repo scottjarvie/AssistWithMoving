@@ -42,7 +42,7 @@ async function ensureHousehold(page: Page, householdName: string) {
 }
 
 test.describe("authenticated product flow", () => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
 
   test.skip(
     !e2eUserEmail,
@@ -185,6 +185,44 @@ test.describe("authenticated product flow", () => {
     await expect(
       page.getByRole("heading", { name: "Documentation packets", exact: true })
     ).toBeVisible();
+
+    const roomSweep = page
+      .getByRole("heading", { name: "Room sweep", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(roomSweep.getByLabel("Room or area")).toBeEnabled();
+    await expect(roomSweep.getByLabel("Room photo")).toBeEnabled();
+
+    const aiTextIntake = page
+      .getByRole("heading", { name: "AI text intake", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await aiTextIntake
+      .getByLabel("AI text intake source")
+      .fill(
+        `Garage: E2E helmet ${runId}, E2E riding gloves ${runId}\nBox ${boxCode}-AI: helmet, gloves (Garage)`
+      );
+    await aiTextIntake
+      .getByRole("button", { name: "Generate suggestions" })
+      .click();
+    await expect(
+      aiTextIntake.getByText(/\d+ reviewable suggestions created\./)
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      aiTextIntake.getByRole("button", { name: "Approve selected" })
+    ).toBeEnabled({ timeout: 30_000 });
+    await aiTextIntake
+      .getByRole("button", { name: "Approve selected" })
+      .click();
+    await expect(
+      aiTextIntake.getByText(/\d+ items and \d+ boxes approved\./)
+    ).toBeVisible({ timeout: 30_000 });
+
+    const aiJobMonitor = page
+      .getByRole("heading", { name: "AI job monitor", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await aiJobMonitor.getByRole("button", { name: "Mock review" }).click();
+    await expect(
+      aiJobMonitor.getByText("Mock AI review completed.")
+    ).toBeVisible({ timeout: 30_000 });
 
     const pcsPacketHref = await documentationPackets
       .getByRole("link", { name: "PCS packet" })
