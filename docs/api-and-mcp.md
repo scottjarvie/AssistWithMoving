@@ -44,6 +44,9 @@ API keys can include these scopes:
 
 Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
+The move summary endpoint requires `moves/read`, `inventory/read`, and
+`exports/read` because it returns move, inventory, photo metadata, documentation,
+and export state in one response.
 
 ## Errors
 
@@ -133,6 +136,17 @@ Get one move:
 curl https://movingmanifest.com/api/v1/moves/MOVE_ID \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
+
+Get one compact move summary:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/summary \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+The summary response includes the move, resources, zones, items, boxes,
+assignments, photo metadata, documentation profiles, export jobs, counts, and a
+`generatedAt` timestamp. It omits storage keys and original photo URLs.
 
 List items:
 
@@ -307,7 +321,7 @@ Available MCP tools:
 | Tool | Purpose |
 | --- | --- |
 | `list_moves` | List accessible moves. |
-| `get_move_summary` | Fetch a move plus resources, zones, items, boxes, assignments, and photo metadata. |
+| `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, documentation profiles, and export jobs. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
 | `update_item` | Update selected item fields, with `dryRun` support. |

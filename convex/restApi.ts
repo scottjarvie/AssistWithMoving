@@ -303,6 +303,9 @@ async function routeRequest(
     });
     return restOk({ data: { moveId, ...patch } });
   }
+  if (nested === "summary" && args.method === "GET" && segments.length === 3) {
+    return await routeMoveSummary(ctx, auth, move);
+  }
 
   if (nested === "resources" && args.method === "GET") {
     const resources = await ctx.db
@@ -381,6 +384,115 @@ async function routeRequest(
   }
 
   return restError({ status: 404, code: "not_found", message: "Not found." });
+}
+
+async function routeMoveSummary(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  move: Doc<"moves">
+) {
+  const [
+    resources,
+    zones,
+    items,
+    boxes,
+    assignments,
+    photos,
+    documentationProfiles,
+    exportJobs,
+  ] = await Promise.all([
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .order("desc")
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .order("desc")
+      .collect(),
+    ctx.db
+      .query("boxItems")
+      .withIndex("by_move", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("itemPhotos")
+      .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
+      .order("desc")
+      .collect(),
+    ctx.db
+      .query("documentationProfiles")
+      .withIndex("by_move_status", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("exportJobs")
+      .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
+      .order("desc")
+      .collect(),
+  ]);
+
+  const activeResources = resources.filter(
+    (resource) => resource.householdId === auth.householdId && !resource.archivedAt
+  );
+  const activeZones = zones.filter(
+    (zone) => zone.householdId === auth.householdId && !zone.archivedAt
+  );
+  const activeItems = items.filter(
+    (item) => item.householdId === auth.householdId && !item.deletedAt
+  );
+  const activeBoxes = boxes.filter(
+    (box) => box.householdId === auth.householdId && !box.archivedAt
+  );
+  const visiblePhotos = photos.filter(
+    (photo) => photo.householdId === auth.householdId && !photo.archivedAt
+  );
+  const activeDocumentationProfiles = documentationProfiles.filter(
+    (profile) =>
+      profile.householdId === auth.householdId && profile.status !== "archived"
+  );
+  const visibleExportJobs = exportJobs.filter(
+    (job) => job.householdId === auth.householdId
+  );
+  const visibleAssignments = assignments.filter(
+    (assignment) => assignment.householdId === auth.householdId
+  );
+
+  return restOk({
+    data: {
+      move: safeMove(move),
+      resources: activeResources.map((resource) => safeTransportResource(resource)),
+      zones: activeZones.map((zone) => safeTransportZone(zone)),
+      items: activeItems.map((item) => safeItem(item)),
+      boxes: activeBoxes.map((box) => safeBox(box)),
+      assignments: visibleAssignments.map((assignment) =>
+        safeAssignment(assignment)
+      ),
+      photos: visiblePhotos.map((photo) => safePhoto(photo)),
+      documentationProfiles: activeDocumentationProfiles.map((profile) =>
+        safeDocumentationProfile(profile)
+      ),
+      exports: visibleExportJobs.map((job) => safeExportJob(job)),
+      counts: {
+        resources: activeResources.length,
+        zones: activeZones.length,
+        items: activeItems.length,
+        boxes: activeBoxes.length,
+        assignments: visibleAssignments.length,
+        photos: visiblePhotos.length,
+        documentationProfiles: activeDocumentationProfiles.length,
+        exports: visibleExportJobs.length,
+      },
+      generatedAt: Date.now(),
+    },
+  });
 }
 
 async function routeItems(
@@ -969,6 +1081,68 @@ function safeBox(box: Doc<"boxes">) {
     assignmentHardBlocks: box.assignmentHardBlocks,
     createdAt: box.createdAt,
     updatedAt: box.updatedAt,
+  };
+}
+
+function safeTransportResource(resource: Doc<"transportResources">) {
+  return {
+    resourceId: resource._id,
+    type: resource.type,
+    name: resource.name,
+    description: resource.description,
+    capacity: resource.capacity,
+    rules: resource.rules,
+    sortOrder: resource.sortOrder,
+    createdAt: resource.createdAt,
+    updatedAt: resource.updatedAt,
+  };
+}
+
+function safeTransportZone(zone: Doc<"transportZones">) {
+  return {
+    zoneId: zone._id,
+    resourceId: zone.resourceId,
+    name: zone.name,
+    description: zone.description,
+    capacity: zone.capacity,
+    preferredTags: zone.preferredTags,
+    sortOrder: zone.sortOrder,
+    createdAt: zone.createdAt,
+    updatedAt: zone.updatedAt,
+  };
+}
+
+function safeAssignment(assignment: Doc<"boxItems">) {
+  return {
+    assignmentId: assignment._id,
+    boxId: assignment.boxId,
+    itemId: assignment.itemId,
+    quantity: assignment.quantity,
+    notes: assignment.notes,
+    createdAt: assignment.createdAt,
+    updatedAt: assignment.updatedAt,
+  };
+}
+
+function safePhoto(photo: Doc<"itemPhotos">) {
+  return {
+    photoId: photo._id,
+    itemId: photo.itemId,
+    boxId: photo.boxId,
+    room: photo.room,
+    documentationProfileTypes: photo.documentationProfileTypes,
+    photoType: photo.photoType,
+    privacyLevel: photo.privacyLevel,
+    visibilityScope: photo.visibilityScope,
+    verificationStatus: photo.verificationStatus,
+    caption: photo.caption,
+    width: photo.width,
+    height: photo.height,
+    mimeType: photo.mimeType,
+    sizeBytes: photo.sizeBytes,
+    capturedAt: photo.capturedAt,
+    uploadedAt: photo.createdAt,
+    updatedAt: photo.updatedAt,
   };
 }
 

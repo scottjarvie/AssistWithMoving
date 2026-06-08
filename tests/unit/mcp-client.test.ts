@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createApiConfig,
   createItem,
+  getMoveSummary,
   movingManifestRequest,
   searchInventory,
 } from "../../mcp-server/movingmanifest-api.mjs";
@@ -85,6 +86,37 @@ describe("MovingManifest MCP API client", () => {
     );
 
     expect(result.data).toEqual([{ itemId: "1", name: "Desk lamp", room: "Office" }]);
+  });
+
+  it("fetches move summaries through the compact summary endpoint", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          move: { moveId: "move1", title: "PCS move" },
+          counts: { items: 2, boxes: 1 },
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getMoveSummary(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/summary"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(result).toEqual({
+      move: { moveId: "move1", title: "PCS move" },
+      counts: { items: 2, boxes: 1 },
+    });
   });
 
   it("dry-runs item creation without calling the API", async () => {

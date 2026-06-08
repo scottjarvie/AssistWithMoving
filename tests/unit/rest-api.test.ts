@@ -43,6 +43,12 @@ describe("REST API helpers", () => {
     ).toEqual(["moves/read"]);
     expect(
       requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["moves", "move1", "summary"],
+      })
+    ).toEqual(["moves/read", "inventory/read", "exports/read"]);
+    expect(
+      requiredScopesForRestRoute({
         method: "POST",
         segments: ["uploads", "init"],
       })

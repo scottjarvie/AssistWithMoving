@@ -95,27 +95,10 @@ export async function listMoves(config, input = {}) {
 }
 
 export async function getMoveSummary(config, input) {
-  const [move, resources, zones, items, boxes, assignments, photos] =
-    await Promise.all([
-      movingManifestRequest(config, { path: `/moves/${input.moveId}` }),
-      movingManifestRequest(config, { path: `/moves/${input.moveId}/resources` }),
-      movingManifestRequest(config, { path: `/moves/${input.moveId}/zones` }),
-      movingManifestRequest(config, {
-        path: `/moves/${input.moveId}/items`,
-        query: { limit: input.limit ?? 25 },
-      }),
-      movingManifestRequest(config, {
-        path: `/moves/${input.moveId}/boxes`,
-        query: { limit: input.limit ?? 25 },
-      }),
-      movingManifestRequest(config, { path: `/moves/${input.moveId}/assignments` }),
-      movingManifestRequest(config, {
-        path: `/moves/${input.moveId}/photos`,
-        query: { limit: input.limit ?? 25 },
-      }),
-    ]);
-
-  return { move: move.data, resources, zones, items, boxes, assignments, photos };
+  const response = await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/summary`,
+  });
+  return response.data;
 }
 
 export async function searchInventory(config, input) {

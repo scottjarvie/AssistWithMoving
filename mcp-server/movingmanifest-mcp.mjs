@@ -58,7 +58,6 @@ export function registerTools(target, apiConfig) {
       "Fetch a compact move summary with resources, zones, inventory, boxes, assignments, and photo metadata.",
     inputSchema: {
       moveId: z.string().describe("MovingManifest move id."),
-      limit: z.number().int().min(1).max(100).optional(),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => getMoveSummary(apiConfig, input),
