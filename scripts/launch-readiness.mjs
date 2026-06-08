@@ -99,8 +99,8 @@ async function checkHome() {
   }
 }
 
-async function checkSignedOutProtection() {
-  const protectedUrl = toUrl("/app/dashboard");
+async function checkSignedOutProtection(path, label) {
+  const protectedUrl = toUrl(path);
   const response = await fetch(protectedUrl, { redirect: "manual" });
   const location = response.headers.get("location") ?? "";
 
@@ -110,7 +110,7 @@ async function checkSignedOutProtection() {
   ) {
     record(
       "pass",
-      "signed-out workspace protection",
+      label,
       `redirects to ${location}`
     );
     return;
@@ -118,7 +118,7 @@ async function checkSignedOutProtection() {
 
   record(
     "fail",
-    "signed-out workspace protection",
+    label,
     `expected sign-in redirect, got HTTP ${response.status} ${location}`
   );
 }
@@ -202,7 +202,11 @@ async function checkStaleAlias() {
 await checkHome();
 await checkOkRoute("/robots.txt", "robots");
 await checkOkRoute("/sitemap.xml", "sitemap");
-await checkSignedOutProtection();
+await checkSignedOutProtection(
+  "/app/dashboard",
+  "signed-out workspace protection"
+);
+await checkSignedOutProtection("/admin", "signed-out admin protection");
 await checkRuntimeOrigins();
 await checkStaleAlias();
 
