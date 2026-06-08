@@ -3,8 +3,8 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
   requireCurrentUser,
-  requireHouseholdRole,
 } from "./lib/auth";
+import { requireHouseholdPermission } from "./lib/permissions";
 
 function slugify(value: string) {
   return value
@@ -87,7 +87,11 @@ export const rename = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireHouseholdRole(ctx, args.householdId, "admin");
+    await requireHouseholdPermission(
+      ctx,
+      args.householdId,
+      "household:manage_settings"
+    );
 
     await ctx.db.patch(args.householdId, {
       name: args.name.trim(),

@@ -26,11 +26,89 @@ const householdRoleRank: Record<HouseholdRole, number> = {
   guest: 10,
 };
 
+export type PermissionAction =
+  | "household:read"
+  | "household:edit"
+  | "household:manage_members"
+  | "household:manage_settings"
+  | "inventory:read"
+  | "inventory:edit"
+  | "inventory:pack"
+  | "documentation:read"
+  | "documentation:create"
+  | "documentation:manage"
+  | "api_keys:manage"
+  | "admin:read";
+
+const actionMinimumRole: Record<PermissionAction, HouseholdRole> = {
+  "household:read": "guest",
+  "household:edit": "editor",
+  "household:manage_members": "admin",
+  "household:manage_settings": "admin",
+  "inventory:read": "guest",
+  "inventory:edit": "editor",
+  "inventory:pack": "packer",
+  "documentation:read": "viewer",
+  "documentation:create": "editor",
+  "documentation:manage": "admin",
+  "api_keys:manage": "admin",
+  "admin:read": "admin",
+};
+
+export type SensitiveField =
+  | "estimatedValue"
+  | "purchaseValue"
+  | "serialNumber"
+  | "privateNotes"
+  | "sensitivePhotos"
+  | "apiKeys";
+
+const sensitiveFieldMinimumRole: Record<SensitiveField, HouseholdRole> = {
+  estimatedValue: "editor",
+  purchaseValue: "editor",
+  serialNumber: "editor",
+  privateNotes: "editor",
+  sensitivePhotos: "editor",
+  apiKeys: "admin",
+};
+
 export function householdRoleAtLeast(
   actual: HouseholdRole,
   required: HouseholdRole
 ) {
   return householdRoleRank[actual] >= householdRoleRank[required];
+}
+
+export function strongerHouseholdRole(
+  first: HouseholdRole,
+  second: HouseholdRole
+) {
+  return householdRoleRank[first] >= householdRoleRank[second] ? first : second;
+}
+
+export function canPerformHouseholdAction(
+  role: HouseholdRole,
+  action: PermissionAction
+) {
+  return householdRoleAtLeast(role, actionMinimumRole[action]);
+}
+
+export function canViewSensitiveField(
+  role: HouseholdRole,
+  field: SensitiveField
+) {
+  return householdRoleAtLeast(role, sensitiveFieldMinimumRole[field]);
+}
+
+export function visibilityForHouseholdRole(role: HouseholdRole) {
+  return {
+    estimatedValue: canViewSensitiveField(role, "estimatedValue"),
+    purchaseValue: canViewSensitiveField(role, "purchaseValue"),
+    serialNumber: canViewSensitiveField(role, "serialNumber"),
+    privateNotes: canViewSensitiveField(role, "privateNotes"),
+    sensitivePhotos: canViewSensitiveField(role, "sensitivePhotos"),
+    apiKeys: canViewSensitiveField(role, "apiKeys"),
+  };
 }
 
 export function canManageHousehold(role: HouseholdRole) {

@@ -11,6 +11,7 @@
 import type * as health from "../health.js";
 import type * as households from "../households.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as users from "../users.js";
 
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   health: typeof health;
   households: typeof households;
   "lib/auth": typeof lib_auth;
+  "lib/permissions": typeof lib_permissions;
   "lib/roles": typeof lib_roles;
   users: typeof users;
 }>;
