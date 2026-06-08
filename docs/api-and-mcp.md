@@ -1,0 +1,356 @@
+# MovingManifest API and MCP Guide
+
+This guide covers the shipped `v1` REST API and the local MCP server package.
+The API is designed for controlled automation: API keys carry explicit scopes,
+may be restricted to one move, and all write paths are auditable.
+
+## Base URL
+
+Production:
+
+```text
+https://movingmanifest.com/api/v1
+```
+
+Local development uses the same path through the Next rewrite when
+`CONVEX_HTTP_ACTIONS_URL` is configured.
+
+## Authentication
+
+Send API keys as bearer tokens:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Never put API keys in browser JavaScript, screenshots, issue text, logs, or MCP
+config examples. Create separate keys per integration and revoke keys that are
+no longer needed.
+
+## Scopes
+
+API keys can include these scopes:
+
+| Scope | Allows |
+| --- | --- |
+| `moves/read` | List and read move records. |
+| `moves/write` | Update move metadata. |
+| `inventory/read` | Read items, boxes, assignments, and photo metadata. |
+| `inventory/write` | Create/update items, boxes, and assignments. |
+| `photos/write` | Start and finalize photo upload sessions. |
+| `exports/read` | List profiles/exports and read unexpired export artifacts. |
+| `exports/create` | Create export jobs. |
+
+Keys may also be restricted to a single move. A move-restricted key should use
+move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
+
+## Errors
+
+Errors return JSON:
+
+```json
+{
+  "error": {
+    "code": "unauthorized",
+    "message": "Use a Bearer API key."
+  }
+}
+```
+
+Common statuses:
+
+| Status | Meaning |
+| --- | --- |
+| `400` | Invalid request or validation failure. |
+| `401` | Missing or invalid bearer API key. |
+| `403` | API key does not have the required scope. |
+| `404` | Route or object was not found for that household/move. |
+| `409` | Idempotency key was reused with different request content. |
+
+## Pagination
+
+List endpoints accept:
+
+| Query | Default | Notes |
+| --- | --- | --- |
+| `limit` | `50` | Clamped to `1..100` for REST helper pagination. |
+| `cursor` | `0` | Offset cursor returned as `page.nextCursor`. |
+
+Paginated responses look like:
+
+```json
+{
+  "data": [],
+  "page": {
+    "limit": 50,
+    "nextCursor": null,
+    "total": 0
+  }
+}
+```
+
+## Idempotency
+
+Send `Idempotency-Key` on non-GET requests that may be retried:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/items \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: item-import-row-001" \
+  -d '{ "name": "Desk lamp", "room": "Office" }'
+```
+
+If the same key and same request are replayed, the stored response is returned.
+If the same key is reused with different request content, the API returns `409`.
+
+Most idempotency entries live for 24 hours. Upload-init idempotency uses the
+shorter upload session TTL so expired presigned URLs are not replayed.
+
+## Rate Limits
+
+There is no custom product-level rate-limit header yet. Clients should behave
+conservatively:
+
+- Prefer coarse tools and batch flows over chatty loops.
+- Use `limit` and pagination.
+- Use idempotency keys for writes.
+- Back off on platform errors or `429` if Vercel/Convex returns one.
+
+## Moves and Inventory
+
+List moves:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Get one move:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+List items:
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/items?limit=25&status=active" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Create an item:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/items \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-item-001" \
+  -d '{
+    "name": "Desk lamp",
+    "room": "Office",
+    "category": "Lighting",
+    "quantity": 1,
+    "condition": "good"
+  }'
+```
+
+Create a box:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/boxes \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-box-office-001" \
+  -d '{ "code": "OFFICE-1", "label": "Office books", "room": "Office" }'
+```
+
+Assign an item to a box:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/assignments \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: assign-item-001" \
+  -d '{ "boxId": "BOX_ID", "itemId": "ITEM_ID", "quantity": 1 }'
+```
+
+## Photos
+
+Photo upload is a two-step flow.
+
+1. Start an upload session and receive a presigned Backblaze URL.
+2. PUT the file to the returned `uploadUrl`.
+3. Finalize the photo metadata.
+
+Start upload:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/uploads/init \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: photo-session-001" \
+  -d '{
+    "moveId": "MOVE_ID",
+    "itemId": "ITEM_ID",
+    "mimeType": "image/jpeg",
+    "sizeBytes": 123456
+  }'
+```
+
+Finalize:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/photos/finalize \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: photo-finalize-001" \
+  -d '{
+    "moveId": "MOVE_ID",
+    "uploadSessionId": "UPLOAD_SESSION_ID",
+    "width": 1600,
+    "height": 1200,
+    "caption": "Desk lamp before packing",
+    "photoType": "condition",
+    "privacyLevel": "normal"
+  }'
+```
+
+The finalize step verifies the uploaded object size and MIME type before it
+creates the photo record.
+
+## Documentation Profiles and Exports
+
+List documentation profiles:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/documentation-profiles \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Create a CSV export:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/exports \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: export-001" \
+  -d '{ "type": "inventory" }'
+```
+
+Supported `type` values:
+
+- `inventory`
+- `boxes`
+- `assignments`
+- `documentationProfile`
+
+For `documentationProfile`, include `documentationProfileId`.
+
+List exports:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/exports \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Download an unexpired export artifact:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/exports/EXPORT_JOB_ID/download \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Exports are currently generated synchronously as CSV text and expire according
+to their `expiresAt` value. Generic inventory exports omit value, serial, and
+private note fields. Documentation-profile exports include only fields allowed
+by the selected profile.
+
+## MCP Server
+
+The local MCP server wraps the REST API. It does not connect directly to Convex
+or Clerk.
+
+Run locally:
+
+```bash
+MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" npm run mcp
+```
+
+Optional env:
+
+```bash
+MOVINGMANIFEST_API_BASE_URL="https://movingmanifest.com/api/v1"
+```
+
+Desktop agent config example:
+
+```json
+{
+  "mcpServers": {
+    "movingmanifest": {
+      "command": "node",
+      "args": ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"],
+      "env": {
+        "MOVINGMANIFEST_API_BASE_URL": "https://movingmanifest.com/api/v1",
+        "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
+      }
+    }
+  }
+}
+```
+
+Available MCP tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `list_moves` | List accessible moves. |
+| `get_move_summary` | Fetch a move plus resources, zones, items, boxes, assignments, and photo metadata. |
+| `search_inventory` | Search item data with optional filters. |
+| `create_item` | Create an item, with `dryRun` support. |
+| `update_item` | Update selected item fields, with `dryRun` support. |
+| `create_box` | Create a box, with `dryRun` support. |
+| `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
+| `start_photo_upload` | Start a photo upload session and return presigned upload information. |
+| `list_transport_resources` | List resources and zones for load planning. |
+| `list_documentation_profiles` | List scoped documentation profiles. |
+| `create_export` | Create a CSV export. |
+| `list_exports` | List export jobs. |
+| `download_export` | Return an unexpired export artifact as text. |
+
+Recommended MCP key scopes depend on the intended agent:
+
+| Agent role | Suggested scopes |
+| --- | --- |
+| Read-only helper | `moves/read`, `inventory/read`, `exports/read` |
+| Inventory intake helper | `moves/read`, `inventory/read`, `inventory/write` |
+| Photo intake helper | `moves/read`, `inventory/read`, `photos/write` |
+| Documentation helper | `moves/read`, `inventory/read`, `exports/read`, `exports/create` |
+
+Prefer move-restricted API keys for local agents.
+
+## Security Guidance
+
+- Use separate keys per agent/client.
+- Prefer the smallest scope set that supports the workflow.
+- Prefer move-restricted keys when the agent only needs one move.
+- Store keys in local MCP client config or a password manager, not source code.
+- Use `dryRun` before write tools when an agent is planning a bulk change.
+- Revoke keys after temporary helper sessions.
+
+## Webhooks and Async Jobs
+
+There is no public webhook contract yet. Clerk webhooks are internal app
+infrastructure.
+
+Current export jobs complete synchronously. Future long-running export or AI
+jobs should expose a status endpoint and a stable event/webhook contract before
+external clients depend on background completion.
+
+## Versioning
+
+The current API version is `v1` in the URL path. Breaking changes should ship
+under a new path such as `/api/v2`. Additive response fields may be added within
+`v1`; clients should ignore unknown fields.
