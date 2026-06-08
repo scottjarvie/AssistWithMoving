@@ -225,8 +225,12 @@ export const photoType = v.union(
 
 export const photoPrivacyLevel = v.union(
   v.literal("normal"),
+  v.literal("moverVisible"),
+  v.literal("reportVisible"),
+  v.literal("claimOnly"),
   v.literal("sensitive"),
-  v.literal("hiddenFromGuests")
+  v.literal("hiddenFromGuests"),
+  v.literal("private")
 );
 
 export const photoVisibilityScope = v.union(

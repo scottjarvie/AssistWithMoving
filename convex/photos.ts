@@ -20,7 +20,6 @@ import {
 import { recordAuditEvent } from "./lib/audit";
 import {
   selectDerivativeRef,
-  shouldUseOriginalFallback,
   type PhotoDisplayVariant,
 } from "./lib/photoDelivery";
 import {
@@ -34,7 +33,10 @@ import {
   photoVerificationStatusValidator,
   photoVisibilityScopeValidator,
 } from "./lib/moveFields";
-import { redactPhotoForVisibility } from "./lib/photoVisibility";
+import {
+  canDownloadOriginalPhoto,
+  redactPhotoForVisibility,
+} from "./lib/photoVisibility";
 import { requireMovePermission } from "./lib/permissions";
 
 const allowedPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -618,13 +620,13 @@ export const getDisplayUrl = action({
     url: string;
     expiresAt: number;
     requestedVariant: PhotoDisplayVariant;
-    servedVariant: PhotoDisplayVariant | "originalFallback";
+    servedVariant: PhotoDisplayVariant;
     derivativeStatus?: "pending" | "ready" | "failed";
     width: number;
     height: number;
     mimeType: string;
   }> => {
-    const { photo, visibility } = await ctx.runQuery(
+    const { photo } = await ctx.runQuery(
       internal.photos.getPhotoForDelivery,
       {
         householdId: args.householdId,
@@ -636,24 +638,21 @@ export const getDisplayUrl = action({
       args.variant === "original"
         ? null
         : selectDerivativeRef(photo.derivativeRefs, args.variant);
-    const canUseOriginal = visibility.sensitivePhotos;
 
-    if (
-      !selected &&
-      !shouldUseOriginalFallback({
-        canViewOriginal: canUseOriginal,
-      })
-    ) {
+    if (args.variant === "original") {
+      throw new Error("Use the audited original download action.");
+    }
+
+    if (!selected) {
       throw new Error("Photo variant is not available for this role.");
     }
 
     const config = requireB2Config();
-    const key = selected?.ref ?? photo.originalStorageKey;
     const url = await getSignedUrl(
       b2Client(),
       new GetObjectCommand({
         Bucket: config.bucketName,
-        Key: key,
+        Key: selected.ref,
       }),
       { expiresIn: displayUrlTtlSeconds }
     );
@@ -662,13 +661,66 @@ export const getDisplayUrl = action({
       url,
       expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
       requestedVariant: args.variant,
-      servedVariant:
-        selected?.variant ??
-        (args.variant === "original" ? "original" : "originalFallback"),
+      servedVariant: selected.variant,
       derivativeStatus: photo.derivativeStatus,
       width: photo.width,
       height: photo.height,
       mimeType: photo.mimeType,
+    };
+  },
+});
+
+export const getOriginalDownloadUrl = action({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+  },
+  handler: async (ctx, args): Promise<{
+    url: string;
+    expiresAt: number;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+  }> => {
+    const { photo, visibility } = await ctx.runQuery(
+      internal.photos.getPhotoForDelivery,
+      {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        photoId: args.photoId,
+      }
+    );
+    if (!canDownloadOriginalPhoto(photo, visibility)) {
+      throw new Error("Original download is not available for this role.");
+    }
+
+    const config = requireB2Config();
+    const filename = `movingmanifest-original-${args.photoId}.${fileExtensionForMimeType(
+      photo.mimeType
+    )}`;
+    const url = await getSignedUrl(
+      b2Client(),
+      new GetObjectCommand({
+        Bucket: config.bucketName,
+        Key: photo.originalStorageKey,
+        ResponseContentDisposition: `attachment; filename="${filename}"`,
+      }),
+      { expiresIn: displayUrlTtlSeconds }
+    );
+
+    await ctx.runMutation(internal.photos.recordOriginalAccess, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      photoId: args.photoId,
+    });
+
+    return {
+      url,
+      expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+      filename,
+      mimeType: photo.mimeType,
+      sizeBytes: photo.sizeBytes,
     };
   },
 });
@@ -791,6 +843,49 @@ export const getPhotoForDelivery = internalQuery({
       photo,
       visibility: policy.visibility,
     };
+  },
+});
+
+export const recordOriginalAccess = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit"
+    );
+    if (actor.type !== "user") {
+      throw new Error("API-key original photo access is not implemented yet.");
+    }
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      throw new Error("Photo not found.");
+    }
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "photo",
+      action: "photo.original_download_url_created",
+      objectTable: "itemPhotos",
+      objectId: args.photoId,
+      metadata: {
+        privacyLevel: photo.privacyLevel,
+        visibilityScope: photo.visibilityScope,
+      },
+    });
   },
 });
 

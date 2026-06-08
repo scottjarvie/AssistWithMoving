@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useQuery } from "convex/react";
-import { AlertTriangle, Camera, ImageOff, Images, ShieldCheck } from "lucide-react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import {
+  AlertTriangle,
+  Camera,
+  Download,
+  ImageOff,
+  Images,
+  ShieldCheck,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +35,14 @@ type ReviewFilter = "all" | "review" | "unassigned" | "sensitive" | "derivatives
 
 type DisplayUrlState = Record<string, string>;
 
+type PhotoPrivacyLevel = Doc<"itemPhotos">["privacyLevel"];
+type PhotoVisibilityScope = Doc<"itemPhotos">["visibilityScope"];
+type ReviewPhoto = {
+  _id: Id<"itemPhotos">;
+  privacyLevel: PhotoPrivacyLevel;
+  visibilityScope: PhotoVisibilityScope;
+};
+
 const reviewFilters = [
   ["all", "All"],
   ["review", "Review"],
@@ -35,6 +50,25 @@ const reviewFilters = [
   ["sensitive", "Sensitive"],
   ["derivatives", "Derivative issues"],
 ] as const satisfies ReadonlyArray<readonly [ReviewFilter, string]>;
+
+const privacyOptions = [
+  ["normal", "Normal"],
+  ["moverVisible", "Mover-visible"],
+  ["reportVisible", "Report-visible"],
+  ["claimOnly", "Claim-only"],
+  ["sensitive", "Sensitive"],
+  ["hiddenFromGuests", "Hidden from guests"],
+  ["private", "Private"],
+] as const satisfies ReadonlyArray<readonly [PhotoPrivacyLevel, string]>;
+
+const visibilityOptions = [
+  ["moveCollaborators", "Move collaborators"],
+  ["household", "Household"],
+  ["documentationScoped", "Documentation scoped"],
+  ["private", "Private"],
+] as const satisfies ReadonlyArray<
+  readonly [PhotoVisibilityScope, string]
+>;
 
 export function PhotoReviewWorkspace({
   householdId,
@@ -51,6 +85,9 @@ export function PhotoReviewWorkspace({
     householdId && moveId ? { householdId, moveId } : "skip"
   );
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
+  const getOriginalDownloadUrl = useAction(api.photos.getOriginalDownloadUrl);
+  const updateEvidence = useMutation(api.photos.updateEvidence);
+  const [photoMessage, setPhotoMessage] = useState<string | null>(null);
   const filteredPhotos = useMemo(() => {
     const records = photos ?? [];
     switch (filter) {
@@ -113,6 +150,47 @@ export function PhotoReviewWorkspace({
     };
   }, [getDisplayUrl, householdId, moveId, photoKey, visiblePhotos]);
 
+  async function updatePhotoPrivacy(
+    photo: ReviewPhoto,
+    patch:
+      | { privacyLevel: PhotoPrivacyLevel }
+      | { visibilityScope: PhotoVisibilityScope }
+  ) {
+    if (!householdId || !moveId) {
+      return;
+    }
+    setPhotoMessage(null);
+    try {
+      await updateEvidence({
+        householdId,
+        moveId,
+        photoId: photo._id,
+        ...patch,
+      });
+      setPhotoMessage("Photo privacy updated.");
+    } catch {
+      setPhotoMessage("Could not update photo privacy.");
+    }
+  }
+
+  async function downloadOriginal(photo: ReviewPhoto) {
+    if (!householdId || !moveId) {
+      return;
+    }
+    setPhotoMessage(null);
+    try {
+      const download = await getOriginalDownloadUrl({
+        householdId,
+        moveId,
+        photoId: photo._id,
+      });
+      window.open(download.url, "_blank", "noopener,noreferrer");
+      setPhotoMessage("Original download URL created and audited.");
+    } catch {
+      setPhotoMessage("Original download is not available for this role or scope.");
+    }
+  }
+
   return (
     <section id="photos" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
       <Card>
@@ -157,6 +235,9 @@ export function PhotoReviewWorkspace({
               </Button>
             ))}
           </div>
+          {photoMessage ? (
+            <p className="text-xs text-muted-foreground">{photoMessage}</p>
+          ) : null}
 
           {photos === undefined ? (
             <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-4">
@@ -205,6 +286,50 @@ export function PhotoReviewWorkspace({
                       <p className="truncate text-muted-foreground">
                         {photo.caption ?? photo.room ?? "No caption"}
                       </p>
+                      <div className="grid gap-1">
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2"
+                          value={photo.privacyLevel}
+                          onChange={(event) =>
+                            void updatePhotoPrivacy(photo, {
+                              privacyLevel: event.target
+                                .value as PhotoPrivacyLevel,
+                            })
+                          }
+                        >
+                          {privacyOptions.map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2"
+                          value={photo.visibilityScope}
+                          onChange={(event) =>
+                            void updatePhotoPrivacy(photo, {
+                              visibilityScope: event.target
+                                .value as PhotoVisibilityScope,
+                            })
+                          }
+                        >
+                          {visibilityOptions.map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => void downloadOriginal(photo)}
+                      >
+                        <Download aria-hidden="true" />
+                        Original
+                      </Button>
                     </div>
                   </div>
                 );

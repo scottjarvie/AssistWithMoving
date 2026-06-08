@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Doc } from "../../convex/_generated/dataModel";
 import {
+  canDownloadOriginalPhoto,
   canViewPhotoAssets,
   redactPhotoForVisibility,
 } from "../../convex/lib/photoVisibility";
@@ -62,6 +63,44 @@ describe("photo visibility", () => {
       redactPhotoForVisibility(sensitivePhoto, { sensitivePhotos: false })
         .derivativeRefs
     ).toEqual({});
+  });
+
+  it("allows mover-visible derivatives while still hiding originals", () => {
+    const moverVisiblePhoto = {
+      ...basePhoto,
+      privacyLevel: "moverVisible",
+    } satisfies Doc<"itemPhotos">;
+
+    expect(
+      canViewPhotoAssets(moverVisiblePhoto, { sensitivePhotos: false })
+    ).toBe(true);
+    expect(
+      canDownloadOriginalPhoto(moverVisiblePhoto, { sensitivePhotos: false })
+    ).toBe(false);
+  });
+
+  it("keeps private and claim-only assets behind sensitive-photo visibility", () => {
+    expect(
+      canViewPhotoAssets(
+        { ...basePhoto, privacyLevel: "private" },
+        { sensitivePhotos: false }
+      )
+    ).toBe(false);
+    expect(
+      canViewPhotoAssets(
+        { ...basePhoto, privacyLevel: "claimOnly" },
+        { sensitivePhotos: false }
+      )
+    ).toBe(false);
+  });
+
+  it("does not expose generic original downloads for documentation-scoped photos", () => {
+    expect(
+      canDownloadOriginalPhoto(
+        { ...basePhoto, visibilityScope: "documentationScoped" },
+        { sensitivePhotos: true }
+      )
+    ).toBe(false);
   });
 
   it("exposes original and derivative fields to roles allowed to see sensitive photos", () => {

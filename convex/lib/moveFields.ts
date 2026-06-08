@@ -140,8 +140,12 @@ export const photoTypes = [
 
 export const photoPrivacyLevels = [
   "normal",
+  "moverVisible",
+  "reportVisible",
+  "claimOnly",
   "sensitive",
   "hiddenFromGuests",
+  "private",
 ] as const;
 
 export const photoVisibilityScopes = [
@@ -465,8 +469,12 @@ export const photoTypeValidator = v.union(
 
 export const photoPrivacyLevelValidator = v.union(
   v.literal("normal"),
+  v.literal("moverVisible"),
+  v.literal("reportVisible"),
+  v.literal("claimOnly"),
   v.literal("sensitive"),
-  v.literal("hiddenFromGuests")
+  v.literal("hiddenFromGuests"),
+  v.literal("private")
 );
 
 export const photoVisibilityScopeValidator = v.union(
