@@ -75,6 +75,7 @@ import type * as restApi from "../restApi.js";
 import type * as restApiActions from "../restApiActions.js";
 import type * as shareLinks from "../shareLinks.js";
 import type * as subManifests from "../subManifests.js";
+import type * as testSupport from "../testSupport.js";
 import type * as transportResources from "../transportResources.js";
 import type * as transportZones from "../transportZones.js";
 import type * as users from "../users.js";
@@ -153,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   restApiActions: typeof restApiActions;
   shareLinks: typeof shareLinks;
   subManifests: typeof subManifests;
+  testSupport: typeof testSupport;
   transportResources: typeof transportResources;
   transportZones: typeof transportZones;
   users: typeof users;

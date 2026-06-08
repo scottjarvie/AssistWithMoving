@@ -1,5 +1,8 @@
 import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { ConvexHttpClient } from "convex/browser";
+
+import { api } from "../../convex/_generated/api";
 
 const e2eUserEmail = process.env.E2E_CLERK_USER_EMAIL;
 
@@ -77,6 +80,26 @@ async function waitForAiOutcome(card: Locator, successPattern: RegExp) {
   return successMessage.isVisible().catch(() => false);
 }
 
+async function cleanupE2eData(page: Page) {
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!convexUrl || !page.url().startsWith("http")) {
+    return null;
+  }
+
+  const token = await page
+    .evaluate(async () => {
+      return (await window.Clerk?.session?.getToken({ template: "convex" })) ?? null;
+    })
+    .catch(() => null);
+  if (!token) {
+    return null;
+  }
+
+  const client = new ConvexHttpClient(convexUrl);
+  client.setAuth(token);
+  return await client.mutation(api.testSupport.cleanupE2eDataForCurrentUser, {});
+}
+
 test.describe("authenticated product flow", () => {
   test.setTimeout(120_000);
 
@@ -84,6 +107,17 @@ test.describe("authenticated product flow", () => {
     !e2eUserEmail,
     "Set E2E_CLERK_USER_EMAIL to run signed-in MovingManifest product flows."
   );
+
+  test.afterEach(async ({ page }, testInfo) => {
+    try {
+      await cleanupE2eData(page);
+    } catch (error) {
+      if (testInfo.status === testInfo.expectedStatus) {
+        throw error;
+      }
+      console.warn("E2E cleanup failed after a failed test.", error);
+    }
+  });
 
   test("creates a PCS move and reaches core workspace surfaces", async ({
     context,
