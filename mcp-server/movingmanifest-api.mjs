@@ -213,6 +213,13 @@ export async function listTransportResources(config, input) {
   return { resources, zones };
 }
 
+export async function getCapacityReport(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/capacity-report`,
+  });
+  return response.data;
+}
+
 export async function listDocumentationProfiles(config, input) {
   return await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/documentation-profiles`,

@@ -4,6 +4,7 @@ import {
   batchUpsertItems,
   createApiConfig,
   createItem,
+  getCapacityReport,
   getMoveSummary,
   movingManifestRequest,
   searchInventory,
@@ -160,6 +161,39 @@ describe("MovingManifest MCP API client", () => {
         }),
       }
     );
+  });
+
+  it("fetches capacity reports through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          moveId: "move1",
+          totalEstimatedWeightLb: 1200,
+          resourceReports: [],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getCapacityReport(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/capacity-report"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(result).toEqual({
+      moveId: "move1",
+      totalEstimatedWeightLb: 1200,
+      resourceReports: [],
+    });
   });
 
   it("dry-runs item creation without calling the API", async () => {

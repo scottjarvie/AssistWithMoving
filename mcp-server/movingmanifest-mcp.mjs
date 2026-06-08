@@ -12,6 +12,7 @@ import {
   createExport,
   createItem,
   downloadExport,
+  getCapacityReport,
   getMoveSummary,
   listDocumentationProfiles,
   listExports,
@@ -238,6 +239,17 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listTransportResources(apiConfig, input),
+  });
+
+  registerTool(target, "get_capacity_report", {
+    title: "Get capacity report",
+    description:
+      "Fetch move-level weight/volume estimates, box reports, resource capacity usage, zone usage, and missing-estimate counts.",
+    inputSchema: {
+      moveId: z.string(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => getCapacityReport(apiConfig, input),
   });
 
   registerTool(target, "list_documentation_profiles", {

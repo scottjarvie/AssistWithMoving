@@ -16,6 +16,11 @@ import {
   type ExportVisibility,
 } from "./lib/exportRows";
 import {
+  estimateItem,
+  roundEstimate,
+  sumEstimateValues,
+} from "./lib/estimateEngine";
+import {
   boxStatuses,
   itemConditions,
   itemDispositions,
@@ -307,6 +312,13 @@ async function routeRequest(
   if (nested === "summary" && args.method === "GET" && segments.length === 3) {
     return await routeMoveSummary(ctx, auth, move);
   }
+  if (
+    nested === "capacity-report" &&
+    args.method === "GET" &&
+    segments.length === 3
+  ) {
+    return await routeCapacityReport(ctx, auth, move);
+  }
 
   if (nested === "resources" && args.method === "GET") {
     const resources = await ctx.db
@@ -491,6 +503,223 @@ async function routeMoveSummary(
         documentationProfiles: activeDocumentationProfiles.length,
         exports: visibleExportJobs.length,
       },
+      generatedAt: Date.now(),
+    },
+  });
+}
+
+async function routeCapacityReport(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  move: Doc<"moves">
+) {
+  const [items, boxes, assignments, resources, zones] = await Promise.all([
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("boxItems")
+      .withIndex("by_move", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+  ]);
+
+  const activeItems = items.filter(
+    (item) => item.householdId === auth.householdId && !item.deletedAt
+  );
+  const activeBoxes = boxes.filter(
+    (box) => box.householdId === auth.householdId && !box.archivedAt
+  );
+  const activeAssignments = assignments.filter(
+    (assignment) => assignment.householdId === auth.householdId
+  );
+  const activeResources = resources.filter(
+    (resource) => resource.householdId === auth.householdId && !resource.archivedAt
+  );
+  const activeZones = zones.filter(
+    (zone) => zone.householdId === auth.householdId && !zone.archivedAt
+  );
+  const itemById = new Map(activeItems.map((item) => [item._id, item]));
+  const assignmentsByBoxId = new Map<Id<"boxes">, Doc<"boxItems">[]>();
+  for (const assignment of activeAssignments) {
+    const existing = assignmentsByBoxId.get(assignment.boxId) ?? [];
+    existing.push(assignment);
+    assignmentsByBoxId.set(assignment.boxId, existing);
+  }
+
+  const itemEstimates = activeItems.map((item) => ({
+    itemId: item._id,
+    name: item.name,
+    room: item.room,
+    disposition: item.disposition,
+    estimate: estimateItem(item),
+  }));
+  const totalEstimatedWeightLb = sumEstimateValues(
+    itemEstimates.map((item) => item.estimate.weight)
+  );
+  const totalEstimatedVolumeCuFt = sumEstimateValues(
+    itemEstimates.map((item) => item.estimate.volume)
+  );
+
+  const boxReports = activeBoxes.map((box) => {
+    const boxAssignments = assignmentsByBoxId.get(box._id) ?? [];
+    const contentEstimates = boxAssignments
+      .map((assignment) => {
+        const item = itemById.get(assignment.itemId);
+        return item
+          ? estimateItem({
+              ...item,
+              quantity: assignment.quantity,
+            })
+          : null;
+      })
+      .filter((estimate): estimate is NonNullable<typeof estimate> =>
+        Boolean(estimate)
+      );
+    const contentsWeight = sumEstimateValues(
+      contentEstimates.map((estimate) => estimate.weight)
+    );
+    const contentsVolume = sumEstimateValues(
+      contentEstimates.map((estimate) => estimate.volume)
+    );
+    const estimatedWeightLb =
+      box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight;
+    const estimatedVolumeCuFt = box.estimatedVolumeCuFt ?? contentsVolume;
+    const warnings: string[] = [];
+    if (!box.actualWeightLb && !box.estimatedWeightLb && contentsWeight === 0) {
+      warnings.push("missingBoxWeightEstimate");
+    }
+    if (!box.estimatedVolumeCuFt && contentsVolume === 0) {
+      warnings.push("missingBoxVolumeEstimate");
+    }
+    if (estimatedWeightLb > 65) {
+      warnings.push("overweightBox");
+    }
+
+    return {
+      boxId: box._id,
+      code: box.code,
+      label: box.label,
+      room: box.room,
+      assignedResourceId: box.assignedResourceId,
+      assignedZoneId: box.assignedZoneId,
+      itemCount: boxAssignments.reduce(
+        (sum, assignment) => sum + assignment.quantity,
+        0
+      ),
+      estimatedWeightLb: roundEstimate(estimatedWeightLb),
+      estimatedVolumeCuFt: roundEstimate(estimatedVolumeCuFt),
+      assignmentLocked: box.assignmentLocked ?? false,
+      assignmentWarnings: box.assignmentWarnings ?? [],
+      assignmentHardBlocks: box.assignmentHardBlocks ?? [],
+      warnings,
+    };
+  });
+
+  const resourceReports = activeResources.map((resource) => {
+    const assignedBoxes = boxReports.filter(
+      (box) => box.assignedResourceId === resource._id
+    );
+    const estimatedWeightLb = roundEstimate(
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedWeightLb, 0)
+    );
+    const estimatedVolumeCuFt = roundEstimate(
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedVolumeCuFt, 0)
+    );
+    return {
+      resourceId: resource._id,
+      name: resource.name,
+      type: resource.type,
+      estimatedWeightLb,
+      estimatedVolumeCuFt,
+      maxWeightLb: resource.capacity.maxWeightLb,
+      maxVolumeCuFt: resource.capacity.maxVolumeCuFt,
+      weightPercent: capacityPercent({
+        used: estimatedWeightLb,
+        max: resource.capacity.maxWeightLb,
+        unlimited: resource.capacity.weightIsUnlimited,
+      }),
+      volumePercent: capacityPercent({
+        used: estimatedVolumeCuFt,
+        max: resource.capacity.maxVolumeCuFt,
+        unlimited: resource.capacity.volumeIsUnlimited,
+      }),
+      assignedBoxCount: assignedBoxes.length,
+      warningCount: assignedBoxes.reduce(
+        (sum, box) =>
+          sum +
+          box.warnings.length +
+          box.assignmentWarnings.length +
+          box.assignmentHardBlocks.length,
+        0
+      ),
+    };
+  });
+
+  const zoneReports = activeZones.map((zone) => {
+    const assignedBoxes = boxReports.filter((box) => box.assignedZoneId === zone._id);
+    const estimatedWeightLb = roundEstimate(
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedWeightLb, 0)
+    );
+    const estimatedVolumeCuFt = roundEstimate(
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedVolumeCuFt, 0)
+    );
+    return {
+      zoneId: zone._id,
+      resourceId: zone.resourceId,
+      name: zone.name,
+      estimatedWeightLb,
+      estimatedVolumeCuFt,
+      maxWeightLb: zone.capacity.maxWeightLb,
+      maxVolumeCuFt: zone.capacity.maxVolumeCuFt,
+      weightPercent: capacityPercent({
+        used: estimatedWeightLb,
+        max: zone.capacity.maxWeightLb,
+        unlimited: zone.capacity.weightIsUnlimited,
+      }),
+      volumePercent: capacityPercent({
+        used: estimatedVolumeCuFt,
+        max: zone.capacity.maxVolumeCuFt,
+        unlimited: zone.capacity.volumeIsUnlimited,
+      }),
+      assignedBoxCount: assignedBoxes.length,
+    };
+  });
+
+  return restOk({
+    data: {
+      moveId: move._id,
+      moveAllowanceLb: move.moveLevelWeightAllowanceLb,
+      totalEstimatedWeightLb,
+      totalEstimatedVolumeCuFt,
+      allowancePercent: capacityPercent({
+        used: totalEstimatedWeightLb,
+        max: move.moveLevelWeightAllowanceLb,
+      }),
+      missingWeightCount: itemEstimates.filter((item) =>
+        item.estimate.warnings.includes("missingWeightEstimate")
+      ).length,
+      missingVolumeCount: itemEstimates.filter((item) =>
+        item.estimate.warnings.includes("missingVolumeEstimate")
+      ).length,
+      unassignedBoxCount: boxReports.filter((box) => !box.assignedResourceId)
+        .length,
+      boxReports,
+      resourceReports,
+      zoneReports,
+      itemEstimates: itemEstimates.slice(0, 100),
       generatedAt: Date.now(),
     },
   });
@@ -1691,6 +1920,18 @@ function parseExportJobType(value: unknown) {
   return includesLiteral(restExportJobTypes, value)
     ? (value as ExportJobType)
     : undefined;
+}
+
+function capacityPercent({
+  used,
+  max,
+  unlimited,
+}: {
+  used: number;
+  max?: number;
+  unlimited?: boolean;
+}) {
+  return max && !unlimited ? roundEstimate((used / max) * 100) : undefined;
 }
 
 function includesLiteral(values: readonly string[], value: unknown) {

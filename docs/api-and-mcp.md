@@ -215,6 +215,17 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/assignments \
   -d '{ "boxId": "BOX_ID", "itemId": "ITEM_ID", "quantity": 1 }'
 ```
 
+Get a capacity report:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/capacity-report \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+The capacity report requires `moves/read` and `inventory/read`. It returns
+move-level weight/volume estimates, allowance percentage, missing-estimate
+counts, per-box estimates and warnings, resource capacity usage, and zone usage.
+
 ## Photos
 
 Photo upload is a two-step flow.
@@ -354,6 +365,7 @@ Available MCP tools:
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
 | `start_photo_upload` | Start a photo upload session and return presigned upload information. |
 | `list_transport_resources` | List resources and zones for load planning. |
+| `get_capacity_report` | Fetch move, box, resource, and zone capacity estimates and warning counts. |
 | `list_documentation_profiles` | List scoped documentation profiles. |
 | `create_export` | Create a CSV export. |
 | `list_exports` | List export jobs. |
