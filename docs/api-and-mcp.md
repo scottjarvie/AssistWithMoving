@@ -129,12 +129,43 @@ conservatively:
 
 ## Moves and Inventory
 
+Inspect the current API key context:
+
+```bash
+curl https://movingmanifest.com/api/v1/me \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+The context response includes the household id/name, key scopes, whether the
+key is move-restricted, and the restricted move when applicable. This endpoint
+does not return the raw key or secret hash.
+
 List moves:
 
 ```bash
 curl https://movingmanifest.com/api/v1/moves \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
+
+Create a move with a household-scoped key:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-move-001" \
+  -d '{
+    "title": "PCS Utah to Virginia",
+    "type": "pcs",
+    "origin": "Utah",
+    "destination": "Virginia",
+    "pcsShipmentType": "mixed"
+  }'
+```
+
+Move creation requires `moves/write` and a household-scoped key. Keys already
+restricted to one move cannot create additional moves. New moves receive default
+documentation profile types and planning defaults just like app-created moves.
 
 Get one move:
 
@@ -504,7 +535,9 @@ Available MCP tools:
 
 | Tool | Purpose |
 | --- | --- |
+| `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `list_moves` | List accessible moves. |
+| `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, documentation profiles, and export jobs. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |

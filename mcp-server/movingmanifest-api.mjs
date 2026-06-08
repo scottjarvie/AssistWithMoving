@@ -87,10 +87,27 @@ export function toolErrorResult(error) {
   };
 }
 
+export async function getApiContext(config) {
+  return await movingManifestRequest(config, {
+    path: "/me",
+  });
+}
+
 export async function listMoves(config, input = {}) {
   return await movingManifestRequest(config, {
     path: "/moves",
     query: { limit: input.limit },
+  });
+}
+
+export async function createMove(config, input) {
+  if (input.dryRun) {
+    return { dryRun: true, request: { path: "/moves", body: input } };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: "/moves",
+    body: input,
   });
 }
 

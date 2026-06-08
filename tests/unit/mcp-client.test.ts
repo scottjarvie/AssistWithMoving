@@ -6,9 +6,11 @@ import {
   attachPhoto,
   createApiConfig,
   createItem,
+  createMove,
   createTransportResource,
   createTransportZone,
   deleteItem,
+  getApiContext,
   getCapacityReport,
   getMoveSummary,
   movingManifestRequest,
@@ -41,6 +43,33 @@ describe("MovingManifest MCP API client", () => {
     );
   });
 
+  it("gets API key context", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          household: { householdId: "household1", name: "Jarvie" },
+          apiKey: { scopes: ["moves/read"], moveRestricted: false },
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getApiContext({
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/me"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+  });
+
   it("sends bearer auth, JSON bodies, and idempotency keys for writes", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -70,6 +99,50 @@ describe("MovingManifest MCP API client", () => {
           "idempotency-key": "idem1",
         },
         body: JSON.stringify({ name: "Lamp" }),
+      }
+    );
+  });
+
+  it("creates moves through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          move: { moveId: "move1", title: "PCS move", type: "pcs" },
+          planningDefaultCount: 8,
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createMove(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        title: "PCS move",
+        type: "pcs",
+        origin: "Utah",
+        destination: "Virginia",
+        pcsShipmentType: "mixed",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          title: "PCS move",
+          type: "pcs",
+          origin: "Utah",
+          destination: "Virginia",
+          pcsShipmentType: "mixed",
+        }),
       }
     );
   });

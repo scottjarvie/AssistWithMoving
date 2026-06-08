@@ -15,12 +15,14 @@ export async function authenticateApiKey(
     householdId,
     moveId,
     action,
+    allowRestrictedKeyWithoutMoveId = false,
   }: {
     rawKey: string;
     requiredScopes: ApiKeyScope[];
     householdId?: Id<"households">;
     moveId?: Id<"moves">;
     action: string;
+    allowRestrictedKeyWithoutMoveId?: boolean;
   }
 ) {
   const prefix = apiKeyPrefix(rawKey);
@@ -49,7 +51,8 @@ export async function authenticateApiKey(
         expiresAt: key.expiresAt,
       },
       householdId,
-      moveId,
+      moveId:
+        allowRestrictedKeyWithoutMoveId && !moveId ? key.moveId : moveId,
       requiredScopes,
     })
   ) {

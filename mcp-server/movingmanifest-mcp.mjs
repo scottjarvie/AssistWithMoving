@@ -13,10 +13,12 @@ import {
   createBox,
   createExport,
   createItem,
+  createMove,
   createTransportResource,
   createTransportZone,
   deleteItem,
   downloadExport,
+  getApiContext,
   getCapacityReport,
   getMoveSummary,
   listDocumentationProfiles,
@@ -66,6 +68,15 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 export function registerTools(target, apiConfig) {
+  registerTool(target, "get_api_context", {
+    title: "Get API context",
+    description:
+      "Inspect the current MovingManifest API key context, including scopes and any move restriction.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: () => getApiContext(apiConfig),
+  });
+
   registerTool(target, "list_moves", {
     title: "List moves",
     description:
@@ -75,6 +86,36 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listMoves(apiConfig, input),
+  });
+
+  registerTool(target, "create_move", {
+    title: "Create move",
+    description:
+      "Create a move using a household-scoped API key with moves/write. Set dryRun true to preview the request without writing.",
+    inputSchema: {
+      title: z.string().min(1),
+      type: z.string().optional(),
+      origin: z.string().optional(),
+      destination: z.string().optional(),
+      dateStart: z.string().optional(),
+      dateEnd: z.string().optional(),
+      unitSystem: z.enum(["imperial", "metric"]).optional(),
+      documentationProfileTypes: z.array(z.string()).optional(),
+      moveLevelWeightAllowanceLb: z.number().positive().optional(),
+      pcsBranch: z.string().optional(),
+      pcsRankPayGrade: z.string().optional(),
+      pcsDependentStatus: z.string().optional(),
+      pcsShipmentType: z.string().optional(),
+      pcsOrdersNumber: z.string().optional(),
+      pcsAllowanceNotes: z.string().optional(),
+      pcsTransportationOfficeNotes: z.string().optional(),
+      pcsRestrictedItemsNotes: z.string().optional(),
+      proGearNotes: z.string().optional(),
+      notes: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createMove(apiConfig, input),
   });
 
   registerTool(target, "get_move_summary", {

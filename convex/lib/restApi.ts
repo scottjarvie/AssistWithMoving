@@ -82,6 +82,9 @@ export function requiredScopesForRestRoute({
   method: RestMethod;
   segments: string[];
 }): ApiKeyScope[] {
+  if (segments[0] === "me" && method === "GET") {
+    return ["moves/read"];
+  }
   if (segments[0] === "uploads" && method === "POST") {
     return ["photos/write"];
   }
@@ -98,6 +101,9 @@ export function requiredScopesForRestRoute({
     return ["exports/read"];
   }
   if (segments[0] !== "moves") return [];
+  if (segments.length === 1 && method === "POST") {
+    return ["moves/write"];
+  }
   if (
     method === "POST" &&
     segments[2] === "assignments" &&

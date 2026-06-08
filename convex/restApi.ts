@@ -9,6 +9,7 @@ import {
   requiresOverrideReason,
   validateAssignment,
 } from "./lib/assignmentValidation";
+import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   assignmentCsvRows,
   boxCsvRows,
@@ -27,6 +28,7 @@ import {
 import {
   boxStatuses,
   documentationProfileTypes,
+  defaultDocumentationProfilesForMoveType,
   exifHandlingStatuses,
   itemConditions,
   itemDispositions,
@@ -43,11 +45,16 @@ import {
   photoTypes,
   photoVerificationStatuses,
   photoVisibilityScopes,
+  moveTypes,
+  pcsBranches,
+  pcsDependentStatuses,
+  pcsShipmentTypes,
   transportResourcePresetKeys,
   transportResourceTypes,
 } from "./lib/moveFields";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { getTransportResourcePreset } from "./lib/transportPresets";
+import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import {
   bearerToken,
   paginate,
@@ -122,6 +129,7 @@ export const handle = internalMutation({
         requiredScopes,
         moveId,
         action: `${args.method} /api/v1/${segments.join("/")}`,
+        allowRestrictedKeyWithoutMoveId: segments[0] === "me",
       });
 
       return await withIdempotency(ctx, args, auth, async () =>
@@ -290,6 +298,9 @@ async function routeRequest(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>
 ) {
   const [resource, moveIdSegment, nested, nestedId] = segments;
+  if (resource === "me" && args.method === "GET" && segments.length === 1) {
+    return await routeMe(ctx, auth);
+  }
   if (resource === "exports" && args.method === "GET") {
     return await routeTopLevelExport(ctx, args, auth, moveIdSegment);
   }
@@ -321,6 +332,9 @@ async function routeRequest(
         args.query
       )
     );
+  }
+  if (args.method === "POST" && segments.length === 1) {
+    return await routeCreateMove(ctx, args, auth);
   }
 
   const moveId = moveIdSegment as Id<"moves"> | undefined;
@@ -524,6 +538,123 @@ async function routeMoveSummary(
       generatedAt: Date.now(),
     },
   });
+}
+
+async function routeMe(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+) {
+  const [household, restrictedMove] = await Promise.all([
+    ctx.db.get(auth.householdId),
+    auth.moveId ? ctx.db.get(auth.moveId) : Promise.resolve(null),
+  ]);
+  return restOk({
+    data: {
+      household: household
+        ? {
+            householdId: household._id,
+            name: household.name,
+            slug: household.slug,
+          }
+        : { householdId: auth.householdId },
+      apiKey: {
+        apiKeyId: auth.apiKeyId,
+        scopes: auth.scopes,
+        moveRestricted: Boolean(auth.moveId),
+        moveId: auth.moveId,
+        createdByUserId: auth.createdByUserId,
+      },
+      restrictedMove:
+        restrictedMove && restrictedMove.householdId === auth.householdId
+          ? safeMove(restrictedMove)
+          : null,
+      generatedAt: Date.now(),
+    },
+  });
+}
+
+async function routeCreateMove(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+) {
+  if (auth.moveId) {
+    return restError({
+      status: 403,
+      code: "move_restricted_key",
+      message: "Move-restricted API keys cannot create new moves.",
+    });
+  }
+  const body = bodyObject(args.body);
+  const title = normalizeOptionalText(asString(body.title));
+  if (!title) {
+    return restError({
+      status: 400,
+      code: "invalid_move",
+      message: "title is required.",
+    });
+  }
+  const type = parseMoveType(body.type) ?? "other";
+  await assertHouseholdEntitlement(ctx, {
+    householdId: auth.householdId,
+    dimension: "activeMoves",
+  });
+
+  const now = Date.now();
+  const documentationProfileTypes = Array.isArray(body.documentationProfileTypes)
+    ? parseDocumentationProfileTypes(body.documentationProfileTypes)
+    : [...defaultDocumentationProfilesForMoveType(type)];
+  const moveId = await ctx.db.insert("moves", {
+    householdId: auth.householdId,
+    title,
+    type,
+    status: "planning",
+    origin: normalizeOptionalText(asString(body.origin)),
+    destination: normalizeOptionalText(asString(body.destination)),
+    dateStart: normalizeOptionalText(asString(body.dateStart)),
+    dateEnd: normalizeOptionalText(asString(body.dateEnd)),
+    unitSystem: parseUnitSystem(body.unitSystem) ?? "imperial",
+    documentationProfileTypes,
+    moveLevelWeightAllowanceLb: optionalNumber(body.moveLevelWeightAllowanceLb),
+    pcsBranch: parsePcsBranch(body.pcsBranch),
+    pcsRankPayGrade: normalizeOptionalText(asString(body.pcsRankPayGrade)),
+    pcsDependentStatus: parsePcsDependentStatus(body.pcsDependentStatus),
+    pcsShipmentType: parsePcsShipmentType(body.pcsShipmentType),
+    pcsOrdersNumber: normalizeOptionalText(asString(body.pcsOrdersNumber)),
+    pcsAllowanceNotes: normalizeOptionalText(asString(body.pcsAllowanceNotes)),
+    pcsTransportationOfficeNotes: normalizeOptionalText(
+      asString(body.pcsTransportationOfficeNotes)
+    ),
+    pcsRestrictedItemsNotes: normalizeOptionalText(
+      asString(body.pcsRestrictedItemsNotes)
+    ),
+    proGearNotes: normalizeOptionalText(asString(body.proGearNotes)),
+    notes: normalizeOptionalText(asString(body.notes)),
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const planningDefaultIds = await insertMissingMovePlanningDefaults(ctx, {
+    householdId: auth.householdId,
+    moveId,
+  });
+
+  await auditApiWrite(ctx, auth, moveId, "move.api_created", "moves", moveId, {
+    title,
+    type,
+    documentationProfileTypes,
+    planningDefaultCount: planningDefaultIds.length,
+  });
+  const created = await ctx.db.get(moveId);
+  return restOk(
+    {
+      data: {
+        move: created ? safeMove(created) : { moveId },
+        planningDefaultCount: planningDefaultIds.length,
+      },
+    },
+    201
+  );
 }
 
 async function routeCapacityReport(
@@ -1780,6 +1911,9 @@ function routeMoveIdFromRequest(
   if (segments[0] === "moves" && segments[1]) {
     return segments[1] as Id<"moves">;
   }
+  if (segments[0] === "moves") {
+    return undefined;
+  }
   const input = bodyObject(body);
   const bodyMoveId = input.moveId;
   if (typeof bodyMoveId === "string" && bodyMoveId) {
@@ -2923,6 +3057,34 @@ function optionalString(value: unknown) {
 function parseMoveStatus(value: unknown) {
   return includesLiteral(restMoveStatuses, value)
     ? (value as Doc<"moves">["status"])
+    : undefined;
+}
+
+function parseMoveType(value: unknown) {
+  return includesLiteral(moveTypes, value) ? (value as Doc<"moves">["type"]) : undefined;
+}
+
+function parseUnitSystem(value: unknown) {
+  return value === "imperial" || value === "metric"
+    ? (value as Doc<"moves">["unitSystem"])
+    : undefined;
+}
+
+function parsePcsBranch(value: unknown) {
+  return includesLiteral(pcsBranches, value)
+    ? (value as Doc<"moves">["pcsBranch"])
+    : undefined;
+}
+
+function parsePcsDependentStatus(value: unknown) {
+  return includesLiteral(pcsDependentStatuses, value)
+    ? (value as Doc<"moves">["pcsDependentStatus"])
+    : undefined;
+}
+
+function parsePcsShipmentType(value: unknown) {
+  return includesLiteral(pcsShipmentTypes, value)
+    ? (value as Doc<"moves">["pcsShipmentType"])
     : undefined;
 }
 
