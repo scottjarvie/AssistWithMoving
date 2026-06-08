@@ -873,6 +873,7 @@ export default defineSchema({
     room: v.optional(v.string()),
     destinationRoom: v.optional(v.string()),
     description: v.optional(v.string()),
+    moveDayNote: v.optional(v.string()),
     status: boxStatus,
     dimensionsIn: v.optional(dimensionsIn),
     estimatedWeightLb: v.optional(v.number()),

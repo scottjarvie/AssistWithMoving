@@ -27,6 +27,7 @@ const boxWriteArgs = {
   room: v.optional(v.string()),
   destinationRoom: v.optional(v.string()),
   description: v.optional(v.string()),
+  moveDayNote: v.optional(v.string()),
   status: v.optional(boxStatusValidator),
   dimensionsIn: v.optional(dimensionsValidator),
   estimatedWeightLb: v.optional(v.number()),
@@ -411,6 +412,7 @@ export const create = mutation({
       room: normalizeOptionalText(args.room),
       destinationRoom: normalizeOptionalText(args.destinationRoom),
       description: normalizeOptionalText(args.description),
+      moveDayNote: normalizeOptionalText(args.moveDayNote),
       status,
       dimensionsIn: args.dimensionsIn,
       estimatedWeightLb: args.estimatedWeightLb,
@@ -485,6 +487,9 @@ export const update = mutation({
     }
     if (args.description !== undefined) {
       patch.description = normalizeOptionalText(args.description);
+    }
+    if (args.moveDayNote !== undefined) {
+      patch.moveDayNote = normalizeOptionalText(args.moveDayNote);
     }
     if (args.status !== undefined) {
       patch.status = args.status;

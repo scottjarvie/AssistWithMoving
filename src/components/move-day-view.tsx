@@ -1,14 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
+  CloudOff,
   PackageCheck,
+  RefreshCw,
   ScanLine,
   Search,
+  StickyNote,
   Truck,
 } from "lucide-react";
 
@@ -25,6 +34,16 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  createMoveDayCachePayload,
+  moveDayCacheAgeLabel,
+  moveDayCacheKey,
+  moveDayConnectivityMessage,
+  moveDayMutationFailureMessage,
+  parseMoveDayCache,
+  type MoveDayCachedBox,
+} from "@/lib/move-day";
 import { cn } from "@/lib/utils";
 
 type BoxRecord = NonNullable<
@@ -33,6 +52,13 @@ type BoxRecord = NonNullable<
 type BoxStatus = Doc<"boxes">["status"];
 type ItemStatus = Doc<"items">["status"];
 type CrewFilter = "all" | "ready" | "staged" | "loaded" | "exceptions";
+type FailedStatusAction = {
+  boxId: Id<"boxes">;
+  boxCode: string;
+  boxStatus: BoxStatus;
+  itemStatus?: ItemStatus;
+  moveDayNote?: string;
+};
 
 const crewFilters: { key: CrewFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -98,11 +124,23 @@ export function MoveDayView({
   const updateBox = useMutation(api.boxes.update);
   const updateItem = useMutation(api.items.update);
 
+  const lookupInputRef = useRef<HTMLInputElement | null>(null);
   const [lookup, setLookup] = useState("");
   const [filter, setFilter] = useState<CrewFilter>("ready");
   const [safeView, setSafeView] = useState(true);
   const [updatingBoxId, setUpdatingBoxId] = useState<Id<"boxes"> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const online = useSyncExternalStore(
+    subscribeOnlineStatus,
+    readOnlineStatus,
+    readServerOnlineStatus
+  );
+  const [lastFailedAction, setLastFailedAction] =
+    useState<FailedStatusAction | null>(null);
+  const [exceptionNotes, setExceptionNotes] = useState<Record<string, string>>(
+    {}
+  );
+  const [activeNoteBoxId, setActiveNoteBoxId] = useState<string | null>(null);
 
   const resourceNameById = useMemo(() => {
     const resources = new Map<string, string>();
@@ -122,10 +160,64 @@ export function MoveDayView({
   }, [resourcesWithZones]);
 
   const activeBoxes = useMemo(() => boxes ?? [], [boxes]);
+  const liveChecklistBoxes = useMemo(
+    () =>
+      activeBoxes.map((record) =>
+        toMoveDayCachedBox(
+          record,
+          record.box.assignedResourceId
+            ? resourceNameById.get(record.box.assignedResourceId)
+            : undefined,
+          record.box.assignedZoneId
+            ? zoneNameById.get(record.box.assignedZoneId)
+            : undefined
+        )
+      ),
+    [activeBoxes, resourceNameById, zoneNameById]
+  );
+  const liveDataReady = boxes !== undefined && resourcesWithZones !== undefined;
+  const storedCachedPayload = useMemo(() => {
+    if (!moveId || typeof window === "undefined") {
+      return null;
+    }
+    try {
+      return parseMoveDayCache(
+        window.localStorage.getItem(moveDayCacheKey(moveId)),
+        moveId
+      );
+    } catch {
+      return null;
+    }
+  }, [moveId]);
+  const liveCachePayload = useMemo(() => {
+    if (!moveId || !liveDataReady) {
+      return null;
+    }
+    return createMoveDayCachePayload({
+      moveId,
+      boxes: liveChecklistBoxes,
+    });
+  }, [liveChecklistBoxes, liveDataReady, moveId]);
+  const usingCachedBoxes =
+    !liveDataReady && Boolean(storedCachedPayload);
+  const displayedChecklistBoxes = useMemo(
+    () =>
+      usingCachedBoxes
+        ? storedCachedPayload?.boxes ?? []
+        : liveChecklistBoxes,
+    [liveChecklistBoxes, storedCachedPayload, usingCachedBoxes]
+  );
   const filteredBoxes = useMemo(() => {
     const normalizedLookup = lookup.trim().toLowerCase();
     return activeBoxes.filter((record) => {
-      if (!matchesCrewFilter(record, filter)) {
+      if (
+        !matchesCrewFilter(
+          record.box.status,
+          record.box.assignmentWarnings ?? [],
+          record.box.assignmentHardBlocks ?? [],
+          filter
+        )
+      ) {
         return false;
       }
       if (!normalizedLookup) {
@@ -143,42 +235,121 @@ export function MoveDayView({
       );
     });
   }, [activeBoxes, filter, lookup]);
+  const filteredCachedBoxes = useMemo(() => {
+    const normalizedLookup = lookup.trim().toLowerCase();
+    return displayedChecklistBoxes.filter((box) => {
+      if (
+        !matchesCrewFilter(
+          box.status,
+          box.assignmentWarnings,
+          box.assignmentHardBlocks,
+          filter
+        )
+      ) {
+        return false;
+      }
+      if (!normalizedLookup) {
+        return true;
+      }
+      const haystack = [
+        box.code,
+        box.label,
+        box.room,
+        box.destinationRoom,
+        box.status,
+        box.resourceName,
+        box.zoneName,
+      ];
+      return haystack.some((value) =>
+        value?.toLowerCase().includes(normalizedLookup)
+      );
+    });
+  }, [displayedChecklistBoxes, filter, lookup]);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<BoxStatus, number>();
     for (const status of progressStatuses) {
       counts.set(status, 0);
     }
-    for (const record of activeBoxes) {
-      counts.set(record.box.status, (counts.get(record.box.status) ?? 0) + 1);
+    for (const box of displayedChecklistBoxes) {
+      if (isBoxStatus(box.status)) {
+        counts.set(box.status, (counts.get(box.status) ?? 0) + 1);
+      }
     }
     return counts;
-  }, [activeBoxes]);
+  }, [displayedChecklistBoxes]);
   const completedCount =
     (statusCounts.get("loaded") ?? 0) + (statusCounts.get("delivered") ?? 0);
   const exceptionCount =
     (statusCounts.get("missing") ?? 0) + (statusCounts.get("damaged") ?? 0);
-  const progressPercent = activeBoxes.length
-    ? Math.round((completedCount / activeBoxes.length) * 100)
+  const progressPercent = displayedChecklistBoxes.length
+    ? Math.round((completedCount / displayedChecklistBoxes.length) * 100)
     : 0;
+  const cacheAgeLabel = storedCachedPayload
+    ? moveDayCacheAgeLabel(storedCachedPayload.cachedAt)
+    : undefined;
+  const connectivityMessage = moveDayConnectivityMessage({
+    online,
+    usingCache: usingCachedBoxes,
+    cacheAgeLabel,
+  });
+
+  useEffect(() => {
+    if (!moveId || !liveCachePayload) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        moveDayCacheKey(moveId),
+        JSON.stringify(liveCachePayload)
+      );
+    } catch {
+      // Move Day must keep working even if browser storage is unavailable.
+    }
+  }, [liveCachePayload, moveId]);
 
   async function setBoxStatus(
     record: BoxRecord,
     boxStatus: BoxStatus,
-    itemStatus?: ItemStatus
+    itemStatus?: ItemStatus,
+    moveDayNote?: string
   ) {
     if (!householdId || !moveId) {
       return;
     }
 
+    const noteForMutation = isExceptionStatus(boxStatus)
+      ? moveDayNote?.trim() || record.box.moveDayNote || ""
+      : "";
+    const failedAction = {
+      boxId: record.box._id,
+      boxCode: record.box.code,
+      boxStatus,
+      itemStatus,
+      moveDayNote: noteForMutation,
+    };
+
+    if (!online) {
+      setLastFailedAction(failedAction);
+      setMessage(
+        moveDayMutationFailureMessage({
+          boxCode: record.box.code,
+          online: false,
+        })
+      );
+      return;
+    }
+
     setUpdatingBoxId(record.box._id);
     setMessage(null);
+    setLastFailedAction(null);
     try {
       await updateBox({
         householdId,
         moveId,
         boxId: record.box._id,
         status: boxStatus,
+        moveDayNote: noteForMutation,
       });
       if (itemStatus) {
         await Promise.all(
@@ -194,12 +365,41 @@ export function MoveDayView({
             )
         );
       }
+      setExceptionNotes((current) => ({
+        ...current,
+        [record.box._id]: noteForMutation,
+      }));
       setMessage(`${record.box.code} marked ${boxStatus}.`);
     } catch {
-      setMessage(`Could not update ${record.box.code}.`);
+      setLastFailedAction(failedAction);
+      setMessage(
+        moveDayMutationFailureMessage({
+          boxCode: record.box.code,
+          online,
+        })
+      );
     } finally {
       setUpdatingBoxId(null);
     }
+  }
+
+  function retryLastAction() {
+    if (!lastFailedAction) return;
+    const record = activeBoxes.find(
+      (entry) => entry.box._id === lastFailedAction.boxId
+    );
+    if (!record) {
+      setMessage("Reconnect and refresh the checklist before retrying that update.");
+      return;
+    }
+    const latestNote =
+      exceptionNotes[lastFailedAction.boxId] ?? lastFailedAction.moveDayNote;
+    void setBoxStatus(
+      record,
+      lastFailedAction.boxStatus,
+      lastFailedAction.itemStatus,
+      latestNote
+    );
   }
 
   const loading = boxes === undefined || resourcesWithZones === undefined;
@@ -229,71 +429,125 @@ export function MoveDayView({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-3">
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                className="pl-8"
-                value={lookup}
-                onChange={(event) => setLookup(event.target.value)}
-                placeholder="Scan or type a box code, room, destination, or status"
-              />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {crewFilters.map((option) => (
+        <div className="sticky top-2 z-20 rounded-md border border-border bg-card/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-3">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div className="relative">
+                  <Search
+                    className="pointer-events-none absolute left-2 top-3 size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    ref={lookupInputRef}
+                    className="h-11 pl-8 text-base sm:text-sm"
+                    value={lookup}
+                    onChange={(event) => setLookup(event.target.value)}
+                    placeholder="Scan or type a box code, room, destination, or status"
+                    inputMode="search"
+                    autoCapitalize="characters"
+                  />
+                </div>
                 <Button
-                  key={option.key}
                   type="button"
-                  size="sm"
-                  variant={filter === option.key ? "default" : "outline"}
-                  onClick={() => setFilter(option.key)}
+                  variant="outline"
+                  className="h-11"
+                  onClick={() => {
+                    lookupInputRef.current?.focus();
+                    lookupInputRef.current?.select();
+                  }}
                 >
-                  {option.label}
+                  <ScanLine aria-hidden="true" />
+                  Code
                 </Button>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-md border border-border p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Crew-safe mode</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Hides values, serials, private notes, and photo details.
-                </p>
               </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-3.5 accent-primary"
-                  checked={safeView}
-                  onChange={(event) => setSafeView(event.target.checked)}
-                />
-                Safe
-              </label>
+              <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+                {crewFilters.map((option) => (
+                  <Button
+                    key={option.key}
+                    type="button"
+                    size="sm"
+                    className="h-10 shrink-0"
+                    variant={filter === option.key ? "default" : "outline"}
+                    onClick={() => setFilter(option.key)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-              <MoveDayMetric label="Sealed" value={statusCounts.get("sealed") ?? 0} />
-              <MoveDayMetric label="Staged" value={statusCounts.get("staged") ?? 0} />
-              <MoveDayMetric label="Loaded" value={statusCounts.get("loaded") ?? 0} />
-              <MoveDayMetric
-                label="Delivered"
-                value={statusCounts.get("delivered") ?? 0}
-              />
-              <MoveDayMetric
-                label="Missing"
-                value={statusCounts.get("missing") ?? 0}
-              />
-              <MoveDayMetric
-                label="Damaged"
-                value={statusCounts.get("damaged") ?? 0}
-              />
+
+            <div className="rounded-md border border-border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Crew-safe mode</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Hides values, serials, private notes, and photo details.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={safeView}
+                    onChange={(event) => setSafeView(event.target.checked)}
+                  />
+                  Safe
+                </label>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                <MoveDayMetric
+                  label="Sealed"
+                  value={statusCounts.get("sealed") ?? 0}
+                />
+                <MoveDayMetric
+                  label="Staged"
+                  value={statusCounts.get("staged") ?? 0}
+                />
+                <MoveDayMetric
+                  label="Loaded"
+                  value={statusCounts.get("loaded") ?? 0}
+                />
+                <MoveDayMetric
+                  label="Delivered"
+                  value={statusCounts.get("delivered") ?? 0}
+                />
+                <MoveDayMetric
+                  label="Missing"
+                  value={statusCounts.get("missing") ?? 0}
+                />
+                <MoveDayMetric
+                  label="Damaged"
+                  value={statusCounts.get("damaged") ?? 0}
+                />
+              </div>
             </div>
           </div>
+        </div>
+
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3 text-sm text-muted-foreground",
+            (!online || usingCachedBoxes) &&
+              "border-amber-500/50 bg-amber-500/10 text-foreground"
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <CloudOff className="size-4 shrink-0" aria-hidden="true" />
+            {connectivityMessage}
+          </span>
+          {lastFailedAction ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!online || updatingBoxId !== null}
+              onClick={retryLastAction}
+            >
+              <RefreshCw aria-hidden="true" />
+              Retry {lastFailedAction.boxCode}
+            </Button>
+          ) : null}
         </div>
 
         {message ? (
@@ -302,13 +556,19 @@ export function MoveDayView({
           </p>
         ) : null}
 
-        {loading ? (
+        {loading && !usingCachedBoxes ? (
           <div className="space-y-2">
             <Skeleton className="h-28 w-full" />
             <Skeleton className="h-28 w-full" />
             <Skeleton className="h-28 w-5/6" />
           </div>
-        ) : filteredBoxes.length ? (
+        ) : usingCachedBoxes && filteredCachedBoxes.length ? (
+          <div className="grid gap-3 xl:grid-cols-2">
+            {filteredCachedBoxes.slice(0, 80).map((box) => (
+              <CachedMoveDayBoxCard key={box.id} box={box} />
+            ))}
+          </div>
+        ) : !usingCachedBoxes && filteredBoxes.length ? (
           <div className="grid gap-3 xl:grid-cols-2">
             {filteredBoxes.slice(0, 80).map((record) => (
               <MoveDayBoxCard
@@ -326,8 +586,30 @@ export function MoveDayView({
                     : undefined
                 }
                 updating={updatingBoxId === record.box._id}
-                onSetStatus={(boxStatus, itemStatus) =>
-                  void setBoxStatus(record, boxStatus, itemStatus)
+                online={online}
+                exceptionNote={
+                  exceptionNotes[record.box._id] ?? record.box.moveDayNote ?? ""
+                }
+                noteOpen={
+                  activeNoteBoxId === record.box._id ||
+                  isExceptionStatus(record.box.status) ||
+                  Boolean(record.box.moveDayNote)
+                }
+                onSetExceptionNote={(note) =>
+                  setExceptionNotes((current) => ({
+                    ...current,
+                    [record.box._id]: note,
+                  }))
+                }
+                onOpenNote={() => setActiveNoteBoxId(record.box._id)}
+                onSetStatus={(boxStatus, itemStatus, note) => {
+                  if (isExceptionStatus(boxStatus)) {
+                    setActiveNoteBoxId(record.box._id);
+                  }
+                  void setBoxStatus(record, boxStatus, itemStatus, note);
+                }}
+                onSaveNote={(note) =>
+                  void setBoxStatus(record, record.box.status, undefined, note)
                 }
               />
             ))}
@@ -354,14 +636,30 @@ function MoveDayBoxCard({
   resourceName,
   zoneName,
   updating,
+  online,
+  exceptionNote,
+  noteOpen,
+  onSetExceptionNote,
+  onOpenNote,
   onSetStatus,
+  onSaveNote,
 }: {
   record: BoxRecord;
   safeView: boolean;
   resourceName?: string;
   zoneName?: string;
   updating: boolean;
-  onSetStatus: (boxStatus: BoxStatus, itemStatus?: ItemStatus) => void;
+  online: boolean;
+  exceptionNote: string;
+  noteOpen: boolean;
+  onSetExceptionNote: (note: string) => void;
+  onOpenNote: () => void;
+  onSetStatus: (
+    boxStatus: BoxStatus,
+    itemStatus?: ItemStatus,
+    moveDayNote?: string
+  ) => void;
+  onSaveNote: (moveDayNote: string) => void;
 }) {
   const { box, contents, itemCount } = record;
   const hasException = box.status === "missing" || box.status === "damaged";
@@ -441,15 +739,51 @@ function MoveDayBoxCard({
         </div>
       ) : null}
 
+      {noteOpen ? (
+        <div className="mt-3 rounded-md border border-border p-3">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <StickyNote className="size-4 text-primary" aria-hidden="true" />
+            Exception note
+          </div>
+          <Textarea
+            value={exceptionNote}
+            disabled={updating}
+            onChange={(event) => onSetExceptionNote(event.target.value)}
+            placeholder="Damage, missing item context, customer instruction, or mover note"
+          />
+          <div className="mt-2 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={updating || !online || !hasException}
+              onClick={() => onSaveNote(exceptionNote)}
+            >
+              Save note
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {statusActions.map((action) => (
           <Button
             key={action.boxStatus}
             type="button"
             size="sm"
+            className="h-11 justify-start"
             variant={action.variant ?? "default"}
             disabled={updating || box.status === action.boxStatus}
-            onClick={() => onSetStatus(action.boxStatus, action.itemStatus)}
+            onClick={() => {
+              if (isExceptionStatus(action.boxStatus)) {
+                onOpenNote();
+              }
+              onSetStatus(
+                action.boxStatus,
+                action.itemStatus,
+                exceptionNote
+              );
+            }}
           >
             {action.boxStatus === "loaded" ? (
               <Truck aria-hidden="true" />
@@ -461,6 +795,59 @@ function MoveDayBoxCard({
             {action.label}
           </Button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function CachedMoveDayBoxCard({ box }: { box: MoveDayCachedBox }) {
+  const hasException = box.status === "missing" || box.status === "damaged";
+  const hasWarnings =
+    box.assignmentWarnings.length > 0 || box.assignmentHardBlocks.length > 0;
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border border-dashed border-border p-3",
+        hasException && "border-destructive/50 bg-destructive/5"
+      )}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <PackageCheck className="size-4 text-primary" aria-hidden="true" />
+            <p className="font-medium">{box.code}</p>
+            <Badge variant={hasException ? "destructive" : "outline"}>
+              {box.status}
+            </Badge>
+            {hasWarnings ? (
+              <AlertTriangle className="size-4 text-destructive" aria-hidden="true" />
+            ) : null}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {box.label ?? box.room ?? "Unlabeled box"}
+          </p>
+        </div>
+        <Badge variant="secondary">{box.itemCount} items</Badge>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+        <MoveDayField label="From" value={box.room ?? "unset"} />
+        <MoveDayField label="To" value={box.destinationRoom ?? "unset"} />
+        <MoveDayField
+          label="Load"
+          value={[box.resourceName, box.zoneName].filter(Boolean).join(" / ") || "unset"}
+        />
+      </div>
+
+      {box.moveDayNote ? (
+        <p className="mt-3 rounded-md border border-border p-3 text-sm text-muted-foreground">
+          {box.moveDayNote}
+        </p>
+      ) : null}
+
+      <div className="mt-3 rounded-md border border-border p-3 text-sm text-muted-foreground">
+        Cached checklist only. Reconnect before changing status.
       </div>
     </div>
   );
@@ -484,23 +871,72 @@ function MoveDayMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function matchesCrewFilter(record: BoxRecord, filter: CrewFilter) {
+function toMoveDayCachedBox(
+  record: BoxRecord,
+  resourceName?: string,
+  zoneName?: string
+): MoveDayCachedBox {
+  return {
+    id: record.box._id,
+    code: record.box.code,
+    label: record.box.label,
+    room: record.box.room,
+    destinationRoom: record.box.destinationRoom,
+    status: record.box.status,
+    itemCount: record.itemCount,
+    resourceName,
+    zoneName,
+    assignmentWarnings: record.box.assignmentWarnings ?? [],
+    assignmentHardBlocks: record.box.assignmentHardBlocks ?? [],
+    assignmentLocked: record.box.assignmentLocked ?? false,
+    moveDayNote: record.box.moveDayNote,
+  };
+}
+
+function isBoxStatus(status: string): status is BoxStatus {
+  return progressStatuses.includes(status as BoxStatus);
+}
+
+function isExceptionStatus(status: BoxStatus) {
+  return status === "missing" || status === "damaged";
+}
+
+function matchesCrewFilter(
+  status: string,
+  assignmentWarnings: string[],
+  assignmentHardBlocks: string[],
+  filter: CrewFilter
+) {
   switch (filter) {
     case "all":
       return true;
     case "ready":
-      return ["sealed", "staged"].includes(record.box.status);
+      return ["sealed", "staged"].includes(status);
     case "staged":
-      return record.box.status === "staged";
+      return status === "staged";
     case "loaded":
-      return ["loaded", "delivered"].includes(record.box.status);
+      return ["loaded", "delivered"].includes(status);
     case "exceptions":
       return (
-        ["missing", "damaged"].includes(record.box.status) ||
-        Boolean(
-          record.box.assignmentWarnings?.length ||
-            record.box.assignmentHardBlocks?.length
-        )
+        ["missing", "damaged"].includes(status) ||
+        Boolean(assignmentWarnings.length || assignmentHardBlocks.length)
       );
   }
+}
+
+function subscribeOnlineStatus(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function readOnlineStatus() {
+  return navigator.onLine;
+}
+
+function readServerOnlineStatus() {
+  return true;
 }
