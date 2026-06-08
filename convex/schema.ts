@@ -325,6 +325,18 @@ export const aiPhotoSuggestionStatus = v.union(
   v.literal("rejected")
 );
 
+export const aiPlanningSuggestionType = v.union(
+  v.literal("estimate"),
+  v.literal("assignment")
+);
+
+export const aiPlanningSuggestionStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("edited"),
+  v.literal("rejected")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -821,6 +833,53 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_created", ["moveId", "createdAt"])
     .index("by_photo_status", ["photoId", "status"])
+    .index("by_job", ["aiJobId"])
+    .index("by_household_status", ["householdId", "status"]),
+
+  aiPlanningSuggestions: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    aiJobId: v.id("aiJobs"),
+    type: aiPlanningSuggestionType,
+    status: aiPlanningSuggestionStatus,
+    itemId: v.optional(v.id("items")),
+    boxId: v.optional(v.id("boxes")),
+    confidence: estimateConfidence,
+    reasoning: v.string(),
+    assumptions: v.array(v.string()),
+    estimateDraft: v.optional(
+      v.object({
+        category: v.optional(v.string()),
+        estimatedWeightLb: v.optional(v.number()),
+        estimatedWeightLowLb: v.optional(v.number()),
+        estimatedWeightHighLb: v.optional(v.number()),
+        estimatedVolumeCuFt: v.optional(v.number()),
+        estimatedPackedVolumeCuFt: v.optional(v.number()),
+        weightConfidence: estimateConfidence,
+        volumeConfidence: estimateConfidence,
+      })
+    ),
+    assignmentDraft: v.optional(
+      v.object({
+        assignedResourceId: v.id("transportResources"),
+        assignedZoneId: v.optional(v.id("transportZones")),
+        assignmentWarnings: v.array(v.string()),
+        assignmentHardBlocks: v.array(v.string()),
+        weightPercent: v.optional(v.number()),
+        volumePercent: v.optional(v.number()),
+        overrideReason: v.optional(v.string()),
+      })
+    ),
+    reviewedByUserId: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_item_status", ["itemId", "status"])
+    .index("by_box_status", ["boxId", "status"])
     .index("by_job", ["aiJobId"])
     .index("by_household_status", ["householdId", "status"]),
 

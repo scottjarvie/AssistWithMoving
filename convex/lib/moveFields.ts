@@ -232,6 +232,15 @@ export const aiPhotoSuggestionStatuses = [
   "rejected",
 ] as const;
 
+export const aiPlanningSuggestionTypes = ["estimate", "assignment"] as const;
+
+export const aiPlanningSuggestionStatuses = [
+  "pending",
+  "approved",
+  "edited",
+  "rejected",
+] as const;
+
 export const documentationProfileTypes = [
   "personalFullRecord",
   "pcsMove",
@@ -616,6 +625,18 @@ export const aiPhotoSuggestionTypeValidator = v.union(
 );
 
 export const aiPhotoSuggestionStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("edited"),
+  v.literal("rejected")
+);
+
+export const aiPlanningSuggestionTypeValidator = v.union(
+  v.literal("estimate"),
+  v.literal("assignment")
+);
+
+export const aiPlanningSuggestionStatusValidator = v.union(
   v.literal("pending"),
   v.literal("approved"),
   v.literal("edited"),

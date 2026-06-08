@@ -10,6 +10,7 @@
 
 import type * as aiJobs from "../aiJobs.js";
 import type * as aiPhotoIntake from "../aiPhotoIntake.js";
+import type * as aiPlanningSuggestions from "../aiPlanningSuggestions.js";
 import type * as aiTextIntake from "../aiTextIntake.js";
 import type * as audit from "../audit.js";
 import type * as boxes from "../boxes.js";
@@ -31,6 +32,7 @@ import type * as lib_photoDelivery from "../lib/photoDelivery.js";
 import type * as lib_photoIntake from "../lib/photoIntake.js";
 import type * as lib_photoVisibility from "../lib/photoVisibility.js";
 import type * as lib_planningDefaults from "../lib/planningDefaults.js";
+import type * as lib_planningSuggestions from "../lib/planningSuggestions.js";
 import type * as lib_roles from "../lib/roles.js";
 import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
@@ -51,6 +53,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   aiJobs: typeof aiJobs;
   aiPhotoIntake: typeof aiPhotoIntake;
+  aiPlanningSuggestions: typeof aiPlanningSuggestions;
   aiTextIntake: typeof aiTextIntake;
   audit: typeof audit;
   boxes: typeof boxes;
@@ -72,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   "lib/photoIntake": typeof lib_photoIntake;
   "lib/photoVisibility": typeof lib_photoVisibility;
   "lib/planningDefaults": typeof lib_planningDefaults;
+  "lib/planningSuggestions": typeof lib_planningSuggestions;
   "lib/roles": typeof lib_roles;
   "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;
