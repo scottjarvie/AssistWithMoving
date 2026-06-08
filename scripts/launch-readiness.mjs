@@ -88,13 +88,31 @@ async function checkHome() {
     }
   }
 
-  if (response.headers.get("content-security-policy")) {
+  const enforcedCsp = response.headers.get("content-security-policy");
+  const reportOnlyCsp = response.headers.get("content-security-policy-report-only");
+
+  if (enforcedCsp) {
     record("pass", "content security policy", "CSP is enforced");
+  } else if (reportOnlyCsp) {
+    const directiveCount = reportOnlyCsp
+      .split(";")
+      .map((directive) => directive.trim())
+      .filter(Boolean).length;
+    record(
+      "pass",
+      "content security policy report-only",
+      `report-only CSP is present with ${directiveCount} directives`
+    );
+    record(
+      "blocked",
+      "content security policy enforcement",
+      "CSP is report-only until production origins settle; tracked by MOVE-64"
+    );
   } else {
     record(
       "blocked",
       "content security policy",
-      "CSP is intentionally deferred until production origins settle; tracked by MOVE-64"
+      "CSP is missing until production origins settle; tracked by MOVE-64"
     );
   }
 }

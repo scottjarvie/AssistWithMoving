@@ -25,6 +25,13 @@ test("public pages include baseline browser security headers", async ({
     expect(headers[header], `${header} header`).toMatch(pattern);
   }
   expect(headers["content-security-policy"]).toBeUndefined();
+
+  const reportOnlyCsp = headers["content-security-policy-report-only"];
+  expect(reportOnlyCsp, "report-only CSP header").toBeDefined();
+  expect(reportOnlyCsp).toContain("default-src 'self'");
+  expect(reportOnlyCsp).toContain("frame-ancestors 'none'");
+  expect(reportOnlyCsp).toContain("object-src 'none'");
+  expect(reportOnlyCsp).toContain("connect-src 'self' https: wss:");
 });
 
 test("protected app redirects keep baseline browser security headers", async ({
@@ -37,4 +44,7 @@ test("protected app redirects keep baseline browser security headers", async ({
   for (const [header, pattern] of expectedHeaders) {
     expect(headers[header], `${header} header`).toMatch(pattern);
   }
+  expect(headers["content-security-policy-report-only"]).toContain(
+    "default-src 'self'"
+  );
 });
