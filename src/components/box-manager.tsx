@@ -531,6 +531,7 @@ export function BoxManager({
       </CardHeader>
       <CardContent className="space-y-4">
         <form
+          aria-label="Create box"
           className="grid gap-2 md:grid-cols-[120px_minmax(0,1fr)_160px_160px_auto]"
           onSubmit={handleCreate}
         >
@@ -538,24 +539,28 @@ export function BoxManager({
             value={code}
             onChange={(event) => setCode(event.target.value)}
             placeholder="B-001"
+            aria-label="New box code"
             disabled={!moveId}
           />
           <Input
             value={label}
             onChange={(event) => setLabel(event.target.value)}
             placeholder="Label"
+            aria-label="New box label"
             disabled={!moveId}
           />
           <Input
             value={room}
             onChange={(event) => setRoom(event.target.value)}
             placeholder="Room"
+            aria-label="New box room"
             disabled={!moveId}
           />
           <Input
             value={destinationRoom}
             onChange={(event) => setDestinationRoom(event.target.value)}
             placeholder="Destination"
+            aria-label="New box destination room"
             disabled={!moveId}
           />
           <Button type="submit" size="sm" disabled={!moveId || creating}>

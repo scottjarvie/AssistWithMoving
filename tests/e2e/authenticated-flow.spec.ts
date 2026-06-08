@@ -25,7 +25,25 @@ async function gotoDashboard(page: Page) {
   }
 }
 
+async function ensureHousehold(page: Page, householdName: string) {
+  const householdInput = page.getByLabel("Household name");
+  const selectedHousehold = page.getByLabel("Selected household");
+  await expect(householdInput.or(selectedHousehold).first()).toBeVisible({
+    timeout: 30_000,
+  });
+
+  if (await selectedHousehold.isVisible().catch(() => false)) {
+    return;
+  }
+
+  await householdInput.fill(householdName);
+  await householdInput.press("Enter");
+  await expect(selectedHousehold).toBeVisible({ timeout: 30_000 });
+}
+
 test.describe("authenticated product flow", () => {
+  test.setTimeout(90_000);
+
   test.skip(
     !e2eUserEmail,
     "Set E2E_CLERK_USER_EMAIL to run signed-in MovingManifest product flows."
@@ -49,17 +67,11 @@ test.describe("authenticated product flow", () => {
     const runId = Date.now().toString(36);
     const householdName = `E2E household ${runId}`;
     const moveTitle = `E2E PCS move ${runId}`;
+    const itemName = `E2E road bike ${runId}`;
+    const boxCode = `E2E-${runId.toUpperCase()}`;
+    const boxLabel = `E2E bike parts ${runId}`;
 
-    const householdInput = page.getByLabel("Household name");
-    const selectedHousehold = page.getByLabel("Selected household");
-    await expect(householdInput.or(selectedHousehold).first()).toBeVisible({
-      timeout: 30_000,
-    });
-    if (await householdInput.isVisible()) {
-      await householdInput.fill(householdName);
-      await page.getByRole("button", { name: "Create household" }).click();
-      await expect(selectedHousehold).toBeVisible();
-    }
+    await ensureHousehold(page, householdName);
 
     await expect(page.getByLabel("Move title")).toBeEnabled({ timeout: 30_000 });
     await page.getByLabel("Move title").fill(moveTitle);
@@ -70,6 +82,45 @@ test.describe("authenticated product flow", () => {
     await page.getByLabel("Official weight allowance in pounds").fill("11000");
     await page.getByRole("button", { name: "Create move" }).click();
     await expect(page.getByRole("cell", { name: moveTitle })).toBeVisible();
+
+    const transportResources = page
+      .getByRole("heading", { name: "Transport resources", exact: true })
+      .locator("xpath=ancestor::section[1]");
+    await transportResources
+      .getByRole("button", { name: /Military movers \/ HHG/ })
+      .click();
+    await expect(
+      transportResources.getByText("Pro gear review").first()
+    ).toBeVisible();
+
+    await page.getByLabel("New item name").fill(itemName);
+    await page.getByLabel("New item room").fill("Garage");
+    await page.getByLabel("New item category").fill("Sports");
+    await page.getByLabel("New item disposition").selectOption("mover");
+    await page.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByLabel(`Status for ${itemName}`)).toBeVisible();
+
+    const createBoxForm = page.getByRole("form", { name: "Create box" });
+    await createBoxForm.getByLabel("New box code").fill(boxCode);
+    await createBoxForm.getByLabel("New box label").fill(boxLabel);
+    await createBoxForm.getByLabel("New box room").fill("Garage");
+    await createBoxForm.getByLabel("New box destination room").fill("Storage");
+    await createBoxForm.getByRole("button", { name: "Create" }).click();
+    await expect(page.getByRole("cell", { name: boxCode })).toBeVisible();
+
+    const documentationPackets = page
+      .getByRole("heading", { name: "Documentation packets", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    const ensureProfiles = documentationPackets.getByRole("button", {
+      name: "Ensure move profiles",
+    });
+    if (await ensureProfiles.isEnabled()) {
+      await ensureProfiles.click();
+      await expect(ensureProfiles).toBeDisabled();
+    }
+    await expect(
+      documentationPackets.getByRole("button", { name: "Inventory CSV" })
+    ).toBeEnabled({ timeout: 30_000 });
 
     await expect(
       page.getByRole("heading", { name: "Inventory", exact: true })
