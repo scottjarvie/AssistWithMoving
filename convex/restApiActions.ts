@@ -98,6 +98,7 @@ export const handle = internalAction({
 });
 
 async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
+  if (!hasBearer(args.authorization)) return unknownAuthError();
   const body = bodyObject(args.body);
   const moveId = requiredId<"moves">(body.moveId, "moveId is required.");
   const authResult = await authenticateAction(ctx, args, moveId);
@@ -205,6 +206,7 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
 }
 
 async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
+  if (!hasBearer(args.authorization)) return unknownAuthError();
   const body = bodyObject(args.body);
   const moveId = requiredId<"moves">(body.moveId, "moveId is required.");
   const uploadSessionId = requiredId<"photoUploadSessions">(
@@ -455,6 +457,10 @@ function requiredString(value: unknown, message: string) {
 
 function optionalString(value: unknown) {
   return typeof value === "string" ? value : undefined;
+}
+
+function hasBearer(authorization: string | undefined) {
+  return /^Bearer\s+.+$/i.test(authorization ?? "");
 }
 
 function requiredNumber(value: unknown, message: string) {

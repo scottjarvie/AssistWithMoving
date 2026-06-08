@@ -118,7 +118,7 @@ export const authenticateActionRequest = internalMutation({
     query: v.record(v.string(), v.string()),
     authorization: v.optional(v.string()),
     body: v.optional(v.any()),
-    moveId: v.optional(v.id("moves")),
+    moveId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const segments = parseRestPath(args.path);
@@ -153,7 +153,9 @@ export const authenticateActionRequest = internalMutation({
       const auth = await authenticateApiKey(ctx, {
         rawKey,
         requiredScopes,
-        moveId: args.moveId ?? routeMoveIdFromRequest(segments, args.body, args.query),
+        moveId: args.moveId
+          ? (args.moveId as Id<"moves">)
+          : routeMoveIdFromRequest(segments, args.body, args.query),
         action: `${args.method} /api/v1/${segments.join("/")}`,
       });
       return { ok: true, auth, segments };
