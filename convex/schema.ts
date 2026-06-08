@@ -27,6 +27,27 @@ export const moveRole = v.union(
   v.literal("guest")
 );
 
+export const auditActorType = v.union(
+  v.literal("user"),
+  v.literal("apiKey"),
+  v.literal("system"),
+  v.literal("webhook")
+);
+
+export const auditCategory = v.union(
+  v.literal("auth"),
+  v.literal("household"),
+  v.literal("inventory"),
+  v.literal("assignment"),
+  v.literal("photo"),
+  v.literal("documentation"),
+  v.literal("shareLink"),
+  v.literal("apiKey"),
+  v.literal("export"),
+  v.literal("admin"),
+  v.literal("system")
+);
+
 export default defineSchema({
   users: defineTable({
     clerkUserId: v.string(),
@@ -85,4 +106,22 @@ export default defineSchema({
     .index("by_move_user", ["moveId", "userId"])
     .index("by_user_status", ["userId", "status"])
     .index("by_household_move", ["householdId", "moveId"]),
+
+  auditLogs: defineTable({
+    householdId: v.optional(v.id("households")),
+    moveId: v.optional(v.id("moves")),
+    actorType: auditActorType,
+    actorUserId: v.optional(v.id("users")),
+    actorApiKeyId: v.optional(v.string()),
+    category: auditCategory,
+    action: v.string(),
+    objectTable: v.optional(v.string()),
+    objectId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_household_time", ["householdId", "createdAt"])
+    .index("by_move_time", ["moveId", "createdAt"])
+    .index("by_actor_user_time", ["actorUserId", "createdAt"])
+    .index("by_category_time", ["category", "createdAt"]),
 });

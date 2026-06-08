@@ -1,9 +1,8 @@
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
-import {
-  requireCurrentUser,
-} from "./lib/auth";
+import { requireCurrentUser } from "./lib/auth";
+import { recordAuditEvent } from "./lib/audit";
 import { requireHouseholdPermission } from "./lib/permissions";
 
 function slugify(value: string) {
@@ -77,6 +76,17 @@ export const create = mutation({
       });
     }
 
+    await recordAuditEvent(ctx, {
+      householdId,
+      actorType: "user",
+      actorUserId: user._id,
+      category: "household",
+      action: "household.created",
+      objectTable: "households",
+      objectId: householdId,
+      metadata: { name: args.name.trim() },
+    });
+
     return householdId;
   },
 });
@@ -87,16 +97,32 @@ export const rename = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireHouseholdPermission(
+    const { actor } = await requireHouseholdPermission(
       ctx,
       args.householdId,
       "household:manage_settings"
     );
+    const existing = await ctx.db.get(args.householdId);
 
     await ctx.db.patch(args.householdId, {
       name: args.name.trim(),
       slug: slugify(args.name),
       updatedAt: Date.now(),
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      actorType: actor.type,
+      actorUserId: actor.type === "user" ? actor.userId : undefined,
+      actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
+      category: "household",
+      action: "household.renamed",
+      objectTable: "households",
+      objectId: args.householdId,
+      metadata: {
+        previousName: existing?.name,
+        nextName: args.name.trim(),
+      },
     });
   },
 });

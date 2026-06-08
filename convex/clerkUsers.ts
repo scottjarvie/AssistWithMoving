@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { internalMutation } from "./_generated/server";
+import { recordAuditEvent } from "./lib/audit";
 
 export const upsertFromWebhook = internalMutation({
   args: {
@@ -26,10 +27,19 @@ export const upsertFromWebhook = internalMutation({
         updatedAt: args.sourceUpdatedAt ?? now,
       });
 
+      await recordAuditEvent(ctx, {
+        actorType: "webhook",
+        category: "auth",
+        action: "clerk_user.updated",
+        objectTable: "users",
+        objectId: existing._id,
+        metadata: { clerkUserId: args.clerkUserId, email: args.email },
+      });
+
       return existing._id;
     }
 
-    return await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
       clerkUserId: args.clerkUserId,
       email: args.email,
       name: args.name,
@@ -40,6 +50,17 @@ export const upsertFromWebhook = internalMutation({
       updatedAt: args.sourceUpdatedAt ?? now,
       lastSeenAt: now,
     });
+
+    await recordAuditEvent(ctx, {
+      actorType: "webhook",
+      category: "auth",
+      action: "clerk_user.created",
+      objectTable: "users",
+      objectId: userId,
+      metadata: { clerkUserId: args.clerkUserId, email: args.email },
+    });
+
+    return userId;
   },
 });
 
@@ -63,6 +84,15 @@ export const disableFromWebhook = internalMutation({
       imageUrl: undefined,
       status: "disabled",
       updatedAt: Date.now(),
+    });
+
+    await recordAuditEvent(ctx, {
+      actorType: "webhook",
+      category: "auth",
+      action: "clerk_user.disabled",
+      objectTable: "users",
+      objectId: existing._id,
+      metadata: { clerkUserId: args.clerkUserId },
     });
 
     return existing._id;
