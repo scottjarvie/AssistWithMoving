@@ -28,17 +28,34 @@ async function gotoDashboard(page: Page) {
 async function ensureHousehold(page: Page, householdName: string) {
   const householdInput = page.getByLabel("Household name");
   const selectedHousehold = page.getByLabel("Selected household");
-  await expect(householdInput.or(selectedHousehold).first()).toBeVisible({
-    timeout: 30_000,
+  const createHousehold = page.getByRole("button", {
+    name: "Create household",
   });
 
-  if (await selectedHousehold.isVisible().catch(() => false)) {
+  const existingHouseholdVisible = await selectedHousehold
+    .waitFor({ state: "visible", timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (existingHouseholdVisible) {
     return;
   }
 
-  await householdInput.fill(householdName);
-  await householdInput.press("Enter");
-  await expect(selectedHousehold).toBeVisible({ timeout: 30_000 });
+  await expect(householdInput).toBeVisible({ timeout: 30_000 });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await householdInput.fill(householdName);
+      await createHousehold.click();
+      await expect(selectedHousehold).toBeVisible({ timeout: 30_000 });
+      return;
+    } catch (error) {
+      if (await selectedHousehold.isVisible().catch(() => false)) {
+        return;
+      }
+      if (attempt === 2) {
+        throw error;
+      }
+    }
+  }
 }
 
 test.describe("authenticated product flow", () => {
@@ -169,9 +186,15 @@ test.describe("authenticated product flow", () => {
     await documentationPackets
       .getByRole("button", { name: "Create link token" })
       .click();
+    const revokeShareLink = documentationPackets
+      .getByRole("button", { name: "Revoke" })
+      .first();
+    await expect(revokeShareLink).toBeVisible({ timeout: 30_000 });
+    await revokeShareLink.click();
     await expect(
-      documentationPackets.getByRole("button", { name: "Revoke" }).first()
+      documentationPackets.getByText("Share link revoked.")
     ).toBeVisible({ timeout: 30_000 });
+    await expect(revokeShareLink).toBeHidden({ timeout: 30_000 });
 
     await expect(
       page.getByRole("heading", { name: "Inventory", exact: true })
