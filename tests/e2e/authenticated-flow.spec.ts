@@ -44,14 +44,6 @@ async function ensureHousehold(page: Page, householdName: string) {
     name: "Create household",
   });
 
-  const existingHouseholdVisible = await selectedHousehold
-    .waitFor({ state: "visible", timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (existingHouseholdVisible) {
-    return;
-  }
-
   await expect(householdInput).toBeVisible({ timeout: 30_000 });
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -59,9 +51,22 @@ async function ensureHousehold(page: Page, householdName: string) {
       await expect(createHousehold).toBeEnabled({ timeout: 30_000 });
       await createHousehold.click();
       await expect(selectedHousehold).toBeVisible({ timeout: 30_000 });
+      await expect(selectedHousehold).toContainText(householdName, {
+        timeout: 30_000,
+      });
+      await selectedHousehold.selectOption({
+        label: `${householdName} - owner`,
+      });
       return;
     } catch (error) {
-      if (await selectedHousehold.isVisible().catch(() => false)) {
+      const householdExists = await selectedHousehold
+        .getByRole("option", { name: `${householdName} - owner` })
+        .isVisible()
+        .catch(() => false);
+      if (householdExists) {
+        await selectedHousehold.selectOption({
+          label: `${householdName} - owner`,
+        });
         return;
       }
       if (attempt === 2) {
@@ -133,6 +138,9 @@ test.describe("authenticated product flow", () => {
     await expect(
       page.getByRole("heading", { name: "Household", exact: true })
     ).toBeVisible();
+    await waitForWorkspaceAuth(page);
+    await cleanupE2eData(page);
+    await page.reload({ waitUntil: "domcontentloaded" });
     await waitForWorkspaceAuth(page);
 
     const runId = Date.now().toString(36);

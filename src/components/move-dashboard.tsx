@@ -166,12 +166,18 @@ export function MoveDashboard() {
 
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const nextHouseholdName = householdName.trim();
+    if (!nextHouseholdName) {
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
 
     try {
-      const id = await createHousehold({ name: householdName });
+      const id = await createHousehold({ name: nextHouseholdName });
       setSelectedHouseholdId(id);
+      setHouseholdName("My household");
       setMessage("Household created.");
     } catch {
       setMessage("Could not create the household yet.");
@@ -351,14 +357,14 @@ export function MoveDashboard() {
                 Every move belongs to a household permission boundary.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               {loadingIdentity || loadingHouseholds ? (
                 <div className="space-y-2">
                   <Skeleton className="h-9 w-full" />
                   <Skeleton className="h-9 w-2/3" />
                 </div>
               ) : households?.length ? (
-                <div className="space-y-3">
+                <>
                   <select
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={householdId ?? ""}
@@ -379,7 +385,27 @@ export function MoveDashboard() {
                     Owner/admin/editor roles can create and update move records.
                     Helper and mover-safe access stays restricted by policy.
                   </p>
-                </div>
+                  <form
+                    className="flex flex-wrap gap-2"
+                    onSubmit={handleCreateHousehold}
+                  >
+                    <Input
+                      value={householdName}
+                      onChange={(event) => setHouseholdName(event.target.value)}
+                      placeholder="New household name"
+                      aria-label="Household name"
+                      className="min-w-0 flex-1"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={saving || !householdName.trim()}
+                    >
+                      <Plus aria-hidden="true" />
+                      Create household
+                    </Button>
+                  </form>
+                </>
               ) : (
                 <form className="space-y-3" onSubmit={handleCreateHousehold}>
                   <Input
@@ -388,7 +414,11 @@ export function MoveDashboard() {
                     placeholder="Household name"
                     aria-label="Household name"
                   />
-                  <Button type="submit" size="sm" disabled={saving}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={saving || !householdName.trim()}
+                  >
                     <Plus aria-hidden="true" />
                     Create household
                   </Button>
