@@ -88,6 +88,91 @@ type PublicSubManifestPacket = {
   };
 };
 
+type PublicDocumentationPacket = {
+  packetKind: "pcs" | "movingCompany" | "loadCrew" | "employer" | "claim";
+  profileType: string;
+  title: string;
+  generatedAt: number;
+  recipientMode: string;
+  disclaimer?: string;
+  move: {
+    title: string;
+    type: string;
+    origin?: string;
+    destination?: string;
+    dateStart?: string;
+    dateEnd?: string;
+    pcsBranch?: string;
+    pcsRankPayGrade?: string;
+    pcsDependentStatus?: string;
+    pcsShipmentType?: string;
+    pcsAllowanceNotes?: string;
+    pcsTransportationOfficeNotes?: string;
+    pcsRestrictedItemsNotes?: string;
+    proGearNotes?: string;
+    moveLevelWeightAllowanceLb?: number;
+  };
+  visibility: {
+    ownerPrivateFieldsShown: boolean;
+    valuesHidden: boolean;
+    serialsHidden: boolean;
+    privateNotesHidden: boolean;
+    rawStorageHidden: boolean;
+    disclosure?: string;
+  };
+  summary: {
+    itemCount: number;
+    boxCount: number;
+    photoCount: number;
+    totalEstimatedWeightLb: number;
+    totalEstimatedVolumeCuFt: number;
+    totalValueCents?: number;
+    metrics: Array<{ label: string; value: string | number }>;
+  };
+  sections: {
+    boxes: Array<{
+      boxId: string;
+      code: string;
+      label?: string;
+      room?: string;
+      destinationRoom?: string;
+      status: string;
+      assignedResource?: string;
+      assignedZone?: string;
+      itemCount: number;
+      estimatedWeightLb?: number;
+      estimatedVolumeCuFt?: number;
+      warnings: string[];
+    }>;
+    items: Array<{
+      itemId: string;
+      name: string;
+      description?: string;
+      room?: string;
+      destinationRoom?: string;
+      category?: string;
+      disposition: string;
+      status: string;
+      condition: string;
+      quantity: number;
+      estimatedWeightLb?: number;
+      estimatedVolumeCuFt?: number;
+      photoCount: number;
+      boxCodes: string[];
+      flags: string[];
+      claim?: {
+        relevanceReasons: string[];
+        evidenceScore: number;
+        evidenceWarnings: string[];
+        valueCents?: number;
+        replacementValueCents?: number;
+        serialNumber?: string;
+        modelNumber?: string;
+      };
+    }>;
+  };
+};
+
 type PublicShareView =
   | {
       status: "ready";
@@ -95,6 +180,13 @@ type PublicShareView =
       shareLink: ShareMetadata;
       profile: { name: string; type: string; disclaimer?: string };
       packet: PublicSubManifestPacket;
+    }
+  | {
+      status: "ready";
+      kind: "documentationPacket";
+      shareLink: ShareMetadata;
+      profile: { name: string; type: string; disclaimer?: string };
+      packet: PublicDocumentationPacket;
     }
   | {
       status: "unsupported";
@@ -204,7 +296,11 @@ export function PublicShareViewer({ token }: { token: string }) {
 
   return (
     <PublicShareShell>
-      <PublicSubManifest view={view} />
+      {view.kind === "documentationPacket" ? (
+        <PublicDocumentationPacketView view={view} />
+      ) : (
+        <PublicSubManifest view={view} />
+      )}
     </PublicShareShell>
   );
 }
@@ -220,7 +316,7 @@ function PublicShareShell({ children }: { children: React.ReactNode }) {
 function PublicSubManifest({
   view,
 }: {
-  view: Extract<PublicShareView, { status: "ready" }>;
+  view: Extract<PublicShareView, { status: "ready"; kind: "subManifest" }>;
 }) {
   const { packet, shareLink, profile } = view;
   const canDownload = shareLink.canDownload;
@@ -423,6 +519,334 @@ function PublicSubManifest({
   );
 }
 
+function PublicDocumentationPacketView({
+  view,
+}: {
+  view: Extract<
+    PublicShareView,
+    { status: "ready"; kind: "documentationPacket" }
+  >;
+}) {
+  const { packet, shareLink, profile } = view;
+  const canDownload = shareLink.canDownload;
+  const pcsDetails = [
+    { label: "Branch", value: packet.move.pcsBranch },
+    { label: "Rank / pay grade", value: packet.move.pcsRankPayGrade },
+    { label: "Dependents", value: packet.move.pcsDependentStatus },
+    { label: "Shipment", value: packet.move.pcsShipmentType },
+    {
+      label: "Weight allowance",
+      value:
+        typeof packet.move.moveLevelWeightAllowanceLb === "number"
+          ? `${formatNumber(packet.move.moveLevelWeightAllowanceLb)} lb`
+          : undefined,
+    },
+  ].filter((entry): entry is { label: string; value: string } =>
+    Boolean(entry.value)
+  );
+
+  return (
+    <div className="space-y-4">
+      <style>{`
+        @media print {
+          .print-hidden { display: none !important; }
+          body { background: white !important; }
+          .packet-page { color: #111 !important; }
+          .packet-section { break-inside: avoid; page-break-inside: avoid; }
+          .packet-table th, .packet-table td { border-color: #111 !important; }
+        }
+      `}</style>
+
+      <div className="print-hidden flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">MovingManifest shared packet</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-normal">
+            {profile.name}
+          </h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">recipient safe</Badge>
+          <Badge variant="outline">{packet.recipientMode}</Badge>
+          <Badge variant="outline">{shareLink.role}</Badge>
+          {canDownload ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                downloadCsv(
+                  documentationPacketFilename(packet),
+                  documentationPacketToCsv(packet)
+                )
+              }
+            >
+              <Download aria-hidden="true" />
+              CSV
+            </Button>
+          ) : null}
+          <Button type="button" onClick={() => window.print()}>
+            <Printer aria-hidden="true" />
+            Print
+          </Button>
+        </div>
+      </div>
+
+      <div className="packet-page space-y-4">
+        <section className="packet-section rounded-md border border-border p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-normal">
+                {packet.title}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                {profile.disclaimer ?? packet.disclaimer ?? "Recipient packet"}
+              </p>
+            </div>
+            <Badge variant="outline">
+              Expires {new Date(shareLink.expiresAt).toLocaleDateString()}
+            </Badge>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {packet.summary.metrics.map((metric) => (
+              <Metric
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="packet-section rounded-md border border-border p-4">
+          <h2 className="text-xl font-semibold tracking-normal">Move overview</h2>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Info label="Move" value={packet.move.title} />
+            <Info label="Type" value={packet.move.type} />
+            <Info label="Origin" value={packet.move.origin ?? "Not set"} />
+            <Info
+              label="Destination"
+              value={packet.move.destination ?? "Not set"}
+            />
+            <Info
+              label="Window"
+              value={
+                [packet.move.dateStart, packet.move.dateEnd]
+                  .filter(Boolean)
+                  .join(" to ") || "Not set"
+              }
+            />
+          </div>
+
+          {pcsDetails.length ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {pcsDetails.map((entry) => (
+                <Info key={entry.label} label={entry.label} value={entry.value} />
+              ))}
+            </div>
+          ) : null}
+
+          {packet.packetKind === "pcs" &&
+          (packet.move.pcsAllowanceNotes ||
+            packet.move.pcsTransportationOfficeNotes ||
+            packet.move.pcsRestrictedItemsNotes ||
+            packet.move.proGearNotes) ? (
+            <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+              <LongInfo
+                label="Allowance notes"
+                value={packet.move.pcsAllowanceNotes}
+              />
+              <LongInfo
+                label="Transportation office notes"
+                value={packet.move.pcsTransportationOfficeNotes}
+              />
+              <LongInfo
+                label="Restricted-item notes"
+                value={packet.move.pcsRestrictedItemsNotes}
+              />
+              <LongInfo label="Pro gear notes" value={packet.move.proGearNotes} />
+            </div>
+          ) : null}
+        </section>
+
+        <section className="packet-section rounded-md border border-border p-4">
+          <h2 className="text-xl font-semibold tracking-normal">Privacy boundary</h2>
+          {packet.visibility.disclosure ? (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {packet.visibility.disclosure}
+            </p>
+          ) : null}
+          <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+            <p>Values hidden: {packet.visibility.valuesHidden ? "Yes" : "No"}</p>
+            <p>Serials hidden: {packet.visibility.serialsHidden ? "Yes" : "No"}</p>
+            <p>
+              Private notes hidden:{" "}
+              {packet.visibility.privateNotesHidden ? "Yes" : "No"}
+            </p>
+            <p>Original storage hidden: {packet.visibility.rawStorageHidden ? "Yes" : "No"}</p>
+          </div>
+        </section>
+
+        <section className="packet-section rounded-md border border-border p-4">
+          <h2 className="text-xl font-semibold tracking-normal">Box map</h2>
+          <div className="mt-3 overflow-x-auto rounded-md border border-border">
+            <table className="packet-table w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-2 py-2">Box</th>
+                  <th className="px-2 py-2">Room</th>
+                  <th className="px-2 py-2">Status</th>
+                  <th className="px-2 py-2">Resource</th>
+                  <th className="px-2 py-2">Zone</th>
+                  <th className="px-2 py-2">Items</th>
+                  <th className="px-2 py-2">Weight</th>
+                  <th className="px-2 py-2">Warnings</th>
+                </tr>
+              </thead>
+              <tbody>
+                {packet.sections.boxes.map((box) => (
+                  <tr key={box.boxId} className="border-b border-border last:border-b-0">
+                    <td className="px-2 py-2 font-medium">
+                      {box.code}
+                      {box.label ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {box.label}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2">
+                      {[box.room, box.destinationRoom].filter(Boolean).join(" -> ") ||
+                        "unset"}
+                    </td>
+                    <td className="px-2 py-2">{box.status}</td>
+                    <td className="px-2 py-2">{box.assignedResource ?? "unassigned"}</td>
+                    <td className="px-2 py-2">{box.assignedZone ?? "any"}</td>
+                    <td className="px-2 py-2">{box.itemCount}</td>
+                    <td className="px-2 py-2">
+                      {typeof box.estimatedWeightLb === "number"
+                        ? `${formatNumber(box.estimatedWeightLb)} lb`
+                        : "unset"}
+                    </td>
+                    <td className="px-2 py-2">
+                      {box.warnings.length ? box.warnings.join(", ") : "clear"}
+                    </td>
+                  </tr>
+                ))}
+                {!packet.sections.boxes.length ? (
+                  <tr>
+                    <td className="px-2 py-4 text-muted-foreground" colSpan={8}>
+                      No boxes are included in this scoped packet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="packet-section rounded-md border border-border p-4">
+          <h2 className="text-xl font-semibold tracking-normal">Manifest items</h2>
+          <div className="mt-3 overflow-x-auto rounded-md border border-border">
+            <table className="packet-table w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-2 py-2">Item</th>
+                  <th className="px-2 py-2">Room</th>
+                  <th className="px-2 py-2">Qty</th>
+                  <th className="px-2 py-2">Disposition</th>
+                  <th className="px-2 py-2">Status</th>
+                  <th className="px-2 py-2">Condition</th>
+                  <th className="px-2 py-2">Boxes</th>
+                  <th className="px-2 py-2">Photos</th>
+                  <th className="px-2 py-2">
+                    {packet.packetKind === "claim" ? "Claim evidence" : "Flags"}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {packet.sections.items.map((item) => (
+                  <tr
+                    key={item.itemId}
+                    className="border-b border-border align-top last:border-b-0"
+                  >
+                    <td className="px-2 py-2">
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.description ?? item.category ?? "No description"}
+                      </p>
+                      {typeof item.estimatedWeightLb === "number" ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatNumber(item.estimatedWeightLb)} lb
+                          {typeof item.estimatedVolumeCuFt === "number"
+                            ? ` / ${formatNumber(item.estimatedVolumeCuFt)} cu ft`
+                            : ""}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-2 py-2">
+                      {[item.room, item.destinationRoom].filter(Boolean).join(" -> ") ||
+                        "unset"}
+                    </td>
+                    <td className="px-2 py-2">{item.quantity}</td>
+                    <td className="px-2 py-2">{item.disposition}</td>
+                    <td className="px-2 py-2">{item.status}</td>
+                    <td className="px-2 py-2">{item.condition}</td>
+                    <td className="px-2 py-2">
+                      {item.boxCodes.join(", ") || "unboxed"}
+                    </td>
+                    <td className="px-2 py-2">{item.photoCount}</td>
+                    <td className="px-2 py-2">
+                      {packet.packetKind === "claim" ? (
+                        <ClaimEvidenceSummary item={item} />
+                      ) : (
+                        item.flags.join(", ") || "none"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!packet.sections.items.length ? (
+                  <tr>
+                    <td className="px-2 py-4 text-muted-foreground" colSpan={9}>
+                      No items match this scoped packet yet.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ClaimEvidenceSummary({
+  item,
+}: {
+  item: PublicDocumentationPacket["sections"]["items"][number];
+}) {
+  if (!item.claim) {
+    return <span>Not claim-scoped</span>;
+  }
+
+  return (
+    <div className="min-w-48 space-y-1">
+      <p>Score: {item.claim.evidenceScore}</p>
+      <p>Value: {formatCurrency(item.claim.valueCents)}</p>
+      <p>Replacement: {formatCurrency(item.claim.replacementValueCents)}</p>
+      <p>Serial/model: {[item.claim.serialNumber, item.claim.modelNumber].filter(Boolean).join(" / ") || "unset"}</p>
+      <p>
+        Reasons:{" "}
+        {item.claim.relevanceReasons.length
+          ? item.claim.relevanceReasons.join(", ")
+          : "none"}
+      </p>
+      {item.claim.evidenceWarnings.length ? (
+        <p>Warnings: {item.claim.evidenceWarnings.join(", ")}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-md border border-border p-3">
@@ -439,6 +863,19 @@ function Info({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       <p className="mt-1 text-sm">{value}</p>
+    </div>
+  );
+}
+
+function LongInfo({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 leading-6">{value}</p>
     </div>
   );
 }
@@ -471,6 +908,58 @@ function subManifestToCsv(packet: PublicSubManifestPacket) {
     .join("\n");
 }
 
+function documentationPacketFilename(packet: PublicDocumentationPacket) {
+  return `movingmanifest-${packet.packetKind}-${packet.recipientMode}.csv`;
+}
+
+function documentationPacketToCsv(packet: PublicDocumentationPacket) {
+  const header = [
+    "item",
+    "room",
+    "destination_room",
+    "quantity",
+    "disposition",
+    "status",
+    "condition",
+    "box_codes",
+    "photo_count",
+    "weight_lb",
+    "volume_cu_ft",
+    "flags",
+    "claim_value",
+    "claim_replacement_value",
+    "serial_number",
+    "model_number",
+    "claim_evidence_score",
+    "claim_warnings",
+  ];
+  const rows = packet.sections.items.map((item) => [
+    item.name,
+    item.room ?? "",
+    item.destinationRoom ?? "",
+    item.quantity,
+    item.disposition,
+    item.status,
+    item.condition,
+    item.boxCodes.join("; "),
+    item.photoCount,
+    item.estimatedWeightLb ?? "",
+    item.estimatedVolumeCuFt ?? "",
+    item.flags.join("; "),
+    item.claim?.valueCents ? formatCurrency(item.claim.valueCents) : "",
+    item.claim?.replacementValueCents
+      ? formatCurrency(item.claim.replacementValueCents)
+      : "",
+    item.claim?.serialNumber ?? "",
+    item.claim?.modelNumber ?? "",
+    item.claim?.evidenceScore ?? "",
+    item.claim?.evidenceWarnings.join("; ") ?? "",
+  ]);
+  return [header, ...rows]
+    .map((row) => row.map((cell) => csvCell(String(cell))).join(","))
+    .join("\n");
+}
+
 function downloadCsv(filename: string, csv: string) {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -492,4 +981,12 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 1,
   }).format(value);
+}
+
+function formatCurrency(valueCents?: number) {
+  if (typeof valueCents !== "number") return "unset";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(valueCents / 100);
 }

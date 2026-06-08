@@ -78,7 +78,7 @@ const internalMutations = anyApi as unknown as {
 };
 
 const internalQueries = anyApi as unknown as {
-  subManifests: {
+  publicPackets: {
     getForShareLink: FunctionReference<
       "query",
       "internal",
@@ -214,7 +214,7 @@ export const resolvePublicView = action({
       throw new Error("Share link does not allow viewing.");
     }
 
-    return await ctx.runQuery(internalQueries.subManifests.getForShareLink, access);
+    return await ctx.runQuery(internalQueries.publicPackets.getForShareLink, access);
   },
 });
 

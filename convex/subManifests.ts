@@ -132,7 +132,7 @@ export const getForShareLink = internalQuery({
   },
 });
 
-async function buildSubManifest(
+export async function buildSubManifest(
   ctx: QueryCtx,
   args: {
     householdId: Id<"households">;
