@@ -13,14 +13,17 @@ export function SettingsFeatureSections() {
   const flags = useQuery(api.featureFlags.effective, {}) as
     | EffectiveFeatureFlag[]
     | undefined;
+  const currentUser = useQuery(api.users.current);
   const apiMcpEnabled = flagEnabled(flags, "apiMcp", true);
   const billingGatesEnabled = flagEnabled(flags, "billingGates", false);
+  const authReady = currentUser !== undefined;
+  const authenticated = Boolean(currentUser);
 
   return (
     <>
       <div className="mt-6">
         {apiMcpEnabled ? (
-          <ApiKeyManager />
+          <ApiKeyManager enabled={authReady && authenticated} />
         ) : (
           <FeatureUnavailable
             title="API and MCP disabled"
@@ -29,7 +32,7 @@ export function SettingsFeatureSections() {
         )}
       </div>
       <div className="mt-6">
-        <AccountPrivacyControls />
+        <AccountPrivacyControls enabled={authReady && authenticated} />
       </div>
       <div className="mt-6">
         {billingGatesEnabled ? <BillingReadinessPanel /> : null}

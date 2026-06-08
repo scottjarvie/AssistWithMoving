@@ -251,6 +251,54 @@ test.describe("authenticated product flow", () => {
       .getByRole("link", { name: "PCS packet" })
       .getAttribute("href");
     expect(pcsPacketHref).toBeTruthy();
+
+    await page.goto("/settings");
+    await expect(
+      page.getByRole("heading", { name: "Settings", exact: true })
+    ).toBeVisible({ timeout: 30_000 });
+    const apiKeys = page
+      .getByRole("heading", { name: "API and MCP keys", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(apiKeys.getByLabel("Household for API keys")).toBeVisible({
+      timeout: 30_000,
+    });
+    const apiKeyName = `E2E local agent ${runId}`;
+    await apiKeys.getByLabel("API key name").fill(apiKeyName);
+    await apiKeys.getByRole("button", { name: "Create key" }).click();
+    await expect(
+      apiKeys.getByText(
+        "API key created. Store the secret now; it will not be shown again."
+      )
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(apiKeys.getByText("One-time secret")).toBeVisible();
+    const rawApiKey = await apiKeys
+      .getByLabel("One-time API key secret")
+      .inputValue();
+    const apiReadResponse = await page.request.get("/api/v1/moves", {
+      headers: { authorization: `Bearer ${rawApiKey}` },
+    });
+    expect(apiReadResponse.status()).toBe(200);
+    const apiReadBody = (await apiReadResponse.json()) as {
+      data?: unknown[];
+    };
+    expect(Array.isArray(apiReadBody.data)).toBe(true);
+
+    const apiKeyRow = apiKeys.getByRole("group", {
+      name: `API key ${apiKeyName}`,
+    });
+    await expect(apiKeyRow).toBeVisible({ timeout: 30_000 });
+    await apiKeyRow.getByRole("button", { name: "Revoke" }).click();
+    await expect(apiKeys.getByText("API key revoked.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(apiKeyRow.getByText("Revoked")).toBeVisible({
+      timeout: 30_000,
+    });
+    const revokedApiResponse = await page.request.get("/api/v1/moves", {
+      headers: { authorization: `Bearer ${rawApiKey}` },
+    });
+    expect(revokedApiResponse.status()).toBe(403);
+
     await page.goto(pcsPacketHref!);
     await expect(
       page.getByRole("heading", {

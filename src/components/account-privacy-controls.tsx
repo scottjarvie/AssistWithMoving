@@ -57,8 +57,15 @@ type PrivacyStatus = {
   retentionPolicy: Record<string, string>;
 };
 
-export function AccountPrivacyControls() {
-  const privacyStatus = useQuery(api.accountPrivacy.status) as
+export function AccountPrivacyControls({
+  enabled = true,
+}: {
+  enabled?: boolean;
+}) {
+  const privacyStatus = useQuery(
+    api.accountPrivacy.status,
+    enabled ? {} : "skip"
+  ) as
     | PrivacyStatus
     | undefined;
   const createExport = useMutation(api.accountPrivacy.createAccountExport);
@@ -69,7 +76,7 @@ export function AccountPrivacyControls() {
     useState<Id<"accountExportJobs"> | null>(null);
   const artifact = useQuery(
     api.accountPrivacy.getAccountExportArtifact,
-    selectedExportId ? { exportJobId: selectedExportId } : "skip"
+    enabled && selectedExportId ? { exportJobId: selectedExportId } : "skip"
   );
   const downloadedArtifactId = useRef<string | null>(null);
   const [confirmation, setConfirmation] = useState("");
@@ -158,7 +165,7 @@ export function AccountPrivacyControls() {
     }
   }
 
-  if (privacyStatus === undefined) {
+  if (!enabled || privacyStatus === undefined) {
     return <Skeleton className="h-96 w-full" />;
   }
 

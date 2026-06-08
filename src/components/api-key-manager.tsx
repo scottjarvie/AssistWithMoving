@@ -52,8 +52,8 @@ const defaultScopes: ApiKeyScope[] = [
   "exports/read",
 ];
 
-export function ApiKeyManager() {
-  const households = useQuery(api.households.listMine) as
+export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
+  const households = useQuery(api.households.listMine, enabled ? {} : "skip") as
     | HouseholdEntry[]
     | undefined;
   const [selectedHouseholdId, setSelectedHouseholdId] =
@@ -164,7 +164,7 @@ export function ApiKeyManager() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {households === undefined ? (
+        {!enabled || households === undefined ? (
           <Skeleton className="h-10 w-full" />
         ) : households.length ? (
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
@@ -253,7 +253,12 @@ export function ApiKeyManager() {
                 Copy
               </Button>
             </div>
-            <Textarea className="mt-3 font-mono text-xs" readOnly value={oneTimeSecret} />
+            <Textarea
+              className="mt-3 font-mono text-xs"
+              readOnly
+              value={oneTimeSecret}
+              aria-label="One-time API key secret"
+            />
           </div>
         ) : null}
 
@@ -274,6 +279,8 @@ export function ApiKeyManager() {
             keys.map((key) => (
               <div
                 key={key.apiKeyId}
+                role="group"
+                aria-label={`API key ${key.name}`}
                 className="rounded-md border border-border p-3 text-sm"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">

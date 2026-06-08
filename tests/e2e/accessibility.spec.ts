@@ -8,7 +8,11 @@ async function expectNoAxeViolations(page: Page) {
 
 test("home page has no automated accessibility violations", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("main")).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "The manifest for everything that moves.",
+    })
+  ).toBeVisible();
   await expectNoAxeViolations(page);
 });
 
