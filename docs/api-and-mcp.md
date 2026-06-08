@@ -215,6 +215,46 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/assignments \
   -d '{ "boxId": "BOX_ID", "itemId": "ITEM_ID", "quantity": 1 }'
 ```
 
+Suggest box-to-resource assignments:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/assignments/suggest \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "limit": 25 }'
+```
+
+The suggestion endpoint requires `moves/read` and `inventory/read`. It does not
+write changes. It skips locked and already assigned boxes, avoids hard-blocked
+targets, and returns deterministic suggestions using the same load planner
+validation rules as the app.
+
+Apply reviewed box-to-resource assignments:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/assignments/apply \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: apply-load-plan-001" \
+  -d '{
+    "dryRun": true,
+    "assignments": [
+      {
+        "boxId": "BOX_ID",
+        "assignedResourceId": "RESOURCE_ID",
+        "assignedZoneId": "ZONE_ID",
+        "overrideReason": "Reviewed validation warnings."
+      }
+    ]
+  }'
+```
+
+The apply endpoint requires `inventory/write`. It accepts only explicit
+box/resource/zone assignments, not broad instructions. Use `dryRun: true` first
+to validate locked boxes, hard blocks, zone ownership, and warning override
+requirements without writing. If any row fails validation, the response uses
+HTTP `207` and includes row-level details.
+
 Create a transport resource from a preset:
 
 ```bash
@@ -411,6 +451,8 @@ Available MCP tools:
 | `update_item` | Update selected item fields, with `dryRun` support. |
 | `create_box` | Create a box, with `dryRun` support. |
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
+| `suggest_assignments` | Generate deterministic box-to-resource/zone suggestions without writing. |
+| `apply_assignments` | Apply explicit box-to-resource/zone assignments, with API-side `dryRun` validation. |
 | `start_photo_upload` | Start a photo upload session and return presigned upload information. |
 | `list_transport_resources` | List resources and zones for load planning. |
 | `create_transport_resource` | Create a transport resource from a preset or custom fields, with `dryRun` support. |

@@ -6,6 +6,7 @@ import * as z from "zod/v4";
 
 import {
   addItemsToBox,
+  applyAssignments,
   batchUpsertItems,
   createApiConfig,
   createBox,
@@ -22,6 +23,7 @@ import {
   listTransportResources,
   searchInventory,
   startPhotoUpload,
+  suggestAssignments,
   textResult,
   toolErrorResult,
   updateTransportResource,
@@ -232,6 +234,41 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (input) => addItemsToBox(apiConfig, input),
+  });
+
+  registerTool(target, "suggest_assignments", {
+    title: "Suggest assignments",
+    description:
+      "Generate deterministic box-to-resource/zone assignment suggestions using MovingManifest load planner validation. This does not write changes.",
+    inputSchema: {
+      moveId: z.string(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => suggestAssignments(apiConfig, input),
+  });
+
+  registerTool(target, "apply_assignments", {
+    title: "Apply assignments",
+    description:
+      "Apply explicit box-to-resource/zone assignments. Use dryRun true first to validate warnings, hard blocks, and locked boxes without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      assignments: z
+        .array(
+          z.object({
+            boxId: z.string(),
+            assignedResourceId: z.string(),
+            assignedZoneId: z.string().optional(),
+            overrideReason: z.string().optional(),
+          })
+        )
+        .min(1)
+        .max(100),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => applyAssignments(apiConfig, input),
   });
 
   registerTool(target, "start_photo_upload", {

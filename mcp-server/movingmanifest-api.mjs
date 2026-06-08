@@ -197,6 +197,25 @@ export async function addItemsToBox(config, input) {
   return { data: results };
 }
 
+export async function suggestAssignments(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/assignments/suggest`,
+    body: { limit: input.limit },
+  });
+}
+
+export async function applyAssignments(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/assignments/apply`,
+    body: {
+      dryRun: input.dryRun,
+      assignments: input.assignments,
+    },
+  });
+}
+
 export async function startPhotoUpload(config, input) {
   return await movingManifestRequest(config, {
     method: "POST",

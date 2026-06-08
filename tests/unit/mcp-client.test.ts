@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   batchUpsertItems,
+  applyAssignments,
   createApiConfig,
   createItem,
   createTransportResource,
@@ -10,6 +11,7 @@ import {
   getMoveSummary,
   movingManifestRequest,
   searchInventory,
+  suggestAssignments,
   updateTransportResource,
   updateTransportZone,
 } from "../../mcp-server/movingmanifest-api.mjs";
@@ -324,6 +326,94 @@ describe("MovingManifest MCP API client", () => {
           moveId: "move1",
           zoneId: "zone1",
           preferredTags: ["access soon"],
+        }),
+      }
+    );
+  });
+
+  it("requests deterministic assignment suggestions from the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          suggestions: [{ boxId: "box1" }],
+          counts: { suggestions: 1 },
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await suggestAssignments(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1", limit: 10 }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/assignments/suggest"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ limit: 10 }),
+      }
+    );
+  });
+
+  it("applies explicit load assignments through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          dryRun: true,
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          results: [],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await applyAssignments(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        dryRun: true,
+        assignments: [
+          {
+            boxId: "box1",
+            assignedResourceId: "resource1",
+            assignedZoneId: "zone1",
+            overrideReason: "Reviewed validation warnings.",
+          },
+        ],
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/assignments/apply"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          dryRun: true,
+          assignments: [
+            {
+              boxId: "box1",
+              assignedResourceId: "resource1",
+              assignedZoneId: "zone1",
+              overrideReason: "Reviewed validation warnings.",
+            },
+          ],
         }),
       }
     );

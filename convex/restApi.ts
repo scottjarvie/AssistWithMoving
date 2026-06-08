@@ -6,6 +6,10 @@ import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { hashApiKey } from "./lib/apiKeys";
 import {
+  requiresOverrideReason,
+  validateAssignment,
+} from "./lib/assignmentValidation";
+import {
   assignmentCsvRows,
   boxCsvRows,
   csvFromRows,
@@ -34,6 +38,7 @@ import {
   transportResourcePresetKeys,
   transportResourceTypes,
 } from "./lib/moveFields";
+import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 import {
   bearerToken,
@@ -1161,6 +1166,14 @@ async function routeAssignments(
   moveId: Id<"moves">,
   assignmentIdSegment?: string
 ) {
+  if (args.method === "POST" && assignmentIdSegment === "suggest") {
+    return await routeAssignmentSuggestions(ctx, args, auth, moveId);
+  }
+
+  if (args.method === "POST" && assignmentIdSegment === "apply") {
+    return await routeApplyAssignments(ctx, args, auth, moveId);
+  }
+
   if (args.method === "GET") {
     const assignments = await ctx.db
       .query("boxItems")
@@ -1250,6 +1263,192 @@ async function routeAssignments(
     code: "not_found",
     message: "Assignment route not found.",
   });
+}
+
+async function routeAssignmentSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const body = bodyObject(args.body);
+  const limit = boundedInteger(body.limit, 1, 100, 50);
+  const [boxes, resources, zones] = await Promise.all([
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+      .order("desc")
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect(),
+  ]);
+  const activeBoxes = boxes.filter(
+    (box) => box.householdId === auth.householdId && !box.archivedAt
+  );
+  const activeResources = resources.filter(
+    (resource) => resource.householdId === auth.householdId && !resource.archivedAt
+  );
+  const activeZones = zones.filter(
+    (zone) => zone.householdId === auth.householdId && !zone.archivedAt
+  );
+  const suggestions = [];
+
+  for (const box of activeBoxes) {
+    if (suggestions.length >= limit) break;
+    const loadableBox = await loadableApiBoxFor(ctx, box);
+    const suggestion = suggestAssignmentForBox({
+      box: {
+        ...loadableBox,
+        boxId: box._id,
+        code: box.code,
+        assignedResourceId: box.assignedResourceId,
+        assignmentLocked: box.assignmentLocked,
+      },
+      resources: activeResources.map((resource) => ({
+        resourceId: resource._id,
+        type: resource.type,
+        name: resource.name,
+        capacity: resource.capacity,
+      })),
+      zones: activeZones.map((zone) => ({
+        zoneId: zone._id,
+        resourceId: zone.resourceId,
+        name: zone.name,
+        capacity: zone.capacity,
+      })),
+    });
+    if (suggestion) {
+      suggestions.push(suggestion);
+    }
+  }
+
+  return restOk({
+    data: {
+      suggestions,
+      counts: {
+        boxesConsidered: activeBoxes.length,
+        resourcesConsidered: activeResources.length,
+        zonesConsidered: activeZones.length,
+        suggestions: suggestions.length,
+      },
+      generatedAt: Date.now(),
+    },
+  });
+}
+
+async function routeApplyAssignments(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const body = bodyObject(args.body);
+  const dryRun = Boolean(body.dryRun);
+  const rows = Array.isArray(body.assignments) ? body.assignments : [];
+  if (!rows.length) {
+    return restError({
+      status: 400,
+      code: "invalid_assignments",
+      message: "assignments must include at least one row.",
+    });
+  }
+  if (rows.length > 100) {
+    return restError({
+      status: 400,
+      code: "batch_too_large",
+      message: "Assignment apply requests are limited to 100 rows.",
+    });
+  }
+
+  const results = [];
+  for (const [index, row] of rows.entries()) {
+    const input = bodyObject(row);
+    const boxId = optionalString(input.boxId);
+    const assignedResourceId = optionalString(input.assignedResourceId);
+    const assignedZoneId = optionalString(input.assignedZoneId);
+    const overrideReason = normalizeOptionalText(asString(input.overrideReason));
+    try {
+      if (!boxId) throw new Error("boxId is required.");
+      if (!assignedResourceId) throw new Error("assignedResourceId is required.");
+      const box = await requireApiBox(ctx, auth.householdId, moveId, boxId);
+      if (box.assignmentLocked) {
+        throw new Error("Locked assignments must be changed manually.");
+      }
+      const validation = await validateApiBoxAssignment(ctx, {
+        householdId: auth.householdId,
+        moveId,
+        box,
+        assignedResourceId,
+        assignedZoneId,
+        overrideReason,
+      });
+      if (!dryRun) {
+        await ctx.db.patch(box._id, {
+          assignedResourceId: assignedResourceId as Id<"transportResources">,
+          assignedZoneId: assignedZoneId as Id<"transportZones"> | undefined,
+          assignmentOverrideReason: overrideReason,
+          assignmentWarnings: validation.softWarnings,
+          assignmentHardBlocks: validation.hardBlocks,
+          assignmentValidatedAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        await auditApiWrite(
+          ctx,
+          auth,
+          moveId,
+          "assignment.api_applied",
+          "boxes",
+          box._id,
+          {
+            rowIndex: index,
+            assignedResourceId,
+            assignedZoneId,
+            warningCount: validation.softWarnings.length,
+          }
+        );
+      }
+      results.push({
+        index,
+        ok: true,
+        boxId: box._id,
+        assignedResourceId,
+        assignedZoneId: assignedZoneId || undefined,
+        assignmentWarnings: validation.softWarnings,
+        assignmentHardBlocks: validation.hardBlocks,
+        dryRun,
+      });
+    } catch (error) {
+      results.push({
+        index,
+        ok: false,
+        boxId: boxId || undefined,
+        assignedResourceId: assignedResourceId || undefined,
+        assignedZoneId: assignedZoneId || undefined,
+        error: error instanceof Error ? error.message : "Assignment failed.",
+        dryRun,
+      });
+    }
+  }
+
+  const failed = results.filter((result) => !result.ok).length;
+  return restOk(
+    {
+      data: {
+        dryRun,
+        total: rows.length,
+        succeeded: rows.length - failed,
+        failed,
+        results,
+      },
+    },
+    failed > 0 ? 207 : 200
+  );
 }
 
 async function routeDocumentationProfiles(
@@ -1861,6 +2060,96 @@ async function createApiTransportZone(
   });
 }
 
+async function loadableApiBoxFor(ctx: MutationCtx, box: Doc<"boxes">) {
+  const memberships = await ctx.db
+    .query("boxItems")
+    .withIndex("by_box", (q) => q.eq("boxId", box._id))
+    .collect();
+  const contents = await Promise.all(
+    memberships.map(async (membership) => {
+      const item = await ctx.db.get(membership.itemId);
+      return item && !item.deletedAt ? { item, membership } : null;
+    })
+  );
+  const activeContents = contents.filter(
+    (entry): entry is { item: Doc<"items">; membership: Doc<"boxItems"> } =>
+      Boolean(entry)
+  );
+  const contentEstimates = activeContents.map(({ item, membership }) =>
+    estimateItem({ ...item, quantity: membership.quantity })
+  );
+  const contentsWeight = sumEstimateValues(
+    contentEstimates.map((estimate) => estimate.weight)
+  );
+  const contentsVolume = sumEstimateValues(
+    contentEstimates.map((estimate) => estimate.volume)
+  );
+
+  return {
+    estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight,
+    estimatedVolumeCuFt: box.estimatedVolumeCuFt ?? contentsVolume,
+    dimensionsIn: box.dimensionsIn,
+    itemCount: activeContents.reduce(
+      (sum, entry) => sum + entry.membership.quantity,
+      0
+    ),
+    hasFragile: activeContents.some((entry) => entry.item.fragility === "high"),
+    hasHighValue: activeContents.some((entry) => entry.item.highValue),
+    hasSensitive: activeContents.some((entry) =>
+      entry.item.planningDefaultKeys.includes("sensitive")
+    ),
+    hasPersonalTransport: activeContents.some(
+      (entry) => entry.item.requiresPersonalTransport
+    ),
+    hasHazardous: activeContents.some((entry) => entry.item.hazardousFlag),
+  };
+}
+
+async function validateApiBoxAssignment(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    box: Doc<"boxes">;
+    assignedResourceId: string;
+    assignedZoneId?: string;
+    overrideReason?: string;
+  }
+) {
+  const resource = await requireApiTransportResource(
+    ctx,
+    args.householdId,
+    args.moveId,
+    args.assignedResourceId
+  );
+  const zone = args.assignedZoneId
+    ? await requireApiTransportZone(
+        ctx,
+        args.householdId,
+        args.moveId,
+        args.assignedZoneId
+      )
+    : null;
+  if (zone && zone.resourceId !== resource._id) {
+    throw new Error("Zone does not belong to the assigned resource.");
+  }
+  const loadableBox = await loadableApiBoxFor(ctx, args.box);
+  const validation = validateAssignment({
+    box: loadableBox,
+    target: {
+      resourceType: resource.type,
+      capacity: mergeCapacity(resource.capacity, zone?.capacity),
+    },
+  });
+  if (validation.hardBlocks.length) {
+    throw new Error(`Assignment blocked: ${validation.hardBlocks.join(", ")}`);
+  }
+  if (requiresOverrideReason(validation) && !args.overrideReason) {
+    throw new Error("Assignment warnings require an override reason.");
+  }
+  return validation;
+}
+
 async function createApiItem(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
@@ -2298,6 +2587,13 @@ function positiveNumber(value: unknown) {
   return number && number > 0 ? number : undefined;
 }
 
+function boundedInteger(value: unknown, min: number, max: number, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(Math.max(Math.floor(value), min), max);
+}
+
 function asString(value: unknown) {
   return typeof value === "string" ? value : undefined;
 }
@@ -2414,6 +2710,56 @@ function capacityPercent({
   unlimited?: boolean;
 }) {
   return max && !unlimited ? roundEstimate((used / max) * 100) : undefined;
+}
+
+function mergeCapacity(
+  resourceCapacity: Doc<"transportResources">["capacity"],
+  zoneCapacity?: Doc<"transportZones">["capacity"]
+) {
+  if (!zoneCapacity) {
+    return resourceCapacity;
+  }
+
+  return {
+    maxWeightLb: minOptional(
+      resourceCapacity.maxWeightLb,
+      zoneCapacity.maxWeightLb
+    ),
+    maxVolumeCuFt: minOptional(
+      resourceCapacity.maxVolumeCuFt,
+      zoneCapacity.maxVolumeCuFt
+    ),
+    maxItemCount: minOptional(
+      resourceCapacity.maxItemCount,
+      zoneCapacity.maxItemCount
+    ),
+    dimensions: {
+      lengthIn: minOptional(
+        resourceCapacity.dimensions?.lengthIn,
+        zoneCapacity.dimensions?.lengthIn
+      ),
+      widthIn: minOptional(
+        resourceCapacity.dimensions?.widthIn,
+        zoneCapacity.dimensions?.widthIn
+      ),
+      heightIn: minOptional(
+        resourceCapacity.dimensions?.heightIn,
+        zoneCapacity.dimensions?.heightIn
+      ),
+    },
+    weightIsUnlimited:
+      resourceCapacity.weightIsUnlimited === true &&
+      zoneCapacity.weightIsUnlimited === true,
+    volumeIsUnlimited:
+      resourceCapacity.volumeIsUnlimited === true &&
+      zoneCapacity.volumeIsUnlimited === true,
+  };
+}
+
+function minOptional(first?: number, second?: number) {
+  if (typeof first !== "number") return second;
+  if (typeof second !== "number") return first;
+  return Math.min(first, second);
 }
 
 function includesLiteral(values: readonly string[], value: unknown) {

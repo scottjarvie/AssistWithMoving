@@ -92,6 +92,13 @@ export function requiredScopesForRestRoute({
     return ["exports/read"];
   }
   if (segments[0] !== "moves") return [];
+  if (
+    method === "POST" &&
+    segments[2] === "assignments" &&
+    segments[3] === "suggest"
+  ) {
+    return ["moves/read", "inventory/read"];
+  }
   if (method === "GET") {
     if (segments[2] === "summary") {
       return ["moves/read", "inventory/read", "exports/read"];
