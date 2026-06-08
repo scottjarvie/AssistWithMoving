@@ -20,6 +20,24 @@ const internalMutations = anyApi as unknown as {
       { clerkUserId: string }
     >;
   };
+  restApi: {
+    handle: FunctionReference<
+      "mutation",
+      "internal",
+      {
+        method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+        path: string;
+        query: Record<string, string>;
+        authorization?: string;
+        idempotencyKey?: string;
+        body?: unknown;
+      },
+      {
+        status: number;
+        body: unknown;
+      }
+    >;
+  };
 };
 
 http.route({
@@ -70,4 +88,42 @@ http.route({
   }),
 });
 
+for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"] as const) {
+  http.route({
+    pathPrefix: "/api/v1/",
+    method,
+    handler: httpAction(async (ctx, request) => {
+      const url = new URL(request.url);
+      const path = url.pathname.replace(/^\/api\/v1\/?/, "");
+      const query = Object.fromEntries(url.searchParams.entries());
+      const body = await parseJsonBody(request);
+      const response = await ctx.runMutation(internalMutations.restApi.handle, {
+        method,
+        path,
+        query,
+        authorization: request.headers.get("authorization") ?? undefined,
+        idempotencyKey: request.headers.get("idempotency-key") ?? undefined,
+        body,
+      });
+
+      return Response.json(response.body, { status: response.status });
+    }),
+  });
+}
+
 export default http;
+
+async function parseJsonBody(request: Request) {
+  if (request.method === "GET" || request.method === "DELETE") {
+    return undefined;
+  }
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return undefined;
+  }
+  try {
+    return await request.json();
+  } catch {
+    return undefined;
+  }
+}

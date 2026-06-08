@@ -610,6 +610,21 @@ export default defineSchema({
     .index("by_created_by", ["createdByUserId"])
     .index("by_expires", ["expiresAt"]),
 
+  apiIdempotencyKeys: defineTable({
+    householdId: v.id("households"),
+    moveId: v.optional(v.id("moves")),
+    apiKeyId: v.id("apiKeys"),
+    idempotencyKey: v.string(),
+    requestHash: v.string(),
+    response: v.any(),
+    status: v.number(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_api_key_key", ["apiKeyId", "idempotencyKey"])
+    .index("by_expires", ["expiresAt"])
+    .index("by_household", ["householdId"]),
+
   shareLinks: defineTable({
     householdId: v.id("households"),
     moveId: v.id("moves"),

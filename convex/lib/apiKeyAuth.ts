@@ -69,6 +69,8 @@ export async function authenticateApiKey(
       apiKeyId: String(key._id),
       scopes: key.scopes,
     },
+    apiKeyId: key._id,
+    createdByUserId: key.createdByUserId,
     householdId: key.householdId,
     moveId: key.moveId,
     scopes: key.scopes,
