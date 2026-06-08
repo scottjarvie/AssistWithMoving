@@ -23,6 +23,7 @@ export type AuditEventInput = {
     | "shareLink"
     | "apiKey"
     | "export"
+    | "ai"
     | "admin"
     | "system";
   action: string;

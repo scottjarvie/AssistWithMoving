@@ -44,6 +44,7 @@ export const auditCategory = v.union(
   v.literal("shareLink"),
   v.literal("apiKey"),
   v.literal("export"),
+  v.literal("ai"),
   v.literal("admin"),
   v.literal("system")
 );
@@ -262,6 +263,37 @@ export const photoVerificationStatus = v.union(
   v.literal("unreviewed"),
   v.literal("verified"),
   v.literal("needsReview"),
+  v.literal("rejected")
+);
+
+export const aiJobType = v.union(
+  v.literal("photoIntake"),
+  v.literal("inventoryExtraction"),
+  v.literal("itemCategorization"),
+  v.literal("loadPlanSuggestions"),
+  v.literal("documentationDraft"),
+  v.literal("claimsReview"),
+  v.literal("generalReview")
+);
+
+export const aiJobStatus = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+  v.literal("canceled")
+);
+
+export const aiJobModality = v.union(
+  v.literal("text"),
+  v.literal("vision"),
+  v.literal("structured")
+);
+
+export const aiJobReviewStatus = v.union(
+  v.literal("unreviewed"),
+  v.literal("accepted"),
+  v.literal("edited"),
   v.literal("rejected")
 );
 
@@ -619,6 +651,54 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_expires", ["expiresAt"])
     .index("by_household", ["householdId"]),
+
+  aiJobs: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    type: aiJobType,
+    status: aiJobStatus,
+    modality: aiJobModality,
+    provider: v.string(),
+    model: v.string(),
+    inputRef: v.optional(v.any()),
+    inputSummary: v.optional(v.string()),
+    outputRef: v.optional(v.any()),
+    outputSummary: v.optional(v.string()),
+    confidence: v.optional(estimateConfidence),
+    reviewStatus: aiJobReviewStatus,
+    reviewedByUserId: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    tokenUsage: v.optional(
+      v.object({
+        inputTokens: v.optional(v.number()),
+        outputTokens: v.optional(v.number()),
+        totalTokens: v.optional(v.number()),
+      })
+    ),
+    cost: v.optional(
+      v.object({
+        estimatedCents: v.optional(v.number()),
+        actualCents: v.optional(v.number()),
+        currency: v.string(),
+      })
+    ),
+    maxCostCents: v.optional(v.number()),
+    retryCount: v.number(),
+    maxRetries: v.number(),
+    error: v.optional(v.string()),
+    providerMetadata: v.optional(v.any()),
+    createdByUserId: v.id("users"),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    canceledAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_household_status", ["householdId", "status"])
+    .index("by_created_by", ["createdByUserId"])
+    .index("by_status_updated", ["status", "updatedAt"]),
 
   items: defineTable({
     householdId: v.id("households"),

@@ -29,6 +29,7 @@ export const record = internalMutation({
       v.literal("shareLink"),
       v.literal("apiKey"),
       v.literal("export"),
+      v.literal("ai"),
       v.literal("admin"),
       v.literal("system")
     ),

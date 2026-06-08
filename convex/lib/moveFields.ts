@@ -180,6 +180,33 @@ export const photoVerificationStatuses = [
   "rejected",
 ] as const;
 
+export const aiJobTypes = [
+  "photoIntake",
+  "inventoryExtraction",
+  "itemCategorization",
+  "loadPlanSuggestions",
+  "documentationDraft",
+  "claimsReview",
+  "generalReview",
+] as const;
+
+export const aiJobStatuses = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+] as const;
+
+export const aiJobModalities = ["text", "vision", "structured"] as const;
+
+export const aiJobReviewStatuses = [
+  "unreviewed",
+  "accepted",
+  "edited",
+  "rejected",
+] as const;
+
 export const documentationProfileTypes = [
   "personalFullRecord",
   "pcsMove",
@@ -508,6 +535,37 @@ export const photoVerificationStatusValidator = v.union(
   v.literal("unreviewed"),
   v.literal("verified"),
   v.literal("needsReview"),
+  v.literal("rejected")
+);
+
+export const aiJobTypeValidator = v.union(
+  v.literal("photoIntake"),
+  v.literal("inventoryExtraction"),
+  v.literal("itemCategorization"),
+  v.literal("loadPlanSuggestions"),
+  v.literal("documentationDraft"),
+  v.literal("claimsReview"),
+  v.literal("generalReview")
+);
+
+export const aiJobStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("succeeded"),
+  v.literal("failed"),
+  v.literal("canceled")
+);
+
+export const aiJobModalityValidator = v.union(
+  v.literal("text"),
+  v.literal("vision"),
+  v.literal("structured")
+);
+
+export const aiJobReviewStatusValidator = v.union(
+  v.literal("unreviewed"),
+  v.literal("accepted"),
+  v.literal("edited"),
   v.literal("rejected")
 );
 

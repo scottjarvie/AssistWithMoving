@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as aiJobs from "../aiJobs.js";
 import type * as audit from "../audit.js";
 import type * as boxes from "../boxes.js";
 import type * as clerkUsers from "../clerkUsers.js";
@@ -16,6 +17,7 @@ import type * as health from "../health.js";
 import type * as households from "../households.js";
 import type * as http from "../http.js";
 import type * as items from "../items.js";
+import type * as lib_aiProvider from "../lib/aiProvider.js";
 import type * as lib_assignmentValidation from "../lib/assignmentValidation.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -43,6 +45,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiJobs: typeof aiJobs;
   audit: typeof audit;
   boxes: typeof boxes;
   clerkUsers: typeof clerkUsers;
@@ -51,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   households: typeof households;
   http: typeof http;
   items: typeof items;
+  "lib/aiProvider": typeof lib_aiProvider;
   "lib/assignmentValidation": typeof lib_assignmentValidation;
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;

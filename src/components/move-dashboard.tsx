@@ -17,6 +17,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { AiJobMonitor } from "@/components/ai-job-monitor";
 import { BoxManager } from "@/components/box-manager";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
 import { EstimateSummary } from "@/components/estimate-summary";
@@ -781,6 +782,8 @@ export function MoveDashboard() {
       </section>
 
       <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
+
+      <AiJobMonitor householdId={householdId} moveId={moveId} />
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
