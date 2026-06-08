@@ -29,6 +29,7 @@ import {
   type ShareLinkAction,
   type ShareLinkRole,
 } from "@/lib/documentation-packets";
+import { buildClaimPacketPath } from "@/lib/claim-packet";
 import { buildPcsPacketPath } from "@/lib/pcs-packet";
 import { buildEmployerPacketPath } from "@/lib/employer-packet";
 import {
@@ -632,6 +633,33 @@ export function DocumentationPacketBuilder({
                           })}
                         >
                           Employer owner
+                        </Link>
+                      </Button>
+                    </>
+                  ) : null}
+                  {selectedProfile.type === "insuranceClaim" &&
+                  householdId &&
+                  moveId ? (
+                    <>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildClaimPacketPath({
+                            householdId,
+                            moveId,
+                          })}
+                        >
+                          Claim packet
+                        </Link>
+                      </Button>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildClaimPacketPath({
+                            householdId,
+                            moveId,
+                            mode: "owner",
+                          })}
+                        >
+                          Claim owner
                         </Link>
                       </Button>
                     </>
