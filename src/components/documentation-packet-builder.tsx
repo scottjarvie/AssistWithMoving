@@ -34,6 +34,7 @@ import {
   documentationProfileOptions,
   type DocumentationProfileType,
 } from "@/lib/move-presets";
+import { buildMoverPacketPath } from "@/lib/mover-packet";
 
 type DocumentationProfile = {
   _id: Id<"documentationProfiles">;
@@ -571,6 +572,38 @@ export function DocumentationPacketBuilder({
                           })}
                         >
                           PCS owner
+                        </Link>
+                      </Button>
+                    </>
+                  ) : null}
+                  {(selectedProfile.type === "movingCompany" ||
+                    selectedProfile.type === "loadCrew") &&
+                  householdId &&
+                  moveId ? (
+                    <>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildMoverPacketPath({
+                            householdId,
+                            moveId,
+                            mode:
+                              selectedProfile.type === "loadCrew"
+                                ? "loadCrew"
+                                : "movingCompany",
+                          })}
+                        >
+                          Mover packet
+                        </Link>
+                      </Button>
+                      <Button asChild type="button" variant="outline">
+                        <Link
+                          href={buildMoverPacketPath({
+                            householdId,
+                            moveId,
+                            mode: "owner",
+                          })}
+                        >
+                          Mover owner
                         </Link>
                       </Button>
                     </>
