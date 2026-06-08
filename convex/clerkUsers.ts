@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { internalMutation } from "./_generated/server";
+import { appRoleForEmail } from "./lib/admin";
 import { recordAuditEvent } from "./lib/audit";
 
 export const upsertFromWebhook = internalMutation({
@@ -23,6 +24,7 @@ export const upsertFromWebhook = internalMutation({
         email: args.email,
         name: args.name,
         imageUrl: args.imageUrl,
+        appRole: appRoleForEmail(args.email, existing.appRole),
         status: "active",
         updatedAt: args.sourceUpdatedAt ?? now,
       });
@@ -44,7 +46,7 @@ export const upsertFromWebhook = internalMutation({
       email: args.email,
       name: args.name,
       imageUrl: args.imageUrl,
-      appRole: "member",
+      appRole: appRoleForEmail(args.email),
       status: "active",
       createdAt: now,
       updatedAt: args.sourceUpdatedAt ?? now,

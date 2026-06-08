@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import { appRoleForEmail } from "./lib/admin";
 import { getCurrentUser } from "./lib/auth";
 
 export const current = query({
@@ -38,6 +39,7 @@ export const upsertCurrent = mutation({
         email,
         name,
         imageUrl,
+        appRole: appRoleForEmail(email, existing.appRole),
         updatedAt: now,
         lastSeenAt: now,
       });
@@ -50,7 +52,7 @@ export const upsertCurrent = mutation({
       email,
       name,
       imageUrl,
-      appRole: "member",
+      appRole: appRoleForEmail(email),
       status: "active",
       createdAt: now,
       updatedAt: now,
