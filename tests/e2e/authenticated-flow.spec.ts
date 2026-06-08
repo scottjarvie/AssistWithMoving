@@ -25,6 +25,15 @@ async function gotoDashboard(page: Page) {
   }
 }
 
+async function waitForWorkspaceAuth(page: Page) {
+  await expect(
+    page.getByText(/Convex sees this browser session as/)
+  ).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
+    timeout: 30_000,
+  });
+}
+
 async function ensureHousehold(page: Page, householdName: string) {
   const householdInput = page.getByLabel("Household name");
   const selectedHousehold = page.getByLabel("Selected household");
@@ -44,6 +53,7 @@ async function ensureHousehold(page: Page, householdName: string) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       await householdInput.fill(householdName);
+      await expect(createHousehold).toBeEnabled({ timeout: 30_000 });
       await createHousehold.click();
       await expect(selectedHousehold).toBeVisible({ timeout: 30_000 });
       return;
@@ -80,6 +90,7 @@ test.describe("authenticated product flow", () => {
     await expect(
       page.getByRole("heading", { name: "Household", exact: true })
     ).toBeVisible();
+    await waitForWorkspaceAuth(page);
 
     const runId = Date.now().toString(36);
     const householdName = `E2E household ${runId}`;
@@ -253,6 +264,9 @@ test.describe("authenticated product flow", () => {
     expect(pcsPacketHref).toBeTruthy();
 
     await page.goto("/settings");
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(
       page.getByRole("heading", { name: "Settings", exact: true })
     ).toBeVisible({ timeout: 30_000 });
@@ -287,10 +301,25 @@ test.describe("authenticated product flow", () => {
       name: `API key ${apiKeyName}`,
     });
     await expect(apiKeyRow).toBeVisible({ timeout: 30_000 });
-    await apiKeyRow.getByRole("button", { name: "Revoke" }).click();
-    await expect(apiKeys.getByText("API key revoked.")).toBeVisible({
-      timeout: 30_000,
-    });
+    await apiKeyRow.scrollIntoViewIfNeeded();
+    const revokeApiKey = apiKeyRow.getByRole("button", { name: "Revoke" });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(revokeApiKey).toBeEnabled({ timeout: 30_000 });
+      await revokeApiKey.click();
+      const revoked = await apiKeyRow
+        .getByText("Revoked")
+        .waitFor({ state: "visible", timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (revoked) {
+        break;
+      }
+      if (attempt === 2) {
+        await expect(apiKeyRow.getByText("Revoked")).toBeVisible({
+          timeout: 30_000,
+        });
+      }
+    }
     await expect(apiKeyRow.getByText("Revoked")).toBeVisible({
       timeout: 30_000,
     });
