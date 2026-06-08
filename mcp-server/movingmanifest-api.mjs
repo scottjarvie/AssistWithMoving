@@ -164,6 +164,24 @@ export async function updateItem(config, input) {
   });
 }
 
+export async function deleteItem(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "DELETE",
+        path: `/items/${input.itemId}`,
+        query: { moveId: input.moveId },
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "DELETE",
+    path: `/items/${input.itemId}`,
+    query: { moveId: input.moveId },
+  });
+}
+
 export async function createBox(config, input) {
   if (input.dryRun) {
     return { dryRun: true, request: { path: `/moves/${input.moveId}/boxes`, body: input } };
@@ -220,6 +238,20 @@ export async function startPhotoUpload(config, input) {
   return await movingManifestRequest(config, {
     method: "POST",
     path: "/uploads/init",
+    body: input,
+  });
+}
+
+export async function attachPhoto(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: { path: `/photos/${input.photoId}/attach`, body: input },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/photos/${input.photoId}/attach`,
     body: input,
   });
 }

@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   batchUpsertItems,
   applyAssignments,
+  attachPhoto,
   createApiConfig,
   createItem,
   createTransportResource,
   createTransportZone,
+  deleteItem,
   getCapacityReport,
   getMoveSummary,
   movingManifestRequest,
@@ -414,6 +416,80 @@ describe("MovingManifest MCP API client", () => {
               overrideReason: "Reviewed validation warnings.",
             },
           ],
+        }),
+      }
+    );
+  });
+
+  it("soft-deletes items through the top-level API alias", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { deleted: true, itemId: "item1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await deleteItem(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1", itemId: "item1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/items/item1?moveId=move1"),
+      {
+        method: "DELETE",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "idempotency-key": expect.any(String),
+        },
+      }
+    );
+  });
+
+  it("attaches photo evidence through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          photoId: "photo1",
+          itemId: "item1",
+          photoType: "condition",
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await attachPhoto(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        photoId: "photo1",
+        itemId: "item1",
+        boxId: "box1",
+        photoType: "condition",
+        privacyLevel: "reportVisible",
+        caption: "Pre-move condition.",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/photos/photo1/attach"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          photoId: "photo1",
+          itemId: "item1",
+          boxId: "box1",
+          photoType: "condition",
+          privacyLevel: "reportVisible",
+          caption: "Pre-move condition.",
         }),
       }
     );

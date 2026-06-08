@@ -43,6 +43,30 @@ describe("REST API helpers", () => {
     ).toEqual(["inventory/write"]);
     expect(
       requiredScopesForRestRoute({
+        method: "PATCH",
+        segments: ["items", "item1"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "DELETE",
+        segments: ["items", "item1"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "PATCH",
+        segments: ["boxes", "box1"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["photos", "photo1", "attach"],
+      })
+    ).toEqual(["photos/write"]);
+    expect(
+      requiredScopesForRestRoute({
         method: "GET",
         segments: ["moves"],
       })

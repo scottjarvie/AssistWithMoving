@@ -38,7 +38,7 @@ API keys can include these scopes:
 | `moves/write` | Update move metadata and create/update transport resources and zones. |
 | `inventory/read` | Read items, boxes, assignments, and photo metadata. |
 | `inventory/write` | Create/update items, boxes, and assignments. |
-| `photos/write` | Start and finalize photo upload sessions. |
+| `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles/exports and read unexpired export artifacts. |
 | `exports/create` | Create export jobs. |
 
@@ -47,6 +47,12 @@ move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
 The move summary endpoint requires `moves/read`, `inventory/read`, and
 `exports/read` because it returns move, inventory, photo metadata, documentation,
 and export state in one response.
+
+Top-level object aliases such as `/items/{itemId}`, `/boxes/{boxId}`, and
+`/photos/{photoId}/attach` still validate object ownership server-side. For
+move-restricted keys, include `moveId` in the JSON body or query string so the
+key can be authenticated before the object is loaded. `DELETE /items/{itemId}`
+must pass `moveId` as a query parameter because DELETE bodies are not parsed.
 
 ## Errors
 
@@ -195,6 +201,28 @@ idempotency key when ready to commit. This endpoint does not yet implement a
 third-party external-key sync model. If any row fails validation, the response
 uses HTTP `207` and includes the failed row details.
 
+Update an item through the top-level alias:
+
+```bash
+curl -X PATCH https://movingmanifest.com/api/v1/items/ITEM_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: update-item-001" \
+  -d '{ "moveId": "MOVE_ID", "status": "packed", "room": "Office" }'
+```
+
+Soft-delete an item:
+
+```bash
+curl -X DELETE "https://movingmanifest.com/api/v1/items/ITEM_ID?moveId=MOVE_ID" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Idempotency-Key: delete-item-001"
+```
+
+Top-level item aliases require `inventory/write` for `PATCH`/`DELETE` and
+`inventory/read` for `GET`. Delete is a soft delete: the record is hidden from
+normal inventory reads and the write is audited.
+
 Create a box:
 
 ```bash
@@ -203,6 +231,16 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/boxes \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: create-box-office-001" \
   -d '{ "code": "OFFICE-1", "label": "Office books", "room": "Office" }'
+```
+
+Update a box through the top-level alias:
+
+```bash
+curl -X PATCH https://movingmanifest.com/api/v1/boxes/BOX_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: update-box-001" \
+  -d '{ "moveId": "MOVE_ID", "status": "sealed", "actualWeightLb": 42 }'
 ```
 
 Assign an item to a box:
@@ -254,6 +292,29 @@ box/resource/zone assignments, not broad instructions. Use `dryRun: true` first
 to validate locked boxes, hard blocks, zone ownership, and warning override
 requirements without writing. If any row fails validation, the response uses
 HTTP `207` and includes row-level details.
+
+Attach or update photo evidence metadata after upload finalization:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/photos/PHOTO_ID/attach \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: attach-photo-001" \
+  -d '{
+    "moveId": "MOVE_ID",
+    "itemId": "ITEM_ID",
+    "boxId": "BOX_ID",
+    "photoType": "condition",
+    "privacyLevel": "reportVisible",
+    "caption": "Pre-move condition photo"
+  }'
+```
+
+Photo attach requires `photos/write`. It can set or clear `itemId`, `boxId`,
+`room`, `claimId`, `documentationProfileTypes`, `caption`, `photoType`,
+`privacyLevel`, `visibilityScope`, `source`, `exifHandlingStatus`, `confidence`,
+`notes`, `verificationStatus`, `aiProcessed`, and `capturedAt`. It cannot change
+storage object keys, file size, MIME type, or original download access.
 
 Create a transport resource from a preset:
 
@@ -449,11 +510,13 @@ Available MCP tools:
 | `create_item` | Create an item, with `dryRun` support. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
 | `update_item` | Update selected item fields, with `dryRun` support. |
+| `delete_item` | Soft-delete one item, with `dryRun` support. |
 | `create_box` | Create a box, with `dryRun` support. |
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
 | `suggest_assignments` | Generate deterministic box-to-resource/zone suggestions without writing. |
 | `apply_assignments` | Apply explicit box-to-resource/zone assignments, with API-side `dryRun` validation. |
 | `start_photo_upload` | Start a photo upload session and return presigned upload information. |
+| `attach_photo` | Attach/update photo evidence metadata after upload finalization, with `dryRun` support. |
 | `list_transport_resources` | List resources and zones for load planning. |
 | `create_transport_resource` | Create a transport resource from a preset or custom fields, with `dryRun` support. |
 | `update_transport_resource` | Update resource metadata, capacity, rules, and sort order, with `dryRun` support. |

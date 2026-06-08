@@ -26,15 +26,23 @@ import {
 } from "./lib/estimateEngine";
 import {
   boxStatuses,
+  documentationProfileTypes,
+  exifHandlingStatuses,
   itemConditions,
   itemDispositions,
   itemStatuses,
+  normalizeDocumentationProfileTypes,
   normalizeBoxCode,
   normalizeItemName,
   normalizeOptionalText,
   normalizeRuleList,
   normalizeSortOrder,
   normalizedSearchName,
+  photoPrivacyLevels,
+  photoSources,
+  photoTypes,
+  photoVerificationStatuses,
+  photoVisibilityScopes,
   transportResourcePresetKeys,
   transportResourceTypes,
 } from "./lib/moveFields";
@@ -58,6 +66,14 @@ const restExportJobTypes = [
   "boxes",
   "assignments",
   "documentationProfile",
+] as const;
+const restEstimateConfidences = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "manual",
+  "actual",
 ] as const;
 const maxBatchUpsertItems = 100;
 
@@ -100,7 +116,7 @@ export const handle = internalMutation({
     }
 
     try {
-      const moveId = routeMoveId(segments);
+      const moveId = routeMoveIdFromRequest(segments, args.body, args.query);
       const auth = await authenticateApiKey(ctx, {
         rawKey,
         requiredScopes,
@@ -276,6 +292,15 @@ async function routeRequest(
   const [resource, moveIdSegment, nested, nestedId] = segments;
   if (resource === "exports" && args.method === "GET") {
     return await routeTopLevelExport(ctx, args, auth, moveIdSegment);
+  }
+  if (resource === "items") {
+    return await routeTopLevelItem(ctx, args, auth, moveIdSegment);
+  }
+  if (resource === "boxes") {
+    return await routeTopLevelBox(ctx, args, auth, moveIdSegment);
+  }
+  if (resource === "photos") {
+    return await routeTopLevelPhoto(ctx, args, auth, moveIdSegment, nested);
   }
   if (resource !== "moves") {
     return restError({ status: 404, code: "not_found", message: "Not found." });
@@ -1541,6 +1566,145 @@ async function routeExports(
   });
 }
 
+async function routeTopLevelItem(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  itemIdSegment?: string
+) {
+  if (!itemIdSegment) {
+    return restError({ status: 404, code: "not_found", message: "Item not found." });
+  }
+  const item = await requireApiItemById(ctx, auth.householdId, itemIdSegment);
+  assertApiObjectMoveAccess(auth, item.moveId);
+  assertRequestedMoveMatches(args, item.moveId, "Item not found.");
+
+  if (args.method === "GET") {
+    return restOk({ data: safeItem(item) });
+  }
+
+  if (args.method === "PATCH") {
+    const patch = itemPatch(args.body, auth.createdByUserId);
+    await ctx.db.patch(item._id, patch);
+    const updated = await ctx.db.get(item._id);
+    await auditApiWrite(
+      ctx,
+      auth,
+      item.moveId,
+      "item.api_updated",
+      "items",
+      item._id,
+      { route: "top_level", changedKeys: Object.keys(patch) }
+    );
+    return restOk({ data: updated ? safeItem(updated) : { itemId: item._id } });
+  }
+
+  if (args.method === "DELETE") {
+    const now = Date.now();
+    await ctx.db.patch(item._id, {
+      deletedAt: now,
+      updatedAt: now,
+      updatedByUserId: auth.createdByUserId,
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      item.moveId,
+      "item.api_deleted",
+      "items",
+      item._id,
+      { route: "top_level" }
+    );
+    return restOk({ data: { deleted: true, itemId: item._id } });
+  }
+
+  return restError({ status: 404, code: "not_found", message: "Item route not found." });
+}
+
+async function routeTopLevelBox(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  boxIdSegment?: string
+) {
+  if (!boxIdSegment) {
+    return restError({ status: 404, code: "not_found", message: "Box not found." });
+  }
+  const box = await requireApiBoxById(ctx, auth.householdId, boxIdSegment);
+  assertApiObjectMoveAccess(auth, box.moveId);
+  assertRequestedMoveMatches(args, box.moveId, "Box not found.");
+
+  if (args.method === "GET") {
+    return restOk({ data: safeBox(box) });
+  }
+
+  if (args.method === "PATCH") {
+    const patch = boxPatch(args.body);
+    await ctx.db.patch(box._id, patch);
+    const updated = await ctx.db.get(box._id);
+    await auditApiWrite(
+      ctx,
+      auth,
+      box.moveId,
+      "box.api_updated",
+      "boxes",
+      box._id,
+      { route: "top_level", changedKeys: Object.keys(patch) }
+    );
+    return restOk({ data: updated ? safeBox(updated) : { boxId: box._id } });
+  }
+
+  return restError({ status: 404, code: "not_found", message: "Box route not found." });
+}
+
+async function routeTopLevelPhoto(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  photoIdSegment?: string,
+  actionSegment?: string
+) {
+  if (!photoIdSegment) {
+    return restError({ status: 404, code: "not_found", message: "Photo not found." });
+  }
+  if (args.method !== "POST" || actionSegment !== "attach") {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Photo route not found.",
+    });
+  }
+
+  const photo = await requireApiPhotoById(ctx, auth.householdId, photoIdSegment);
+  assertApiObjectMoveAccess(auth, photo.moveId);
+  assertRequestedMoveMatches(args, photo.moveId, "Photo not found.");
+  const patch = await photoAttachPatch(ctx, {
+    householdId: auth.householdId,
+    moveId: photo.moveId,
+    reviewedByUserId: auth.createdByUserId,
+    body: args.body,
+  });
+  if (!Object.keys(patch).some((key) => key !== "updatedAt")) {
+    return restError({
+      status: 400,
+      code: "empty_photo_patch",
+      message: "Provide at least one photo attachment or metadata field.",
+    });
+  }
+  await ctx.db.patch(photo._id, patch);
+  const updated = await ctx.db.get(photo._id);
+  await auditApiWrite(
+    ctx,
+    auth,
+    photo.moveId,
+    "photo.api_attached",
+    "itemPhotos",
+    photo._id,
+    { changedKeys: Object.keys(patch) }
+  );
+  return restOk({ data: updated ? safePhoto(updated) : { photoId: photo._id } });
+}
+
 async function routeTopLevelExport(
   ctx: MutationCtx,
   args: RestRequestInput,
@@ -1608,12 +1772,6 @@ async function withIdempotency(
   return response;
 }
 
-function routeMoveId(segments: string[]) {
-  return segments[0] === "moves" && segments[1]
-    ? (segments[1] as Id<"moves">)
-    : undefined;
-}
-
 function routeMoveIdFromRequest(
   segments: string[],
   body: unknown,
@@ -1658,6 +1816,18 @@ async function requireApiItem(
   return item;
 }
 
+async function requireApiItemById(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  itemIdSegment: string
+) {
+  const item = await ctx.db.get(itemIdSegment as Id<"items">);
+  if (!item || item.householdId !== householdId || item.deletedAt) {
+    throw new Error("Item not found.");
+  }
+  return item;
+}
+
 async function requireApiBox(
   ctx: MutationCtx,
   householdId: Id<"households">,
@@ -1669,6 +1839,30 @@ async function requireApiBox(
     throw new Error("Box not found.");
   }
   return box;
+}
+
+async function requireApiBoxById(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  boxIdSegment: string
+) {
+  const box = await ctx.db.get(boxIdSegment as Id<"boxes">);
+  if (!box || box.householdId !== householdId || box.archivedAt) {
+    throw new Error("Box not found.");
+  }
+  return box;
+}
+
+async function requireApiPhotoById(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  photoIdSegment: string
+) {
+  const photo = await ctx.db.get(photoIdSegment as Id<"itemPhotos">);
+  if (!photo || photo.householdId !== householdId || photo.archivedAt) {
+    throw new Error("Photo not found.");
+  }
+  return photo;
 }
 
 async function requireApiTransportResource(
@@ -1750,6 +1944,37 @@ function requiredQueryMoveId(query: Record<string, string>) {
     throw new Error("moveId query parameter is required.");
   }
   return query.moveId as Id<"moves">;
+}
+
+function assertApiObjectMoveAccess(
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  objectMoveId: Id<"moves">
+) {
+  if (auth.moveId && auth.moveId !== objectMoveId) {
+    throw new Error("API key is not allowed for this operation.");
+  }
+}
+
+function assertRequestedMoveMatches(
+  args: RestRequestInput,
+  objectMoveId: Id<"moves">,
+  message: string
+) {
+  const requestedMoveId = optionalRequestMoveId(args);
+  if (requestedMoveId && requestedMoveId !== objectMoveId) {
+    throw new Error(message);
+  }
+}
+
+function optionalRequestMoveId(args: RestRequestInput) {
+  const bodyMoveId = bodyObject(args.body).moveId;
+  if (typeof bodyMoveId === "string" && bodyMoveId) {
+    return bodyMoveId as Id<"moves">;
+  }
+  if (args.query.moveId) {
+    return args.query.moveId as Id<"moves">;
+  }
+  return undefined;
 }
 
 function safeMove(move: Doc<"moves">) {
@@ -2549,6 +2774,99 @@ function boxPatch(body: unknown): Partial<Doc<"boxes">> {
   return patch;
 }
 
+async function photoAttachPatch(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    reviewedByUserId: Id<"users">;
+    body: unknown;
+  }
+): Promise<Partial<Doc<"itemPhotos">>> {
+  const input = bodyObject(args.body);
+  const now = Date.now();
+  const patch: Partial<Doc<"itemPhotos">> = { updatedAt: now };
+
+  if (input.itemId !== undefined) {
+    const itemId = optionalString(input.itemId) as Id<"items"> | undefined;
+    if (itemId) {
+      await requireApiItem(ctx, args.householdId, args.moveId, itemId);
+    }
+    patch.itemId = itemId;
+  }
+  if (input.boxId !== undefined) {
+    const boxId = optionalString(input.boxId) as Id<"boxes"> | undefined;
+    if (boxId) {
+      await requireApiBox(ctx, args.householdId, args.moveId, boxId);
+    }
+    patch.boxId = boxId;
+  }
+  if (input.room !== undefined) {
+    patch.room = normalizeOptionalText(asString(input.room));
+  }
+  if (input.claimId !== undefined) {
+    patch.claimId = normalizeOptionalText(asString(input.claimId));
+  }
+  if (input.documentationProfileTypes !== undefined) {
+    patch.documentationProfileTypes = parseDocumentationProfileTypes(
+      input.documentationProfileTypes
+    );
+  }
+  if (input.caption !== undefined) {
+    patch.caption = normalizeOptionalText(asString(input.caption));
+  }
+  if (input.photoType !== undefined) {
+    const photoType = parsePhotoType(input.photoType);
+    if (!photoType) throw new Error("Unsupported photoType.");
+    patch.photoType = photoType;
+  }
+  if (input.privacyLevel !== undefined) {
+    const privacyLevel = parsePhotoPrivacyLevel(input.privacyLevel);
+    if (!privacyLevel) throw new Error("Unsupported privacyLevel.");
+    patch.privacyLevel = privacyLevel;
+  }
+  if (input.visibilityScope !== undefined) {
+    const visibilityScope = parsePhotoVisibilityScope(input.visibilityScope);
+    if (!visibilityScope) throw new Error("Unsupported visibilityScope.");
+    patch.visibilityScope = visibilityScope;
+  }
+  if (input.source !== undefined) {
+    const source = parsePhotoSource(input.source);
+    if (!source) throw new Error("Unsupported source.");
+    patch.source = source;
+  }
+  if (input.exifHandlingStatus !== undefined) {
+    const exifHandlingStatus = parseExifHandlingStatus(input.exifHandlingStatus);
+    if (!exifHandlingStatus) throw new Error("Unsupported exifHandlingStatus.");
+    patch.exifHandlingStatus = exifHandlingStatus;
+  }
+  if (input.confidence !== undefined) {
+    const confidence = parseConfidence(input.confidence);
+    if (!confidence) throw new Error("Unsupported confidence.");
+    patch.confidence = confidence;
+  }
+  if (input.notes !== undefined) {
+    patch.notes = normalizeOptionalText(asString(input.notes));
+  }
+  if (input.verificationStatus !== undefined) {
+    const verificationStatus = parsePhotoVerificationStatus(
+      input.verificationStatus
+    );
+    if (!verificationStatus) throw new Error("Unsupported verificationStatus.");
+    patch.verificationStatus = verificationStatus;
+    patch.reviewedAt = now;
+    patch.reviewedByUserId = args.reviewedByUserId;
+  }
+  if (input.aiProcessed !== undefined) {
+    patch.aiProcessed = Boolean(input.aiProcessed);
+  }
+  if (input.capturedAt !== undefined) {
+    patch.capturedAt = optionalNumber(input.capturedAt);
+  }
+
+  return patch;
+}
+
 async function auditApiWrite(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
@@ -2630,6 +2948,55 @@ function parseBoxStatus(value: unknown) {
   return includesLiteral(boxStatuses, value)
     ? (value as Doc<"boxes">["status"])
     : undefined;
+}
+
+function parsePhotoType(value: unknown) {
+  return includesLiteral(photoTypes, value)
+    ? (value as Doc<"itemPhotos">["photoType"])
+    : undefined;
+}
+
+function parsePhotoPrivacyLevel(value: unknown) {
+  return includesLiteral(photoPrivacyLevels, value)
+    ? (value as Doc<"itemPhotos">["privacyLevel"])
+    : undefined;
+}
+
+function parsePhotoVisibilityScope(value: unknown) {
+  return includesLiteral(photoVisibilityScopes, value)
+    ? (value as Doc<"itemPhotos">["visibilityScope"])
+    : undefined;
+}
+
+function parsePhotoSource(value: unknown) {
+  return includesLiteral(photoSources, value)
+    ? (value as Doc<"itemPhotos">["source"])
+    : undefined;
+}
+
+function parseExifHandlingStatus(value: unknown) {
+  return includesLiteral(exifHandlingStatuses, value)
+    ? (value as Doc<"itemPhotos">["exifHandlingStatus"])
+    : undefined;
+}
+
+function parsePhotoVerificationStatus(value: unknown) {
+  return includesLiteral(photoVerificationStatuses, value)
+    ? (value as Doc<"itemPhotos">["verificationStatus"])
+    : undefined;
+}
+
+function parseConfidence(value: unknown) {
+  return includesLiteral(restEstimateConfidences, value)
+    ? (value as Doc<"itemPhotos">["confidence"])
+    : undefined;
+}
+
+function parseDocumentationProfileTypes(value: unknown) {
+  const values = parseStringArray(value)?.filter((entry) =>
+    includesLiteral(documentationProfileTypes, entry)
+  ) as (typeof documentationProfileTypes)[number][] | undefined;
+  return normalizeDocumentationProfileTypes(values);
 }
 
 function parseExportJobType(value: unknown) {

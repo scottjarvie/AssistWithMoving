@@ -88,6 +88,12 @@ export function requiredScopesForRestRoute({
   if (segments[0] === "photos" && method !== "GET") {
     return ["photos/write"];
   }
+  if (segments[0] === "items") {
+    return method === "GET" ? ["inventory/read"] : ["inventory/write"];
+  }
+  if (segments[0] === "boxes") {
+    return method === "GET" ? ["inventory/read"] : ["inventory/write"];
+  }
   if (segments[0] === "exports" && method === "GET") {
     return ["exports/read"];
   }

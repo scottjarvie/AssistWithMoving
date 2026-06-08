@@ -8,12 +8,14 @@ import {
   addItemsToBox,
   applyAssignments,
   batchUpsertItems,
+  attachPhoto,
   createApiConfig,
   createBox,
   createExport,
   createItem,
   createTransportResource,
   createTransportZone,
+  deleteItem,
   downloadExport,
   getCapacityReport,
   getMoveSummary,
@@ -195,6 +197,19 @@ export function registerTools(target, apiConfig) {
     handler: (input) => updateItem(apiConfig, input),
   });
 
+  registerTool(target, "delete_item", {
+    title: "Delete item",
+    description:
+      "Soft-delete one inventory item. Set dryRun true to preview the request without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      itemId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (input) => deleteItem(apiConfig, input),
+  });
+
   registerTool(target, "create_box", {
     title: "Create box",
     description:
@@ -285,6 +300,35 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     handler: (input) => startPhotoUpload(apiConfig, input),
+  });
+
+  registerTool(target, "attach_photo", {
+    title: "Attach photo",
+    description:
+      "Attach or update photo evidence metadata after upload finalization. Supports item, box, room, caption, privacy, documentation profile, and review fields.",
+    inputSchema: {
+      moveId: z.string(),
+      photoId: z.string(),
+      itemId: z.string().optional(),
+      boxId: z.string().optional(),
+      room: z.string().optional(),
+      claimId: z.string().optional(),
+      documentationProfileTypes: z.array(z.string()).optional(),
+      caption: z.string().optional(),
+      photoType: z.string().optional(),
+      privacyLevel: z.string().optional(),
+      visibilityScope: z.string().optional(),
+      source: z.string().optional(),
+      exifHandlingStatus: z.string().optional(),
+      confidence: z.string().optional(),
+      notes: z.string().optional(),
+      verificationStatus: z.string().optional(),
+      aiProcessed: z.boolean().optional(),
+      capturedAt: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => attachPhoto(apiConfig, input),
   });
 
   registerTool(target, "list_transport_resources", {
