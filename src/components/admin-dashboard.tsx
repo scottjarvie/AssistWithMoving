@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   Activity,
   Bot,
@@ -20,6 +20,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { FeatureFlagControls } from "@/components/feature-flag-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
 
 type CountMap = Record<string, number>;
 
@@ -169,6 +171,9 @@ const coreMetrics = [
 
 export function AdminDashboard() {
   const loadOverviewMutation = useMutation(api.admin.overview);
+  const flags = useQuery(api.featureFlags.effective, {}) as
+    | EffectiveFeatureFlag[]
+    | undefined;
   const searchMutation = useMutation(api.admin.search);
   const getUser = useMutation(api.admin.getUser);
   const getHousehold = useMutation(api.admin.getHousehold);
@@ -276,6 +281,7 @@ export function AdminDashboard() {
       ["Admin users", overview.totals.adminUsers.toLocaleString()],
     ];
   }, [overview]);
+  const adminToolsEnabled = flagEnabled(flags, "adminTools", true);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -307,7 +313,15 @@ export function AdminDashboard() {
         </div>
       ) : null}
 
-      {overview ? (
+      {!adminToolsEnabled ? (
+        <div className="space-y-4">
+          <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+            Admin operational dashboards are disabled by feature flag. Runtime
+            flag controls remain available so an app admin can re-enable them.
+          </div>
+          <FeatureFlagControls />
+        </div>
+      ) : overview ? (
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {coreMetrics.map(([key, label, Icon]) => (
@@ -402,6 +416,7 @@ export function AdminDashboard() {
             <DetailPanel detail={detail} loading={loading === "detail"} />
             <AuditTable title="Recent operational audit" rows={overview.recentAudit} />
           </div>
+          <FeatureFlagControls />
         </>
       ) : loading === "overview" ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">

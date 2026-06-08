@@ -26,6 +26,7 @@ import { BoxManager } from "@/components/box-manager";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
 import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
 import { EstimateSummary } from "@/components/estimate-summary";
+import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { InventoryTable } from "@/components/inventory-table";
 import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { MoveDayView } from "@/components/move-day-view";
@@ -67,6 +68,7 @@ import {
   transportResourcePresetOptions,
   type TransportResourcePresetKey,
 } from "@/lib/transport-presets";
+import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
 
 export function MoveDashboard() {
   const { user } = useUser();
@@ -74,6 +76,9 @@ export function MoveDashboard() {
   const upsertCurrentUser = useMutation(api.users.upsertCurrent);
   const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
   const createHousehold = useMutation(api.households.create);
+  const featureFlags = useQuery(api.featureFlags.effective, {}) as
+    | EffectiveFeatureFlag[]
+    | undefined;
   const createMove = useMutation(api.moves.create);
   const createTransportResourceFromPreset = useMutation(
     api.transportResources.createFromPreset
@@ -152,6 +157,12 @@ export function MoveDashboard() {
     householdId && moveId ? { householdId, moveId } : "skip"
   );
   const selectedPacketCount = documentationProfileTypes.length;
+  const documentationPacketsEnabled = flagEnabled(
+    featureFlags,
+    "documentationPackets",
+    true
+  );
+  const aiPhotoIntakeEnabled = flagEnabled(featureFlags, "aiPhotoIntake", true);
 
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -784,11 +795,18 @@ export function MoveDashboard() {
 
       <MoveDayView householdId={householdId} moveId={moveId} />
 
-      <DocumentationPacketBuilder
-        householdId={householdId}
-        moveId={moveId}
-        selectedProfileTypes={selectedMove?.documentationProfileTypes ?? []}
-      />
+      {documentationPacketsEnabled ? (
+        <DocumentationPacketBuilder
+          householdId={householdId}
+          moveId={moveId}
+          selectedProfileTypes={selectedMove?.documentationProfileTypes ?? []}
+        />
+      ) : (
+        <FeatureUnavailable
+          title="Documentation packets disabled"
+          description="PCS, mover, employer, claim, load-plan, and sub-manifest packets are currently hidden by rollout controls."
+        />
+      )}
 
       <section>
         <BoxManager householdId={householdId} moveId={moveId} />
@@ -798,7 +816,14 @@ export function MoveDashboard() {
 
       <AiReviewQueue householdId={householdId} moveId={moveId} />
 
-      <AiPhotoIntake householdId={householdId} moveId={moveId} />
+      {aiPhotoIntakeEnabled ? (
+        <AiPhotoIntake householdId={householdId} moveId={moveId} />
+      ) : (
+        <FeatureUnavailable
+          title="AI photo intake disabled"
+          description="Photo-based AI suggestions are currently hidden by rollout controls. Existing photo review remains available."
+        />
+      )}
 
       <AiTextIntake householdId={householdId} moveId={moveId} />
 

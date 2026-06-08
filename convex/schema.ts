@@ -536,6 +536,18 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_scheduled", ["scheduledDeletionAt"]),
 
+  featureFlags: defineTable({
+    key: v.string(),
+    environment: v.string(),
+    enabled: v.boolean(),
+    note: v.optional(v.string()),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key_environment", ["key", "environment"])
+    .index("by_environment", ["environment"]),
+
   households: defineTable({
     name: v.string(),
     slug: v.optional(v.string()),

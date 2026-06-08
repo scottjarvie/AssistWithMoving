@@ -1,7 +1,6 @@
 import { KeyRound, Shield, SlidersHorizontal } from "lucide-react";
 
-import { AccountPrivacyControls } from "@/components/account-privacy-controls";
-import { ApiKeyManager } from "@/components/api-key-manager";
+import { SettingsFeatureSections } from "@/components/settings-feature-sections";
 import {
   Card,
   CardContent,
@@ -51,12 +50,7 @@ export default function SettingsPage() {
           </Card>
         ))}
       </div>
-      <div className="mt-6">
-        <ApiKeyManager />
-      </div>
-      <div className="mt-6">
-        <AccountPrivacyControls />
-      </div>
+      <SettingsFeatureSections />
     </div>
   );
 }
