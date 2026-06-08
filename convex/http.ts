@@ -8,6 +8,21 @@ import { normalizeClerkUser } from "./lib/clerk";
 const http = httpRouter();
 
 const internalMutations = anyApi as unknown as {
+  audit: {
+    record: FunctionReference<
+      "mutation",
+      "internal",
+      {
+        actorType: "system";
+        category: "auth";
+        action: string;
+        objectTable?: string;
+        objectId?: string;
+        metadata?: Record<string, unknown>;
+      },
+      unknown
+    >;
+  };
   clerkUsers: {
     upsertFromWebhook: FunctionReference<
       "mutation",
@@ -52,6 +67,12 @@ http.route({
       process.env.CLERK_WEBHOOK_SECRET;
 
     if (!signingSecret) {
+      await ctx.runMutation(internalMutations.audit.record, {
+        actorType: "system",
+        category: "auth",
+        action: "clerk_webhook.signing_secret_missing",
+        metadata: { endpoint: "clerk-webhook" },
+      });
       return new Response("Webhook signing secret is not configured.", {
         status: 500,
       });
@@ -61,6 +82,12 @@ http.route({
     try {
       event = await verifyWebhook(request, { signingSecret });
     } catch {
+      await ctx.runMutation(internalMutations.audit.record, {
+        actorType: "system",
+        category: "auth",
+        action: "clerk_webhook.verification_failed",
+        metadata: { endpoint: "clerk-webhook" },
+      });
       return new Response("Webhook verification failed.", { status: 400 });
     }
 
