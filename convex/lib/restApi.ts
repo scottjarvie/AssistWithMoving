@@ -82,8 +82,23 @@ export function requiredScopesForRestRoute({
   method: RestMethod;
   segments: string[];
 }): ApiKeyScope[] {
+  if (segments[0] === "uploads" && method === "POST") {
+    return ["photos/write"];
+  }
+  if (segments[0] === "photos" && method !== "GET") {
+    return ["photos/write"];
+  }
+  if (segments[0] === "exports" && method === "GET") {
+    return ["exports/read"];
+  }
   if (segments[0] !== "moves") return [];
   if (method === "GET") {
+    if (segments.includes("exports")) {
+      return ["exports/read"];
+    }
+    if (segments.includes("documentation-profiles")) {
+      return ["exports/read"];
+    }
     if (segments.includes("items") || segments.includes("boxes")) {
       return ["inventory/read"];
     }
@@ -96,6 +111,12 @@ export function requiredScopesForRestRoute({
     return ["moves/read"];
   }
   if (method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE") {
+    if (segments.includes("exports")) {
+      return ["exports/create"];
+    }
+    if (segments.includes("documentation-profiles")) {
+      return ["exports/create"];
+    }
     if (segments.includes("items") || segments.includes("boxes")) {
       return ["inventory/write"];
     }

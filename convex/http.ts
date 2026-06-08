@@ -20,9 +20,12 @@ const internalMutations = anyApi as unknown as {
       { clerkUserId: string }
     >;
   };
-  restApi: {
+};
+
+const internalActions = anyApi as unknown as {
+  restApiActions: {
     handle: FunctionReference<
-      "mutation",
+      "action",
       "internal",
       {
         method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -97,7 +100,7 @@ for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"] as const) {
       const path = url.pathname.replace(/^\/api\/v1\/?/, "");
       const query = Object.fromEntries(url.searchParams.entries());
       const body = await parseJsonBody(request);
-      const response = await ctx.runMutation(internalMutations.restApi.handle, {
+      const response = await ctx.runAction(internalActions.restApiActions.handle, {
         method,
         path,
         query,

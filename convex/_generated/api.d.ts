@@ -60,6 +60,7 @@ import type * as moves from "../moves.js";
 import type * as pcsPackets from "../pcsPackets.js";
 import type * as photos from "../photos.js";
 import type * as restApi from "../restApi.js";
+import type * as restApiActions from "../restApiActions.js";
 import type * as shareLinks from "../shareLinks.js";
 import type * as subManifests from "../subManifests.js";
 import type * as transportResources from "../transportResources.js";
@@ -125,6 +126,7 @@ declare const fullApi: ApiFromModules<{
   pcsPackets: typeof pcsPackets;
   photos: typeof photos;
   restApi: typeof restApi;
+  restApiActions: typeof restApiActions;
   shareLinks: typeof shareLinks;
   subManifests: typeof subManifests;
   transportResources: typeof transportResources;

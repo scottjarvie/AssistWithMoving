@@ -41,6 +41,42 @@ describe("REST API helpers", () => {
         segments: ["moves"],
       })
     ).toEqual(["moves/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["uploads", "init"],
+      })
+    ).toEqual(["photos/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["photos", "finalize"],
+      })
+    ).toEqual(["photos/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["moves", "move1", "exports"],
+      })
+    ).toEqual(["exports/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "exports"],
+      })
+    ).toEqual(["exports/create"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["moves", "move1", "documentation-profiles"],
+      })
+    ).toEqual(["exports/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["exports", "export1"],
+      })
+    ).toEqual(["exports/read"]);
   });
 
   it("paginates with cursor and limit", () => {

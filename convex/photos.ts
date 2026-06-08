@@ -97,6 +97,10 @@ const photoDisplayVariantValidator = v.union(
   v.literal("full"),
   v.literal("original")
 );
+const apiPhotoActorValidator = v.object({
+  apiKeyId: v.string(),
+  createdByUserId: v.id("users"),
+});
 
 function requireB2Config() {
   const endpoint = process.env.B2_ENDPOINT;
@@ -194,6 +198,19 @@ async function assertPhotoTargets(
     if (!box || box.moveId !== args.moveId || box.archivedAt) {
       throw new Error("Invalid photo box target.");
     }
+  }
+}
+
+async function assertMoveInHousehold(
+  ctx: MutationCtx,
+  args: {
+    householdId: Doc<"households">["_id"];
+    moveId: Doc<"moves">["_id"];
+  }
+) {
+  const move = await ctx.db.get(args.moveId);
+  if (!move || move.householdId !== args.householdId || move.status === "archived") {
+    throw new Error("Move not found.");
   }
 }
 
@@ -750,16 +767,24 @@ export const createUploadSession = internalMutation({
       )
     ),
     expiresAt: v.number(),
+    apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
-    const { actor } = await requireMovePermission(
-      ctx,
-      args.householdId,
-      args.moveId,
-      "inventory:edit"
-    );
-    if (actor.type !== "user") {
-      throw new Error("API-key photo uploads are not implemented yet.");
+    let userId = args.apiActor?.createdByUserId;
+    if (!userId) {
+      const { actor } = await requireMovePermission(
+        ctx,
+        args.householdId,
+        args.moveId,
+        "inventory:edit"
+      );
+      if (actor.type !== "user") {
+        throw new Error("Photo uploads require a user or API-key actor.");
+      }
+      userId = actor.userId;
+    }
+    if (args.apiActor) {
+      await assertMoveInHousehold(ctx, args);
     }
     assertUploadFileShape({
       mimeType: args.expectedMimeType,
@@ -781,7 +806,7 @@ export const createUploadSession = internalMutation({
       derivativeUploads: args.derivativeUploads,
       status: "authorized",
       expiresAt: args.expiresAt,
-      createdByUserId: actor.userId,
+      createdByUserId: userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -793,14 +818,17 @@ export const getUploadSession = internalQuery({
     householdId: v.id("households"),
     moveId: v.id("moves"),
     uploadSessionId: uploadSessionIdValidator,
+    apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
-    await requireMovePermission(
-      ctx,
-      args.householdId,
-      args.moveId,
-      "inventory:edit"
-    );
+    if (!args.apiActor) {
+      await requireMovePermission(
+        ctx,
+        args.householdId,
+        args.moveId,
+        "inventory:edit"
+      );
+    }
     const session = await ctx.db.get(args.uploadSessionId);
     if (
       !session ||
@@ -894,14 +922,17 @@ export const markUploadSessionFailed = internalMutation({
     householdId: v.id("households"),
     moveId: v.id("moves"),
     uploadSessionId: uploadSessionIdValidator,
+    apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
-    await requireMovePermission(
-      ctx,
-      args.householdId,
-      args.moveId,
-      "inventory:edit"
-    );
+    if (!args.apiActor) {
+      await requireMovePermission(
+        ctx,
+        args.householdId,
+        args.moveId,
+        "inventory:edit"
+      );
+    }
     const session = await ctx.db.get(args.uploadSessionId);
     if (
       session &&
@@ -934,16 +965,21 @@ export const completeUploadSession = internalMutation({
     notes: v.optional(v.string()),
     verificationStatus: v.optional(photoVerificationStatusValidator),
     capturedAt: v.optional(v.number()),
+    apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
-    const { actor } = await requireMovePermission(
-      ctx,
-      args.householdId,
-      args.moveId,
-      "inventory:edit"
-    );
-    if (actor.type !== "user") {
-      throw new Error("API-key photo upload finalization is not implemented yet.");
+    let userId = args.apiActor?.createdByUserId;
+    if (!userId) {
+      const { actor } = await requireMovePermission(
+        ctx,
+        args.householdId,
+        args.moveId,
+        "inventory:edit"
+      );
+      if (actor.type !== "user") {
+        throw new Error("Photo upload finalization requires a user or API-key actor.");
+      }
+      userId = actor.userId;
     }
 
     const session = await ctx.db.get(args.uploadSessionId);
@@ -996,7 +1032,7 @@ export const completeUploadSession = internalMutation({
       verificationStatus: args.verificationStatus ?? "unreviewed",
       aiProcessed: false,
       capturedAt: args.capturedAt,
-      uploadedByUserId: actor.userId,
+      uploadedByUserId: userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -1010,8 +1046,9 @@ export const completeUploadSession = internalMutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
-      actorUserId: actor.userId,
+      actorType: args.apiActor ? "apiKey" : "user",
+      actorUserId: args.apiActor ? undefined : userId,
+      actorApiKeyId: args.apiActor?.apiKeyId,
       category: "photo",
       action: "photo.metadata_created",
       objectTable: "itemPhotos",

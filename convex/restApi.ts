@@ -6,6 +6,16 @@ import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { hashApiKey } from "./lib/apiKeys";
 import {
+  assignmentCsvRows,
+  boxCsvRows,
+  csvFromRows,
+  exportFilename,
+  exportMimeType,
+  inventoryCsvRows,
+  type ExportJobType,
+  type ExportVisibility,
+} from "./lib/exportRows";
+import {
   boxStatuses,
   itemConditions,
   itemDispositions,
@@ -28,6 +38,12 @@ import {
 } from "./lib/restApi";
 
 const restMoveStatuses = ["planning", "active", "completed", "archived"] as const;
+const restExportJobTypes = [
+  "inventory",
+  "boxes",
+  "assignments",
+  "documentationProfile",
+] as const;
 
 export const handle = internalMutation({
   args: {
@@ -89,6 +105,150 @@ export const handle = internalMutation({
   },
 });
 
+export const authenticateActionRequest = internalMutation({
+  args: {
+    method: v.union(
+      v.literal("GET"),
+      v.literal("POST"),
+      v.literal("PATCH"),
+      v.literal("PUT"),
+      v.literal("DELETE")
+    ),
+    path: v.string(),
+    query: v.record(v.string(), v.string()),
+    authorization: v.optional(v.string()),
+    body: v.optional(v.any()),
+    moveId: v.optional(v.id("moves")),
+  },
+  handler: async (ctx, args) => {
+    const segments = parseRestPath(args.path);
+    const requiredScopes = requiredScopesForRestRoute({
+      method: args.method,
+      segments,
+    });
+    if (!requiredScopes.length) {
+      return {
+        ok: false,
+        response: restError({
+          status: 404,
+          code: "not_found",
+          message: "API route not found.",
+        }),
+      };
+    }
+
+    const rawKey = bearerToken(args.authorization);
+    if (!rawKey) {
+      return {
+        ok: false,
+        response: restError({
+          status: 401,
+          code: "unauthorized",
+          message: "Use a Bearer API key.",
+        }),
+      };
+    }
+
+    try {
+      const auth = await authenticateApiKey(ctx, {
+        rawKey,
+        requiredScopes,
+        moveId: args.moveId ?? routeMoveIdFromRequest(segments, args.body, args.query),
+        action: `${args.method} /api/v1/${segments.join("/")}`,
+      });
+      return { ok: true, auth, segments };
+    } catch (error) {
+      return {
+        ok: false,
+        response: restError({
+          status: errorStatus(error),
+          code: "request_failed",
+          message: error instanceof Error ? error.message : "Request failed.",
+        }),
+      };
+    }
+  },
+});
+
+export const checkIdempotency = internalMutation({
+  args: {
+    method: v.union(
+      v.literal("GET"),
+      v.literal("POST"),
+      v.literal("PATCH"),
+      v.literal("PUT"),
+      v.literal("DELETE")
+    ),
+    path: v.string(),
+    body: v.optional(v.any()),
+    apiKeyId: v.id("apiKeys"),
+    idempotencyKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (args.method === "GET" || !args.idempotencyKey) {
+      return { replay: null, requestHash: null };
+    }
+    const requestHash = await hashApiKey(requestHashInput(args));
+    const existing = await ctx.db
+      .query("apiIdempotencyKeys")
+      .withIndex("by_api_key_key", (q) =>
+        q.eq("apiKeyId", args.apiKeyId).eq("idempotencyKey", args.idempotencyKey!)
+      )
+      .unique();
+    if (!existing) {
+      return { replay: null, requestHash };
+    }
+    if (existing.expiresAt < Date.now()) {
+      await ctx.db.delete(existing._id);
+      return { replay: null, requestHash };
+    }
+    if (existing.requestHash !== requestHash) {
+      return {
+        replay: restError({
+          status: 409,
+          code: "idempotency_conflict",
+          message: "Idempotency key was already used with a different request.",
+        }),
+        requestHash: null,
+      };
+    }
+    return {
+      replay: {
+        status: existing.status,
+        body: existing.response,
+      } satisfies RestResponse,
+      requestHash: null,
+    };
+  },
+});
+
+export const storeIdempotency = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.optional(v.id("moves")),
+    apiKeyId: v.id("apiKeys"),
+    idempotencyKey: v.optional(v.string()),
+    requestHash: v.optional(v.string()),
+    response: v.any(),
+    status: v.number(),
+    expiresAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    if (!args.idempotencyKey || !args.requestHash) return;
+    await ctx.db.insert("apiIdempotencyKeys", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      apiKeyId: args.apiKeyId,
+      idempotencyKey: args.idempotencyKey,
+      requestHash: args.requestHash,
+      response: args.response,
+      status: args.status,
+      createdAt: Date.now(),
+      expiresAt: args.expiresAt ?? Date.now() + 24 * 60 * 60 * 1000,
+    });
+  },
+});
+
 async function routeRequest(
   ctx: MutationCtx,
   args: RestRequestInput,
@@ -96,6 +256,9 @@ async function routeRequest(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>
 ) {
   const [resource, moveIdSegment, nested, nestedId] = segments;
+  if (resource === "exports" && args.method === "GET") {
+    return await routeTopLevelExport(ctx, args, auth, moveIdSegment);
+  }
   if (resource !== "moves") {
     return restError({ status: 404, code: "not_found", message: "Not found." });
   }
@@ -179,6 +342,12 @@ async function routeRequest(
   }
   if (nested === "assignments") {
     return await routeAssignments(ctx, args, auth, moveId, nestedId);
+  }
+  if (nested === "documentation-profiles") {
+    return await routeDocumentationProfiles(ctx, args, auth, moveId, nestedId);
+  }
+  if (nested === "exports") {
+    return await routeExports(ctx, args, auth, moveId, nestedId, segments[4]);
   }
   if (nested === "photos" && args.method === "GET") {
     const photos = await ctx.db
@@ -477,6 +646,115 @@ async function routeAssignments(
   });
 }
 
+async function routeDocumentationProfiles(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  profileIdSegment?: string
+) {
+  if (args.method !== "GET") {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Documentation profile route not found.",
+    });
+  }
+  const profiles = await ctx.db
+    .query("documentationProfiles")
+    .withIndex("by_move_status", (q) => q.eq("moveId", moveId))
+    .collect();
+  const activeProfiles = profiles.filter(
+    (profile) => profile.householdId === auth.householdId && profile.status !== "archived"
+  );
+  if (profileIdSegment) {
+    const profile = activeProfiles.find((entry) => entry._id === profileIdSegment);
+    if (!profile) {
+      throw new Error("Documentation profile not found.");
+    }
+    return restOk({ data: safeDocumentationProfile(profile) });
+  }
+  return restOk(
+    paginate(activeProfiles.map((profile) => safeDocumentationProfile(profile)), args.query)
+  );
+}
+
+async function routeExports(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  exportIdSegment?: string,
+  actionSegment?: string
+) {
+  if (args.method === "GET" && !exportIdSegment) {
+    const jobs = await ctx.db
+      .query("exportJobs")
+      .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+      .order("desc")
+      .collect();
+    return restOk(
+      paginate(
+        jobs
+          .filter((job) => job.householdId === auth.householdId)
+          .map((job) => safeExportJob(job)),
+        args.query
+      )
+    );
+  }
+
+  if (args.method === "POST" && !exportIdSegment) {
+    const body = bodyObject(args.body);
+    const result = await createApiCsvExport(ctx, {
+      auth,
+      moveId,
+      type: parseExportJobType(body.type) ?? "inventory",
+      documentationProfileId: optionalString(body.documentationProfileId) as
+        | Id<"documentationProfiles">
+        | undefined,
+    });
+    return restOk({ data: result }, 201);
+  }
+
+  if (args.method === "GET" && exportIdSegment) {
+    const job = await requireApiExportJob(
+      ctx,
+      auth.householdId,
+      moveId,
+      exportIdSegment
+    );
+    if (actionSegment === "download") {
+      return restOk({ data: artifactForApiExport(job) });
+    }
+    return restOk({ data: safeExportJob(job) });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Export route not found.",
+  });
+}
+
+async function routeTopLevelExport(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  exportIdSegment?: string
+) {
+  if (!exportIdSegment) {
+    return restError({ status: 404, code: "not_found", message: "Export not found." });
+  }
+  const moveId = requiredQueryMoveId(args.query);
+  const job = await requireApiExportJob(ctx, auth.householdId, moveId, exportIdSegment);
+  return restOk({
+    data:
+      args.query.download === "1" || args.query.download === "true"
+        ? artifactForApiExport(job)
+        : safeExportJob(job),
+  });
+}
+
 async function withIdempotency(
   ctx: MutationCtx,
   args: RestRequestInput,
@@ -494,6 +772,10 @@ async function withIdempotency(
     )
     .unique();
   if (existing) {
+    if (existing.expiresAt < Date.now()) {
+      await ctx.db.delete(existing._id);
+      return await withIdempotency(ctx, args, auth, createResponse);
+    }
     if (existing.requestHash !== requestHash) {
       return restError({
         status: 409,
@@ -525,6 +807,25 @@ function routeMoveId(segments: string[]) {
   return segments[0] === "moves" && segments[1]
     ? (segments[1] as Id<"moves">)
     : undefined;
+}
+
+function routeMoveIdFromRequest(
+  segments: string[],
+  body: unknown,
+  query: Record<string, string>
+) {
+  if (segments[0] === "moves" && segments[1]) {
+    return segments[1] as Id<"moves">;
+  }
+  const input = bodyObject(body);
+  const bodyMoveId = input.moveId;
+  if (typeof bodyMoveId === "string" && bodyMoveId) {
+    return bodyMoveId as Id<"moves">;
+  }
+  if (query.moveId) {
+    return query.moveId as Id<"moves">;
+  }
+  return undefined;
 }
 
 async function requireApiMove(
@@ -563,6 +864,49 @@ async function requireApiBox(
     throw new Error("Box not found.");
   }
   return box;
+}
+
+async function requireApiDocumentationProfile(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    documentationProfileId?: Id<"documentationProfiles">;
+  }
+) {
+  if (!args.documentationProfileId) {
+    throw new Error("Documentation profile export requires a profile.");
+  }
+  const profile = await ctx.db.get(args.documentationProfileId);
+  if (
+    !profile ||
+    profile.householdId !== args.householdId ||
+    profile.moveId !== args.moveId ||
+    profile.status === "archived"
+  ) {
+    throw new Error("Documentation profile not found.");
+  }
+  return profile;
+}
+
+async function requireApiExportJob(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  exportIdSegment: string
+) {
+  const job = await ctx.db.get(exportIdSegment as Id<"exportJobs">);
+  if (!job || job.householdId !== householdId || job.moveId !== moveId) {
+    throw new Error("Export job not found.");
+  }
+  return job;
+}
+
+function requiredQueryMoveId(query: Record<string, string>) {
+  if (!query.moveId) {
+    throw new Error("moveId query parameter is required.");
+  }
+  return query.moveId as Id<"moves">;
 }
 
 function safeMove(move: Doc<"moves">) {
@@ -624,6 +968,261 @@ function safeBox(box: Doc<"boxes">) {
     createdAt: box.createdAt,
     updatedAt: box.updatedAt,
   };
+}
+
+function safeDocumentationProfile(profile: Doc<"documentationProfiles">) {
+  return {
+    documentationProfileId: profile._id,
+    type: profile.type,
+    name: profile.name,
+    status: profile.status,
+    includedFields: profile.includedFields,
+    imageRule: profile.imageRule,
+    filters: profile.filters,
+    allowedActions: profile.allowedActions,
+    disclaimer: profile.disclaimer,
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+}
+
+function safeExportJob(job: Doc<"exportJobs">) {
+  return {
+    exportJobId: job._id,
+    moveId: job.moveId,
+    documentationProfileId: job.documentationProfileId,
+    type: job.type,
+    format: job.format,
+    status: job.status,
+    filename: job.filename,
+    mimeType: job.mimeType,
+    rowCount: job.rowCount,
+    sizeBytes: job.sizeBytes,
+    createdAt: job.createdAt,
+    completedAt: job.completedAt,
+    expiresAt: job.expiresAt,
+  };
+}
+
+function artifactForApiExport(job: Doc<"exportJobs">) {
+  if (job.status !== "completed" || !job.artifactText) {
+    throw new Error("Export artifact is not ready.");
+  }
+  if (job.expiresAt && job.expiresAt < Date.now()) {
+    throw new Error("Export artifact has expired.");
+  }
+  return {
+    ...safeExportJob(job),
+    artifactText: job.artifactText,
+    encoding: "utf-8",
+  };
+}
+
+async function createApiCsvExport(
+  ctx: MutationCtx,
+  args: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    type: ExportJobType;
+    documentationProfileId?: Id<"documentationProfiles">;
+  }
+) {
+  const [items, boxes, boxItems, resources, zones] = await Promise.all([
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+    ctx.db
+      .query("boxItems")
+      .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+  ]);
+  const profile =
+    args.type === "documentationProfile"
+      ? await requireApiDocumentationProfile(ctx, {
+          householdId: args.auth.householdId,
+          moveId: args.moveId,
+          documentationProfileId: args.documentationProfileId,
+        })
+      : null;
+  const visibility = apiExportVisibility(profile);
+  const activeItems = items.filter((item) => !item.deletedAt);
+  const activeBoxes = boxes.filter((box) => !box.archivedAt);
+  const filteredItems = profile
+    ? activeItems.filter((item) => itemMatchesProfile(item, profile))
+    : activeItems;
+  const resourceNameById = new Map(
+    resources.map((resource) => [resource._id, resource.name])
+  );
+  const zoneNameById = new Map(zones.map((zone) => [zone._id, zone.name]));
+  const rows = rowsForExport({
+    type: args.type,
+    items: filteredItems,
+    boxes: activeBoxes,
+    boxItems,
+    resourceNameById,
+    zoneNameById,
+    visibility,
+  });
+  const artifactText = csvFromRows(rows);
+  const now = Date.now();
+  const filename = exportFilename({
+    type: args.type,
+    format: "csv",
+    slug: profile?.name ?? args.type,
+  });
+  const exportJobId = await ctx.db.insert("exportJobs", {
+    householdId: args.auth.householdId,
+    moveId: args.moveId,
+    documentationProfileId: profile?._id,
+    type: args.type,
+    format: "csv",
+    status: "completed",
+    version: 1,
+    filename,
+    mimeType: exportMimeType("csv"),
+    artifactText,
+    rowCount: Math.max(rows.length - 1, 0),
+    sizeBytes: artifactText.length,
+    filters: profile?.filters,
+    createdByUserId: args.auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: now,
+    expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+  });
+
+  if (profile) {
+    await ctx.db.patch(profile._id, {
+      exportHistory: [
+        {
+          exportJobId: String(exportJobId),
+          format: "csv" as const,
+          createdByUserId: args.auth.createdByUserId,
+          createdAt: now,
+        },
+        ...profile.exportHistory,
+      ].slice(0, 25),
+      updatedAt: now,
+    });
+  }
+
+  await auditApiWrite(ctx, args.auth, args.moveId, "export.api_completed", "exportJobs", exportJobId, {
+    type: args.type,
+    format: "csv",
+    rowCount: Math.max(rows.length - 1, 0),
+    documentationProfileId: profile?._id,
+  });
+
+  return {
+    exportJobId,
+    filename,
+    rowCount: Math.max(rows.length - 1, 0),
+    expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+  };
+}
+
+function apiExportVisibility(
+  profile: Doc<"documentationProfiles"> | null
+): ExportVisibility {
+  if (!profile) {
+    return { values: false, serials: false, privateNotes: false };
+  }
+  return {
+    values:
+      profile.includedFields.includes("estimatedValues") ||
+      profile.includedFields.includes("purchaseValues"),
+    serials: profile.includedFields.includes("serialNumbers"),
+    privateNotes: profile.includedFields.includes("privateNotes"),
+  };
+}
+
+function itemMatchesProfile(
+  item: Doc<"items">,
+  profile: Doc<"documentationProfiles">
+) {
+  const filters = profile.filters;
+  if (filters.dispositions?.length && !filters.dispositions.includes(item.disposition)) {
+    return false;
+  }
+  if (filters.statuses?.length && !filters.statuses.includes(item.status)) {
+    return false;
+  }
+  if (
+    filters.planningDefaultKeys?.length &&
+    !filters.planningDefaultKeys.some((key) => item.planningDefaultKeys.includes(key))
+  ) {
+    return false;
+  }
+  if (filters.room && item.room !== filters.room) {
+    return false;
+  }
+  if (filters.destinationRoom && item.destinationRoom !== filters.destinationRoom) {
+    return false;
+  }
+  return true;
+}
+
+function rowsForExport({
+  type,
+  items,
+  boxes,
+  boxItems,
+  resourceNameById,
+  zoneNameById,
+  visibility,
+}: {
+  type: ExportJobType;
+  items: Doc<"items">[];
+  boxes: Doc<"boxes">[];
+  boxItems: Doc<"boxItems">[];
+  resourceNameById: Map<Id<"transportResources">, string>;
+  zoneNameById: Map<Id<"transportZones">, string>;
+  visibility: ExportVisibility;
+}) {
+  switch (type) {
+    case "inventory":
+    case "documentationProfile":
+      return inventoryCsvRows(items, visibility);
+    case "boxes":
+      return boxCsvRows(
+        boxes.map((box) => ({
+          ...box,
+          assignedResource: box.assignedResourceId
+            ? resourceNameById.get(box.assignedResourceId)
+            : undefined,
+          assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
+        }))
+      );
+    case "assignments":
+      return assignmentCsvRows(
+        boxes.map((box) => ({
+          boxCode: box.code,
+          boxLabel: box.label,
+          boxStatus: box.status,
+          assignedResource: box.assignedResourceId
+            ? resourceNameById.get(box.assignedResourceId)
+            : undefined,
+          assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
+          itemCount: boxItems
+            .filter((membership) => membership.boxId === box._id)
+            .reduce((total, membership) => total + membership.quantity, 0),
+          estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
+        }))
+      );
+  }
 }
 
 function movePatch(body: unknown): Partial<Doc<"moves">> {
@@ -747,6 +1346,10 @@ function asString(value: unknown) {
   return typeof value === "string" ? value : undefined;
 }
 
+function optionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function parseMoveStatus(value: unknown) {
   return includesLiteral(restMoveStatuses, value)
     ? (value as Doc<"moves">["status"])
@@ -774,6 +1377,12 @@ function parseCondition(value: unknown) {
 function parseBoxStatus(value: unknown) {
   return includesLiteral(boxStatuses, value)
     ? (value as Doc<"boxes">["status"])
+    : undefined;
+}
+
+function parseExportJobType(value: unknown) {
+  return includesLiteral(restExportJobTypes, value)
+    ? (value as ExportJobType)
     : undefined;
 }
 
