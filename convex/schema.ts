@@ -125,6 +125,21 @@ export const shareLinkAction = v.union(
   v.literal("uploadEvidence")
 );
 
+export const apiKeyStatus = v.union(
+  v.literal("active"),
+  v.literal("revoked")
+);
+
+export const apiKeyScope = v.union(
+  v.literal("moves/read"),
+  v.literal("moves/write"),
+  v.literal("inventory/read"),
+  v.literal("inventory/write"),
+  v.literal("photos/write"),
+  v.literal("exports/read"),
+  v.literal("exports/create")
+);
+
 export const pcsBranch = v.union(
   v.literal("army"),
   v.literal("navy"),
@@ -567,6 +582,32 @@ export default defineSchema({
     .index("by_profile_created", ["documentationProfileId", "createdAt"])
     .index("by_household_created", ["householdId", "createdAt"])
     .index("by_status", ["status"])
+    .index("by_expires", ["expiresAt"]),
+
+  apiKeys: defineTable({
+    householdId: v.id("households"),
+    moveId: v.optional(v.id("moves")),
+    name: v.string(),
+    prefix: v.string(),
+    tokenPreview: v.string(),
+    secretHash: v.string(),
+    scopes: v.array(apiKeyScope),
+    status: apiKeyStatus,
+    expiresAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+    rotatedFromApiKeyId: v.optional(v.id("apiKeys")),
+    lastUsedAt: v.optional(v.number()),
+    lastUsedAction: v.optional(v.string()),
+    lastUsedIpHash: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_prefix", ["prefix"])
+    .index("by_household_status", ["householdId", "status"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_created_by", ["createdByUserId"])
     .index("by_expires", ["expiresAt"]),
 
   shareLinks: defineTable({

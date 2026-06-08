@@ -1,5 +1,6 @@
 import { KeyRound, Shield, SlidersHorizontal } from "lucide-react";
 
+import { ApiKeyManager } from "@/components/api-key-manager";
 import {
   Card,
   CardContent,
@@ -17,7 +18,7 @@ const settings = [
   {
     icon: KeyRound,
     title: "API and MCP keys",
-    copy: "Future agent access will use hashed, scoped, revocable keys instead of full user credentials.",
+    copy: "Agent and API access uses hashed, scoped, revocable keys instead of full user credentials.",
   },
   {
     icon: SlidersHorizontal,
@@ -32,8 +33,7 @@ export default function SettingsPage() {
       <div className="mb-6 max-w-3xl">
         <h2 className="text-3xl font-semibold tracking-tight">Settings</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          These placeholders define the account, security, and documentation
-          settings surfaces before Clerk and Convex are wired in.
+          Manage security and integration settings for MovingManifest.
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
@@ -45,10 +45,13 @@ export default function SettingsPage() {
               <CardDescription>{setting.copy}</CardDescription>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              Planned in Phase 1, Phase 7, and Phase 8.
+              Managed through Clerk, Convex permissions, and scoped packet settings.
             </CardContent>
           </Card>
         ))}
+      </div>
+      <div className="mt-6">
+        <ApiKeyManager />
       </div>
     </div>
   );
