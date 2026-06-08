@@ -439,6 +439,27 @@ const exportHistoryEntry = v.object({
   createdAt: v.number(),
 });
 
+const exportJobFormat = v.union(
+  v.literal("pdf"),
+  v.literal("csv"),
+  v.literal("print")
+);
+
+const exportJobStatus = v.union(
+  v.literal("queued"),
+  v.literal("processing"),
+  v.literal("completed"),
+  v.literal("failed"),
+  v.literal("expired")
+);
+
+const exportJobType = v.union(
+  v.literal("inventory"),
+  v.literal("boxes"),
+  v.literal("assignments"),
+  v.literal("documentationProfile")
+);
+
 export default defineSchema({
   users: defineTable({
     clerkUserId: v.string(),
@@ -520,6 +541,33 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_type", ["moveId", "type"])
     .index("by_household_status", ["householdId", "status"]),
+
+  exportJobs: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    documentationProfileId: v.optional(v.id("documentationProfiles")),
+    type: exportJobType,
+    format: exportJobFormat,
+    status: exportJobStatus,
+    version: v.number(),
+    filename: v.optional(v.string()),
+    mimeType: v.optional(v.string()),
+    artifactText: v.optional(v.string()),
+    rowCount: v.optional(v.number()),
+    sizeBytes: v.optional(v.number()),
+    filters: v.optional(v.any()),
+    error: v.optional(v.string()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+  })
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_profile_created", ["documentationProfileId", "createdAt"])
+    .index("by_household_created", ["householdId", "createdAt"])
+    .index("by_status", ["status"])
+    .index("by_expires", ["expiresAt"]),
 
   shareLinks: defineTable({
     householdId: v.id("households"),

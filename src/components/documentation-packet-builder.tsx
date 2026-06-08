@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { FileText, Link2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Download, FileText, Link2, RefreshCw, ShieldCheck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -74,6 +74,22 @@ type ShareLink = {
   accessCount: number;
 };
 
+type ExportJobSummary = {
+  exportJobId: Id<"exportJobs">;
+  type: "inventory" | "boxes" | "assignments" | "documentationProfile";
+  format: "pdf" | "csv" | "print";
+  status: "queued" | "processing" | "completed" | "failed" | "expired";
+  filename?: string;
+  rowCount?: number;
+  createdAt: number;
+};
+
+type ExportJobType =
+  | "inventory"
+  | "boxes"
+  | "assignments"
+  | "documentationProfile";
+
 type ProfileDisposition =
   | "undecided"
   | "take"
@@ -130,6 +146,7 @@ export function DocumentationPacketBuilder({
   const archiveProfile = useMutation(api.documentationProfiles.archive);
   const createShareLink = useAction(api.shareLinks.create);
   const revokeShareLink = useMutation(api.shareLinks.revoke);
+  const createCsvExport = useMutation(api.exports.createCsv);
 
   const [profileType, setProfileType] =
     useState<DocumentationProfileType>("pcsMove");
@@ -147,8 +164,21 @@ export function DocumentationPacketBuilder({
   const [linkRole, setLinkRole] = useState<ShareLinkRole>("viewer");
   const [expiresInDays, setExpiresInDays] = useState("30");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [downloadExportJobId, setDownloadExportJobId] =
+    useState<Id<"exportJobs"> | null>(null);
+  const lastDownloadedExportJobId = useRef<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const exportJobs = useQuery(
+    api.exports.listForMove,
+    householdId && moveId ? { householdId, moveId, limit: 8 } : "skip"
+  ) as ExportJobSummary[] | undefined;
+  const exportArtifact = useQuery(
+    api.exports.getArtifact,
+    householdId && moveId && downloadExportJobId
+      ? { householdId, moveId, exportJobId: downloadExportJobId }
+      : "skip"
+  );
 
   const activeProfiles = useMemo(
     () => profiles?.filter((profile) => profile.status !== "archived") ?? [],
@@ -193,6 +223,19 @@ export function DocumentationPacketBuilder({
         allowedActions: effectiveActions,
       })
     : null;
+
+  useEffect(() => {
+    if (!exportArtifact) return;
+    if (lastDownloadedExportJobId.current === exportArtifact.exportJobId) {
+      return;
+    }
+    lastDownloadedExportJobId.current = exportArtifact.exportJobId;
+    downloadTextArtifact({
+      filename: exportArtifact.filename,
+      text: exportArtifact.artifactText,
+      mimeType: exportArtifact.mimeType,
+    });
+  }, [exportArtifact]);
 
   function loadProfileDraft(profile: DocumentationProfile) {
     setDraftProfileId(profile._id);
@@ -316,6 +359,28 @@ export function DocumentationPacketBuilder({
       setMessage("Share link token created.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not create link.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleCreateCsvExport(type: ExportJobType) {
+    if (!householdId || !moveId) return;
+    if (type === "documentationProfile" && !selectedProfile) return;
+    setBusy(`export-${type}`);
+    setMessage(null);
+    try {
+      const result = await createCsvExport({
+        householdId,
+        moveId,
+        type,
+        documentationProfileId:
+          type === "documentationProfile" ? selectedProfile?._id : undefined,
+      });
+      setDownloadExportJobId(result.exportJobId as Id<"exportJobs">);
+      setMessage(`CSV export created with ${result.rowCount} rows.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not create export.");
     } finally {
       setBusy(null);
     }
@@ -553,6 +618,81 @@ export function DocumentationPacketBuilder({
                           : ["No packet warnings"]
                       }
                     />
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-medium">Server exports</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Create permission-checked CSV artifacts with export
+                        history.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <ExportButton
+                        label="Inventory CSV"
+                        busy={busy === "export-inventory"}
+                        onClick={() => void handleCreateCsvExport("inventory")}
+                      />
+                      <ExportButton
+                        label="Boxes CSV"
+                        busy={busy === "export-boxes"}
+                        onClick={() => void handleCreateCsvExport("boxes")}
+                      />
+                      <ExportButton
+                        label="Assignments CSV"
+                        busy={busy === "export-assignments"}
+                        onClick={() => void handleCreateCsvExport("assignments")}
+                      />
+                      <ExportButton
+                        label="Profile CSV"
+                        busy={busy === "export-documentationProfile"}
+                        disabled={!selectedProfile}
+                        onClick={() =>
+                          void handleCreateCsvExport("documentationProfile")
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {exportJobs === undefined ? (
+                      <Skeleton className="h-8 w-full" />
+                    ) : exportJobs.length ? (
+                      exportJobs.map((job) => (
+                        <div
+                          key={job.exportJobId}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs"
+                        >
+                          <span>
+                            {job.filename ?? `${job.type}.${job.format}`} -
+                            {" "}
+                            {job.status}
+                            {typeof job.rowCount === "number"
+                              ? ` - ${job.rowCount} rows`
+                              : ""}
+                          </span>
+                          {job.status === "completed" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setDownloadExportJobId(job.exportJobId)
+                              }
+                            >
+                              <Download aria-hidden="true" />
+                              Download
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No server exports yet.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -852,6 +992,53 @@ function PreviewList({ title, values }: { title: string; values: string[] }) {
       </ul>
     </div>
   );
+}
+
+function ExportButton({
+  label,
+  busy,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  busy: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={disabled || busy}
+      onClick={onClick}
+    >
+      {busy ? (
+        <RefreshCw className="animate-spin" aria-hidden="true" />
+      ) : (
+        <Download aria-hidden="true" />
+      )}
+      {label}
+    </Button>
+  );
+}
+
+function downloadTextArtifact({
+  filename,
+  text,
+  mimeType,
+}: {
+  filename: string;
+  text: string;
+  mimeType: string;
+}) {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function toggleValue<TValue extends string>(values: TValue[], value: TValue) {
