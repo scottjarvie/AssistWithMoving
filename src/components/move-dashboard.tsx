@@ -21,6 +21,7 @@ import { BoxManager } from "@/components/box-manager";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
 import { EstimateSummary } from "@/components/estimate-summary";
 import { InventoryTable } from "@/components/inventory-table";
+import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -769,6 +770,8 @@ export function MoveDashboard() {
       </section>
 
       <EstimateSummary householdId={householdId} moveId={moveId} />
+
+      <LoadPlannerBoard householdId={householdId} moveId={moveId} />
 
       <section>
         <BoxManager householdId={householdId} moveId={moveId} />
