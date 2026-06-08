@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -17,6 +18,7 @@ import {
   type MutationCtx,
   query,
 } from "./_generated/server";
+import { requireAppAdmin } from "./lib/admin";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
@@ -38,6 +40,13 @@ import {
   canDownloadOriginalPhoto,
   redactPhotoForVisibility,
 } from "./lib/photoVisibility";
+import {
+  defaultPhotoUploadCleanupGraceMs,
+  shouldCleanupExpiredUploadSession,
+  type StorageObjectRef,
+  unreferencedUploadSessionStorageRefs,
+  uploadSessionStorageRefs,
+} from "./lib/photoCleanup";
 import { requireMovePermission } from "./lib/permissions";
 
 const allowedPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -102,6 +111,13 @@ const apiPhotoActorValidator = v.object({
   apiKeyId: v.string(),
   createdByUserId: v.id("users"),
 });
+const maxPhotoCleanupBatchSize = 100;
+const cleanupDeleteResultValidator = v.object({
+  uploadSessionId: uploadSessionIdValidator,
+  attemptedObjectCount: v.number(),
+  deletedObjectCount: v.number(),
+  error: v.optional(v.string()),
+});
 
 function requireB2Config() {
   const endpoint = process.env.B2_ENDPOINT;
@@ -135,6 +151,24 @@ function b2Client() {
       secretAccessKey: config.applicationKey,
     },
   });
+}
+
+async function deleteStorageObject(ref: StorageObjectRef) {
+  await b2Client().send(
+    new DeleteObjectCommand({
+      Bucket: ref.bucket,
+      Key: ref.storageKey,
+    })
+  );
+}
+
+function cleanupStorageError(error: unknown) {
+  if (error instanceof Error) {
+    return error.name === "Error"
+      ? "Storage object cleanup failed."
+      : `Storage object cleanup failed: ${error.name}`;
+  }
+  return "Storage object cleanup failed.";
 }
 
 function fileExtensionForMimeType(mimeType: string) {
@@ -740,6 +774,217 @@ export const getOriginalDownloadUrl = action({
       mimeType: photo.mimeType,
       sizeBytes: photo.sizeBytes,
     };
+  },
+});
+
+export const cleanupExpiredUploadSessions = action({
+  args: {
+    now: v.optional(v.number()),
+    graceMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+    deleteObjects: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<{
+    dryRun: boolean;
+    deleteObjects: boolean;
+    plannedSessionCount: number;
+    attemptedObjectCount: number;
+    deletedObjectCount: number;
+    failedDeleteCount: number;
+    skippedReferencedObjectCount: number;
+    markedFailedSessionCount: number;
+  }> => {
+    const now = args.now ?? Date.now();
+    const dryRun = args.dryRun ?? true;
+    const deleteObjects = args.deleteObjects ?? true;
+    const plan = await ctx.runQuery(
+      internal.photos.planExpiredUploadSessionCleanup,
+      {
+        now,
+        graceMs: args.graceMs,
+        limit: args.limit,
+      }
+    );
+
+    if (dryRun) {
+      return {
+        dryRun,
+        deleteObjects,
+        plannedSessionCount: plan.candidates.length,
+        attemptedObjectCount: 0,
+        deletedObjectCount: 0,
+        failedDeleteCount: 0,
+        skippedReferencedObjectCount: plan.skippedReferencedObjectCount,
+        markedFailedSessionCount: 0,
+      };
+    }
+
+    const results = await Promise.all(
+      plan.candidates.map(async (candidate) => {
+        if (!deleteObjects) {
+          return {
+            uploadSessionId: candidate.uploadSessionId,
+            attemptedObjectCount: 0,
+            deletedObjectCount: 0,
+          };
+        }
+
+        let deletedObjectCount = 0;
+        let error: string | undefined;
+        for (const ref of candidate.objectRefs) {
+          try {
+            await deleteStorageObject(ref);
+            deletedObjectCount += 1;
+          } catch (deleteError) {
+            error = cleanupStorageError(deleteError);
+          }
+        }
+
+        return {
+          uploadSessionId: candidate.uploadSessionId,
+          attemptedObjectCount: candidate.objectRefs.length,
+          deletedObjectCount,
+          error,
+        };
+      })
+    );
+
+    const finish = await ctx.runMutation(
+      internal.photos.finishExpiredUploadSessionCleanup,
+      {
+        now,
+        deleteObjects,
+        plannedSessionCount: plan.candidates.length,
+        skippedReferencedObjectCount: plan.skippedReferencedObjectCount,
+        results,
+      }
+    );
+
+    return {
+      dryRun,
+      deleteObjects,
+      plannedSessionCount: plan.candidates.length,
+      attemptedObjectCount: results.reduce(
+        (total, result) => total + result.attemptedObjectCount,
+        0
+      ),
+      deletedObjectCount: results.reduce(
+        (total, result) => total + result.deletedObjectCount,
+        0
+      ),
+      failedDeleteCount: results.filter((result) => result.error).length,
+      skippedReferencedObjectCount: plan.skippedReferencedObjectCount,
+      markedFailedSessionCount: finish.markedFailedSessionCount,
+    };
+  },
+});
+
+export const planExpiredUploadSessionCleanup = internalQuery({
+  args: {
+    now: v.number(),
+    graceMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAppAdmin(ctx);
+    const graceMs = Math.max(
+      args.graceMs ?? defaultPhotoUploadCleanupGraceMs,
+      uploadSessionTtlMs
+    );
+    const limit = Math.min(
+      Math.max(Math.floor(args.limit ?? 50), 1),
+      maxPhotoCleanupBatchSize
+    );
+    const cutoff = args.now - graceMs;
+    const sessions = await ctx.db
+      .query("photoUploadSessions")
+      .withIndex("by_expires", (q) => q.lt("expiresAt", cutoff))
+      .take(limit);
+    const candidates = [];
+    let skippedReferencedObjectCount = 0;
+
+    for (const session of sessions) {
+      if (!shouldCleanupExpiredUploadSession(session, args.now, graceMs)) {
+        continue;
+      }
+
+      const photos = await ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", session.moveId))
+        .collect();
+      const allRefs = uploadSessionStorageRefs(session);
+      const objectRefs = unreferencedUploadSessionStorageRefs(session, photos);
+      skippedReferencedObjectCount += allRefs.length - objectRefs.length;
+      candidates.push({
+        uploadSessionId: session._id,
+        householdId: session.householdId,
+        moveId: session.moveId,
+        objectRefs,
+      });
+    }
+
+    return {
+      candidates,
+      skippedReferencedObjectCount,
+    };
+  },
+});
+
+export const finishExpiredUploadSessionCleanup = internalMutation({
+  args: {
+    now: v.number(),
+    deleteObjects: v.boolean(),
+    plannedSessionCount: v.number(),
+    skippedReferencedObjectCount: v.number(),
+    results: v.array(cleanupDeleteResultValidator),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireAppAdmin(ctx);
+    let markedFailedSessionCount = 0;
+
+    for (const result of args.results) {
+      const session = await ctx.db.get(result.uploadSessionId);
+      if (!session || session.status === "completed") {
+        continue;
+      }
+
+      await ctx.db.patch(result.uploadSessionId, {
+        status: session.status === "authorized" ? "failed" : session.status,
+        cleanupAttemptedAt: args.now,
+        cleanupCompletedAt:
+          result.error || !args.deleteObjects ? undefined : args.now,
+        cleanupError: result.error,
+        abandonedObjectCount: result.attemptedObjectCount,
+        deletedAbandonedObjectCount: result.deletedObjectCount,
+        updatedAt: args.now,
+      });
+      markedFailedSessionCount += 1;
+    }
+
+    await recordAuditEvent(ctx, {
+      actorType: "user",
+      actorUserId: admin._id,
+      category: "photo",
+      action: "photo_upload_sessions.cleanup_run",
+      metadata: {
+        plannedSessionCount: args.plannedSessionCount,
+        markedFailedSessionCount,
+        deleteObjects: args.deleteObjects,
+        attemptedObjectCount: args.results.reduce(
+          (total, result) => total + result.attemptedObjectCount,
+          0
+        ),
+        deletedObjectCount: args.results.reduce(
+          (total, result) => total + result.deletedObjectCount,
+          0
+        ),
+        failedDeleteCount: args.results.filter((result) => result.error).length,
+        skippedReferencedObjectCount: args.skippedReferencedObjectCount,
+      },
+    });
+
+    return { markedFailedSessionCount };
   },
 });
 

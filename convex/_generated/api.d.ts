@@ -53,6 +53,7 @@ import type * as lib_moverPacket from "../lib/moverPacket.js";
 import type * as lib_observability from "../lib/observability.js";
 import type * as lib_pcsPacket from "../lib/pcsPacket.js";
 import type * as lib_permissions from "../lib/permissions.js";
+import type * as lib_photoCleanup from "../lib/photoCleanup.js";
 import type * as lib_photoDelivery from "../lib/photoDelivery.js";
 import type * as lib_photoIntake from "../lib/photoIntake.js";
 import type * as lib_photoVisibility from "../lib/photoVisibility.js";
@@ -130,6 +131,7 @@ declare const fullApi: ApiFromModules<{
   "lib/observability": typeof lib_observability;
   "lib/pcsPacket": typeof lib_pcsPacket;
   "lib/permissions": typeof lib_permissions;
+  "lib/photoCleanup": typeof lib_photoCleanup;
   "lib/photoDelivery": typeof lib_photoDelivery;
   "lib/photoIntake": typeof lib_photoIntake;
   "lib/photoVisibility": typeof lib_photoVisibility;

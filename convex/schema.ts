@@ -1027,10 +1027,16 @@ export default defineSchema({
     expiresAt: v.number(),
     createdByUserId: v.id("users"),
     completedPhotoId: v.optional(v.id("itemPhotos")),
+    cleanupAttemptedAt: v.optional(v.number()),
+    cleanupCompletedAt: v.optional(v.number()),
+    cleanupError: v.optional(v.string()),
+    abandonedObjectCount: v.optional(v.number()),
+    deletedAbandonedObjectCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_move_status", ["moveId", "status"])
+    .index("by_status_expires", ["status", "expiresAt"])
     .index("by_expires", ["expiresAt"])
     .index("by_household", ["householdId"]),
 
