@@ -211,6 +211,54 @@ export const boxStatus = v.union(
   v.literal("archived")
 );
 
+export const photoType = v.union(
+  v.literal("item"),
+  v.literal("serialNumber"),
+  v.literal("condition"),
+  v.literal("damage"),
+  v.literal("boxContents"),
+  v.literal("boxLabel"),
+  v.literal("receipt"),
+  v.literal("room"),
+  v.literal("other")
+);
+
+export const photoPrivacyLevel = v.union(
+  v.literal("normal"),
+  v.literal("sensitive"),
+  v.literal("hiddenFromGuests")
+);
+
+export const photoVisibilityScope = v.union(
+  v.literal("household"),
+  v.literal("moveCollaborators"),
+  v.literal("documentationScoped"),
+  v.literal("private")
+);
+
+export const photoSource = v.union(
+  v.literal("manualUpload"),
+  v.literal("photoAI"),
+  v.literal("api"),
+  v.literal("mcp"),
+  v.literal("import")
+);
+
+export const exifHandlingStatus = v.union(
+  v.literal("pending"),
+  v.literal("stripped"),
+  v.literal("retained"),
+  v.literal("failed"),
+  v.literal("notApplicable")
+);
+
+export const photoVerificationStatus = v.union(
+  v.literal("unreviewed"),
+  v.literal("verified"),
+  v.literal("needsReview"),
+  v.literal("rejected")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -231,6 +279,13 @@ const capacity = v.object({
   dimensions: v.optional(dimensionsIn),
   weightIsUnlimited: v.optional(v.boolean()),
   volumeIsUnlimited: v.optional(v.boolean()),
+});
+
+const photoDerivativeRefs = v.object({
+  thumb: v.optional(v.string()),
+  card: v.optional(v.string()),
+  detail: v.optional(v.string()),
+  full: v.optional(v.string()),
 });
 
 export default defineSchema({
@@ -453,6 +508,49 @@ export default defineSchema({
     .index("by_box", ["boxId"])
     .index("by_item", ["itemId"])
     .index("by_move", ["moveId"])
+    .index("by_household", ["householdId"]),
+
+  itemPhotos: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.optional(v.id("items")),
+    boxId: v.optional(v.id("boxes")),
+    room: v.optional(v.string()),
+    claimId: v.optional(v.string()),
+    documentationProfileTypes: v.array(documentationProfileType),
+    originalStorageKey: v.string(),
+    originalBucket: v.string(),
+    originalHash: v.optional(v.string()),
+    derivativeRefs: photoDerivativeRefs,
+    cloudflareImageId: v.optional(v.string()),
+    width: v.number(),
+    height: v.number(),
+    mimeType: v.string(),
+    sizeBytes: v.number(),
+    caption: v.optional(v.string()),
+    photoType,
+    privacyLevel: photoPrivacyLevel,
+    visibilityScope: photoVisibilityScope,
+    source: photoSource,
+    exifHandlingStatus,
+    confidence: estimateConfidence,
+    notes: v.optional(v.string()),
+    verificationStatus: photoVerificationStatus,
+    aiProcessed: v.boolean(),
+    capturedAt: v.optional(v.number()),
+    uploadedByUserId: v.id("users"),
+    reviewedByUserId: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_item_created", ["itemId", "createdAt"])
+    .index("by_box_created", ["boxId", "createdAt"])
+    .index("by_move_ai_processed", ["moveId", "aiProcessed"])
+    .index("by_move_verification", ["moveId", "verificationStatus"])
+    .index("by_move_privacy", ["moveId", "privacyLevel"])
     .index("by_household", ["householdId"]),
 
   items: defineTable({

@@ -126,6 +126,54 @@ export const boxStatuses = [
   "archived",
 ] as const;
 
+export const photoTypes = [
+  "item",
+  "serialNumber",
+  "condition",
+  "damage",
+  "boxContents",
+  "boxLabel",
+  "receipt",
+  "room",
+  "other",
+] as const;
+
+export const photoPrivacyLevels = [
+  "normal",
+  "sensitive",
+  "hiddenFromGuests",
+] as const;
+
+export const photoVisibilityScopes = [
+  "household",
+  "moveCollaborators",
+  "documentationScoped",
+  "private",
+] as const;
+
+export const photoSources = [
+  "manualUpload",
+  "photoAI",
+  "api",
+  "mcp",
+  "import",
+] as const;
+
+export const exifHandlingStatuses = [
+  "pending",
+  "stripped",
+  "retained",
+  "failed",
+  "notApplicable",
+] as const;
+
+export const photoVerificationStatuses = [
+  "unreviewed",
+  "verified",
+  "needsReview",
+  "rejected",
+] as const;
+
 export const documentationProfileTypes = [
   "personalFullRecord",
   "pcsMove",
@@ -401,6 +449,54 @@ export const boxStatusValidator = v.union(
   v.literal("missing"),
   v.literal("damaged"),
   v.literal("archived")
+);
+
+export const photoTypeValidator = v.union(
+  v.literal("item"),
+  v.literal("serialNumber"),
+  v.literal("condition"),
+  v.literal("damage"),
+  v.literal("boxContents"),
+  v.literal("boxLabel"),
+  v.literal("receipt"),
+  v.literal("room"),
+  v.literal("other")
+);
+
+export const photoPrivacyLevelValidator = v.union(
+  v.literal("normal"),
+  v.literal("sensitive"),
+  v.literal("hiddenFromGuests")
+);
+
+export const photoVisibilityScopeValidator = v.union(
+  v.literal("household"),
+  v.literal("moveCollaborators"),
+  v.literal("documentationScoped"),
+  v.literal("private")
+);
+
+export const photoSourceValidator = v.union(
+  v.literal("manualUpload"),
+  v.literal("photoAI"),
+  v.literal("api"),
+  v.literal("mcp"),
+  v.literal("import")
+);
+
+export const exifHandlingStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("stripped"),
+  v.literal("retained"),
+  v.literal("failed"),
+  v.literal("notApplicable")
+);
+
+export const photoVerificationStatusValidator = v.union(
+  v.literal("unreviewed"),
+  v.literal("verified"),
+  v.literal("needsReview"),
+  v.literal("rejected")
 );
 
 export function normalizeItemName(name: string) {
