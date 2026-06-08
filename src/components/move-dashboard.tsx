@@ -30,6 +30,7 @@ import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { InventoryTable } from "@/components/inventory-table";
 import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { MoveDayView } from "@/components/move-day-view";
+import { MovePeopleManager } from "@/components/move-people-manager";
 import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -738,6 +739,8 @@ export function MoveDashboard() {
           </CardContent>
         </Card>
       </section>
+
+      <MovePeopleManager householdId={householdId} moveId={moveId} />
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card>

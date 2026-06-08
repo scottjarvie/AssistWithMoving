@@ -149,6 +149,7 @@ test.describe("authenticated product flow", () => {
     const itemName = `E2E road bike ${runId}`;
     const boxCode = `E2E-${runId.toUpperCase()}`;
     const boxLabel = `E2E bike parts ${runId}`;
+    const contactName = `E2E transportation office ${runId}`;
 
     await ensureHousehold(page, householdName);
 
@@ -167,6 +168,26 @@ test.describe("authenticated product flow", () => {
       timeout: 30_000,
     });
 
+    await page.getByLabel("Contact name").fill(contactName);
+    await page.getByLabel("Contact role").selectOption("contact");
+    await page.getByLabel("Contact email").fill(`office-${runId}@example.test`);
+    await page.getByLabel("Contact phone").fill("555-0100");
+    await page.getByLabel("Contact notes").fill("E2E PCS counseling contact");
+    await page.getByRole("button", { name: "Add contact" }).click();
+    await expect(page.getByText("Contact added.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByLabel(`Contact name for ${contactName}`)).toBeVisible();
+    await page.getByLabel(`Contact phone for ${contactName}`).fill("555-0101");
+    await page.getByRole("button", { name: `Save ${contactName}` }).click();
+    await expect(page.getByText(`${contactName} saved.`)).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: `Archive ${contactName}` }).click();
+    await expect(page.getByText(`${contactName} archived.`)).toBeVisible({
+      timeout: 30_000,
+    });
+
     const transportResources = page
       .getByRole("heading", { name: "Transport resources", exact: true })
       .locator("xpath=ancestor::section[1]");
@@ -181,7 +202,7 @@ test.describe("authenticated product flow", () => {
     await page.getByLabel("New item room").fill("Garage");
     await page.getByLabel("New item category").fill("Sports");
     await page.getByLabel("New item disposition").selectOption("mover");
-    await page.getByRole("button", { name: "Add" }).click();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
     await expect(page.getByLabel(`Status for ${itemName}`)).toBeVisible();
 
     const createBoxForm = page.getByRole("form", { name: "Create box" });
