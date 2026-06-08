@@ -361,6 +361,70 @@ to validate locked boxes, hard blocks, zone ownership, and warning override
 requirements without writing. If any row fails validation, the response uses
 HTTP `207` and includes row-level details.
 
+Create deterministic planning suggestions in the app review queue:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/planning-suggestions/generate \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: generate-planning-suggestions-001" \
+  -d '{}'
+```
+
+Planning suggestion generation requires `inventory/write`. It creates an
+audited `aiJobs` record plus pending estimate and load-assignment suggestions.
+It does not apply the suggestions to trusted item or box records.
+
+List pending planning suggestions:
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/planning-suggestions?status=pending&limit=50" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Listing requires `inventory/read`. `GET /moves/{moveId}/summary` also includes
+recent planning suggestion metadata so agents can see review work in the move
+overview.
+
+Approve reviewed planning suggestions:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/planning-suggestions/approve \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: approve-planning-suggestions-001" \
+  -d '{
+    "approvals": [
+      {
+        "suggestionId": "SUGGESTION_ID",
+        "estimateDraft": {
+          "estimatedWeightLb": 42,
+          "weightConfidence": "manual"
+        }
+      }
+    ]
+  }'
+```
+
+Approval requires `inventory/write`. Callers must approve exact suggestion IDs.
+If `estimateDraft` or `assignmentOverrideReason` is supplied, the suggestion is
+marked `edited`; otherwise it is marked `approved`. Assignment target changes
+should use the assignment dry-run/apply endpoint rather than changing reviewed
+suggestion targets directly.
+
+Reject planning suggestions:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/planning-suggestions/reject \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reject-planning-suggestions-001" \
+  -d '{ "suggestionIds": ["SUGGESTION_ID"] }'
+```
+
+Rejecting requires `inventory/write` and marks only pending suggestions as
+rejected. API-key actions are audited as API-key actions.
+
 Attach or update photo evidence metadata after upload finalization:
 
 ```bash
@@ -648,7 +712,7 @@ Available MCP tools:
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
-| `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, documentation profiles, export jobs, and share-link metadata. |
+| `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
@@ -659,6 +723,10 @@ Available MCP tools:
 | `remove_item_from_box` | Remove one item-to-box assignment without deleting the item, with `dryRun` support. |
 | `suggest_assignments` | Generate deterministic box-to-resource/zone suggestions without writing. |
 | `apply_assignments` | Apply explicit box-to-resource/zone assignments, with API-side `dryRun` validation. |
+| `list_planning_suggestions` | List AI planning review suggestions by status. |
+| `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
+| `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
+| `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
 | `start_photo_upload` | Start a photo upload session and return presigned upload information. |
 | `attach_photo` | Attach/update photo evidence metadata after upload finalization, with `dryRun` support. |
 | `list_transport_resources` | List resources and zones for load planning. |

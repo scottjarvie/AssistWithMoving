@@ -20,15 +20,19 @@ import {
   createTransportZone,
   deleteItem,
   downloadExport,
+  approvePlanningSuggestions,
+  generatePlanningSuggestions,
   getApiContext,
   getCapacityReport,
   getMoveSummary,
   listDocumentationProfiles,
   listExports,
   listMoves,
+  listPlanningSuggestions,
   listShareLinks,
   listTransportResources,
   removeItemFromBox,
+  rejectPlanningSuggestions,
   revokeShareLink,
   searchInventory,
   startPhotoUpload,
@@ -93,6 +97,44 @@ const documentationImageRuleSchema = z.enum([
 ]);
 
 const documentationStatusSchema = z.enum(["draft", "active", "archived"]);
+
+const planningSuggestionStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "edited",
+  "rejected",
+]);
+
+const estimateConfidenceSchema = z.enum([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "manual",
+  "actual",
+]);
+
+const planningEstimateDraftSchema = z.object({
+  category: z.string().optional(),
+  estimatedWeightLb: z.number().positive().optional(),
+  estimatedWeightLowLb: z.number().positive().optional(),
+  estimatedWeightHighLb: z.number().positive().optional(),
+  estimatedVolumeCuFt: z.number().positive().optional(),
+  estimatedPackedVolumeCuFt: z.number().positive().optional(),
+  weightConfidence: estimateConfidenceSchema.optional(),
+  volumeConfidence: estimateConfidenceSchema.optional(),
+});
+
+const planningAssignmentDraftSchema = z.object({
+  overrideReason: z.string().optional(),
+});
+
+const planningApprovalSchema = z.object({
+  suggestionId: z.string(),
+  estimateDraft: planningEstimateDraftSchema.optional(),
+  assignmentDraft: planningAssignmentDraftSchema.optional(),
+  assignmentOverrideReason: z.string().optional(),
+});
 
 const shareLinkActionSchema = z.enum([
   "view",
@@ -448,6 +490,57 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (input) => applyAssignments(apiConfig, input),
+  });
+
+  registerTool(target, "list_planning_suggestions", {
+    title: "List planning suggestions",
+    description:
+      "List AI planning review suggestions for a move, optionally filtered by pending, approved, edited, or rejected status.",
+    inputSchema: {
+      moveId: z.string(),
+      status: planningSuggestionStatusSchema.optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listPlanningSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "generate_planning_suggestions", {
+    title: "Generate planning suggestions",
+    description:
+      "Create deterministic estimate and load-assignment suggestions in the review queue. This writes suggestions, but does not apply them to inventory or boxes.",
+    inputSchema: {
+      moveId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => generatePlanningSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "approve_planning_suggestions", {
+    title: "Approve planning suggestions",
+    description:
+      "Approve specific pending planning suggestions, optionally with edited estimate drafts or assignment override reasons.",
+    inputSchema: {
+      moveId: z.string(),
+      approvals: z.array(planningApprovalSchema).min(1).max(100),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => approvePlanningSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "reject_planning_suggestions", {
+    title: "Reject planning suggestions",
+    description:
+      "Reject specific pending planning suggestions without applying their estimate or assignment draft.",
+    inputSchema: {
+      moveId: z.string(),
+      suggestionIds: z.array(z.string()).min(1).max(100),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => rejectPlanningSuggestions(apiConfig, input),
   });
 
   registerTool(target, "start_photo_upload", {

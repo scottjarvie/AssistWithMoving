@@ -145,6 +145,30 @@ describe("REST API helpers", () => {
     ).toEqual(["inventory/write"]);
     expect(
       requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["moves", "move1", "planning-suggestions"],
+      })
+    ).toEqual(["inventory/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "planning-suggestions", "generate"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "planning-suggestions", "approve"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "planning-suggestions", "reject"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
         method: "POST",
         segments: ["uploads", "init"],
       })

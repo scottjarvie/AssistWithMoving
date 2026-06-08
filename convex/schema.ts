@@ -1080,6 +1080,7 @@ export default defineSchema({
     error: v.optional(v.string()),
     providerMetadata: v.optional(v.any()),
     createdByUserId: v.id("users"),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     canceledAt: v.optional(v.number()),
@@ -1225,8 +1226,10 @@ export default defineSchema({
       })
     ),
     reviewedByUserId: v.optional(v.id("users")),
+    reviewedByApiKeyId: v.optional(v.id("apiKeys")),
     reviewedAt: v.optional(v.number()),
     createdByUserId: v.id("users"),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

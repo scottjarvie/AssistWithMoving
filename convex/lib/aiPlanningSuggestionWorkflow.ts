@@ -1,0 +1,619 @@
+import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { recordAuditEvent } from "./audit";
+import { assertAiUsageAllowed } from "./aiUsage";
+import { estimateItem, sumEstimateValues } from "./estimateEngine";
+import { normalizeOptionalText } from "./moveFields";
+import {
+  suggestAssignmentForBox,
+  suggestEstimateForItem,
+} from "./planningSuggestions";
+
+export type PlanningSuggestionActor =
+  | { type: "user"; userId: Id<"users"> }
+  | { type: "apiKey"; userId: Id<"users">; apiKeyId: Id<"apiKeys"> };
+
+type EstimateDraft = NonNullable<
+  Doc<"aiPlanningSuggestions">["estimateDraft"]
+>;
+type AssignmentDraft = NonNullable<
+  Doc<"aiPlanningSuggestions">["assignmentDraft"]
+>;
+
+export type PlanningSuggestionApprovalInput = {
+  suggestionId: Id<"aiPlanningSuggestions">;
+  estimateDraft?: Partial<EstimateDraft>;
+  assignmentDraft?: Partial<AssignmentDraft>;
+  assignmentOverrideReason?: string;
+};
+
+export async function createPlanningSuggestionsForMove(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    actor: PlanningSuggestionActor;
+  }
+) {
+  const [items, boxes, resources, zones] = await Promise.all([
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+      .collect(),
+  ]);
+
+  const activeItems = items.filter(
+    (item) => item.householdId === args.householdId && !item.deletedAt
+  );
+  const activeBoxes = boxes.filter(
+    (box) => box.householdId === args.householdId && !box.archivedAt
+  );
+  const activeResources = resources.filter(
+    (resource) => resource.householdId === args.householdId && !resource.archivedAt
+  );
+  const activeZones = zones.filter(
+    (zone) => zone.householdId === args.householdId && !zone.archivedAt
+  );
+
+  await assertAiUsageAllowed(ctx, {
+    householdId: args.householdId,
+    moveId: args.moveId,
+    userId: args.actor.userId,
+    inputSizeBytes: activeItems.length * 256 + activeBoxes.length * 256,
+    estimatedCents: 0,
+  });
+
+  const generated = [];
+
+  for (const item of activeItems.slice(0, 150)) {
+    const suggestion = suggestEstimateForItem({
+      itemId: item._id,
+      name: item.name,
+      category: item.category,
+      quantity: item.quantity,
+      estimatedWeightLb: item.estimatedWeightLb,
+      actualWeightLb: item.actualWeightLb,
+      estimatedVolumeCuFt: item.estimatedVolumeCuFt,
+      estimatedPackedVolumeCuFt: item.estimatedPackedVolumeCuFt,
+      weightConfidence: item.weightConfidence,
+      volumeConfidence: item.volumeConfidence,
+    });
+    if (suggestion) {
+      generated.push({
+        type: "estimate" as const,
+        itemId: item._id,
+        confidence: suggestion.confidence,
+        reasoning: suggestion.reasoning,
+        assumptions: suggestion.assumptions,
+        estimateDraft: suggestion.estimateDraft,
+      });
+    }
+  }
+
+  for (const box of activeBoxes.slice(0, 150)) {
+    const loadableBox = await loadableBoxFor(ctx, box);
+    const suggestion = suggestAssignmentForBox({
+      box: {
+        ...loadableBox,
+        boxId: box._id,
+        code: box.code,
+        assignedResourceId: box.assignedResourceId,
+        assignmentLocked: box.assignmentLocked,
+      },
+      resources: activeResources.map((resource) => ({
+        resourceId: resource._id,
+        type: resource.type,
+        name: resource.name,
+        capacity: resource.capacity,
+      })),
+      zones: activeZones.map((zone) => ({
+        zoneId: zone._id,
+        resourceId: zone.resourceId,
+        name: zone.name,
+        capacity: zone.capacity,
+      })),
+    });
+    if (suggestion) {
+      generated.push({
+        type: "assignment" as const,
+        boxId: box._id,
+        confidence: suggestion.confidence,
+        reasoning: suggestion.reasoning,
+        assumptions: suggestion.assumptions,
+        assignmentDraft: {
+          assignedResourceId: suggestion.assignmentDraft
+            .assignedResourceId as Id<"transportResources">,
+          assignedZoneId: suggestion.assignmentDraft.assignedZoneId as
+            | Id<"transportZones">
+            | undefined,
+          assignmentWarnings: suggestion.assignmentDraft.assignmentWarnings,
+          assignmentHardBlocks: suggestion.assignmentDraft.assignmentHardBlocks,
+          weightPercent: suggestion.assignmentDraft.weightPercent,
+          volumePercent: suggestion.assignmentDraft.volumePercent,
+          overrideReason: suggestion.assignmentDraft.overrideReason,
+        },
+      });
+    }
+  }
+
+  const now = Date.now();
+  const limitedGenerated = generated.slice(0, 120);
+  const aiJobId = await ctx.db.insert("aiJobs", {
+    householdId: args.householdId,
+    moveId: args.moveId,
+    type: "loadPlanSuggestions",
+    status: "succeeded",
+    modality: "structured",
+    provider: "mock",
+    model: "planning-suggestions-v1",
+    inputRef: {
+      source: "aiPlanningSuggestions",
+      itemCount: activeItems.length,
+      boxCount: activeBoxes.length,
+      resourceCount: activeResources.length,
+    },
+    inputSummary: "Estimate and load assignment suggestion pass.",
+    outputRef: {
+      suggestionCount: limitedGenerated.length,
+      estimateCount: limitedGenerated.filter((entry) => entry.type === "estimate")
+        .length,
+      assignmentCount: limitedGenerated.filter(
+        (entry) => entry.type === "assignment"
+      ).length,
+    },
+    outputSummary: `${limitedGenerated.length} planning suggestions created.`,
+    confidence: "medium",
+    reviewStatus: "unreviewed",
+    tokenUsage: {
+      inputTokens: activeItems.length * 12 + activeBoxes.length * 20,
+      outputTokens: limitedGenerated.length * 48,
+      totalTokens:
+        activeItems.length * 12 +
+        activeBoxes.length * 20 +
+        limitedGenerated.length * 48,
+    },
+    cost: {
+      estimatedCents: 0,
+      actualCents: 0,
+      currency: "USD",
+    },
+    retryCount: 0,
+    maxRetries: 0,
+    createdByUserId: args.actor.userId,
+    ...(args.actor.type === "apiKey"
+      ? { createdByApiKeyId: args.actor.apiKeyId }
+      : {}),
+    startedAt: now,
+    completedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const suggestionIds = [];
+  for (const suggestion of limitedGenerated) {
+    const suggestionId = await ctx.db.insert("aiPlanningSuggestions", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      aiJobId,
+      status: "pending",
+      type: suggestion.type,
+      itemId: suggestion.itemId,
+      boxId: suggestion.boxId,
+      confidence: suggestion.confidence,
+      reasoning: suggestion.reasoning,
+      assumptions: suggestion.assumptions,
+      estimateDraft: suggestion.estimateDraft,
+      assignmentDraft: suggestion.assignmentDraft,
+      createdByUserId: args.actor.userId,
+      ...(args.actor.type === "apiKey"
+        ? { createdByApiKeyId: args.actor.apiKeyId }
+        : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
+    suggestionIds.push(suggestionId);
+  }
+
+  await recordAuditEvent(ctx, {
+    householdId: args.householdId,
+    moveId: args.moveId,
+    ...auditActorFields(args.actor),
+    category: "ai",
+    action: "ai_planning_suggestions.created",
+    objectTable: "aiJobs",
+    objectId: aiJobId,
+    metadata: { suggestionCount: suggestionIds.length },
+  });
+
+  return { aiJobId, suggestionIds };
+}
+
+export async function approvePlanningSuggestions(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    actor: PlanningSuggestionActor;
+    approvals: PlanningSuggestionApprovalInput[];
+  }
+) {
+  const now = Date.now();
+  const loaded = await loadPendingSuggestions(ctx, args);
+  const updatedItemIds: Id<"items">[] = [];
+  const updatedBoxIds: Id<"boxes">[] = [];
+
+  for (const { suggestion, approval } of loaded) {
+    if (suggestion.type === "estimate") {
+      const draft = mergeEstimateDraft(
+        suggestion.estimateDraft,
+        approval.estimateDraft
+      );
+      if (!draft || !suggestion.itemId) continue;
+      const item = await ctx.db.get(suggestion.itemId);
+      if (
+        !item ||
+        item.deletedAt ||
+        item.householdId !== args.householdId ||
+        item.moveId !== args.moveId
+      ) {
+        throw new Error("Suggested item no longer exists.");
+      }
+      if (item.actualWeightLb) {
+        throw new Error("Actual item weight cannot be overridden by AI.");
+      }
+      await ctx.db.patch(suggestion.itemId, {
+        category: normalizeOptionalText(draft.category) ?? item.category,
+        estimatedWeightLb:
+          item.estimatedWeightLb ?? positiveNumber(draft.estimatedWeightLb),
+        estimatedWeightLowLb:
+          item.estimatedWeightLowLb ??
+          positiveNumber(draft.estimatedWeightLowLb),
+        estimatedWeightHighLb:
+          item.estimatedWeightHighLb ??
+          positiveNumber(draft.estimatedWeightHighLb),
+        estimatedVolumeCuFt:
+          item.estimatedVolumeCuFt ??
+          positiveNumber(draft.estimatedVolumeCuFt),
+        estimatedPackedVolumeCuFt:
+          item.estimatedPackedVolumeCuFt ??
+          positiveNumber(draft.estimatedPackedVolumeCuFt),
+        weightConfidence:
+          item.weightConfidence === "none"
+            ? draft.weightConfidence
+            : item.weightConfidence,
+        volumeConfidence:
+          item.volumeConfidence === "none"
+            ? draft.volumeConfidence
+            : item.volumeConfidence,
+        aiTags: Array.from(new Set([...item.aiTags, "planningSuggestion"])),
+        aiSummary: "Accepted AI planning estimate suggestion.",
+        updatedByUserId: args.actor.userId,
+        updatedAt: now,
+      });
+      updatedItemIds.push(suggestion.itemId);
+    }
+
+    if (suggestion.type === "assignment") {
+      const draft = mergeAssignmentDraft(
+        suggestion.assignmentDraft,
+        approval.assignmentDraft,
+        approval.assignmentOverrideReason
+      );
+      if (!draft || !suggestion.boxId) continue;
+      const box = await ctx.db.get(suggestion.boxId);
+      if (
+        !box ||
+        box.archivedAt ||
+        box.householdId !== args.householdId ||
+        box.moveId !== args.moveId
+      ) {
+        throw new Error("Suggested box no longer exists.");
+      }
+      if (box.assignmentLocked) {
+        throw new Error("Locked assignments must be changed manually.");
+      }
+      await assertAssignmentTargets(ctx, args.moveId, draft);
+      await ctx.db.patch(suggestion.boxId, {
+        assignedResourceId: draft.assignedResourceId,
+        assignedZoneId: draft.assignedZoneId,
+        assignmentOverrideReason: normalizeOptionalText(draft.overrideReason),
+        assignmentWarnings: draft.assignmentWarnings,
+        assignmentHardBlocks: draft.assignmentHardBlocks,
+        assignmentValidatedAt: now,
+        updatedAt: now,
+      });
+      updatedBoxIds.push(suggestion.boxId);
+    }
+
+    await ctx.db.patch(suggestion._id, {
+      status: isEditedApproval(approval) ? "edited" : "approved",
+      reviewedByUserId: args.actor.userId,
+      ...(args.actor.type === "apiKey"
+        ? { reviewedByApiKeyId: args.actor.apiKeyId }
+        : {}),
+      reviewedAt: now,
+      updatedAt: now,
+    });
+  }
+
+  await recordAuditEvent(ctx, {
+    householdId: args.householdId,
+    moveId: args.moveId,
+    ...auditActorFields(args.actor),
+    category: "ai",
+    action: "ai_planning_suggestions.approved",
+    objectTable: "aiPlanningSuggestions",
+    metadata: {
+      suggestionCount: loaded.length,
+      updatedItemIds,
+      updatedBoxIds,
+    },
+  });
+
+  return {
+    updatedItemIds,
+    updatedBoxIds,
+    reviewedSuggestionIds: loaded.map(({ suggestion }) => suggestion._id),
+  };
+}
+
+export async function rejectPlanningSuggestions(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    actor: PlanningSuggestionActor;
+    suggestionIds: Id<"aiPlanningSuggestions">[];
+  }
+) {
+  const loaded = await loadPendingSuggestions(ctx, {
+    ...args,
+    approvals: args.suggestionIds.map((suggestionId) => ({ suggestionId })),
+  });
+  const now = Date.now();
+  for (const { suggestion } of loaded) {
+    await ctx.db.patch(suggestion._id, {
+      status: "rejected",
+      reviewedByUserId: args.actor.userId,
+      ...(args.actor.type === "apiKey"
+        ? { reviewedByApiKeyId: args.actor.apiKeyId }
+        : {}),
+      reviewedAt: now,
+      updatedAt: now,
+    });
+  }
+  await recordAuditEvent(ctx, {
+    householdId: args.householdId,
+    moveId: args.moveId,
+    ...auditActorFields(args.actor),
+    category: "ai",
+    action: "ai_planning_suggestions.rejected",
+    objectTable: "aiPlanningSuggestions",
+    metadata: { suggestionCount: loaded.length },
+  });
+
+  return {
+    rejectedSuggestionIds: loaded.map(({ suggestion }) => suggestion._id),
+  };
+}
+
+async function loadPendingSuggestions(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    approvals: PlanningSuggestionApprovalInput[];
+  }
+) {
+  const loaded = [];
+  for (const approval of args.approvals) {
+    const suggestion = await ctx.db.get(approval.suggestionId);
+    if (
+      !suggestion ||
+      suggestion.householdId !== args.householdId ||
+      suggestion.moveId !== args.moveId
+    ) {
+      throw new Error("AI planning suggestion not found.");
+    }
+    if (suggestion.status !== "pending") {
+      throw new Error("Only pending AI planning suggestions can be reviewed.");
+    }
+    loaded.push({ suggestion, approval });
+  }
+  return loaded;
+}
+
+async function loadableBoxFor(ctx: QueryCtx | MutationCtx, box: Doc<"boxes">) {
+  const memberships = await ctx.db
+    .query("boxItems")
+    .withIndex("by_box", (q) => q.eq("boxId", box._id))
+    .collect();
+  const contents = await Promise.all(
+    memberships.map(async (membership) => {
+      const item = await ctx.db.get(membership.itemId);
+      return item &&
+        !item.deletedAt &&
+        item.householdId === box.householdId &&
+        item.moveId === box.moveId
+        ? { item, membership }
+        : null;
+    })
+  );
+  const activeContents = contents.filter(
+    (entry): entry is { item: Doc<"items">; membership: Doc<"boxItems"> } =>
+      Boolean(entry)
+  );
+  const contentEstimates = activeContents.map(({ item, membership }) =>
+    estimateItem({ ...item, quantity: membership.quantity })
+  );
+  const contentsWeight = sumEstimateValues(
+    contentEstimates.map((estimate) => estimate.weight)
+  );
+  const contentsVolume = sumEstimateValues(
+    contentEstimates.map((estimate) => estimate.volume)
+  );
+
+  return {
+    estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight,
+    estimatedVolumeCuFt: box.estimatedVolumeCuFt ?? contentsVolume,
+    dimensionsIn: box.dimensionsIn,
+    itemCount: activeContents.reduce(
+      (sum, entry) => sum + entry.membership.quantity,
+      0
+    ),
+    hasFragile: activeContents.some((entry) => entry.item.fragility === "high"),
+    hasHighValue: activeContents.some((entry) => entry.item.highValue),
+    hasSensitive: activeContents.some((entry) =>
+      entry.item.planningDefaultKeys.includes("sensitive")
+    ),
+    hasPersonalTransport: activeContents.some(
+      (entry) => entry.item.requiresPersonalTransport
+    ),
+    hasHazardous: activeContents.some((entry) => entry.item.hazardousFlag),
+  };
+}
+
+async function assertAssignmentTargets(
+  ctx: MutationCtx,
+  moveId: Id<"moves">,
+  draft: AssignmentDraft
+) {
+  const resource = await ctx.db.get(draft.assignedResourceId);
+  if (!resource || resource.moveId !== moveId || resource.archivedAt) {
+    throw new Error("Suggested resource is no longer available.");
+  }
+  if (draft.assignedZoneId) {
+    const zone = await ctx.db.get(draft.assignedZoneId);
+    if (
+      !zone ||
+      zone.moveId !== moveId ||
+      zone.resourceId !== draft.assignedResourceId ||
+      zone.archivedAt
+    ) {
+      throw new Error("Suggested zone is no longer available.");
+    }
+  }
+}
+
+function mergeEstimateDraft(
+  base: EstimateDraft | undefined,
+  patch: Partial<EstimateDraft> | undefined
+): EstimateDraft | undefined {
+  if (!base && !patch) return undefined;
+  if (!base) {
+    if (!patch?.weightConfidence || !patch.volumeConfidence) {
+      throw new Error("Edited estimate drafts require confidence fields.");
+    }
+    return patch as EstimateDraft;
+  }
+  if (!patch) return base;
+  return {
+    category: patch.category === undefined ? base.category : patch.category,
+    estimatedWeightLb:
+      patch.estimatedWeightLb === undefined
+        ? base.estimatedWeightLb
+        : patch.estimatedWeightLb,
+    estimatedWeightLowLb:
+      patch.estimatedWeightLowLb === undefined
+        ? base.estimatedWeightLowLb
+        : patch.estimatedWeightLowLb,
+    estimatedWeightHighLb:
+      patch.estimatedWeightHighLb === undefined
+        ? base.estimatedWeightHighLb
+        : patch.estimatedWeightHighLb,
+    estimatedVolumeCuFt:
+      patch.estimatedVolumeCuFt === undefined
+        ? base.estimatedVolumeCuFt
+        : patch.estimatedVolumeCuFt,
+    estimatedPackedVolumeCuFt:
+      patch.estimatedPackedVolumeCuFt === undefined
+        ? base.estimatedPackedVolumeCuFt
+        : patch.estimatedPackedVolumeCuFt,
+    weightConfidence: patch.weightConfidence ?? base.weightConfidence,
+    volumeConfidence: patch.volumeConfidence ?? base.volumeConfidence,
+  };
+}
+
+function mergeAssignmentDraft(
+  base: AssignmentDraft | undefined,
+  patch: Partial<AssignmentDraft> | undefined,
+  overrideReason: string | undefined
+): AssignmentDraft | undefined {
+  if (!base && !patch) return undefined;
+  if (!base) {
+    if (!patch?.assignedResourceId) {
+      throw new Error("Edited assignment drafts require assignedResourceId.");
+    }
+    return {
+      assignedResourceId: patch.assignedResourceId,
+      assignedZoneId: patch.assignedZoneId,
+      assignmentWarnings: patch.assignmentWarnings ?? [],
+      assignmentHardBlocks: patch.assignmentHardBlocks ?? [],
+      weightPercent: patch.weightPercent,
+      volumePercent: patch.volumePercent,
+      overrideReason: patch.overrideReason ?? overrideReason,
+    };
+  }
+  if (!patch && overrideReason === undefined) return base;
+  return {
+    assignedResourceId: patch?.assignedResourceId ?? base.assignedResourceId,
+    assignedZoneId:
+      patch?.assignedZoneId === undefined
+        ? base.assignedZoneId
+        : patch.assignedZoneId,
+    assignmentWarnings: patch?.assignmentWarnings ?? base.assignmentWarnings,
+    assignmentHardBlocks: patch?.assignmentHardBlocks ?? base.assignmentHardBlocks,
+    weightPercent:
+      patch?.weightPercent === undefined ? base.weightPercent : patch.weightPercent,
+    volumePercent:
+      patch?.volumePercent === undefined ? base.volumePercent : patch.volumePercent,
+    overrideReason:
+      patch?.overrideReason === undefined
+        ? (overrideReason ?? base.overrideReason)
+        : patch.overrideReason,
+  };
+}
+
+function isEditedApproval(approval: PlanningSuggestionApprovalInput) {
+  return Boolean(
+    approval.estimateDraft ||
+      approval.assignmentDraft ||
+      approval.assignmentOverrideReason !== undefined
+  );
+}
+
+function positiveNumber(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function auditActorFields(actor: PlanningSuggestionActor) {
+  return actor.type === "user"
+    ? ({
+        actorType: "user" as const,
+        actorUserId: actor.userId,
+      } satisfies Pick<
+        Parameters<typeof recordAuditEvent>[1],
+        "actorType" | "actorUserId"
+      >)
+    : ({
+        actorType: "apiKey" as const,
+        actorApiKeyId: String(actor.apiKeyId),
+      } satisfies Pick<
+        Parameters<typeof recordAuditEvent>[1],
+        "actorType" | "actorApiKeyId"
+      >);
+}

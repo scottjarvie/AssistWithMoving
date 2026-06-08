@@ -33,6 +33,7 @@ import type * as items from "../items.js";
 import type * as lib_accountPrivacy from "../lib/accountPrivacy.js";
 import type * as lib_admin from "../lib/admin.js";
 import type * as lib_adminSummaries from "../lib/adminSummaries.js";
+import type * as lib_aiPlanningSuggestionWorkflow from "../lib/aiPlanningSuggestionWorkflow.js";
 import type * as lib_aiProvider from "../lib/aiProvider.js";
 import type * as lib_aiUsage from "../lib/aiUsage.js";
 import type * as lib_apiKeyAuth from "../lib/apiKeyAuth.js";
@@ -117,6 +118,7 @@ declare const fullApi: ApiFromModules<{
   "lib/accountPrivacy": typeof lib_accountPrivacy;
   "lib/admin": typeof lib_admin;
   "lib/adminSummaries": typeof lib_adminSummaries;
+  "lib/aiPlanningSuggestionWorkflow": typeof lib_aiPlanningSuggestionWorkflow;
   "lib/aiProvider": typeof lib_aiProvider;
   "lib/aiUsage": typeof lib_aiUsage;
   "lib/apiKeyAuth": typeof lib_apiKeyAuth;

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   addItemsToBox,
+  approvePlanningSuggestions,
   batchUpsertItems,
   applyAssignments,
   archiveDocumentationProfile,
@@ -14,13 +15,16 @@ import {
   createTransportResource,
   createTransportZone,
   deleteItem,
+  generatePlanningSuggestions,
   getApiContext,
   getCapacityReport,
   getMoveSummary,
   listDocumentationProfiles,
+  listPlanningSuggestions,
   listShareLinks,
   movingManifestRequest,
   removeItemFromBox,
+  rejectPlanningSuggestions,
   revokeShareLink,
   searchInventory,
   suggestAssignments,
@@ -550,6 +554,102 @@ describe("MovingManifest MCP API client", () => {
             },
           ],
         }),
+      }
+    );
+  });
+
+  it("lists, generates, approves, and rejects planning suggestions through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { ok: true } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listPlanningSuggestions(config, {
+      moveId: "move1",
+      status: "pending",
+      limit: 20,
+    });
+    await generatePlanningSuggestions(config, { moveId: "move1" });
+    await approvePlanningSuggestions(config, {
+      moveId: "move1",
+      approvals: [
+        {
+          suggestionId: "suggestion1",
+          estimateDraft: { estimatedWeightLb: 42, weightConfidence: "manual" },
+        },
+      ],
+    });
+    await rejectPlanningSuggestions(config, {
+      moveId: "move1",
+      suggestionIds: ["suggestion2"],
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL(
+        "https://example.com/api/v1/moves/move1/planning-suggestions?limit=20&status=pending"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL(
+        "https://example.com/api/v1/moves/move1/planning-suggestions/generate"
+      ),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({}),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL(
+        "https://example.com/api/v1/moves/move1/planning-suggestions/approve"
+      ),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          approvals: [
+            {
+              suggestionId: "suggestion1",
+              estimateDraft: { estimatedWeightLb: 42, weightConfidence: "manual" },
+            },
+          ],
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      new URL(
+        "https://example.com/api/v1/moves/move1/planning-suggestions/reject"
+      ),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ suggestionIds: ["suggestion2"] }),
       }
     );
   });

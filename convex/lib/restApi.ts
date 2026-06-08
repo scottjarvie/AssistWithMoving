@@ -133,6 +133,9 @@ export function requiredScopesForRestRoute({
     if (segments.includes("assignments")) {
       return ["inventory/read"];
     }
+    if (segments.includes("planning-suggestions")) {
+      return ["inventory/read"];
+    }
     if (segments.includes("photos")) {
       return ["inventory/read"];
     }
@@ -152,6 +155,9 @@ export function requiredScopesForRestRoute({
       return ["inventory/write"];
     }
     if (segments.includes("assignments")) {
+      return ["inventory/write"];
+    }
+    if (segments.includes("planning-suggestions")) {
       return ["inventory/write"];
     }
     return ["moves/write"];

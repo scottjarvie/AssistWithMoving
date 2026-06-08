@@ -73,6 +73,12 @@ import {
   safeShareLinkMetadata,
   type ShareLinkRole,
 } from "./lib/shareLinks";
+import {
+  approvePlanningSuggestions,
+  createPlanningSuggestionsForMove,
+  rejectPlanningSuggestions,
+  type PlanningSuggestionApprovalInput,
+} from "./lib/aiPlanningSuggestionWorkflow";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
@@ -112,6 +118,12 @@ const restEstimateConfidences = [
   "high",
   "manual",
   "actual",
+] as const;
+const restPlanningSuggestionStatuses = [
+  "pending",
+  "approved",
+  "edited",
+  "rejected",
 ] as const;
 const maxBatchUpsertItems = 100;
 
@@ -424,6 +436,16 @@ async function routeRequest(
   if (nested === "assignments") {
     return await routeAssignments(ctx, args, auth, moveId, nestedId);
   }
+  if (nested === "planning-suggestions") {
+    return await routePlanningSuggestions(
+      ctx,
+      args,
+      auth,
+      moveId,
+      nestedId,
+      segments[4]
+    );
+  }
   if (nested === "documentation-profiles") {
     return await routeDocumentationProfiles(
       ctx,
@@ -484,6 +506,7 @@ async function routeMoveSummary(
     boxes,
     assignments,
     photos,
+    planningSuggestions,
     documentationProfiles,
     exportJobs,
     shareLinks,
@@ -515,6 +538,11 @@ async function routeMoveSummary(
       .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
       .order("desc")
       .collect(),
+    ctx.db
+      .query("aiPlanningSuggestions")
+      .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
+      .order("desc")
+      .take(120),
     ctx.db
       .query("documentationProfiles")
       .withIndex("by_move_status", (q) => q.eq("moveId", move._id))
@@ -549,6 +577,9 @@ async function routeMoveSummary(
     (profile) =>
       profile.householdId === auth.householdId && profile.status !== "archived"
   );
+  const visiblePlanningSuggestions = planningSuggestions.filter(
+    (suggestion) => suggestion.householdId === auth.householdId
+  );
   const visibleExportJobs = exportJobs.filter(
     (job) => job.householdId === auth.householdId
   );
@@ -570,6 +601,9 @@ async function routeMoveSummary(
         safeAssignment(assignment)
       ),
       photos: visiblePhotos.map((photo) => safePhoto(photo)),
+      planningSuggestions: visiblePlanningSuggestions.map((suggestion) =>
+        safePlanningSuggestion(suggestion)
+      ),
       documentationProfiles: activeDocumentationProfiles.map((profile) =>
         safeDocumentationProfile(profile)
       ),
@@ -582,6 +616,7 @@ async function routeMoveSummary(
         boxes: activeBoxes.length,
         assignments: visibleAssignments.length,
         photos: visiblePhotos.length,
+        planningSuggestions: visiblePlanningSuggestions.length,
         documentationProfiles: activeDocumentationProfiles.length,
         exports: visibleExportJobs.length,
         shareLinks: visibleShareLinks.length,
@@ -1691,6 +1726,128 @@ async function routeApplyAssignments(
   );
 }
 
+async function routePlanningSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  suggestionIdSegment?: string,
+  actionSegment?: string
+) {
+  if (args.method === "GET") {
+    const suggestions = await ctx.db
+      .query("aiPlanningSuggestions")
+      .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+      .order("desc")
+      .collect();
+    const status = parsePlanningSuggestionStatus(args.query.status);
+    const visibleSuggestions = suggestions.filter(
+      (suggestion) =>
+        suggestion.householdId === auth.householdId &&
+        (status ? suggestion.status === status : true)
+    );
+    if (suggestionIdSegment && !actionSegment) {
+      const suggestion = visibleSuggestions.find(
+        (entry) => entry._id === suggestionIdSegment
+      );
+      if (!suggestion) {
+        throw new Error("AI planning suggestion not found.");
+      }
+      return restOk({ data: safePlanningSuggestion(suggestion) });
+    }
+    if (!suggestionIdSegment) {
+      return restOk(
+        paginate(visibleSuggestions.map((entry) => safePlanningSuggestion(entry)), args.query)
+      );
+    }
+  }
+
+  if (
+    args.method === "POST" &&
+    suggestionIdSegment === "generate" &&
+    !actionSegment
+  ) {
+    const result = await createPlanningSuggestionsForMove(ctx, {
+      householdId: auth.householdId,
+      moveId,
+      actor: {
+        type: "apiKey",
+        userId: auth.createdByUserId,
+        apiKeyId: auth.apiKeyId,
+      },
+    });
+    const suggestions = await Promise.all(
+      result.suggestionIds.map((suggestionId) => ctx.db.get(suggestionId))
+    );
+    return restOk(
+      {
+        data: {
+          aiJobId: result.aiJobId,
+          suggestionIds: result.suggestionIds,
+          suggestions: suggestions
+            .filter((entry): entry is Doc<"aiPlanningSuggestions"> => Boolean(entry))
+            .map((entry) => safePlanningSuggestion(entry)),
+        },
+      },
+      201
+    );
+  }
+
+  if (
+    args.method === "POST" &&
+    suggestionIdSegment === "approve" &&
+    !actionSegment
+  ) {
+    const approvals = parsePlanningApprovals(args.body);
+    const result = await approvePlanningSuggestions(ctx, {
+      householdId: auth.householdId,
+      moveId,
+      actor: {
+        type: "apiKey",
+        userId: auth.createdByUserId,
+        apiKeyId: auth.apiKeyId,
+      },
+      approvals,
+    });
+    return restOk({ data: result });
+  }
+
+  if (
+    args.method === "POST" &&
+    suggestionIdSegment === "reject" &&
+    !actionSegment
+  ) {
+    const body = bodyObject(args.body);
+    const suggestionIds = parseIdArray(body.suggestionIds).map(
+      (suggestionId) => suggestionId as Id<"aiPlanningSuggestions">
+    );
+    if (!suggestionIds.length) {
+      return restError({
+        status: 400,
+        code: "invalid_suggestions",
+        message: "suggestionIds must include at least one suggestion ID.",
+      });
+    }
+    const result = await rejectPlanningSuggestions(ctx, {
+      householdId: auth.householdId,
+      moveId,
+      actor: {
+        type: "apiKey",
+        userId: auth.createdByUserId,
+        apiKeyId: auth.apiKeyId,
+      },
+      suggestionIds,
+    });
+    return restOk({ data: result });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Planning suggestion route not found.",
+  });
+}
+
 async function routeDocumentationProfiles(
   ctx: MutationCtx,
   args: RestRequestInput,
@@ -2698,6 +2855,25 @@ function safeAssignment(assignment: Doc<"boxItems">) {
     notes: assignment.notes,
     createdAt: assignment.createdAt,
     updatedAt: assignment.updatedAt,
+  };
+}
+
+function safePlanningSuggestion(suggestion: Doc<"aiPlanningSuggestions">) {
+  return {
+    suggestionId: suggestion._id,
+    aiJobId: suggestion.aiJobId,
+    type: suggestion.type,
+    status: suggestion.status,
+    itemId: suggestion.itemId,
+    boxId: suggestion.boxId,
+    confidence: suggestion.confidence,
+    reasoning: suggestion.reasoning,
+    assumptions: suggestion.assumptions,
+    estimateDraft: suggestion.estimateDraft,
+    assignmentDraft: suggestion.assignmentDraft,
+    reviewedAt: suggestion.reviewedAt,
+    createdAt: suggestion.createdAt,
+    updatedAt: suggestion.updatedAt,
   };
 }
 
@@ -3760,6 +3936,91 @@ function parseConfidence(value: unknown) {
     : undefined;
 }
 
+function parsePlanningSuggestionStatus(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(restPlanningSuggestionStatuses, value)) {
+    throw new Error("Unsupported planning suggestion status.");
+  }
+  return value as Doc<"aiPlanningSuggestions">["status"];
+}
+
+function parsePlanningApprovals(body: unknown): PlanningSuggestionApprovalInput[] {
+  const input = bodyObject(body);
+  const rows = Array.isArray(input.approvals) ? input.approvals : [];
+  if (!rows.length) {
+    throw new Error("approvals must include at least one suggestion.");
+  }
+  if (rows.length > 100) {
+    throw new Error("Planning suggestion approvals are limited to 100 rows.");
+  }
+  return rows.map((row) => {
+    const approval = bodyObject(row);
+    const suggestionId = optionalString(approval.suggestionId);
+    if (!suggestionId) {
+      throw new Error("approval.suggestionId is required.");
+    }
+    return {
+      suggestionId: suggestionId as Id<"aiPlanningSuggestions">,
+      estimateDraft: parseEstimateDraftPatch(approval.estimateDraft),
+      assignmentDraft: parseAssignmentDraftPatch(approval.assignmentDraft),
+      assignmentOverrideReason: normalizeOptionalText(
+        asString(approval.assignmentOverrideReason)
+      ),
+    };
+  });
+}
+
+function parseEstimateDraftPatch(
+  value: unknown
+): PlanningSuggestionApprovalInput["estimateDraft"] {
+  if (value === undefined) return undefined;
+  const input = bodyObject(value);
+  return removeUndefined({
+    category: normalizeOptionalText(asString(input.category)),
+    estimatedWeightLb: optionalNumber(input.estimatedWeightLb),
+    estimatedWeightLowLb: optionalNumber(input.estimatedWeightLowLb),
+    estimatedWeightHighLb: optionalNumber(input.estimatedWeightHighLb),
+    estimatedVolumeCuFt: optionalNumber(input.estimatedVolumeCuFt),
+    estimatedPackedVolumeCuFt: optionalNumber(input.estimatedPackedVolumeCuFt),
+    weightConfidence: parsePlanningConfidence(
+      input.weightConfidence,
+      "estimateDraft.weightConfidence"
+    ),
+    volumeConfidence: parsePlanningConfidence(
+      input.volumeConfidence,
+      "estimateDraft.volumeConfidence"
+    ),
+  });
+}
+
+function parseAssignmentDraftPatch(
+  value: unknown
+): PlanningSuggestionApprovalInput["assignmentDraft"] {
+  if (value === undefined) return undefined;
+  const input = bodyObject(value);
+  return removeUndefined({
+    assignedResourceId: optionalString(input.assignedResourceId) as
+      | Id<"transportResources">
+      | undefined,
+    assignedZoneId: optionalString(input.assignedZoneId) as
+      | Id<"transportZones">
+      | undefined,
+    assignmentWarnings: parseStringArray(input.assignmentWarnings),
+    assignmentHardBlocks: parseStringArray(input.assignmentHardBlocks),
+    weightPercent: optionalNumber(input.weightPercent),
+    volumePercent: optionalNumber(input.volumePercent),
+    overrideReason: normalizeOptionalText(asString(input.overrideReason)),
+  });
+}
+
+function parsePlanningConfidence(value: unknown, label: string) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(restEstimateConfidences, value)) {
+    throw new Error(`Unsupported ${label}.`);
+  }
+  return value as Doc<"aiPlanningSuggestions">["confidence"];
+}
+
 function parseDocumentationProfileTypes(value: unknown) {
   const values = parseStringArray(value)?.filter((entry) =>
     includesLiteral(documentationProfileTypes, entry)
@@ -3952,6 +4213,27 @@ function parseStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string")
     : undefined;
+}
+
+function parseIdArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new Error("Expected an array of IDs.");
+  }
+  const ids = value.filter((entry): entry is string => typeof entry === "string");
+  if (ids.length !== value.length) {
+    throw new Error("ID arrays may only contain strings.");
+  }
+  return ids;
+}
+
+function removeUndefined<TValue extends Record<string, unknown>>(value: TValue) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined)
+  ) as {
+    [TKey in keyof TValue as undefined extends TValue[TKey] ? TKey : TKey]:
+      | Exclude<TValue[TKey], undefined>
+      | undefined;
+  };
 }
 
 function capacityPercent({

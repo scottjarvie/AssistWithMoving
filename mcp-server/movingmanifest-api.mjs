@@ -281,6 +281,75 @@ export async function applyAssignments(config, input) {
   });
 }
 
+export async function listPlanningSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/planning-suggestions`,
+    query: {
+      limit: input.limit,
+      status: input.status,
+    },
+  });
+}
+
+export async function generatePlanningSuggestions(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/planning-suggestions/generate`,
+        body: {},
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/planning-suggestions/generate`,
+    body: {},
+  });
+}
+
+export async function approvePlanningSuggestions(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/planning-suggestions/approve`,
+        body: {
+          approvals: input.approvals,
+        },
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/planning-suggestions/approve`,
+    body: {
+      approvals: input.approvals,
+    },
+  });
+}
+
+export async function rejectPlanningSuggestions(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        path: `/moves/${input.moveId}/planning-suggestions/reject`,
+        body: {
+          suggestionIds: input.suggestionIds,
+        },
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/planning-suggestions/reject`,
+    body: {
+      suggestionIds: input.suggestionIds,
+    },
+  });
+}
+
 export async function startPhotoUpload(config, input) {
   return await movingManifestRequest(config, {
     method: "POST",
