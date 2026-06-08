@@ -5,6 +5,8 @@ import { useAuth } from "@clerk/nextjs";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 
+import { IdentityBootstrapper } from "@/components/identity-bootstrapper";
+
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -31,6 +33,7 @@ export function ConvexClientProvider({
 
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+      <IdentityBootstrapper />
       {children}
     </ConvexProviderWithClerk>
   );
