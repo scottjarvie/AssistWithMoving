@@ -171,6 +171,30 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/items \
   }'
 ```
 
+Batch create/update items:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/items/batch-upsert \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: item-import-batch-001" \
+  -d '{
+    "dryRun": true,
+    "items": [
+      { "name": "Desk lamp", "room": "Office", "quantity": 1 },
+      { "itemId": "ITEM_ID", "status": "packed", "needsReview": false }
+    ]
+  }'
+```
+
+Rows with `itemId` update existing items. Rows without `itemId` create new
+items and require `name`. Batches are limited to 100 rows and return per-row
+results with `succeeded`, `failed`, and `results` fields. Use `dryRun: true` to
+validate a batch without writing, then retry with the same rows and a new
+idempotency key when ready to commit. This endpoint does not yet implement a
+third-party external-key sync model. If any row fails validation, the response
+uses HTTP `207` and includes the failed row details.
+
 Create a box:
 
 ```bash
@@ -324,6 +348,7 @@ Available MCP tools:
 | `get_move_summary` | Fetch a move plus resources, zones, inventory, boxes, assignments, photo metadata, documentation profiles, and export jobs. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
+| `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
 | `update_item` | Update selected item fields, with `dryRun` support. |
 | `create_box` | Create a box, with `dryRun` support. |
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |

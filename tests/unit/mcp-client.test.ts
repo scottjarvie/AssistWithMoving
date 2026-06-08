@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  batchUpsertItems,
   createApiConfig,
   createItem,
   getMoveSummary,
@@ -117,6 +118,48 @@ describe("MovingManifest MCP API client", () => {
       move: { moveId: "move1", title: "PCS move" },
       counts: { items: 2, boxes: 1 },
     });
+  });
+
+  it("sends batch item upserts to the API for backend validation", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          dryRun: true,
+          total: 2,
+          succeeded: 2,
+          failed: 0,
+          results: [],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await batchUpsertItems(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        dryRun: true,
+        items: [{ name: "Lamp" }, { itemId: "item1", status: "packed" }],
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/items/batch-upsert"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          dryRun: true,
+          items: [{ name: "Lamp" }, { itemId: "item1", status: "packed" }],
+        }),
+      }
+    );
   });
 
   it("dry-runs item creation without calling the API", async () => {

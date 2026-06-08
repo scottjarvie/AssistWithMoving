@@ -6,6 +6,7 @@ import * as z from "zod/v4";
 
 import {
   addItemsToBox,
+  batchUpsertItems,
   createApiConfig,
   createBox,
   createExport,
@@ -103,6 +104,45 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (input) => createItem(apiConfig, input),
+  });
+
+  registerTool(target, "batch_upsert_items", {
+    title: "Batch upsert items",
+    description:
+      "Create or update up to 100 inventory items. Rows with itemId update existing items; rows without itemId create new items. Set dryRun true to validate without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      items: z
+        .array(
+          z.object({
+            itemId: z.string().optional(),
+            name: z.string().optional(),
+            description: z.string().optional(),
+            room: z.string().optional(),
+            destinationRoom: z.string().optional(),
+            category: z.string().optional(),
+            subcategory: z.string().optional(),
+            disposition: z.string().optional(),
+            status: z.string().optional(),
+            quantity: z.number().positive().optional(),
+            condition: z.string().optional(),
+            valueCents: z.number().int().nonnegative().optional(),
+            replacementValueCents: z.number().int().nonnegative().optional(),
+            serialNumber: z.string().optional(),
+            modelNumber: z.string().optional(),
+            estimatedWeightLb: z.number().nonnegative().optional(),
+            actualWeightLb: z.number().nonnegative().optional(),
+            estimatedVolumeCuFt: z.number().nonnegative().optional(),
+            highValue: z.boolean().optional(),
+            needsReview: z.boolean().optional(),
+          })
+        )
+        .min(1)
+        .max(100),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => batchUpsertItems(apiConfig, input),
   });
 
   registerTool(target, "update_item", {

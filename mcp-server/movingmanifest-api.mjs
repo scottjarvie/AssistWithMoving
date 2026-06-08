@@ -139,6 +139,17 @@ export async function createItem(config, input) {
   });
 }
 
+export async function batchUpsertItems(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/items/batch-upsert`,
+    body: {
+      dryRun: input.dryRun,
+      items: input.items,
+    },
+  });
+}
+
 export async function updateItem(config, input) {
   if (input.dryRun) {
     return {

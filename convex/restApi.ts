@@ -44,6 +44,7 @@ const restExportJobTypes = [
   "assignments",
   "documentationProfile",
 ] as const;
+const maxBatchUpsertItems = 100;
 
 export const handle = internalMutation({
   args: {
@@ -531,49 +532,13 @@ async function routeItems(
     return restOk({ data: safeItem(item) });
   }
 
+  if (args.method === "POST" && itemIdSegment === "batch-upsert") {
+    return await routeBatchUpsertItems(ctx, args, auth, moveId);
+  }
+
   if (args.method === "POST" && !itemIdSegment) {
     const body = bodyObject(args.body);
-    const now = Date.now();
-    const name = normalizeItemName(String(body.name ?? ""));
-    const itemId = await ctx.db.insert("items", {
-      householdId: auth.householdId,
-      moveId,
-      name,
-      normalizedName: normalizedSearchName(name),
-      description: normalizeOptionalText(asString(body.description)),
-      room: normalizeOptionalText(asString(body.room)),
-      destinationRoom: normalizeOptionalText(asString(body.destinationRoom)),
-      category: normalizeOptionalText(asString(body.category)),
-      subcategory: normalizeOptionalText(asString(body.subcategory)),
-      disposition: parseDisposition(body.disposition) ?? "undecided",
-      status: parseItemStatus(body.status) ?? "active",
-      quantity: positiveNumber(body.quantity) ?? 1,
-      condition: parseCondition(body.condition) ?? "unknown",
-      valueCents: optionalNumber(body.valueCents),
-      replacementValueCents: optionalNumber(body.replacementValueCents),
-      serialNumber: normalizeOptionalText(asString(body.serialNumber)),
-      modelNumber: normalizeOptionalText(asString(body.modelNumber)),
-      estimatedWeightLb: optionalNumber(body.estimatedWeightLb),
-      actualWeightLb: optionalNumber(body.actualWeightLb),
-      estimatedVolumeCuFt: optionalNumber(body.estimatedVolumeCuFt),
-      weightConfidence: "none",
-      volumeConfidence: "none",
-      fragility: "low",
-      stackable: true,
-      hazardousFlag: Boolean(body.hazardousFlag),
-      highValue: Boolean(body.highValue),
-      requiresPersonalTransport: Boolean(body.requiresPersonalTransport),
-      planningDefaultKeys: [],
-      needsReview: Boolean(body.needsReview),
-      reviewFlags: [],
-      privateNotes: normalizeOptionalText(asString(body.privateNotes)),
-      aiTags: [],
-      createdVia: "api",
-      createdByUserId: auth.createdByUserId,
-      updatedByUserId: auth.createdByUserId,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const { itemId, name } = await createApiItem(ctx, auth, moveId, body);
     await auditApiWrite(ctx, auth, moveId, "item.api_created", "items", itemId, {
       name,
     });
@@ -591,6 +556,121 @@ async function routeItems(
   }
 
   return restError({ status: 404, code: "not_found", message: "Item route not found." });
+}
+
+async function routeBatchUpsertItems(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const body = bodyObject(args.body);
+  const rows = Array.isArray(body.items) ? body.items : [];
+  const dryRun = Boolean(body.dryRun);
+  if (!rows.length) {
+    return restError({
+      status: 400,
+      code: "invalid_batch",
+      message: "items must include at least one row.",
+    });
+  }
+  if (rows.length > maxBatchUpsertItems) {
+    return restError({
+      status: 400,
+      code: "batch_too_large",
+      message: `Batch item imports are limited to ${maxBatchUpsertItems} rows.`,
+    });
+  }
+
+  const results = [];
+  for (const [index, row] of rows.entries()) {
+    const input = bodyObject(row);
+    const itemId = optionalString(input.itemId);
+    try {
+      if (itemId) {
+        const item = await requireApiItem(ctx, auth.householdId, moveId, itemId);
+        const patch = itemPatch(input, auth.createdByUserId);
+        if (!dryRun) {
+          await ctx.db.patch(item._id, patch);
+          await auditApiWrite(
+            ctx,
+            auth,
+            moveId,
+            "item.api_batch_updated",
+            "items",
+            item._id,
+            { rowIndex: index, changedKeys: Object.keys(patch) }
+          );
+        }
+        results.push({
+          index,
+          ok: true,
+          action: "update",
+          itemId: item._id,
+          changedKeys: Object.keys(patch),
+          dryRun,
+        });
+        continue;
+      }
+
+      const name = normalizeItemName(String(input.name ?? ""));
+      if (!name) {
+        throw new Error("name is required when creating an item.");
+      }
+      if (dryRun) {
+        results.push({
+          index,
+          ok: true,
+          action: "create",
+          name,
+          dryRun,
+        });
+        continue;
+      }
+      const created = await createApiItem(ctx, auth, moveId, input);
+      await auditApiWrite(
+        ctx,
+        auth,
+        moveId,
+        "item.api_batch_created",
+        "items",
+        created.itemId,
+        { rowIndex: index, name: created.name }
+      );
+      results.push({
+        index,
+        ok: true,
+        action: "create",
+        itemId: created.itemId,
+        name: created.name,
+        dryRun,
+      });
+    } catch (error) {
+      results.push({
+        index,
+        ok: false,
+        action: itemId ? "update" : "create",
+        itemId: itemId || undefined,
+        error: error instanceof Error ? error.message : "Row failed.",
+        dryRun,
+      });
+    }
+  }
+
+  const failed = results.filter((result) => !result.ok).length;
+
+  return restOk(
+    {
+      data: {
+        dryRun,
+        total: rows.length,
+        succeeded: results.filter((result) => result.ok).length,
+        failed,
+        results,
+      },
+    },
+    failed > 0 ? 207 : 200
+  );
 }
 
 async function routeBoxes(
@@ -1192,6 +1272,57 @@ function artifactForApiExport(job: Doc<"exportJobs">) {
     artifactText: job.artifactText,
     encoding: "utf-8",
   };
+}
+
+async function createApiItem(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  body: Record<string, unknown>
+) {
+  const now = Date.now();
+  const name = normalizeItemName(String(body.name ?? ""));
+  const itemId = await ctx.db.insert("items", {
+    householdId: auth.householdId,
+    moveId,
+    name,
+    normalizedName: normalizedSearchName(name),
+    description: normalizeOptionalText(asString(body.description)),
+    room: normalizeOptionalText(asString(body.room)),
+    destinationRoom: normalizeOptionalText(asString(body.destinationRoom)),
+    category: normalizeOptionalText(asString(body.category)),
+    subcategory: normalizeOptionalText(asString(body.subcategory)),
+    disposition: parseDisposition(body.disposition) ?? "undecided",
+    status: parseItemStatus(body.status) ?? "active",
+    quantity: positiveNumber(body.quantity) ?? 1,
+    condition: parseCondition(body.condition) ?? "unknown",
+    valueCents: optionalNumber(body.valueCents),
+    replacementValueCents: optionalNumber(body.replacementValueCents),
+    serialNumber: normalizeOptionalText(asString(body.serialNumber)),
+    modelNumber: normalizeOptionalText(asString(body.modelNumber)),
+    estimatedWeightLb: optionalNumber(body.estimatedWeightLb),
+    actualWeightLb: optionalNumber(body.actualWeightLb),
+    estimatedVolumeCuFt: optionalNumber(body.estimatedVolumeCuFt),
+    weightConfidence: "none",
+    volumeConfidence: "none",
+    fragility: "low",
+    stackable: true,
+    hazardousFlag: Boolean(body.hazardousFlag),
+    highValue: Boolean(body.highValue),
+    requiresPersonalTransport: Boolean(body.requiresPersonalTransport),
+    planningDefaultKeys: [],
+    needsReview: Boolean(body.needsReview),
+    reviewFlags: [],
+    privateNotes: normalizeOptionalText(asString(body.privateNotes)),
+    aiTags: [],
+    createdVia: "api",
+    createdByUserId: auth.createdByUserId,
+    updatedByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return { itemId, name };
 }
 
 async function createApiCsvExport(
