@@ -172,6 +172,10 @@ export const reportForMove = query({
           room: box.room,
           assignedResourceId: box.assignedResourceId,
           assignedZoneId: box.assignedZoneId,
+          assignmentLocked: box.assignmentLocked ?? false,
+          assignmentOverrideReason: box.assignmentOverrideReason,
+          assignmentWarnings: box.assignmentWarnings ?? [],
+          assignmentHardBlocks: box.assignmentHardBlocks ?? [],
           itemCount: contents.reduce(
             (sum, entry) => sum + entry.membership.quantity,
             0

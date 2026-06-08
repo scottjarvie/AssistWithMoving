@@ -94,6 +94,12 @@ function BoxCard({
     box.assignedResourceId ?? ""
   );
   const [assignedZoneId, setAssignedZoneId] = useState(box.assignedZoneId ?? "");
+  const [assignmentLocked, setAssignmentLocked] = useState(
+    box.assignmentLocked ?? false
+  );
+  const [assignmentOverrideReason, setAssignmentOverrideReason] = useState(
+    box.assignmentOverrideReason ?? ""
+  );
   const [selectedItemId, setSelectedItemId] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -133,10 +139,14 @@ function BoxCard({
         ...(assignedZoneId
           ? { assignedZoneId: assignedZoneId as Id<"transportZones"> }
           : { clearAssignedZone: true }),
+        assignmentLocked,
+        assignmentOverrideReason,
       });
       onMessage(`${box.code} saved.`);
-    } catch {
-      onMessage(`Could not save ${box.code}.`);
+    } catch (error) {
+      onMessage(
+        error instanceof Error ? error.message : `Could not save ${box.code}.`
+      );
     } finally {
       setSaving(false);
     }
@@ -156,8 +166,12 @@ function BoxCard({
       });
       setSelectedItemId("");
       onMessage(`Item added to ${box.code}.`);
-    } catch {
-      onMessage(`Could not add that item to ${box.code}.`);
+    } catch (error) {
+      onMessage(
+        error instanceof Error
+          ? error.message
+          : `Could not add that item to ${box.code}.`
+      );
     }
   }
 
@@ -169,8 +183,12 @@ function BoxCard({
         boxItemId,
       });
       onMessage(`Item removed from ${box.code}.`);
-    } catch {
-      onMessage(`Could not remove that item from ${box.code}.`);
+    } catch (error) {
+      onMessage(
+        error instanceof Error
+          ? error.message
+          : `Could not remove that item from ${box.code}.`
+      );
     }
   }
 
@@ -280,7 +298,41 @@ function BoxCard({
             </option>
           ))}
         </select>
+        <label className="flex h-8 items-center gap-2 rounded-md border border-input bg-background px-2 text-sm">
+          <input
+            type="checkbox"
+            checked={assignmentLocked}
+            onChange={(event) => setAssignmentLocked(event.target.checked)}
+          />
+          Locked
+        </label>
       </div>
+
+      <Input
+        className="mt-2"
+        value={assignmentOverrideReason}
+        onChange={(event) => setAssignmentOverrideReason(event.target.value)}
+        placeholder="Override reason for load warnings"
+      />
+
+      {(box.assignmentWarnings?.length ?? 0) ||
+      (box.assignmentHardBlocks?.length ?? 0) ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {box.assignmentWarnings?.map((warning) => (
+            <Badge key={warning} variant="outline">
+              {warning}
+            </Badge>
+          ))}
+          {box.assignmentHardBlocks?.map((block) => (
+            <Badge key={block} variant="destructive">
+              {block}
+            </Badge>
+          ))}
+          {box.assignmentLocked ? (
+            <Badge variant="secondary">locked assignment</Badge>
+          ) : null}
+        </div>
+      ) : null}
 
       <Textarea
         className="mt-2"

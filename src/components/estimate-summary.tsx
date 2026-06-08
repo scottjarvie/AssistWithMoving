@@ -31,6 +31,13 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
     api.estimates.reportForMove,
     householdId && moveId ? { householdId, moveId } : "skip"
   );
+  const warningBoxes =
+    report?.boxReports.filter(
+      (box) =>
+        box.warnings.length ||
+        box.assignmentWarnings.length ||
+        box.assignmentHardBlocks.length
+    ) ?? [];
 
   return (
     <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -135,7 +142,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
             Estimate warnings
           </CardTitle>
           <CardDescription>
-            Unknown estimates and heavy boxes before assignment validation.
+            Unknown estimates, heavy boxes, and assignment validation results.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -146,8 +153,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {report.boxReports
-                .filter((box) => box.warnings.length)
+              {warningBoxes
                 .slice(0, 8)
                 .map((box) => (
                   <div
@@ -164,10 +170,23 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
                           {warning}
                         </Badge>
                       ))}
+                      {box.assignmentWarnings.map((warning) => (
+                        <Badge key={warning} variant="secondary">
+                          {warning}
+                        </Badge>
+                      ))}
+                      {box.assignmentHardBlocks.map((block) => (
+                        <Badge key={block} variant="destructive">
+                          {block}
+                        </Badge>
+                      ))}
+                      {box.assignmentLocked ? (
+                        <Badge variant="outline">locked</Badge>
+                      ) : null}
                     </div>
                   </div>
                 ))}
-              {report.boxReports.every((box) => !box.warnings.length) ? (
+              {!warningBoxes.length ? (
                 <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
                   No box estimate warnings yet.
                 </div>
