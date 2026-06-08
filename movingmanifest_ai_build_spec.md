@@ -1,16 +1,16 @@
 # MovingManifest - AI-Agent-Ready Product Blueprint and Build Spec
 
 Prepared: June 8, 2026
-Status: Draft 1 - comprehensive product and technical spec
+Status: Draft 2 - full product build plan and technical spec
 Target builder: an autonomous AI coding agent working in a fresh repository
 
 ## Build Directive for the AI Agent
 
-Build the complete application described in this document, not a thin demo. Implement the product workflows, database schema, image pipeline, API, agent integration, admin screens, tests, seed data, and deployment documentation. If current official documentation conflicts with anything here, follow the official documentation and leave a short note explaining the change.
+Build the complete application described in this document, not a thin demo and not a minimal MVP. The product owner wants the full product vision implemented in sequenced milestones. Implement the product workflows, database schema, image pipeline, API, agent integration, documentation packet system, admin screens, tests, seed data, and deployment documentation. If current official documentation conflicts with anything here, follow the official documentation and leave a short note explaining the change.
 
 Default stack: Next.js App Router, React, TypeScript, Tailwind CSS, shadcn/ui, Convex, Clerk, Vercel, Backblaze B2, Cloudflare image delivery/transformations, and a small Node-based MCP server plus REST API for agent integrations.
 
-Important domain note: MovingManifest is the product brand, with `movingmanifest.com` as the preferred production domain if purchased and configured. Do not hardcode any production domain; the app name, marketing domain, and email-from domain must remain configurable.
+Important domain note: MovingManifest is the product brand, and `movingmanifest.com` has been purchased and connected through Vercel. Use it as the production domain once the app is ready, but do not hardcode any production domain; the app name, marketing domain, and email-from domain must remain configurable.
 
 ---
 
@@ -32,6 +32,24 @@ The app's job is to turn moving chaos into a searchable source of truth:
 - What is already packed, loaded, delivered, damaged, or missing?
 
 The AI's job is not to silently make irreversible decisions. The AI acts like a calm logistics clerk: it classifies, estimates, suggests, flags uncertainty, and prepares plans that humans can accept or revise.
+
+## 1.1 Full Product Mandate
+
+MovingManifest should be planned as a full product, not as a throwaway MVP. Sequencing still matters: foundation, permissions, inventory, photos, load planning, AI, exports, API, and admin must land in dependency order. However, the intended destination includes the full documentation, AI, claims, helper access, API/MCP, and operational/admin surfaces.
+
+The first useful workflows should become usable early, but they should be implemented on the same architecture that supports the full product. Avoid temporary shortcuts that would make later privacy, exports, AI review, or collaboration difficult.
+
+## 1.2 Product Outcome
+
+MovingManifest should become the trusted record of a move:
+
+- a household inventory,
+- a packing and box manifest,
+- a load plan,
+- a photo evidence vault,
+- a claim-ready documentation center,
+- a helper/mover-friendly task surface,
+- and an AI-assisted planning partner that keeps uncertainty visible.
 
 # 2. Product Mental Model
 
@@ -88,6 +106,19 @@ A household wants to avoid moving junk. The app creates pipelines for Sell, Dona
 ## 4.4 Claims and Insurance Support
 
 A user wants pre-move and post-move evidence. The app keeps photos, condition notes, values, serial numbers, and box contents in a claims center. It should produce a claims packet export, but it should not pretend to be legal, insurance, or military claims advice.
+
+## 4.5 Documentation Packet Support
+
+Many moves require documentation for a third party. MovingManifest should support documentation profiles and export packets for common recipients:
+
+- Military PCS / HHG / PPM / partial PPM documentation
+- Moving company inventory and high-value item lists
+- Employer relocation reimbursement support
+- Insurance or claims evidence packets
+- Self-move planning and load sheets
+- Donation, sell, free pickup, dump run, and storage manifests
+
+Each documentation profile should define which fields matter, which sensitive fields are hidden by default, and which disclaimers should be shown. The app should organize evidence and records, not claim to replace official forms, transportation office guidance, legal advice, or insurer/mover requirements.
 
 # 5. Personas and Permissions
 
@@ -544,6 +575,8 @@ convex/
   photos.ts
   assignments.ts
   estimates.ts
+  documentationProfiles.ts
+  shareLinks.ts
   apiKeys.ts
   aiJobs.ts
   http.ts
@@ -555,6 +588,7 @@ lib/
   permissions/
   estimation/
   capacity/
+  documentation/
 packages/
   mcp-server/
 tests/
@@ -1046,6 +1080,60 @@ Indexes:
 
 - by_moveId
 - by_status
+
+## 9.18 documentationProfiles
+
+Purpose: reusable export/share configurations for third-party documentation needs.
+
+Fields:
+
+- moveId
+- type: personalFullRecord, pcsMove, movingCompany, employerRelocation, insuranceClaim, donationPickup, sellOrGiveaway, storageInventory, loadCrew
+- name
+- description
+- includedFields array
+- includedPhotoTypes array
+- includeValues boolean
+- includeSerialNumbers boolean
+- includePrivateNotes boolean
+- includeSensitivePhotos boolean
+- allowedFormats array: csv, pdf, printableHtml, shareLink
+- disclaimerText
+- createdByUserId
+- createdAt
+- updatedAt
+
+Indexes:
+
+- by_moveId
+- by_move_type
+
+## 9.19 shareLinks
+
+Purpose: scoped, revocable access for helpers, movers, pickup recipients, or documentation packets.
+
+Fields:
+
+- orgId
+- moveId
+- documentationProfileId optional
+- tokenHash
+- tokenPrefix
+- linkType: boxLookup, loadCrew, moverList, donationPickup, sellOrGiveaway, claimsPacket, storageInventory
+- allowedBoxIds optional array
+- allowedResourceIds optional array
+- expiresAt optional
+- revokedAt optional
+- lastAccessedAt optional
+- createdByUserId
+- createdAt
+
+Indexes:
+
+- by_orgId
+- by_moveId
+- by_tokenPrefix
+- by_move_linkType
 
 # 10. Estimation and Load Planning
 
@@ -1578,9 +1666,86 @@ Claims export should include:
 
 The app should state that exports are evidence organization tools and not official claims approval.
 
-# 17. PCS-Specific Considerations
+# 17. Documentation Modes and PCS-Specific Considerations
 
-The app should support PCS presets, but rules and allowances must remain configurable and verified by the user.
+MovingManifest should include a documentation packet system. A documentation packet is a filtered/exportable view of a move for a specific purpose. It can produce CSV, printable HTML/PDF, and shareable scoped views depending on sensitivity and recipient.
+
+## 17.1 Documentation Profile Types
+
+Recommended profile types:
+
+- personalFullRecord: complete owner archive
+- pcsMove: military PCS / HHG / PPM / partial PPM support
+- movingCompany: mover-facing inventory and load details
+- employerRelocation: employer reimbursement and relocation support
+- insuranceClaim: general insurance or damage/missing claim support
+- donationPickup: donation manifest and pickup list
+- sellOrGiveaway: sale/free item list with private fields hidden
+- storageInventory: storage unit manifest
+- loadCrew: helper/mover load task sheet
+
+Each profile should control:
+
+- included item fields
+- included photos
+- value/serial visibility
+- private notes visibility
+- recipient-facing disclaimers
+- export format options
+- whether a share link is allowed
+- expiration/revocation defaults for share links
+
+## 17.2 Common Documentation Packets
+
+PCS support packet:
+
+- Move summary
+- PCS-specific fields and user-entered allowance notes
+- Resource/load plan summary
+- Personal transport / do-not-let-movers-touch list
+- High-value item list
+- Photos/evidence checklist
+- Boxes and contents
+- Damage/missing timeline if applicable
+- Clear reminder to verify current official guidance with the transportation office
+
+Moving company packet:
+
+- Mover-visible load list
+- Box counts by room
+- Fragile/heavy labels
+- High-value flag summary without exposing values unless explicitly included
+- Restricted/hazardous item warnings
+- Destination room labels
+
+Employer relocation packet:
+
+- Move summary
+- Inventory summary
+- Receipts/expense attachment metadata if added later
+- Storage/shipping summaries
+- CSV/PDF export suitable for reimbursement support
+
+Insurance/claims packet:
+
+- Item values and replacement values where entered
+- Serial/model numbers
+- Before/after condition notes
+- Photos and evidence density
+- Damage/missing status history
+- Export disclaimer that the packet is evidence organization, not claim approval
+
+Self-move/load crew packet:
+
+- Resource and zone load sheets
+- Loading order
+- Heavy/fragile/first-night indicators
+- Box code lookup
+- Mobile-friendly helper view
+
+## 17.3 PCS-Specific Considerations
+
+The app should support PCS mode, but rules and allowances must remain configurable and verified by the user.
 
 PCS fields:
 
@@ -1600,9 +1765,11 @@ Potential PCS warnings:
 - High-value items should have photos, serial numbers, values, and condition notes.
 - User should confirm official entitlements and mover restrictions with current official sources.
 
-The product should have a PCS preset but should not hardcode permanent legal assumptions.
+The product should have a PCS mode with structured fields, documentation packet exports, and strong verification language. It should not hardcode permanent legal assumptions or present itself as official military claims, HHG, PPM, or entitlement guidance.
 
-# 18. Polished Product Ideas Beyond the Initial Scope
+# 18. Advanced Product Capabilities
+
+These are not throwaway backlog ideas. They are part of the full product vision, sequenced after the foundation and core workflows.
 
 ## 18.1 Photo Walk Mode
 
@@ -1670,9 +1837,9 @@ The app should not make the user hunt for AI uncertainty. Low-confidence items s
 
 The user can lock assignments they know are correct. The AI can rebalance everything else without moving locked items.
 
-# 19. Build Plan for the Coding Agent
+# 19. Full Build Program
 
-These phases are dependency order, not a license to stop early.
+These phases are dependency order. The plan is to build the complete product, with quality gates between phases so each later layer rests on real permissions, data contracts, tests, and working UI.
 
 ## Phase 0 - Project Foundation
 
@@ -1683,6 +1850,8 @@ These phases are dependency order, not a license to stop early.
 - Set up linting, formatting, test framework, and environment examples.
 - Add seed data scripts.
 - Create base marketing, auth, dashboard, app layout, and admin layout.
+- Connect `movingmanifest.com` to the Vercel project when production app routes exist.
+- Configure project metadata, Open Graph defaults, and environment examples.
 
 ## Phase 1 - Auth, Tenancy, and Core Data
 
@@ -1692,17 +1861,35 @@ These phases are dependency order, not a license to stop early.
 - Implement permission helpers.
 - Implement moves, people, transport resources, and zones.
 - Add tests for object-level authorization.
+- Implement audit log primitives before broad write flows.
 
-## Phase 2 - Inventory, Boxes, and Photos
+## Phase 2 - Move Setup, Resources, and Planning Presets
+
+- Implement move creation and onboarding.
+- Implement PCS, local, long-distance, storage, estate, and decluttering presets.
+- Implement transport resource presets for trucks, trailers, movers, storage, sell, donate, dump, free, and unknown.
+- Implement zones, capacities, rules, soft/hard warnings, and first-night/personal transport defaults.
+- Implement documentation profile selection during move setup.
+
+## Phase 3 - Inventory and Boxes
 
 - Implement items, boxes, box contents, photos, and status flows.
 - Implement inventory table.
 - Implement item detail panel.
 - Implement box manager.
+- Implement bulk paste/text import without AI dependency.
+- Implement QR/short-code lookup.
+- Implement box labels PDF.
+
+## Phase 4 - Photos and Evidence
+
+- Implement photo metadata, privacy levels, evidence density, and photo review.
 - Implement Backblaze upload session and photo finalize flow.
 - Implement Cloudflare image delivery route/loader.
+- Implement original download with owner/admin permission only.
+- Implement EXIF handling for derivatives.
 
-## Phase 3 - Estimation and Load Planner
+## Phase 5 - Estimation and Load Planner
 
 - Implement weight and volume fields.
 - Implement aggregate capacity calculations.
@@ -1710,8 +1897,9 @@ These phases are dependency order, not a license to stop early.
 - Implement drag-and-drop assignments.
 - Implement warnings.
 - Implement locked assignments.
+- Implement first-night, do-not-let-movers-touch, and load crew views.
 
-## Phase 4 - AI Assistance
+## Phase 6 - AI Assistance
 
 - Implement AI provider abstraction.
 - Implement text intake.
@@ -1719,8 +1907,22 @@ These phases are dependency order, not a license to stop early.
 - Implement estimate jobs.
 - Implement assignment suggestion jobs.
 - Store confidence, reasoning, and assumptions.
+- Implement duplicate detection and low-confidence review queues.
+- Implement AI cost controls and prompt/model version tracking.
 
-## Phase 5 - API and MCP
+## Phase 7 - Documentation Packets, Reports, and Exports
+
+- Implement CSV export.
+- Implement load plan export.
+- Implement box labels PDF if not already complete.
+- Implement claims packet export.
+- Implement PCS support packet.
+- Implement moving company packet.
+- Implement employer relocation packet.
+- Implement donation/sell/free/storage manifests.
+- Implement scoped share links with expiration/revocation.
+
+## Phase 8 - API and MCP
 
 - Implement API key management UI.
 - Implement REST API v1.
@@ -1728,20 +1930,20 @@ These phases are dependency order, not a license to stop early.
 - Implement Node MCP server package wrapping the API.
 - Add API docs and examples.
 
-## Phase 6 - Reports, Admin, and Polish
+## Phase 9 - Admin, Billing Readiness, and Operations
 
-- Implement CSV export.
-- Implement load plan export.
-- Implement box labels PDF.
-- Implement claims packet export.
 - Implement admin dashboard.
 - Implement storage/AI/API usage views.
+- Implement abuse signals and audit review.
+- Implement feature flags.
+- Implement account export/delete flows.
+- Add billing/pricing scaffolding only when product direction requires paid plans.
+
+## Phase 10 - Mobile, Accessibility, and Launch Hardening
+
 - Add mobile Move Day Mode.
 - Add accessibility review.
 - Add empty states, loading states, optimistic updates, and error states.
-
-## Phase 7 - Quality Gate
-
 - Run type checks.
 - Run lint.
 - Run unit tests.
@@ -1752,6 +1954,7 @@ These phases are dependency order, not a license to stop early.
 - Verify image originals are private.
 - Verify exports work.
 - Document deployment steps.
+- Verify `movingmanifest.com` production routes, SSL, and redirect behavior.
 
 # 20. Acceptance Criteria
 
@@ -1778,29 +1981,27 @@ The build is complete when all of these are true:
 - A guest/helper role can be limited and cannot see private values/photos.
 - Admin can see usage and job status.
 - Claims export includes item details, photos, values, condition notes, and status history.
+- PCS documentation packet can be generated with appropriate disclaimers and configurable official fields.
+- Moving company, employer relocation, insurance, self-move/load crew, donation/sell/free, and storage packets can be generated or shared with scoped privacy.
+- `movingmanifest.com` serves the production application.
 - Tests cover permissions, estimate calculations, API scopes, and core UI flows.
 
-# 21. Open Questions for the Product Owner
+# 21. Product Owner Decisions
 
-These are the questions most worth answering before the coding agent begins.
+The product owner has decided to build the full product rather than a narrow MVP. The following defaults are technical/product decisions Codex should use unless Scott explicitly overrides them.
 
-1. Is this primarily a personal/family tool first, or should it be designed as a public SaaS from day one?
-2. Should organizations/households be required on day one, or can a single-user account own moves with collaboration added in the same schema?
-3. Should AI be built into the product using an app-owned model provider key, or should most AI actions come from the user's external agent through API/MCP?
-4. How exact should load planning be: ballpark capacity planning, or a more visual Tetris-like layout?
-5. Should PCS be a first-class mode with official allowance fields, or just a move preset with custom notes?
-6. Should the product use `movingmanifest.com` as the production domain after purchase, or should the domain stay configurable until launch?
-7. Should values and serial numbers be hidden from helper/mover views by default?
-8. Do you want printable QR labels in the first build?
-9. Do you want a sell/donate/free public share link in the first build?
-10. What claim export format matters most: general insurance, military move, CSV, PDF packet, or all of them?
-11. Should the app support poor internet/offline-ish mobile capture, or is online-only acceptable for the first version?
-12. Should the product include billing/pricing on day one?
-13. Should users be able to invite temporary helpers with expiring links?
-14. Should photos preserve EXIF in private originals, strip it entirely, or preserve originals but strip public derivatives?
-15. Should Backblaze/Cloudflare be mandatory, or should the image service be swappable?
+1. Build the complete product vision in phases rather than stopping at a minimal MVP.
+2. Use `movingmanifest.com` as the production domain when the production app is ready.
+3. Make PCS a first-class documentation mode, with configurable official fields and careful disclaimers.
+4. Support common third-party documentation needs: moving company, employer relocation, insurance/claims, self-move/load crew, donation/sell/free, and storage.
+5. Build as SaaS-capable from day one, while still making the product useful for a single household.
+6. Use households/organizations as the collaboration boundary.
+7. Hide values, serial numbers, sensitive photos, and private notes from helper/mover views by default.
+8. Build QR labels, printable exports, and documentation packets as part of the full product.
+9. Make load planning practical and capacity-based first; do not attempt precise 3D packing optimization unless a later dedicated feature requires it.
+10. Make mobile capture and Move Day Mode robust, then consider full offline sync only after the data model and conflict rules are stable.
 
-# 22. Recommended Decisions if the Product Owner Does Not Answer
+# 22. Technical Defaults
 
 To reduce ambiguity for the coding agent, use these defaults:
 
@@ -1815,7 +2016,8 @@ To reduce ambiguity for the coding agent, use these defaults:
 - Use private originals and signed access for originals.
 - Use Cloudflare-transformed images in the web UI rather than Vercel image optimization.
 - Implement REST API and local MCP server in the first full build.
-- Make PCS a preset with configurable official allowance fields and clear verification language.
+- Make PCS a first-class documentation mode with configurable official allowance fields and clear verification language.
+- Include moving company, employer relocation, insurance, self-move/load crew, donation/sell/free, and storage documentation profiles.
 - Treat domain/app name as configurable.
 
 # 23. Environment Variables
