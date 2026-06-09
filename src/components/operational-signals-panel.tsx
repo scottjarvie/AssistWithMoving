@@ -2,10 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
-import { Activity, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,8 +43,12 @@ type OperationalSignal = {
 };
 
 type SafeAudit = {
-  id: Id<"auditLogs">;
+  id: string;
+  householdId?: string;
+  moveId?: string;
   actorType: string;
+  actorUserId?: string;
+  actorApiKeyId?: string;
   category: string;
   action: string;
   objectTable?: string;
@@ -47,10 +56,31 @@ type SafeAudit = {
   createdAt: number;
 };
 
+type AbuseReviewCard = {
+  id: string;
+  title: string;
+  severity: "warning" | "critical";
+  area: string;
+  reason: string;
+  count: number;
+  thresholdLabel: string;
+  householdId?: string;
+  moveId?: string;
+  actorType?: string;
+  actorUserId?: string;
+  actorApiKeyId?: string;
+  objectTable?: string;
+  objectId?: string;
+  lastSeenAt: number;
+  recommendedAction: string;
+  events: SafeAudit[];
+};
+
 type ObservabilityStatus = {
   generatedAt: number;
   health: OperationalHealth;
   signals: OperationalSignal[];
+  reviewQueue: AbuseReviewCard[];
   metrics: Record<string, number>;
   distributions: Record<string, Record<string, number>>;
   healthChecks: Array<{
@@ -219,6 +249,8 @@ export function OperationalSignalsPanel() {
               </p>
             )}
 
+            <AbuseReviewQueue cards={status.reviewQueue} />
+
             <div className="grid gap-2 md:grid-cols-3">
               {visibleMetrics.map(([key, value]) => (
                 <div key={key} className="rounded-md border border-border p-3">
@@ -283,6 +315,139 @@ export function OperationalSignalsPanel() {
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function AbuseReviewQueue({ cards }: { cards: AbuseReviewCard[] }) {
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-medium">
+            <ShieldAlert className="size-4 text-primary" aria-hidden="true" />
+            Abuse review
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Prioritized review cards built from redacted events and usage windows.
+          </p>
+        </div>
+        <Badge variant={cards.length ? "outline" : "secondary"}>
+          {cards.length} queued
+        </Badge>
+      </div>
+
+      {cards.length ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {cards.map((card) => (
+            <div key={card.id} className="rounded-md border border-border p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase text-muted-foreground">
+                    {card.area}
+                  </p>
+                  <h4 className="mt-1 text-sm font-semibold">{card.title}</h4>
+                </div>
+                <Badge
+                  variant={
+                    card.severity === "critical" ? "destructive" : "outline"
+                  }
+                >
+                  {card.severity}
+                </Badge>
+              </div>
+
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {card.reason}
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <ReviewFact label="Count" value={card.count.toLocaleString()} />
+                <ReviewFact label="Last seen" value={formatDate(card.lastSeenAt)} />
+                <ReviewFact label="Threshold" value={card.thresholdLabel} wide />
+                <ReviewFact label="Recommended" value={card.recommendedAction} wide />
+              </div>
+
+              <AffectedScope card={card} />
+
+              {card.events.length ? (
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">
+                    Recent redacted events
+                  </p>
+                  <div className="space-y-2">
+                    {card.events.slice(0, 3).map((event) => (
+                      <div
+                        key={`${card.id}-${event.id}`}
+                        className="grid gap-1 rounded-md bg-muted/40 p-2 text-xs sm:grid-cols-[minmax(0,1fr)_96px]"
+                      >
+                        <span className="min-w-0 truncate font-medium">
+                          {event.action}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {formatDate(event.createdAt)}
+                        </span>
+                        <span className="min-w-0 truncate font-mono text-muted-foreground sm:col-span-2">
+                          {event.objectTable
+                            ? `${event.objectTable}:${event.objectId}`
+                            : event.category}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+          No abuse review cards are currently queued.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function ReviewFact({
+  label,
+  value,
+  wide = false,
+}: {
+  label: string;
+  value: string;
+  wide?: boolean;
+}) {
+  return (
+    <div className={wide ? "sm:col-span-2" : undefined}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm leading-5">{value}</p>
+    </div>
+  );
+}
+
+function AffectedScope({ card }: { card: AbuseReviewCard }) {
+  const rows = [
+    ["Household", card.householdId],
+    ["Move", card.moveId],
+    ["Actor", card.actorApiKeyId ?? card.actorUserId ?? card.actorType],
+    [
+      "Object",
+      card.objectTable ? `${card.objectTable}:${card.objectId}` : card.objectId,
+    ],
+  ].filter((row): row is [string, string] => Boolean(row[1]));
+
+  if (!rows.length) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {rows.map(([label, value]) => (
+        <Badge key={`${label}-${value}`} variant="secondary">
+          <span className="mr-1 text-muted-foreground">{label}</span>
+          <span className="max-w-48 truncate font-mono">{value}</span>
+        </Badge>
+      ))}
+    </div>
   );
 }
 

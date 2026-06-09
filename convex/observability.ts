@@ -2,6 +2,7 @@ import { mutation, type MutationCtx } from "./_generated/server";
 import { requireAppAdmin, recordAdminAccess } from "./lib/admin";
 import { countBy, safeAuditSummary, sumBy } from "./lib/adminSummaries";
 import {
+  buildAbuseReviewQueue,
   evaluateOperationalSignals,
   operationalHealth,
   type OperationalMetrics,
@@ -105,16 +106,35 @@ export const status = mutation({
       ),
     };
     const signals = evaluateOperationalSignals(metrics);
+    const reviewQueue = buildAbuseReviewQueue({
+      signals,
+      audits: audits.map(safeAuditSummary),
+      rateLimitWindows: recentApiRateLimitWindows.map((window) => ({
+        id: window._id,
+        householdId: window.householdId,
+        moveId: window.moveId,
+        apiKeyId: window.apiKeyId,
+        windowStart: window.windowStart,
+        windowEnd: window.windowEnd,
+        count: window.count,
+        limit: window.limit,
+        lastAction: window.lastAction,
+        updatedAt: window.updatedAt,
+      })),
+      now,
+    });
 
     await recordAdminAccess(ctx, admin, "admin.observability_viewed", {
       health: operationalHealth(signals),
       signalCount: signals.length,
+      reviewCount: reviewQueue.length,
     });
 
     return {
       generatedAt: now,
       health: operationalHealth(signals),
       signals,
+      reviewQueue,
       metrics,
       distributions: {
         auditByCategory24h: countBy(recentAudits, (entry) => entry.category),
