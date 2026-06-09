@@ -356,6 +356,19 @@ test.describe("authenticated product flow", () => {
     await expect(
       loadPlanner.getByText("1 box assignment updated.")
     ).toBeVisible({ timeout: 30_000 });
+    await loadPlanner
+      .getByRole("button", { name: `Lock assignment for ${boxCode}` })
+      .click();
+    await expect(
+      loadPlanner.getByText(`${boxCode} assignment locked.`)
+    ).toBeVisible({ timeout: 30_000 });
+    await loadPlanner.getByLabel(`Select ${boxCode}`).check();
+    await expect(
+      loadPlanner.getByText("1 selected in the current view, 1 locked will be skipped")
+    ).toBeVisible();
+    await expect(
+      loadPlanner.getByRole("button", { name: "Unassign", exact: true })
+    ).toBeDisabled();
 
     const documentationPackets = page
       .getByRole("heading", { name: "Documentation packets", exact: true })

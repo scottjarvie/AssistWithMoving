@@ -7,9 +7,11 @@ import {
   AlertTriangle,
   Boxes,
   CheckSquare,
+  Lock,
   PackageOpen,
   Search,
   Truck,
+  Unlock,
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -32,6 +34,10 @@ import {
   isMissingBoxWeight,
 } from "@/lib/box-weight";
 import { buildLoadPlanPacketPath } from "@/lib/load-plan-packet";
+import {
+  splitBulkAssignmentSelection,
+  summarizeLoadLocks,
+} from "@/lib/load-locks";
 import { cn } from "@/lib/utils";
 
 type BoxRecord = NonNullable<
@@ -91,8 +97,10 @@ export function LoadPlannerBoard({
   const [targetResourceId, setTargetResourceId] = useState("");
   const [targetZoneId, setTargetZoneId] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
+  const [includeLockedInBulk, setIncludeLockedInBulk] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const [lockSavingBoxIds, setLockSavingBoxIds] = useState<Id<"boxes">[]>([]);
 
   const reportByBoxId = useMemo(
     () =>
@@ -166,12 +174,41 @@ export function LoadPlannerBoard({
   const visibleSelectedCount = selectedBoxIds.filter((boxId) =>
     filteredBoxes.some((record) => record.box._id === boxId)
   ).length;
+  const loadLockSummary = useMemo(
+    () => summarizeLoadLocks(boxes ?? []),
+    [boxes]
+  );
+  const selectedBulkSplit = useMemo(
+    () =>
+      splitBulkAssignmentSelection(boxes ?? [], selectedBoxIds, {
+        includeLocked: includeLockedInBulk,
+      }),
+    [boxes, includeLockedInBulk, selectedBoxIds]
+  );
+
   async function assignBoxes(
     boxIds: Id<"boxes">[],
     resourceId: Id<"transportResources"> | null,
-    zoneId?: Id<"transportZones">
+    zoneId?: Id<"transportZones">,
+    options: { includeLocked?: boolean } = {}
   ) {
     if (!householdId || !moveId || !boxIds.length) {
+      return;
+    }
+
+    const split = splitBulkAssignmentSelection(boxes ?? [], boxIds, {
+      includeLocked: options.includeLocked,
+    });
+    const assignableBoxIds = split.assignableBoxIds;
+    const skippedLockedCount = split.skippedLockedBoxIds.length;
+    if (!assignableBoxIds.length) {
+      setMessage(
+        skippedLockedCount
+          ? `${skippedLockedCount} locked ${boxWord(
+              skippedLockedCount
+            )} skipped. Unlock ${skippedLockedCount === 1 ? "it" : "them"} first or include locked boxes deliberately.`
+          : "No selected boxes are available for assignment."
+      );
       return;
     }
 
@@ -179,7 +216,7 @@ export function LoadPlannerBoard({
     setMessage(null);
     try {
       await Promise.all(
-        boxIds.map((boxId) =>
+        assignableBoxIds.map((boxId) =>
           updateBox({
             householdId,
             moveId,
@@ -193,12 +230,15 @@ export function LoadPlannerBoard({
         )
       );
       setSelectedBoxIds((current) =>
-        current.filter((boxId) => !boxIds.includes(boxId))
+        current.filter((boxId) => !assignableBoxIds.includes(boxId))
       );
+      const actionMessage = formatAssignmentMessage({
+        count: assignableBoxIds.length,
+        action: resourceId ? "updated" : "cleared",
+        skippedLockedCount,
+      });
       setMessage(
-        resourceId
-          ? `${boxIds.length} box assignment updated.`
-          : `${boxIds.length} box assignment cleared.`
+        actionMessage
       );
     } catch (error) {
       setMessage(
@@ -217,6 +257,37 @@ export function LoadPlannerBoard({
         ? current.filter((id) => id !== boxId)
         : [...current, boxId]
     );
+  }
+
+  async function toggleAssignmentLock(record: BoxRecord) {
+    if (!householdId || !moveId) {
+      return;
+    }
+
+    const nextLocked = !record.box.assignmentLocked;
+    setLockSavingBoxIds((current) => [...current, record.box._id]);
+    setMessage(null);
+    try {
+      await updateBox({
+        householdId,
+        moveId,
+        boxId: record.box._id,
+        assignmentLocked: nextLocked,
+      });
+      setMessage(
+        `${record.box.code} assignment ${nextLocked ? "locked" : "unlocked"}.`
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : `Could not ${nextLocked ? "lock" : "unlock"} ${record.box.code}.`
+      );
+    } finally {
+      setLockSavingBoxIds((current) =>
+        current.filter((boxId) => boxId !== record.box._id)
+      );
+    }
   }
 
   function selectVisibleBoxes() {
@@ -247,6 +318,9 @@ export function LoadPlannerBoard({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{boxes?.length ?? 0} boxes</Badge>
+            <Badge variant="outline">
+              {loadLockSummary.lockedCount} locked
+            </Badge>
             <Badge variant="outline">{allUnboxedItems.length} unpacked queue</Badge>
             {householdId && moveId ? (
               <>
@@ -324,6 +398,10 @@ export function LoadPlannerBoard({
                 <p className="text-sm font-medium">Bulk assignment</p>
                 <p className="text-xs text-muted-foreground">
                   {visibleSelectedCount} selected in the current view
+                  {selectedBulkSplit.skippedLockedBoxIds.length &&
+                  !includeLockedInBulk
+                    ? `, ${selectedBulkSplit.skippedLockedBoxIds.length} locked will be skipped`
+                    : ""}
                 </p>
               </div>
               <Button
@@ -373,18 +451,34 @@ export function LoadPlannerBoard({
                 placeholder="Override reason when warnings are expected"
                 aria-label="Assignment override reason"
               />
+              <label className="flex min-h-9 items-center gap-2 rounded-md border border-input bg-background px-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-primary"
+                  checked={includeLockedInBulk}
+                  onChange={(event) =>
+                    setIncludeLockedInBulk(event.target.checked)
+                  }
+                />
+                Include locked boxes deliberately
+              </label>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  disabled={!selectedBoxIds.length || !targetResourceId || assigning}
+                  disabled={
+                    !selectedBulkSplit.assignableBoxIds.length ||
+                    !targetResourceId ||
+                    assigning
+                  }
                   onClick={() =>
                     void assignBoxes(
                       selectedBoxIds,
                       targetResourceId as Id<"transportResources">,
                       targetZoneId
                         ? (targetZoneId as Id<"transportZones">)
-                        : undefined
+                        : undefined,
+                      { includeLocked: includeLockedInBulk }
                     )
                   }
                 >
@@ -394,8 +488,12 @@ export function LoadPlannerBoard({
                   type="button"
                   size="sm"
                   variant="outline"
-                  disabled={!selectedBoxIds.length || assigning}
-                  onClick={() => void assignBoxes(selectedBoxIds, null)}
+                  disabled={!selectedBulkSplit.assignableBoxIds.length || assigning}
+                  onClick={() =>
+                    void assignBoxes(selectedBoxIds, null, undefined, {
+                      includeLocked: includeLockedInBulk,
+                    })
+                  }
                 >
                   Unassign
                 </Button>
@@ -431,6 +529,8 @@ export function LoadPlannerBoard({
               selectedBoxIds={selectedBoxIds}
               reportByBoxId={reportByBoxId}
               onToggleBox={toggleBox}
+              onToggleLock={toggleAssignmentLock}
+              lockSavingBoxIds={lockSavingBoxIds}
               onDropBox={(boxId) => void assignBoxes([boxId], null)}
             />
             {resourcesWithZones?.map(({ resource, zones }) => (
@@ -445,6 +545,8 @@ export function LoadPlannerBoard({
                 reportByBoxId={reportByBoxId}
                 resourceReport={reportByResourceId.get(resource._id)}
                 onToggleBox={toggleBox}
+                onToggleLock={toggleAssignmentLock}
+                lockSavingBoxIds={lockSavingBoxIds}
                 onAssign={(boxIds, zoneId) =>
                   void assignBoxes(boxIds, resource._id, zoneId)
                 }
@@ -513,6 +615,8 @@ function ResourcePanel({
   reportByBoxId,
   resourceReport,
   onToggleBox,
+  onToggleLock,
+  lockSavingBoxIds,
   onAssign,
 }: {
   resource: Doc<"transportResources">;
@@ -522,8 +626,12 @@ function ResourcePanel({
   reportByBoxId: Map<Id<"boxes">, BoxReport>;
   resourceReport?: EstimateReport["resourceReports"][number];
   onToggleBox: (boxId: Id<"boxes">) => void;
+  onToggleLock: (record: BoxRecord) => void;
+  lockSavingBoxIds: Id<"boxes">[];
   onAssign: (boxIds: Id<"boxes">[], zoneId?: Id<"transportZones">) => void;
 }) {
+  const loadLockSummary = summarizeLoadLocks(boxes);
+
   return (
     <div className="rounded-md border border-border">
       <div className="border-b border-border p-3">
@@ -532,7 +640,12 @@ function ResourcePanel({
             <p className="text-sm font-medium">{resource.name}</p>
             <p className="mt-1 text-xs text-muted-foreground">{resource.type}</p>
           </div>
-          <Badge variant="outline">{boxes.length} boxes</Badge>
+          <div className="flex flex-wrap justify-end gap-1">
+            <Badge variant="outline">{boxes.length} boxes</Badge>
+            <Badge variant="secondary">
+              {loadLockSummary.lockedAssignedCount} locked
+            </Badge>
+          </div>
         </div>
         <div className="mt-3 grid gap-2 text-xs">
           <CapacityLine
@@ -549,6 +662,12 @@ function ResourcePanel({
             percent={resourceReport?.volumePercent}
             unit="cu ft"
           />
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Locked assignments</span>
+            <span>
+              {loadLockSummary.lockedAssignedCount} / {boxes.length} boxes
+            </span>
+          </div>
         </div>
       </div>
       <DropSection
@@ -557,6 +676,8 @@ function ResourcePanel({
         selectedBoxIds={selectedBoxIds}
         reportByBoxId={reportByBoxId}
         onToggleBox={onToggleBox}
+        onToggleLock={onToggleLock}
+        lockSavingBoxIds={lockSavingBoxIds}
         onDropBox={(boxId) => onAssign([boxId])}
       />
       {zones.map((zone) => (
@@ -568,6 +689,8 @@ function ResourcePanel({
           selectedBoxIds={selectedBoxIds}
           reportByBoxId={reportByBoxId}
           onToggleBox={onToggleBox}
+          onToggleLock={onToggleLock}
+          lockSavingBoxIds={lockSavingBoxIds}
           onDropBox={(boxId) => onAssign([boxId], zone._id)}
         />
       ))}
@@ -582,6 +705,8 @@ function AssignmentPanel({
   selectedBoxIds,
   reportByBoxId,
   onToggleBox,
+  onToggleLock,
+  lockSavingBoxIds,
   onDropBox,
 }: {
   title: string;
@@ -590,8 +715,12 @@ function AssignmentPanel({
   selectedBoxIds: Id<"boxes">[];
   reportByBoxId: Map<Id<"boxes">, BoxReport>;
   onToggleBox: (boxId: Id<"boxes">) => void;
+  onToggleLock: (record: BoxRecord) => void;
+  lockSavingBoxIds: Id<"boxes">[];
   onDropBox: (boxId: Id<"boxes">) => void;
 }) {
+  const loadLockSummary = summarizeLoadLocks(boxes);
+
   return (
     <div className="rounded-md border border-border">
       <div className="border-b border-border p-3">
@@ -602,7 +731,14 @@ function AssignmentPanel({
               <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
             ) : null}
           </div>
-          <Badge variant="outline">{boxes.length}</Badge>
+          <div className="flex flex-wrap justify-end gap-1">
+            <Badge variant="outline">{boxes.length}</Badge>
+            {loadLockSummary.lockedCount ? (
+              <Badge variant="secondary">
+                {loadLockSummary.lockedCount} locked
+              </Badge>
+            ) : null}
+          </div>
         </div>
       </div>
       <DropSection
@@ -611,6 +747,8 @@ function AssignmentPanel({
         selectedBoxIds={selectedBoxIds}
         reportByBoxId={reportByBoxId}
         onToggleBox={onToggleBox}
+        onToggleLock={onToggleLock}
+        lockSavingBoxIds={lockSavingBoxIds}
         onDropBox={onDropBox}
       />
     </div>
@@ -624,6 +762,8 @@ function DropSection({
   selectedBoxIds,
   reportByBoxId,
   onToggleBox,
+  onToggleLock,
+  lockSavingBoxIds,
   onDropBox,
 }: {
   title: string;
@@ -632,6 +772,8 @@ function DropSection({
   selectedBoxIds: Id<"boxes">[];
   reportByBoxId: Map<Id<"boxes">, BoxReport>;
   onToggleBox: (boxId: Id<"boxes">) => void;
+  onToggleLock: (record: BoxRecord) => void;
+  lockSavingBoxIds: Id<"boxes">[];
   onDropBox: (boxId: Id<"boxes">) => void;
 }) {
   return (
@@ -664,6 +806,8 @@ function DropSection({
             selected={selectedBoxIds.includes(record.box._id)}
             report={reportByBoxId.get(record.box._id)}
             onToggle={() => onToggleBox(record.box._id)}
+            onToggleLock={() => onToggleLock(record)}
+            lockSaving={lockSavingBoxIds.includes(record.box._id)}
           />
         ))}
         {boxes.length > 60 ? (
@@ -687,11 +831,15 @@ function BoxTile({
   selected,
   report,
   onToggle,
+  onToggleLock,
+  lockSaving,
 }: {
   record: BoxRecord;
   selected: boolean;
   report?: BoxReport;
   onToggle: () => void;
+  onToggleLock: () => void;
+  lockSaving: boolean;
 }) {
   const { box, itemCount } = record;
   const warningCount =
@@ -728,9 +876,29 @@ function BoxTile({
             </span>
           </span>
         </label>
-        {warningCount ? (
-          <AlertTriangle className="mt-0.5 size-4 text-destructive" />
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {warningCount ? (
+            <AlertTriangle className="size-4 text-destructive" />
+          ) : null}
+          <Button
+            type="button"
+            size="icon-xs"
+            variant={box.assignmentLocked ? "secondary" : "outline"}
+            aria-label={`${box.assignmentLocked ? "Unlock" : "Lock"} assignment for ${box.code}`}
+            title={`${box.assignmentLocked ? "Unlock" : "Lock"} assignment for ${box.code}`}
+            disabled={lockSaving}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleLock();
+            }}
+          >
+            {box.assignmentLocked ? (
+              <Unlock aria-hidden="true" />
+            ) : (
+              <Lock aria-hidden="true" />
+            )}
+          </Button>
+        </div>
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
         <Badge variant="outline">{box.status}</Badge>
@@ -839,4 +1007,28 @@ function formatNumber(value: number | undefined) {
   return typeof value === "number" && Number.isFinite(value)
     ? value.toLocaleString(undefined, { maximumFractionDigits: 1 })
     : "0";
+}
+
+function boxWord(count: number) {
+  return count === 1 ? "box" : "boxes";
+}
+
+function assignmentWord(count: number) {
+  return count === 1 ? "assignment" : "assignments";
+}
+
+function formatAssignmentMessage({
+  count,
+  action,
+  skippedLockedCount,
+}: {
+  count: number;
+  action: "updated" | "cleared";
+  skippedLockedCount: number;
+}) {
+  return `${count} ${boxWord(count)} ${assignmentWord(count)} ${action}.${
+    skippedLockedCount
+      ? ` ${skippedLockedCount} locked ${boxWord(skippedLockedCount)} skipped.`
+      : ""
+  }`;
 }
