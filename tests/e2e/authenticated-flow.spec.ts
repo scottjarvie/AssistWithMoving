@@ -242,6 +242,13 @@ test.describe("authenticated product flow", () => {
     await expect(packingDebt).toContainText("High-value without photos");
     await expect(packingDebt).toContainText("Boxes not assigned");
 
+    const evidenceDensity = page.locator("#evidence-density");
+    await expect(evidenceDensity.getByText("Evidence density")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(evidenceDensity).toContainText("Average score");
+    await expect(evidenceDensity).toContainText("Top evidence gaps");
+
     const duplicateReview = page
       .getByRole("heading", { name: "Duplicate review", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");

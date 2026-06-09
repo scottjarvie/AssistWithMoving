@@ -25,6 +25,7 @@ import { AiTextIntake } from "@/components/ai-text-intake";
 import { BoxManager } from "@/components/box-manager";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
 import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
+import { EvidenceDensityPanel } from "@/components/evidence-density-panel";
 import { EstimateSummary } from "@/components/estimate-summary";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { InventoryDuplicateReview } from "@/components/inventory-duplicate-review";
@@ -851,6 +852,8 @@ export function MoveDashboard() {
       <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
 
       <PackingDebtDashboard householdId={householdId} moveId={moveId} />
+
+      <EvidenceDensityPanel householdId={householdId} moveId={moveId} />
 
       <EstimateSummary householdId={householdId} moveId={moveId} />
 
