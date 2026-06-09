@@ -6,6 +6,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { pathToFileURL } from "node:url";
 
 const strict = process.argv.includes("--strict");
 const requiredEnv = [
@@ -15,14 +16,14 @@ const requiredEnv = [
   "B2_APPLICATION_KEY_ID",
   "B2_APPLICATION_KEY",
 ];
-const requiredCorsOrigins = [
+export const requiredCorsOrigins = [
   "http://localhost:3827",
   "https://movingmanifest.com",
   "https://www.movingmanifest.com",
   "https://*.vercel.app",
 ];
-const requiredCorsMethods = ["PUT", "GET", "HEAD"];
-const recommendedCorsRule = {
+export const requiredCorsMethods = ["PUT", "GET", "HEAD"];
+export const recommendedS3CorsConfiguration = {
   CORSRules: [
     {
       AllowedOrigins: requiredCorsOrigins,
@@ -33,6 +34,16 @@ const recommendedCorsRule = {
     },
   ],
 };
+export const recommendedBackblazeNativeCorsRules = [
+  {
+    corsRuleName: "movingmanifest-upload",
+    allowedOrigins: requiredCorsOrigins,
+    allowedHeaders: ["*"],
+    allowedOperations: ["s3_put", "s3_get", "s3_head"],
+    exposeHeaders: ["ETag"],
+    maxAgeSeconds: 3600,
+  },
+];
 const results = [];
 
 function record(status, label, detail) {
@@ -55,6 +66,66 @@ function displayBucket() {
 function displayNativeError(body) {
   if (!body || typeof body !== "object") return "unknown error";
   return [body.code, body.message].filter(Boolean).join(": ") || "unknown error";
+}
+
+function normalizeOrigin(origin) {
+  return origin.trim().replace(/\/+$/, "");
+}
+
+export function corsOriginAllows(requiredOrigin, allowedOrigin) {
+  const required = normalizeOrigin(requiredOrigin);
+  const allowed = normalizeOrigin(allowedOrigin);
+  if (!required || !allowed) return false;
+  if (allowed === "*") return true;
+  if (allowed === "https") return required.startsWith("https://");
+  if (allowed === "http") return required.startsWith("http://");
+  if (allowed === required) return true;
+  if (!allowed.includes("*")) return false;
+
+  const pattern = allowed
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[^/]*");
+  return new RegExp(`^${pattern}$`).test(required);
+}
+
+export function missingCorsRequirements(
+  rules,
+  origins = requiredCorsOrigins,
+  methods = requiredCorsMethods
+) {
+  const allowedOrigins = rules.flatMap((rule) => rule.AllowedOrigins ?? []);
+  const allowedMethods = new Set(
+    rules.flatMap((rule) => rule.AllowedMethods ?? [])
+  );
+  return {
+    origins: origins.filter(
+      (origin) =>
+        !allowedOrigins.some((allowedOrigin) =>
+          corsOriginAllows(origin, allowedOrigin)
+        )
+    ),
+    methods: methods.filter((method) => !allowedMethods.has(method)),
+  };
+}
+
+export function corsAdministrationGuidance(allowed) {
+  const capabilities = new Set(allowed?.capabilities ?? []);
+  const bucketScoped = Boolean(allowed?.bucketName);
+  if (capabilities.has("writeBuckets")) {
+    return {
+      status: "warn",
+      detail:
+        "this key can administer bucket-level CORS; use it only for setup and do not deploy it as app runtime credentials",
+    };
+  }
+
+  return {
+    status: "warn",
+    detail: bucketScoped
+      ? "runtime key is bucket-scoped; keep it that way and use the Backblaze dashboard or a separate admin key for CORS changes"
+      : "key lacks writeBuckets; use the Backblaze dashboard or a separate admin key for CORS changes",
+  };
 }
 
 async function checkEnv() {
@@ -105,6 +176,8 @@ async function checkNativeAuthorize() {
       allowed?.bucketName ? "{scoped-bucket}" : "account-wide or unspecified"
     }; capabilities ${(allowed?.capabilities ?? []).join(", ") || "none"}`
   );
+  const corsAdmin = corsAdministrationGuidance(allowed);
+  record(corsAdmin.status, "CORS administration key", corsAdmin.detail);
   return body;
 }
 
@@ -160,18 +233,8 @@ async function checkCors(client) {
       new GetBucketCorsCommand({ Bucket: process.env.B2_BUCKET_NAME })
     );
     const rules = cors.CORSRules ?? [];
-    const allowedOrigins = new Set(
-      rules.flatMap((rule) => rule.AllowedOrigins ?? [])
-    );
-    const allowedMethods = new Set(
-      rules.flatMap((rule) => rule.AllowedMethods ?? [])
-    );
-    const missingOrigins = requiredCorsOrigins.filter(
-      (origin) => !allowedOrigins.has(origin) && !allowedOrigins.has("*")
-    );
-    const missingMethods = requiredCorsMethods.filter(
-      (method) => !allowedMethods.has(method)
-    );
+    const { origins: missingOrigins, methods: missingMethods } =
+      missingCorsRequirements(rules);
 
     if (missingOrigins.length || missingMethods.length) {
       record(
@@ -219,48 +282,64 @@ async function main() {
   await checkCors(client);
 }
 
-await main();
+const isMain =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-const counts = results.reduce(
-  (acc, result) => {
-    acc[result.status] += 1;
-    return acc;
-  },
-  { pass: 0, warn: 0, blocked: 0, fail: 0 }
-);
+if (isMain) {
+  await main();
 
-for (const result of results) {
-  const label =
-    result.status === "pass"
-      ? "PASS"
-      : result.status === "warn"
-        ? "WARN"
-        : result.status === "blocked"
-          ? "BLOCKED"
-          : "FAIL";
-  console.log(`${label} ${result.label}: ${result.detail}`);
-}
-
-if (shouldPrintCorsPlan()) {
-  console.log("");
-  console.log(
-    "Recommended Backblaze custom CORS rule after valid scoped credentials exist:"
+  const counts = results.reduce(
+    (acc, result) => {
+      acc[result.status] += 1;
+      return acc;
+    },
+    { pass: 0, warn: 0, blocked: 0, fail: 0 }
   );
-  console.log(JSON.stringify(recommendedCorsRule, null, 2));
+
+  for (const result of results) {
+    const label =
+      result.status === "pass"
+        ? "PASS"
+        : result.status === "warn"
+          ? "WARN"
+          : result.status === "blocked"
+            ? "BLOCKED"
+            : "FAIL";
+    console.log(`${label} ${result.label}: ${result.detail}`);
+  }
+
+  if (shouldPrintCorsPlan()) {
+    console.log("");
+    console.log(
+      "Recommended Backblaze S3-compatible CORS configuration for presigned browser uploads:"
+    );
+    console.log(JSON.stringify(recommendedS3CorsConfiguration, null, 2));
+    console.log("");
+    console.log(
+      "Equivalent Backblaze native custom CORS rule if configuring through the B2 CLI/custom rules UI:"
+    );
+    console.log(JSON.stringify(recommendedBackblazeNativeCorsRules, null, 2));
+    console.log(
+      "Dashboard note: if Backblaze asks which API the rule applies to, choose S3-compatible API or Both for MovingManifest uploads."
+    );
+    console.log(
+      "Key note: keep the app runtime B2 key bucket-scoped for file read/write; use the dashboard or a separate admin key for bucket-level CORS changes."
+    );
+    console.log(
+      "Security note: avoid broad all-origin CORS for launch unless it is a temporary debugging step."
+    );
+  }
+
   console.log(
-    "Security note: avoid broad all-origin CORS for launch unless it is a temporary debugging step."
+    `Storage readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
   );
-}
+  console.log(
+    strict
+      ? "Strict mode: failures and blockers exit nonzero."
+      : "Default mode: only missing env or script failures exit nonzero. Use --strict for launch gating."
+  );
 
-console.log(
-  `Storage readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
-);
-console.log(
-  strict
-    ? "Strict mode: failures and blockers exit nonzero."
-    : "Default mode: only missing env or script failures exit nonzero. Use --strict for launch gating."
-);
-
-if (counts.fail > 0 || (strict && counts.blocked > 0)) {
-  process.exitCode = 1;
+  if (counts.fail > 0 || (strict && counts.blocked > 0)) {
+    process.exitCode = 1;
+  }
 }
