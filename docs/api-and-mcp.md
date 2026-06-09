@@ -120,8 +120,28 @@ shorter upload session TTL so expired presigned URLs are not replayed.
 
 ## Rate Limits
 
-There is no custom product-level rate-limit header yet. Clients should behave
-conservatively:
+REST API requests are limited per API key to 300 requests per 5-minute window.
+Responses from authenticated API-key requests include:
+
+| Header | Meaning |
+| --- | --- |
+| `X-RateLimit-Limit` | Maximum requests allowed in the current window. |
+| `X-RateLimit-Remaining` | Requests left for the API key in the current window. |
+| `X-RateLimit-Reset` | Unix timestamp, in seconds, when the window resets. |
+| `Retry-After` | Seconds to wait before retrying, only returned with `429`. |
+
+When a key exceeds the window, the API returns HTTP `429`:
+
+```json
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "API rate limit exceeded. Retry after 120 seconds."
+  }
+}
+```
+
+Clients should still behave conservatively:
 
 - Prefer coarse tools and batch flows over chatty loops.
 - Use `limit` and pagination.

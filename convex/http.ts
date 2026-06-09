@@ -80,6 +80,7 @@ const internalActions = anyApi as unknown as {
       {
         status: number;
         body: unknown;
+        headers?: Record<string, string>;
       }
     >;
   };
@@ -248,7 +249,10 @@ for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"] as const) {
         body,
       });
 
-      return Response.json(response.body, { status: response.status });
+      return Response.json(response.body, {
+        status: response.status,
+        headers: response.headers,
+      });
     }),
   });
 }

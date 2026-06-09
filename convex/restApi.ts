@@ -90,7 +90,13 @@ import {
   requiredScopesForRestRoute,
   restError,
   restOk,
+  restApiRateLimit,
+  restRateLimitResult,
+  restRateLimitWindowStart,
+  restRateLimited,
+  withRestRateLimitHeaders,
   type RestRequestInput,
+  type RestRateLimitResult,
   type RestResponse,
 } from "./lib/restApi";
 
@@ -174,17 +180,29 @@ export const handle = internalMutation({
 
     try {
       const moveId = routeMoveIdFromRequest(segments, args.body, args.query);
+      const action = `${args.method} /api/v1/${segments.join("/")}`;
       const auth = await authenticateApiKey(ctx, {
         rawKey,
         requiredScopes,
         moveId,
-        action: `${args.method} /api/v1/${segments.join("/")}`,
+        action,
         allowRestrictedKeyWithoutMoveId: segments[0] === "me",
       });
 
-      return await withIdempotency(ctx, args, auth, async () =>
+      const rateLimit = await checkApiRateLimit(ctx, {
+        householdId: auth.householdId,
+        moveId: auth.moveId,
+        apiKeyId: auth.apiKeyId,
+        action,
+      });
+      if (!rateLimit.allowed) {
+        return restRateLimited(rateLimit);
+      }
+
+      const response = await withIdempotency(ctx, args, auth, async () =>
         routeRequest(ctx, args, segments, auth)
       );
+      return withRestRateLimitHeaders(response, rateLimit);
     } catch (error) {
       return restError({
         status: errorStatus(error),
@@ -192,6 +210,18 @@ export const handle = internalMutation({
         message: error instanceof Error ? error.message : "Request failed.",
       });
     }
+  },
+});
+
+export const checkRateLimit = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.optional(v.id("moves")),
+    apiKeyId: v.id("apiKeys"),
+    action: v.string(),
+  },
+  handler: async (ctx, args): Promise<RestRateLimitResult> => {
+    return await checkApiRateLimit(ctx, args);
   },
 });
 
@@ -313,6 +343,68 @@ export const checkIdempotency = internalMutation({
     };
   },
 });
+
+async function checkApiRateLimit(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId?: Id<"moves">;
+    apiKeyId: Id<"apiKeys">;
+    action: string;
+  }
+) {
+  const now = Date.now();
+  await deleteExpiredRateLimitWindows(ctx, now);
+  const windowStart = restRateLimitWindowStart(now);
+  const windowEnd = windowStart + restApiRateLimit.windowMs;
+  const existing = await ctx.db
+    .query("apiRateLimitWindows")
+    .withIndex("by_api_key_window", (q) =>
+      q.eq("apiKeyId", args.apiKeyId).eq("windowStart", windowStart)
+    )
+    .unique();
+  const count = (existing?.count ?? 0) + 1;
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      count,
+      lastAction: args.action,
+      updatedAt: now,
+    });
+  } else {
+    await ctx.db.insert("apiRateLimitWindows", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      apiKeyId: args.apiKeyId,
+      windowStart,
+      windowEnd,
+      count,
+      limit: restApiRateLimit.limit,
+      lastAction: args.action,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return restRateLimitResult({
+    count,
+    now,
+    limit: restApiRateLimit.limit,
+    windowStart,
+    windowMs: restApiRateLimit.windowMs,
+  });
+}
+
+async function deleteExpiredRateLimitWindows(ctx: MutationCtx, now: number) {
+  const expired = await ctx.db
+    .query("apiRateLimitWindows")
+    .withIndex("by_expires", (q) => q.lt("windowEnd", now))
+    .take(25);
+
+  for (const window of expired) {
+    await ctx.db.delete(window._id);
+  }
+}
 
 export const storeIdempotency = internalMutation({
   args: {

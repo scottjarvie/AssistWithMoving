@@ -7,6 +7,12 @@ import {
   requestHashInput,
   requiredScopesForRestRoute,
   restError,
+  restOk,
+  restRateLimitHeaders,
+  restRateLimitResult,
+  restRateLimitWindowStart,
+  restRateLimited,
+  withRestRateLimitHeaders,
 } from "../../convex/lib/restApi";
 
 describe("REST API helpers", () => {
@@ -302,6 +308,67 @@ describe("REST API helpers", () => {
           code: "forbidden",
           message: "No scope.",
         },
+      },
+    });
+  });
+
+  it("builds API rate-limit windows and headers", () => {
+    const windowStart = restRateLimitWindowStart(301_000, 300_000);
+
+    expect(windowStart).toBe(300_000);
+
+    const allowed = restRateLimitResult({
+      count: 2,
+      now: 301_000,
+      limit: 3,
+      windowStart,
+      windowMs: 300_000,
+    });
+
+    expect(allowed).toEqual({
+      allowed: true,
+      limit: 3,
+      remaining: 1,
+      resetAt: 600_000,
+      retryAfterSeconds: 299,
+    });
+    expect(restRateLimitHeaders(allowed)).toEqual({
+      "X-RateLimit-Limit": "3",
+      "X-RateLimit-Remaining": "1",
+      "X-RateLimit-Reset": "600",
+    });
+    expect(withRestRateLimitHeaders(restOk({ ok: true }), allowed)).toEqual({
+      status: 200,
+      body: { ok: true },
+      headers: {
+        "X-RateLimit-Limit": "3",
+        "X-RateLimit-Remaining": "1",
+        "X-RateLimit-Reset": "600",
+      },
+    });
+
+    const limited = restRateLimitResult({
+      count: 4,
+      now: 301_000,
+      limit: 3,
+      windowStart,
+      windowMs: 300_000,
+    });
+
+    expect(limited.allowed).toBe(false);
+    expect(restRateLimited(limited)).toEqual({
+      status: 429,
+      body: {
+        error: {
+          code: "rate_limited",
+          message: "API rate limit exceeded. Retry after 299 seconds.",
+        },
+      },
+      headers: {
+        "X-RateLimit-Limit": "3",
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": "600",
+        "Retry-After": "299",
       },
     });
   });

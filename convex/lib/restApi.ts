@@ -14,7 +14,21 @@ export type RestRequestInput = {
 export type RestResponse = {
   status: number;
   body: unknown;
+  headers?: Record<string, string>;
 };
+
+export type RestRateLimitResult = {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  resetAt: number;
+  retryAfterSeconds: number;
+};
+
+export const restApiRateLimit = {
+  limit: 300,
+  windowMs: 5 * 60 * 1000,
+} as const;
 
 export function bearerToken(authorization: string | undefined) {
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
@@ -50,6 +64,72 @@ export function restError({
 
 export function restOk(body: unknown, status = 200): RestResponse {
   return { status, body };
+}
+
+export function restRateLimitWindowStart(
+  now: number,
+  windowMs = restApiRateLimit.windowMs
+) {
+  return Math.floor(now / windowMs) * windowMs;
+}
+
+export function restRateLimitResult({
+  count,
+  now,
+  limit = restApiRateLimit.limit,
+  windowStart,
+  windowMs = restApiRateLimit.windowMs,
+}: {
+  count: number;
+  now: number;
+  limit?: number;
+  windowStart: number;
+  windowMs?: number;
+}): RestRateLimitResult {
+  const resetAt = windowStart + windowMs;
+  const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - now) / 1000));
+  return {
+    allowed: count <= limit,
+    limit,
+    remaining: Math.max(0, limit - count),
+    resetAt,
+    retryAfterSeconds,
+  };
+}
+
+export function restRateLimitHeaders(result: RestRateLimitResult) {
+  return {
+    "X-RateLimit-Limit": String(result.limit),
+    "X-RateLimit-Remaining": String(result.remaining),
+    "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
+    ...(result.allowed
+      ? {}
+      : { "Retry-After": String(result.retryAfterSeconds) }),
+  };
+}
+
+export function withRestRateLimitHeaders(
+  response: RestResponse,
+  result: RestRateLimitResult
+): RestResponse {
+  return {
+    ...response,
+    headers: {
+      ...response.headers,
+      ...restRateLimitHeaders(result),
+    },
+  };
+}
+
+export function restRateLimited(result: RestRateLimitResult): RestResponse {
+  return withRestRateLimitHeaders(
+    restError({
+      status: 429,
+      code: "rate_limited",
+      message: `API rate limit exceeded. Retry after ${result.retryAfterSeconds} seconds.`,
+    }),
+    result
+  );
 }
 
 export function paginationFromQuery(query: Record<string, string>) {

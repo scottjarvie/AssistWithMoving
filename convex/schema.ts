@@ -757,6 +757,22 @@ export default defineSchema({
     .index("by_expires", ["expiresAt"])
     .index("by_household", ["householdId"]),
 
+  apiRateLimitWindows: defineTable({
+    householdId: v.id("households"),
+    moveId: v.optional(v.id("moves")),
+    apiKeyId: v.id("apiKeys"),
+    windowStart: v.number(),
+    windowEnd: v.number(),
+    count: v.number(),
+    limit: v.number(),
+    lastAction: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_api_key_window", ["apiKeyId", "windowStart"])
+    .index("by_expires", ["windowEnd"])
+    .index("by_household", ["householdId"]),
+
   shareLinks: defineTable({
     householdId: v.id("households"),
     moveId: v.id("moves"),

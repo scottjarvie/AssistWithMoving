@@ -13,8 +13,10 @@ import {
   parseRestPath,
   restError,
   restOk,
+  restRateLimited,
   type RestRequestInput,
   type RestResponse,
+  withRestRateLimitHeaders,
 } from "./lib/restApi";
 
 const allowedPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -105,9 +107,12 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
   if (!authResult.ok || !authResult.auth) {
     return authResult.response ?? unknownAuthError();
   }
-  const auth = authResult.auth as ApiActionAuth;
+  const auth = {
+    ...(authResult.auth as ApiActionAuth),
+    moveId: (authResult.auth as ApiActionAuth).moveId ?? moveId,
+  };
 
-  return await withActionIdempotency(ctx, args, auth, async () => {
+  return await withActionRateLimit(ctx, args, auth, async () => {
     try {
       const mimeType = requiredString(body.mimeType, "mimeType is required.");
       const sizeBytes = requiredNumber(body.sizeBytes, "sizeBytes is required.");
@@ -217,9 +222,12 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
   if (!authResult.ok || !authResult.auth) {
     return authResult.response ?? unknownAuthError();
   }
-  const auth = authResult.auth as ApiActionAuth;
+  const auth = {
+    ...(authResult.auth as ApiActionAuth),
+    moveId: (authResult.auth as ApiActionAuth).moveId ?? moveId,
+  };
 
-  return await withActionIdempotency(ctx, args, auth, async () => {
+  return await withActionRateLimit(ctx, args, auth, async () => {
     try {
       const config = requireB2Config();
       const session = await ctx.runQuery(internal.photos.getUploadSession, {
@@ -329,6 +337,38 @@ async function withActionIdempotency(
     expiresAt: idempotencyExpiresAt,
   });
   return response;
+}
+
+async function withActionRateLimit(
+  ctx: ActionCtx,
+  args: RestRequestInput,
+  auth: {
+    householdId: Id<"households">;
+    moveId?: Id<"moves">;
+    apiKeyId: Id<"apiKeys">;
+  },
+  createResponse: () => Promise<RestResponse>,
+  idempotencyExpiresAt?: number
+) {
+  const segments = parseRestPath(args.path);
+  const rateLimit = await ctx.runMutation(internal.restApi.checkRateLimit, {
+    householdId: auth.householdId,
+    moveId: auth.moveId,
+    apiKeyId: auth.apiKeyId,
+    action: `${args.method} /api/v1/${segments.join("/")}`,
+  });
+  if (!rateLimit.allowed) {
+    return restRateLimited(rateLimit);
+  }
+
+  const response = await withActionIdempotency(
+    ctx,
+    args,
+    auth,
+    createResponse,
+    idempotencyExpiresAt
+  );
+  return withRestRateLimitHeaders(response, rateLimit);
 }
 
 function requireB2Config() {

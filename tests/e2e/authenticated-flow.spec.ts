@@ -472,6 +472,9 @@ test.describe("authenticated product flow", () => {
       headers: { authorization: `Bearer ${rawApiKey}` },
     });
     expect(apiReadResponse.status()).toBe(200);
+    expect(apiReadResponse.headers()["x-ratelimit-limit"]).toBeTruthy();
+    expect(apiReadResponse.headers()["x-ratelimit-remaining"]).toBeTruthy();
+    expect(apiReadResponse.headers()["x-ratelimit-reset"]).toBeTruthy();
     const apiReadBody = (await apiReadResponse.json()) as {
       data?: unknown[];
     };
