@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+export { getApiCapabilities } from "./capabilities.mjs";
+
 export function createApiConfig(env = process.env) {
   const baseUrl =
     env.MOVINGMANIFEST_API_BASE_URL ?? "https://movingmanifest.com/api/v1";

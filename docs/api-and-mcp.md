@@ -742,6 +742,12 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 The local MCP server wraps the REST API. It does not connect directly to Convex
 or Clerk.
 
+Agents should usually call `get_api_capabilities` first. It returns a
+code-backed capability matrix with supported workflows, required scopes,
+REST endpoints, MCP tool names, and known launch blockers. This keeps agents
+from guessing from a long tool list and makes operational gaps explicit, such
+as `MOVE-66` for Backblaze-backed photo upload verification.
+
 Run locally:
 
 ```bash
@@ -775,6 +781,7 @@ Available MCP tools:
 
 | Tool | Purpose |
 | --- | --- |
+| `get_api_capabilities` | Inspect supported REST/MCP workflows, required scopes, tools, and known launch blockers without calling the API. |
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |

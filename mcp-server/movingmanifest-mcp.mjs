@@ -24,6 +24,7 @@ import {
   downloadExport,
   approvePlanningSuggestions,
   generatePlanningSuggestions,
+  getApiCapabilities,
   getApiContext,
   getCapacityReport,
   getMoveSummary,
@@ -225,6 +226,15 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 }
 
 export function registerTools(target, apiConfig) {
+  registerTool(target, "get_api_capabilities", {
+    title: "Get API capabilities",
+    description:
+      "Inspect MovingManifest REST/MCP capabilities, required scopes, core workflows, and known launch blockers. This is local metadata and does not call the API.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: () => getApiCapabilities(),
+  });
+
   registerTool(target, "get_api_context", {
     title: "Get API context",
     description:
