@@ -21,6 +21,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { FeatureFlagControls } from "@/components/feature-flag-controls";
+import { LaunchReadinessPanel } from "@/components/launch-readiness-panel";
 import { OperationalSignalsPanel } from "@/components/operational-signals-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -418,6 +419,7 @@ export function AdminDashboard() {
             <AuditTable title="Recent operational audit" rows={overview.recentAudit} />
           </div>
           <OperationalSignalsPanel />
+          <LaunchReadinessPanel />
           <FeatureFlagControls />
         </>
       ) : loading === "overview" ? (
