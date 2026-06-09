@@ -1201,7 +1201,7 @@ async function routeTransportResources(
       moveId,
       resourceIdSegment
     );
-    const patch = transportResourcePatch(args.body);
+    const patch = transportResourcePatch(args.body, auth);
     await ctx.db.patch(resource._id, patch);
     const updated = await ctx.db.get(resource._id);
     await auditApiWrite(
@@ -4648,6 +4648,10 @@ function safeTransportResource(resource: Doc<"transportResources">) {
     name: resource.name,
     description: resource.description,
     capacity: resource.capacity,
+    capacityReviewStatus: resource.capacityReviewStatus ?? "unreviewed",
+    capacityNotes: resource.capacityNotes,
+    capacityReviewedAt: resource.capacityReviewedAt,
+    capacityReviewedByUserId: resource.capacityReviewedByUserId,
     rules: resource.rules,
     sortOrder: resource.sortOrder,
     createdAt: resource.createdAt,
@@ -4899,6 +4903,9 @@ async function createApiTransportResource(
       name: normalizeOptionalText(asString(body.name)) ?? preset.name,
       description: normalizeOptionalText(asString(body.description)) ?? preset.description,
       capacity: parseCapacity(body.capacity) ?? preset.capacity,
+      capacityReviewStatus:
+        parseCapacityReviewStatus(body.capacityReviewStatus) ?? "unreviewed",
+      capacityNotes: normalizeOptionalText(asString(body.capacityNotes)),
       rules: normalizeRuleList(parseStringArray(body.rules) ?? preset.rules),
       sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
       createdByUserId: auth.createdByUserId,
@@ -4964,6 +4971,9 @@ async function createApiTransportResource(
     name,
     description: normalizeOptionalText(asString(body.description)),
     capacity: parseCapacity(body.capacity) ?? {},
+    capacityReviewStatus:
+      parseCapacityReviewStatus(body.capacityReviewStatus) ?? "unreviewed",
+    capacityNotes: normalizeOptionalText(asString(body.capacityNotes)),
     rules: normalizeRuleList(parseStringArray(body.rules) ?? []),
     sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
     createdByUserId: auth.createdByUserId,
@@ -5382,9 +5392,13 @@ function movePatch(body: unknown): Partial<Doc<"moves">> {
   return patch;
 }
 
-function transportResourcePatch(body: unknown): Partial<Doc<"transportResources">> {
+function transportResourcePatch(
+  body: unknown,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+): Partial<Doc<"transportResources">> {
   const input = bodyObject(body);
-  const patch: Partial<Doc<"transportResources">> = { updatedAt: Date.now() };
+  const now = Date.now();
+  const patch: Partial<Doc<"transportResources">> = { updatedAt: now };
   if (input.type !== undefined) {
     const type = parseTransportResourceType(input.type);
     if (!type) throw new Error("Invalid transport resource type.");
@@ -5400,6 +5414,16 @@ function transportResourcePatch(body: unknown): Partial<Doc<"transportResources"
   }
   if (input.capacity !== undefined) {
     patch.capacity = parseCapacity(input.capacity) ?? {};
+  }
+  if (input.capacityReviewStatus !== undefined) {
+    const status = parseCapacityReviewStatus(input.capacityReviewStatus);
+    if (!status) throw new Error("Invalid capacityReviewStatus.");
+    patch.capacityReviewStatus = status;
+    patch.capacityReviewedAt = now;
+    patch.capacityReviewedByUserId = auth.createdByUserId;
+  }
+  if (input.capacityNotes !== undefined) {
+    patch.capacityNotes = normalizeOptionalText(asString(input.capacityNotes));
   }
   if (input.rules !== undefined) {
     patch.rules = normalizeRuleList(parseStringArray(input.rules) ?? []);
@@ -6156,6 +6180,14 @@ function parseTransportResourcePresetKey(value: unknown) {
   return includesLiteral(transportResourcePresetKeys, value)
     ? (value as (typeof transportResourcePresetKeys)[number])
     : undefined;
+}
+
+function parseCapacityReviewStatus(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (value === "unreviewed" || value === "estimated" || value === "confirmed") {
+    return value;
+  }
+  throw new Error("Invalid capacityReviewStatus.");
 }
 
 function parseCapacity(value: unknown):

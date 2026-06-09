@@ -495,6 +495,8 @@ describe("MovingManifest MCP API client", () => {
         moveId: "move1",
         resourceId: "resource1",
         capacity: { maxWeightLb: 1000 },
+        capacityReviewStatus: "confirmed",
+        capacityNotes: "Confirmed from rental agreement.",
       }
     );
 
@@ -511,6 +513,8 @@ describe("MovingManifest MCP API client", () => {
           moveId: "move1",
           resourceId: "resource1",
           capacity: { maxWeightLb: 1000 },
+          capacityReviewStatus: "confirmed",
+          capacityNotes: "Confirmed from rental agreement.",
         }),
       }
     );

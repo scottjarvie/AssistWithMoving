@@ -172,6 +172,12 @@ const estimateConfidenceSchema = z.enum([
   "actual",
 ]);
 
+const capacityReviewStatusSchema = z.enum([
+  "unreviewed",
+  "estimated",
+  "confirmed",
+]);
+
 const planningEstimateDraftSchema = z.object({
   category: z.string().optional(),
   estimatedWeightLb: z.number().positive().optional(),
@@ -946,6 +952,8 @@ export function registerTools(target, apiConfig) {
       name: z.string().optional(),
       description: z.string().optional(),
       capacity: capacityInputSchema.optional(),
+      capacityReviewStatus: capacityReviewStatusSchema.optional(),
+      capacityNotes: z.string().optional(),
       rules: z.array(z.string()).optional(),
       sortOrder: z.number().optional(),
       dryRun: z.boolean().optional(),
@@ -957,7 +965,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "update_transport_resource", {
     title: "Update transport resource",
     description:
-      "Update a transport resource's name, description, type, capacity, rules, or sort order.",
+      "Update a transport resource's name, description, type, capacity, capacity review state, rules, or sort order.",
     inputSchema: {
       moveId: z.string(),
       resourceId: z.string(),
@@ -965,6 +973,8 @@ export function registerTools(target, apiConfig) {
       name: z.string().optional(),
       description: z.string().optional(),
       capacity: capacityInputSchema.optional(),
+      capacityReviewStatus: capacityReviewStatusSchema.optional(),
+      capacityNotes: z.string().optional(),
       rules: z.array(z.string()).optional(),
       sortOrder: z.number().optional(),
       dryRun: z.boolean().optional(),

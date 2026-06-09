@@ -668,6 +668,19 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/resources \
   }'
 ```
 
+Mark a transport resource capacity as estimated or confirmed:
+
+```bash
+curl -X PATCH https://movingmanifest.com/api/v1/moves/MOVE_ID/resources/RESOURCE_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: confirm-resource-capacity-001" \
+  -d '{
+    "capacityReviewStatus": "confirmed",
+    "capacityNotes": "Confirmed from rental agreement."
+  }'
+```
+
 Create a resource zone:
 
 ```bash
@@ -685,6 +698,10 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/zones \
 Resource and zone writes require `moves/write`. They are auditable and support
 idempotency like other non-GET API requests. Destructive archive/delete endpoints
 are intentionally not part of the public API yet.
+
+Transport resource responses include `capacityReviewStatus`, `capacityNotes`,
+`capacityReviewedAt`, and `capacityReviewedByUserId` so browser, REST, and MCP
+clients can share the same "actual vs. guessed capacity" state.
 
 Get a capacity report:
 
