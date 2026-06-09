@@ -385,6 +385,18 @@ test.describe("authenticated product flow", () => {
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
     await expect(roomSweep.getByLabel("Room or area")).toBeEnabled();
     await expect(roomSweep.getByLabel("Room photo")).toBeEnabled();
+    const photoEvidence = page
+      .getByRole("heading", { name: "Photo evidence", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(
+      photoEvidence.getByRole("button", { name: "Claim / evidence" })
+    ).toBeVisible();
+    await expect(
+      photoEvidence.getByRole("button", { name: "AI not processed" })
+    ).toBeVisible();
+    await expect(
+      photoEvidence.getByRole("button", { name: "Quality issues" })
+    ).toBeVisible();
 
     const aiTextIntake = page
       .getByRole("heading", { name: "AI text intake", exact: true })

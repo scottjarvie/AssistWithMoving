@@ -25,13 +25,16 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  filterPhotosForReview,
+  photoReviewFilters,
+  type PhotoReviewFilterKey,
+} from "@/lib/photo-review-filters";
 
 type PhotoReviewWorkspaceProps = {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
 };
-
-type ReviewFilter = "all" | "review" | "unassigned" | "sensitive" | "derivatives";
 
 type DisplayUrlState = Record<string, string>;
 
@@ -42,14 +45,6 @@ type ReviewPhoto = {
   privacyLevel: PhotoPrivacyLevel;
   visibilityScope: PhotoVisibilityScope;
 };
-
-const reviewFilters = [
-  ["all", "All"],
-  ["review", "Review"],
-  ["unassigned", "Unassigned"],
-  ["sensitive", "Sensitive"],
-  ["derivatives", "Derivative issues"],
-] as const satisfies ReadonlyArray<readonly [ReviewFilter, string]>;
 
 const privacyOptions = [
   ["normal", "Normal"],
@@ -74,7 +69,7 @@ export function PhotoReviewWorkspace({
   householdId,
   moveId,
 }: PhotoReviewWorkspaceProps) {
-  const [filter, setFilter] = useState<ReviewFilter>("all");
+  const [filter, setFilter] = useState<PhotoReviewFilterKey>("all");
   const [room, setRoom] = useState("");
   const photos = useQuery(
     api.photos.listForMove,
@@ -89,24 +84,9 @@ export function PhotoReviewWorkspace({
   const updateEvidence = useMutation(api.photos.updateEvidence);
   const [photoMessage, setPhotoMessage] = useState<string | null>(null);
   const filteredPhotos = useMemo(() => {
-    const records = photos ?? [];
-    switch (filter) {
-      case "review":
-        return records.filter((photo) => photo.verificationStatus === "needsReview");
-      case "unassigned":
-        return records.filter((photo) => !photo.itemId && !photo.boxId && !photo.room);
-      case "sensitive":
-        return records.filter((photo) => photo.privacyLevel !== "normal");
-      case "derivatives":
-        return records.filter(
-          (photo) =>
-            photo.derivativeStatus === "pending" ||
-            photo.derivativeStatus === "failed"
-        );
-      default:
-        return records;
-    }
+    return filterPhotosForReview(photos ?? [], filter);
   }, [filter, photos]);
+  const activeFilter = photoReviewFilters.find((entry) => entry.key === filter);
   const visiblePhotos = useMemo(() => filteredPhotos.slice(0, 24), [filteredPhotos]);
   const photoKey = visiblePhotos.map((photo) => photo._id).join("|");
   const [displayUrls, setDisplayUrls] = useState<DisplayUrlState>({});
@@ -223,13 +203,13 @@ export function PhotoReviewWorkspace({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {reviewFilters.map(([value, label]) => (
+            {photoReviewFilters.map(({ key, label }) => (
               <Button
-                key={value}
+                key={key}
                 type="button"
                 size="sm"
-                variant={filter === value ? "default" : "outline"}
-                onClick={() => setFilter(value)}
+                variant={filter === key ? "default" : "outline"}
+                onClick={() => setFilter(key)}
               >
                 {label}
               </Button>
@@ -339,7 +319,7 @@ export function PhotoReviewWorkspace({
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-              No photos match this review filter.
+              No {activeFilter?.emptyLabel ?? "photos"} match this review filter.
             </div>
           )}
         </CardContent>
