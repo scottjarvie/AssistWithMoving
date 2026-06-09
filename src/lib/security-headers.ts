@@ -35,6 +35,7 @@ export const contentSecurityPolicy = [
   ].join(" "),
   "media-src 'self' blob: https:",
   "manifest-src 'self'",
+  "report-uri /api/csp-report",
 ].join("; ");
 
 export function normalizeContentSecurityPolicyMode(

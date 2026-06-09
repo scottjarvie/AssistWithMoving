@@ -32,6 +32,7 @@ test("public pages include baseline browser security headers", async ({
   expect(reportOnlyCsp).toContain("frame-ancestors 'none'");
   expect(reportOnlyCsp).toContain("object-src 'none'");
   expect(reportOnlyCsp).toContain("connect-src 'self' https: wss:");
+  expect(reportOnlyCsp).toContain("report-uri /api/csp-report");
 });
 
 test("protected app redirects keep baseline browser security headers", async ({

@@ -15,6 +15,7 @@ describe("security headers", () => {
       key: "Content-Security-Policy-Report-Only",
       value: contentSecurityPolicy,
     });
+    expect(contentSecurityPolicy).toContain("report-uri /api/csp-report");
     expect(headers.some((header) => header.key === "Content-Security-Policy")).toBe(
       false
     );

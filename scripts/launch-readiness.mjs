@@ -103,6 +103,19 @@ async function checkHome() {
       "content security policy report-only",
       `report-only CSP is present with ${directiveCount} directives`
     );
+    if (reportOnlyCsp.includes("report-uri /api/csp-report")) {
+      record(
+        "pass",
+        "content security policy reporting",
+        "CSP reports post to /api/csp-report"
+      );
+    } else {
+      record(
+        "warn",
+        "content security policy reporting",
+        "report-only CSP is present without a report-uri endpoint"
+      );
+    }
     record(
       "blocked",
       "content security policy enforcement",
