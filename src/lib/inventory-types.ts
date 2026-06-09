@@ -1,4 +1,4 @@
-import type { Doc } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 
 export type InventoryItemSignals = {
   photoCount: number;
@@ -22,6 +22,8 @@ export type InventoryItemPatch = {
   destinationRoom?: string;
   category?: string;
   subcategory?: string;
+  ownerPersonId?: Id<"movePeople">;
+  clearOwnerPersonId?: boolean;
   disposition?: InventoryItem["disposition"];
   status?: InventoryItem["status"];
   quantity?: number;

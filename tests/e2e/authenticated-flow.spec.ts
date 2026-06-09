@@ -183,10 +183,6 @@ test.describe("authenticated product flow", () => {
     await expect(page.getByText(`${contactName} saved.`)).toBeVisible({
       timeout: 30_000,
     });
-    await page.getByRole("button", { name: `Archive ${contactName}` }).click();
-    await expect(page.getByText(`${contactName} archived.`)).toBeVisible({
-      timeout: 30_000,
-    });
 
     const transportResources = page
       .getByRole("heading", { name: "Transport resources", exact: true })
@@ -204,6 +200,27 @@ test.describe("authenticated product flow", () => {
     await page.getByLabel("New item disposition").selectOption("mover");
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await expect(page.getByLabel(`Status for ${itemName}`)).toBeVisible();
+
+    const itemRow = page
+      .getByRole("row")
+      .filter({ has: page.getByText(itemName) });
+    await itemRow.getByRole("button", { name: "Details" }).click();
+    const itemDialog = page.getByRole("dialog", { name: itemName });
+    await itemDialog.getByLabel("Owner / contact").selectOption({
+      label: `${contactName} - contact`,
+    });
+    await itemDialog.getByRole("button", { name: "Save item" }).click();
+    await expect(page.getByText("Item saved.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await itemDialog.getByRole("tab", { name: "Planning" }).click();
+    await expect(itemDialog.getByText(`${contactName} (contact)`)).toBeVisible();
+    await itemDialog.getByRole("button", { name: "Close" }).first().click();
+
+    await page.getByRole("button", { name: `Archive ${contactName}` }).click();
+    await expect(page.getByText(`${contactName} archived.`)).toBeVisible({
+      timeout: 30_000,
+    });
 
     const createBoxForm = page.getByRole("form", { name: "Create box" });
     await createBoxForm.getByLabel("New box code").fill(boxCode);

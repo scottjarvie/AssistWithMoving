@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
   dimensionsValidator,
@@ -178,6 +178,26 @@ function isEvidencePhoto(photo: Doc<"itemPhotos">) {
   );
 }
 
+async function assertMovePersonTarget(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    ownerPersonId?: Id<"movePeople">;
+  }
+) {
+  if (!args.ownerPersonId) return;
+  const person = await ctx.db.get(args.ownerPersonId);
+  if (
+    !person ||
+    person.householdId !== args.householdId ||
+    person.moveId !== args.moveId ||
+    person.archivedAt
+  ) {
+    throw new Error("Item owner/contact is not available for this move.");
+  }
+}
+
 export const listForMove = query({
   args: itemListArgs,
   handler: async (ctx, args) => {
@@ -326,6 +346,11 @@ export const create = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key item creation is not implemented yet.");
     }
+    await assertMovePersonTarget(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      ownerPersonId: args.ownerPersonId,
+    });
 
     const now = Date.now();
     const name = normalizeItemName(args.name);
@@ -402,6 +427,7 @@ export const update = mutation({
     moveId: v.id("moves"),
     itemId: v.id("items"),
     name: v.optional(v.string()),
+    clearOwnerPersonId: v.optional(v.boolean()),
     ...itemWriteArgs,
   },
   handler: async (ctx, args) => {
@@ -414,6 +440,11 @@ export const update = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key item updates are not implemented yet.");
     }
+    await assertMovePersonTarget(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      ownerPersonId: args.ownerPersonId,
+    });
 
     const patch: Partial<Doc<"items">> = {
       updatedByUserId: actor.userId,
@@ -439,7 +470,9 @@ export const update = mutation({
     if (args.subcategory !== undefined) {
       patch.subcategory = normalizeOptionalText(args.subcategory);
     }
-    if (args.ownerPersonId !== undefined) {
+    if (args.clearOwnerPersonId) {
+      patch.ownerPersonId = undefined;
+    } else if (args.ownerPersonId !== undefined) {
       patch.ownerPersonId = args.ownerPersonId;
     }
     if (args.disposition !== undefined) {

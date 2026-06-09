@@ -8,6 +8,7 @@ import {
   ClipboardList,
   PackageCheck,
   Sparkles,
+  UserRound,
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -131,6 +132,9 @@ export function ItemDetailSheet({
   );
   const [category, setCategory] = useState(item?.category ?? "");
   const [subcategory, setSubcategory] = useState(item?.subcategory ?? "");
+  const [ownerPersonId, setOwnerPersonId] = useState<Id<"movePeople"> | "">(
+    item?.ownerPersonId ?? ""
+  );
   const [status, setStatus] = useState<InventoryItem["status"]>(
     item?.status ?? "active"
   );
@@ -217,10 +221,42 @@ export function ItemDetailSheet({
         }
       : "skip"
   );
+  const people = useQuery(
+    api.movePeople.listForMove,
+    householdId && moveId ? { householdId, moveId } : "skip"
+  );
 
   if (!item) {
     return null;
   }
+  const currentItem = item;
+
+  const selectedOwner =
+    people?.find((person) => person._id === ownerPersonId) ?? null;
+  const ownerSummary = selectedOwner
+    ? `${selectedOwner.name} (${selectedOwner.role})`
+    : ownerPersonId
+      ? "Owner no longer active"
+      : "Unassigned";
+  const itemSignals = item.signals;
+  const photoSummary = `${itemSignals?.photoCount ?? 0} attached${
+    itemSignals?.evidencePhotoCount
+      ? `, ${itemSignals.evidencePhotoCount} evidence`
+      : ""
+  }`;
+  const boxSummary = itemSignals?.boxCount
+    ? `${itemSignals.boxCount} boxed${
+        itemSignals.boxCodes.length ? `: ${itemSignals.boxCodes.join(", ")}` : ""
+      }`
+    : "Unboxed";
+  const assignmentSummary = itemSignals?.assignmentCount
+    ? [
+        ...itemSignals.assignedResourceNames,
+        ...itemSignals.assignedZoneNames,
+      ].join(", ") || `${itemSignals.assignmentCount} assigned box`
+    : item.requiresPersonalTransport
+      ? "Personal transport"
+      : "None";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -245,6 +281,11 @@ export function ItemDetailSheet({
         highValue,
         requiresPersonalTransport,
         needsReview,
+        ...(ownerPersonId
+          ? { ownerPersonId }
+          : currentItem.ownerPersonId
+            ? { clearOwnerPersonId: true }
+            : {}),
         serialNumber,
         modelNumber,
         weightConfidence,
@@ -389,6 +430,24 @@ export function ItemDetailSheet({
                       value={quantity}
                       onChange={(event) => setQuantity(event.target.value)}
                     />
+                  </Field>
+                  <Field label="Owner / contact">
+                    <select
+                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                      value={ownerPersonId}
+                      onChange={(event) =>
+                        setOwnerPersonId(
+                          event.target.value as Id<"movePeople"> | ""
+                        )
+                      }
+                    >
+                      <option value="">Unassigned</option>
+                      {people?.map((person) => (
+                        <option key={person._id} value={person._id}>
+                          {person.name} - {person.role}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                   <Field label="Condition">
                     <select
@@ -644,21 +703,26 @@ export function ItemDetailSheet({
               </TabsContent>
 
               <TabsContent value="planning" className="space-y-4">
-                <div className="grid gap-3 lg:grid-cols-3">
+                <div className="grid gap-3 lg:grid-cols-4">
+                  <InfoBlock
+                    icon={UserRound}
+                    title="Owner"
+                    value={ownerSummary}
+                  />
                   <InfoBlock
                     icon={Camera}
                     title="Photos"
-                    value="0 attached"
+                    value={photoSummary}
                   />
                   <InfoBlock
                     icon={Boxes}
                     title="Box membership"
-                    value="Unboxed"
+                    value={boxSummary}
                   />
                   <InfoBlock
                     icon={PackageCheck}
                     title="Transport assignment"
-                    value={item.requiresPersonalTransport ? "Personal" : "None"}
+                    value={assignmentSummary}
                   />
                 </div>
 
