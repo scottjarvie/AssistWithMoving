@@ -119,6 +119,8 @@ export function OperationalSignalsPanel() {
             "aiEstimatedCents24h",
             "uploadFailures24h",
             "activeApiKeys",
+            "apiRateLimitedWindows24h",
+            "apiHighestWindowUsagePercent24h",
             "activeShareLinks",
           ].map((key) => [key, status.metrics[key] ?? 0] as const)
         : [],
@@ -299,6 +301,9 @@ function formatMetric(value: number, key: string) {
   }
   if (key === "aiEstimatedCents24h") {
     return `$${(value / 100).toFixed(2)}`;
+  }
+  if (key === "apiHighestWindowUsagePercent24h") {
+    return `${value.toLocaleString()}%`;
   }
   return value.toLocaleString();
 }

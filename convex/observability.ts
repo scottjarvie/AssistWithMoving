@@ -26,6 +26,7 @@ export const status = mutation({
       uploadSessions,
       shareLinks,
       apiKeys,
+      apiRateLimitWindows,
       photos,
     ] = await Promise.all([
       recentAuditsByCategory(ctx, "auth", 100),
@@ -40,6 +41,7 @@ export const status = mutation({
       ctx.db.query("photoUploadSessions").collect(),
       ctx.db.query("shareLinks").collect(),
       ctx.db.query("apiKeys").collect(),
+      ctx.db.query("apiRateLimitWindows").collect(),
       ctx.db.query("itemPhotos").collect(),
     ]);
 
@@ -57,6 +59,9 @@ export const status = mutation({
     const recentExportJobs = exportJobs.filter((job) => job.createdAt >= dayStart);
     const recentUploadSessions = uploadSessions.filter(
       (session) => session.createdAt >= dayStart
+    );
+    const recentApiRateLimitWindows = apiRateLimitWindows.filter(
+      (window) => window.updatedAt >= dayStart || window.windowEnd >= dayStart
     );
     const metrics: OperationalMetrics = {
       authFailures24h: recentAudits.filter(
@@ -87,6 +92,17 @@ export const status = mutation({
         (photo) => photo.sizeBytes
       ),
       activeApiKeys: apiKeys.filter((key) => key.status === "active").length,
+      apiRateLimitedWindows24h: recentApiRateLimitWindows.filter(
+        (window) => window.count > window.limit
+      ).length,
+      apiHighestWindowUsagePercent24h: Math.round(
+        Math.max(
+          0,
+          ...recentApiRateLimitWindows.map((window) =>
+            window.limit > 0 ? (window.count / window.limit) * 100 : 0
+          )
+        )
+      ),
     };
     const signals = evaluateOperationalSignals(metrics);
 
@@ -107,6 +123,10 @@ export const status = mutation({
         uploadSessionsByStatus24h: countBy(
           recentUploadSessions,
           (session) => session.status
+        ),
+        apiRateLimitWindowsByStatus24h: countBy(
+          recentApiRateLimitWindows,
+          (window) => (window.count > window.limit ? "limited" : "withinLimit")
         ),
       },
       healthChecks: [

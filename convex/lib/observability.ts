@@ -11,6 +11,8 @@ export type OperationalMetrics = {
   uploadFailures24h: number;
   photoStorageBytes: number;
   activeApiKeys: number;
+  apiRateLimitedWindows24h: number;
+  apiHighestWindowUsagePercent24h: number;
 };
 
 export type OperationalSignal = {
@@ -92,6 +94,18 @@ export const operationalThresholds: Record<
     criticalAt: 2_000,
     description: "Currently active API keys.",
   },
+  apiRateLimitedWindows24h: {
+    label: "API rate-limited windows",
+    warningAt: 1,
+    criticalAt: 10,
+    description: "API-key windows that exceeded their configured limit in the last 24 hours.",
+  },
+  apiHighestWindowUsagePercent24h: {
+    label: "Highest API window usage",
+    warningAt: 90,
+    criticalAt: 100,
+    description: "Highest API-key rate-limit window utilization in the last 24 hours.",
+  },
 };
 
 export function evaluateOperationalSignals(metrics: OperationalMetrics) {
@@ -139,6 +153,9 @@ export function formatOperationalMetric(value: number, key: keyof OperationalMet
   }
   if (key === "aiEstimatedCents24h") {
     return `$${(value / 100).toFixed(2)}`;
+  }
+  if (key === "apiHighestWindowUsagePercent24h") {
+    return `${value.toLocaleString()}%`;
   }
   return value.toLocaleString();
 }
