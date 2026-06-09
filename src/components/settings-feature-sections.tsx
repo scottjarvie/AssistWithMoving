@@ -7,6 +7,7 @@ import { AccountPrivacyControls } from "@/components/account-privacy-controls";
 import { ApiKeyManager } from "@/components/api-key-manager";
 import { BillingReadinessPanel } from "@/components/billing-readiness-panel";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { SettingsPostureOverview } from "@/components/settings-posture-overview";
 import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
 
 export function SettingsFeatureSections() {
@@ -14,6 +15,7 @@ export function SettingsFeatureSections() {
     | EffectiveFeatureFlag[]
     | undefined;
   const currentUser = useQuery(api.users.current);
+  const households = useQuery(api.households.listMine);
   const apiMcpEnabled = flagEnabled(flags, "apiMcp", true);
   const billingGatesEnabled = flagEnabled(flags, "billingGates", false);
   const authReady = currentUser !== undefined;
@@ -21,6 +23,11 @@ export function SettingsFeatureSections() {
 
   return (
     <>
+      <SettingsPostureOverview
+        currentUser={currentUser}
+        households={households}
+        flags={flags}
+      />
       <div className="mt-6">
         {apiMcpEnabled ? (
           <ApiKeyManager enabled={authReady && authenticated} />
