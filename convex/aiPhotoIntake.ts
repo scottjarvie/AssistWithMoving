@@ -15,7 +15,10 @@ import {
 } from "./lib/moveFields";
 import { suggestFromPhotoIntake } from "./lib/photoIntake";
 import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const itemDraftValidator = v.object({
   name: v.string(),
@@ -46,8 +49,8 @@ export const listForMove = query({
         v.literal("pending"),
         v.literal("approved"),
         v.literal("edited"),
-        v.literal("rejected")
-      )
+        v.literal("rejected"),
+      ),
     ),
     limit: v.optional(v.number()),
   },
@@ -56,7 +59,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const limit = Math.min(Math.max(args.limit ?? 100, 1), 200);
     const suggestions = await ctx.db
@@ -65,7 +68,7 @@ export const listForMove = query({
       .order("desc")
       .take(limit);
     return suggestions.filter((suggestion) =>
-      args.status ? suggestion.status === args.status : true
+      args.status ? suggestion.status === args.status : true,
     );
   },
 });
@@ -81,10 +84,10 @@ export const createForPhoto = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI photo intake is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const photo = await ctx.db.get(args.photoId);
@@ -97,7 +100,9 @@ export const createForPhoto = mutation({
       throw new Error("Photo not found.");
     }
     if (!canUsePhotoDerivativeForAi(photo)) {
-      throw new Error("Photo privacy or derivative status does not allow AI intake.");
+      throw new Error(
+        "Photo privacy or derivative status does not allow AI intake.",
+      );
     }
     if (photo.sizeBytes > aiUsageLimits.maxPhotoInputBytes) {
       throw new Error("Photo is too large for AI intake.");
@@ -106,7 +111,7 @@ export const createForPhoto = mutation({
     const existingPending = await ctx.db
       .query("aiPhotoSuggestions")
       .withIndex("by_photo_status", (q) =>
-        q.eq("photoId", args.photoId).eq("status", "pending")
+        q.eq("photoId", args.photoId).eq("status", "pending"),
       )
       .collect();
     if (existingPending.length) {
@@ -192,7 +197,9 @@ export const createForPhoto = mutation({
         reasoning: suggestion.reasoning,
         itemDraft: suggestion.itemDraft,
         boxDraft: suggestion.boxDraft,
-        duplicatePhotoIds: suggestion.duplicatePhotoIds as Id<"itemPhotos">[] | undefined,
+        duplicatePhotoIds: suggestion.duplicatePhotoIds as
+          | Id<"itemPhotos">[]
+          | undefined,
         createdByUserId: actor.userId,
         createdAt: now,
         updatedAt: now,
@@ -215,7 +222,10 @@ export const createForPhoto = mutation({
       action: "ai_photo_intake.created",
       objectTable: "aiJobs",
       objectId: aiJobId,
-      metadata: { photoId: args.photoId, suggestionCount: suggestionIds.length },
+      metadata: {
+        photoId: args.photoId,
+        suggestionCount: suggestionIds.length,
+      },
     });
 
     return { aiJobId, suggestionIds };
@@ -231,7 +241,7 @@ export const approveMany = mutation({
         suggestionId: v.id("aiPhotoSuggestions"),
         itemDraft: v.optional(itemDraftValidator),
         boxDraft: v.optional(boxDraftValidator),
-      })
+      }),
     ),
   },
   handler: async (ctx, args) => {
@@ -239,10 +249,10 @@ export const approveMany = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI photo approvals are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const now = Date.now();
@@ -254,7 +264,9 @@ export const approveMany = mutation({
       let approvedItemId: Id<"items"> | undefined;
       let approvedBoxId: Id<"boxes"> | undefined;
 
-      const boxDraft = normalizeBoxDraft(approval.boxDraft ?? suggestion.boxDraft);
+      const boxDraft = normalizeBoxDraft(
+        approval.boxDraft ?? suggestion.boxDraft,
+      );
       if (boxDraft) {
         approvedBoxId = await ensureBoxForDraft(ctx, {
           householdId: args.householdId,
@@ -272,7 +284,7 @@ export const approveMany = mutation({
       }
 
       const itemDraft = normalizeItemDraft(
-        approval.itemDraft ?? suggestion.itemDraft
+        approval.itemDraft ?? suggestion.itemDraft,
       );
       if (itemDraft) {
         approvedItemId = await createItemFromPhotoDraft(ctx, {
@@ -331,10 +343,10 @@ export const rejectMany = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI photo rejection is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
     const loaded = await loadPendingSuggestions(ctx, {
       ...args,
@@ -362,7 +374,7 @@ async function loadPendingSuggestions(
       itemDraft?: PhotoItemDraft;
       boxDraft?: PhotoBoxDraft;
     }[];
-  }
+  },
 ) {
   const loaded = [];
   for (const approval of args.approvals) {
@@ -394,7 +406,7 @@ async function createItemFromPhotoDraft(
     photoId: Id<"itemPhotos">;
     userId: Id<"users">;
     now: number;
-  }
+  },
 ) {
   const name = normalizeItemName(args.draft.name);
   const itemId = await ctx.db.insert("items", {
@@ -452,7 +464,7 @@ async function ensureBoxForDraft(
     draft: PhotoBoxDraft;
     userId: Id<"users">;
     now: number;
-  }
+  },
 ) {
   const label = normalizeOptionalText(args.draft.label) ?? "AI photo box";
   const code = await uniqueBoxCode(ctx, args.moveId, args.draft.code ?? label);
@@ -488,7 +500,7 @@ async function ensureBoxForDraft(
 
 async function duplicatePhotoIdsForMove(
   ctx: MutationCtx,
-  photo: Doc<"itemPhotos">
+  photo: Doc<"itemPhotos">,
 ) {
   if (!photo.originalHash) return [];
   const photos = await ctx.db
@@ -500,7 +512,7 @@ async function duplicatePhotoIdsForMove(
       (candidate) =>
         candidate._id !== photo._id &&
         !candidate.archivedAt &&
-        candidate.originalHash === photo.originalHash
+        candidate.originalHash === photo.originalHash,
     )
     .map((candidate) => candidate._id);
 }
@@ -508,7 +520,7 @@ async function duplicatePhotoIdsForMove(
 async function uniqueBoxCode(
   ctx: MutationCtx,
   moveId: Id<"moves">,
-  label: string
+  label: string,
 ) {
   const base = normalizeBoxCode(label) || "AI-PHOTO-BOX";
   const existing = await ctx.db

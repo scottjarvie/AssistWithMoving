@@ -10,7 +10,10 @@ import {
   itemIdsKey,
   removeDuplicateReviewFlag,
 } from "./lib/inventoryDuplicates";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const duplicateGroupArgs = {
   householdId: v.id("households"),
@@ -30,7 +33,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const [items, ignoredDecisions] = await Promise.all([
       ctx.db
@@ -40,20 +43,20 @@ export const listForMove = query({
       ctx.db
         .query("inventoryDuplicateDecisions")
         .withIndex("by_move_status", (q) =>
-          q.eq("moveId", args.moveId).eq("status", "ignored")
+          q.eq("moveId", args.moveId).eq("status", "ignored"),
         )
         .collect(),
     ]);
 
     const inventoryItems = items.filter(
-      (item) => item.householdId === args.householdId
+      (item) => item.householdId === args.householdId,
     );
     const ignoredKeys = new Set(
       ignoredDecisions
         .filter((decision) => decision.householdId === args.householdId)
         .map((decision) =>
-          duplicateDecisionKey(decision.groupKey, decision.itemIdsKey)
-        )
+          duplicateDecisionKey(decision.groupKey, decision.itemIdsKey),
+        ),
     );
 
     return findInventoryDuplicateGroups(inventoryItems, {
@@ -62,13 +65,13 @@ export const listForMove = query({
       .filter(
         (group) =>
           !ignoredKeys.has(
-            duplicateDecisionKey(group.groupKey, itemIdsKey(group.itemIds))
-          )
+            duplicateDecisionKey(group.groupKey, itemIdsKey(group.itemIds)),
+          ),
       )
       .map((group) => ({
         ...group,
         items: group.items.map((item) =>
-          redactItemForVisibility(item, policy.visibility)
+          redactItemForVisibility(item, policy.visibility),
         ),
       }));
   },
@@ -81,10 +84,10 @@ export const markForReview = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key duplicate review is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const items = await loadGroupItems(ctx, args);
@@ -97,8 +100,8 @@ export const markForReview = mutation({
           reviewedAt: undefined,
           updatedByUserId: actor.userId,
           updatedAt: now,
-        })
-      )
+        }),
+      ),
     );
 
     await recordAuditEvent(ctx, {
@@ -126,10 +129,10 @@ export const ignoreGroup = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key duplicate review is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const items = await loadGroupItems(ctx, args);
@@ -138,7 +141,10 @@ export const ignoreGroup = mutation({
     const existing = await ctx.db
       .query("inventoryDuplicateDecisions")
       .withIndex("by_move_group", (q) =>
-        q.eq("moveId", args.moveId).eq("groupKey", args.groupKey).eq("itemIdsKey", idsKey)
+        q
+          .eq("moveId", args.moveId)
+          .eq("groupKey", args.groupKey)
+          .eq("itemIdsKey", idsKey),
       )
       .unique();
 
@@ -177,7 +183,7 @@ export const ignoreGroup = mutation({
             updatedByUserId: actor.userId,
             updatedAt: now,
           });
-        })
+        }),
     );
 
     await recordAuditEvent(ctx, {
@@ -204,9 +210,11 @@ async function loadGroupItems(
     householdId: Id<"households">;
     moveId: Id<"moves">;
     itemIds: Id<"items">[];
-  }
+  },
 ) {
-  const items = await Promise.all(args.itemIds.map((itemId) => ctx.db.get(itemId)));
+  const items = await Promise.all(
+    args.itemIds.map((itemId) => ctx.db.get(itemId)),
+  );
   if (items.some((item) => !item)) {
     throw new Error("Duplicate review item no longer exists.");
   }
@@ -228,7 +236,7 @@ async function loadGroupItems(
 
 function redactItemForVisibility(
   item: Doc<"items">,
-  visibility: Awaited<ReturnType<typeof requireMovePermission>>["visibility"]
+  visibility: Awaited<ReturnType<typeof requireMovePermission>>["visibility"],
 ) {
   return {
     ...item,

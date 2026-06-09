@@ -16,6 +16,7 @@ import {
   unitSystemValidator,
 } from "./lib/moveFields";
 import {
+  directConvexUserContextRequiredMessage,
   requireHouseholdPermission,
   requireMovePermission,
 } from "./lib/permissions";
@@ -31,7 +32,9 @@ export const listForHousehold = query({
 
     const moves = await ctx.db
       .query("moves")
-      .withIndex("by_household_status", (q) => q.eq("householdId", args.householdId))
+      .withIndex("by_household_status", (q) =>
+        q.eq("householdId", args.householdId),
+      )
       .collect();
 
     return args.includeArchived
@@ -51,7 +54,7 @@ export const create = mutation({
     dateEnd: v.optional(v.string()),
     unitSystem: v.optional(unitSystemValidator),
     documentationProfileTypes: v.optional(
-      v.array(documentationProfileTypeValidator)
+      v.array(documentationProfileTypeValidator),
     ),
     moveLevelWeightAllowanceLb: v.optional(v.number()),
     pcsBranch: v.optional(pcsBranchValidator),
@@ -69,10 +72,10 @@ export const create = mutation({
     const { actor } = await requireHouseholdPermission(
       ctx,
       args.householdId,
-      "household:edit"
+      "household:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key move creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     await assertHouseholdEntitlement(ctx, {
@@ -103,10 +106,10 @@ export const create = mutation({
       pcsOrdersNumber: normalizeOptionalText(args.pcsOrdersNumber),
       pcsAllowanceNotes: normalizeOptionalText(args.pcsAllowanceNotes),
       pcsTransportationOfficeNotes: normalizeOptionalText(
-        args.pcsTransportationOfficeNotes
+        args.pcsTransportationOfficeNotes,
       ),
       pcsRestrictedItemsNotes: normalizeOptionalText(
-        args.pcsRestrictedItemsNotes
+        args.pcsRestrictedItemsNotes,
       ),
       proGearNotes: normalizeOptionalText(args.proGearNotes),
       notes: normalizeOptionalText(args.notes),
@@ -151,7 +154,7 @@ export const updateBasics = mutation({
     dateStart: v.optional(v.string()),
     dateEnd: v.optional(v.string()),
     documentationProfileTypes: v.optional(
-      v.array(documentationProfileTypeValidator)
+      v.array(documentationProfileTypeValidator),
     ),
     moveLevelWeightAllowanceLb: v.optional(v.number()),
     pcsBranch: v.optional(pcsBranchValidator),
@@ -170,7 +173,7 @@ export const updateBasics = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "household:edit"
+      "household:edit",
     );
 
     await ctx.db.patch(args.moveId, {
@@ -191,10 +194,10 @@ export const updateBasics = mutation({
       pcsOrdersNumber: normalizeOptionalText(args.pcsOrdersNumber),
       pcsAllowanceNotes: normalizeOptionalText(args.pcsAllowanceNotes),
       pcsTransportationOfficeNotes: normalizeOptionalText(
-        args.pcsTransportationOfficeNotes
+        args.pcsTransportationOfficeNotes,
       ),
       pcsRestrictedItemsNotes: normalizeOptionalText(
-        args.pcsRestrictedItemsNotes
+        args.pcsRestrictedItemsNotes,
       ),
       proGearNotes: normalizeOptionalText(args.proGearNotes),
       notes: normalizeOptionalText(args.notes),
@@ -226,7 +229,7 @@ export const archive = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "household:manage_settings"
+      "household:manage_settings",
     );
 
     await ctx.db.patch(args.moveId, {

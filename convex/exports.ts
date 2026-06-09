@@ -14,13 +14,16 @@ import {
   type ExportJobType,
   type ExportVisibility,
 } from "./lib/exportRows";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const exportJobTypeValidator = v.union(
   v.literal("inventory"),
   v.literal("boxes"),
   v.literal("assignments"),
-  v.literal("documentationProfile")
+  v.literal("documentationProfile"),
 );
 
 export const createCsv = mutation({
@@ -35,10 +38,10 @@ export const createCsv = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:create"
+      "documentation:create",
     );
     if (policy.actor.type !== "user") {
-      throw new Error("API-key export creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     await assertHouseholdEntitlement(ctx, {
@@ -88,7 +91,7 @@ export const createCsv = mutation({
       ? activeItems.filter((item) => itemMatchesProfile(item, profile))
       : activeItems;
     const resourceNameById = new Map(
-      resources.map((resource) => [resource._id, resource.name])
+      resources.map((resource) => [resource._id, resource.name]),
     );
     const zoneNameById = new Map(zones.map((zone) => [zone._id, zone.name]));
 
@@ -180,7 +183,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:read"
+      "documentation:read",
     );
     const limit = Math.min(Math.max(args.limit ?? 25, 1), 100);
     const jobs = await ctx.db
@@ -216,7 +219,7 @@ export const getArtifact = query({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:read"
+      "documentation:read",
     );
     const job = await ctx.db.get(args.exportJobId);
     if (
@@ -235,7 +238,8 @@ export const getArtifact = query({
 
     return {
       exportJobId: job._id,
-      filename: job.filename ?? exportFilename({ type: job.type, format: job.format }),
+      filename:
+        job.filename ?? exportFilename({ type: job.type, format: job.format }),
       mimeType: job.mimeType ?? exportMimeType(job.format),
       artifactText: job.artifactText,
       rowCount: job.rowCount,
@@ -251,7 +255,7 @@ async function requireExportProfile(
     householdId: Id<"households">;
     moveId: Id<"moves">;
     documentationProfileId?: Id<"documentationProfiles">;
-  }
+  },
 ) {
   if (!args.documentationProfileId) {
     throw new Error("Documentation profile export requires a profile.");
@@ -304,10 +308,13 @@ function exportVisibilityFor({
 
 function itemMatchesProfile(
   item: Doc<"items">,
-  profile: Doc<"documentationProfiles">
+  profile: Doc<"documentationProfiles">,
 ) {
   const filters = profile.filters;
-  if (filters.dispositions?.length && !filters.dispositions.includes(item.disposition)) {
+  if (
+    filters.dispositions?.length &&
+    !filters.dispositions.includes(item.disposition)
+  ) {
     return false;
   }
   if (filters.statuses?.length && !filters.statuses.includes(item.status)) {
@@ -315,14 +322,19 @@ function itemMatchesProfile(
   }
   if (
     filters.planningDefaultKeys?.length &&
-    !filters.planningDefaultKeys.some((key) => item.planningDefaultKeys.includes(key))
+    !filters.planningDefaultKeys.some((key) =>
+      item.planningDefaultKeys.includes(key),
+    )
   ) {
     return false;
   }
   if (filters.room && item.room !== filters.room) {
     return false;
   }
-  if (filters.destinationRoom && item.destinationRoom !== filters.destinationRoom) {
+  if (
+    filters.destinationRoom &&
+    item.destinationRoom !== filters.destinationRoom
+  ) {
     return false;
   }
   return true;
@@ -356,8 +368,10 @@ function rowsForExport({
           assignedResource: box.assignedResourceId
             ? resourceNameById.get(box.assignedResourceId)
             : undefined,
-          assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
-        }))
+          assignedZone: box.assignedZoneId
+            ? zoneNameById.get(box.assignedZoneId)
+            : undefined,
+        })),
       );
     case "assignments":
       return assignmentCsvRows(
@@ -368,12 +382,14 @@ function rowsForExport({
           assignedResource: box.assignedResourceId
             ? resourceNameById.get(box.assignedResourceId)
             : undefined,
-          assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
+          assignedZone: box.assignedZoneId
+            ? zoneNameById.get(box.assignedZoneId)
+            : undefined,
           itemCount: boxItems
             .filter((membership) => membership.boxId === box._id)
             .reduce((total, membership) => total + membership.quantity, 0),
           estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
-        }))
+        })),
       );
   }
 }

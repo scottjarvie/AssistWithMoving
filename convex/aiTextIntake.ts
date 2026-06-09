@@ -3,10 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
-import {
-  assertAiUsageAllowed,
-  inputBytesFromText,
-} from "./lib/aiUsage";
+import { assertAiUsageAllowed, inputBytesFromText } from "./lib/aiUsage";
 import {
   itemDispositionValidator,
   itemFragilityValidator,
@@ -21,7 +18,10 @@ import {
   type TextIntakeBoxDraft,
   type TextIntakeItemDraft,
 } from "./lib/textIntakeParser";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const itemDraftValidator = v.object({
   name: v.string(),
@@ -54,8 +54,8 @@ export const listForMove = query({
         v.literal("pending"),
         v.literal("approved"),
         v.literal("edited"),
-        v.literal("rejected")
-      )
+        v.literal("rejected"),
+      ),
     ),
     limit: v.optional(v.number()),
   },
@@ -64,7 +64,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     const limit = Math.min(Math.max(args.limit ?? 100, 1), 200);
@@ -75,7 +75,7 @@ export const listForMove = query({
       .take(limit);
 
     return suggestions.filter((suggestion) =>
-      args.status ? suggestion.status === args.status : true
+      args.status ? suggestion.status === args.status : true,
     );
   },
 });
@@ -91,10 +91,10 @@ export const createFromText = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI text intake is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const sourceText = normalizeOptionalText(args.sourceText);
@@ -139,8 +139,8 @@ export const createFromText = mutation({
       tokenUsage: {
         inputTokens: Math.max(32, Math.ceil(sourceText.length / 4)),
         outputTokens: parsed.length * 32,
-        totalTokens: Math.max(32, Math.ceil(sourceText.length / 4)) +
-          parsed.length * 32,
+        totalTokens:
+          Math.max(32, Math.ceil(sourceText.length / 4)) + parsed.length * 32,
       },
       cost: {
         estimatedCents: 0,
@@ -209,7 +209,7 @@ export const approveMany = mutation({
         suggestionId: v.id("aiTextSuggestions"),
         itemDraft: v.optional(itemDraftValidator),
         boxDraft: v.optional(boxDraftValidator),
-      })
+      }),
     ),
   },
   handler: async (ctx, args) => {
@@ -217,10 +217,10 @@ export const approveMany = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI text approvals are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const now = Date.now();
@@ -230,10 +230,10 @@ export const approveMany = mutation({
     const createdBoxIds: Id<"boxes">[] = [];
 
     for (const suggestion of suggestions.filter(
-      (entry) => entry.suggestion.type === "box"
+      (entry) => entry.suggestion.type === "box",
     )) {
       const draft = normalizeBoxDraft(
-        suggestion.approval.boxDraft ?? suggestion.suggestion.boxDraft
+        suggestion.approval.boxDraft ?? suggestion.suggestion.boxDraft,
       );
       if (!draft) continue;
       const boxId = await ensureBoxForDraft(ctx, {
@@ -255,10 +255,10 @@ export const approveMany = mutation({
     }
 
     for (const suggestion of suggestions.filter(
-      (entry) => entry.suggestion.type === "item"
+      (entry) => entry.suggestion.type === "item",
     )) {
       const draft = normalizeItemDraft(
-        suggestion.approval.itemDraft ?? suggestion.suggestion.itemDraft
+        suggestion.approval.itemDraft ?? suggestion.suggestion.itemDraft,
       );
       if (!draft) continue;
       const itemId = await createTrustedItemFromDraft(ctx, {
@@ -334,10 +334,10 @@ export const rejectMany = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI text rejection is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const now = Date.now();
@@ -377,7 +377,7 @@ async function loadPendingSuggestions(
       itemDraft?: TextIntakeItemDraft;
       boxDraft?: TextIntakeBoxDraft;
     }[];
-  }
+  },
 ) {
   const loaded = [];
   for (const approval of args.approvals) {
@@ -405,7 +405,7 @@ async function createTrustedItemFromDraft(
     draft: TextIntakeItemDraft;
     userId: Id<"users">;
     now: number;
-  }
+  },
 ) {
   const name = normalizeItemName(args.draft.name);
   const itemId = await ctx.db.insert("items", {
@@ -469,17 +469,13 @@ async function ensureBoxForDraft(
     draft: TextIntakeBoxDraft;
     userId: Id<"users">;
     now: number;
-  }
+  },
 ) {
   const label = normalizeOptionalText(args.draft.label) ?? "AI text intake box";
   const existing = await findBoxByLabel(ctx, args.moveId, label);
   if (existing) return existing._id;
 
-  const code = await uniqueBoxCode(
-    ctx,
-    args.moveId,
-    args.draft.code ?? label
-  );
+  const code = await uniqueBoxCode(ctx, args.moveId, args.draft.code ?? label);
   const boxId = await ctx.db.insert("boxes", {
     householdId: args.householdId,
     moveId: args.moveId,
@@ -522,7 +518,7 @@ async function addItemToBox(
     itemId: Id<"items">;
     quantity: number;
     now: number;
-  }
+  },
 ) {
   await ctx.db.insert("boxItems", {
     householdId: args.householdId,
@@ -547,7 +543,7 @@ async function addItemToBox(
 async function findBoxByLabel(
   ctx: MutationCtx,
   moveId: Id<"moves">,
-  label: string
+  label: string,
 ) {
   const normalizedLabel = normalizeBoxLabelKey(label);
   const boxes = await ctx.db
@@ -558,14 +554,14 @@ async function findBoxByLabel(
     (box) =>
       !box.archivedAt &&
       (normalizeBoxLabelKey(box.label ?? "") === normalizedLabel ||
-        normalizeBoxLabelKey(box.code) === normalizedLabel)
+        normalizeBoxLabelKey(box.code) === normalizedLabel),
   );
 }
 
 async function uniqueBoxCode(
   ctx: MutationCtx,
   moveId: Id<"moves">,
-  label: string
+  label: string,
 ) {
   const base = normalizeBoxCode(label) || "AI-BOX";
   const existing = await ctx.db

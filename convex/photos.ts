@@ -47,7 +47,10 @@ import {
   unreferencedUploadSessionStorageRefs,
   uploadSessionStorageRefs,
 } from "./lib/photoCleanup";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const allowedPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 const maxPhotoUploadBytes = 25 * 1024 * 1024;
@@ -66,7 +69,7 @@ const photoWriteArgs = {
   room: v.optional(v.string()),
   claimId: v.optional(v.string()),
   documentationProfileTypes: v.optional(
-    v.array(documentationProfileTypeValidator)
+    v.array(documentationProfileTypeValidator),
   ),
   originalHash: v.optional(v.string()),
   derivativeRefs: v.optional(derivativeRefsValidator),
@@ -98,14 +101,14 @@ const photoDerivativeVariantValidator = v.union(
   v.literal("thumb"),
   v.literal("card"),
   v.literal("detail"),
-  v.literal("full")
+  v.literal("full"),
 );
 const photoDisplayVariantValidator = v.union(
   v.literal("thumb"),
   v.literal("card"),
   v.literal("detail"),
   v.literal("full"),
-  v.literal("original")
+  v.literal("original"),
 );
 const apiPhotoActorValidator = v.object({
   apiKeyId: v.string(),
@@ -158,7 +161,7 @@ async function deleteStorageObject(ref: StorageObjectRef) {
     new DeleteObjectCommand({
       Bucket: ref.bucket,
       Key: ref.storageKey,
-    })
+    }),
   );
 }
 
@@ -194,7 +197,11 @@ function assertUploadFileShape({
   if (!allowedPhotoMimeTypes.includes(mimeType)) {
     throw new Error("Unsupported image type.");
   }
-  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxPhotoUploadBytes) {
+  if (
+    !Number.isFinite(sizeBytes) ||
+    sizeBytes <= 0 ||
+    sizeBytes > maxPhotoUploadBytes
+  ) {
     throw new Error("Image must be under 25 MB.");
   }
 }
@@ -209,7 +216,7 @@ function uploadObjectKey({
   prefix?: string;
 }) {
   return `moves/${moveId}/${prefix}/${crypto.randomUUID()}.${fileExtensionForMimeType(
-    mimeType
+    mimeType,
   )}`;
 }
 
@@ -219,7 +226,7 @@ async function assertPhotoTargets(
     moveId: Doc<"moves">["_id"];
     itemId?: Doc<"items">["_id"];
     boxId?: Doc<"boxes">["_id"];
-  }
+  },
 ) {
   if (args.itemId) {
     const item = await ctx.db.get(args.itemId);
@@ -241,17 +248,21 @@ async function assertMoveInHousehold(
   args: {
     householdId: Doc<"households">["_id"];
     moveId: Doc<"moves">["_id"];
-  }
+  },
 ) {
   const move = await ctx.db.get(args.moveId);
-  if (!move || move.householdId !== args.householdId || move.status === "archived") {
+  if (
+    !move ||
+    move.householdId !== args.householdId ||
+    move.status === "archived"
+  ) {
     throw new Error("Move not found.");
   }
 }
 
 function redactPhotos(
   photos: Doc<"itemPhotos">[],
-  visibility: Parameters<typeof redactPhotoForVisibility>[1]
+  visibility: Parameters<typeof redactPhotoForVisibility>[1],
 ) {
   return photos
     .filter((photo) => !photo.archivedAt)
@@ -271,7 +282,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const limit = Math.min(Math.max(args.limit ?? 100, 1), 250);
     const photos = await ctx.db
@@ -285,12 +296,12 @@ export const listForMove = query({
         .filter((photo) =>
           args.verificationStatus
             ? photo.verificationStatus === args.verificationStatus
-            : true
+            : true,
         )
         .filter((photo) =>
-          args.privacyLevel ? photo.privacyLevel === args.privacyLevel : true
+          args.privacyLevel ? photo.privacyLevel === args.privacyLevel : true,
         ),
-      policy.visibility
+      policy.visibility,
     );
   },
 });
@@ -306,7 +317,7 @@ export const listForItem = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const photos = await ctx.db
       .query("itemPhotos")
@@ -316,7 +327,7 @@ export const listForItem = query({
 
     return redactPhotos(
       photos.filter((photo) => photo.moveId === args.moveId),
-      policy.visibility
+      policy.visibility,
     );
   },
 });
@@ -332,7 +343,7 @@ export const listForBox = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const photos = await ctx.db
       .query("itemPhotos")
@@ -342,7 +353,7 @@ export const listForBox = query({
 
     return redactPhotos(
       photos.filter((photo) => photo.moveId === args.moveId),
-      policy.visibility
+      policy.visibility,
     );
   },
 });
@@ -358,13 +369,13 @@ export const listReviewQueue = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 100);
     const photos = await ctx.db
       .query("itemPhotos")
       .withIndex("by_move_verification", (q) =>
-        q.eq("moveId", args.moveId).eq("verificationStatus", "needsReview")
+        q.eq("moveId", args.moveId).eq("verificationStatus", "needsReview"),
       )
       .take(limit);
 
@@ -382,7 +393,7 @@ export const evidenceSummary = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const [photos, items] = await Promise.all([
       ctx.db
@@ -402,7 +413,7 @@ export const evidenceSummary = query({
         }
         return counts;
       },
-      {}
+      {},
     );
     const activeItems = items.filter((item) => !item.deletedAt);
     const evidenceGaps = activeItems
@@ -413,7 +424,7 @@ export const evidenceSummary = query({
             item.planningDefaultKeys.includes("highValue") ||
             item.planningDefaultKeys.includes("sensitive") ||
             item.planningDefaultKeys.includes("irreplaceable")) &&
-          !itemPhotoCounts[item._id]
+          !itemPhotoCounts[item._id],
       )
       .slice(0, 12)
       .map((item) => ({
@@ -428,19 +439,19 @@ export const evidenceSummary = query({
     return {
       photoCount: activePhotos.length,
       unassignedCount: activePhotos.filter(
-        (photo) => !photo.itemId && !photo.boxId && !photo.room
+        (photo) => !photo.itemId && !photo.boxId && !photo.room,
       ).length,
       needsReviewCount: activePhotos.filter(
-        (photo) => photo.verificationStatus === "needsReview"
+        (photo) => photo.verificationStatus === "needsReview",
       ).length,
       sensitiveCount: activePhotos.filter(
-        (photo) => photo.privacyLevel !== "normal"
+        (photo) => photo.privacyLevel !== "normal",
       ).length,
       pendingDerivativeCount: activePhotos.filter(
-        (photo) => photo.derivativeStatus === "pending"
+        (photo) => photo.derivativeStatus === "pending",
       ).length,
       failedDerivativeCount: activePhotos.filter(
-        (photo) => photo.derivativeStatus === "failed"
+        (photo) => photo.derivativeStatus === "failed",
       ).length,
       highValueItemCount: activeItems.filter((item) => item.highValue).length,
       highValueWithoutPhotoCount: evidenceGaps.length,
@@ -466,11 +477,14 @@ export const initUpload = action({
           sizeBytes: v.number(),
           width: v.number(),
           height: v.number(),
-        })
-      )
+        }),
+      ),
     ),
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     uploadSessionId: string;
     uploadUrl: string;
     method: "PUT";
@@ -529,7 +543,7 @@ export const initUpload = action({
           height: derivative.height,
         })),
         expiresAt,
-      }
+      },
     );
 
     const uploadUrl = await getSignedUrl(
@@ -540,7 +554,7 @@ export const initUpload = action({
         ContentType: args.mimeType,
         ContentLength: args.sizeBytes,
       }),
-      { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
+      { expiresIn: Math.floor(uploadSessionTtlMs / 1000) },
     );
     const signedDerivativeUploads = await Promise.all(
       derivativeUploads.map(async (derivative) => ({
@@ -553,11 +567,11 @@ export const initUpload = action({
             ContentType: derivative.mimeType,
             ContentLength: derivative.sizeBytes,
           }),
-          { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
+          { expiresIn: Math.floor(uploadSessionTtlMs / 1000) },
         ),
         method: "PUT" as const,
         headers: { "Content-Type": derivative.mimeType },
-      }))
+      })),
     );
 
     return {
@@ -603,15 +617,12 @@ export const finalizeUpload = action({
         new HeadObjectCommand({
           Bucket: config.bucketName,
           Key: session.originalStorageKey,
-        })
+        }),
       );
       if (head.ContentLength !== session.expectedSizeBytes) {
         throw new Error("Uploaded object size does not match the session.");
       }
-      if (
-        head.ContentType &&
-        head.ContentType !== session.expectedMimeType
-      ) {
+      if (head.ContentType && head.ContentType !== session.expectedMimeType) {
         throw new Error("Uploaded object type does not match the session.");
       }
       for (const derivative of session.derivativeUploads ?? []) {
@@ -619,16 +630,20 @@ export const finalizeUpload = action({
           new HeadObjectCommand({
             Bucket: derivative.bucket,
             Key: derivative.storageKey,
-          })
+          }),
         );
         if (derivativeHead.ContentLength !== derivative.expectedSizeBytes) {
-          throw new Error("Uploaded derivative size does not match the session.");
+          throw new Error(
+            "Uploaded derivative size does not match the session.",
+          );
         }
         if (
           derivativeHead.ContentType &&
           derivativeHead.ContentType !== derivative.expectedMimeType
         ) {
-          throw new Error("Uploaded derivative type does not match the session.");
+          throw new Error(
+            "Uploaded derivative type does not match the session.",
+          );
         }
       }
     } catch (error) {
@@ -668,7 +683,10 @@ export const getDisplayUrl = action({
     photoId: v.id("itemPhotos"),
     variant: photoDisplayVariantValidator,
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     url: string;
     expiresAt: number;
     requestedVariant: PhotoDisplayVariant;
@@ -678,14 +696,11 @@ export const getDisplayUrl = action({
     height: number;
     mimeType: string;
   }> => {
-    const { photo } = await ctx.runQuery(
-      internal.photos.getPhotoForDelivery,
-      {
-        householdId: args.householdId,
-        moveId: args.moveId,
-        photoId: args.photoId,
-      }
-    );
+    const { photo } = await ctx.runQuery(internal.photos.getPhotoForDelivery, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      photoId: args.photoId,
+    });
     const selected =
       args.variant === "original"
         ? null
@@ -706,7 +721,7 @@ export const getDisplayUrl = action({
         Bucket: config.bucketName,
         Key: selected.ref,
       }),
-      { expiresIn: displayUrlTtlSeconds }
+      { expiresIn: displayUrlTtlSeconds },
     );
 
     return {
@@ -728,7 +743,10 @@ export const getOriginalDownloadUrl = action({
     moveId: v.id("moves"),
     photoId: v.id("itemPhotos"),
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     url: string;
     expiresAt: number;
     filename: string;
@@ -741,7 +759,7 @@ export const getOriginalDownloadUrl = action({
         householdId: args.householdId,
         moveId: args.moveId,
         photoId: args.photoId,
-      }
+      },
     );
     if (!canDownloadOriginalPhoto(photo, visibility)) {
       throw new Error("Original download is not available for this role.");
@@ -749,7 +767,7 @@ export const getOriginalDownloadUrl = action({
 
     const config = requireB2Config();
     const filename = `movingmanifest-original-${args.photoId}.${fileExtensionForMimeType(
-      photo.mimeType
+      photo.mimeType,
     )}`;
     const url = await getSignedUrl(
       b2Client(),
@@ -758,7 +776,7 @@ export const getOriginalDownloadUrl = action({
         Key: photo.originalStorageKey,
         ResponseContentDisposition: `attachment; filename="${filename}"`,
       }),
-      { expiresIn: displayUrlTtlSeconds }
+      { expiresIn: displayUrlTtlSeconds },
     );
 
     await ctx.runMutation(internal.photos.recordOriginalAccess, {
@@ -785,7 +803,10 @@ export const cleanupExpiredUploadSessions = action({
     dryRun: v.optional(v.boolean()),
     deleteObjects: v.optional(v.boolean()),
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     dryRun: boolean;
     deleteObjects: boolean;
     plannedSessionCount: number;
@@ -804,7 +825,7 @@ export const cleanupExpiredUploadSessions = action({
         now,
         graceMs: args.graceMs,
         limit: args.limit,
-      }
+      },
     );
 
     if (dryRun) {
@@ -847,7 +868,7 @@ export const cleanupExpiredUploadSessions = action({
           deletedObjectCount,
           error,
         };
-      })
+      }),
     );
 
     const finish = await ctx.runMutation(
@@ -858,7 +879,7 @@ export const cleanupExpiredUploadSessions = action({
         plannedSessionCount: plan.candidates.length,
         skippedReferencedObjectCount: plan.skippedReferencedObjectCount,
         results,
-      }
+      },
     );
 
     return {
@@ -867,11 +888,11 @@ export const cleanupExpiredUploadSessions = action({
       plannedSessionCount: plan.candidates.length,
       attemptedObjectCount: results.reduce(
         (total, result) => total + result.attemptedObjectCount,
-        0
+        0,
       ),
       deletedObjectCount: results.reduce(
         (total, result) => total + result.deletedObjectCount,
-        0
+        0,
       ),
       failedDeleteCount: results.filter((result) => result.error).length,
       skippedReferencedObjectCount: plan.skippedReferencedObjectCount,
@@ -890,11 +911,11 @@ export const planExpiredUploadSessionCleanup = internalQuery({
     await requireAppAdmin(ctx);
     const graceMs = Math.max(
       args.graceMs ?? defaultPhotoUploadCleanupGraceMs,
-      uploadSessionTtlMs
+      uploadSessionTtlMs,
     );
     const limit = Math.min(
       Math.max(Math.floor(args.limit ?? 50), 1),
-      maxPhotoCleanupBatchSize
+      maxPhotoCleanupBatchSize,
     );
     const cutoff = args.now - graceMs;
     const sessions = await ctx.db
@@ -973,11 +994,11 @@ export const finishExpiredUploadSessionCleanup = internalMutation({
         deleteObjects: args.deleteObjects,
         attemptedObjectCount: args.results.reduce(
           (total, result) => total + result.attemptedObjectCount,
-          0
+          0,
         ),
         deletedObjectCount: args.results.reduce(
           (total, result) => total + result.deletedObjectCount,
-          0
+          0,
         ),
         failedDeleteCount: args.results.filter((result) => result.error).length,
         skippedReferencedObjectCount: args.skippedReferencedObjectCount,
@@ -1009,8 +1030,8 @@ export const createUploadSession = internalMutation({
           expectedSizeBytes: v.number(),
           width: v.number(),
           height: v.number(),
-        })
-      )
+        }),
+      ),
     ),
     expiresAt: v.number(),
     apiActor: v.optional(apiPhotoActorValidator),
@@ -1022,7 +1043,7 @@ export const createUploadSession = internalMutation({
         ctx,
         args.householdId,
         args.moveId,
-        "inventory:edit"
+        "inventory:edit",
       );
       if (actor.type !== "user") {
         throw new Error("Photo uploads require a user or API-key actor.");
@@ -1072,7 +1093,7 @@ export const getUploadSession = internalQuery({
         ctx,
         args.householdId,
         args.moveId,
-        "inventory:edit"
+        "inventory:edit",
       );
     }
     const session = await ctx.db.get(args.uploadSessionId);
@@ -1101,7 +1122,7 @@ export const getPhotoForDelivery = internalQuery({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
     const photo = await ctx.db.get(args.photoId);
     if (
@@ -1131,10 +1152,10 @@ export const recordOriginalAccess = internalMutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key original photo access is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
     const photo = await ctx.db.get(args.photoId);
     if (
@@ -1176,7 +1197,7 @@ export const markUploadSessionFailed = internalMutation({
         ctx,
         args.householdId,
         args.moveId,
-        "inventory:edit"
+        "inventory:edit",
       );
     }
     const session = await ctx.db.get(args.uploadSessionId);
@@ -1220,10 +1241,12 @@ export const completeUploadSession = internalMutation({
         ctx,
         args.householdId,
         args.moveId,
-        "inventory:edit"
+        "inventory:edit",
       );
       if (actor.type !== "user") {
-        throw new Error("Photo upload finalization requires a user or API-key actor.");
+        throw new Error(
+          "Photo upload finalization requires a user or API-key actor.",
+        );
       }
       userId = actor.userId;
     }
@@ -1332,7 +1355,7 @@ export const cancelUploadSession = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     const session = await ctx.db.get(args.uploadSessionId);
     if (
@@ -1362,10 +1385,10 @@ export const updateEvidence = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key photo metadata updates are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const photo = await ctx.db.get(args.photoId);
@@ -1416,7 +1439,8 @@ export const updateEvidence = mutation({
       patch.exifHandlingStatus = args.exifHandlingStatus;
     }
     if (args.confidence !== undefined) patch.confidence = args.confidence;
-    if (args.notes !== undefined) patch.notes = normalizeOptionalText(args.notes);
+    if (args.notes !== undefined)
+      patch.notes = normalizeOptionalText(args.notes);
     if (args.verificationStatus !== undefined) {
       patch.verificationStatus = args.verificationStatus;
       patch.reviewedAt = now;
@@ -1452,10 +1476,10 @@ export const archive = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key photo deletion is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const photo = await ctx.db.get(args.photoId);

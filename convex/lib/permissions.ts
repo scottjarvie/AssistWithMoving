@@ -27,6 +27,9 @@ export type ApiKeyActor = {
 
 export type Actor = UserActor | ApiKeyActor;
 
+export const directConvexUserContextRequiredMessage =
+  "Direct Convex functions require a signed-in user. Use the REST API for API-key automation.";
+
 export type PermissionPolicy = {
   actor: Actor;
   householdId: Id<"households">;
@@ -50,13 +53,13 @@ export async function resolveUserActor(ctx: QueryCtx | MutationCtx) {
 export async function requireHouseholdPermission(
   ctx: QueryCtx | MutationCtx,
   householdId: Id<"households">,
-  action: PermissionAction
+  action: PermissionAction,
 ): Promise<PermissionPolicy> {
   const actor = await resolveUserActor(ctx);
   const membership = await getActiveHouseholdMembership(
     ctx.db,
     householdId,
-    actor.userId
+    actor.userId,
   );
 
   if (!membership || !canPerformHouseholdAction(membership.role, action)) {
@@ -71,27 +74,31 @@ export async function requireHouseholdPermission(
   };
 }
 
+export function requireSignedInUserActor(actor: Actor): UserActor {
+  if (actor.type !== "user") {
+    throw new AuthorizationError(directConvexUserContextRequiredMessage);
+  }
+
+  return actor;
+}
+
 export async function requireMovePermission(
   ctx: QueryCtx | MutationCtx,
   householdId: Id<"households">,
   moveId: MoveId,
-  action: PermissionAction
+  action: PermissionAction,
 ): Promise<PermissionPolicy & { moveId: MoveId }> {
   const basePolicy = await requireHouseholdPermission(
     ctx,
     householdId,
-    "household:read"
+    "household:read",
   );
 
-  if (basePolicy.actor.type !== "user") {
-    throw new AuthorizationError("API-key move access is not implemented yet.");
-  }
-
-  const userActor = basePolicy.actor;
+  const userActor = requireSignedInUserActor(basePolicy.actor);
   const moveGrant = await ctx.db
     .query("moveRoleGrants")
     .withIndex("by_move_user", (q) =>
-      q.eq("moveId", moveId).eq("userId", userActor.userId)
+      q.eq("moveId", moveId).eq("userId", userActor.userId),
     )
     .unique();
 
@@ -101,7 +108,9 @@ export async function requireMovePermission(
       : basePolicy.role;
 
   if (!canPerformHouseholdAction(effectiveRole, action)) {
-    throw new AuthorizationError(`Requires ${action} permission for this move.`);
+    throw new AuthorizationError(
+      `Requires ${action} permission for this move.`,
+    );
   }
 
   return {

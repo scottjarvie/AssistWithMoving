@@ -7,7 +7,10 @@ import {
   normalizeRuleList,
   normalizeSortOrder,
 } from "./lib/moveFields";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 export const listForResource = query({
   args: {
@@ -20,7 +23,7 @@ export const listForResource = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     return await ctx.db
@@ -46,10 +49,10 @@ export const create = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "household:edit"
+      "household:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key zone creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
     const now = Date.now();
     const zoneId = await ctx.db.insert("transportZones", {

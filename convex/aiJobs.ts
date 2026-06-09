@@ -27,7 +27,10 @@ import {
   estimateConfidenceValidator,
   normalizeOptionalText,
 } from "./lib/moveFields";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const aiJobWriteArgs = {
   type: aiJobTypeValidator,
@@ -50,8 +53,8 @@ export const listForMove = query({
         v.literal("running"),
         v.literal("succeeded"),
         v.literal("failed"),
-        v.literal("canceled")
-      )
+        v.literal("canceled"),
+      ),
     ),
     limit: v.optional(v.number()),
   },
@@ -60,7 +63,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     const limit = Math.min(Math.max(args.limit ?? 50, 1), 100);
@@ -70,7 +73,9 @@ export const listForMove = query({
       .order("desc")
       .take(limit);
 
-    return jobs.filter((job) => (args.status ? job.status === args.status : true));
+    return jobs.filter((job) =>
+      args.status ? job.status === args.status : true,
+    );
   },
 });
 
@@ -85,7 +90,7 @@ export const get = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     const job = await ctx.db.get(args.aiJobId);
@@ -111,7 +116,7 @@ export const providerStatus = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     return getAiProviderStatus();
@@ -129,10 +134,10 @@ export const create = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI job creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     await assertHouseholdEntitlement(ctx, {
@@ -205,10 +210,10 @@ export const cancel = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI job cancellation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const job = await getMutableJob(ctx, args);
@@ -252,10 +257,10 @@ export const markReviewed = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key AI job review is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const job = await getMutableJob(ctx, args);
@@ -350,7 +355,7 @@ export const startExecution = internalMutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     const job = await getMutableJob(ctx, args);
     if (job.status !== "queued" && job.status !== "failed") {
@@ -386,14 +391,14 @@ export const completeExecution = internalMutation({
         inputTokens: v.optional(v.number()),
         outputTokens: v.optional(v.number()),
         totalTokens: v.optional(v.number()),
-      })
+      }),
     ),
     cost: v.optional(
       v.object({
         estimatedCents: v.optional(v.number()),
         actualCents: v.optional(v.number()),
         currency: v.string(),
-      })
+      }),
     ),
     providerMetadata: v.optional(v.any()),
   },
@@ -402,7 +407,7 @@ export const completeExecution = internalMutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     const job = await getMutableJob(ctx, args);
     if (job.status !== "running") {
@@ -455,7 +460,7 @@ export const failExecution = internalMutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     const job = await getMutableJob(ctx, args);
     const now = Date.now();
@@ -490,10 +495,14 @@ async function getMutableJob(
     householdId: Id<"households">;
     moveId: Id<"moves">;
     aiJobId: Id<"aiJobs">;
-  }
+  },
 ) {
   const job = await ctx.db.get(args.aiJobId);
-  if (!job || job.householdId !== args.householdId || job.moveId !== args.moveId) {
+  if (
+    !job ||
+    job.householdId !== args.householdId ||
+    job.moveId !== args.moveId
+  ) {
     throw new Error("AI job not found.");
   }
   return job;

@@ -20,7 +20,10 @@ import {
   normalizeBoxCode,
   normalizeOptionalText,
 } from "./lib/moveFields";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const boxWriteArgs = {
   code: v.optional(v.string()),
@@ -48,7 +51,7 @@ async function assertResourceAndZone(
     moveId: Id<"moves">;
     assignedResourceId?: Id<"transportResources">;
     assignedZoneId?: Id<"transportZones">;
-  }
+  },
 ) {
   if (args.assignedResourceId) {
     const resource = await ctx.db.get(args.assignedResourceId);
@@ -62,7 +65,10 @@ async function assertResourceAndZone(
     if (!zone || zone.moveId !== args.moveId || zone.archivedAt) {
       throw new Error("Invalid transport zone.");
     }
-    if (args.assignedResourceId && zone.resourceId !== args.assignedResourceId) {
+    if (
+      args.assignedResourceId &&
+      zone.resourceId !== args.assignedResourceId
+    ) {
       throw new Error("Zone does not belong to the assigned resource.");
     }
   }
@@ -89,7 +95,7 @@ async function ensureUniqueBoxCode(
   ctx: MutationCtx,
   moveId: Id<"moves">,
   code: string,
-  currentBoxId?: Id<"boxes">
+  currentBoxId?: Id<"boxes">,
 ) {
   const existing = await ctx.db
     .query("boxes")
@@ -111,14 +117,14 @@ async function boxContents(ctx: QueryCtx, box: Doc<"boxes">) {
     memberships.map(async (membership) => {
       const item = await ctx.db.get(membership.itemId);
       return item && !item.deletedAt ? { membership, item } : null;
-    })
+    }),
   );
 
   return contents.filter(Boolean);
 }
 
 function contentsEstimatedWeight(
-  contents: Awaited<ReturnType<typeof boxContents>>
+  contents: Awaited<ReturnType<typeof boxContents>>,
 ) {
   return sumEstimateValues(
     contents.map((entry) =>
@@ -127,8 +133,8 @@ function contentsEstimatedWeight(
             ...entry.item,
             quantity: entry.membership.quantity,
           }).weight
-        : undefined
-    )
+        : undefined,
+    ),
   );
 }
 
@@ -145,7 +151,7 @@ async function loadAssignmentValidation(
     estimatedVolumeCuFt?: number;
     assignmentOverrideReason?: string;
     enforce?: boolean;
-  }
+  },
 ) {
   if (!args.assignedResourceId) {
     return {
@@ -157,7 +163,9 @@ async function loadAssignmentValidation(
 
   const [resource, zone, memberships] = await Promise.all([
     ctx.db.get(args.assignedResourceId),
-    args.assignedZoneId ? ctx.db.get(args.assignedZoneId) : Promise.resolve(null),
+    args.assignedZoneId
+      ? ctx.db.get(args.assignedZoneId)
+      : Promise.resolve(null),
     args.boxId
       ? ctx.db
           .query("boxItems")
@@ -182,20 +190,20 @@ async function loadAssignmentValidation(
     memberships.map(async (membership) => {
       const item = await ctx.db.get(membership.itemId);
       return item && !item.deletedAt ? { item, membership } : null;
-    })
+    }),
   );
   const activeContents = contents.filter(
     (entry): entry is { item: Doc<"items">; membership: Doc<"boxItems"> } =>
-      Boolean(entry)
+      Boolean(entry),
   );
   const contentEstimates = activeContents.map(({ item, membership }) =>
-    estimateItem({ ...item, quantity: membership.quantity })
+    estimateItem({ ...item, quantity: membership.quantity }),
   );
   const contentsWeight = sumEstimateValues(
-    contentEstimates.map((estimate) => estimate.weight)
+    contentEstimates.map((estimate) => estimate.weight),
   );
   const contentsVolume = sumEstimateValues(
-    contentEstimates.map((estimate) => estimate.volume)
+    contentEstimates.map((estimate) => estimate.volume),
   );
   const validation = validateAssignment({
     box: {
@@ -205,15 +213,17 @@ async function loadAssignmentValidation(
       dimensionsIn: args.dimensionsIn,
       itemCount: activeContents.reduce(
         (sum, entry) => sum + entry.membership.quantity,
-        0
+        0,
       ),
-      hasFragile: activeContents.some((entry) => entry.item.fragility === "high"),
+      hasFragile: activeContents.some(
+        (entry) => entry.item.fragility === "high",
+      ),
       hasHighValue: activeContents.some((entry) => entry.item.highValue),
       hasSensitive: activeContents.some((entry) =>
-        entry.item.planningDefaultKeys.includes("sensitive")
+        entry.item.planningDefaultKeys.includes("sensitive"),
       ),
       hasPersonalTransport: activeContents.some(
-        (entry) => entry.item.requiresPersonalTransport
+        (entry) => entry.item.requiresPersonalTransport,
       ),
       hasHazardous: activeContents.some((entry) => entry.item.hazardousFlag),
     },
@@ -225,7 +235,9 @@ async function loadAssignmentValidation(
 
   if (args.enforce !== false) {
     if (validation.hardBlocks.length) {
-      throw new Error(`Assignment blocked: ${validation.hardBlocks.join(", ")}`);
+      throw new Error(
+        `Assignment blocked: ${validation.hardBlocks.join(", ")}`,
+      );
     }
     if (
       requiresOverrideReason(validation) &&
@@ -244,7 +256,7 @@ async function loadAssignmentValidation(
 
 function mergeCapacity(
   resourceCapacity: Doc<"transportResources">["capacity"],
-  zoneCapacity?: Doc<"transportZones">["capacity"]
+  zoneCapacity?: Doc<"transportZones">["capacity"],
 ) {
   if (!zoneCapacity) {
     return resourceCapacity;
@@ -253,28 +265,28 @@ function mergeCapacity(
   return {
     maxWeightLb: minOptional(
       resourceCapacity.maxWeightLb,
-      zoneCapacity.maxWeightLb
+      zoneCapacity.maxWeightLb,
     ),
     maxVolumeCuFt: minOptional(
       resourceCapacity.maxVolumeCuFt,
-      zoneCapacity.maxVolumeCuFt
+      zoneCapacity.maxVolumeCuFt,
     ),
     maxItemCount: minOptional(
       resourceCapacity.maxItemCount,
-      zoneCapacity.maxItemCount
+      zoneCapacity.maxItemCount,
     ),
     dimensions: {
       lengthIn: minOptional(
         resourceCapacity.dimensions?.lengthIn,
-        zoneCapacity.dimensions?.lengthIn
+        zoneCapacity.dimensions?.lengthIn,
       ),
       widthIn: minOptional(
         resourceCapacity.dimensions?.widthIn,
-        zoneCapacity.dimensions?.widthIn
+        zoneCapacity.dimensions?.widthIn,
       ),
       heightIn: minOptional(
         resourceCapacity.dimensions?.heightIn,
-        zoneCapacity.dimensions?.heightIn
+        zoneCapacity.dimensions?.heightIn,
       ),
     },
     weightIsUnlimited:
@@ -303,7 +315,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     const boxes = await ctx.db
@@ -319,7 +331,7 @@ export const listForMove = query({
           const contents = await boxContents(ctx, box);
           const itemCount = contents.reduce(
             (sum, entry) => sum + (entry?.membership.quantity ?? 0),
-            0
+            0,
           );
           const contentsEstimatedWeightLb = contentsEstimatedWeight(contents);
           const weightSummary = resolveBoxWeight({
@@ -335,7 +347,7 @@ export const listForMove = query({
             contentsEstimatedWeightLb,
             weightSummary,
           };
-        })
+        }),
     );
   },
 });
@@ -351,7 +363,7 @@ export const get = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     const box = await ctx.db.get(args.boxId);
@@ -367,7 +379,7 @@ export const get = query({
     const contents = await boxContents(ctx, box);
     const itemCount = contents.reduce(
       (sum, entry) => sum + (entry?.membership.quantity ?? 0),
-      0
+      0,
     );
     const contentsEstimatedWeightLb = contentsEstimatedWeight(contents);
     const weightSummary = resolveBoxWeight({
@@ -376,7 +388,13 @@ export const get = query({
       contentsEstimatedWeightLb,
     });
 
-    return { box, contents, itemCount, contentsEstimatedWeightLb, weightSummary };
+    return {
+      box,
+      contents,
+      itemCount,
+      contentsEstimatedWeightLb,
+      weightSummary,
+    };
   },
 });
 
@@ -391,10 +409,10 @@ export const create = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key box creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     await assertResourceAndZone(ctx, args);
@@ -437,7 +455,7 @@ export const create = mutation({
       assignedZoneId: args.assignedZoneId,
       assignmentLocked: args.assignmentLocked ?? false,
       assignmentOverrideReason: normalizeOptionalText(
-        args.assignmentOverrideReason
+        args.assignmentOverrideReason,
       ),
       ...assignmentValidation,
       sealedAt: status === "sealed" ? now : undefined,
@@ -474,14 +492,18 @@ export const update = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key box updates are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const box = await ctx.db.get(args.boxId);
-    if (!box || box.moveId !== args.moveId || box.householdId !== args.householdId) {
+    if (
+      !box ||
+      box.moveId !== args.moveId ||
+      box.householdId !== args.householdId
+    ) {
       throw new Error("Box not found.");
     }
 
@@ -495,7 +517,8 @@ export const update = mutation({
       await ensureUniqueBoxCode(ctx, args.moveId, code, args.boxId);
       patch.code = code;
     }
-    if (args.label !== undefined) patch.label = normalizeOptionalText(args.label);
+    if (args.label !== undefined)
+      patch.label = normalizeOptionalText(args.label);
     if (args.room !== undefined) patch.room = normalizeOptionalText(args.room);
     if (args.destinationRoom !== undefined) {
       patch.destinationRoom = normalizeOptionalText(args.destinationRoom);
@@ -509,26 +532,29 @@ export const update = mutation({
     if (args.status !== undefined) {
       patch.status = args.status;
       patch.archivedAt = args.status === "archived" ? now : undefined;
-      patch.sealedAt = args.status === "sealed" ? box.sealedAt ?? now : box.sealedAt;
+      patch.sealedAt =
+        args.status === "sealed" ? (box.sealedAt ?? now) : box.sealedAt;
     }
     if (args.dimensionsIn !== undefined) patch.dimensionsIn = args.dimensionsIn;
     if (args.estimatedWeightLb !== undefined) {
       patch.estimatedWeightLb = args.estimatedWeightLb;
     }
-    if (args.actualWeightLb !== undefined) patch.actualWeightLb = args.actualWeightLb;
+    if (args.actualWeightLb !== undefined)
+      patch.actualWeightLb = args.actualWeightLb;
     if (args.estimatedVolumeCuFt !== undefined) {
       patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
     }
     if (args.assignedResourceId !== undefined) {
       patch.assignedResourceId = args.assignedResourceId;
     }
-    if (args.assignedZoneId !== undefined) patch.assignedZoneId = args.assignedZoneId;
+    if (args.assignedZoneId !== undefined)
+      patch.assignedZoneId = args.assignedZoneId;
     if (args.assignmentLocked !== undefined) {
       patch.assignmentLocked = args.assignmentLocked;
     }
     if (args.assignmentOverrideReason !== undefined) {
       patch.assignmentOverrideReason = normalizeOptionalText(
-        args.assignmentOverrideReason
+        args.assignmentOverrideReason,
       );
     }
     if (args.clearAssignedResource) {
@@ -544,7 +570,7 @@ export const update = mutation({
     const nextAssignedResourceId =
       args.clearAssignedResource === true
         ? undefined
-        : patch.assignedResourceId ?? box.assignedResourceId;
+        : (patch.assignedResourceId ?? box.assignedResourceId);
     if (nextAssignedResourceId) {
       const validation = await loadAssignmentValidation(ctx, {
         moveId: args.moveId,
@@ -553,7 +579,7 @@ export const update = mutation({
         assignedZoneId:
           args.clearAssignedZone === true
             ? undefined
-            : patch.assignedZoneId ?? box.assignedZoneId,
+            : (patch.assignedZoneId ?? box.assignedZoneId),
         dimensionsIn: patch.dimensionsIn ?? box.dimensionsIn,
         estimatedWeightLb: patch.estimatedWeightLb ?? box.estimatedWeightLb,
         actualWeightLb: patch.actualWeightLb ?? box.actualWeightLb,
@@ -573,7 +599,7 @@ export const update = mutation({
       assignedZoneId:
         args.clearAssignedResource || args.clearAssignedZone
           ? undefined
-          : patch.assignedZoneId ?? box.assignedZoneId,
+          : (patch.assignedZoneId ?? box.assignedZoneId),
     });
 
     await ctx.db.patch(args.boxId, patch);
@@ -611,10 +637,10 @@ export const addItem = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key box item updates are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const [box, item] = await Promise.all([
@@ -635,7 +661,7 @@ export const addItem = mutation({
       .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
       .collect();
     const existingForMove = existing.find(
-      (membership) => membership.moveId === args.moveId
+      (membership) => membership.moveId === args.moveId,
     );
 
     if (existingForMove) {
@@ -712,10 +738,10 @@ export const removeItem = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key box item updates are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const membership = await ctx.db.get(args.boxItemId);

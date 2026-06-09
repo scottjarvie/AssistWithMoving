@@ -16,7 +16,10 @@ import {
   documentationProfileTypeValidator,
   normalizeOptionalText,
 } from "./lib/moveFields";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const profileWriteArgs = {
   type: documentationProfileTypeValidator,
@@ -40,7 +43,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:read"
+      "documentation:read",
     );
 
     const profiles = await ctx.db
@@ -49,7 +52,7 @@ export const listForMove = query({
       .collect();
 
     return profiles.filter((profile) =>
-      args.status ? profile.status === args.status : true
+      args.status ? profile.status === args.status : true,
     );
   },
 });
@@ -65,7 +68,7 @@ export const get = query({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:read"
+      "documentation:read",
     );
 
     const profile = await ctx.db.get(args.documentationProfileId);
@@ -92,31 +95,34 @@ export const create = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:create"
+      "documentation:create",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key documentation profile creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const config = normalizeDocumentationProfileConfig(args);
     const now = Date.now();
-    const documentationProfileId = await ctx.db.insert("documentationProfiles", {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      type: args.type,
-      status: "active",
-      name: config.name,
-      includedFields: config.includedFields,
-      imageRule: config.imageRule,
-      filters: config.filters,
-      allowedActions: config.allowedActions,
-      disclaimer: config.disclaimer,
-      ownerNotes: normalizeOptionalText(args.ownerNotes),
-      exportHistory: [],
-      createdByUserId: actor.userId,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const documentationProfileId = await ctx.db.insert(
+      "documentationProfiles",
+      {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        type: args.type,
+        status: "active",
+        name: config.name,
+        includedFields: config.includedFields,
+        imageRule: config.imageRule,
+        filters: config.filters,
+        allowedActions: config.allowedActions,
+        disclaimer: config.disclaimer,
+        ownerNotes: normalizeOptionalText(args.ownerNotes),
+        exportHistory: [],
+        createdByUserId: actor.userId,
+        createdAt: now,
+        updatedAt: now,
+      },
+    );
 
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
@@ -151,10 +157,10 @@ export const update = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:create"
+      "documentation:create",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key documentation profile updates are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const existing = await getMutableProfile(ctx, args);
@@ -221,10 +227,10 @@ export const archive = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:manage"
+      "documentation:manage",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key documentation profile archival is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     await getMutableProfile(ctx, args);
@@ -262,10 +268,10 @@ export const recordExport = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "documentation:create"
+      "documentation:create",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key documentation export recording is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const existing = await getMutableProfile(ctx, args);
@@ -303,7 +309,7 @@ async function getMutableProfile(
     householdId: Id<"households">;
     moveId: Id<"moves">;
     documentationProfileId: Id<"documentationProfiles">;
-  }
+  },
 ) {
   const profile = await ctx.db.get(args.documentationProfileId);
   if (

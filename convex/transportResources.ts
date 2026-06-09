@@ -11,7 +11,10 @@ import {
   transportResourcePresetKeyValidator,
   transportResourceTypeValidator,
 } from "./lib/moveFields";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 
 export const listForMove = query({
@@ -24,7 +27,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     return await ctx.db
@@ -44,7 +47,7 @@ export const listForMoveWithZones = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     const resources = await ctx.db
@@ -59,7 +62,7 @@ export const listForMoveWithZones = query({
           const zones = await ctx.db
             .query("transportZones")
             .withIndex("by_resource_sort", (q) =>
-              q.eq("resourceId", resource._id)
+              q.eq("resourceId", resource._id),
             )
             .collect();
 
@@ -67,7 +70,7 @@ export const listForMoveWithZones = query({
             resource,
             zones: zones.filter((zone) => !zone.archivedAt),
           };
-        })
+        }),
     );
   },
 });
@@ -88,10 +91,10 @@ export const create = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "household:edit"
+      "household:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key resource creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
     const now = Date.now();
     const resourceId = await ctx.db.insert("transportResources", {
@@ -138,10 +141,10 @@ export const createFromPreset = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "household:edit"
+      "household:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key resource creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const preset = getTransportResourcePreset(args.presetKey);
@@ -212,10 +215,10 @@ export const updateCapacityReview = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "household:edit"
+      "household:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key resource updates are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
 
     const resource = await ctx.db.get(args.resourceId);

@@ -16,7 +16,10 @@ import {
   normalizedSearchName,
   planningDefaultKeyValidator,
 } from "./lib/moveFields";
-import { requireMovePermission } from "./lib/permissions";
+import {
+  directConvexUserContextRequiredMessage,
+  requireMovePermission,
+} from "./lib/permissions";
 
 const itemWriteArgs = {
   description: v.optional(v.string()),
@@ -95,14 +98,14 @@ function normalizeStringList(values: string[] | undefined) {
       (values ?? [])
         .map((value) => value.trim())
         .filter(Boolean)
-        .map((value) => value.slice(0, 80))
-    )
+        .map((value) => value.slice(0, 80)),
+    ),
   );
 }
 
 function redactItemForVisibility(
   item: Doc<"items">,
-  visibility: Awaited<ReturnType<typeof requireMovePermission>>["visibility"]
+  visibility: Awaited<ReturnType<typeof requireMovePermission>>["visibility"],
 ) {
   return {
     ...item,
@@ -121,19 +124,19 @@ function filterItemRecords(items: Doc<"items">[], args: ItemListFilterArgs) {
     .filter((item) => args.includeDeleted || !item.deletedAt)
     .filter((item) => (args.status ? item.status === args.status : true))
     .filter((item) =>
-      args.disposition ? item.disposition === args.disposition : true
+      args.disposition ? item.disposition === args.disposition : true,
     )
     .filter((item) => (args.room ? item.room === args.room : true))
     .filter((item) => (args.category ? item.category === args.category : true))
     .filter((item) =>
       typeof args.needsReview === "boolean"
         ? item.needsReview === args.needsReview
-        : true
+        : true,
     )
     .filter((item) =>
       typeof args.highValue === "boolean"
         ? item.highValue === args.highValue
-        : true
+        : true,
     );
 }
 
@@ -152,7 +155,7 @@ function defaultItemSignals(): MutableItemSignals {
 
 function signalsForItem(
   signalsByItemId: Map<string, MutableItemSignals>,
-  itemId: Id<"items">
+  itemId: Id<"items">,
 ) {
   const key = String(itemId);
   const existing = signalsByItemId.get(key);
@@ -171,9 +174,11 @@ function isEvidencePhoto(photo: Doc<"itemPhotos">) {
   return (
     photo.claimId ||
     photo.privacyLevel === "claimOnly" ||
-    ["condition", "damage", "serialNumber", "receipt"].includes(photo.photoType) ||
+    ["condition", "damage", "serialNumber", "receipt"].includes(
+      photo.photoType,
+    ) ||
     photo.documentationProfileTypes.some((type) =>
-      ["insuranceClaim", "pcsMove", "movingCompany"].includes(type)
+      ["insuranceClaim", "pcsMove", "movingCompany"].includes(type),
     )
   );
 }
@@ -184,7 +189,7 @@ async function assertMovePersonTarget(
     householdId: Id<"households">;
     moveId: Id<"moves">;
     ownerPersonId?: Id<"movePeople">;
-  }
+  },
 ) {
   if (!args.ownerPersonId) return;
   const person = await ctx.db.get(args.ownerPersonId);
@@ -205,7 +210,7 @@ export const listForMove = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
     const items = await ctx.db
@@ -214,8 +219,9 @@ export const listForMove = query({
       .order("desc")
       .collect();
 
-    return filterItemRecords(items, args)
-      .map((item) => redactItemForVisibility(item, policy.visibility));
+    return filterItemRecords(items, args).map((item) =>
+      redactItemForVisibility(item, policy.visibility),
+    );
   },
 });
 
@@ -226,56 +232,63 @@ export const listForMoveWithSignals = query({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:read"
+      "inventory:read",
     );
 
-    const [items, boxItems, boxes, photos, resources, zones] = await Promise.all([
-      ctx.db
-        .query("items")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-        .order("desc")
-        .collect(),
-      ctx.db
-        .query("boxItems")
-        .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-      ctx.db
-        .query("boxes")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-      ctx.db
-        .query("itemPhotos")
-        .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-      ctx.db
-        .query("transportResources")
-        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-      ctx.db
-        .query("transportZones")
-        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-    ]);
+    const [items, boxItems, boxes, photos, resources, zones] =
+      await Promise.all([
+        ctx.db
+          .query("items")
+          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+          .order("desc")
+          .collect(),
+        ctx.db
+          .query("boxItems")
+          .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("boxes")
+          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("itemPhotos")
+          .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("transportResources")
+          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("transportZones")
+          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+      ]);
 
     const visibleItems = filterItemRecords(items, args);
-    const visibleItemIds = new Set(visibleItems.map((item) => String(item._id)));
+    const visibleItemIds = new Set(
+      visibleItems.map((item) => String(item._id)),
+    );
     const boxById = new Map(
       boxes
-        .filter((box) => box.householdId === args.householdId && !box.archivedAt)
-        .map((box) => [String(box._id), box])
+        .filter(
+          (box) => box.householdId === args.householdId && !box.archivedAt,
+        )
+        .map((box) => [String(box._id), box]),
     );
     const resourceById = new Map(
       resources
         .filter(
           (resource) =>
-            resource.householdId === args.householdId && !resource.archivedAt
+            resource.householdId === args.householdId && !resource.archivedAt,
         )
-        .map((resource) => [String(resource._id), resource])
+        .map((resource) => [String(resource._id), resource]),
     );
     const zoneById = new Map(
       zones
-        .filter((zone) => zone.householdId === args.householdId && !zone.archivedAt)
-        .map((zone) => [String(zone._id), zone])
+        .filter(
+          (zone) => zone.householdId === args.householdId && !zone.archivedAt,
+        )
+        .map((zone) => [String(zone._id), zone]),
     );
     const signalsByItemId = new Map<string, MutableItemSignals>();
 
@@ -341,10 +354,10 @@ export const create = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key item creation is not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
     await assertMovePersonTarget(ctx, {
       householdId: args.householdId,
@@ -435,10 +448,10 @@ export const update = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
     if (actor.type !== "user") {
-      throw new Error("API-key item updates are not implemented yet.");
+      throw new Error(directConvexUserContextRequiredMessage);
     }
     await assertMovePersonTarget(ctx, {
       householdId: args.householdId,
@@ -606,7 +619,7 @@ export const archive = mutation({
       ctx,
       args.householdId,
       args.moveId,
-      "inventory:edit"
+      "inventory:edit",
     );
 
     await ctx.db.patch(args.itemId, {
