@@ -61,7 +61,7 @@ export const launchBlockerRemediations = [
     why:
       "Photo evidence is core product data, so uploads need a valid scoped key and browser CORS before launch.",
     ownerAction:
-      "Generate a Backblaze application key scoped to the production bucket, then allow PUT, GET, and HEAD from localhost:3827, movingmanifest.com, and www.movingmanifest.com.",
+      "Generate a Backblaze application key scoped to the production bucket, then allow PUT, GET, and HEAD from localhost:3827, movingmanifest.com, www.movingmanifest.com, and Vercel preview origins.",
     actions: [
       "npx vercel env add B2_APPLICATION_KEY_ID production",
       "npx vercel env add B2_APPLICATION_KEY production",

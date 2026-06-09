@@ -152,6 +152,7 @@ async function checkCors(client) {
       "http://localhost:3827",
       "https://movingmanifest.com",
       "https://www.movingmanifest.com",
+      "https://*.vercel.app",
     ];
     const missingOrigins = requiredOrigins.filter(
       (origin) => !allowedOrigins.has(origin) && !allowedOrigins.has("*")

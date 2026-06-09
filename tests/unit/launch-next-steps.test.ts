@@ -43,6 +43,7 @@ describe("launch next steps", () => {
 
     expect(plan).toContain("ADMIN_EMAILS");
     expect(plan).toContain("B2_APPLICATION_KEY");
+    expect(plan).toContain("Vercel preview origins");
     expect(plan).toContain("CONTENT_SECURITY_POLICY_MODE");
     expect(plan).toContain("npm run doctor:launch");
     expect(plan).toContain("<production-clerk-issuer>");
