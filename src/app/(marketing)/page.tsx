@@ -40,12 +40,18 @@ export default function MarketingPage() {
       <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
         <BrandMark />
         <nav aria-label="Public navigation" className="hidden items-center gap-6 md:flex">
-          <a className="text-sm text-muted-foreground hover:text-foreground" href="#packets">
-            Packets
-          </a>
-          <a className="text-sm text-muted-foreground hover:text-foreground" href="#privacy">
+          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/features">
+            Features
+          </Link>
+          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/pcs-moving">
+            PCS moving
+          </Link>
+          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/claims-inventory">
+            Claims
+          </Link>
+          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/privacy">
             Privacy
-          </a>
+          </Link>
           <Link
             className="text-sm text-muted-foreground hover:text-foreground"
             href="/app/dashboard"
