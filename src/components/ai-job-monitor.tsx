@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Bot, Gauge, Play, RefreshCw, ShieldAlert } from "lucide-react";
+import { Bot, Gauge, Play, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -48,6 +48,10 @@ export function AiJobMonitor({
   );
   const usage = useQuery(
     api.aiUsage.summaryForMove,
+    householdId && moveId ? { householdId, moveId } : "skip"
+  );
+  const providerStatus = useQuery(
+    api.aiJobs.providerStatus,
     householdId && moveId ? { householdId, moveId } : "skip"
   );
   const createAiJob = useMutation(api.aiJobs.create);
@@ -106,6 +110,43 @@ export function AiJobMonitor({
     }
   }
 
+  async function createModelReview() {
+    if (!householdId || !moveId || !providerStatus?.openai.configured) {
+      return;
+    }
+
+    setRunning(true);
+    setMessage(null);
+    try {
+      const aiJobId = await createAiJob({
+        householdId,
+        moveId,
+        type: "generalReview",
+        modality: "structured",
+        provider: "openai",
+        model: providerStatus.openai.defaultModel,
+        inputSummary:
+          "Review current move records for missing assignment, evidence, capacity, PCS, privacy, and packet readiness signals.",
+        inputRef: {
+          source: "dashboard",
+          scope: "move-readiness",
+        },
+        maxCostCents: 5,
+      });
+      await executeAiJob({
+        householdId,
+        moveId,
+        aiJobId,
+        maxOutputTokens: 512,
+      });
+      setMessage("Model AI review completed.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "AI review failed.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
   return (
     <Card id="ai">
       <CardHeader>
@@ -120,19 +161,41 @@ export function AiJobMonitor({
               packet records until reviewed.
             </CardDescription>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            disabled={!moveId || running}
-            onClick={() => void createMockReview()}
-          >
-            {running ? (
-              <RefreshCw className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Play aria-hidden="true" />
-            )}
-            Mock review
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {providerStatus ? (
+              <Badge variant="outline">
+                Default: {providerStatus.defaultProvider}/
+                {providerStatus.defaultModel}
+              </Badge>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!moveId || running}
+              onClick={() => void createMockReview()}
+            >
+              {running ? (
+                <RefreshCw className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Play aria-hidden="true" />
+              )}
+              Mock review
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!moveId || running || !providerStatus?.openai.configured}
+              onClick={() => void createModelReview()}
+            >
+              {running ? (
+                <RefreshCw className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Sparkles aria-hidden="true" />
+              )}
+              Model review
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

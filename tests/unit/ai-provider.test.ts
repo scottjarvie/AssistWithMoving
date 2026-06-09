@@ -1,10 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   enforceAiCostGuardrails,
   estimateTokenCostCents,
+  getAiProviderStatus,
   runAiProvider,
 } from "../../convex/lib/aiProvider";
+
+const originalEnv = { ...process.env };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  process.env = { ...originalEnv };
+});
 
 describe("AI provider abstraction", () => {
   it("estimates token cost in cents", () => {
@@ -40,6 +48,97 @@ describe("AI provider abstraction", () => {
     expect(result.confidence).toBe("low");
     expect(result.tokenUsage?.totalTokens).toBeGreaterThan(0);
     expect(result.cost?.currency).toBe("USD");
+  });
+
+  it("reports safe provider readiness without exposing secrets", () => {
+    process.env.AI_DEFAULT_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "sk-test-secret";
+    process.env.OPENAI_MODEL = "gpt-5-mini";
+
+    expect(getAiProviderStatus()).toEqual({
+      defaultProvider: "openai",
+      defaultModel: "gpt-5-mini",
+      openai: {
+        configured: true,
+        defaultModel: "gpt-5-mini",
+      },
+    });
+  });
+
+  it("runs the OpenAI provider through the Responses API", async () => {
+    process.env.OPENAI_API_KEY = "sk-test-secret";
+    process.env.OPENAI_MODEL = "gpt-5-mini";
+    process.env.OPENAI_INPUT_CENTS_PER_MILLION = "25";
+    process.env.OPENAI_OUTPUT_CENTS_PER_MILLION = "200";
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          id: "resp_123",
+          status: "completed",
+          model: "gpt-5-mini",
+          output_text: JSON.stringify({
+            summary: "Capacity, evidence, and packet readiness need review.",
+            confidence: "medium",
+            questions: ["Which trailer capacity is confirmed?"],
+            risks: ["Unconfirmed capacity can make load totals misleading."],
+            recommendedActions: ["Confirm truck and trailer capacities."],
+          }),
+          usage: {
+            input_tokens: 1000,
+            output_tokens: 500,
+            total_tokens: 1500,
+          },
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runAiProvider({
+      jobId: "job-id",
+      type: "generalReview",
+      modality: "structured",
+      provider: "openai",
+      model: "gpt-5-mini",
+      inputSummary: "Review move readiness.",
+      maxOutputTokens: 256,
+      maxCostCents: 1,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/responses",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer sk-test-secret",
+        }),
+      })
+    );
+    expect(result.outputSummary).toBe(
+      "Capacity, evidence, and packet readiness need review."
+    );
+    expect(result.confidence).toBe("medium");
+    expect(result.tokenUsage?.totalTokens).toBe(1500);
+    expect(result.cost?.estimatedCents).toBe(0.125);
+    expect(result.providerMetadata).toEqual({
+      responseId: "resp_123",
+      status: "completed",
+      model: "gpt-5-mini",
+    });
+  });
+
+  it("requires an OpenAI API key before running the OpenAI provider", async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    await expect(
+      runAiProvider({
+        jobId: "job-id",
+        type: "generalReview",
+        modality: "structured",
+        provider: "openai",
+        model: "gpt-5-mini",
+      })
+    ).rejects.toThrow("OpenAI provider is not configured.");
   });
 
   it("rejects unconfigured providers", async () => {

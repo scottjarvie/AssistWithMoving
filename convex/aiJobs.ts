@@ -11,7 +11,11 @@ import {
 } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
-import { runAiProvider } from "./lib/aiProvider";
+import {
+  getAiProviderStatus,
+  isKnownAiProvider,
+  runAiProvider,
+} from "./lib/aiProvider";
 import {
   assertAiUsageAllowed,
   estimatedCentsForDeterministicJob,
@@ -97,6 +101,23 @@ export const get = query({
   },
 });
 
+export const providerStatus = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read"
+    );
+
+    return getAiProviderStatus();
+  },
+});
+
 export const create = mutation({
   args: {
     householdId: v.id("households"),
@@ -128,6 +149,11 @@ export const create = mutation({
       estimatedCents: estimatedCentsForDeterministicJob(args.maxCostCents),
     });
 
+    const provider = normalizeProvider(args.provider);
+    if (!isKnownAiProvider(provider)) {
+      throw new Error(`AI provider is not configured: ${provider}`);
+    }
+    const model = normalizeModel(provider, args.model);
     const now = Date.now();
     const aiJobId = await ctx.db.insert("aiJobs", {
       householdId: args.householdId,
@@ -135,8 +161,8 @@ export const create = mutation({
       type: args.type,
       status: "queued",
       modality: args.modality,
-      provider: normalizeProvider(args.provider),
-      model: normalizeOptionalText(args.model) ?? "mock-model",
+      provider,
+      model,
       inputRef: args.inputRef,
       inputSummary: normalizeOptionalText(args.inputSummary),
       reviewStatus: "unreviewed",
@@ -159,8 +185,8 @@ export const create = mutation({
       objectId: aiJobId,
       metadata: {
         type: args.type,
-        provider: normalizeProvider(args.provider),
-        model: normalizeOptionalText(args.model) ?? "mock-model",
+        provider,
+        model,
       },
     });
 
@@ -474,7 +500,20 @@ async function getMutableJob(
 }
 
 function normalizeProvider(provider: string | undefined) {
-  return normalizeOptionalText(provider) ?? "mock";
+  return (
+    normalizeOptionalText(provider) ??
+    normalizeOptionalText(process.env.AI_DEFAULT_PROVIDER) ??
+    "mock"
+  );
+}
+
+function normalizeModel(provider: string, model: string | undefined) {
+  const requested = normalizeOptionalText(model);
+  if (requested) return requested;
+  if (provider === "openai") {
+    return normalizeOptionalText(process.env.OPENAI_MODEL) ?? "gpt-5-mini";
+  }
+  return "mock-model";
 }
 
 export type AiJobDoc = Doc<"aiJobs">;
