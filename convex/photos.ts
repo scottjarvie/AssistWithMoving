@@ -22,7 +22,9 @@ import { requireAppAdmin } from "./lib/admin";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
+  cloudflareImageDeliveryUrl,
   selectDerivativeRef,
+  type PhotoDeliveryProvider,
   type PhotoDisplayVariant,
 } from "./lib/photoDelivery";
 import {
@@ -691,6 +693,7 @@ export const getDisplayUrl = action({
     expiresAt: number;
     requestedVariant: PhotoDisplayVariant;
     servedVariant: PhotoDisplayVariant;
+    deliveryProvider: PhotoDeliveryProvider;
     derivativeStatus?: "pending" | "ready" | "failed";
     width: number;
     height: number;
@@ -714,6 +717,27 @@ export const getDisplayUrl = action({
       throw new Error("Photo variant is not available for this role.");
     }
 
+    const cloudflareUrl = cloudflareImageDeliveryUrl({
+      accountHash: process.env.CLOUDFLARE_IMAGES_ACCOUNT_HASH,
+      deliveryBaseUrl: process.env.CLOUDFLARE_IMAGE_DELIVERY_URL,
+      deliveryDomain: process.env.CLOUDFLARE_IMAGE_DELIVERY_DOMAIN,
+      imageId: photo.cloudflareImageId,
+      variant: selected.variant,
+    });
+    if (cloudflareUrl) {
+      return {
+        url: cloudflareUrl,
+        expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+        requestedVariant: args.variant,
+        servedVariant: selected.variant,
+        deliveryProvider: "cloudflareImages",
+        derivativeStatus: photo.derivativeStatus,
+        width: photo.width,
+        height: photo.height,
+        mimeType: photo.mimeType,
+      };
+    }
+
     const config = requireB2Config();
     const url = await getSignedUrl(
       b2Client(),
@@ -729,6 +753,7 @@ export const getDisplayUrl = action({
       expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
       requestedVariant: args.variant,
       servedVariant: selected.variant,
+      deliveryProvider: "b2SignedUrl",
       derivativeStatus: photo.derivativeStatus,
       width: photo.width,
       height: photo.height,
