@@ -42,6 +42,46 @@ export function parseRestPath(path: string) {
     .filter(Boolean);
 }
 
+export function bodyRecord(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return {};
+  }
+  return body as Record<string, unknown>;
+}
+
+export function moveIdFromRestRequest({
+  segments,
+  body,
+  query,
+}: {
+  segments: string[];
+  body?: unknown;
+  query: Record<string, string>;
+}) {
+  if (segments[0] === "moves" && segments[1]) {
+    return segments[1];
+  }
+  if (segments[0] === "moves") {
+    return undefined;
+  }
+
+  return moveIdFromRestBodyOrQuery({ body, query });
+}
+
+export function moveIdFromRestBodyOrQuery({
+  body,
+  query,
+}: {
+  body?: unknown;
+  query: Record<string, string>;
+}) {
+  const bodyMoveId = bodyRecord(body).moveId;
+  if (typeof bodyMoveId === "string" && bodyMoveId) {
+    return bodyMoveId;
+  }
+  return query.moveId || undefined;
+}
+
 export function restError({
   status,
   code,

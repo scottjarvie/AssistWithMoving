@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   bearerToken,
+  bodyRecord,
+  moveIdFromRestBodyOrQuery,
+  moveIdFromRestRequest,
   paginate,
   parseRestPath,
   requestHashInput,
@@ -347,6 +350,60 @@ describe("REST API helpers", () => {
         segments: ["exports", "export1"],
       })
     ).toEqual(["exports/read"]);
+  });
+
+  it("derives move context for move-restricted top-level routes", () => {
+    expect(
+      moveIdFromRestRequest({
+        segments: ["moves", "move1", "items"],
+        body: { moveId: "ignored" },
+        query: { moveId: "also-ignored" },
+      })
+    ).toBe("move1");
+
+    expect(
+      moveIdFromRestRequest({
+        segments: ["moves"],
+        body: { moveId: "ignored" },
+        query: { moveId: "also-ignored" },
+      })
+    ).toBeUndefined();
+
+    expect(
+      moveIdFromRestRequest({
+        segments: ["items", "item1"],
+        body: { moveId: "move-from-body" },
+        query: {},
+      })
+    ).toBe("move-from-body");
+
+    expect(
+      moveIdFromRestRequest({
+        segments: ["boxes", "box1", "items", "item1"],
+        body: {},
+        query: { moveId: "move-from-query" },
+      })
+    ).toBe("move-from-query");
+
+    expect(
+      moveIdFromRestRequest({
+        segments: ["photos", "photo1", "attach"],
+        body: { moveId: "photo-move" },
+        query: {},
+      })
+    ).toBe("photo-move");
+  });
+
+  it("keeps body/query move context parsing safe for non-object bodies", () => {
+    expect(
+      moveIdFromRestBodyOrQuery({
+        body: ["move1"],
+        query: { moveId: "move-from-query" },
+      })
+    ).toBe("move-from-query");
+    expect(bodyRecord(null)).toEqual({});
+    expect(bodyRecord(["not", "a", "record"])).toEqual({});
+    expect(bodyRecord({ moveId: "move1" })).toEqual({ moveId: "move1" });
   });
 
   it("paginates with cursor and limit", () => {

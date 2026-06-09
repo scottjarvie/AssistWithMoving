@@ -59,6 +59,20 @@ key can be authenticated before the object is loaded. Top-level `DELETE`
 aliases, including `/items/{itemId}` and `/boxes/{boxId}/items/{itemId}`, must
 pass `moveId` as a query parameter because DELETE bodies are not parsed.
 
+Examples for move-restricted keys:
+
+```bash
+curl -X PATCH https://movingmanifest.com/api/v1/items/ITEM_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_move_scoped_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: item-update-001" \
+  -d '{ "moveId": "MOVE_ID", "room": "Office" }'
+
+curl -X DELETE "https://movingmanifest.com/api/v1/items/ITEM_ID?moveId=MOVE_ID" \
+  -H "Authorization: Bearer mmk_replace_with_a_move_scoped_key" \
+  -H "Idempotency-Key: item-delete-001"
+```
+
 ## Errors
 
 Errors return JSON:

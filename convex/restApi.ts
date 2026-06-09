@@ -100,6 +100,9 @@ import { getTransportResourcePreset } from "./lib/transportPresets";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import {
   bearerToken,
+  bodyRecord as bodyObject,
+  moveIdFromRestBodyOrQuery,
+  moveIdFromRestRequest,
   paginate,
   parseRestPath,
   requestHashInput,
@@ -208,7 +211,11 @@ export const handle = internalMutation({
     }
 
     try {
-      const moveId = routeMoveIdFromRequest(segments, args.body, args.query);
+      const moveId = moveIdFromRestRequest({
+        segments,
+        body: args.body,
+        query: args.query,
+      }) as Id<"moves"> | undefined;
       const action = `${args.method} /api/v1/${segments.join("/")}`;
       const auth = await authenticateApiKey(ctx, {
         rawKey,
@@ -304,7 +311,11 @@ export const authenticateActionRequest = internalMutation({
         requiredScopes,
         moveId: args.moveId
           ? (args.moveId as Id<"moves">)
-          : routeMoveIdFromRequest(segments, args.body, args.query),
+          : (moveIdFromRestRequest({
+              segments,
+              body: args.body,
+              query: args.query,
+            }) as Id<"moves"> | undefined),
         action: `${args.method} /api/v1/${segments.join("/")}`,
       });
       return { ok: true, auth, segments };
@@ -4439,28 +4450,6 @@ async function withIdempotency(
   return response;
 }
 
-function routeMoveIdFromRequest(
-  segments: string[],
-  body: unknown,
-  query: Record<string, string>
-) {
-  if (segments[0] === "moves" && segments[1]) {
-    return segments[1] as Id<"moves">;
-  }
-  if (segments[0] === "moves") {
-    return undefined;
-  }
-  const input = bodyObject(body);
-  const bodyMoveId = input.moveId;
-  if (typeof bodyMoveId === "string" && bodyMoveId) {
-    return bodyMoveId as Id<"moves">;
-  }
-  if (query.moveId) {
-    return query.moveId as Id<"moves">;
-  }
-  return undefined;
-}
-
 async function requireApiMove(
   ctx: MutationCtx,
   householdId: Id<"households">,
@@ -4682,14 +4671,10 @@ function assertRequestedMoveMatches(
 }
 
 function optionalRequestMoveId(args: RestRequestInput) {
-  const bodyMoveId = bodyObject(args.body).moveId;
-  if (typeof bodyMoveId === "string" && bodyMoveId) {
-    return bodyMoveId as Id<"moves">;
-  }
-  if (args.query.moveId) {
-    return args.query.moveId as Id<"moves">;
-  }
-  return undefined;
+  return moveIdFromRestBodyOrQuery({
+    body: args.body,
+    query: args.query,
+  }) as Id<"moves"> | undefined;
 }
 
 function safeMove(move: Doc<"moves">) {
@@ -5860,13 +5845,6 @@ async function auditApiMovePerson(
     objectId: personId,
     metadata,
   });
-}
-
-function bodyObject(body: unknown): Record<string, unknown> {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return {};
-  }
-  return body as Record<string, unknown>;
 }
 
 function optionalNumber(value: unknown) {
