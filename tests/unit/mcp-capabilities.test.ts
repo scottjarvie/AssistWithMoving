@@ -30,6 +30,52 @@ type CapabilityPayload = {
   }>;
 };
 
+function capabilitySourceObjects(source: string) {
+  const start = source.indexOf("export const MOVINGMANIFEST_API_CAPABILITIES = [");
+  const end = source.indexOf("];", start);
+  if (start === -1 || end === -1) {
+    throw new Error("Could not locate MOVINGMANIFEST_API_CAPABILITIES source.");
+  }
+
+  const lines = source.slice(start, end).split("\n");
+  const objects: string[][] = [];
+  let current: string[] | null = null;
+
+  for (const line of lines) {
+    if (line === "  {") {
+      current = [line];
+      continue;
+    }
+    if (!current) {
+      continue;
+    }
+    current.push(line);
+    if (line === "  }," || line === "  }") {
+      objects.push(current);
+      current = null;
+    }
+  }
+
+  return objects;
+}
+
+function duplicateTopLevelKeys(objectLines: string[]) {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  for (const line of objectLines) {
+    const match = line.match(/^    ([A-Za-z][A-Za-z0-9_]*):/);
+    if (!match) continue;
+    const key = match[1];
+    if (seen.has(key)) {
+      duplicates.add(key);
+    }
+    seen.add(key);
+  }
+
+  return [...duplicates];
+}
+
 function collectToolRegistrations() {
   const registrations = new Map<
     string,
@@ -103,6 +149,27 @@ describe("MovingManifest MCP capability discovery", () => {
     const registeredToolNames = [...collectToolRegistrations().keys()].sort();
 
     expect(registeredToolNames).toEqual([...getCapabilityToolNames()].sort());
+  });
+
+  it("keeps capability ids unique for agent discovery", () => {
+    const ids = MOVINGMANIFEST_API_CAPABILITIES.map((entry) => entry.id);
+
+    expect(ids).toHaveLength(new Set(ids).size);
+  });
+
+  it("keeps capability object literals free of duplicate top-level keys", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "mcp-server/capabilities.mjs"),
+      "utf8"
+    );
+    const duplicates = capabilitySourceObjects(source).flatMap(
+      (objectLines, index) =>
+        duplicateTopLevelKeys(objectLines).map(
+          (key) => `capability ${index + 1}: ${key}`
+        )
+    );
+
+    expect(duplicates).toEqual([]);
   });
 
   it("keeps the API/MCP guide tool table synced with capability discovery", () => {
