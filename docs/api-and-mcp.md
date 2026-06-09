@@ -716,7 +716,16 @@ curl -X POST https://movingmanifest.com/api/v1/uploads/init \
     "moveId": "MOVE_ID",
     "itemId": "ITEM_ID",
     "mimeType": "image/jpeg",
-    "sizeBytes": 123456
+    "sizeBytes": 123456,
+    "derivatives": [
+      {
+        "variant": "card",
+        "mimeType": "image/webp",
+        "sizeBytes": 32768,
+        "width": 960,
+        "height": 720
+      }
+    ]
   }'
 ```
 
@@ -742,8 +751,9 @@ The finalize step verifies the uploaded object size and MIME type before it
 creates the photo record.
 
 For MCP clients, use `start_photo_upload`, upload the file to the returned
-presigned URL, then call `finalize_photo_upload`. Use `attach_photo` afterward
-only when evidence metadata needs to be changed or linked differently.
+presigned URL and any returned derivative upload URLs, then call
+`finalize_photo_upload`. Use `attach_photo` afterward only when evidence
+metadata needs to be changed or linked differently.
 
 ## Documentation Profiles, Exports, and Share Links
 
@@ -954,7 +964,7 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
-| `start_photo_upload` | Start a photo upload session and return presigned upload information. |
+| `start_photo_upload` | Start a photo upload session and return presigned original/derivative upload information. |
 | `finalize_photo_upload` | Finalize a completed presigned upload and create the photo evidence record after server-side object verification. |
 | `attach_photo` | Attach/update photo evidence metadata after upload finalization, with `dryRun` support. |
 | `list_transport_resources` | List resources and zones for load planning. |

@@ -41,6 +41,7 @@ import {
   rejectPlanningSuggestions,
   revokeShareLink,
   searchInventory,
+  startPhotoUpload,
   suggestAssignments,
   updateDocumentationProfile,
   updateMovePerson,
@@ -1172,6 +1173,68 @@ describe("MovingManifest MCP API client", () => {
           caption: "Pre-move condition.",
           photoType: "condition",
           privacyLevel: "reportVisible",
+        }),
+      }
+    );
+  });
+
+  it("starts photo uploads with derivative descriptors", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          uploadSessionId: "session1",
+          derivativeUploads: [
+            { variant: "card", uploadUrl: "https://b2.test/card" },
+          ],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startPhotoUpload(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        itemId: "item1",
+        mimeType: "image/jpeg",
+        sizeBytes: 123456,
+        derivatives: [
+          {
+            variant: "card",
+            mimeType: "image/webp",
+            sizeBytes: 32768,
+            width: 960,
+            height: 720,
+          },
+        ],
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/uploads/init"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          itemId: "item1",
+          mimeType: "image/jpeg",
+          sizeBytes: 123456,
+          derivatives: [
+            {
+              variant: "card",
+              mimeType: "image/webp",
+              sizeBytes: 32768,
+              width: 960,
+              height: 720,
+            },
+          ],
         }),
       }
     );

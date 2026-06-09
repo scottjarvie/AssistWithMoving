@@ -789,6 +789,18 @@ export function registerTools(target, apiConfig) {
       room: z.string().optional(),
       mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
       sizeBytes: z.number().int().positive().max(25 * 1024 * 1024),
+      derivatives: z
+        .array(
+          z.object({
+            variant: z.enum(["thumb", "card", "detail", "full"]),
+            mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+            sizeBytes: z.number().int().positive().max(25 * 1024 * 1024),
+            width: z.number().int().positive(),
+            height: z.number().int().positive(),
+          })
+        )
+        .max(4)
+        .optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     handler: (input) => startPhotoUpload(apiConfig, input),
