@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { useAuth } from "@clerk/nextjs";
 
 import { api } from "../../convex/_generated/api";
 import { AccountPrivacyControls } from "@/components/account-privacy-controls";
@@ -11,14 +12,22 @@ import { SettingsPostureOverview } from "@/components/settings-posture-overview"
 import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
 
 export function SettingsFeatureSections() {
-  const flags = useQuery(api.featureFlags.effective, {}) as
+  const { isLoaded, isSignedIn } = useAuth();
+  const authQueryReady = isLoaded && isSignedIn;
+  const flags = useQuery(
+    api.featureFlags.effective,
+    authQueryReady ? {} : "skip"
+  ) as
     | EffectiveFeatureFlag[]
     | undefined;
-  const currentUser = useQuery(api.users.current);
-  const households = useQuery(api.households.listMine);
+  const currentUser = useQuery(api.users.current, authQueryReady ? {} : "skip");
+  const households = useQuery(
+    api.households.listMine,
+    authQueryReady ? {} : "skip"
+  );
   const apiMcpEnabled = flagEnabled(flags, "apiMcp", true);
   const billingGatesEnabled = flagEnabled(flags, "billingGates", false);
-  const authReady = currentUser !== undefined;
+  const authReady = authQueryReady && currentUser !== undefined;
   const authenticated = Boolean(currentUser);
 
   return (

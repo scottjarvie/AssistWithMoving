@@ -599,8 +599,8 @@ test.describe("authenticated product flow", () => {
     const aiJobMonitor = page
       .getByRole("heading", { name: "AI job monitor", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
-    await aiJobMonitor.getByRole("button", { name: "Mock review" }).click();
-    await waitForAiOutcome(aiJobMonitor, /Mock AI review completed\./);
+    await aiJobMonitor.getByRole("button", { name: "Local review" }).click();
+    await waitForAiOutcome(aiJobMonitor, /Local demo review completed\./);
 
     const pcsPacketHref = await documentationPackets
       .getByRole("link", { name: "PCS packet" })
@@ -659,17 +659,25 @@ test.describe("authenticated product flow", () => {
     const apiKeys = page
       .getByRole("heading", { name: "API and MCP keys", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
-    await expect(apiKeys.getByLabel("Household for API keys")).toBeVisible({
+    const apiKeyHouseholdSelect = apiKeys.getByLabel("Household for API keys");
+    await expect(apiKeyHouseholdSelect).toBeVisible({
       timeout: 30_000,
     });
-    await expect(apiKeys.getByLabel("API key move restriction")).toBeVisible({
+    await apiKeyHouseholdSelect.selectOption({ label: householdName });
+    await expect(
+      apiKeys.locator("[data-slot='badge']").filter({ hasText: householdName })
+    ).toBeVisible({ timeout: 30_000 });
+    const apiKeyMoveRestriction = apiKeys.getByLabel(
+      "API key move restriction"
+    );
+    await expect(apiKeyMoveRestriction).toBeVisible({ timeout: 30_000 });
+    await expect(apiKeyMoveRestriction).toBeEnabled({ timeout: 30_000 });
+    await expect(apiKeyMoveRestriction).toContainText(moveTitle, {
       timeout: 30_000,
     });
     const apiKeyName = `E2E local agent ${runId}`;
     await apiKeys.getByLabel("API key name").fill(apiKeyName);
-    await apiKeys
-      .getByLabel("API key move restriction")
-      .selectOption({ label: moveTitle });
+    await apiKeyMoveRestriction.selectOption({ label: moveTitle });
     await expect(apiKeys.getByText(`Move: ${moveTitle}`)).toBeVisible({
       timeout: 30_000,
     });

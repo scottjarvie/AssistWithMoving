@@ -31,6 +31,32 @@ const flags = [
 ] satisfies EffectiveFeatureFlag[];
 
 describe("settings posture summary", () => {
+  it("keeps account and household posture in a checking state until auth is ready", () => {
+    const posture = buildSettingsPosture({
+      currentUser: undefined,
+      households: undefined,
+      flags: undefined,
+      authReady: false,
+    });
+
+    expect(posture).toContainEqual(
+      expect.objectContaining({
+        key: "account",
+        value: "Checking",
+        detail: "Waiting for Clerk and Convex identity.",
+        tone: "muted",
+      })
+    );
+    expect(posture).toContainEqual(
+      expect.objectContaining({
+        key: "households",
+        value: "Checking",
+        detail: "Memberships load after authentication.",
+        tone: "muted",
+      })
+    );
+  });
+
   it("shows signed-out users what requires authentication", () => {
     const posture = buildSettingsPosture({
       currentUser: null,
