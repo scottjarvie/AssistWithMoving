@@ -24,7 +24,7 @@ export const defaultBillingTier: BillingTier = "launch";
 export const billingProviderDecision = {
   activeProvider: "none",
   candidates: ["stripe", "vercelMarketplace"],
-  note: "Payment-provider activation is intentionally separate from code-level entitlement readiness.",
+  note: "Payment collection is intentionally inactive until pricing and provider setup are approved.",
 } as const;
 
 export const tierDefinitions: Record<
@@ -66,8 +66,9 @@ export const tierDefinitions: Record<
     },
   },
   plus: {
-    label: "Plus placeholder",
-    description: "Likely paid household tier placeholder.",
+    label: "Plus household",
+    description:
+      "Expanded household tier for larger moves, photo evidence, exports, and API use.",
     limits: {
       activeMoves: 50,
       photoCount: 25_000,
@@ -81,8 +82,9 @@ export const tierDefinitions: Record<
     },
   },
   pro: {
-    label: "Pro placeholder",
-    description: "High-usage household or small operations placeholder.",
+    label: "Pro operations",
+    description:
+      "High-volume household or small-operations tier for heavy inventory, evidence, exports, and automations.",
     limits: {
       activeMoves: 200,
       photoCount: 100_000,

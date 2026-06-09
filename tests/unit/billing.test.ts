@@ -72,6 +72,19 @@ describe("billing readiness helpers", () => {
   it("keeps payment activation outside the code default", () => {
     expect(billingProviderDecision.activeProvider).toBe("none");
     expect(billingProviderDecision.candidates).toContain("stripe");
+    expect(billingProviderDecision.note).toContain(
+      "Payment collection is intentionally inactive"
+    );
     expect(billingTierDefinition("launch").label).toContain("Launch");
+  });
+
+  it("uses launch-ready tier copy without placeholder wording", () => {
+    const copy = Object.values(tierDefinitions)
+      .flatMap((definition) => [definition.label, definition.description])
+      .join(" ");
+
+    expect(copy).not.toMatch(/placeholder/i);
+    expect(billingTierDefinition("plus").label).toBe("Plus household");
+    expect(billingTierDefinition("pro").label).toBe("Pro operations");
   });
 });

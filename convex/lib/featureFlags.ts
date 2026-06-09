@@ -60,7 +60,7 @@ export const featureFlagDefinitions: FeatureFlagDefinition[] = [
   {
     key: "billingGates",
     label: "Billing gates",
-    description: "Tier-like usage gates and upgrade messaging placeholders.",
+    description: "Tier-like usage gates, plan posture, and upgrade messaging.",
     defaultEnabled: {
       development: false,
       preview: true,

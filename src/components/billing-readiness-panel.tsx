@@ -88,7 +88,7 @@ export function BillingReadinessPanel() {
           Billing readiness
         </CardTitle>
         <CardDescription>
-          Usage dimensions, tier gates, and provider-adapter placeholders.
+          Usage dimensions, tier gates, and inactive payment-provider status.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

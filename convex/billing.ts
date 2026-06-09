@@ -56,7 +56,7 @@ export const statusForHousehold = query({
         evaluation: evaluateEntitlement(usage, definition.limits, dimension, 0),
       })),
       upgradeMessage:
-        "Usage limits are ready in code. Payment collection is not active until Scott chooses a provider and pricing.",
+        "Usage limits are configured. Payment collection remains inactive until pricing and provider setup are approved.",
     };
   },
 });

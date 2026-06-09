@@ -122,7 +122,7 @@ export function buildSettingsPosture({
       value: billingGatesEnabled ? "Enforcing" : "Prepared",
       detail: billingGatesEnabled
         ? "Tier limits actively block usage over the configured household plan."
-        : "Usage limits are visible in code but not blocking production users.",
+        : "Usage limits are configured but not blocking production users.",
       tone: billingGatesEnabled ? "attention" : "muted",
     },
   ];
