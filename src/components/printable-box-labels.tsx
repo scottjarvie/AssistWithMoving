@@ -29,6 +29,7 @@ import {
   formatBoxWeightSource,
   formatBoxWeightValue,
 } from "@/lib/box-weight";
+import { moveBoxesPath } from "@/lib/move-links";
 
 export function PrintableBoxLabels({
   householdId,
@@ -137,7 +138,7 @@ export function PrintableBoxLabels({
             ))}
           </div>
           <Button asChild variant="outline">
-            <Link href="/app/dashboard#boxes">
+            <Link href={moveBoxesPath(moveId)}>
               <ArrowLeft aria-hidden="true" />
               Boxes
             </Link>
