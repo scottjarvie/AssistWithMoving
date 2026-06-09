@@ -198,6 +198,9 @@ export function requiredScopesForRestRoute({
     if (segments[2] === "questions") {
       return ["moves/read", "inventory/read"];
     }
+    if (segments[2] === "move-day") {
+      return ["moves/read", "inventory/read"];
+    }
     if (segments[2] === "capacity-report") {
       return ["moves/read", "inventory/read"];
     }

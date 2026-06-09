@@ -33,6 +33,7 @@ import {
   getApiCapabilities,
   getApiContext,
   getCapacityReport,
+  getMoveDayChecklist,
   getMoveQuestions,
   getMoveSummary,
   listAiJobs,
@@ -178,6 +179,14 @@ const capacityReviewStatusSchema = z.enum([
   "unreviewed",
   "estimated",
   "confirmed",
+]);
+
+const moveDayFilterSchema = z.enum([
+  "all",
+  "ready",
+  "staged",
+  "loaded",
+  "exceptions",
 ]);
 
 const planningEstimateDraftSchema = z.object({
@@ -412,6 +421,21 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => getMoveQuestions(apiConfig, input),
+  });
+
+  registerTool(target, "get_move_day_checklist", {
+    title: "Get Move Day checklist",
+    description:
+      "Fetch a crew-safe Move Day checklist with box status, item counts, load assignment names, warnings, exception notes, and progress counts.",
+    inputSchema: {
+      moveId: z.string().describe("MovingManifest move id."),
+      filter: moveDayFilterSchema.optional(),
+      query: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => getMoveDayChecklist(apiConfig, input),
   });
 
   registerTool(target, "search_inventory", {

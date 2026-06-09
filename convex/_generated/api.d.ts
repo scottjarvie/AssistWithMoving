@@ -59,6 +59,7 @@ import type * as lib_evidenceDensity from "../lib/evidenceDensity.js";
 import type * as lib_exportRows from "../lib/exportRows.js";
 import type * as lib_featureFlags from "../lib/featureFlags.js";
 import type * as lib_inventoryDuplicates from "../lib/inventoryDuplicates.js";
+import type * as lib_moveDayChecklist from "../lib/moveDayChecklist.js";
 import type * as lib_moveFields from "../lib/moveFields.js";
 import type * as lib_moveQuestionDocuments from "../lib/moveQuestionDocuments.js";
 import type * as lib_moveQuestions from "../lib/moveQuestions.js";
@@ -160,6 +161,7 @@ declare const fullApi: ApiFromModules<{
   "lib/exportRows": typeof lib_exportRows;
   "lib/featureFlags": typeof lib_featureFlags;
   "lib/inventoryDuplicates": typeof lib_inventoryDuplicates;
+  "lib/moveDayChecklist": typeof lib_moveDayChecklist;
   "lib/moveFields": typeof lib_moveFields;
   "lib/moveQuestionDocuments": typeof lib_moveQuestionDocuments;
   "lib/moveQuestions": typeof lib_moveQuestions;

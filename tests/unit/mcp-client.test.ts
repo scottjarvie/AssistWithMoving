@@ -26,6 +26,7 @@ import {
   getAiProviderStatus,
   getApiContext,
   getCapacityReport,
+  getMoveDayChecklist,
   getMoveQuestions,
   getMoveSummary,
   listAiJobs,
@@ -281,6 +282,52 @@ describe("MovingManifest MCP API client", () => {
       ],
       counts: { openPrompts: 1, critical: 1 },
     });
+  });
+
+  it("fetches the Move Day checklist through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          move: { moveId: "move1", title: "PCS move", type: "pcs" },
+          filter: { mode: "ready", query: "truck" },
+          counts: { totalBoxes: 2, filteredBoxes: 1 },
+          checklist: [
+            {
+              boxId: "box1",
+              code: "B-001",
+              status: "staged",
+              itemCount: 4,
+              assignedResourceName: "Rental truck",
+            },
+          ],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getMoveDayChecklist(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1", filter: "ready", query: "truck", limit: 20 }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "https://example.com/api/v1/moves/move1/move-day?filter=ready&query=truck&limit=20"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(result.checklist).toEqual([
+      expect.objectContaining({
+        boxId: "box1",
+        code: "B-001",
+        assignedResourceName: "Rental truck",
+      }),
+    ]);
   });
 
   it("keeps external source keys on item create requests", async () => {

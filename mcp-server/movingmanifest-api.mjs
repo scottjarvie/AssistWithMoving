@@ -127,6 +127,19 @@ export async function getMoveQuestions(config, input) {
   return response.data;
 }
 
+export async function getMoveDayChecklist(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/move-day`,
+    query: {
+      filter: input.filter,
+      query: input.query,
+      limit: input.limit,
+      cursor: input.cursor,
+    },
+  });
+  return response.data;
+}
+
 export async function searchInventory(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/items`,

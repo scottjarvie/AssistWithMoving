@@ -48,7 +48,9 @@ The move summary endpoint requires `moves/read`, `inventory/read`, and
 `exports/read` because it returns move, inventory, photo metadata, documentation,
 and export state in one response. The move questions endpoint requires
 `moves/read` and `inventory/read` because it summarizes missing setup,
-inventory, evidence, resource, load, PCS, and packet details.
+inventory, evidence, resource, load, PCS, and packet details. The Move Day
+checklist endpoint also requires `moves/read` and `inventory/read` because it
+returns crew-safe box status, counts, assignments, warnings, and exception notes.
 
 Top-level object aliases such as `/items/{itemId}`, `/boxes/{boxId}`, and
 `/photos/{photoId}/attach` still validate object ownership server-side. For
@@ -220,6 +222,22 @@ The questions response includes the move id/title/type, all prompt definitions,
 the top open prompts, severity counts, category counts, and `generatedAt`. It is
 the same question-readiness logic used by the app UI for setup, PCS, resources,
 inventory, evidence, load planning, and documentation packet prompts.
+
+Get the crew-safe Move Day checklist:
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/move-day?filter=ready&limit=50" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+The Move Day response includes move identity, filter metadata, progress counts,
+paginated checklist rows, and `generatedAt`. Checklist rows include box code,
+label, source/destination rooms, status, item count, load resource/zone names,
+assignment warnings/hard blocks, lock state, and Move Day exception notes. It is
+intentionally crew-safe: values, serial numbers, private notes, and photo details
+are not returned. Supported filters are `all`, `ready`, `staged`, `loaded`, and
+`exceptions`; pass `query` or `search` to narrow by box code, label, room,
+destination, status, resource, or zone.
 
 List move people and contacts:
 
@@ -984,6 +1002,7 @@ Available MCP tools:
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
 | `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |
+| `get_move_day_checklist` | Fetch a crew-safe Move Day checklist with box status, item counts, load assignment names, warnings, exception notes, and progress counts. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |

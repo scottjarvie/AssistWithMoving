@@ -7,6 +7,10 @@ import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { hashApiKey } from "./lib/apiKeys";
 import { getAiProviderStatus } from "./lib/aiProvider";
 import {
+  buildMoveDayChecklist,
+  parseMoveDayFilter,
+} from "./lib/moveDayChecklist";
+import {
   aiUsageLimits,
   assertAiUsageAllowed,
   inputBytesFromText,
@@ -531,6 +535,9 @@ async function routeRequest(
   if (nested === "questions" && args.method === "GET" && segments.length === 3) {
     return await routeMoveQuestions(ctx, auth, move);
   }
+  if (nested === "move-day" && args.method === "GET" && segments.length === 3) {
+    return await routeMoveDayChecklist(ctx, args, auth, move);
+  }
   if (
     nested === "capacity-report" &&
     args.method === "GET" &&
@@ -861,6 +868,58 @@ async function routeMoveQuestions(
       },
       ...summary,
       generatedAt: Date.now(),
+    },
+  });
+}
+
+async function routeMoveDayChecklist(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  move: Doc<"moves">
+) {
+  const [items, boxes, memberships, resources, zones] = await Promise.all([
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .order("desc")
+      .collect(),
+    ctx.db
+      .query("boxItems")
+      .withIndex("by_move", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+  ]);
+
+  const summary = buildMoveDayChecklist({
+    householdId: auth.householdId,
+    move,
+    items,
+    boxes,
+    memberships,
+    resources,
+    zones,
+    filter: parseMoveDayFilter(args.query.filter) ?? "all",
+    search: args.query.query ?? args.query.search,
+  });
+  const page = paginate(summary.checklist, args.query);
+
+  return restOk({
+    data: {
+      ...summary,
+      checklist: page.data,
+      page: page.page,
     },
   });
 }

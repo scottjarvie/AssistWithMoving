@@ -99,6 +99,20 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
   },
   {
+    id: "moveDayChecklist",
+    title: "Move Day checklist",
+    status: "available",
+    purpose:
+      "Fetch a crew-safe Move Day box checklist with progress counts, load assignment names, warnings, hard blocks, and exception notes.",
+    requiredScopes: ["moves/read", "inventory/read"],
+    restEndpoints: ["GET /api/v1/moves/:moveId/move-day"],
+    mcpTools: ["get_move_day_checklist"],
+    agentWorkflows: [
+      "Give helpers, movers, or local assistants a filtered status checklist without exposing values, serials, private notes, or photo details.",
+      "Search a scanned box code and see where it should be staged, loaded, or marked as an exception.",
+    ],
+  },
+  {
     id: "inventory",
     title: "Inventory intake and item updates",
     status: "available",
