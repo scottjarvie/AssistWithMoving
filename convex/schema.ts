@@ -401,6 +401,8 @@ export const aiPlanningSuggestionStatus = v.union(
   v.literal("rejected")
 );
 
+export const inventoryDuplicateDecisionStatus = v.union(v.literal("ignored"));
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -1242,6 +1244,21 @@ export default defineSchema({
     .index("by_box_status", ["boxId", "status"])
     .index("by_job", ["aiJobId"])
     .index("by_household_status", ["householdId", "status"]),
+
+  inventoryDuplicateDecisions: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    groupKey: v.string(),
+    itemIdsKey: v.string(),
+    itemIds: v.array(v.id("items")),
+    status: inventoryDuplicateDecisionStatus,
+    reviewedByUserId: v.id("users"),
+    reviewedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_group", ["moveId", "groupKey", "itemIdsKey"]),
 
   items: defineTable({
     householdId: v.id("households"),

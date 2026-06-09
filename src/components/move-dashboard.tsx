@@ -27,6 +27,7 @@ import { ConvexAuthStatus } from "@/components/convex-auth-status";
 import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
 import { EstimateSummary } from "@/components/estimate-summary";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { InventoryDuplicateReview } from "@/components/inventory-duplicate-review";
 import { InventoryTable } from "@/components/inventory-table";
 import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { MoveDayView } from "@/components/move-day-view";
@@ -845,6 +846,8 @@ export function MoveDashboard() {
       <section>
         <InventoryTable householdId={householdId} moveId={moveId} />
       </section>
+
+      <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
 
       <EstimateSummary householdId={householdId} moveId={moveId} />
 

@@ -148,6 +148,8 @@ test.describe("authenticated product flow", () => {
     const moveTitle = `E2E PCS move ${runId}`;
     const itemName = `E2E road bike ${runId}`;
     const roomWalkItemName = `E2E office binder ${runId}`;
+    const duplicateItemName = `E2E red toolbox ${runId}`;
+    const duplicateMatchName = `E2E tool box ${runId}`;
     const boxCode = `E2E-${runId.toUpperCase()}`;
     const boxLabel = `E2E bike parts ${runId}`;
     const contactName = `E2E transportation office ${runId}`;
@@ -219,6 +221,48 @@ test.describe("authenticated product flow", () => {
     await page.getByLabel("New item disposition").selectOption("mover");
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await expect(page.getByLabel(`Status for ${itemName}`)).toBeVisible();
+
+    for (const duplicateName of [duplicateItemName, duplicateMatchName]) {
+      await page.getByLabel("New item name").fill(duplicateName);
+      await page.getByLabel("New item room").fill("Garage");
+      await page.getByLabel("New item category").fill("Tools");
+      await page.getByLabel("New item disposition").selectOption("mover");
+      await page.getByRole("button", { name: "Add", exact: true }).click();
+      await expect(page.getByLabel(`Status for ${duplicateName}`)).toBeVisible({
+        timeout: 30_000,
+      });
+    }
+
+    const duplicateReview = page
+      .getByRole("heading", { name: "Duplicate review", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(duplicateReview.getByText(duplicateItemName)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(duplicateReview.getByText(duplicateMatchName)).toBeVisible();
+    await duplicateReview
+      .getByRole("button", { name: "Mark review" })
+      .first()
+      .click();
+    await expect(
+      duplicateReview.getByText(/\d+ items marked for duplicate review\./)
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page
+        .getByRole("row")
+        .filter({ has: page.getByText(duplicateItemName) })
+        .getByLabel("needs review")
+    ).toBeChecked({ timeout: 30_000 });
+    await duplicateReview
+      .getByRole("button", { name: "Not duplicates" })
+      .first()
+      .click();
+    await expect(
+      duplicateReview.getByText(/\d+ items kept as separate records\./)
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(duplicateReview.getByText(duplicateItemName)).toBeHidden({
+      timeout: 30_000,
+    });
 
     const itemRow = page
       .getByRole("row")
