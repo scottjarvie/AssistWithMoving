@@ -62,6 +62,18 @@ export const alternativeGroups = [
   },
 ];
 
+export const optionalGroups = [
+  {
+    label: "Cloudflare image delivery env names",
+    alternatives: [
+      "CLOUDFLARE_IMAGE_DELIVERY_URL",
+      "CLOUDFLARE_IMAGES_ACCOUNT_HASH",
+    ],
+    helperKeys: ["CLOUDFLARE_IMAGE_DELIVERY_DOMAIN"],
+    issue: "MOVE-138",
+  },
+];
+
 export function envArg() {
   const index = process.argv.indexOf("--environment");
   if (index === -1) return undefined;
@@ -183,6 +195,36 @@ function checkAlternativeGroups(names) {
   results.push(...alternativeGroupResults(names));
 }
 
+export function optionalGroupResults(names) {
+  const nextResults = [];
+  for (const group of optionalGroups) {
+    const present = group.alternatives.filter((key) => names.has(key));
+    const helpers = group.helperKeys.filter((key) => names.has(key));
+    if (present.length) {
+      nextResults.push({
+        status: "pass",
+        label: group.label,
+        detail: helpers.length
+          ? `configured through ${present.join(" or ")} with ${helpers.join(", ")}`
+          : `configured through ${present.join(" or ")}`,
+      });
+      continue;
+    }
+
+    nextResults.push({
+      status: "warn",
+      label: group.label,
+      detail: `optional Cloudflare Images delivery is inactive; signed Backblaze derivative URLs remain the fallback; tracked by ${group.issue}`,
+    });
+  }
+
+  return nextResults;
+}
+
+function checkOptionalGroups(names) {
+  results.push(...optionalGroupResults(names));
+}
+
 export async function main() {
   const response = await run("npx", ["vercel", "env", "ls", environment]);
   if (response.code !== 0) {
@@ -203,12 +245,14 @@ export async function main() {
     );
     checkRequiredGroups(names);
     checkAlternativeGroups(names);
+    checkOptionalGroups(names);
     return;
   }
 
   record("pass", "Vercel env list", `${environment}: ${summarizeNames(names)}`);
   checkRequiredGroups(names);
   checkAlternativeGroups(names);
+  checkOptionalGroups(names);
   record(
     "warn",
     "encrypted value validation",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   alternativeGroupResults,
+  optionalGroupResults,
   parseEnvNames,
   requiredGroupResults,
   trackedIssueDetail,
@@ -52,5 +53,58 @@ CLERK_SECRET_KEY                 Encrypted  Production  1d ago
     expect(webhookDetails).toContain(
       "missing one of CLERK_WEBHOOK_SIGNING_SECRET, CLERK_WEBHOOK_SECRET; tracked by MOVE-106; source setup MOVE-68"
     );
+  });
+
+  it("warns when optional Cloudflare image delivery is inactive", () => {
+    expect(optionalGroupResults(new Set())).toEqual([
+      {
+        status: "warn",
+        label: "Cloudflare image delivery env names",
+        detail:
+          "optional Cloudflare Images delivery is inactive; signed Backblaze derivative URLs remain the fallback; tracked by MOVE-138",
+      },
+    ]);
+  });
+
+  it("does not route optional Cloudflare preview readiness through required preview env blockers", () => {
+    const [result] = optionalGroupResults(new Set());
+
+    expect(result).toEqual(
+      {
+        status: "warn",
+        label: "Cloudflare image delivery env names",
+        detail:
+          "optional Cloudflare Images delivery is inactive; signed Backblaze derivative URLs remain the fallback; tracked by MOVE-138",
+      }
+    );
+    expect(result?.detail).not.toContain("MOVE-106");
+  });
+
+  it("passes when a Cloudflare delivery URL or account hash is configured", () => {
+    expect(
+      optionalGroupResults(new Set(["CLOUDFLARE_IMAGE_DELIVERY_URL"]))
+    ).toEqual([
+      {
+        status: "pass",
+        label: "Cloudflare image delivery env names",
+        detail: "configured through CLOUDFLARE_IMAGE_DELIVERY_URL",
+      },
+    ]);
+
+    expect(
+      optionalGroupResults(
+        new Set([
+          "CLOUDFLARE_IMAGES_ACCOUNT_HASH",
+          "CLOUDFLARE_IMAGE_DELIVERY_DOMAIN",
+        ])
+      )
+    ).toEqual([
+      {
+        status: "pass",
+        label: "Cloudflare image delivery env names",
+        detail:
+          "configured through CLOUDFLARE_IMAGES_ACCOUNT_HASH with CLOUDFLARE_IMAGE_DELIVERY_DOMAIN",
+      },
+    ]);
   });
 });
