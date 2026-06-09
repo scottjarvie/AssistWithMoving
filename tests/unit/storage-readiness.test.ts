@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  backblazeDashboardPresetWarnings,
   corsAdministrationGuidance,
   corsOriginAllows,
   missingCorsRequirements,
@@ -14,12 +15,15 @@ describe("storage readiness CORS helpers", () => {
       true
     );
     expect(
-      corsOriginAllows("https://movingmanifest-git-main.vercel.app", "https://*.vercel.app")
+      corsOriginAllows(
+        "https://movingmanifest-git-main.vercel.app",
+        "https://*.vercel.app"
+      )
     ).toBe(true);
     expect(corsOriginAllows("http://localhost:3827", "https")).toBe(false);
-    expect(corsOriginAllows("http://localhost:3827", "http://localhost:3827")).toBe(
-      true
-    );
+    expect(
+      corsOriginAllows("http://localhost:3827", "http://localhost:3827")
+    ).toBe(true);
   });
 
   it("does not report missing required origins when broad HTTPS covers production and previews", () => {
@@ -39,6 +43,24 @@ describe("storage readiness CORS helpers", () => {
       "s3_get",
       "s3_head",
     ]);
+  });
+
+  it("warns against unsafe or incomplete Backblaze dashboard CORS presets", () => {
+    expect(backblazeDashboardPresetWarnings.join("\n")).toContain(
+      "every origin"
+    );
+    expect(backblazeDashboardPresetWarnings.join("\n")).toContain(
+      "all HTTPS origins"
+    );
+    expect(backblazeDashboardPresetWarnings.join("\n")).toContain(
+      "http://localhost:3827"
+    );
+    expect(backblazeDashboardPresetWarnings.join("\n")).toContain(
+      "one origin"
+    );
+    expect(backblazeDashboardPresetWarnings.join("\n")).toContain(
+      "custom CORS rule"
+    );
   });
 
   it("keeps bucket-scoped runtime keys separate from CORS administration", () => {

@@ -44,6 +44,12 @@ export const recommendedBackblazeNativeCorsRules = [
     maxAgeSeconds: 3600,
   },
 ];
+export const backblazeDashboardPresetWarnings = [
+  "Backblaze dashboard preset note: do not use 'Share everything with every origin' for launch; it is broader than the app needs.",
+  "Backblaze dashboard preset note: 'Share everything with all HTTPS origins' still does not cover local http://localhost:3827 and allows unrelated HTTPS sites.",
+  "Backblaze dashboard preset note: 'Share everything with this one origin' is too narrow for local dev, production, www, and Vercel preview coverage together.",
+  "Use a custom CORS rule through the B2 CLI/custom rules path or a temporary admin key with bucket CORS permissions.",
+];
 const results = [];
 
 function record(status, label, detail) {
@@ -322,6 +328,9 @@ if (isMain) {
     console.log(
       "Dashboard note: if Backblaze asks which API the rule applies to, choose S3-compatible API or Both for MovingManifest uploads."
     );
+    for (const warning of backblazeDashboardPresetWarnings) {
+      console.log(warning);
+    }
     console.log(
       "Key note: keep the app runtime B2 key bucket-scoped for file read/write; use the dashboard or a separate admin key for bucket-level CORS changes."
     );
