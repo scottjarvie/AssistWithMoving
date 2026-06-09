@@ -73,8 +73,23 @@ describe("move question summary", () => {
           verificationStatus: "needsReview",
         },
       ],
+      resources: [
+        {
+          resourceId: "truck-1",
+          type: "truck",
+          name: "Truck 1",
+          capacity: {},
+          capacityReviewStatus: "unreviewed",
+          rules: [],
+        },
+      ],
+      zones: [],
     });
 
+    expect(promptCount(summary, "capacity-review")).toBe(1);
+    expect(promptCount(summary, "capacity-values")).toBe(1);
+    expect(promptCount(summary, "resource-zones")).toBe(1);
+    expect(promptCount(summary, "resource-rules")).toBe(1);
     expect(promptCount(summary, "move-route")).toBe(1);
     expect(promptCount(summary, "pcs-orders-allowance")).toBe(3);
     expect(promptCount(summary, "inventory-review")).toBe(1);
@@ -140,6 +155,24 @@ describe("move question summary", () => {
           itemId: "ready",
           photoType: "item",
           verificationStatus: "verified",
+        },
+      ],
+      resources: [
+        {
+          resourceId: "truck-1",
+          type: "truck",
+          name: "Truck 1",
+          capacity: { maxWeightLb: 1200, maxVolumeCuFt: 80 },
+          capacityReviewStatus: "confirmed",
+          rules: ["secure loose items"],
+        },
+      ],
+      zones: [
+        {
+          zoneId: "zone-1",
+          resourceId: "truck-1",
+          name: "Bed",
+          preferredTags: ["boxes"],
         },
       ],
     });

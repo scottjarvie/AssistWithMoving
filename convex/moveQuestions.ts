@@ -18,25 +18,34 @@ export const summaryForMove = query({
       "inventory:read"
     );
 
-    const [move, items, boxes, memberships, photos] = await Promise.all([
-      ctx.db.get(args.moveId),
-      ctx.db
-        .query("items")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-      ctx.db
-        .query("boxes")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-      ctx.db
-        .query("boxItems")
-        .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-      ctx.db
-        .query("itemPhotos")
-        .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-        .collect(),
-    ]);
+    const [move, items, boxes, memberships, photos, resources, zones] =
+      await Promise.all([
+        ctx.db.get(args.moveId),
+        ctx.db
+          .query("items")
+          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("boxes")
+          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("boxItems")
+          .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("itemPhotos")
+          .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("transportResources")
+          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("transportZones")
+          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+      ]);
 
     if (!move || move.householdId !== args.householdId) {
       throw new Error("Move not found.");
@@ -64,6 +73,18 @@ export const summaryForMove = query({
           photoType: photo.photoType,
           verificationStatus: photo.verificationStatus,
           archivedAt: photo.archivedAt,
+        })),
+      resources: resources
+        .filter((resource) => resource.householdId === args.householdId)
+        .map(toMoveQuestionResource),
+      zones: zones
+        .filter((zone) => zone.householdId === args.householdId)
+        .map((zone) => ({
+          zoneId: String(zone._id),
+          resourceId: String(zone.resourceId),
+          name: zone.name,
+          preferredTags: zone.preferredTags,
+          archivedAt: zone.archivedAt,
         })),
     });
   },
@@ -122,5 +143,17 @@ function toMoveQuestionBox(box: Doc<"boxes">) {
     assignmentWarnings: box.assignmentWarnings,
     assignmentHardBlocks: box.assignmentHardBlocks,
     archivedAt: box.archivedAt,
+  };
+}
+
+function toMoveQuestionResource(resource: Doc<"transportResources">) {
+  return {
+    resourceId: String(resource._id),
+    type: resource.type,
+    name: resource.name,
+    capacity: resource.capacity,
+    capacityReviewStatus: resource.capacityReviewStatus,
+    rules: resource.rules,
+    archivedAt: resource.archivedAt,
   };
 }

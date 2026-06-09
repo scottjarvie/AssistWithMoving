@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Archive,
   CalendarDays,
+  CheckCircle2,
   ClipboardList,
   FileStack,
   Home,
@@ -91,6 +92,9 @@ export function MoveDashboard() {
   const createTransportResourceFromPreset = useMutation(
     api.transportResources.createFromPreset
   );
+  const updateTransportResourceCapacityReview = useMutation(
+    api.transportResources.updateCapacityReview
+  );
   const ensurePlanningDefaults = useMutation(
     api.movePlanningDefaults.ensureForMove
   );
@@ -126,6 +130,8 @@ export function MoveDashboard() {
   const [saving, setSaving] = useState(false);
   const [addingPreset, setAddingPreset] =
     useState<TransportResourcePresetKey | null>(null);
+  const [reviewingResourceId, setReviewingResourceId] =
+    useState<Id<"transportResources"> | null>(null);
   const [ensuringDefaults, setEnsuringDefaults] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -270,6 +276,36 @@ export function MoveDashboard() {
       setMessage("Could not add that resource preset yet.");
     } finally {
       setAddingPreset(null);
+    }
+  }
+
+  async function handleCapacityReview(
+    resourceId: Id<"transportResources">,
+    status: "estimated" | "confirmed"
+  ) {
+    if (!householdId || !moveId) {
+      return;
+    }
+
+    setReviewingResourceId(resourceId);
+    setMessage(null);
+
+    try {
+      await updateTransportResourceCapacityReview({
+        householdId,
+        moveId,
+        resourceId,
+        status,
+      });
+      setMessage(
+        status === "confirmed"
+          ? "Resource capacity marked as confirmed."
+          : "Resource capacity marked as estimated."
+      );
+    } catch {
+      setMessage("Could not update that resource capacity review yet.");
+    } finally {
+      setReviewingResourceId(null);
     }
   }
 
@@ -750,7 +786,7 @@ export function MoveDashboard() {
       <MovePeopleManager householdId={householdId} moveId={moveId} />
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
+        <Card id="transport-resources">
           <CardHeader>
             <CardTitle>Transport resources</CardTitle>
             <CardDescription>
@@ -807,6 +843,40 @@ export function MoveDashboard() {
                         </Badge>
                       ))}
                     </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          resource.capacityReviewStatus === "confirmed"
+                            ? "secondary"
+                            : "outline"
+                        }
+                      >
+                        {capacityReviewLabel(resource.capacityReviewStatus)}
+                      </Badge>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={reviewingResourceId === resource._id}
+                        onClick={() =>
+                          void handleCapacityReview(resource._id, "estimated")
+                        }
+                      >
+                        Estimated
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={reviewingResourceId === resource._id}
+                        onClick={() =>
+                          void handleCapacityReview(resource._id, "confirmed")
+                        }
+                      >
+                        <CheckCircle2 aria-hidden="true" />
+                        Confirmed
+                      </Button>
+                    </div>
                     <p className="mt-3 text-xs text-muted-foreground">
                       {resource.rules.length
                         ? resource.rules.join(" · ")
@@ -824,7 +894,7 @@ export function MoveDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="capacity-posture">
           <CardHeader>
             <CardTitle>Capacity posture</CardTitle>
             <CardDescription>
@@ -1063,6 +1133,17 @@ export function MoveDashboard() {
       </section>
     </div>
   );
+}
+
+function capacityReviewLabel(status?: string) {
+  switch (status) {
+    case "estimated":
+      return "Capacity estimated";
+    case "confirmed":
+      return "Capacity confirmed";
+    default:
+      return "Capacity needs review";
+  }
 }
 
 function Metric({

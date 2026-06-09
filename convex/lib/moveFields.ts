@@ -669,6 +669,12 @@ export const movePersonRoleValidator = v.union(
   v.literal("contact")
 );
 
+export const capacityReviewStatusValidator = v.union(
+  v.literal("unreviewed"),
+  v.literal("estimated"),
+  v.literal("confirmed")
+);
+
 export const dimensionsValidator = v.object({
   lengthIn: v.optional(v.number()),
   widthIn: v.optional(v.number()),

@@ -27,6 +27,7 @@ type MoveQuestionSeverity = "critical" | "warning" | "info";
 type MoveQuestionCategory =
   | "setup"
   | "pcs"
+  | "resources"
   | "inventory"
   | "evidence"
   | "load"
@@ -69,6 +70,7 @@ const severityClasses: Record<MoveQuestionSeverity, string> = {
 const categoryLabels: Record<MoveQuestionCategory, string> = {
   setup: "Setup",
   pcs: "PCS",
+  resources: "Resources",
   inventory: "Inventory",
   evidence: "Evidence",
   load: "Load",
@@ -181,7 +183,7 @@ export function MoveQuestionsPanel({
               ))}
             </div>
 
-            <div className="grid gap-2 md:grid-cols-6">
+            <div className="grid gap-2 md:grid-cols-7">
               {Object.entries(categoryLabels).map(([category, label]) => (
                 <div key={category} className="rounded-md border border-border p-3">
                   <p className="text-xs text-muted-foreground">{label}</p>
@@ -193,6 +195,9 @@ export function MoveQuestionsPanel({
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href="#transport-resources">Resources</Link>
+              </Button>
               <Button asChild size="sm" variant="outline">
                 <Link href="#inventory">Inventory</Link>
               </Button>

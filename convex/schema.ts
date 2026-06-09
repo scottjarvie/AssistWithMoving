@@ -403,6 +403,12 @@ export const aiPlanningSuggestionStatus = v.union(
 
 export const inventoryDuplicateDecisionStatus = v.union(v.literal("ignored"));
 
+export const capacityReviewStatus = v.union(
+  v.literal("unreviewed"),
+  v.literal("estimated"),
+  v.literal("confirmed")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -895,6 +901,10 @@ export default defineSchema({
     name: v.string(),
     description: v.optional(v.string()),
     capacity,
+    capacityReviewStatus: v.optional(capacityReviewStatus),
+    capacityNotes: v.optional(v.string()),
+    capacityReviewedAt: v.optional(v.number()),
+    capacityReviewedByUserId: v.optional(v.id("users")),
     rules: v.array(v.string()),
     sortOrder: v.number(),
     createdByUserId: v.id("users"),

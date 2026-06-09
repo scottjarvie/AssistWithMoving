@@ -3,6 +3,7 @@ export type MoveQuestionSeverity = "critical" | "warning" | "info";
 export type MoveQuestionCategory =
   | "setup"
   | "pcs"
+  | "resources"
   | "inventory"
   | "evidence"
   | "load"
@@ -69,6 +70,32 @@ export type MoveQuestionPhoto = {
   archivedAt?: number;
 };
 
+export type MoveQuestionCapacity = {
+  maxWeightLb?: number;
+  maxVolumeCuFt?: number;
+  maxItemCount?: number;
+  weightIsUnlimited?: boolean;
+  volumeIsUnlimited?: boolean;
+};
+
+export type MoveQuestionResource = {
+  resourceId: string;
+  type: string;
+  name: string;
+  capacity: MoveQuestionCapacity;
+  capacityReviewStatus?: string;
+  rules: string[];
+  archivedAt?: number;
+};
+
+export type MoveQuestionZone = {
+  zoneId: string;
+  resourceId: string;
+  name: string;
+  preferredTags: string[];
+  archivedAt?: number;
+};
+
 export type MoveQuestionPrompt = {
   key: string;
   category: MoveQuestionCategory;
@@ -87,6 +114,8 @@ export type MoveQuestionInput = {
   boxes: MoveQuestionBox[];
   memberships: MoveQuestionMembership[];
   photos: MoveQuestionPhoto[];
+  resources: MoveQuestionResource[];
+  zones: MoveQuestionZone[];
 };
 
 const loadRelevantDispositions = new Set([
@@ -108,6 +137,29 @@ const evidenceImportantKeys = new Set([
   "restrictedReview",
 ]);
 
+const capacityRelevantResourceTypes = new Set([
+  "truck",
+  "trailer",
+  "personalVehicle",
+  "storage",
+  "custom",
+]);
+
+const rulesRelevantResourceTypes = new Set([
+  "truck",
+  "trailer",
+  "personalVehicle",
+  "professionalMovers",
+  "militaryMovers",
+  "storage",
+  "dump",
+  "sell",
+  "donate",
+  "free",
+  "freeGiveaway",
+  "custom",
+]);
+
 export function summarizeMoveQuestions(input: MoveQuestionInput) {
   const activeItems = input.items.filter(
     (item) => !item.deletedAt && item.status !== "archived"
@@ -123,6 +175,13 @@ export function summarizeMoveQuestions(input: MoveQuestionInput) {
     activeMemberships.map((membership) => membership.itemId)
   );
   const activePhotos = input.photos.filter((photo) => !photo.archivedAt);
+  const activeResources = input.resources.filter((resource) => !resource.archivedAt);
+  const activeResourceIds = new Set(
+    activeResources.map((resource) => resource.resourceId)
+  );
+  const activeZones = input.zones.filter(
+    (zone) => !zone.archivedAt && activeResourceIds.has(zone.resourceId)
+  );
   const itemIdsWithPhotos = new Set(
     activePhotos
       .map((photo) => photo.itemId)
@@ -132,6 +191,7 @@ export function summarizeMoveQuestions(input: MoveQuestionInput) {
   const prompts = [
     ...setupPrompts(input.move),
     ...pcsPrompts(input.move),
+    ...resourcePrompts(activeResources, activeZones),
     ...inventoryPrompts(activeItems),
     ...evidencePrompts(activeItems, activePhotos, itemIdsWithPhotos),
     ...loadPrompts(activeItems, activeBoxes, boxedItemIds),
@@ -200,6 +260,101 @@ function setupPrompts(move: MoveQuestionMove): MoveQuestionPrompt[] {
       count: missingDateFields.length,
       anchor: "#active-moves",
       actionLabel: "Move details",
+    }),
+  ];
+}
+
+function resourcePrompts(
+  resources: MoveQuestionResource[],
+  zones: MoveQuestionZone[]
+): MoveQuestionPrompt[] {
+  const zonesByResourceId = new Set(zones.map((zone) => zone.resourceId));
+  const capacityRelevant = resources.filter(isCapacityRelevantResource);
+  const unreviewedCapacity = capacityRelevant.filter(
+    (resource) =>
+      !resource.capacityReviewStatus ||
+      resource.capacityReviewStatus === "unreviewed"
+  );
+  const missingCapacity = capacityRelevant.filter(hasCapacityGap);
+  const missingZones = resources.filter(
+    (resource) =>
+      resource.type !== "unknown" && !zonesByResourceId.has(resource.resourceId)
+  );
+  const missingRules = resources.filter(
+    (resource) =>
+      rulesRelevantResourceTypes.has(resource.type) && resource.rules.length === 0
+  );
+
+  return [
+    prompt({
+      key: "transport-resources",
+      category: "resources",
+      severity: "critical",
+      title: "Transport resources",
+      question: "Which trucks, trailers, movers, storage, or disposition buckets exist?",
+      detail:
+        resources.length === 0
+          ? "No active transport resources are set yet."
+          : "Active transport resources are set.",
+      count: resources.length === 0 ? 1 : 0,
+      anchor: "#transport-resources",
+      actionLabel: "Resources",
+    }),
+    prompt({
+      key: "capacity-review",
+      category: "resources",
+      severity: "warning",
+      title: "Capacity assumptions",
+      question: "Which truck, trailer, vehicle, or storage capacities are actual vs. guesses?",
+      detail:
+        unreviewedCapacity.length > 0
+          ? `${unreviewedCapacity.length} capacity-bearing resources still need estimated or confirmed review.`
+          : "Capacity-bearing resources have been reviewed.",
+      count: unreviewedCapacity.length,
+      anchor: "#capacity-posture",
+      actionLabel: "Capacity",
+    }),
+    prompt({
+      key: "capacity-values",
+      category: "resources",
+      severity: "warning",
+      title: "Capacity values",
+      question: "Which capacity-bound resources need weight or volume limits?",
+      detail:
+        missingCapacity.length > 0
+          ? `${missingCapacity.length} resources are missing weight or volume capacity unless intentionally unlimited.`
+          : "Capacity-bound resources have weight or volume values or are marked unlimited.",
+      count: missingCapacity.length,
+      anchor: "#capacity-posture",
+      actionLabel: "Capacity",
+    }),
+    prompt({
+      key: "resource-zones",
+      category: "resources",
+      severity: "info",
+      title: "Resource zones",
+      question: "Which resources need zones for more precise loading or unloading?",
+      detail:
+        missingZones.length > 0
+          ? `${missingZones.length} resources do not have active zones.`
+          : "Active resources have zones.",
+      count: missingZones.length,
+      anchor: "#transport-resources",
+      actionLabel: "Resources",
+    }),
+    prompt({
+      key: "resource-rules",
+      category: "resources",
+      severity: "info",
+      title: "Resource restrictions",
+      question: "Which resources need rule notes for helpers, movers, pickup, donation, or disposal?",
+      detail:
+        missingRules.length > 0
+          ? `${missingRules.length} resources have no rule or restriction notes.`
+          : "Resource rule notes are present.",
+      count: missingRules.length,
+      anchor: "#transport-resources",
+      actionLabel: "Resources",
     }),
   ];
 }
@@ -600,4 +755,20 @@ function categoryCounts(prompts: MoveQuestionPrompt[]) {
     },
     {} as Partial<Record<MoveQuestionCategory, number>>
   );
+}
+
+function isCapacityRelevantResource(resource: MoveQuestionResource) {
+  return capacityRelevantResourceTypes.has(resource.type);
+}
+
+function hasCapacityGap(resource: MoveQuestionResource) {
+  const capacity = resource.capacity;
+  const hasWeight =
+    capacity.weightIsUnlimited ||
+    (typeof capacity.maxWeightLb === "number" && capacity.maxWeightLb > 0);
+  const hasVolume =
+    capacity.volumeIsUnlimited ||
+    (typeof capacity.maxVolumeCuFt === "number" && capacity.maxVolumeCuFt > 0);
+
+  return !hasWeight && !hasVolume;
 }
