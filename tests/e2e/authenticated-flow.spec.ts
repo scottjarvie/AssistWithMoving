@@ -420,6 +420,28 @@ test.describe("authenticated product flow", () => {
       .getByRole("link", { name: "PCS packet" })
       .getAttribute("href");
     expect(pcsPacketHref).toBeTruthy();
+    await documentationPackets
+      .getByRole("button")
+      .filter({ hasText: "Moving company" })
+      .first()
+      .click();
+    const moverPacketHref = await documentationPackets
+      .getByRole("link", { name: "Mover packet" })
+      .getAttribute("href");
+    expect(moverPacketHref).toBeTruthy();
+    await documentationPackets
+      .getByLabel("Documentation profile type")
+      .selectOption("employerRelocation");
+    await documentationPackets
+      .getByRole("button", { name: "Create profile" })
+      .click();
+    await expect(
+      documentationPackets.getByText("Packet profile created.")
+    ).toBeVisible({ timeout: 30_000 });
+    const employerPacketHref = await documentationPackets
+      .getByRole("link", { name: "Employer packet" })
+      .getAttribute("href");
+    expect(employerPacketHref).toBeTruthy();
 
     await page.goto("/settings");
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
@@ -510,5 +532,37 @@ test.describe("authenticated product flow", () => {
       pcsReadiness.getByText("Evidence coverage", { exact: true })
     ).toBeVisible();
     await expect(page.getByText(moveTitle)).toBeVisible({ timeout: 30_000 });
+
+    await page.goto(moverPacketHref!);
+    const moverReadiness = page
+      .getByRole("heading", {
+        name: "Mover handoff readiness",
+        exact: true,
+      })
+      .locator("xpath=ancestor::section[1]");
+    await expect(moverReadiness).toBeVisible({ timeout: 30_000 });
+    await expect(
+      moverReadiness.getByText("Load assignment", { exact: true })
+    ).toBeVisible();
+    await expect(
+      moverReadiness.getByText("Mover recipient privacy", { exact: true })
+    ).toBeVisible();
+
+    await page.goto(employerPacketHref!);
+    const employerReadiness = page
+      .getByRole("heading", {
+        name: "Employer packet readiness",
+        exact: true,
+      })
+      .locator("xpath=ancestor::section[1]");
+    await expect(employerReadiness).toBeVisible({ timeout: 30_000 });
+    await expect(
+      employerReadiness.getByText("Relocation shipment summary", {
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(
+      employerReadiness.getByText("Employer recipient privacy", { exact: true })
+    ).toBeVisible();
   });
 });

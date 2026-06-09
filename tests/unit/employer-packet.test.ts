@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildEmployerReadinessChecklist,
   employerItemWeight,
   employerPacketDisclaimer,
   employerRelocationCategory,
@@ -54,6 +55,95 @@ describe("employer relocation packet helpers", () => {
 
   it("does not imply tax or legal advice", () => {
     expect(employerPacketDisclaimer()).toContain("not tax, legal");
+  });
+
+  it("marks an employer submission packet ready when key records are present", () => {
+    const checklist = buildEmployerReadinessChecklist({
+      mode: "submission",
+      move: {
+        origin: "Utah",
+        destination: "Virginia",
+        dateStart: "2026-07-01",
+      },
+      visibility: {
+        privateFieldsShown: false,
+        valuesHidden: true,
+        serialsHidden: true,
+        privateNotesHidden: true,
+      },
+      summary: {
+        itemCount: 8,
+        boxCount: 4,
+        resourceCount: 2,
+        storageBoxCount: 1,
+        shipmentWeightLb: 900,
+        shipmentVolumeCuFt: 140,
+      },
+      counts: {
+        shipmentItemCount: 7,
+        storageItemCount: 1,
+        excludedItemCount: 0,
+        personalTransportItemCount: 0,
+        needsReviewCount: 0,
+        unboxedShipmentItemCount: 0,
+        missingWeightCount: 0,
+        damagedOrMissingItemCount: 0,
+      },
+    });
+
+    expect(checklist.find((entry) => entry.key === "move-overview")).toMatchObject({
+      status: "ready",
+    });
+    expect(
+      checklist.find((entry) => entry.key === "recipient-privacy")
+    ).toMatchObject({
+      status: "ready",
+    });
+  });
+
+  it("surfaces employer packet gaps without exposing private data", () => {
+    const checklist = buildEmployerReadinessChecklist({
+      mode: "owner",
+      move: {},
+      visibility: {
+        privateFieldsShown: true,
+        valuesHidden: false,
+        serialsHidden: false,
+        privateNotesHidden: false,
+      },
+      summary: {
+        itemCount: 2,
+        boxCount: 0,
+        resourceCount: 0,
+        storageBoxCount: 0,
+        shipmentWeightLb: 0,
+        shipmentVolumeCuFt: 0,
+      },
+      counts: {
+        shipmentItemCount: 0,
+        storageItemCount: 1,
+        excludedItemCount: 1,
+        personalTransportItemCount: 1,
+        needsReviewCount: 2,
+        unboxedShipmentItemCount: 1,
+        missingWeightCount: 1,
+        damagedOrMissingItemCount: 1,
+      },
+    });
+
+    expect(checklist.find((entry) => entry.key === "move-overview")).toMatchObject({
+      status: "missing",
+    });
+    expect(
+      checklist.find((entry) => entry.key === "shipment-summary")
+    ).toMatchObject({
+      status: "missing",
+    });
+    expect(
+      checklist.find((entry) => entry.key === "recipient-privacy")
+    ).toMatchObject({
+      status: "attention",
+    });
   });
 });
 

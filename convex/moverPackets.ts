@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import {
+  buildMoverReadinessChecklist,
   moverBoxExceptionLevel,
   moverFlagsForItem,
   shouldShowMoverContents,
@@ -127,6 +128,51 @@ export const getForMove = query({
         ],
       };
     });
+    const summary = {
+      boxCount: packetBoxes.length,
+      itemCount: packetBoxes.reduce((total, box) => total + box.itemCount, 0),
+      clearCount: packetBoxes.filter((box) => box.exceptionLevel === "clear")
+        .length,
+      attentionCount: packetBoxes.filter(
+        (box) => box.exceptionLevel === "attention"
+      ).length,
+      blockerCount: packetBoxes.filter((box) => box.exceptionLevel === "blocker")
+        .length,
+      unassignedCount: packetBoxes.filter((box) => !box.assignedResource).length,
+    };
+    const visibility = {
+      contentsShown: showContents,
+      privateFieldsShown: showPrivate,
+      valuesHidden: !showPrivate,
+      serialsHidden: !showPrivate,
+      privateNotesHidden: !showPrivate,
+    };
+    const handoffReadyStatuses = new Set([
+      "packed",
+      "sealed",
+      "staged",
+      "loaded",
+      "delivered",
+      "missing",
+      "damaged",
+    ]);
+    const readinessChecklist = buildMoverReadinessChecklist({
+      mode,
+      visibility,
+      summary,
+      counts: {
+        boxesWithoutDestinationCount: packetBoxes.filter(
+          (box) => !box.destinationRoom
+        ).length,
+        boxesWithHandlingFlagsCount: packetBoxes.filter((box) => box.flags.length > 0)
+          .length,
+        boxesWithWarningsCount: packetBoxes.filter((box) => box.warnings.length > 0)
+          .length,
+        boxesNotHandoffReadyCount: packetBoxes.filter(
+          (box) => !handoffReadyStatuses.has(box.status)
+        ).length,
+      },
+    });
 
     return {
       mode,
@@ -138,25 +184,9 @@ export const getForMove = query({
         dateStart: move.dateStart,
         dateEnd: move.dateEnd,
       },
-      visibility: {
-        contentsShown: showContents,
-        privateFieldsShown: showPrivate,
-        valuesHidden: !showPrivate,
-        serialsHidden: !showPrivate,
-        privateNotesHidden: !showPrivate,
-      },
-      summary: {
-        boxCount: packetBoxes.length,
-        itemCount: packetBoxes.reduce((total, box) => total + box.itemCount, 0),
-        clearCount: packetBoxes.filter((box) => box.exceptionLevel === "clear")
-          .length,
-        attentionCount: packetBoxes.filter(
-          (box) => box.exceptionLevel === "attention"
-        ).length,
-        blockerCount: packetBoxes.filter((box) => box.exceptionLevel === "blocker")
-          .length,
-        unassignedCount: packetBoxes.filter((box) => !box.assignedResource).length,
-      },
+      visibility,
+      summary,
+      readinessChecklist,
       sections: {
         resources: resourceSections,
         unassigned: packetBoxes.filter((box) => !box.assignedResource),

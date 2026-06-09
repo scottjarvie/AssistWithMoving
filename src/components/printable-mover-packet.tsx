@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { ArrowLeft, Download, Printer, ShieldCheck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -37,9 +37,10 @@ export function PrintableMoverPacket({
   moveId?: string;
   mode?: MoverPacketMode;
 }) {
+  const auth = useConvexAuth();
   const packet = useQuery(
     api.moverPackets.getForMove,
-    householdId && moveId
+    householdId && moveId && auth.isAuthenticated
       ? {
           householdId: householdId as Id<"households">,
           moveId: moveId as Id<"moves">,
@@ -117,7 +118,29 @@ export function PrintableMoverPacket({
         </div>
       </div>
 
-      {!packet ? (
+      {auth.isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-4/5" />
+        </div>
+      ) : !auth.isAuthenticated ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign in required</CardTitle>
+            <CardDescription>
+              Sign in before exporting a mover packet for this move.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/sign-in">
+                <ShieldCheck aria-hidden="true" />
+                Sign in
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !packet ? (
         <div className="space-y-2">
           <Skeleton className="h-40 w-full" />
           <Skeleton className="h-40 w-4/5" />
@@ -147,6 +170,8 @@ export function PrintableMoverPacket({
               <Metric label="Blockers" value={packet.summary.blockerCount} />
             </div>
           </section>
+
+          <ReadinessChecklist items={packet.readinessChecklist} />
 
           <section className="packet-section rounded-md border border-border p-4">
             <h2 className="text-xl font-semibold tracking-normal">
@@ -233,6 +258,55 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function ReadinessChecklist({
+  items,
+}: {
+  items: MoverPacket["readinessChecklist"];
+}) {
+  return (
+    <section className="packet-section rounded-md border border-border p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-semibold tracking-normal">
+            Mover handoff readiness
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use this as a moving-company, helper, or load-crew handoff checklist
+            before boxes leave the house.
+          </p>
+        </div>
+        <Badge variant="outline">{items.length} checks</Badge>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {items.map((item) => (
+          <div key={item.key} className="rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="text-sm font-medium">{item.label}</p>
+              <ChecklistStatus status={item.status} />
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{item.action}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ChecklistStatus({
+  status,
+}: {
+  status: MoverPacket["readinessChecklist"][number]["status"];
+}) {
+  if (status === "missing") {
+    return <Badge variant="destructive">missing</Badge>;
+  }
+  if (status === "attention") {
+    return <Badge variant="secondary">attention</Badge>;
+  }
+  return <Badge variant="outline">ready</Badge>;
+}
+
 function BoxTable({
   boxes,
   showContents,
@@ -297,6 +371,7 @@ function BoxTable({
 
 function moverPacketToCsv(packet: MoverPacket) {
   const header = [
+    "section",
     "box_code",
     "status",
     "from_room",
@@ -305,24 +380,54 @@ function moverPacketToCsv(packet: MoverPacket) {
     "item_count",
     "flags",
     "warnings",
+    "detail",
+    "action",
     ...(packet.visibility.contentsShown ? ["contents"] : []),
   ];
-  const rows = packet.sections.allBoxes.map((box) => [
-    box.code,
-    box.status,
-    box.room ?? "",
-    box.destinationRoom ?? "",
-    [box.assignedResource, box.assignedZone].filter(Boolean).join(" / "),
-    box.itemCount,
-    box.flags.join("; "),
-    box.warnings.join("; "),
-    ...(packet.visibility.contentsShown
-      ? [box.contents.map((entry) => `${entry.name} x${entry.quantity}`).join("; ")]
-      : []),
-  ]);
+  const rows = [
+    ...packet.readinessChecklist.map((entry) =>
+      checklistRow(entry, packet.visibility.contentsShown)
+    ),
+    ...packet.sections.allBoxes.map((box) => [
+      "Box",
+      box.code,
+      box.status,
+      box.room ?? "",
+      box.destinationRoom ?? "",
+      [box.assignedResource, box.assignedZone].filter(Boolean).join(" / "),
+      box.itemCount,
+      box.flags.join("; "),
+      box.warnings.join("; "),
+      "",
+      "",
+      ...(packet.visibility.contentsShown
+        ? [box.contents.map((entry) => `${entry.name} x${entry.quantity}`).join("; ")]
+        : []),
+    ]),
+  ];
   return [header, ...rows]
     .map((row) => row.map((cell) => csvCell(String(cell))).join(","))
     .join("\n");
+}
+
+function checklistRow(
+  entry: MoverPacket["readinessChecklist"][number],
+  contentsShown: boolean
+) {
+  return [
+    "Mover readiness",
+    entry.label,
+    entry.status,
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    entry.detail,
+    entry.action,
+    ...(contentsShown ? [""] : []),
+  ];
 }
 
 function downloadCsv(filename: string, csv: string) {

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { estimateItem, roundEstimate } from "./lib/estimateEngine";
 import {
+  buildEmployerReadinessChecklist,
   employerItemWeight,
   employerPacketDisclaimer,
   employerRelocationCategory,
@@ -76,12 +77,24 @@ export const getForMove = query({
     const dispositionBuckets = new Map<string, SummaryBucket>();
     const statusBuckets = new Map<string, SummaryBucket>();
     const shipmentItems = [];
+    let shipmentItemCount = 0;
+    let storageItemCount = 0;
+    let excludedItemCount = 0;
+    let personalTransportItemCount = 0;
+    let missingWeightCount = 0;
 
     for (const item of activeItems) {
       const estimate = estimateItem(item);
       const category = employerRelocationCategory(item);
       const weight = employerItemWeight(item);
       const volume = estimate.volume?.value ?? item.estimatedVolumeCuFt ?? 0;
+      if (category === "relocationShipment") shipmentItemCount += 1;
+      if (category === "storage") storageItemCount += 1;
+      if (category === "excludedDisposition") excludedItemCount += 1;
+      if (category === "personalTransport") personalTransportItemCount += 1;
+      if ((category === "relocationShipment" || category === "storage") && weight <= 0) {
+        missingWeightCount += 1;
+      }
       addToBucket(categoryBuckets, category, labelForCategory(category), {
         quantity: item.quantity,
         weight,
@@ -163,6 +176,52 @@ export const getForMove = query({
     const shipmentVolumeCuFt = roundEstimate(
       shipmentItems.reduce((total, item) => total + item.estimatedVolumeCuFt, 0)
     );
+    const visibility = {
+      privateFieldsShown: showPrivate,
+      valuesHidden: !showPrivate,
+      serialsHidden: !showPrivate,
+      privateNotesHidden: !showPrivate,
+      photosHidden: true,
+    };
+    const summary = {
+      itemCount: activeItems.length,
+      boxCount: activeBoxes.length,
+      resourceCount: resources.length,
+      storageBoxCount: storageBoxes.length,
+      shipmentWeightLb,
+      shipmentVolumeCuFt,
+      estimatedPrivateValueCents: showPrivate
+        ? activeItems.reduce((total, item) => total + (item.valueCents ?? 0), 0)
+        : undefined,
+    };
+    const readinessChecklist = buildEmployerReadinessChecklist({
+      mode,
+      move: {
+        origin: move.origin,
+        destination: move.destination,
+        dateStart: move.dateStart,
+        dateEnd: move.dateEnd,
+      },
+      visibility,
+      summary,
+      counts: {
+        shipmentItemCount,
+        storageItemCount,
+        excludedItemCount,
+        personalTransportItemCount,
+        needsReviewCount: activeItems.filter((item) => item.needsReview).length,
+        unboxedShipmentItemCount: shipmentItems.filter(
+          (item) => !item.boxCodes.length
+        ).length,
+        missingWeightCount,
+        damagedOrMissingItemCount: activeItems.filter(
+          (item) =>
+            item.status === "damaged" ||
+            item.status === "missing" ||
+            item.condition === "damaged"
+        ).length,
+      },
+    });
 
     return {
       mode,
@@ -177,24 +236,9 @@ export const getForMove = query({
         type: move.type,
         notes: showPrivate ? move.notes : undefined,
       },
-      visibility: {
-        privateFieldsShown: showPrivate,
-        valuesHidden: !showPrivate,
-        serialsHidden: !showPrivate,
-        privateNotesHidden: !showPrivate,
-        photosHidden: true,
-      },
-      summary: {
-        itemCount: activeItems.length,
-        boxCount: activeBoxes.length,
-        resourceCount: resources.length,
-        storageBoxCount: storageBoxes.length,
-        shipmentWeightLb,
-        shipmentVolumeCuFt,
-        estimatedPrivateValueCents: showPrivate
-          ? activeItems.reduce((total, item) => total + (item.valueCents ?? 0), 0)
-          : undefined,
-      },
+      visibility,
+      summary,
+      readinessChecklist,
       sections: {
         categoryTotals: Array.from(categoryBuckets.values()),
         dispositionTotals: Array.from(dispositionBuckets.values()),

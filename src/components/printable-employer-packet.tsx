@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { ArrowLeft, Download, Printer, ShieldCheck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -36,9 +36,10 @@ export function PrintableEmployerPacket({
   moveId?: string;
   mode?: EmployerPacketMode;
 }) {
+  const auth = useConvexAuth();
   const packet = useQuery(
     api.employerPackets.getForMove,
-    householdId && moveId
+    householdId && moveId && auth.isAuthenticated
       ? {
           householdId: householdId as Id<"households">,
           moveId: moveId as Id<"moves">,
@@ -134,7 +135,30 @@ export function PrintableEmployerPacket({
         </div>
       </div>
 
-      {!packet ? (
+      {auth.isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-4/5" />
+        </div>
+      ) : !auth.isAuthenticated ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign in required</CardTitle>
+            <CardDescription>
+              Sign in before exporting an employer relocation packet for this
+              move.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline">
+              <Link href="/sign-in">
+                <ShieldCheck aria-hidden="true" />
+                Sign in
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !packet ? (
         <div className="space-y-2">
           <Skeleton className="h-40 w-full" />
           <Skeleton className="h-40 w-4/5" />
@@ -187,6 +211,8 @@ export function PrintableEmployerPacket({
               />
             </div>
           </section>
+
+          <ReadinessChecklist items={packet.readinessChecklist} />
 
           <TotalsSection title="Relocation categories" rows={packet.sections.categoryTotals} ownerMode={ownerMode} />
           <TotalsSection title="Disposition summary" rows={packet.sections.dispositionTotals} ownerMode={ownerMode} />
@@ -295,6 +321,55 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ReadinessChecklist({
+  items,
+}: {
+  items: EmployerPacket["readinessChecklist"];
+}) {
+  return (
+    <section className="packet-section rounded-md border border-border p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-semibold tracking-normal">
+            Employer packet readiness
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use this as a relocation-benefit preparation checklist; verify
+            requirements with the employer or relocation administrator.
+          </p>
+        </div>
+        <Badge variant="outline">{items.length} checks</Badge>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {items.map((item) => (
+          <div key={item.key} className="rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="text-sm font-medium">{item.label}</p>
+              <ChecklistStatus status={item.status} />
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{item.action}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ChecklistStatus({
+  status,
+}: {
+  status: EmployerPacket["readinessChecklist"][number]["status"];
+}) {
+  if (status === "missing") {
+    return <Badge variant="destructive">missing</Badge>;
+  }
+  if (status === "attention") {
+    return <Badge variant="secondary">attention</Badge>;
+  }
+  return <Badge variant="outline">ready</Badge>;
+}
+
 function TotalsSection({
   title,
   rows,
@@ -347,6 +422,7 @@ function TotalsSection({
 
 function employerPacketToCsv(packet: EmployerPacket) {
   const header = [
+    "section",
     "item",
     "room",
     "quantity",
@@ -354,19 +430,42 @@ function employerPacketToCsv(packet: EmployerPacket) {
     "status",
     "box_codes",
     "weight_lb",
+    "detail",
+    "action",
   ];
-  const rows = packet.sections.shipmentItems.map((item) => [
-    item.name,
-    item.room ?? "",
-    item.quantity,
-    item.disposition,
-    item.status,
-    item.boxCodes.join("; "),
-    item.estimatedWeightLb,
-  ]);
+  const rows = [
+    ...packet.readinessChecklist.map((entry) => checklistRow(entry)),
+    ...packet.sections.shipmentItems.map((item) => [
+      "Shipment item",
+      item.name,
+      item.room ?? "",
+      item.quantity,
+      item.disposition,
+      item.status,
+      item.boxCodes.join("; "),
+      item.estimatedWeightLb,
+      "",
+      "",
+    ]),
+  ];
   return [header, ...rows]
     .map((row) => row.map((cell) => csvCell(String(cell))).join(","))
     .join("\n");
+}
+
+function checklistRow(entry: EmployerPacket["readinessChecklist"][number]) {
+  return [
+    "Employer readiness",
+    entry.label,
+    "",
+    "",
+    "",
+    entry.status,
+    "",
+    "",
+    entry.detail,
+    entry.action,
+  ];
 }
 
 function downloadCsv(filename: string, csv: string) {
