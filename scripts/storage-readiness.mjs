@@ -15,6 +15,24 @@ const requiredEnv = [
   "B2_APPLICATION_KEY_ID",
   "B2_APPLICATION_KEY",
 ];
+const requiredCorsOrigins = [
+  "http://localhost:3827",
+  "https://movingmanifest.com",
+  "https://www.movingmanifest.com",
+  "https://*.vercel.app",
+];
+const requiredCorsMethods = ["PUT", "GET", "HEAD"];
+const recommendedCorsRule = {
+  CORSRules: [
+    {
+      AllowedOrigins: requiredCorsOrigins,
+      AllowedMethods: requiredCorsMethods,
+      AllowedHeaders: ["*"],
+      ExposeHeaders: ["ETag"],
+      MaxAgeSeconds: 3600,
+    },
+  ],
+};
 const results = [];
 
 function record(status, label, detail) {
@@ -148,16 +166,10 @@ async function checkCors(client) {
     const allowedMethods = new Set(
       rules.flatMap((rule) => rule.AllowedMethods ?? [])
     );
-    const requiredOrigins = [
-      "http://localhost:3827",
-      "https://movingmanifest.com",
-      "https://www.movingmanifest.com",
-      "https://*.vercel.app",
-    ];
-    const missingOrigins = requiredOrigins.filter(
+    const missingOrigins = requiredCorsOrigins.filter(
       (origin) => !allowedOrigins.has(origin) && !allowedOrigins.has("*")
     );
-    const missingMethods = ["PUT", "GET", "HEAD"].filter(
+    const missingMethods = requiredCorsMethods.filter(
       (method) => !allowedMethods.has(method)
     );
 
@@ -180,6 +192,16 @@ async function checkCors(client) {
   } catch (error) {
     record("blocked", "bucket CORS", storageErrorDetail(error));
   }
+}
+
+function shouldPrintCorsPlan() {
+  return results.some(
+    (result) =>
+      result.status !== "pass" &&
+      ["Backblaze native auth", "S3 bucket", "bucket CORS"].includes(
+        result.label
+      )
+  );
 }
 
 async function main() {
@@ -217,6 +239,17 @@ for (const result of results) {
           ? "BLOCKED"
           : "FAIL";
   console.log(`${label} ${result.label}: ${result.detail}`);
+}
+
+if (shouldPrintCorsPlan()) {
+  console.log("");
+  console.log(
+    "Recommended Backblaze custom CORS rule after valid scoped credentials exist:"
+  );
+  console.log(JSON.stringify(recommendedCorsRule, null, 2));
+  console.log(
+    "Security note: avoid broad all-origin CORS for launch unless it is a temporary debugging step."
+  );
 }
 
 console.log(
