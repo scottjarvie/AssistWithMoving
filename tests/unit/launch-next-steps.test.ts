@@ -22,6 +22,7 @@ describe("launch next steps", () => {
     expect(plan).toContain(
       "MOVE-64 - Evaluate and enforce a Content Security Policy after production origins settle"
     );
+    expect(plan).toContain("MOVE-106 - Configure Vercel preview environment variables");
     expect(plan).toContain(
       "MOVE-67 - Remove stale TheMovePlanner Vercel alias after brand rename"
     );
@@ -33,6 +34,7 @@ describe("launch next steps", () => {
       "MOVE-62",
       "MOVE-68",
       "MOVE-66",
+      "MOVE-106",
       "MOVE-64",
       "MOVE-67",
     ]);
@@ -46,6 +48,7 @@ describe("launch next steps", () => {
     expect(plan).toContain("Vercel preview origins");
     expect(plan).toContain("CONTENT_SECURITY_POLICY_MODE");
     expect(plan).toContain("npm run doctor:launch");
+    expect(plan).toContain("npm run doctor:vercel-preview-env");
     expect(plan).toContain("npm run doctor:convex-dev-env");
     expect(plan).toContain("<production-clerk-issuer>");
     expect(plan).toContain("<svix-signing-secret>");

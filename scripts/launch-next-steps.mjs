@@ -83,6 +83,30 @@ export const launchBlockerRemediations = [
     ],
   },
   {
+    issue: "MOVE-106",
+    title: "Configure Vercel preview environment variables",
+    why:
+      "Preview deployments should be usable for QA and future PR review without relying only on production branch deploys.",
+    ownerAction:
+      "Choose whether Preview uses the dev Convex/Clerk stack or a dedicated staging stack, then add the required app, Clerk, Convex, and storage env names to Vercel Preview.",
+    actions: [
+      "npx vercel env add NEXT_PUBLIC_APP_URL preview",
+      "npx vercel env add NEXT_PUBLIC_CONVEX_URL preview",
+      "npx vercel env add CONVEX_DEPLOYMENT preview",
+      "npx vercel env add CONVEX_HTTP_ACTIONS_URL preview",
+      "npx vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY preview",
+      "npx vercel env add CLERK_SECRET_KEY preview",
+      "npx vercel env add CLERK_JWT_ISSUER_DOMAIN preview",
+      "npx vercel env add CLERK_FRONTEND_API_URL preview",
+      "npx vercel env add B2_APPLICATION_KEY_ID preview",
+      "npx vercel env add B2_APPLICATION_KEY preview",
+      "npx vercel env add B2_BUCKET_NAME preview",
+      "npx vercel env add B2_ENDPOINT preview",
+      "npx vercel env add B2_REGION preview",
+    ],
+    verify: ["npm run doctor:vercel-preview-env", "npx vercel deploy -y"],
+  },
+  {
     issue: "MOVE-64",
     title: "Evaluate and enforce a Content Security Policy after production origins settle",
     why:

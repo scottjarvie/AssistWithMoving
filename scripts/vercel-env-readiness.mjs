@@ -11,7 +11,7 @@ const requiredGroups = [
     issue: "MOVE-59",
   },
   {
-    label: "Clerk production env names",
+    label: "Clerk auth env names",
     keys: [
       "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
       "CLERK_SECRET_KEY",
@@ -25,7 +25,7 @@ const requiredGroups = [
     issue: "MOVE-63",
   },
   {
-    label: "Convex production env names",
+    label: "Convex deployment env names",
     keys: [
       "NEXT_PUBLIC_CONVEX_URL",
       "CONVEX_DEPLOYMENT",
@@ -34,7 +34,7 @@ const requiredGroups = [
     issue: "MOVE-59",
   },
   {
-    label: "Backblaze B2 production env names",
+    label: "Backblaze B2 env names",
     keys: [
       "B2_APPLICATION_KEY_ID",
       "B2_APPLICATION_KEY",
@@ -163,7 +163,13 @@ async function main() {
 
   const names = parseEnvNames(response.stdout);
   if (names.size === 0) {
-    record("fail", "Vercel env list", "no env var names were parsed");
+    record(
+      "blocked",
+      "Vercel env list",
+      `${environment}: no env var names are configured; required groups are checked below`
+    );
+    checkRequiredGroups(names);
+    checkAlternativeGroups(names);
     return;
   }
 
