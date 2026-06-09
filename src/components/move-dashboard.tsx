@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import {
   Archive,
+  ArrowRight,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
@@ -78,8 +81,15 @@ import {
   type TransportResourcePresetKey,
 } from "@/lib/transport-presets";
 import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
+import { moveWorkspacePath } from "@/lib/move-links";
 
-export function MoveDashboard() {
+export function MoveDashboard({
+  initialMoveId,
+}: {
+  initialMoveId?: string | null;
+} = {}) {
+  const pathname = usePathname();
+  const router = useRouter();
   const { user } = useUser();
   const currentUser = useQuery(api.users.current);
   const upsertCurrentUser = useMutation(api.users.upsertCurrent);
@@ -103,7 +113,7 @@ export function MoveDashboard() {
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const [selectedMoveId, setSelectedMoveId] = useState<Id<"moves"> | null>(
-    null
+    initialMoveId ? (initialMoveId as Id<"moves">) : null
   );
   const [moveTitle, setMoveTitle] = useState("");
   const [moveType, setMoveType] = useState<MoveType>("pcs");
@@ -160,7 +170,12 @@ export function MoveDashboard() {
   );
 
   const firstMove = activeMoves[0];
-  const moveId = selectedMoveId ?? firstMove?._id ?? null;
+  const selectedMoveIsAccessible = selectedMoveId
+    ? activeMoves.some((move) => move._id === selectedMoveId)
+    : false;
+  const moveId = selectedMoveIsAccessible
+    ? selectedMoveId
+    : firstMove?._id ?? null;
   const selectedMove = activeMoves.find((move) => move._id === moveId);
   const resourcesWithZones = useQuery(
     api.transportResources.listForMoveWithZones,
@@ -177,6 +192,19 @@ export function MoveDashboard() {
     true
   );
   const aiPhotoIntakeEnabled = flagEnabled(featureFlags, "aiPhotoIntake", true);
+  const moveLinkMessage =
+    selectedMoveId && moves && !selectedMoveIsAccessible
+      ? "That move link is not available in this household."
+      : null;
+  const statusMessage = moveLinkMessage ?? message;
+
+  useEffect(() => {
+    if (selectedMoveId && moves && !selectedMoveIsAccessible) {
+      if (pathname.startsWith("/app/moves/") && firstMove?._id) {
+        router.replace(moveWorkspacePath(firstMove._id));
+      }
+    }
+  }, [firstMove?._id, moves, pathname, router, selectedMoveId, selectedMoveIsAccessible]);
 
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -695,13 +723,13 @@ export function MoveDashboard() {
                   <Plus aria-hidden="true" />
                   Create move
                 </Button>
-                {message ? (
+                {statusMessage ? (
                   <p
                     className="text-xs text-muted-foreground"
                     role="status"
                     aria-live="polite"
                   >
-                    {message}
+                    {statusMessage}
                   </p>
                 ) : null}
               </form>
@@ -728,13 +756,17 @@ export function MoveDashboard() {
               </div>
             ) : activeMoves.length ? (
               <div className="space-y-3">
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={moveId ?? ""}
-                    aria-label="Selected move"
-                    onChange={(event) =>
-                    setSelectedMoveId(event.target.value as Id<"moves">)
-                  }
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={moveId ?? ""}
+                  aria-label="Selected move"
+                  onChange={(event) => {
+                    const nextMoveId = event.target.value as Id<"moves">;
+                    setSelectedMoveId(nextMoveId);
+                    if (pathname.startsWith("/app/moves/")) {
+                      router.replace(moveWorkspacePath(nextMoveId));
+                    }
+                  }}
                 >
                   {activeMoves.map((move) => (
                     <option key={move._id} value={move._id}>
@@ -750,6 +782,7 @@ export function MoveDashboard() {
                       <TableHead>Profiles</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Route</TableHead>
+                      <TableHead className="text-right">Workspace</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -767,6 +800,14 @@ export function MoveDashboard() {
                           {[move.origin, move.destination]
                             .filter(Boolean)
                             .join(" -> ") || "not set"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={moveWorkspacePath(move._id)}>
+                              Open
+                              <ArrowRight aria-hidden="true" />
+                            </Link>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
