@@ -260,6 +260,8 @@ export function PrintablePcsPacket({
             </div>
           </section>
 
+          <ReadinessChecklist items={packet.readinessChecklist} />
+
           <ItemTable title="HHG inventory" items={packet.sections.hhgItems} ownerMode={ownerMode} />
           <ItemTable title="PPM / personal transport" items={packet.sections.ppmItems} ownerMode={ownerMode} />
           <ItemTable title="Pro gear" items={packet.sections.proGearItems} ownerMode={ownerMode} />
@@ -301,6 +303,55 @@ function Note({ title, value }: { title: string; value?: string }) {
       </p>
     </div>
   );
+}
+
+function ReadinessChecklist({
+  items,
+}: {
+  items: PcsPacket["readinessChecklist"];
+}) {
+  return (
+    <section className="packet-section rounded-md border border-border p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-semibold tracking-normal">
+            PCS documentation readiness
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Use this as a preparation checklist; verify official requirements
+            with the transportation office or current guidance.
+          </p>
+        </div>
+        <Badge variant="outline">{items.length} checks</Badge>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {items.map((item) => (
+          <div key={item.key} className="rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="text-sm font-medium">{item.label}</p>
+              <ChecklistStatus status={item.status} />
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{item.action}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ChecklistStatus({
+  status,
+}: {
+  status: PcsPacket["readinessChecklist"][number]["status"];
+}) {
+  if (status === "missing") {
+    return <Badge variant="destructive">missing</Badge>;
+  }
+  if (status === "attention") {
+    return <Badge variant="secondary">attention</Badge>;
+  }
+  return <Badge variant="outline">ready</Badge>;
 }
 
 function ItemTable({
@@ -428,8 +479,11 @@ function pcsPacketToCsv(packet: PcsPacket) {
     "box_codes",
     "weight_lb",
     "flags",
+    "detail",
+    "action",
   ];
   const rows = [
+    ...packet.readinessChecklist.map((entry) => checklistRow(entry)),
     ...packet.sections.hhgItems.map((item) => rowFor("HHG", item)),
     ...packet.sections.ppmItems.map((item) => rowFor("PPM", item)),
     ...packet.sections.proGearItems.map((item) => rowFor("Pro gear", item)),
@@ -453,6 +507,23 @@ function rowFor(section: string, item: PcsItem) {
     item.boxCodes.join("; "),
     item.estimatedWeightLb ?? "",
     item.flags.join("; "),
+    "",
+    "",
+  ];
+}
+
+function checklistRow(entry: PcsPacket["readinessChecklist"][number]) {
+  return [
+    "PCS readiness",
+    entry.label,
+    "",
+    "",
+    entry.status,
+    "",
+    "",
+    "",
+    entry.detail,
+    entry.action,
   ];
 }
 

@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { estimateItem, roundEstimate } from "./lib/estimateEngine";
 import {
+  buildPcsReadinessChecklist,
   classifyPcsItem,
   summarizePcsClassifications,
   type PcsPacketMode,
@@ -172,6 +173,50 @@ export const getForMove = query({
     const totalEstimatedVolumeCuFt = roundEstimate(
       packetItems.reduce((total, item) => total + (item.estimatedVolumeCuFt ?? 0), 0)
     );
+    const classificationSummary = summarizePcsClassifications(classifications);
+    const allowanceRemainingLb =
+      typeof move.moveLevelWeightAllowanceLb === "number"
+        ? roundEstimate(move.moveLevelWeightAllowanceLb - totalEstimatedWeightLb)
+        : undefined;
+    const summary = {
+      itemCount: packetItems.length,
+      boxCount: boxSummaries.length,
+      photoCount: activePhotos.length,
+      pcsEvidencePhotoCount,
+      totalEstimatedWeightLb,
+      totalEstimatedVolumeCuFt,
+      allowanceRemainingLb,
+      ...classificationSummary,
+    };
+    const readinessChecklist = buildPcsReadinessChecklist({
+      move: {
+        pcsBranch: move.pcsBranch,
+        pcsShipmentType: move.pcsShipmentType,
+        pcsRankPayGrade: move.pcsRankPayGrade,
+        pcsDependentStatus: move.pcsDependentStatus,
+        pcsOrdersNumber: move.pcsOrdersNumber,
+        moveLevelWeightAllowanceLb: move.moveLevelWeightAllowanceLb,
+        pcsAllowanceNotes: move.pcsAllowanceNotes,
+        pcsTransportationOfficeNotes: move.pcsTransportationOfficeNotes,
+        pcsRestrictedItemsNotes: move.pcsRestrictedItemsNotes,
+        proGearNotes: move.proGearNotes,
+      },
+      summary,
+      counts: {
+        needsReviewCount: activeItems.filter((item) => item.needsReview).length,
+        restrictedCount: activeItems.filter((item) => item.hazardousFlag).length,
+        unboxedCount: packetItems.filter((item) => !item.boxCodes.length).length,
+        highValueWithoutEvidenceCount: packetItems.filter(
+          (item) => item.classification.highValue && item.photoCount === 0
+        ).length,
+        sensitiveWithoutEvidenceCount: packetItems.filter(
+          (item) => item.classification.sensitive && item.photoCount === 0
+        ).length,
+        boxesWithoutAssignmentCount: boxSummaries.filter(
+          (box) => !box.assignedResource
+        ).length,
+      },
+    });
 
     return {
       mode,
@@ -205,19 +250,8 @@ export const getForMove = query({
         pcsRestrictedItemsNotes: move.pcsRestrictedItemsNotes,
         proGearNotes: move.proGearNotes,
       },
-      summary: {
-        itemCount: packetItems.length,
-        boxCount: boxSummaries.length,
-        photoCount: activePhotos.length,
-        pcsEvidencePhotoCount,
-        totalEstimatedWeightLb,
-        totalEstimatedVolumeCuFt,
-        allowanceRemainingLb:
-          typeof move.moveLevelWeightAllowanceLb === "number"
-            ? roundEstimate(move.moveLevelWeightAllowanceLb - totalEstimatedWeightLb)
-            : undefined,
-        ...summarizePcsClassifications(classifications),
-      },
+      summary,
+      readinessChecklist,
       sections: {
         hhgItems: packetItems.filter((item) => item.classification.hhg),
         ppmItems: packetItems.filter((item) => item.classification.ppm),

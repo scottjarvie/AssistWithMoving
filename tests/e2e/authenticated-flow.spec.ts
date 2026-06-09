@@ -493,6 +493,22 @@ test.describe("authenticated product flow", () => {
         exact: true,
       })
     ).toBeVisible({ timeout: 30_000 });
+    const pcsReadiness = page
+      .getByRole("heading", {
+        name: "PCS documentation readiness",
+        exact: true,
+      })
+      .locator("xpath=ancestor::section[1]");
+    await expect(pcsReadiness).toBeVisible({ timeout: 30_000 });
+    await expect(
+      pcsReadiness.getByText("PCS field check", { exact: true })
+    ).toBeVisible();
+    await expect(
+      pcsReadiness.getByText("Weight allowance", { exact: true })
+    ).toBeVisible();
+    await expect(
+      pcsReadiness.getByText("Evidence coverage", { exact: true })
+    ).toBeVisible();
     await expect(page.getByText(moveTitle)).toBeVisible({ timeout: 30_000 });
   });
 });
