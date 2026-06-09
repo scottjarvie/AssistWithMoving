@@ -33,6 +33,11 @@ import {
   publicShareItemVisibleToProfile,
 } from "./lib/publicShareStatus";
 import {
+  assertPublicShareCanComment,
+  normalizePublicShareComment,
+  normalizePublicShareCommentAuthor,
+} from "./lib/publicShareComments";
+import {
   boxStatusValidator,
   itemStatusValidator,
 } from "./lib/moveFields";
@@ -115,6 +120,22 @@ const internalMutations = anyApi as unknown as {
         changed: boolean;
       }
     >;
+    createCommentByTokenHash: FunctionReference<
+      "mutation",
+      "internal",
+      {
+        tokenHash: string;
+        body: string;
+        authorLabel?: string;
+        accessMetadata?: unknown;
+      },
+      {
+        commentId: Id<"shareLinkComments">;
+        body: string;
+        authorLabel?: string;
+        createdAt: number;
+      }
+    >;
   };
 };
 
@@ -151,6 +172,52 @@ export const listForMove = query({
     return links
       .filter((link) => (args.status ? link.status === args.status : true))
       .map((link) => safeShareLinkMetadata(link));
+  },
+});
+
+export const listCommentsForMove = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "documentation:read"
+    );
+
+    const limit = Math.min(Math.max(args.limit ?? 8, 1), 25);
+    const comments = await ctx.db
+      .query("shareLinkComments")
+      .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+      .order("desc")
+      .take(limit);
+
+    return await Promise.all(
+      comments
+        .filter((comment) => comment.householdId === args.householdId)
+        .map(async (comment) => {
+          const [link, profile] = await Promise.all([
+            ctx.db.get(comment.shareLinkId),
+            ctx.db.get(comment.documentationProfileId),
+          ]);
+          return {
+            _id: comment._id,
+            shareLinkId: comment.shareLinkId,
+            documentationProfileId: comment.documentationProfileId,
+            profileName: profile?.name,
+            shareLabel: link?.label,
+            tokenPreview: comment.tokenPreview,
+            role: comment.role,
+            authorLabel: comment.authorLabel,
+            body: comment.body,
+            createdAt: comment.createdAt,
+          };
+        })
+    );
   },
 });
 
@@ -255,6 +322,27 @@ export const updatePublicStatus = action({
       {
         tokenHash,
         target: args.target,
+        accessMetadata: args.accessMetadata,
+      }
+    );
+  },
+});
+
+export const createPublicComment = action({
+  args: {
+    token: v.string(),
+    body: v.string(),
+    authorLabel: v.optional(v.string()),
+    accessMetadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const tokenHash = await hashShareToken(args.token);
+    return await ctx.runMutation(
+      internalMutations.shareLinks.createCommentByTokenHash,
+      {
+        tokenHash,
+        body: args.body,
+        authorLabel: args.authorLabel,
         accessMetadata: args.accessMetadata,
       }
     );
@@ -374,6 +462,87 @@ export const updateStatusByTokenHash = internalMutation({
     });
 
     return result;
+  },
+});
+
+export const createCommentByTokenHash = internalMutation({
+  args: {
+    tokenHash: v.string(),
+    body: v.string(),
+    authorLabel: v.optional(v.string()),
+    accessMetadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const link = await ctx.db
+      .query("shareLinks")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", args.tokenHash))
+      .unique();
+    if (!link) {
+      throw new Error("Share link not found.");
+    }
+
+    assertShareLinkActive(link);
+    assertPublicShareCanComment(link.allowedActions);
+    if (!link.documentationProfileId) {
+      throw new Error("Comments require a scoped documentation profile.");
+    }
+
+    const profile = await ctx.db.get(link.documentationProfileId);
+    if (
+      !profile ||
+      profile.householdId !== link.householdId ||
+      profile.moveId !== link.moveId ||
+      profile.status !== "active"
+    ) {
+      throw new Error("Documentation profile not found.");
+    }
+
+    const body = normalizePublicShareComment(args.body);
+    const authorLabel = normalizePublicShareCommentAuthor(args.authorLabel);
+    const now = Date.now();
+    const commentId = await ctx.db.insert("shareLinkComments", {
+      householdId: link.householdId,
+      moveId: link.moveId,
+      shareLinkId: link._id,
+      documentationProfileId: profile._id,
+      tokenPreview: link.tokenPreview,
+      role: link.role,
+      authorLabel,
+      body,
+      createdAt: now,
+    });
+
+    await ctx.db.patch(link._id, {
+      accessCount: link.accessCount + 1,
+      lastAccessedAt: now,
+      lastAccessMetadata: args.accessMetadata,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: link.householdId,
+      moveId: link.moveId,
+      actorType: "system",
+      category: "shareLink",
+      action: "share_link.comment_created",
+      objectTable: "shareLinkComments",
+      objectId: commentId,
+      metadata: {
+        shareLinkId: link._id,
+        documentationProfileId: profile._id,
+        tokenPreview: link.tokenPreview,
+        role: link.role,
+        bodyLength: body.length,
+        hasAuthorLabel: Boolean(authorLabel),
+      },
+    });
+
+    return {
+      commentId,
+      body,
+      authorLabel,
+      createdAt: now,
+    };
   },
 });
 

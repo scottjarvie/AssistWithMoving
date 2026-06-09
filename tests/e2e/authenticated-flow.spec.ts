@@ -153,6 +153,7 @@ test.describe("authenticated product flow", () => {
     const boxCode = `E2E-${runId.toUpperCase()}`;
     const boxLabel = `E2E bike parts ${runId}`;
     const contactName = `E2E transportation office ${runId}`;
+    const publicComment = `E2E pickup note ${runId}`;
 
     await ensureHousehold(page, householdName);
 
@@ -403,6 +404,58 @@ test.describe("authenticated product flow", () => {
       documentationPackets.getByText("Share link revoked.")
     ).toBeVisible({ timeout: 30_000 });
     await expect(revokeShareLink).toBeHidden({ timeout: 30_000 });
+
+    await documentationPackets
+      .getByLabel("Documentation profile type")
+      .selectOption("sellOrGiveaway");
+    await documentationPackets
+      .getByRole("button", { name: "Create profile" })
+      .click();
+    await expect(
+      documentationPackets.getByText("Packet profile created.")
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(documentationPackets.getByLabel("Packet profile name")).toHaveValue(
+      "Sell / giveaway",
+      { timeout: 30_000 }
+    );
+    await documentationPackets
+      .getByRole("button", { name: "Create link token" })
+      .click();
+    const openCommentShareLink = documentationPackets.getByRole("link", {
+      name: "Open share link",
+    });
+    await expect(openCommentShareLink).toBeVisible({ timeout: 30_000 });
+    await expect(openCommentShareLink).toHaveAttribute("href", /\/share\//);
+    const commentSharePath = await openCommentShareLink.getAttribute("href");
+    expect(commentSharePath).toBeTruthy();
+
+    await page.goto(commentSharePath!);
+    await expect(
+      page.getByRole("heading", { name: "Sell / giveaway", exact: true })
+    ).toBeVisible({ timeout: 30_000 });
+    await page.getByLabel("Comment author").fill("E2E recipient");
+    await page.getByLabel("Recipient note").fill(publicComment);
+    await page.getByRole("button", { name: "Send note" }).click();
+    await expect(page.getByText("Note sent.")).toBeVisible({ timeout: 30_000 });
+
+    await gotoDashboard(page);
+    await waitForWorkspaceAuth(page);
+    await page.getByLabel("Selected household").selectOption({
+      label: `${householdName} - owner`,
+    });
+    await page.getByLabel("Selected move").selectOption({ label: moveTitle });
+    await expect(
+      documentationPackets.getByText(publicComment)
+    ).toBeVisible({ timeout: 30_000 });
+    const revokeCommentShareLink = documentationPackets
+      .getByRole("button", { name: "Revoke" })
+      .first();
+    await expect(revokeCommentShareLink).toBeVisible({ timeout: 30_000 });
+    await revokeCommentShareLink.click();
+    await expect(
+      documentationPackets.getByText("Share link revoked.")
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(revokeCommentShareLink).toBeHidden({ timeout: 30_000 });
 
     await expect(
       page.getByRole("heading", { name: "Inventory", exact: true })

@@ -75,6 +75,19 @@ type ShareLink = {
   accessCount: number;
 };
 
+type ShareLinkComment = {
+  _id: Id<"shareLinkComments">;
+  shareLinkId: Id<"shareLinks">;
+  documentationProfileId: Id<"documentationProfiles">;
+  profileName?: string;
+  shareLabel?: string;
+  tokenPreview: string;
+  role: string;
+  authorLabel?: string;
+  body: string;
+  createdAt: number;
+};
+
 type ExportJobSummary = {
   exportJobId: Id<"exportJobs">;
   type: "inventory" | "boxes" | "assignments" | "documentationProfile";
@@ -146,6 +159,10 @@ export function DocumentationPacketBuilder({
     api.shareLinks.listForMove,
     householdId && moveId ? { householdId, moveId } : "skip"
   ) as ShareLink[] | undefined;
+  const comments = useQuery(
+    api.shareLinks.listCommentsForMove,
+    householdId && moveId ? { householdId, moveId, limit: 8 } : "skip"
+  ) as ShareLinkComment[] | undefined;
   const createProfile = useMutation(api.documentationProfiles.create);
   const updateProfile = useMutation(api.documentationProfiles.update);
   const archiveProfile = useMutation(api.documentationProfiles.archive);
@@ -213,6 +230,7 @@ export function DocumentationPacketBuilder({
     ? draftDestinationFilter
     : (selectedProfile?.filters.destinationRoom ?? "");
   const activeLinks = links?.filter((link) => link.status === "active") ?? [];
+  const recentComments = comments ?? [];
   const missingMoveProfiles = selectedProfileTypes.filter(
     (type) => !activeProfiles.some((profile) => profile.type === type)
   );
@@ -974,6 +992,34 @@ export function DocumentationPacketBuilder({
                           >
                             Revoke
                           </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {recentComments.length ? (
+                  <div className="rounded-md border border-border p-3">
+                    <h3 className="text-sm font-medium">Recipient comments</h3>
+                    <div className="mt-3 space-y-2">
+                      {recentComments.map((comment) => (
+                        <div
+                          key={comment._id}
+                          className="rounded-md bg-muted/40 p-2 text-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                            <span>
+                              {comment.authorLabel ?? "Recipient"} -{" "}
+                              {comment.profileName ??
+                                comment.shareLabel ??
+                                "Scoped packet"}{" "}
+                              - {comment.role} - {comment.tokenPreview}
+                            </span>
+                            <time dateTime={new Date(comment.createdAt).toISOString()}>
+                              {new Date(comment.createdAt).toLocaleString()}
+                            </time>
+                          </div>
+                          <p className="mt-1 whitespace-pre-wrap">{comment.body}</p>
                         </div>
                       ))}
                     </div>

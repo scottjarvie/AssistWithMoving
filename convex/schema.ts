@@ -802,6 +802,22 @@ export default defineSchema({
     .index("by_household_status", ["householdId", "status"])
     .index("by_expires", ["expiresAt"]),
 
+  shareLinkComments: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    shareLinkId: v.id("shareLinks"),
+    documentationProfileId: v.id("documentationProfiles"),
+    tokenPreview: v.string(),
+    role: householdRole,
+    authorLabel: v.optional(v.string()),
+    body: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_share_link_created", ["shareLinkId", "createdAt"])
+    .index("by_profile_created", ["documentationProfileId", "createdAt"])
+    .index("by_household_created", ["householdId", "createdAt"]),
+
   auditLogs: defineTable({
     householdId: v.optional(v.id("households")),
     moveId: v.optional(v.id("moves")),

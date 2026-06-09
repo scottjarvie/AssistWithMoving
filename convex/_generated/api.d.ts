@@ -65,6 +65,7 @@ import type * as lib_photoVisibility from "../lib/photoVisibility.js";
 import type * as lib_planningDefaults from "../lib/planningDefaults.js";
 import type * as lib_planningSuggestions from "../lib/planningSuggestions.js";
 import type * as lib_publicPackets from "../lib/publicPackets.js";
+import type * as lib_publicShareComments from "../lib/publicShareComments.js";
 import type * as lib_publicShareStatus from "../lib/publicShareStatus.js";
 import type * as lib_restApi from "../lib/restApi.js";
 import type * as lib_roles from "../lib/roles.js";
@@ -154,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   "lib/planningDefaults": typeof lib_planningDefaults;
   "lib/planningSuggestions": typeof lib_planningSuggestions;
   "lib/publicPackets": typeof lib_publicPackets;
+  "lib/publicShareComments": typeof lib_publicShareComments;
   "lib/publicShareStatus": typeof lib_publicShareStatus;
   "lib/restApi": typeof lib_restApi;
   "lib/roles": typeof lib_roles;

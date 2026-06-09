@@ -240,6 +240,13 @@ type PublicStatusUpdateHandler = (
   target: PublicStatusUpdateTarget
 ) => Promise<void>;
 
+type PublicCommentInput = {
+  body: string;
+  authorLabel?: string;
+};
+
+type PublicCommentHandler = (input: PublicCommentInput) => Promise<boolean>;
+
 const publicItemStatusOptions = [
   "packed",
   "staged",
@@ -261,11 +268,14 @@ const publicBoxStatusOptions = [
 export function PublicShareViewer({ token }: { token: string }) {
   const resolvePublicView = useAction(api.shareLinks.resolvePublicView);
   const updatePublicStatus = useAction(api.shareLinks.updatePublicStatus);
+  const createPublicComment = useAction(api.shareLinks.createPublicComment);
   const [view, setView] = useState<PublicShareView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [workingTarget, setWorkingTarget] = useState<string | null>(null);
+  const [commentMessage, setCommentMessage] = useState<string | null>(null);
+  const [commentWorking, setCommentWorking] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -330,6 +340,28 @@ export function PublicShareViewer({ token }: { token: string }) {
       );
     } finally {
       setWorkingTarget(null);
+    }
+  }
+
+  async function handlePublicComment(input: PublicCommentInput) {
+    setCommentMessage(null);
+    setCommentWorking(true);
+    try {
+      await createPublicComment({
+        token,
+        body: input.body,
+        authorLabel: input.authorLabel,
+        accessMetadata: { route: "public_share", action: "comment" },
+      });
+      setCommentMessage("Note sent.");
+      return true;
+    } catch (unknownError) {
+      setCommentMessage(
+        unknownError instanceof Error ? unknownError.message : "Note failed."
+      );
+      return false;
+    } finally {
+      setCommentWorking(false);
     }
   }
 
@@ -401,6 +433,13 @@ export function PublicShareViewer({ token }: { token: string }) {
           {statusMessage}
         </p>
       ) : null}
+      {view.shareLink.canComment ? (
+        <PublicCommentPanel
+          onSubmit={handlePublicComment}
+          working={commentWorking}
+          message={commentMessage}
+        />
+      ) : null}
       {view.kind === "documentationPacket" ? (
         <PublicDocumentationPacketView
           view={view}
@@ -415,6 +454,66 @@ export function PublicShareViewer({ token }: { token: string }) {
         />
       )}
     </PublicShareShell>
+  );
+}
+
+function PublicCommentPanel({
+  onSubmit,
+  working,
+  message,
+}: {
+  onSubmit: PublicCommentHandler;
+  working: boolean;
+  message: string | null;
+}) {
+  const [authorLabel, setAuthorLabel] = useState("");
+  const [body, setBody] = useState("");
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const sent = await onSubmit({
+      body,
+      authorLabel: authorLabel || undefined,
+    });
+    if (sent) {
+      setBody("");
+    }
+  }
+
+  return (
+    <section className="print-hidden mb-4 rounded-md border border-border p-4">
+      <form className="grid gap-3" onSubmit={(event) => void handleSubmit(event)}>
+        <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto]">
+          <input
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={authorLabel}
+            onChange={(event) => setAuthorLabel(event.target.value)}
+            placeholder="Name or company"
+            aria-label="Comment author"
+            maxLength={80}
+          />
+          <textarea
+            className="min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            placeholder="Recipient note"
+            aria-label="Recipient note"
+            maxLength={1200}
+          />
+          <Button type="submit" disabled={working || !body.trim()}>
+            {working ? (
+              <RefreshCw className="animate-spin" aria-hidden="true" />
+            ) : null}
+            Send note
+          </Button>
+        </div>
+        {message ? (
+          <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
+            {message}
+          </p>
+        ) : null}
+      </form>
+    </section>
   );
 }
 
