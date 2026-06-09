@@ -49,9 +49,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  filterInventoryItemsByOwner,
   filterInventoryItems,
   inventorySavedFilters,
   type InventoryFilterKey,
+  type InventoryOwnerFilter,
 } from "@/lib/inventory-filters";
 import {
   itemDispositionOptions,
@@ -62,6 +64,7 @@ import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 const visibleDefaultColumns: VisibilityState = {
   category: true,
   room: true,
+  ownerContact: true,
   condition: false,
   confidence: true,
   indicators: true,
@@ -95,6 +98,7 @@ export function InventoryTable({
 }) {
   const [search, setSearch] = useState("");
   const [savedFilter, setSavedFilter] = useState<InventoryFilterKey>("all");
+  const [ownerFilter, setOwnerFilter] = useState<InventoryOwnerFilter>("all");
   const [newItemName, setNewItemName] = useState("");
   const [newItemRoom, setNewItemRoom] = useState("");
   const [newItemCategory, setNewItemCategory] = useState("");
@@ -119,9 +123,30 @@ export function InventoryTable({
   const updateItem = useMutation(api.items.update);
 
   const filteredItems = useMemo(
-    () => filterInventoryItems(items ?? [], savedFilter, search),
-    [items, savedFilter, search]
+    () =>
+      filterInventoryItemsByOwner(
+        filterInventoryItems(items ?? [], savedFilter, search),
+        ownerFilter
+      ),
+    [items, ownerFilter, savedFilter, search]
   );
+  const ownerFilterOptions = useMemo(() => {
+    const options = new Map<Id<"movePeople">, { name: string; role: string }>();
+
+    for (const item of items ?? []) {
+      if (item.ownerContact) {
+        options.set(item.ownerContact._id, {
+          name: item.ownerContact.name,
+          role: item.ownerContact.role,
+        });
+      }
+    }
+
+    return Array.from(options.entries()).map(([id, owner]) => ({
+      id,
+      ...owner,
+    }));
+  }, [items]);
   const selectedItem = useMemo(
     () => items?.find((item) => item._id === selectedItemId) ?? null,
     [items, selectedItemId]
@@ -266,6 +291,24 @@ export function InventoryTable({
         accessorKey: "category",
         header: "Category",
         cell: ({ row }) => row.original.category ?? "uncategorized",
+      },
+      {
+        id: "ownerContact",
+        header: "Owner / contact",
+        cell: ({ row }) => {
+          const owner = row.original.ownerContact;
+
+          return owner ? (
+            <div>
+              <p className="font-medium">{owner.name}</p>
+              <p className="text-xs text-muted-foreground">{owner.role}</p>
+            </div>
+          ) : row.original.ownerPersonId ? (
+            <span className="text-muted-foreground">Archived contact</span>
+          ) : (
+            <span className="text-muted-foreground">Unassigned</span>
+          );
+        },
       },
       {
         accessorKey: "condition",
@@ -525,10 +568,26 @@ export function InventoryTable({
                   className="pl-8"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search items, rooms, categories, status"
+                  placeholder="Search items, rooms, people, categories"
                   aria-label="Search inventory"
                 />
               </div>
+              <select
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                value={ownerFilter}
+                aria-label="Owner or contact filter"
+                onChange={(event) =>
+                  setOwnerFilter(event.target.value as InventoryOwnerFilter)
+                }
+              >
+                <option value="all">All owners</option>
+                <option value="unassigned">Unassigned</option>
+                {ownerFilterOptions.map((owner) => (
+                  <option key={owner.id} value={owner.id}>
+                    {owner.name} - {owner.role}
+                  </option>
+                ))}
+              </select>
               <select
                 className="h-8 rounded-md border border-input bg-background px-2 text-sm"
                 value={savedFilter}

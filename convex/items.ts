@@ -235,7 +235,7 @@ export const listForMoveWithSignals = query({
       "inventory:read",
     );
 
-    const [items, boxItems, boxes, photos, resources, zones] =
+    const [items, boxItems, boxes, photos, resources, zones, people] =
       await Promise.all([
         ctx.db
           .query("items")
@@ -260,6 +260,10 @@ export const listForMoveWithSignals = query({
           .collect(),
         ctx.db
           .query("transportZones")
+          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+          .collect(),
+        ctx.db
+          .query("movePeople")
           .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
           .collect(),
       ]);
@@ -289,6 +293,21 @@ export const listForMoveWithSignals = query({
           (zone) => zone.householdId === args.householdId && !zone.archivedAt,
         )
         .map((zone) => [String(zone._id), zone]),
+    );
+    const ownerContactById = new Map(
+      people
+        .filter(
+          (person) =>
+            person.householdId === args.householdId && !person.archivedAt,
+        )
+        .map((person) => [
+          String(person._id),
+          {
+            _id: person._id,
+            name: person.name,
+            role: person.role,
+          },
+        ]),
     );
     const signalsByItemId = new Map<string, MutableItemSignals>();
 
@@ -338,6 +357,9 @@ export const listForMoveWithSignals = query({
     return visibleItems.map((item) => ({
       ...redactItemForVisibility(item, policy.visibility),
       signals: signalsByItemId.get(String(item._id)) ?? defaultItemSignals(),
+      ownerContact: item.ownerPersonId
+        ? ownerContactById.get(String(item.ownerPersonId))
+        : undefined,
     }));
   },
 });

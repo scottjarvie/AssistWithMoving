@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  filterInventoryItemsByOwner,
   filterInventoryItems,
   inventorySavedFilters,
   type InventoryFilterableItem,
@@ -9,10 +10,15 @@ import {
 const items: InventoryFilterableItem[] = [
   {
     name: "Camera bag",
+    ownerPersonId: "person-scott",
     room: "Office",
     category: "Electronics",
     disposition: "personalTransport",
     status: "active",
+    ownerContact: {
+      name: "Scott Jarvie",
+      role: "owner",
+    },
     highValue: true,
     needsReview: false,
     requiresPersonalTransport: true,
@@ -30,6 +36,7 @@ const items: InventoryFilterableItem[] = [
   },
   {
     name: "Guest sheets",
+    ownerPersonId: "person-dana",
     room: "Bedroom",
     category: "Linens",
     disposition: "take",
@@ -72,10 +79,15 @@ const items: InventoryFilterableItem[] = [
   },
   {
     name: "Toolbox",
+    ownerPersonId: "person-dana",
     room: "Garage",
     category: "Tools",
     disposition: "mover",
     status: "packed",
+    ownerContact: {
+      name: "Dana PCS Coordinator",
+      role: "relocationCoordinator",
+    },
     valueCents: 25000,
     serialNumber: "TB-100",
     highValue: true,
@@ -138,6 +150,11 @@ describe("inventory filters", () => {
       .toEqual(["Toolbox"]);
     expect(filterInventoryItems(items, "all", "B-002").map((item) => item.name))
       .toEqual(["Guest sheets"]);
+    expect(filterInventoryItems(items, "all", "scott").map((item) => item.name))
+      .toEqual(["Camera bag"]);
+    expect(
+      filterInventoryItems(items, "all", "coordinator").map((item) => item.name)
+    ).toEqual(["Toolbox"]);
   });
 
   it("filters evidence, box, and load planning gaps", () => {
@@ -149,5 +166,16 @@ describe("inventory filters", () => {
     expect(
       filterInventoryItems(items, "unassigned", "").map((item) => item.name)
     ).toEqual(["Guest sheets"]);
+  });
+
+  it("filters by owner/contact assignment", () => {
+    expect(filterInventoryItemsByOwner(items, "person-scott")).toEqual([
+      items[0],
+    ]);
+    expect(filterInventoryItemsByOwner(items, "person-dana").map((item) => item.name))
+      .toEqual(["Guest sheets", "Toolbox"]);
+    expect(filterInventoryItemsByOwner(items, "unassigned").map((item) => item.name))
+      .toEqual(["Old desk"]);
+    expect(filterInventoryItemsByOwner(items, "all")).toEqual(items);
   });
 });

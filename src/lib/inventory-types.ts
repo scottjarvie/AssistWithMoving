@@ -11,8 +11,14 @@ export type InventoryItemSignals = {
   assignedZoneNames: string[];
 };
 
+export type InventoryItemOwnerContact = Pick<
+  Doc<"movePeople">,
+  "_id" | "name" | "role"
+>;
+
 export type InventoryItem = Doc<"items"> & {
   signals?: InventoryItemSignals;
+  ownerContact?: InventoryItemOwnerContact;
 };
 
 export type InventoryItemPatch = {

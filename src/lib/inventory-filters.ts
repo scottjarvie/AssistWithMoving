@@ -10,12 +10,19 @@ export type InventoryFilterKey =
   | "unboxed"
   | "unassigned";
 
+export type InventoryOwnerFilter = "all" | "unassigned" | string;
+
 export type InventoryFilterableItem = {
   name: string;
+  ownerPersonId?: string;
   room?: string;
   category?: string;
   disposition: string;
   status: string;
+  ownerContact?: {
+    name: string;
+    role: string;
+  };
   valueCents?: number;
   replacementValueCents?: number;
   serialNumber?: string;
@@ -107,6 +114,8 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
           item.category,
           item.disposition,
           item.status,
+          item.ownerContact?.name,
+          item.ownerContact?.role,
           ...(item.signals?.boxCodes ?? []),
           ...(item.signals?.assignedResourceNames ?? []),
           ...(item.signals?.assignedZoneNames ?? []),
@@ -161,5 +170,21 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
           ? (item.signals?.assignmentCount ?? 0) === 0
           : false;
     }
+  });
+}
+
+export function filterInventoryItemsByOwner<
+  TItem extends InventoryFilterableItem,
+>(items: TItem[], ownerFilter: InventoryOwnerFilter) {
+  if (ownerFilter === "all") {
+    return items;
+  }
+
+  return items.filter((item) => {
+    if (ownerFilter === "unassigned") {
+      return !item.ownerPersonId;
+    }
+
+    return item.ownerPersonId === ownerFilter;
   });
 }
