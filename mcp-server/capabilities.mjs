@@ -266,12 +266,20 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     requiredScopes: ["exports/read", "exports/create"],
     restEndpoints: [
       "GET /api/v1/moves/:moveId/share-links",
+      "GET /api/v1/moves/:moveId/share-links/comments",
+      "GET /api/v1/moves/:moveId/share-links/:shareLinkId/comments",
       "POST /api/v1/moves/:moveId/share-links",
       "DELETE /api/v1/moves/:moveId/share-links/:shareLinkId",
     ],
-    mcpTools: ["list_share_links", "create_share_link", "revoke_share_link"],
+    mcpTools: [
+      "list_share_links",
+      "list_share_link_comments",
+      "create_share_link",
+      "revoke_share_link",
+    ],
     agentWorkflows: [
       "Create profile-scoped links for movers, employers, PCS offices, donation pickup, storage, or helpers.",
+      "Review recipient comments without exposing raw share tokens or browser sessions.",
       "Allow public status updates and comments through token links without exposing raw API keys.",
     ],
   },

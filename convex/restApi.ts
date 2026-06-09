@@ -2366,6 +2366,24 @@ async function routeShareLinks(
   shareLinkIdSegment?: string,
   actionSegment?: string
 ) {
+  if (
+    args.method === "GET" &&
+    shareLinkIdSegment === "comments" &&
+    !actionSegment
+  ) {
+    return await routeShareLinkComments(ctx, args, auth, moveId);
+  }
+
+  if (args.method === "GET" && shareLinkIdSegment && actionSegment === "comments") {
+    const link = await requireApiShareLink(
+      ctx,
+      auth.householdId,
+      moveId,
+      shareLinkIdSegment
+    );
+    return await routeShareLinkComments(ctx, args, auth, moveId, link._id);
+  }
+
   if (args.method === "GET" && !shareLinkIdSegment) {
     const links = await ctx.db
       .query("shareLinks")
@@ -2460,6 +2478,40 @@ async function routeShareLinks(
     status: 404,
     code: "not_found",
     message: "Share link route not found.",
+  });
+}
+
+async function routeShareLinkComments(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  shareLinkId?: Id<"shareLinks">
+) {
+  const documentationProfileId = optionalString(
+    args.query.documentationProfileId
+  ) as Id<"documentationProfiles"> | undefined;
+  const comments = await ctx.db
+    .query("shareLinkComments")
+    .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+    .order("desc")
+    .collect();
+  const page = paginate(
+    comments.filter(
+      (comment) =>
+        comment.householdId === auth.householdId &&
+        (!shareLinkId || comment.shareLinkId === shareLinkId) &&
+        (!documentationProfileId ||
+          comment.documentationProfileId === documentationProfileId)
+    ),
+    args.query
+  );
+
+  return restOk({
+    ...page,
+    data: await Promise.all(
+      page.data.map((comment) => safeApiShareLinkComment(ctx, comment))
+    ),
   });
 }
 
@@ -3233,6 +3285,27 @@ function safeApiShareLink(link: Doc<"shareLinks">) {
     lastAccessedAt: safe.lastAccessedAt,
     createdAt: safe.createdAt,
     updatedAt: safe.updatedAt,
+  };
+}
+
+async function safeApiShareLinkComment(
+  ctx: MutationCtx,
+  comment: Doc<"shareLinkComments">
+) {
+  const [link, profile] = await Promise.all([
+    ctx.db.get(comment.shareLinkId),
+    ctx.db.get(comment.documentationProfileId),
+  ]);
+  return {
+    commentId: comment._id,
+    shareLinkId: comment.shareLinkId,
+    documentationProfileId: comment.documentationProfileId,
+    shareLabel: link?.label,
+    profileName: profile?.name,
+    role: comment.role,
+    authorLabel: comment.authorLabel,
+    body: comment.body,
+    createdAt: comment.createdAt,
   };
 }
 

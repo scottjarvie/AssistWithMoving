@@ -631,6 +631,18 @@ export async function listShareLinks(config, input) {
   });
 }
 
+export async function listShareLinkComments(config, input) {
+  return await movingManifestRequest(config, {
+    path: input.shareLinkId
+      ? `/moves/${input.moveId}/share-links/${input.shareLinkId}/comments`
+      : `/moves/${input.moveId}/share-links/comments`,
+    query: {
+      limit: input.limit,
+      documentationProfileId: input.documentationProfileId,
+    },
+  });
+}
+
 export async function createShareLink(config, input) {
   if (input.dryRun) {
     return {

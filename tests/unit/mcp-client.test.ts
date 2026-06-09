@@ -24,6 +24,7 @@ import {
   listDocumentationProfiles,
   listMovePeople,
   listPlanningSuggestions,
+  listShareLinkComments,
   listShareLinks,
   movingManifestRequest,
   removeItemFromBox,
@@ -1047,6 +1048,61 @@ describe("MovingManifest MCP API client", () => {
           authorization: "Bearer mmk_test_secret",
           "idempotency-key": expect.any(String),
         },
+      }
+    );
+  });
+
+  it("lists share-link recipient comments through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: [
+          {
+            commentId: "comment1",
+            shareLinkId: "share1",
+            profileName: "PCS packet",
+            authorLabel: "Transportation office",
+            body: "Please add the pro gear estimate.",
+          },
+        ],
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listShareLinkComments(config, {
+      moveId: "move1",
+      documentationProfileId: "profile1",
+      limit: 10,
+    });
+    await listShareLinkComments(config, {
+      moveId: "move1",
+      shareLinkId: "share1",
+      limit: 5,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL(
+        "https://example.com/api/v1/moves/move1/share-links/comments?limit=10&documentationProfileId=profile1"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL(
+        "https://example.com/api/v1/moves/move1/share-links/share1/comments?limit=5"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
       }
     );
   });

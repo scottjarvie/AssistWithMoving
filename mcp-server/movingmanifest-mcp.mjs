@@ -33,6 +33,7 @@ import {
   listMoves,
   listMovePeople,
   listPlanningSuggestions,
+  listShareLinkComments,
   listShareLinks,
   listTransportResources,
   removeItemFromBox,
@@ -883,6 +884,20 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listShareLinks(apiConfig, input),
+  });
+
+  registerTool(target, "list_share_link_comments", {
+    title: "List share link comments",
+    description:
+      "List recent public-recipient comments for a move or one share link. Returns safe share/profile metadata and never raw share tokens.",
+    inputSchema: {
+      moveId: z.string(),
+      shareLinkId: z.string().optional(),
+      documentationProfileId: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listShareLinkComments(apiConfig, input),
   });
 
   registerTool(target, "create_share_link", {

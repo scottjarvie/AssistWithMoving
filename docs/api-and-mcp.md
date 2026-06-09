@@ -729,6 +729,23 @@ The create response includes the raw `token` and `/share/{token}` URL once.
 List responses only include safe metadata such as `shareLinkId`, `tokenPreview`,
 status, scope, allowed actions, expiration, and access counts.
 
+List recent public-recipient comments for all share links on a move:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/comments \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+List comments for one share link:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE_LINK_ID/comments \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+Comment responses include safe share/profile metadata, author label, role,
+comment body, and creation time. They never include raw share tokens.
+
 Revoke a share link:
 
 ```bash
@@ -820,6 +837,7 @@ Available MCP tools:
 | `list_exports` | List export jobs. |
 | `download_export` | Return an unexpired export artifact as text. |
 | `list_share_links` | List safe share-link metadata. |
+| `list_share_link_comments` | List public-recipient comments for a move or one share link without returning raw share tokens. |
 | `create_share_link` | Create a scoped documentation share link, with `dryRun` support. |
 | `revoke_share_link` | Revoke a documentation share link, with `dryRun` support. |
 
