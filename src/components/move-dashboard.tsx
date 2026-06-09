@@ -32,6 +32,7 @@ import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { MoveDayView } from "@/components/move-day-view";
 import { MovePeopleManager } from "@/components/move-people-manager";
 import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
+import { RoomWalkIntake } from "@/components/room-walk-intake";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -838,6 +839,8 @@ export function MoveDashboard() {
           </CardContent>
         </Card>
       </section>
+
+      <RoomWalkIntake householdId={householdId} moveId={moveId} />
 
       <section>
         <InventoryTable householdId={householdId} moveId={moveId} />

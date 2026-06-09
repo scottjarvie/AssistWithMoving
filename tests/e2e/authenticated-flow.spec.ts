@@ -147,6 +147,7 @@ test.describe("authenticated product flow", () => {
     const householdName = `E2E household ${runId}`;
     const moveTitle = `E2E PCS move ${runId}`;
     const itemName = `E2E road bike ${runId}`;
+    const roomWalkItemName = `E2E office binder ${runId}`;
     const boxCode = `E2E-${runId.toUpperCase()}`;
     const boxLabel = `E2E bike parts ${runId}`;
     const contactName = `E2E transportation office ${runId}`;
@@ -192,6 +193,24 @@ test.describe("authenticated product flow", () => {
       .click();
     await expect(
       transportResources.getByText("Pro gear review").first()
+    ).toBeVisible();
+
+    await page.getByLabel("Room walk active room").fill("Office");
+    await page.getByLabel("Room walk item name").fill(roomWalkItemName);
+    await page.getByLabel("Room walk item category").fill("Documents");
+    await page.getByLabel("Room walk disposition").selectOption("personalTransport");
+    await page.getByLabel("Room walk owner or contact").selectOption({
+      label: `${contactName} - contact`,
+    });
+    await page.getByLabel("Room walk item note").fill("PCS orders binder");
+    await page.getByLabel("First night").check();
+    await page.getByLabel("Needs evidence").check();
+    await page.getByRole("button", { name: "Add room item" }).click();
+    await expect(
+      page.getByText(`${roomWalkItemName} added to Office.`)
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.locator("#room-walk").getByText(roomWalkItemName, { exact: true })
     ).toBeVisible();
 
     await page.getByLabel("New item name").fill(itemName);
