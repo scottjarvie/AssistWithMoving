@@ -19,6 +19,7 @@ import {
   createTransportResource,
   createTransportZone,
   deleteItem,
+  finalizePhotoUpload,
   generateAiPhotoSuggestions,
   generateAiTextSuggestions,
   generatePlanningSuggestions,
@@ -1124,6 +1125,53 @@ describe("MovingManifest MCP API client", () => {
           photoType: "condition",
           privacyLevel: "reportVisible",
           caption: "Pre-move condition.",
+        }),
+      }
+    );
+  });
+
+  it("finalizes photo uploads through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          photoId: "photo1",
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await finalizePhotoUpload(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        uploadSessionId: "session1",
+        width: 1600,
+        height: 1200,
+        caption: "Pre-move condition.",
+        photoType: "condition",
+        privacyLevel: "reportVisible",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/photos/finalize"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          uploadSessionId: "session1",
+          width: 1600,
+          height: 1200,
+          caption: "Pre-move condition.",
+          photoType: "condition",
+          privacyLevel: "reportVisible",
         }),
       }
     );

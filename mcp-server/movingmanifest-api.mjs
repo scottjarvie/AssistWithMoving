@@ -454,6 +454,20 @@ export async function startPhotoUpload(config, input) {
   });
 }
 
+export async function finalizePhotoUpload(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: { path: "/photos/finalize", body: input },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: "/photos/finalize",
+    body: input,
+  });
+}
+
 export async function attachPhoto(config, input) {
   if (input.dryRun) {
     return {

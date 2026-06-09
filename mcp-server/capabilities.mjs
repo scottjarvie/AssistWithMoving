@@ -234,10 +234,12 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     requiredScopes: ["moves/read", "inventory/read", "photos/write"],
     restEndpoints: [
       "POST /api/v1/uploads/init",
+      "POST /api/v1/photos/finalize",
       "POST /api/v1/photos/:photoId/attach",
     ],
-    mcpTools: ["start_photo_upload", "attach_photo"],
+    mcpTools: ["start_photo_upload", "finalize_photo_upload", "attach_photo"],
     agentWorkflows: [
+      "Start a photo session, upload the file to the presigned URL, and finalize the evidence record.",
       "Attach reviewed evidence photos to items, boxes, rooms, and documentation profiles.",
       "Keep original file delivery separate from recipient-safe packet thumbnails.",
     ],

@@ -23,6 +23,7 @@ import {
   createTransportResource,
   createTransportZone,
   deleteItem,
+  finalizePhotoUpload,
   downloadExport,
   approvePlanningSuggestions,
   generatePlanningSuggestions,
@@ -780,7 +781,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "start_photo_upload", {
     title: "Start photo upload",
     description:
-      "Create a presigned photo upload session. The client must PUT the file to the returned URL and then call the REST finalize endpoint.",
+      "Create a presigned photo upload session. The client must PUT the file to the returned URL and then call finalize_photo_upload.",
     inputSchema: {
       moveId: z.string(),
       itemId: z.string().optional(),
@@ -791,6 +792,32 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     handler: (input) => startPhotoUpload(apiConfig, input),
+  });
+
+  registerTool(target, "finalize_photo_upload", {
+    title: "Finalize photo upload",
+    description:
+      "Finalize a completed presigned upload after the file PUT succeeds. The server verifies size and MIME type before creating the photo evidence record.",
+    inputSchema: {
+      moveId: z.string(),
+      uploadSessionId: z.string(),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      originalHash: z.string().optional(),
+      caption: z.string().optional(),
+      photoType: z.string().optional(),
+      privacyLevel: z.string().optional(),
+      visibilityScope: z.string().optional(),
+      source: z.string().optional(),
+      exifHandlingStatus: z.string().optional(),
+      confidence: z.string().optional(),
+      notes: z.string().optional(),
+      verificationStatus: z.string().optional(),
+      capturedAt: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => finalizePhotoUpload(apiConfig, input),
   });
 
   registerTool(target, "attach_photo", {
