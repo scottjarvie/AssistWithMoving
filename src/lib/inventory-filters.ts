@@ -5,7 +5,10 @@ export type InventoryFilterKey =
   | "personalTransport"
   | "firstNight"
   | "sellDonateDumpFree"
-  | "packedOrLoaded";
+  | "packedOrLoaded"
+  | "needsEvidence"
+  | "unboxed"
+  | "unassigned";
 
 export type InventoryFilterableItem = {
   name: string;
@@ -13,10 +16,23 @@ export type InventoryFilterableItem = {
   category?: string;
   disposition: string;
   status: string;
+  valueCents?: number;
+  replacementValueCents?: number;
+  serialNumber?: string;
   highValue: boolean;
   needsReview: boolean;
   requiresPersonalTransport: boolean;
   planningDefaultKeys: string[];
+  signals?: {
+    photoCount: number;
+    evidencePhotoCount: number;
+    boxCount: number;
+    assignedBoxCount: number;
+    assignmentCount: number;
+    boxCodes: string[];
+    assignedResourceNames: string[];
+    assignedZoneNames: string[];
+  };
 };
 
 export const inventorySavedFilters: {
@@ -59,6 +75,21 @@ export const inventorySavedFilters: {
     label: "Packed / loaded",
     description: "Items already packed, staged, or loaded.",
   },
+  {
+    key: "needsEvidence",
+    label: "Needs evidence",
+    description: "High-value, serialed, or protected items missing evidence photos.",
+  },
+  {
+    key: "unboxed",
+    label: "Unboxed",
+    description: "Keep/mover/storage items not yet connected to any box.",
+  },
+  {
+    key: "unassigned",
+    label: "Unassigned load",
+    description: "Packed items or boxes that have not been assigned to a resource.",
+  },
 ];
 
 export function filterInventoryItems<TItem extends InventoryFilterableItem>(
@@ -70,7 +101,16 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
 
   return items.filter((item) => {
     const matchesSearch = normalizedSearch
-      ? [item.name, item.room, item.category, item.disposition, item.status]
+      ? [
+          item.name,
+          item.room,
+          item.category,
+          item.disposition,
+          item.status,
+          ...(item.signals?.boxCodes ?? []),
+          ...(item.signals?.assignedResourceNames ?? []),
+          ...(item.signals?.assignedZoneNames ?? []),
+        ]
           .filter((value): value is string => typeof value === "string")
           .some((value) => value.toLowerCase().includes(normalizedSearch))
       : true;
@@ -98,6 +138,28 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
         return ["sell", "donate", "dump", "free"].includes(item.disposition);
       case "packedOrLoaded":
         return ["packed", "staged", "loaded"].includes(item.status);
+      case "needsEvidence": {
+        const hasEvidenceTrigger =
+          item.highValue ||
+          Boolean(item.valueCents || item.replacementValueCents) ||
+          Boolean(item.serialNumber) ||
+          item.requiresPersonalTransport ||
+          item.planningDefaultKeys.includes("doNotLetMoversTouch");
+        return hasEvidenceTrigger && (item.signals?.evidencePhotoCount ?? 0) === 0;
+      }
+      case "unboxed":
+        return (
+          ["take", "mover", "personalTransport", "storage"].includes(
+            item.disposition
+          ) && (item.signals?.boxCount ?? 0) === 0
+        );
+      case "unassigned":
+        return (
+          ["packed", "staged", "loaded"].includes(item.status) ||
+          (item.signals?.boxCount ?? 0) > 0
+        )
+          ? (item.signals?.assignmentCount ?? 0) === 0
+          : false;
     }
   });
 }

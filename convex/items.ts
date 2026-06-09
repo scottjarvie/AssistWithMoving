@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
@@ -56,6 +56,39 @@ const itemWriteArgs = {
   createdVia: v.optional(itemCreatedViaValidator),
 };
 
+const itemListArgs = {
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  status: v.optional(itemStatusValidator),
+  disposition: v.optional(itemDispositionValidator),
+  room: v.optional(v.string()),
+  category: v.optional(v.string()),
+  needsReview: v.optional(v.boolean()),
+  highValue: v.optional(v.boolean()),
+  includeDeleted: v.optional(v.boolean()),
+};
+
+type ItemListFilterArgs = {
+  status?: Doc<"items">["status"];
+  disposition?: Doc<"items">["disposition"];
+  room?: string;
+  category?: string;
+  needsReview?: boolean;
+  highValue?: boolean;
+  includeDeleted?: boolean;
+};
+
+type MutableItemSignals = {
+  photoCount: number;
+  evidencePhotoCount: number;
+  boxCount: number;
+  assignedBoxCount: number;
+  assignmentCount: number;
+  boxCodes: string[];
+  assignedResourceNames: string[];
+  assignedZoneNames: string[];
+};
+
 function normalizeStringList(values: string[] | undefined) {
   return Array.from(
     new Set(
@@ -83,18 +116,70 @@ function redactItemForVisibility(
   };
 }
 
+function filterItemRecords(items: Doc<"items">[], args: ItemListFilterArgs) {
+  return items
+    .filter((item) => args.includeDeleted || !item.deletedAt)
+    .filter((item) => (args.status ? item.status === args.status : true))
+    .filter((item) =>
+      args.disposition ? item.disposition === args.disposition : true
+    )
+    .filter((item) => (args.room ? item.room === args.room : true))
+    .filter((item) => (args.category ? item.category === args.category : true))
+    .filter((item) =>
+      typeof args.needsReview === "boolean"
+        ? item.needsReview === args.needsReview
+        : true
+    )
+    .filter((item) =>
+      typeof args.highValue === "boolean"
+        ? item.highValue === args.highValue
+        : true
+    );
+}
+
+function defaultItemSignals(): MutableItemSignals {
+  return {
+    photoCount: 0,
+    evidencePhotoCount: 0,
+    boxCount: 0,
+    assignedBoxCount: 0,
+    assignmentCount: 0,
+    boxCodes: [],
+    assignedResourceNames: [],
+    assignedZoneNames: [],
+  };
+}
+
+function signalsForItem(
+  signalsByItemId: Map<string, MutableItemSignals>,
+  itemId: Id<"items">
+) {
+  const key = String(itemId);
+  const existing = signalsByItemId.get(key);
+  if (existing) return existing;
+  const next = defaultItemSignals();
+  signalsByItemId.set(key, next);
+  return next;
+}
+
+function pushUnique(values: string[], value: string | undefined, limit = 4) {
+  if (!value || values.includes(value) || values.length >= limit) return;
+  values.push(value);
+}
+
+function isEvidencePhoto(photo: Doc<"itemPhotos">) {
+  return (
+    photo.claimId ||
+    photo.privacyLevel === "claimOnly" ||
+    ["condition", "damage", "serialNumber", "receipt"].includes(photo.photoType) ||
+    photo.documentationProfileTypes.some((type) =>
+      ["insuranceClaim", "pcsMove", "movingCompany"].includes(type)
+    )
+  );
+}
+
 export const listForMove = query({
-  args: {
-    householdId: v.id("households"),
-    moveId: v.id("moves"),
-    status: v.optional(itemStatusValidator),
-    disposition: v.optional(itemDispositionValidator),
-    room: v.optional(v.string()),
-    category: v.optional(v.string()),
-    needsReview: v.optional(v.boolean()),
-    highValue: v.optional(v.boolean()),
-    includeDeleted: v.optional(v.boolean()),
-  },
+  args: itemListArgs,
   handler: async (ctx, args) => {
     const policy = await requireMovePermission(
       ctx,
@@ -109,27 +194,118 @@ export const listForMove = query({
       .order("desc")
       .collect();
 
-    return items
-      .filter((item) => args.includeDeleted || !item.deletedAt)
-      .filter((item) => (args.status ? item.status === args.status : true))
-      .filter((item) =>
-        args.disposition ? item.disposition === args.disposition : true
-      )
-      .filter((item) => (args.room ? item.room === args.room : true))
-      .filter((item) =>
-        args.category ? item.category === args.category : true
-      )
-      .filter((item) =>
-        typeof args.needsReview === "boolean"
-          ? item.needsReview === args.needsReview
-          : true
-      )
-      .filter((item) =>
-        typeof args.highValue === "boolean"
-          ? item.highValue === args.highValue
-          : true
-      )
+    return filterItemRecords(items, args)
       .map((item) => redactItemForVisibility(item, policy.visibility));
+  },
+});
+
+export const listForMoveWithSignals = query({
+  args: itemListArgs,
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read"
+    );
+
+    const [items, boxItems, boxes, photos, resources, zones] = await Promise.all([
+      ctx.db
+        .query("items")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("boxItems")
+        .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("boxes")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("transportResources")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("transportZones")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+    ]);
+
+    const visibleItems = filterItemRecords(items, args);
+    const visibleItemIds = new Set(visibleItems.map((item) => String(item._id)));
+    const boxById = new Map(
+      boxes
+        .filter((box) => box.householdId === args.householdId && !box.archivedAt)
+        .map((box) => [String(box._id), box])
+    );
+    const resourceById = new Map(
+      resources
+        .filter(
+          (resource) =>
+            resource.householdId === args.householdId && !resource.archivedAt
+        )
+        .map((resource) => [String(resource._id), resource])
+    );
+    const zoneById = new Map(
+      zones
+        .filter((zone) => zone.householdId === args.householdId && !zone.archivedAt)
+        .map((zone) => [String(zone._id), zone])
+    );
+    const signalsByItemId = new Map<string, MutableItemSignals>();
+
+    for (const photo of photos) {
+      if (
+        photo.householdId !== args.householdId ||
+        photo.archivedAt ||
+        !photo.itemId ||
+        !visibleItemIds.has(String(photo.itemId))
+      ) {
+        continue;
+      }
+      const signals = signalsForItem(signalsByItemId, photo.itemId);
+      signals.photoCount += 1;
+      if (isEvidencePhoto(photo)) {
+        signals.evidencePhotoCount += 1;
+      }
+    }
+
+    for (const membership of boxItems) {
+      if (
+        membership.householdId !== args.householdId ||
+        !visibleItemIds.has(String(membership.itemId))
+      ) {
+        continue;
+      }
+      const box = boxById.get(String(membership.boxId));
+      if (!box) continue;
+      const signals = signalsForItem(signalsByItemId, membership.itemId);
+      signals.boxCount += 1;
+      pushUnique(signals.boxCodes, box.code);
+
+      if (box.assignedResourceId || box.assignedZoneId) {
+        signals.assignedBoxCount += 1;
+        signals.assignmentCount += 1;
+        const resource = box.assignedResourceId
+          ? resourceById.get(String(box.assignedResourceId))
+          : null;
+        const zone = box.assignedZoneId
+          ? zoneById.get(String(box.assignedZoneId))
+          : null;
+        pushUnique(signals.assignedResourceNames, resource?.name);
+        pushUnique(signals.assignedZoneNames, zone?.name);
+      }
+    }
+
+    return visibleItems.map((item) => ({
+      ...redactItemForVisibility(item, policy.visibility),
+      signals: signalsByItemId.get(String(item._id)) ?? defaultItemSignals(),
+    }));
   },
 });
 

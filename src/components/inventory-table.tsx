@@ -70,6 +70,22 @@ const visibleDefaultColumns: VisibilityState = {
   review: true,
 };
 
+function SignalBadge({
+  label,
+  active,
+  title,
+}: {
+  label: string;
+  active: boolean;
+  title: string;
+}) {
+  return (
+    <Badge variant={active ? "secondary" : "outline"} title={title}>
+      {label}
+    </Badge>
+  );
+}
+
 export function InventoryTable({
   householdId,
   moveId,
@@ -96,7 +112,7 @@ export function InventoryTable({
   const [detailOpen, setDetailOpen] = useState(false);
 
   const items = useQuery(
-    api.items.listForMove,
+    api.items.listForMoveWithSignals,
     householdId && moveId ? { householdId, moveId } : "skip"
   );
   const createItem = useMutation(api.items.create);
@@ -269,23 +285,59 @@ export function InventoryTable({
       {
         id: "indicators",
         header: "Indicators",
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            <Badge variant={row.original.highValue ? "secondary" : "outline"}>
-              value
-            </Badge>
-            <Badge
-              variant={
-                row.original.requiresPersonalTransport ? "secondary" : "outline"
-              }
-            >
-              personal
-            </Badge>
-            <Badge variant="outline">photos 0</Badge>
-            <Badge variant="outline">box 0</Badge>
-            <Badge variant="outline">assign 0</Badge>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const signals = row.original.signals;
+          const photoCount = signals?.photoCount ?? 0;
+          const evidencePhotoCount = signals?.evidencePhotoCount ?? 0;
+          const boxCount = signals?.boxCount ?? 0;
+          const assignmentCount = signals?.assignmentCount ?? 0;
+          const boxContext = signals?.boxCodes.length
+            ? `Boxes: ${signals.boxCodes.join(", ")}`
+            : "No boxes contain this item yet.";
+          const loadContext = [
+            ...(signals?.assignedResourceNames ?? []),
+            ...(signals?.assignedZoneNames ?? []),
+          ].join(", ");
+
+          return (
+            <div className="flex flex-wrap gap-1">
+              <Badge variant={row.original.highValue ? "secondary" : "outline"}>
+                value
+              </Badge>
+              <Badge
+                variant={
+                  row.original.requiresPersonalTransport ? "secondary" : "outline"
+                }
+              >
+                personal
+              </Badge>
+              <SignalBadge
+                label={`photos ${photoCount}`}
+                active={photoCount > 0}
+                title={`${photoCount} active photos are attached to this item.`}
+              />
+              <SignalBadge
+                label={`evidence ${evidencePhotoCount}`}
+                active={evidencePhotoCount > 0}
+                title={`${evidencePhotoCount} claim, condition, serial, receipt, mover, or PCS evidence photos are attached.`}
+              />
+              <SignalBadge
+                label={`boxes ${boxCount}`}
+                active={boxCount > 0}
+                title={boxContext}
+              />
+              <SignalBadge
+                label={`load ${assignmentCount}`}
+                active={assignmentCount > 0}
+                title={
+                  loadContext
+                    ? `Assigned through: ${loadContext}`
+                    : "No containing box is assigned to a transport resource yet."
+                }
+              />
+            </div>
+          );
+        },
       },
       {
         accessorKey: "status",

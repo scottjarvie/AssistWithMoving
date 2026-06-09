@@ -1,6 +1,19 @@
 import type { Doc } from "../../convex/_generated/dataModel";
 
-export type InventoryItem = Doc<"items">;
+export type InventoryItemSignals = {
+  photoCount: number;
+  evidencePhotoCount: number;
+  boxCount: number;
+  assignedBoxCount: number;
+  assignmentCount: number;
+  boxCodes: string[];
+  assignedResourceNames: string[];
+  assignedZoneNames: string[];
+};
+
+export type InventoryItem = Doc<"items"> & {
+  signals?: InventoryItemSignals;
+};
 
 export type InventoryItemPatch = {
   name?: string;
