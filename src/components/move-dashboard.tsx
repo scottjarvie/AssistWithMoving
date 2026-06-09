@@ -35,6 +35,7 @@ import { InventoryTable } from "@/components/inventory-table";
 import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { MoveDayView } from "@/components/move-day-view";
 import { MovePeopleManager } from "@/components/move-people-manager";
+import { MoveQuestionsPanel } from "@/components/move-questions-panel";
 import { PackingDebtDashboard } from "@/components/packing-debt-dashboard";
 import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
 import { RoomWalkIntake } from "@/components/room-walk-intake";
@@ -672,7 +673,7 @@ export function MoveDashboard() {
           </Card>
         </div>
 
-        <Card>
+        <Card id="active-moves">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CalendarDays className="size-4 text-accent" aria-hidden="true" />
@@ -852,6 +853,8 @@ export function MoveDashboard() {
       </section>
 
       <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
+
+      <MoveQuestionsPanel householdId={householdId} moveId={moveId} />
 
       <PackingDebtDashboard householdId={householdId} moveId={moveId} />
 
