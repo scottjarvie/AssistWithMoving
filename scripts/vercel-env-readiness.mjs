@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const strict = process.argv.includes("--strict");
 const environment = envArg() ?? "production";
 const results = [];
+export const previewEnvironmentIssue = "MOVE-106";
 
-const requiredGroups = [
+export const requiredGroups = [
   {
     label: "app routing env",
     keys: ["NEXT_PUBLIC_APP_URL"],
@@ -52,7 +54,7 @@ const requiredGroups = [
   },
 ];
 
-const alternativeGroups = [
+export const alternativeGroups = [
   {
     label: "Clerk webhook signing env",
     alternatives: ["CLERK_WEBHOOK_SIGNING_SECRET", "CLERK_WEBHOOK_SECRET"],
@@ -60,7 +62,7 @@ const alternativeGroups = [
   },
 ];
 
-function envArg() {
+export function envArg() {
   const index = process.argv.indexOf("--environment");
   if (index === -1) return undefined;
   return process.argv[index + 1];
@@ -68,6 +70,14 @@ function envArg() {
 
 function record(status, label, detail) {
   results.push({ status, label, detail });
+}
+
+export function trackedIssueDetail(groupIssue, currentEnvironment = environment) {
+  if (currentEnvironment !== "preview" || groupIssue === previewEnvironmentIssue) {
+    return `tracked by ${groupIssue}`;
+  }
+
+  return `tracked by ${previewEnvironmentIssue}; source setup ${groupIssue}`;
 }
 
 function run(command, args) {
@@ -93,7 +103,7 @@ function run(command, args) {
   });
 }
 
-function parseEnvNames(output) {
+export function parseEnvNames(output) {
   const names = new Set();
   for (const line of output.split(/\r?\n/)) {
     const match = line.trim().match(/^([A-Z][A-Z0-9_]+)\s+/);
@@ -108,7 +118,8 @@ function summarizeNames(names) {
   return `${names.size} env var name${names.size === 1 ? "" : "s"} visible`;
 }
 
-function checkRequiredGroups(names) {
+export function requiredGroupResults(names, currentEnvironment = environment) {
+  const nextResults = [];
   for (const group of requiredGroups) {
     const missing = group.keys.filter((key) => !names.has(key));
     const optionalMissing = (group.optionalKeys ?? []).filter(
@@ -116,41 +127,63 @@ function checkRequiredGroups(names) {
     );
 
     if (missing.length) {
-      record(
-        "blocked",
-        group.label,
-        `missing ${missing.join(", ")}; tracked by ${group.issue}`
-      );
+      nextResults.push({
+        status: "blocked",
+        label: group.label,
+        detail: `missing ${missing.join(", ")}; ${trackedIssueDetail(
+          group.issue,
+          currentEnvironment
+        )}`,
+      });
       continue;
     }
 
-    record(
-      "pass",
-      group.label,
-      optionalMissing.length
+    nextResults.push({
+      status: "pass",
+      label: group.label,
+      detail: optionalMissing.length
         ? `required names present; optional missing ${optionalMissing.join(", ")}`
-        : "all expected names present"
-    );
+        : "all expected names present",
+    });
   }
+
+  return nextResults;
 }
 
-function checkAlternativeGroups(names) {
+function checkRequiredGroups(names) {
+  results.push(...requiredGroupResults(names));
+}
+
+export function alternativeGroupResults(names, currentEnvironment = environment) {
+  const nextResults = [];
   for (const group of alternativeGroups) {
     const present = group.alternatives.filter((key) => names.has(key));
     if (present.length) {
-      record("pass", group.label, `present as ${present.join(" or ")}`);
+      nextResults.push({
+        status: "pass",
+        label: group.label,
+        detail: `present as ${present.join(" or ")}`,
+      });
       continue;
     }
 
-    record(
-      "blocked",
-      group.label,
-      `missing one of ${group.alternatives.join(", ")}; tracked by ${group.issue}`
-    );
+    nextResults.push({
+      status: "blocked",
+      label: group.label,
+      detail: `missing one of ${group.alternatives.join(
+        ", "
+      )}; ${trackedIssueDetail(group.issue, currentEnvironment)}`,
+    });
   }
+
+  return nextResults;
 }
 
-async function main() {
+function checkAlternativeGroups(names) {
+  results.push(...alternativeGroupResults(names));
+}
+
+export async function main() {
   const response = await run("npx", ["vercel", "env", "ls", environment]);
   if (response.code !== 0) {
     record(
@@ -183,37 +216,43 @@ async function main() {
   );
 }
 
-await main();
+async function runCli() {
+  await main();
 
-const counts = results.reduce(
-  (acc, result) => {
-    acc[result.status] += 1;
-    return acc;
-  },
-  { pass: 0, warn: 0, blocked: 0, fail: 0 }
-);
+  const counts = results.reduce(
+    (acc, result) => {
+      acc[result.status] += 1;
+      return acc;
+    },
+    { pass: 0, warn: 0, blocked: 0, fail: 0 }
+  );
 
-for (const result of results) {
-  const label =
-    result.status === "pass"
-      ? "PASS"
-      : result.status === "warn"
-        ? "WARN"
-        : result.status === "blocked"
-          ? "BLOCKED"
-          : "FAIL";
-  console.log(`${label} ${result.label}: ${result.detail}`);
+  for (const result of results) {
+    const label =
+      result.status === "pass"
+        ? "PASS"
+        : result.status === "warn"
+          ? "WARN"
+          : result.status === "blocked"
+            ? "BLOCKED"
+            : "FAIL";
+    console.log(`${label} ${result.label}: ${result.detail}`);
+  }
+
+  console.log(
+    `Vercel env readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
+  );
+  console.log(
+    strict
+      ? "Strict mode: failures and blockers exit nonzero."
+      : "Default mode: only Vercel CLI/list failures exit nonzero. Use --strict for launch gating."
+  );
+
+  if (counts.fail > 0 || (strict && counts.blocked > 0)) {
+    process.exitCode = 1;
+  }
 }
 
-console.log(
-  `Vercel env readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
-);
-console.log(
-  strict
-    ? "Strict mode: failures and blockers exit nonzero."
-    : "Default mode: only Vercel CLI/list failures exit nonzero. Use --strict for launch gating."
-);
-
-if (counts.fail > 0 || (strict && counts.blocked > 0)) {
-  process.exitCode = 1;
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  await runCli();
 }
