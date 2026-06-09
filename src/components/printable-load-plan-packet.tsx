@@ -17,6 +17,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  formatBoxWeightSource,
+  formatBoxWeightValue,
+} from "@/lib/box-weight";
 
 type PacketMode = "crew" | "owner";
 type BoxRecord = NonNullable<
@@ -386,7 +390,12 @@ function ZoneTable({
                 <td className="px-2 py-2">{box.room ?? "unset"}</td>
                 <td className="px-2 py-2">{box.destinationRoom ?? "unset"}</td>
                 <td className="px-2 py-2">{box.itemCount}</td>
-                <td className="px-2 py-2">{formatNumber(box.weightLb)} lb</td>
+                <td className="px-2 py-2">
+                  <div>{formatBoxWeightValue(box.weightSummary)}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {box.weightSourceLabel}
+                  </div>
+                </td>
                 <td className="px-2 py-2">{box.flags.join(", ") || "none"}</td>
                 {!safeMode ? (
                   <td className="px-2 py-2">
@@ -423,6 +432,12 @@ type PacketBox = {
   assignedZoneId?: Id<"transportZones">;
   itemCount: number;
   weightLb: number;
+  weightSourceLabel: string;
+  weightSummary: {
+    valueLb?: number;
+    label?: string;
+    source?: string;
+  };
   volumeCuFt: number;
   flags: string[];
   contents: { name: string; quantity: number }[];
@@ -501,6 +516,7 @@ function buildPacketModel({
 
 function packetBoxFor(record: BoxRecord, report?: BoxReport): PacketBox {
   const flags = new Set<string>();
+  const weightSummary = report?.weightSummary ?? record.weightSummary;
   for (const entry of record.contents) {
     if (!entry) continue;
     if (entry.item.fragility === "high") flags.add("fragile");
@@ -531,11 +547,9 @@ function packetBoxFor(record: BoxRecord, report?: BoxReport): PacketBox {
     assignedResourceId: record.box.assignedResourceId,
     assignedZoneId: record.box.assignedZoneId,
     itemCount: record.itemCount,
-    weightLb:
-      report?.estimatedWeightLb ??
-      record.box.actualWeightLb ??
-      record.box.estimatedWeightLb ??
-      record.contentsEstimatedWeightLb,
+    weightLb: report?.estimatedWeightLb ?? weightSummary.valueLb ?? 0,
+    weightSourceLabel: formatBoxWeightSource(weightSummary),
+    weightSummary,
     volumeCuFt: report?.estimatedVolumeCuFt ?? record.box.estimatedVolumeCuFt ?? 0,
     flags: Array.from(flags),
     contents: record.contents
@@ -561,6 +575,7 @@ function packetToCsv(
     "to_room",
     "item_count",
     "weight_lb",
+    "weight_source",
     "volume_cuft",
     "flags",
     ...(safeMode ? [] : ["contents"]),
@@ -577,7 +592,10 @@ function packetToCsv(
         box.room ?? "",
         box.destinationRoom ?? "",
         box.itemCount,
-        formatNumber(box.weightLb),
+        box.weightSummary.valueLb === undefined
+          ? ""
+          : formatNumber(box.weightSummary.valueLb),
+        box.weightSourceLabel,
         formatNumber(box.volumeCuFt),
         box.flags.join("; "),
         ...(safeMode
@@ -599,7 +617,10 @@ function packetToCsv(
       box.room ?? "",
       box.destinationRoom ?? "",
       box.itemCount,
-      formatNumber(box.weightLb),
+      box.weightSummary.valueLb === undefined
+        ? ""
+        : formatNumber(box.weightSummary.valueLb),
+      box.weightSourceLabel,
       formatNumber(box.volumeCuFt),
       box.flags.join("; "),
       ...(safeMode

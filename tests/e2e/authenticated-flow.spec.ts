@@ -305,6 +305,9 @@ test.describe("authenticated product flow", () => {
         .getByRole("list", { name: `Contents for ${boxCode}` })
         .getByText(itemName)
     ).toBeVisible({ timeout: 30_000 });
+    await expect(boxManager.getByText("contents-derived").first()).toBeVisible({
+      timeout: 30_000,
+    });
 
     const loadPlanner = page
       .getByRole("heading", { name: "Load planner", exact: true })

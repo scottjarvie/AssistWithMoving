@@ -43,6 +43,7 @@ import type * as lib_assignmentValidation from "../lib/assignmentValidation.js";
 import type * as lib_audit from "../lib/audit.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing from "../lib/billing.js";
+import type * as lib_boxWeight from "../lib/boxWeight.js";
 import type * as lib_claimPacket from "../lib/claimPacket.js";
 import type * as lib_clerk from "../lib/clerk.js";
 import type * as lib_demoSeed from "../lib/demoSeed.js";
@@ -130,6 +131,7 @@ declare const fullApi: ApiFromModules<{
   "lib/audit": typeof lib_audit;
   "lib/auth": typeof lib_auth;
   "lib/billing": typeof lib_billing;
+  "lib/boxWeight": typeof lib_boxWeight;
   "lib/claimPacket": typeof lib_claimPacket;
   "lib/clerk": typeof lib_clerk;
   "lib/demoSeed": typeof lib_demoSeed;

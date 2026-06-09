@@ -39,6 +39,11 @@ import {
   buildBoxLabelSheetPath,
   buildBoxLookupPath,
 } from "@/lib/box-labels";
+import {
+  formatBoxWeightSource,
+  formatBoxWeightValue,
+  isMissingBoxWeight,
+} from "@/lib/box-weight";
 import { boxStatusOptions } from "@/lib/box-options";
 import {
   formatOptionalNumber,
@@ -69,7 +74,7 @@ function BoxCard({
   resourcesWithZones: TransportResourceWithZones[];
   onMessage: (message: string) => void;
 }) {
-  const { box, contents, itemCount, contentsEstimatedWeightLb } = boxRecord;
+  const { box, contents, itemCount, weightSummary } = boxRecord;
   const updateBox = useMutation(api.boxes.update);
   const addItem = useMutation(api.boxes.addItem);
   const removeItem = useMutation(api.boxes.removeItem);
@@ -440,9 +445,10 @@ function BoxCard({
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
           <Badge variant="secondary">{itemCount} items</Badge>
-          <Badge variant="outline">
-            {box.actualWeightLb ?? box.estimatedWeightLb ?? contentsEstimatedWeightLb} lb
+          <Badge variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}>
+            {formatBoxWeightValue(weightSummary)}
           </Badge>
+          <Badge variant="outline">{formatBoxWeightSource(weightSummary)}</Badge>
           <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
         </div>
         <Button type="button" size="sm" disabled={saving} onClick={() => void handleSave()}>
@@ -612,7 +618,7 @@ export function BoxManager({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleBoxes.map(({ box, itemCount, contentsEstimatedWeightLb }) => (
+                  {visibleBoxes.map(({ box, itemCount, weightSummary }) => (
                     <TableRow key={box._id}>
                       <TableCell className="font-medium">{box.code}</TableCell>
                       <TableCell>{box.status}</TableCell>
@@ -620,9 +626,12 @@ export function BoxManager({
                       <TableCell>{box.destinationRoom ?? "unassigned"}</TableCell>
                       <TableCell>{itemCount}</TableCell>
                       <TableCell>
-                        {box.actualWeightLb ??
-                          box.estimatedWeightLb ??
-                          contentsEstimatedWeightLb}
+                        <div className="min-w-[8rem]">
+                          <p>{formatBoxWeightValue(weightSummary)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatBoxWeightSource(weightSummary)}
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

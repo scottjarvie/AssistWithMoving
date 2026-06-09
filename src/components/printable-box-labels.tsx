@@ -19,6 +19,10 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildBoxLookupUrl } from "@/lib/box-labels";
+import {
+  formatBoxWeightSource,
+  formatBoxWeightValue,
+} from "@/lib/box-weight";
 
 export function PrintableBoxLabels({
   householdId,
@@ -102,7 +106,7 @@ export function PrintableBoxLabels({
         </div>
       ) : boxes.length ? (
         <div className="label-grid grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {boxes.map(({ box, itemCount }) => {
+          {boxes.map(({ box, itemCount, weightSummary }) => {
             const lookupUrl = origin
               ? buildBoxLookupUrl(origin, {
                   householdId,
@@ -137,7 +141,10 @@ export function PrintableBoxLabels({
                   <Badge variant="outline">{box.status}</Badge>
                   <Badge variant="outline">{itemCount} items</Badge>
                   <Badge variant="outline">
-                    {box.actualWeightLb ?? box.estimatedWeightLb ?? "?"} lb
+                    {formatBoxWeightValue(weightSummary)}
+                  </Badge>
+                  <Badge variant="outline">
+                    {formatBoxWeightSource(weightSummary)}
                   </Badge>
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground break-all">

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
+import { resolveBoxWeight } from "./lib/boxWeight";
 import {
   estimateItem,
   roundEstimate,
@@ -151,11 +152,15 @@ export const reportForMove = query({
         const contentsVolume = sumEstimateValues(
           contentEstimates.map((estimate) => estimate.volume)
         );
-        const estimatedWeightLb =
-          box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight;
+        const weightSummary = resolveBoxWeight({
+          actualWeightLb: box.actualWeightLb,
+          estimatedWeightLb: box.estimatedWeightLb,
+          contentsEstimatedWeightLb: contentsWeight,
+        });
+        const estimatedWeightLb = weightSummary.valueLb ?? 0;
         const estimatedVolumeCuFt = box.estimatedVolumeCuFt ?? contentsVolume;
         const warnings: string[] = [];
-        if (!box.actualWeightLb && !box.estimatedWeightLb && contentsWeight === 0) {
+        if (weightSummary.source === "missing") {
           warnings.push("missingBoxWeightEstimate");
         }
         if (!box.estimatedVolumeCuFt && contentsVolume === 0) {
@@ -181,6 +186,9 @@ export const reportForMove = query({
             0
           ),
           estimatedWeightLb: roundEstimate(estimatedWeightLb),
+          weightSource: weightSummary.source,
+          weightSourceLabel: weightSummary.label,
+          weightSummary,
           estimatedVolumeCuFt: roundEstimate(estimatedVolumeCuFt),
           warnings,
         };

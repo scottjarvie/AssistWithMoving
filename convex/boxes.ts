@@ -12,6 +12,7 @@ import {
   requiresOverrideReason,
   validateAssignment,
 } from "./lib/assignmentValidation";
+import { resolveBoxWeight } from "./lib/boxWeight";
 import { estimateItem, sumEstimateValues } from "./lib/estimateEngine";
 import {
   boxStatusValidator,
@@ -114,6 +115,21 @@ async function boxContents(ctx: QueryCtx, box: Doc<"boxes">) {
   );
 
   return contents.filter(Boolean);
+}
+
+function contentsEstimatedWeight(
+  contents: Awaited<ReturnType<typeof boxContents>>
+) {
+  return sumEstimateValues(
+    contents.map((entry) =>
+      entry
+        ? estimateItem({
+            ...entry.item,
+            quantity: entry.membership.quantity,
+          }).weight
+        : undefined
+    )
+  );
 }
 
 async function loadAssignmentValidation(
@@ -305,19 +321,19 @@ export const listForMove = query({
             (sum, entry) => sum + (entry?.membership.quantity ?? 0),
             0
           );
-          const contentsEstimatedWeightLb = contents.reduce(
-            (sum, entry) =>
-              sum +
-              (entry?.item.estimatedWeightLb ?? 0) *
-                (entry?.membership.quantity ?? 1),
-            0
-          );
+          const contentsEstimatedWeightLb = contentsEstimatedWeight(contents);
+          const weightSummary = resolveBoxWeight({
+            actualWeightLb: box.actualWeightLb,
+            estimatedWeightLb: box.estimatedWeightLb,
+            contentsEstimatedWeightLb,
+          });
 
           return {
             box,
             contents,
             itemCount,
             contentsEstimatedWeightLb,
+            weightSummary,
           };
         })
     );
@@ -353,15 +369,14 @@ export const get = query({
       (sum, entry) => sum + (entry?.membership.quantity ?? 0),
       0
     );
-    const contentsEstimatedWeightLb = contents.reduce(
-      (sum, entry) =>
-        sum +
-        (entry?.item.estimatedWeightLb ?? 0) *
-          (entry?.membership.quantity ?? 1),
-      0
-    );
+    const contentsEstimatedWeightLb = contentsEstimatedWeight(contents);
+    const weightSummary = resolveBoxWeight({
+      actualWeightLb: box.actualWeightLb,
+      estimatedWeightLb: box.estimatedWeightLb,
+      contentsEstimatedWeightLb,
+    });
 
-    return { box, contents, itemCount, contentsEstimatedWeightLb };
+    return { box, contents, itemCount, contentsEstimatedWeightLb, weightSummary };
   },
 });
 

@@ -16,6 +16,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  formatBoxWeightSource,
+  formatBoxWeightValue,
+} from "@/lib/box-weight";
 
 export function BoxLookup({
   householdId,
@@ -101,10 +105,10 @@ export function BoxLookup({
               <div className="rounded-md border border-border p-3">
                 <p className="text-xs text-muted-foreground">Weight</p>
                 <p className="font-medium">
-                  {boxRecord.box.actualWeightLb ??
-                    boxRecord.box.estimatedWeightLb ??
-                    boxRecord.contentsEstimatedWeightLb}{" "}
-                  lb
+                  {formatBoxWeightValue(boxRecord.weightSummary)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatBoxWeightSource(boxRecord.weightSummary)}
                 </p>
               </div>
             </div>

@@ -26,6 +26,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  formatBoxWeightSource,
+  formatBoxWeightValue,
+  isMissingBoxWeight,
+} from "@/lib/box-weight";
 import { buildLoadPlanPacketPath } from "@/lib/load-plan-packet";
 import { cn } from "@/lib/utils";
 
@@ -693,6 +698,7 @@ function BoxTile({
     (box.assignmentWarnings?.length ?? 0) +
     (box.assignmentHardBlocks?.length ?? 0) +
     (report?.warnings.length ?? 0);
+  const weightSummary = report?.weightSummary ?? record.weightSummary;
 
   return (
     <div
@@ -732,9 +738,10 @@ function BoxTile({
           <Boxes aria-hidden="true" />
           {itemCount}
         </Badge>
-        <Badge variant="outline">
-          {formatNumber(report?.estimatedWeightLb)} lb
+        <Badge variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}>
+          {formatBoxWeightValue(weightSummary)}
         </Badge>
+        <Badge variant="outline">{formatBoxWeightSource(weightSummary)}</Badge>
         {box.assignmentLocked ? (
           <Badge variant="secondary">locked</Badge>
         ) : null}

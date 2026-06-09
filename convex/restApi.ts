@@ -5,6 +5,7 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { hashApiKey } from "./lib/apiKeys";
+import { resolveBoxWeight } from "./lib/boxWeight";
 import {
   requiresOverrideReason,
   validateAssignment,
@@ -942,11 +943,15 @@ async function routeCapacityReport(
     const contentsVolume = sumEstimateValues(
       contentEstimates.map((estimate) => estimate.volume)
     );
-    const estimatedWeightLb =
-      box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight;
+    const weightSummary = resolveBoxWeight({
+      actualWeightLb: box.actualWeightLb,
+      estimatedWeightLb: box.estimatedWeightLb,
+      contentsEstimatedWeightLb: contentsWeight,
+    });
+    const estimatedWeightLb = weightSummary.valueLb ?? 0;
     const estimatedVolumeCuFt = box.estimatedVolumeCuFt ?? contentsVolume;
     const warnings: string[] = [];
-    if (!box.actualWeightLb && !box.estimatedWeightLb && contentsWeight === 0) {
+    if (weightSummary.source === "missing") {
       warnings.push("missingBoxWeightEstimate");
     }
     if (!box.estimatedVolumeCuFt && contentsVolume === 0) {
@@ -968,6 +973,9 @@ async function routeCapacityReport(
         0
       ),
       estimatedWeightLb: roundEstimate(estimatedWeightLb),
+      weightSource: weightSummary.source,
+      weightSourceLabel: weightSummary.label,
+      weightSummary,
       estimatedVolumeCuFt: roundEstimate(estimatedVolumeCuFt),
       assignmentLocked: box.assignmentLocked ?? false,
       assignmentWarnings: box.assignmentWarnings ?? [],
