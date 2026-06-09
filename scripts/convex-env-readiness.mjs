@@ -1,8 +1,16 @@
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const strict = process.argv.includes("--strict");
 const deployment = deploymentArg();
+const compareLocalStorage = process.argv.includes("--compare-local-storage");
 const results = [];
+const localStorageKeys = [
+  "B2_BUCKET_NAME",
+  "B2_BUCKET_ID",
+  "B2_ENDPOINT",
+  "B2_REGION",
+];
 
 const requiredGroups = [
   {
@@ -40,6 +48,12 @@ function deploymentArg() {
   const index = process.argv.indexOf("--deployment");
   if (index !== -1) {
     return { label: process.argv[index + 1] ?? "missing", args: ["--deployment", process.argv[index + 1] ?? ""] };
+  }
+
+  if (process.argv.includes("--deployment-from-env")) {
+    const value = process.env.CONVEX_DEPLOYMENT ?? "";
+    const deployment = deploymentReferenceFromEnvValue(value);
+    return { label: value || "missing", args: ["--deployment", deployment] };
   }
 
   return { label: "production", args: ["--prod"] };
@@ -89,6 +103,12 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+export function deploymentReferenceFromEnvValue(value) {
+  const trimmed = value.trim();
+  const shorthand = trimmed.match(/^(dev|prod):(.+)$/);
+  return shorthand ? shorthand[2] : trimmed;
+}
+
 function checkRequiredGroups(output) {
   for (const group of requiredGroups) {
     const missing = group.keys.filter((key) => !outputMentionsKey(output, key));
@@ -123,6 +143,97 @@ function checkAlternativeGroups(output) {
   }
 }
 
+export function parseEnvAssignments(output) {
+  const assignments = new Map();
+  for (const line of output.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    const equalsMatch = trimmed.match(/^([A-Z][A-Z0-9_]+)=(.*)$/);
+    if (equalsMatch) {
+      assignments.set(equalsMatch[1], equalsMatch[2]);
+      continue;
+    }
+
+    const tableMatch = trimmed.match(/^([A-Z][A-Z0-9_]+)\s+(.+)$/);
+    if (tableMatch && tableMatch[1] !== "NAME") {
+      assignments.set(tableMatch[1], tableMatch[2]);
+    }
+  }
+  return assignments;
+}
+
+function normalizePublicStorageValue(key, value) {
+  const trimmed = value.trim();
+  if (key === "B2_ENDPOINT") {
+    return trimmed.replace(/\/+$/, "").toLowerCase();
+  }
+  return trimmed;
+}
+
+export function localStorageAlignmentResults(assignments, localEnv = process.env) {
+  const availableLocalKeys = localStorageKeys.filter((key) => localEnv[key]);
+  if (availableLocalKeys.length === 0) {
+    return [
+      {
+        status: "warn",
+        label: "Backblaze B2 public value alignment",
+        detail:
+          "local B2 public values unavailable; run with --env-file=.env.local and --compare-local-storage to compare drift",
+      },
+    ];
+  }
+
+  const comparableKeys = availableLocalKeys.filter((key) => assignments.has(key));
+  const missingRemoteKeys = availableLocalKeys.filter((key) => !assignments.has(key));
+  const mismatchedKeys = comparableKeys.filter(
+    (key) =>
+      normalizePublicStorageValue(key, assignments.get(key) ?? "") !==
+      normalizePublicStorageValue(key, localEnv[key] ?? "")
+  );
+  const results = [];
+
+  if (missingRemoteKeys.length) {
+    results.push({
+      status: missingRemoteKeys.includes("B2_BUCKET_ID") ? "warn" : "blocked",
+      label: "Backblaze B2 public value alignment",
+      detail: `Convex missing ${missingRemoteKeys.join(", ")} for local comparison; tracked by MOVE-66`,
+    });
+  }
+
+  if (mismatchedKeys.length) {
+    results.push({
+      status: "blocked",
+      label: "Backblaze B2 public value alignment",
+      detail: `${mismatchedKeys.join(", ")} ${
+        mismatchedKeys.length === 1 ? "differs" : "differ"
+      } from local .env.local; tracked by MOVE-66`,
+    });
+  } else if (comparableKeys.length) {
+    results.push({
+      status: "pass",
+      label: "Backblaze B2 public value alignment",
+      detail: `${comparableKeys.join(", ")} match local .env.local without printing values`,
+    });
+  }
+
+  if (results.length === 0) {
+    results.push({
+      status: "warn",
+      label: "Backblaze B2 public value alignment",
+      detail:
+        "no comparable public B2 values found in Convex env output; expected names are still checked separately",
+    });
+  }
+
+  return results;
+}
+
+function checkLocalStorageAlignment(output) {
+  const assignments = parseEnvAssignments(output);
+  for (const result of localStorageAlignmentResults(assignments)) {
+    record(result.status, result.label, result.detail);
+  }
+}
+
 async function main() {
   if (deployment.args.includes("")) {
     record("fail", "Convex env list", "--deployment requires a value");
@@ -146,6 +257,9 @@ async function main() {
   );
   checkRequiredGroups(response.stdout);
   checkAlternativeGroups(response.stdout);
+  if (compareLocalStorage) {
+    checkLocalStorageAlignment(response.stdout);
+  }
   record(
     "warn",
     "encrypted value validation",
@@ -153,37 +267,42 @@ async function main() {
   );
 }
 
-await main();
+const isMain =
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-const counts = results.reduce(
-  (acc, result) => {
-    acc[result.status] += 1;
-    return acc;
-  },
-  { pass: 0, warn: 0, blocked: 0, fail: 0 }
-);
+if (isMain) {
+  await main();
 
-for (const result of results) {
-  const label =
-    result.status === "pass"
-      ? "PASS"
-      : result.status === "warn"
-        ? "WARN"
-        : result.status === "blocked"
-          ? "BLOCKED"
-          : "FAIL";
-  console.log(`${label} ${result.label}: ${result.detail}`);
-}
+  const counts = results.reduce(
+    (acc, result) => {
+      acc[result.status] += 1;
+      return acc;
+    },
+    { pass: 0, warn: 0, blocked: 0, fail: 0 }
+  );
 
-console.log(
-  `Convex env readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
-);
-console.log(
-  strict
-    ? "Strict mode: failures and blockers exit nonzero."
-    : "Default mode: only Convex CLI/list failures exit nonzero. Use --strict for launch gating."
-);
+  for (const result of results) {
+    const label =
+      result.status === "pass"
+        ? "PASS"
+        : result.status === "warn"
+          ? "WARN"
+          : result.status === "blocked"
+            ? "BLOCKED"
+            : "FAIL";
+    console.log(`${label} ${result.label}: ${result.detail}`);
+  }
 
-if (counts.fail > 0 || (strict && counts.blocked > 0)) {
-  process.exitCode = 1;
+  console.log(
+    `Convex env readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
+  );
+  console.log(
+    strict
+      ? "Strict mode: failures and blockers exit nonzero."
+      : "Default mode: only Convex CLI/list failures exit nonzero. Use --strict for launch gating."
+  );
+
+  if (counts.fail > 0 || (strict && counts.blocked > 0)) {
+    process.exitCode = 1;
+  }
 }

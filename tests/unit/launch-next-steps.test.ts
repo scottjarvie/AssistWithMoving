@@ -46,6 +46,7 @@ describe("launch next steps", () => {
     expect(plan).toContain("Vercel preview origins");
     expect(plan).toContain("CONTENT_SECURITY_POLICY_MODE");
     expect(plan).toContain("npm run doctor:launch");
+    expect(plan).toContain("npm run doctor:convex-dev-env");
     expect(plan).toContain("<production-clerk-issuer>");
     expect(plan).toContain("<svix-signing-secret>");
     expect(plan).not.toMatch(/sk_(test|live)_/);

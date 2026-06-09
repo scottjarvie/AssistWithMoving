@@ -79,6 +79,7 @@ export const launchBlockerRemediations = [
       "npm run doctor:storage",
       "npm run doctor:vercel-env",
       "npm run doctor:convex-env",
+      "npm run doctor:convex-dev-env",
     ],
   },
   {

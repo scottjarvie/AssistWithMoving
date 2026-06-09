@@ -18,9 +18,10 @@
     "doctor:launch": "node scripts/launch-readiness.mjs",
     "doctor:vercel-env": "node scripts/vercel-env-readiness.mjs",
     "doctor:convex-env": "node scripts/convex-env-readiness.mjs",
+    "doctor:convex-dev-env": "node --env-file=.env.local scripts/convex-env-readiness.mjs --deployment-from-env --compare-local-storage",
     "doctor:storage": "node --no-warnings --env-file=.env.local scripts/storage-readiness.mjs",
     "doctor:webhooks": "node --env-file=.env.local scripts/webhook-readiness.mjs",
-    "doctor:all": "npm run doctor:launch && npm run doctor:vercel-env && npm run doctor:convex-env && npm run doctor:storage && npm run doctor:webhooks",
+    "doctor:all": "npm run doctor:launch && npm run doctor:vercel-env && npm run doctor:convex-env && npm run doctor:convex-dev-env && npm run doctor:storage && npm run doctor:webhooks",
     "doctor:next": "node scripts/launch-next-steps.mjs",
     "mcp": "node ./mcp-server/movingmanifest-mcp.mjs",
     "seed": "node scripts/seed.mjs"
