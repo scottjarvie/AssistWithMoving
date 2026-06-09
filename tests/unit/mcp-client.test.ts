@@ -1384,6 +1384,46 @@ describe("MovingManifest MCP API client", () => {
     );
   });
 
+  it("starts audio evidence uploads without derivatives through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          uploadSessionId: "session-audio",
+          derivativeUploads: [],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startPhotoUpload(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        mimeType: "audio/mpeg",
+        sizeBytes: 123456,
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/uploads/init"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          mimeType: "audio/mpeg",
+          sizeBytes: 123456,
+        }),
+      }
+    );
+  });
+
   it("lists, creates, updates, and archives documentation profiles through the API", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,

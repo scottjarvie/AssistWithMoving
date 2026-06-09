@@ -213,23 +213,61 @@ async function checkS3(client) {
   await client.send(new HeadBucketCommand({ Bucket: bucket }));
   record("pass", "S3 bucket", "head bucket succeeded");
 
-  const key = `diagnostics/codex-${Date.now()}.txt`;
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: "MovingManifest Backblaze readiness diagnostic.",
-      ContentType: "text/plain",
-    })
-  );
-  const head = await client.send(
-    new HeadObjectCommand({ Bucket: bucket, Key: key })
-  );
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  const timestamp = Date.now();
+  const diagnosticObjects = [
+    {
+      kind: "image",
+      key: `diagnostics/codex-${timestamp}.jpg`,
+      contentType: "image/jpeg",
+      body: "MovingManifest image storage diagnostic.",
+    },
+    {
+      kind: "audio",
+      key: `diagnostics/codex-${timestamp}.mp3`,
+      contentType: "audio/mpeg",
+      body: "MovingManifest audio storage diagnostic.",
+    },
+    {
+      kind: "video",
+      key: `diagnostics/codex-${timestamp}.mp4`,
+      contentType: "video/mp4",
+      body: "MovingManifest video storage diagnostic.",
+    },
+  ];
+  const uploadedKeys = [];
+  let totalBytes = 0;
+  try {
+    for (const diagnostic of diagnosticObjects) {
+      await client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: diagnostic.key,
+          Body: diagnostic.body,
+          ContentType: diagnostic.contentType,
+        })
+      );
+      uploadedKeys.push(diagnostic.key);
+      const head = await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: diagnostic.key })
+      );
+      totalBytes += head.ContentLength ?? 0;
+      if (head.ContentType && head.ContentType !== diagnostic.contentType) {
+        throw new Error(
+          `${diagnostic.kind} diagnostic content type mismatch: ${head.ContentType}`
+        );
+      }
+    }
+  } finally {
+    await Promise.all(
+      uploadedKeys.map((key) =>
+        client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+      )
+    );
+  }
   record(
     "pass",
-    "S3 object lifecycle",
-    `temporary put/head/delete succeeded; bytes ${head.ContentLength ?? "unknown"}`
+    "S3 media object lifecycle",
+    `temporary image/audio/video put/head/delete succeeded; bytes ${totalBytes}`
   );
 }
 

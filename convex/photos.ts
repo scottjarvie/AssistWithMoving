@@ -50,12 +50,19 @@ import {
   uploadSessionStorageRefs,
 } from "./lib/photoCleanup";
 import {
+  assertDerivativeUploadsAllowed,
+  assertImageDerivativeUploadFileShape,
+  assertImageDimensions,
+  assertOriginalUploadFileShape,
+  fileExtensionForMediaMimeType,
+  mediaKindForMimeType,
+  mediaObjectPrefix,
+} from "./lib/mediaStorage";
+import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
 
-const allowedPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
-const maxPhotoUploadBytes = 25 * 1024 * 1024;
 const uploadSessionTtlMs = 15 * 60 * 1000;
 
 const derivativeRefsValidator = v.object({
@@ -176,48 +183,20 @@ function cleanupStorageError(error: unknown) {
   return "Storage object cleanup failed.";
 }
 
-function fileExtensionForMimeType(mimeType: string) {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    case "image/webp":
-      return "webp";
-    default:
-      throw new Error("Unsupported image type.");
-  }
-}
-
-function assertUploadFileShape({
-  mimeType,
-  sizeBytes,
-}: {
-  mimeType: string;
-  sizeBytes: number;
-}) {
-  if (!allowedPhotoMimeTypes.includes(mimeType)) {
-    throw new Error("Unsupported image type.");
-  }
-  if (
-    !Number.isFinite(sizeBytes) ||
-    sizeBytes <= 0 ||
-    sizeBytes > maxPhotoUploadBytes
-  ) {
-    throw new Error("Image must be under 25 MB.");
-  }
-}
-
 function uploadObjectKey({
   moveId,
   mimeType,
-  prefix = "photos",
+  prefix,
 }: {
   moveId: string;
   mimeType: string;
   prefix?: string;
 }) {
-  return `moves/${moveId}/${prefix}/${crypto.randomUUID()}.${fileExtensionForMimeType(
+  const mediaKind = mediaKindForMimeType(mimeType);
+  if (!mediaKind) {
+    throw new Error("Unsupported media type.");
+  }
+  return `moves/${moveId}/${prefix ?? mediaObjectPrefix(mediaKind)}/${crypto.randomUUID()}.${fileExtensionForMediaMimeType(
     mimeType,
   )}`;
 }
@@ -499,21 +478,29 @@ export const initUpload = action({
     }>;
     expiresAt: number;
   }> => {
-    assertUploadFileShape(args);
-    for (const derivative of args.derivatives ?? []) {
-      assertUploadFileShape({
+    const original = assertOriginalUploadFileShape(args);
+    const normalizedDerivatives = (args.derivatives ?? []).map((derivative) => {
+      const normalized = assertImageDerivativeUploadFileShape({
         mimeType: derivative.mimeType,
         sizeBytes: derivative.sizeBytes,
       });
-    }
+      return {
+        ...derivative,
+        mimeType: normalized.mimeType,
+      };
+    });
+    assertDerivativeUploadsAllowed(
+      original.mediaKind,
+      normalizedDerivatives.length,
+    );
 
     const config = requireB2Config();
     const objectKey = uploadObjectKey({
       moveId: args.moveId,
-      mimeType: args.mimeType,
+      mimeType: original.mimeType,
     });
     const derivativeUploads =
-      args.derivatives?.map((derivative) => ({
+      normalizedDerivatives.map((derivative) => ({
         ...derivative,
         storageKey: uploadObjectKey({
           moveId: args.moveId,
@@ -533,8 +520,9 @@ export const initUpload = action({
         room: args.room,
         originalStorageKey: objectKey,
         originalBucket: config.bucketName,
-        expectedMimeType: args.mimeType,
-        expectedSizeBytes: args.sizeBytes,
+        mediaKind: original.mediaKind,
+        expectedMimeType: original.mimeType,
+        expectedSizeBytes: original.sizeBytes,
         derivativeUploads: derivativeUploads.map((derivative) => ({
           variant: derivative.variant,
           storageKey: derivative.storageKey,
@@ -553,8 +541,8 @@ export const initUpload = action({
       new PutObjectCommand({
         Bucket: config.bucketName,
         Key: objectKey,
-        ContentType: args.mimeType,
-        ContentLength: args.sizeBytes,
+        ContentType: original.mimeType,
+        ContentLength: original.sizeBytes,
       }),
       { expiresIn: Math.floor(uploadSessionTtlMs / 1000) },
     );
@@ -580,7 +568,7 @@ export const initUpload = action({
       uploadSessionId,
       uploadUrl,
       method: "PUT",
-      headers: { "Content-Type": args.mimeType },
+      headers: { "Content-Type": original.mimeType },
       derivativeUploads: signedDerivativeUploads,
       expiresAt,
     };
@@ -592,8 +580,8 @@ export const finalizeUpload = action({
     householdId: v.id("households"),
     moveId: v.id("moves"),
     uploadSessionId: uploadSessionIdValidator,
-    width: v.number(),
-    height: v.number(),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
     originalHash: v.optional(v.string()),
     caption: v.optional(v.string()),
     photoType: v.optional(photoTypeValidator),
@@ -695,8 +683,8 @@ export const getDisplayUrl = action({
     servedVariant: PhotoDisplayVariant;
     deliveryProvider: PhotoDeliveryProvider;
     derivativeStatus?: "pending" | "ready" | "failed";
-    width: number;
-    height: number;
+    width?: number;
+    height?: number;
     mimeType: string;
   }> => {
     const { photo } = await ctx.runQuery(internal.photos.getPhotoForDelivery, {
@@ -704,6 +692,12 @@ export const getDisplayUrl = action({
       moveId: args.moveId,
       photoId: args.photoId,
     });
+    const mediaKind =
+      photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
+    if (mediaKind !== "image") {
+      throw new Error("Display derivatives are only available for image evidence.");
+    }
+
     const selected =
       args.variant === "original"
         ? null
@@ -791,7 +785,7 @@ export const getOriginalDownloadUrl = action({
     }
 
     const config = requireB2Config();
-    const filename = `movingmanifest-original-${args.photoId}.${fileExtensionForMimeType(
+    const filename = `movingmanifest-original-${args.photoId}.${fileExtensionForMediaMimeType(
       photo.mimeType,
     )}`;
     const url = await getSignedUrl(
@@ -1043,6 +1037,9 @@ export const createUploadSession = internalMutation({
     room: v.optional(v.string()),
     originalStorageKey: v.string(),
     originalBucket: v.string(),
+    mediaKind: v.optional(
+      v.union(v.literal("image"), v.literal("audio"), v.literal("video")),
+    ),
     expectedMimeType: v.string(),
     expectedSizeBytes: v.number(),
     derivativeUploads: v.optional(
@@ -1078,10 +1075,18 @@ export const createUploadSession = internalMutation({
     if (args.apiActor) {
       await assertMoveInHousehold(ctx, args);
     }
-    assertUploadFileShape({
+    const original = assertOriginalUploadFileShape({
       mimeType: args.expectedMimeType,
       sizeBytes: args.expectedSizeBytes,
     });
+    const derivativeUploads = args.derivativeUploads ?? [];
+    for (const derivative of derivativeUploads) {
+      assertImageDerivativeUploadFileShape({
+        mimeType: derivative.expectedMimeType,
+        sizeBytes: derivative.expectedSizeBytes,
+      });
+    }
+    assertDerivativeUploadsAllowed(original.mediaKind, derivativeUploads.length);
     await assertPhotoTargets(ctx, args);
 
     const now = Date.now();
@@ -1093,9 +1098,10 @@ export const createUploadSession = internalMutation({
       room: normalizeOptionalText(args.room),
       originalStorageKey: args.originalStorageKey,
       originalBucket: args.originalBucket,
-      expectedMimeType: args.expectedMimeType,
-      expectedSizeBytes: args.expectedSizeBytes,
-      derivativeUploads: args.derivativeUploads,
+      mediaKind: original.mediaKind,
+      expectedMimeType: original.mimeType,
+      expectedSizeBytes: original.sizeBytes,
+      derivativeUploads,
       status: "authorized",
       expiresAt: args.expiresAt,
       createdByUserId: userId,
@@ -1244,8 +1250,8 @@ export const completeUploadSession = internalMutation({
     householdId: v.id("households"),
     moveId: v.id("moves"),
     uploadSessionId: uploadSessionIdValidator,
-    width: v.number(),
-    height: v.number(),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
     originalHash: v.optional(v.string()),
     caption: v.optional(v.string()),
     photoType: v.optional(photoTypeValidator),
@@ -1286,6 +1292,15 @@ export const completeUploadSession = internalMutation({
     ) {
       throw new Error("Upload session is not active.");
     }
+    const mediaKind =
+      session.mediaKind ??
+      mediaKindForMimeType(session.expectedMimeType) ??
+      "image";
+    assertImageDimensions({
+      mediaKind,
+      width: args.width,
+      height: args.height,
+    });
 
     await assertHouseholdEntitlement(ctx, {
       householdId: args.householdId,
@@ -1305,9 +1320,11 @@ export const completeUploadSession = internalMutation({
       return refs;
     }, {});
     const derivativeStatus =
-      session.derivativeUploads && session.derivativeUploads.length > 0
-        ? "ready"
-        : "pending";
+      mediaKind === "image"
+        ? session.derivativeUploads && session.derivativeUploads.length > 0
+          ? "ready"
+          : "pending"
+        : undefined;
     const photoId = await ctx.db.insert("itemPhotos", {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -1321,6 +1338,7 @@ export const completeUploadSession = internalMutation({
       derivativeRefs,
       derivativeStatus,
       derivativesUpdatedAt: derivativeStatus === "ready" ? now : undefined,
+      mediaKind,
       width: args.width,
       height: args.height,
       mimeType: session.expectedMimeType,

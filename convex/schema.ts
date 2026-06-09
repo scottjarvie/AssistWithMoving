@@ -316,6 +316,12 @@ export const photoSource = v.union(
   v.literal("import")
 );
 
+export const mediaKind = v.union(
+  v.literal("image"),
+  v.literal("audio"),
+  v.literal("video")
+);
+
 export const exifHandlingStatus = v.union(
   v.literal("pending"),
   v.literal("stripped"),
@@ -1017,8 +1023,9 @@ export default defineSchema({
     derivativeError: v.optional(v.string()),
     derivativesUpdatedAt: v.optional(v.number()),
     cloudflareImageId: v.optional(v.string()),
-    width: v.number(),
-    height: v.number(),
+    mediaKind: v.optional(mediaKind),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
     mimeType: v.string(),
     sizeBytes: v.number(),
     caption: v.optional(v.string()),
@@ -1055,6 +1062,7 @@ export default defineSchema({
     room: v.optional(v.string()),
     originalStorageKey: v.string(),
     originalBucket: v.string(),
+    mediaKind: v.optional(mediaKind),
     expectedMimeType: v.string(),
     expectedSizeBytes: v.number(),
     derivativeUploads: v.optional(

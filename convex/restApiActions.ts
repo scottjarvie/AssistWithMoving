@@ -18,9 +18,15 @@ import {
   type RestResponse,
   withRestRateLimitHeaders,
 } from "./lib/restApi";
+import {
+  assertDerivativeUploadsAllowed,
+  assertImageDerivativeUploadFileShape,
+  assertOriginalUploadFileShape,
+  fileExtensionForMediaMimeType,
+  mediaKindForMimeType,
+  mediaObjectPrefix,
+} from "./lib/mediaStorage";
 
-const allowedPhotoMimeTypes = ["image/jpeg", "image/png", "image/webp"];
-const maxPhotoUploadBytes = 25 * 1024 * 1024;
 const uploadSessionTtlMs = 15 * 60 * 1000;
 type PhotoDerivativeVariant = "thumb" | "card" | "detail" | "full";
 const photoTypes = [
@@ -114,12 +120,20 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
 
   return await withActionRateLimit(ctx, args, auth, async () => {
     try {
-      const mimeType = requiredString(body.mimeType, "mimeType is required.");
+      const requestedMimeType = requiredString(
+        body.mimeType,
+        "mimeType is required."
+      );
       const sizeBytes = requiredNumber(body.sizeBytes, "sizeBytes is required.");
-      assertUploadFileShape({ mimeType, sizeBytes });
+      const original = assertOriginalUploadFileShape({
+        mimeType: requestedMimeType,
+        sizeBytes,
+      });
+      const mimeType = original.mimeType;
       const config = requireB2Config();
       const objectKey = uploadObjectKey({ moveId, mimeType });
       const derivativeInputs = parseDerivativeUploads(body.derivatives);
+      assertDerivativeUploadsAllowed(original.mediaKind, derivativeInputs.length);
       const derivativeUploads = derivativeInputs.map((derivative) => ({
         ...derivative,
         storageKey: uploadObjectKey({
@@ -140,8 +154,9 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
           room: optionalString(body.room),
           originalStorageKey: objectKey,
           originalBucket: config.bucketName,
-          expectedMimeType: mimeType,
-          expectedSizeBytes: sizeBytes,
+          mediaKind: original.mediaKind,
+          expectedMimeType: original.mimeType,
+          expectedSizeBytes: original.sizeBytes,
           derivativeUploads: derivativeUploads.map((derivative) => ({
             variant: derivative.variant,
             storageKey: derivative.storageKey,
@@ -164,8 +179,8 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
         new PutObjectCommand({
           Bucket: config.bucketName,
           Key: objectKey,
-          ContentType: mimeType,
-          ContentLength: sizeBytes,
+          ContentType: original.mimeType,
+          ContentLength: original.sizeBytes,
         }),
         { expiresIn: Math.floor(uploadSessionTtlMs / 1000) }
       );
@@ -193,7 +208,7 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
             uploadSessionId,
             uploadUrl,
             method: "PUT",
-            headers: { "Content-Type": mimeType },
+            headers: { "Content-Type": original.mimeType },
             derivativeUploads: signedDerivativeUploads,
             expiresAt,
           },
@@ -254,8 +269,8 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         householdId: auth.householdId,
         moveId,
         uploadSessionId,
-        width: requiredNumber(body.width, "width is required."),
-        height: requiredNumber(body.height, "height is required."),
+        width: optionalNumber(body.width),
+        height: optionalNumber(body.height),
         originalHash: optionalString(body.originalHash),
         caption: optionalString(body.caption),
         photoType: optionalPhotoType(body.photoType),
@@ -423,60 +438,47 @@ async function assertUploadedObject(
   }
 }
 
-function assertUploadFileShape({
-  mimeType,
-  sizeBytes,
-}: {
-  mimeType: string;
-  sizeBytes: number;
-}) {
-  if (!allowedPhotoMimeTypes.includes(mimeType)) {
-    throw new Error("Unsupported image type.");
-  }
-  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxPhotoUploadBytes) {
-    throw new Error("Image must be under 25 MB.");
-  }
-}
-
 function uploadObjectKey({
   moveId,
   mimeType,
-  prefix = "photos",
+  prefix,
 }: {
   moveId: string;
   mimeType: string;
   prefix?: string;
 }) {
-  return `moves/${moveId}/${prefix}/${crypto.randomUUID()}.${fileExtensionForMimeType(
+  const mediaKind = mediaKindForMimeType(mimeType);
+  if (!mediaKind) {
+    throw new Error("Unsupported media type.");
+  }
+  return `moves/${moveId}/${prefix ?? mediaObjectPrefix(mediaKind)}/${crypto.randomUUID()}.${fileExtensionForMediaMimeType(
     mimeType
   )}`;
-}
-
-function fileExtensionForMimeType(mimeType: string) {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    case "image/webp":
-      return "webp";
-    default:
-      throw new Error("Unsupported image type.");
-  }
 }
 
 function parseDerivativeUploads(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => {
     const derivative = bodyObject(entry);
+    const requestedMimeType = requiredString(
+      derivative.mimeType,
+      "derivative mimeType is required."
+    );
+    const sizeBytes = requiredNumber(
+      derivative.sizeBytes,
+      "derivative sizeBytes is required."
+    );
+    const normalized = assertImageDerivativeUploadFileShape({
+      mimeType: requestedMimeType,
+      sizeBytes,
+    });
     const parsed = {
       variant: requiredDerivativeVariant(derivative.variant),
-      mimeType: requiredString(derivative.mimeType, "derivative mimeType is required."),
-      sizeBytes: requiredNumber(derivative.sizeBytes, "derivative sizeBytes is required."),
+      mimeType: normalized.mimeType,
+      sizeBytes: normalized.sizeBytes,
       width: requiredNumber(derivative.width, "derivative width is required."),
       height: requiredNumber(derivative.height, "derivative height is required."),
     };
-    assertUploadFileShape(parsed);
     return parsed;
   });
 }

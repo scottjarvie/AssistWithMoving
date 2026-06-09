@@ -771,13 +771,15 @@ The capacity report requires `moves/read` and `inventory/read`. It returns
 move-level weight/volume estimates, allowance percentage, missing-estimate
 counts, per-box estimates and warnings, resource capacity usage, and zone usage.
 
-## Photos
+## Evidence Media
 
-Photo upload is a two-step flow.
+Evidence media upload is a two-step flow. The current product UI is still
+photo-first, but the storage contract accepts image, audio, and video originals.
+Image derivatives remain image-only.
 
 1. Start an upload session and receive a presigned Backblaze URL.
 2. PUT the file to the returned `uploadUrl`.
-3. Finalize the photo metadata.
+3. Finalize the evidence metadata.
 
 Start upload:
 
@@ -803,6 +805,10 @@ curl -X POST https://movingmanifest.com/api/v1/uploads/init \
   }'
 ```
 
+For audio/video originals, omit `derivatives`. Supported originals are JPEG,
+PNG, WebP, MP3, M4A, AAC, WAV, WebM audio, OGG audio, MP4, MOV, and WebM video.
+Current limits are 25 MB for images, 100 MB for audio, and 500 MB for video.
+
 Finalize:
 
 ```bash
@@ -822,7 +828,9 @@ curl -X POST https://movingmanifest.com/api/v1/photos/finalize \
 ```
 
 The finalize step verifies the uploaded object size and MIME type before it
-creates the photo record.
+creates the evidence record. Images require positive `width` and `height`.
+Audio can finalize without dimensions; video dimensions may be provided when a
+future UI captures them.
 
 For MCP clients, use `start_photo_upload`, upload the file to the returned
 presigned URL and any returned derivative upload URLs, then call
@@ -1041,8 +1049,8 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
-| `start_photo_upload` | Start a photo upload session and return presigned original/derivative upload information. |
-| `finalize_photo_upload` | Finalize a completed presigned upload and create the photo evidence record after server-side object verification. |
+| `start_photo_upload` | Start an evidence media upload session and return presigned original/derivative upload information. |
+| `finalize_photo_upload` | Finalize a completed presigned upload and create the evidence record after server-side object verification. |
 | `attach_photo` | Attach/update photo evidence metadata after upload finalization, with `dryRun` support. |
 | `list_transport_resources` | List resources and zones for load planning. |
 | `list_move_people` | List move people/contact records, with optional archived records. |

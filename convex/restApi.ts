@@ -2627,7 +2627,10 @@ async function routeGenerateAiPhotoSuggestions(
         photoId: photo._id,
         derivativeVariant: "card",
       },
-      inputSummary: `${photo.photoType} photo ${photo.width}x${photo.height}`,
+      inputSummary:
+        photo.width && photo.height
+          ? `${photo.photoType} photo ${photo.width}x${photo.height}`
+          : `${photo.photoType} photo`,
       outputRef: {
         suggestionCount: suggestions.length,
         duplicatePhotoIds,

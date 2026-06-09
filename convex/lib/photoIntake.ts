@@ -15,8 +15,8 @@ export type PhotoIntakeInput = {
   room?: string;
   photoType: string;
   privacyLevel: string;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
   duplicatePhotoIds?: string[];
 };
 
@@ -158,7 +158,7 @@ function summarizePhoto(input: PhotoIntakeInput) {
     input.caption ? `caption: ${clean(input.caption)}` : undefined,
     input.room ? `room: ${clean(input.room)}` : undefined,
     `type: ${input.photoType}`,
-    `${input.width}x${input.height}`,
+    input.width && input.height ? `${input.width}x${input.height}` : undefined,
   ]
     .filter(Boolean)
     .join("; ");

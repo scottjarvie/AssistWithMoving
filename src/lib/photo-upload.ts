@@ -4,7 +4,30 @@ export const allowedPhotoMimeTypes = [
   "image/webp",
 ] as const;
 
+export const allowedAudioMimeTypes = [
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/aac",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg",
+] as const;
+
+export const allowedVideoMimeTypes = [
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+] as const;
+
+export const allowedMediaMimeTypes = [
+  ...allowedPhotoMimeTypes,
+  ...allowedAudioMimeTypes,
+  ...allowedVideoMimeTypes,
+] as const;
+
 export const maxPhotoUploadBytes = 25 * 1024 * 1024;
+export const maxAudioUploadBytes = 100 * 1024 * 1024;
+export const maxVideoUploadBytes = 500 * 1024 * 1024;
 
 export const photoDerivativeSpecs = [
   { variant: "thumb", maxSide: 200, quality: 0.78 },
@@ -17,6 +40,8 @@ export type PhotoUploadValidation = {
   ok: boolean;
   message?: string;
 };
+
+export type MediaKind = "image" | "audio" | "video";
 
 export type PhotoDerivativeUpload = {
   variant: (typeof photoDerivativeSpecs)[number]["variant"];
@@ -47,6 +72,75 @@ export function validatePhotoUploadFile(file: Pick<File, "type" | "size">) {
   }
 
   return { ok: true } satisfies PhotoUploadValidation;
+}
+
+export function validateMediaUploadFile(file: Pick<File, "type" | "size">) {
+  const mediaKind = mediaKindForMimeType(file.type);
+  if (!mediaKind) {
+    return {
+      ok: false,
+      message:
+        "Use JPEG, PNG, WebP, MP3, M4A, AAC, WAV, WebM, OGG, MP4, or MOV.",
+    } satisfies PhotoUploadValidation;
+  }
+
+  const maxBytes = maxUploadBytesForMediaKind(mediaKind);
+  if (file.size <= 0 || file.size > maxBytes) {
+    return {
+      ok: false,
+      message: sizeLimitMessage(mediaKind),
+    } satisfies PhotoUploadValidation;
+  }
+
+  return { ok: true } satisfies PhotoUploadValidation;
+}
+
+export function mediaKindForMimeType(mimeType: string): MediaKind | null {
+  const normalized = mimeType.trim().toLowerCase().split(";")[0] ?? "";
+  if (
+    allowedPhotoMimeTypes.includes(
+      normalized as (typeof allowedPhotoMimeTypes)[number]
+    )
+  ) {
+    return "image";
+  }
+  if (
+    allowedAudioMimeTypes.includes(
+      normalized as (typeof allowedAudioMimeTypes)[number]
+    )
+  ) {
+    return "audio";
+  }
+  if (
+    allowedVideoMimeTypes.includes(
+      normalized as (typeof allowedVideoMimeTypes)[number]
+    )
+  ) {
+    return "video";
+  }
+  return null;
+}
+
+export function maxUploadBytesForMediaKind(mediaKind: MediaKind) {
+  switch (mediaKind) {
+    case "image":
+      return maxPhotoUploadBytes;
+    case "audio":
+      return maxAudioUploadBytes;
+    case "video":
+      return maxVideoUploadBytes;
+  }
+}
+
+export function sizeLimitMessage(mediaKind: MediaKind) {
+  switch (mediaKind) {
+    case "image":
+      return "Use an image under 25 MB.";
+    case "audio":
+      return "Use an audio file under 100 MB.";
+    case "video":
+      return "Use a video file under 500 MB.";
+  }
 }
 
 export async function fileSha256Hex(file: File) {

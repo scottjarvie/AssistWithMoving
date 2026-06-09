@@ -258,10 +258,10 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
   },
   {
     id: "photoEvidence",
-    title: "Photo evidence intake",
+    title: "Evidence media intake",
     status: "availableWithOperationalBlocker",
     purpose:
-      "Start upload sessions and attach photo metadata for condition, serial, receipt, mover, PCS, and claims evidence.",
+      "Start upload sessions and attach image, audio, or video evidence metadata for condition, serial, receipt, mover, PCS, and claims evidence.",
     requiredScopes: ["moves/read", "inventory/read", "photos/write"],
     restEndpoints: [
       "POST /api/v1/uploads/init",
@@ -270,8 +270,8 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
     mcpTools: ["start_photo_upload", "finalize_photo_upload", "attach_photo"],
     agentWorkflows: [
-      "Start a photo session, upload the file to the presigned URL, and finalize the evidence record.",
-      "Attach reviewed evidence photos to items, boxes, rooms, and documentation profiles.",
+      "Start an evidence media session, upload the file to the presigned URL, and finalize the evidence record.",
+      "Attach reviewed evidence media to items, boxes, rooms, and documentation profiles.",
       "Keep original file delivery separate from recipient-safe packet thumbnails.",
     ],
     operationalBlockers: ["MOVE-66"],

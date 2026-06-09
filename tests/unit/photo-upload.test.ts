@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   fitWithin,
+  maxAudioUploadBytes,
   maxPhotoUploadBytes,
+  maxVideoUploadBytes,
+  mediaKindForMimeType,
+  validateMediaUploadFile,
   validatePhotoUploadFile,
 } from "@/lib/photo-upload";
 
@@ -31,6 +35,35 @@ describe("photo upload validation", () => {
         size: maxPhotoUploadBytes + 1,
       }).ok
     ).toBe(false);
+  });
+
+  it("validates future media uploads for image, audio, and video", () => {
+    expect(validateMediaUploadFile({ type: "image/webp", size: 1024 })).toEqual(
+      { ok: true }
+    );
+    expect(validateMediaUploadFile({ type: "audio/mpeg", size: 1024 })).toEqual(
+      { ok: true }
+    );
+    expect(validateMediaUploadFile({ type: "video/mp4", size: 1024 })).toEqual({
+      ok: true,
+    });
+    expect(mediaKindForMimeType("video/quicktime")).toBe("video");
+    expect(mediaKindForMimeType("audio/webm; codecs=opus")).toBe("audio");
+  });
+
+  it("keeps media upload limits specific to the media kind", () => {
+    expect(
+      validateMediaUploadFile({
+        type: "audio/mpeg",
+        size: maxAudioUploadBytes + 1,
+      }).message
+    ).toContain("audio");
+    expect(
+      validateMediaUploadFile({
+        type: "video/mp4",
+        size: maxVideoUploadBytes + 1,
+      }).message
+    ).toContain("video");
   });
 
   it("fits derivative dimensions within a max side without upscaling", () => {

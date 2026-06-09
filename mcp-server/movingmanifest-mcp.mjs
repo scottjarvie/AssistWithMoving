@@ -65,6 +65,23 @@ import {
   createShareLink,
 } from "./movingmanifest-api.mjs";
 
+const allowedOriginalMediaMimeTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/aac",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+];
+
+const allowedDerivativeImageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+
 const capacityInputSchema = z.object({
   maxWeightLb: z.number().nonnegative().optional(),
   maxVolumeCuFt: z.number().nonnegative().optional(),
@@ -833,21 +850,21 @@ export function registerTools(target, apiConfig) {
   });
 
   registerTool(target, "start_photo_upload", {
-    title: "Start photo upload",
+    title: "Start media evidence upload",
     description:
-      "Create a presigned photo upload session. The client must PUT the file to the returned URL and then call finalize_photo_upload.",
+      "Create a presigned evidence upload session for an image, audio file, or video. The client must PUT the file to the returned URL and then call finalize_photo_upload. Derivatives are image-only.",
     inputSchema: {
       moveId: z.string(),
       itemId: z.string().optional(),
       boxId: z.string().optional(),
       room: z.string().optional(),
-      mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
-      sizeBytes: z.number().int().positive().max(25 * 1024 * 1024),
+      mimeType: z.enum(allowedOriginalMediaMimeTypes),
+      sizeBytes: z.number().int().positive().max(500 * 1024 * 1024),
       derivatives: z
         .array(
           z.object({
             variant: z.enum(["thumb", "card", "detail", "full"]),
-            mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+            mimeType: z.enum(allowedDerivativeImageMimeTypes),
             sizeBytes: z.number().int().positive().max(25 * 1024 * 1024),
             width: z.number().int().positive(),
             height: z.number().int().positive(),
@@ -863,12 +880,12 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "finalize_photo_upload", {
     title: "Finalize photo upload",
     description:
-      "Finalize a completed presigned upload after the file PUT succeeds. The server verifies size and MIME type before creating the photo evidence record.",
+      "Finalize a completed presigned evidence upload after the file PUT succeeds. The server verifies size and MIME type before creating the evidence record. Width and height are required for images.",
     inputSchema: {
       moveId: z.string(),
       uploadSessionId: z.string(),
-      width: z.number().int().positive(),
-      height: z.number().int().positive(),
+      width: z.number().int().positive().optional(),
+      height: z.number().int().positive().optional(),
       originalHash: z.string().optional(),
       caption: z.string().optional(),
       photoType: z.string().optional(),
