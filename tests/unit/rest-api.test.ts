@@ -200,6 +200,12 @@ describe("REST API helpers", () => {
     expect(
       requiredScopesForRestRoute({
         method: "POST",
+        segments: ["moves", "move1", "ai-text-suggestions", "generate"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
         segments: ["moves", "move1", "ai-text-suggestions", "approve"],
       })
     ).toEqual(["inventory/write"]);
@@ -207,6 +213,12 @@ describe("REST API helpers", () => {
       requiredScopesForRestRoute({
         method: "POST",
         segments: ["moves", "move1", "ai-text-suggestions", "reject"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "ai-photo-suggestions", "generate"],
       })
     ).toEqual(["inventory/write"]);
     expect(

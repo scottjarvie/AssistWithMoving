@@ -26,6 +26,8 @@ import {
   downloadExport,
   approvePlanningSuggestions,
   generatePlanningSuggestions,
+  generateAiPhotoSuggestions,
+  generateAiTextSuggestions,
   getApiCapabilities,
   getApiContext,
   getCapacityReport,
@@ -660,6 +662,31 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listAiPhotoSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "generate_ai_text_suggestions", {
+    title: "Generate AI text suggestions",
+    description:
+      "Parse supplied source text into pending text-intake suggestions for explicit review. This creates an AI job and review queue rows, but does not create trusted inventory.",
+    inputSchema: {
+      moveId: z.string(),
+      sourceText: z.string().min(1).max(12000),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => generateAiTextSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "generate_ai_photo_suggestions", {
+    title: "Generate AI photo suggestions",
+    description:
+      "Create pending photo-intake suggestions for explicit photo IDs. Existing pending suggestions are reused instead of duplicated.",
+    inputSchema: {
+      moveId: z.string(),
+      photoId: z.string().optional(),
+      photoIds: z.array(z.string()).min(1).max(50).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => generateAiPhotoSuggestions(apiConfig, input),
   });
 
   registerTool(target, "approve_ai_text_suggestions", {

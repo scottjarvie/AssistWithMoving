@@ -323,6 +323,28 @@ export async function listAiPhotoSuggestions(config, input) {
   });
 }
 
+export async function generateAiTextSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/ai-text-suggestions/generate`,
+    body: {
+      sourceText: input.sourceText,
+    },
+  });
+}
+
+export async function generateAiPhotoSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/ai-photo-suggestions/generate`,
+    body: input.photoId
+      ? { photoId: input.photoId }
+      : {
+          photoIds: input.photoIds,
+        },
+  });
+}
+
 export async function approveAiTextSuggestions(config, input) {
   return await movingManifestRequest(config, {
     method: "POST",

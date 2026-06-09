@@ -5,6 +5,11 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { hashApiKey } from "./lib/apiKeys";
+import {
+  aiUsageLimits,
+  assertAiUsageAllowed,
+  inputBytesFromText,
+} from "./lib/aiUsage";
 import { resolveBoxWeight } from "./lib/boxWeight";
 import {
   requiresOverrideReason,
@@ -81,7 +86,10 @@ import {
   rejectPlanningSuggestions,
   type PlanningSuggestionApprovalInput,
 } from "./lib/aiPlanningSuggestionWorkflow";
+import { suggestFromPhotoIntake } from "./lib/photoIntake";
+import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
+import { parseTextIntakeSuggestions } from "./lib/textIntakeParser";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import {
@@ -2164,6 +2172,10 @@ async function routeAiTextSuggestions(
   moveId: Id<"moves">,
   suggestionIdSegment?: string
 ) {
+  if (args.method === "POST" && suggestionIdSegment === "generate") {
+    return await routeGenerateAiTextSuggestions(ctx, args, auth, moveId);
+  }
+
   if (args.method === "POST" && suggestionIdSegment === "approve") {
     return await routeApproveAiTextSuggestions(ctx, args, auth, moveId);
   }
@@ -2217,6 +2229,10 @@ async function routeAiPhotoSuggestions(
   moveId: Id<"moves">,
   suggestionIdSegment?: string
 ) {
+  if (args.method === "POST" && suggestionIdSegment === "generate") {
+    return await routeGenerateAiPhotoSuggestions(ctx, args, auth, moveId);
+  }
+
   if (args.method === "POST" && suggestionIdSegment === "approve") {
     return await routeApproveAiPhotoSuggestions(ctx, args, auth, moveId);
   }
@@ -2279,6 +2295,298 @@ type RestAiPhotoApproval = {
   itemDraft?: RestAiPhotoItemDraft;
   boxDraft?: RestAiPhotoBoxDraft;
 };
+
+async function routeGenerateAiTextSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const sourceText = parseAiTextGenerationSource(args.body);
+  await assertAiUsageAllowed(ctx, {
+    householdId: auth.householdId,
+    moveId,
+    userId: auth.createdByUserId,
+    inputSizeBytes: inputBytesFromText(sourceText),
+    estimatedCents: 0,
+  });
+
+  const parsed = parseTextIntakeSuggestions(sourceText).slice(0, 80);
+  if (!parsed.length) {
+    throw new Error("No inventory suggestions could be found in that text.");
+  }
+
+  const now = Date.now();
+  const aiJobId = await ctx.db.insert("aiJobs", {
+    householdId: auth.householdId,
+    moveId,
+    type: "inventoryExtraction",
+    status: "succeeded",
+    modality: "text",
+    provider: "mock",
+    model: "text-intake-parser-v1",
+    inputRef: { source: "apiAiTextIntake", sourceText },
+    inputSummary: sourceText.slice(0, 500),
+    outputRef: {
+      suggestionCount: parsed.length,
+      itemCount: parsed.filter((suggestion) => suggestion.type === "item")
+        .length,
+      boxCount: parsed.filter((suggestion) => suggestion.type === "box").length,
+    },
+    outputSummary: `${parsed.length} text intake suggestions created.`,
+    confidence: "medium",
+    reviewStatus: "unreviewed",
+    tokenUsage: {
+      inputTokens: Math.max(32, Math.ceil(sourceText.length / 4)),
+      outputTokens: parsed.length * 32,
+      totalTokens:
+        Math.max(32, Math.ceil(sourceText.length / 4)) + parsed.length * 32,
+    },
+    cost: {
+      estimatedCents: 0,
+      actualCents: 0,
+      currency: "USD",
+    },
+    retryCount: 0,
+    maxRetries: 0,
+    createdByUserId: auth.createdByUserId,
+    createdByApiKeyId: auth.apiKeyId,
+    startedAt: now,
+    completedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const suggestionIds: Id<"aiTextSuggestions">[] = [];
+  for (const suggestion of parsed) {
+    const suggestionId = await ctx.db.insert("aiTextSuggestions", {
+      householdId: auth.householdId,
+      moveId,
+      aiJobId,
+      type: suggestion.type,
+      status: "pending",
+      sourceText,
+      sourceLine: suggestion.sourceLine,
+      sourceIndex: suggestion.sourceIndex,
+      confidence: suggestion.confidence,
+      reasoning: suggestion.reasoning,
+      itemDraft: suggestion.itemDraft
+        ? normalizeApiAiTextItemDraft(suggestion.itemDraft)
+        : undefined,
+      boxDraft: suggestion.boxDraft
+        ? normalizeApiAiTextBoxDraft(suggestion.boxDraft)
+        : undefined,
+      createdByUserId: auth.createdByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    suggestionIds.push(suggestionId);
+  }
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "ai_text_intake.api_created",
+    "aiJobs",
+    aiJobId,
+    { suggestionCount: suggestionIds.length }
+  );
+
+  const suggestions = await Promise.all(
+    suggestionIds.map((suggestionId) => ctx.db.get(suggestionId))
+  );
+  return restOk(
+    {
+      data: {
+        aiJobId,
+        suggestionIds,
+        suggestions: suggestions
+          .filter((entry): entry is Doc<"aiTextSuggestions"> => Boolean(entry))
+          .map((entry) => safeAiTextSuggestion(entry)),
+      },
+    },
+    201
+  );
+}
+
+async function routeGenerateAiPhotoSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const photoIds = parseAiPhotoGenerationIds(args.body);
+  const results = [];
+  const createdAiJobIds: Id<"aiJobs">[] = [];
+  const allSuggestionIds: Id<"aiPhotoSuggestions">[] = [];
+
+  for (const photoId of photoIds) {
+    const photo = await requireApiPhotoById(ctx, auth.householdId, photoId);
+    if (photo.moveId !== moveId) {
+      throw new Error("Photo not found.");
+    }
+    if (!canUsePhotoDerivativeForAi(photo)) {
+      throw new Error(
+        "Photo privacy or derivative status does not allow AI intake."
+      );
+    }
+    if (photo.sizeBytes > aiUsageLimits.maxPhotoInputBytes) {
+      throw new Error("Photo is too large for AI intake.");
+    }
+
+    const existingPending = await ctx.db
+      .query("aiPhotoSuggestions")
+      .withIndex("by_photo_status", (q) =>
+        q.eq("photoId", photo._id).eq("status", "pending")
+      )
+      .collect();
+    if (existingPending.length) {
+      const suggestionIds = existingPending.map((suggestion) => suggestion._id);
+      allSuggestionIds.push(...suggestionIds);
+      results.push({
+        photoId: photo._id,
+        aiJobId: existingPending[0].aiJobId,
+        suggestionIds,
+        reusedPending: true,
+      });
+      continue;
+    }
+
+    await assertAiUsageAllowed(ctx, {
+      householdId: auth.householdId,
+      moveId,
+      userId: auth.createdByUserId,
+      inputSizeBytes: photo.sizeBytes,
+      estimatedCents: 0,
+    });
+
+    const duplicatePhotoIds = await duplicatePhotoIdsForApiMove(ctx, photo);
+    const suggestions = suggestFromPhotoIntake({
+      photoId: photo._id,
+      caption: photo.caption,
+      room: photo.room,
+      photoType: photo.photoType,
+      privacyLevel: photo.privacyLevel,
+      width: photo.width,
+      height: photo.height,
+      duplicatePhotoIds,
+    }).slice(0, 12);
+
+    const now = Date.now();
+    const aiJobId = await ctx.db.insert("aiJobs", {
+      householdId: auth.householdId,
+      moveId,
+      type: "photoIntake",
+      status: "succeeded",
+      modality: "vision",
+      provider: "mock",
+      model: "photo-intake-parser-v1",
+      inputRef: {
+        source: "apiAiPhotoIntake",
+        photoId: photo._id,
+        derivativeVariant: "card",
+      },
+      inputSummary: `${photo.photoType} photo ${photo.width}x${photo.height}`,
+      outputRef: {
+        suggestionCount: suggestions.length,
+        duplicatePhotoIds,
+      },
+      outputSummary: `${suggestions.length} photo intake suggestions created.`,
+      confidence: "medium",
+      reviewStatus: "unreviewed",
+      tokenUsage: {
+        inputTokens: 512,
+        outputTokens: suggestions.length * 48,
+        totalTokens: 512 + suggestions.length * 48,
+      },
+      cost: {
+        estimatedCents: 0,
+        actualCents: 0,
+        currency: "USD",
+      },
+      retryCount: 0,
+      maxRetries: 0,
+      createdByUserId: auth.createdByUserId,
+      createdByApiKeyId: auth.apiKeyId,
+      startedAt: now,
+      completedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const suggestionIds: Id<"aiPhotoSuggestions">[] = [];
+    for (const suggestion of suggestions) {
+      const suggestionId = await ctx.db.insert("aiPhotoSuggestions", {
+        householdId: auth.householdId,
+        moveId,
+        photoId: photo._id,
+        aiJobId,
+        type: suggestion.type,
+        status: "pending",
+        sourceDerivativeVariant: suggestion.sourceDerivativeVariant,
+        sourceSummary: suggestion.sourceSummary,
+        confidence: suggestion.confidence,
+        reasoning: suggestion.reasoning,
+        itemDraft: suggestion.itemDraft
+          ? normalizeApiAiPhotoItemDraft(suggestion.itemDraft)
+          : undefined,
+        boxDraft: suggestion.boxDraft
+          ? normalizeApiAiPhotoBoxDraft(suggestion.boxDraft)
+          : undefined,
+        duplicatePhotoIds: suggestion.duplicatePhotoIds as
+          | Id<"itemPhotos">[]
+          | undefined,
+        createdByUserId: auth.createdByUserId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      suggestionIds.push(suggestionId);
+    }
+
+    await ctx.db.patch(photo._id, {
+      aiProcessed: true,
+      verificationStatus: "needsReview",
+      updatedAt: now,
+    });
+
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "ai_photo_intake.api_created",
+      "aiJobs",
+      aiJobId,
+      { photoId: photo._id, suggestionCount: suggestionIds.length }
+    );
+
+    createdAiJobIds.push(aiJobId);
+    allSuggestionIds.push(...suggestionIds);
+    results.push({
+      photoId: photo._id,
+      aiJobId,
+      suggestionIds,
+      reusedPending: false,
+    });
+  }
+
+  const suggestions = await Promise.all(
+    allSuggestionIds.map((suggestionId) => ctx.db.get(suggestionId))
+  );
+  return restOk(
+    {
+      data: {
+        aiJobIds: createdAiJobIds,
+        suggestionIds: allSuggestionIds,
+        results,
+        suggestions: suggestions
+          .filter((entry): entry is Doc<"aiPhotoSuggestions"> => Boolean(entry))
+          .map((entry) => safeAiPhotoSuggestion(entry)),
+      },
+    },
+    createdAiJobIds.length ? 201 : 200
+  );
+}
 
 async function routeApproveAiTextSuggestions(
   ctx: MutationCtx,
@@ -3230,6 +3538,51 @@ function normalizeApiAiBoxLabelKey(value: string) {
 
 function pushUniqueId<TId extends string>(ids: TId[], id: TId) {
   if (!ids.includes(id)) ids.push(id);
+}
+
+function parseAiTextGenerationSource(body: unknown) {
+  const sourceText = asString(bodyObject(body).sourceText)?.trim().slice(0, 12000);
+  if (!sourceText) {
+    throw new Error("Text intake needs sourceText.");
+  }
+  return sourceText;
+}
+
+function parseAiPhotoGenerationIds(body: unknown) {
+  const input = bodyObject(body);
+  const photoIds =
+    input.photoId !== undefined
+      ? [optionalString(input.photoId)].filter((entry): entry is string =>
+          Boolean(entry)
+        )
+      : parseIdArray(input.photoIds);
+  if (!photoIds.length) {
+    throw new Error("photoIds must include at least one photo ID.");
+  }
+  if (photoIds.length > 50) {
+    throw new Error("photoIds are limited to 50 photos.");
+  }
+  assertUniqueReviewIds(photoIds, "Duplicate photoId value.");
+  return photoIds as Id<"itemPhotos">[];
+}
+
+async function duplicatePhotoIdsForApiMove(
+  ctx: MutationCtx,
+  photo: Doc<"itemPhotos">
+) {
+  if (!photo.originalHash) return [];
+  const photos = await ctx.db
+    .query("itemPhotos")
+    .withIndex("by_move_created", (q) => q.eq("moveId", photo.moveId))
+    .collect();
+  return photos
+    .filter(
+      (candidate) =>
+        candidate._id !== photo._id &&
+        !candidate.archivedAt &&
+        candidate.originalHash === photo.originalHash
+    )
+    .map((candidate) => candidate._id);
 }
 
 async function routeDocumentationProfiles(

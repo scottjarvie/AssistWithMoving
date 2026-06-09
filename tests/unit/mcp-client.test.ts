@@ -19,6 +19,8 @@ import {
   createTransportResource,
   createTransportZone,
   deleteItem,
+  generateAiPhotoSuggestions,
+  generateAiTextSuggestions,
   generatePlanningSuggestions,
   getApiContext,
   getCapacityReport,
@@ -808,6 +810,55 @@ describe("MovingManifest MCP API client", () => {
       {
         method: "GET",
         headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+  });
+
+  it("generates AI intake suggestions through review-queue endpoints", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { aiJobId: "job1", suggestionIds: [] } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await generateAiTextSuggestions(config, {
+      moveId: "move1",
+      sourceText: "Garage: red toolbox, two bikes",
+    });
+    await generateAiPhotoSuggestions(config, {
+      moveId: "move1",
+      photoIds: ["photo1", "photo2"],
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/moves/move1/ai-text-suggestions/generate"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ sourceText: "Garage: red toolbox, two bikes" }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/ai-photo-suggestions/generate"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ photoIds: ["photo1", "photo2"] }),
       }
     );
   });

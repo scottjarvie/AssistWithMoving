@@ -498,12 +498,43 @@ curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-jobs?status=succeeded&l
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
+Generate pending text-intake suggestions from source text:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-text-suggestions/generate \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: generate-ai-text-suggestions-001" \
+  -d '{
+    "sourceText": "Garage: two bikes, red toolbox, camping tent\nBox GAR-001: helmet, gloves, tire pump"
+  }'
+```
+
+Generation requires `inventory/write`. It creates an audited `aiJobs` record and
+pending text-intake suggestions. It does not create trusted items, boxes, or
+assignments until exact pending suggestion IDs are approved.
+
 List text-intake suggestions:
 
 ```bash
 curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-text-suggestions?status=pending&limit=50" \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
+
+Generate pending photo-intake suggestions for already-uploaded photos:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-photo-suggestions/generate \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: generate-ai-photo-suggestions-001" \
+  -d '{ "photoIds": ["PHOTO_ID"] }'
+```
+
+Photo generation requires `inventory/write`. The photo must belong to the same
+move, be unarchived, have an AI-usable derivative, and pass photo privacy/size
+checks. Existing pending suggestions for a photo are reused rather than
+duplicated.
 
 List photo-intake suggestions:
 
@@ -910,6 +941,8 @@ Available MCP tools:
 | `list_ai_jobs` | List AI job status summaries without raw provider refs. |
 | `list_ai_text_suggestions` | List text-intake AI review suggestions for human review. |
 | `list_ai_photo_suggestions` | List photo-intake AI review suggestions for human review. |
+| `generate_ai_text_suggestions` | Generate pending text-intake suggestions from source text without creating trusted inventory. |
+| `generate_ai_photo_suggestions` | Generate pending photo-intake suggestions for explicit uploaded photo IDs. |
 | `approve_ai_text_suggestions` | Approve exact pending text-intake suggestion IDs, with API-side `dryRun` validation and optional edited item/box drafts. |
 | `reject_ai_text_suggestions` | Reject exact pending text-intake suggestion IDs. |
 | `approve_ai_photo_suggestions` | Approve exact pending photo-intake suggestion IDs, with API-side `dryRun` validation and optional edited item/box drafts. |

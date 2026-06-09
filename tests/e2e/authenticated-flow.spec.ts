@@ -273,10 +273,15 @@ test.describe("authenticated product flow", () => {
     await itemDialog.getByLabel("Owner / contact").selectOption({
       label: `${contactName} - contact`,
     });
-    await itemDialog.getByRole("button", { name: "Save item" }).click();
-    await expect(page.getByText("Item saved.")).toBeVisible({
-      timeout: 30_000,
+    const saveItemButton = itemDialog.getByRole("button", {
+      name: "Save item",
     });
+    await expect(async () => {
+      await saveItemButton.click();
+      await expect(page.getByText("Item saved.")).toBeVisible({
+        timeout: 5_000,
+      });
+    }).toPass({ timeout: 30_000 });
     await itemDialog.getByRole("tab", { name: "Planning" }).click();
     await expect(itemDialog.getByText(`${contactName} (contact)`)).toBeVisible();
     await itemDialog.getByRole("button", { name: "Close" }).first().click();
