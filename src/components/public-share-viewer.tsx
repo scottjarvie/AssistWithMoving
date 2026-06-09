@@ -3,9 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAction } from "convex/react";
-import { AlertTriangle, Download, Printer, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  Download,
+  Printer,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -195,11 +202,70 @@ type PublicShareView =
       profile?: { name: string; type: string };
     };
 
+type PublicItemStatus =
+  | "draft"
+  | "active"
+  | "packed"
+  | "staged"
+  | "loaded"
+  | "delivered"
+  | "missing"
+  | "damaged"
+  | "archived";
+
+type PublicBoxStatus =
+  | "open"
+  | "packing"
+  | "sealed"
+  | "staged"
+  | "loaded"
+  | "delivered"
+  | "missing"
+  | "damaged"
+  | "archived";
+
+type PublicStatusUpdateTarget =
+  | {
+      type: "item";
+      itemId: Id<"items">;
+      status: PublicItemStatus;
+    }
+  | {
+      type: "box";
+      boxId: Id<"boxes">;
+      status: PublicBoxStatus;
+    };
+
+type PublicStatusUpdateHandler = (
+  target: PublicStatusUpdateTarget
+) => Promise<void>;
+
+const publicItemStatusOptions = [
+  "packed",
+  "staged",
+  "loaded",
+  "delivered",
+  "missing",
+  "damaged",
+] as const satisfies readonly PublicItemStatus[];
+
+const publicBoxStatusOptions = [
+  "sealed",
+  "staged",
+  "loaded",
+  "delivered",
+  "missing",
+  "damaged",
+] as const satisfies readonly PublicBoxStatus[];
+
 export function PublicShareViewer({ token }: { token: string }) {
   const resolvePublicView = useAction(api.shareLinks.resolvePublicView);
+  const updatePublicStatus = useAction(api.shareLinks.updatePublicStatus);
   const [view, setView] = useState<PublicShareView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [workingTarget, setWorkingTarget] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -236,6 +302,36 @@ export function PublicShareViewer({ token }: { token: string }) {
       alive = false;
     };
   }, [resolvePublicView, token]);
+
+  async function handleStatusUpdate(target: PublicStatusUpdateTarget) {
+    setStatusMessage(null);
+    setWorkingTarget(statusTargetKey(target));
+    try {
+      const result = await updatePublicStatus({
+        token,
+        target,
+        accessMetadata: { route: "public_share", action: "status_update" },
+      });
+      const nextView = (await resolvePublicView({
+        token,
+        accessMetadata: { route: "public_share", after: "status_update" },
+      })) as PublicShareView;
+      setView(nextView);
+      setStatusMessage(
+        result.changed
+          ? `Status updated to ${result.nextStatus}.`
+          : `Status was already ${result.nextStatus}.`
+      );
+    } catch (unknownError) {
+      setStatusMessage(
+        unknownError instanceof Error
+          ? unknownError.message
+          : "Status update failed."
+      );
+    } finally {
+      setWorkingTarget(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -296,10 +392,27 @@ export function PublicShareViewer({ token }: { token: string }) {
 
   return (
     <PublicShareShell>
+      {statusMessage ? (
+        <p
+          className="print-hidden mb-3 rounded-md border border-border p-3 text-sm text-muted-foreground"
+          role="status"
+          aria-live="polite"
+        >
+          {statusMessage}
+        </p>
+      ) : null}
       {view.kind === "documentationPacket" ? (
-        <PublicDocumentationPacketView view={view} />
+        <PublicDocumentationPacketView
+          view={view}
+          onStatusUpdate={handleStatusUpdate}
+          workingTarget={workingTarget}
+        />
       ) : (
-        <PublicSubManifest view={view} />
+        <PublicSubManifest
+          view={view}
+          onStatusUpdate={handleStatusUpdate}
+          workingTarget={workingTarget}
+        />
       )}
     </PublicShareShell>
   );
@@ -315,11 +428,16 @@ function PublicShareShell({ children }: { children: React.ReactNode }) {
 
 function PublicSubManifest({
   view,
+  onStatusUpdate,
+  workingTarget,
 }: {
   view: Extract<PublicShareView, { status: "ready"; kind: "subManifest" }>;
+  onStatusUpdate: PublicStatusUpdateHandler;
+  workingTarget: string | null;
 }) {
   const { packet, shareLink, profile } = view;
   const canDownload = shareLink.canDownload;
+  const canStatusUpdate = shareLink.canStatusUpdate;
 
   return (
     <div className="space-y-4">
@@ -343,6 +461,9 @@ function PublicSubManifest({
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">recipient safe</Badge>
           <Badge variant="outline">{shareLink.role}</Badge>
+          {canStatusUpdate ? (
+            <Badge variant="outline">status updates</Badge>
+          ) : null}
           {canDownload ? (
             <Button
               type="button"
@@ -447,7 +568,26 @@ function PublicSubManifest({
                       ) : null}
                     </td>
                     <td className="px-2 py-2">{box.room ?? "unset"}</td>
-                    <td className="px-2 py-2">{box.status}</td>
+                    <td className="px-2 py-2">
+                      <StatusCell
+                        currentStatus={box.status}
+                        control={
+                          canStatusUpdate ? (
+                            <PublicStatusControl
+                              ariaLabel={`Status for box ${box.code}`}
+                              target={{
+                                type: "box",
+                                boxId: box.boxId as Id<"boxes">,
+                                status: box.status as PublicBoxStatus,
+                              }}
+                              options={publicBoxStatusOptions}
+                              workingTarget={workingTarget}
+                              onStatusUpdate={onStatusUpdate}
+                            />
+                          ) : null
+                        }
+                      />
+                    </td>
                     <td className="px-2 py-2">{box.assignedResource ?? "unassigned"}</td>
                     <td className="px-2 py-2">{box.assignedZone ?? "any"}</td>
                   </tr>
@@ -495,7 +635,26 @@ function PublicSubManifest({
                     <td className="px-2 py-2">{item.room ?? "unset"}</td>
                     <td className="px-2 py-2">{item.quantity}</td>
                     <td className="px-2 py-2">{item.disposition}</td>
-                    <td className="px-2 py-2">{item.status}</td>
+                    <td className="px-2 py-2">
+                      <StatusCell
+                        currentStatus={item.status}
+                        control={
+                          canStatusUpdate ? (
+                            <PublicStatusControl
+                              ariaLabel={`Status for ${item.name}`}
+                              target={{
+                                type: "item",
+                                itemId: item.itemId as Id<"items">,
+                                status: item.status as PublicItemStatus,
+                              }}
+                              options={publicItemStatusOptions}
+                              workingTarget={workingTarget}
+                              onStatusUpdate={onStatusUpdate}
+                            />
+                          ) : null
+                        }
+                      />
+                    </td>
                     <td className="px-2 py-2">{item.condition}</td>
                     <td className="px-2 py-2">
                       {item.boxTrail.map((box) => box.code).join(", ") || "unboxed"}
@@ -521,14 +680,19 @@ function PublicSubManifest({
 
 function PublicDocumentationPacketView({
   view,
+  onStatusUpdate,
+  workingTarget,
 }: {
   view: Extract<
     PublicShareView,
     { status: "ready"; kind: "documentationPacket" }
   >;
+  onStatusUpdate: PublicStatusUpdateHandler;
+  workingTarget: string | null;
 }) {
   const { packet, shareLink, profile } = view;
   const canDownload = shareLink.canDownload;
+  const canStatusUpdate = shareLink.canStatusUpdate;
   const pcsDetails = [
     { label: "Branch", value: packet.move.pcsBranch },
     { label: "Rank / pay grade", value: packet.move.pcsRankPayGrade },
@@ -568,6 +732,9 @@ function PublicDocumentationPacketView({
           <Badge variant="secondary">recipient safe</Badge>
           <Badge variant="outline">{packet.recipientMode}</Badge>
           <Badge variant="outline">{shareLink.role}</Badge>
+          {canStatusUpdate ? (
+            <Badge variant="outline">status updates</Badge>
+          ) : null}
           {canDownload ? (
             <Button
               type="button"
@@ -717,7 +884,26 @@ function PublicDocumentationPacketView({
                       {[box.room, box.destinationRoom].filter(Boolean).join(" -> ") ||
                         "unset"}
                     </td>
-                    <td className="px-2 py-2">{box.status}</td>
+                    <td className="px-2 py-2">
+                      <StatusCell
+                        currentStatus={box.status}
+                        control={
+                          canStatusUpdate ? (
+                            <PublicStatusControl
+                              ariaLabel={`Status for box ${box.code}`}
+                              target={{
+                                type: "box",
+                                boxId: box.boxId as Id<"boxes">,
+                                status: box.status as PublicBoxStatus,
+                              }}
+                              options={publicBoxStatusOptions}
+                              workingTarget={workingTarget}
+                              onStatusUpdate={onStatusUpdate}
+                            />
+                          ) : null
+                        }
+                      />
+                    </td>
                     <td className="px-2 py-2">{box.assignedResource ?? "unassigned"}</td>
                     <td className="px-2 py-2">{box.assignedZone ?? "any"}</td>
                     <td className="px-2 py-2">{box.itemCount}</td>
@@ -788,7 +974,26 @@ function PublicDocumentationPacketView({
                     </td>
                     <td className="px-2 py-2">{item.quantity}</td>
                     <td className="px-2 py-2">{item.disposition}</td>
-                    <td className="px-2 py-2">{item.status}</td>
+                    <td className="px-2 py-2">
+                      <StatusCell
+                        currentStatus={item.status}
+                        control={
+                          canStatusUpdate ? (
+                            <PublicStatusControl
+                              ariaLabel={`Status for ${item.name}`}
+                              target={{
+                                type: "item",
+                                itemId: item.itemId as Id<"items">,
+                                status: item.status as PublicItemStatus,
+                              }}
+                              options={publicItemStatusOptions}
+                              workingTarget={workingTarget}
+                              onStatusUpdate={onStatusUpdate}
+                            />
+                          ) : null
+                        }
+                      />
+                    </td>
                     <td className="px-2 py-2">{item.condition}</td>
                     <td className="px-2 py-2">
                       {item.boxCodes.join(", ") || "unboxed"}
@@ -845,6 +1050,75 @@ function ClaimEvidenceSummary({
       ) : null}
     </div>
   );
+}
+
+function StatusCell({
+  currentStatus,
+  control,
+}: {
+  currentStatus: string;
+  control: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-32 space-y-1">
+      <span>{currentStatus}</span>
+      {control}
+    </div>
+  );
+}
+
+function PublicStatusControl({
+  ariaLabel,
+  target,
+  options,
+  workingTarget,
+  onStatusUpdate,
+}: {
+  ariaLabel: string;
+  target: PublicStatusUpdateTarget;
+  options: readonly string[];
+  workingTarget: string | null;
+  onStatusUpdate: PublicStatusUpdateHandler;
+}) {
+  const targetKey = statusTargetKey(target);
+  const disabled = workingTarget !== null;
+
+  return (
+    <div className="flex items-center gap-1 print-hidden">
+      <select
+        className="h-8 max-w-32 rounded-md border border-input bg-background px-2 text-xs"
+        value={target.status}
+        aria-label={ariaLabel}
+        disabled={disabled}
+        onChange={(event) => {
+          const nextStatus = event.target.value;
+          void onStatusUpdate(
+            target.type === "item"
+              ? { ...target, status: nextStatus as PublicItemStatus }
+              : { ...target, status: nextStatus as PublicBoxStatus }
+          );
+        }}
+      >
+        {options.includes(target.status) ? null : (
+          <option value={target.status}>{target.status}</option>
+        )}
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+      {workingTarget === targetKey ? (
+        <RefreshCw className="size-3 animate-spin text-muted-foreground" aria-hidden="true" />
+      ) : null}
+    </div>
+  );
+}
+
+function statusTargetKey(target: PublicStatusUpdateTarget) {
+  return target.type === "item"
+    ? `item:${target.itemId}`
+    : `box:${target.boxId}`;
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {

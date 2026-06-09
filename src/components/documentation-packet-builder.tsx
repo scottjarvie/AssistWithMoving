@@ -517,6 +517,7 @@ export function DocumentationPacketBuilder({
                 <button
                   key={profile._id}
                   type="button"
+                  aria-label={`Packet profile ${profile.name}`}
                   className={`w-full rounded-md border p-3 text-left text-sm transition ${
                     selectedProfile?._id === profile._id
                       ? "border-primary bg-primary/5"

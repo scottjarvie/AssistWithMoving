@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 
-import type { Id } from "./_generated/dataModel";
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+  action,
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
 import { anyApi, type FunctionReference } from "convex/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
@@ -21,6 +27,15 @@ import {
   safeShareLinkMetadata,
   type CreateShareLinkRecordArgs,
 } from "./lib/shareLinks";
+import {
+  assertPublicShareCanStatusUpdate,
+  publicShareBoxVisibleToProfile,
+  publicShareItemVisibleToProfile,
+} from "./lib/publicShareStatus";
+import {
+  boxStatusValidator,
+  itemStatusValidator,
+} from "./lib/moveFields";
 
 const householdRoleValidator = v.union(
   v.literal("owner"),
@@ -45,6 +60,31 @@ type ShareLinkAccessResult = {
   label?: string;
 };
 
+type PublicStatusTarget =
+  | {
+      type: "item";
+      itemId: Id<"items">;
+      status: Doc<"items">["status"];
+    }
+  | {
+      type: "box";
+      boxId: Id<"boxes">;
+      status: Doc<"boxes">["status"];
+    };
+
+const publicStatusTargetValidator = v.union(
+  v.object({
+    type: v.literal("item"),
+    itemId: v.id("items"),
+    status: itemStatusValidator,
+  }),
+  v.object({
+    type: v.literal("box"),
+    boxId: v.id("boxes"),
+    status: boxStatusValidator,
+  })
+);
+
 const internalMutations = anyApi as unknown as {
   shareLinks: {
     createWithTokenHash: FunctionReference<
@@ -58,6 +98,22 @@ const internalMutations = anyApi as unknown as {
       "internal",
       { tokenHash: string; accessMetadata?: unknown },
       ShareLinkAccessResult
+    >;
+    updateStatusByTokenHash: FunctionReference<
+      "mutation",
+      "internal",
+      {
+        tokenHash: string;
+        target: PublicStatusTarget;
+        accessMetadata?: unknown;
+      },
+      {
+        targetType: "item" | "box";
+        targetId: string;
+        previousStatus: string;
+        nextStatus: string;
+        changed: boolean;
+      }
     >;
   };
 };
@@ -186,6 +242,25 @@ export const resolvePublicView = action({
   },
 });
 
+export const updatePublicStatus = action({
+  args: {
+    token: v.string(),
+    target: publicStatusTargetValidator,
+    accessMetadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const tokenHash = await hashShareToken(args.token);
+    return await ctx.runMutation(
+      internalMutations.shareLinks.updateStatusByTokenHash,
+      {
+        tokenHash,
+        target: args.target,
+        accessMetadata: args.accessMetadata,
+      }
+    );
+  },
+});
+
 export const createWithTokenHash = internalMutation({
   args: {
     householdId: v.id("households"),
@@ -211,6 +286,94 @@ export const createWithTokenHash = internalMutation({
       type: "user",
       userId: actor.userId,
     });
+  },
+});
+
+export const updateStatusByTokenHash = internalMutation({
+  args: {
+    tokenHash: v.string(),
+    target: publicStatusTargetValidator,
+    accessMetadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const link = await ctx.db
+      .query("shareLinks")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", args.tokenHash))
+      .unique();
+    if (!link) {
+      throw new Error("Share link not found.");
+    }
+
+    assertShareLinkActive(link);
+    if (!link.documentationProfileId) {
+      throw new Error("Status updates require a scoped documentation profile.");
+    }
+
+    const profile = await ctx.db.get(link.documentationProfileId);
+    if (
+      !profile ||
+      profile.householdId !== link.householdId ||
+      profile.moveId !== link.moveId ||
+      profile.status !== "active"
+    ) {
+      throw new Error("Documentation profile not found.");
+    }
+
+    assertPublicShareCanStatusUpdate({
+      allowedActions: link.allowedActions,
+      profileType: profile.type,
+      targetType: args.target.type,
+      nextStatus: args.target.status,
+    });
+
+    const now = Date.now();
+    const result =
+      args.target.type === "item"
+        ? await updatePublicItemStatus(ctx, {
+            link,
+            profile,
+            itemId: args.target.itemId,
+            status: args.target.status,
+            now,
+          })
+        : await updatePublicBoxStatus(ctx, {
+            link,
+            profile,
+            boxId: args.target.boxId,
+            status: args.target.status,
+            now,
+          });
+
+    await ctx.db.patch(link._id, {
+      accessCount: link.accessCount + 1,
+      lastAccessedAt: now,
+      lastAccessMetadata: args.accessMetadata,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: link.householdId,
+      moveId: link.moveId,
+      actorType: "system",
+      category: "shareLink",
+      action:
+        result.targetType === "item"
+          ? "share_link.item_status_updated"
+          : "share_link.box_status_updated",
+      objectTable: result.targetType === "item" ? "items" : "boxes",
+      objectId: result.targetId,
+      metadata: {
+        shareLinkId: link._id,
+        documentationProfileId: profile._id,
+        tokenPreview: link.tokenPreview,
+        role: link.role,
+        previousStatus: result.previousStatus,
+        nextStatus: result.nextStatus,
+        changed: result.changed,
+      },
+    });
+
+    return result;
   },
 });
 
@@ -265,3 +428,112 @@ export const recordAccessByTokenHash = internalMutation({
     };
   },
 });
+
+async function updatePublicItemStatus(
+  ctx: MutationCtx,
+  args: {
+    link: Doc<"shareLinks">;
+    profile: Doc<"documentationProfiles">;
+    itemId: Id<"items">;
+    status: Doc<"items">["status"];
+    now: number;
+  }
+) {
+  const item = await ctx.db.get(args.itemId);
+  if (
+    !item ||
+    item.householdId !== args.link.householdId ||
+    item.moveId !== args.link.moveId
+  ) {
+    throw new Error("Shared item not found.");
+  }
+  if (!publicShareItemVisibleToProfile({ item, profile: args.profile })) {
+    throw new Error("Shared item is outside this link scope.");
+  }
+
+  const previousStatus = item.status;
+  const changed = previousStatus !== args.status;
+  if (changed) {
+    await ctx.db.patch(item._id, {
+      status: args.status,
+      updatedAt: args.now,
+    });
+  }
+
+  return {
+    targetType: "item" as const,
+    targetId: item._id,
+    previousStatus,
+    nextStatus: args.status,
+    changed,
+  };
+}
+
+async function updatePublicBoxStatus(
+  ctx: MutationCtx,
+  args: {
+    link: Doc<"shareLinks">;
+    profile: Doc<"documentationProfiles">;
+    boxId: Id<"boxes">;
+    status: Doc<"boxes">["status"];
+    now: number;
+  }
+) {
+  const box = await ctx.db.get(args.boxId);
+  if (
+    !box ||
+    box.householdId !== args.link.householdId ||
+    box.moveId !== args.link.moveId
+  ) {
+    throw new Error("Shared box not found.");
+  }
+  const visibleItemCount = await visibleItemCountForBox(ctx, args.boxId, args.profile);
+  if (
+    !publicShareBoxVisibleToProfile({
+      box,
+      profile: args.profile,
+      visibleItemCount,
+    })
+  ) {
+    throw new Error("Shared box is outside this link scope.");
+  }
+
+  const previousStatus = box.status;
+  const changed = previousStatus !== args.status;
+  if (changed) {
+    await ctx.db.patch(box._id, {
+      status: args.status,
+      ...(args.status === "sealed" && !box.sealedAt
+        ? { sealedAt: args.now }
+        : {}),
+      updatedAt: args.now,
+    });
+  }
+
+  return {
+    targetType: "box" as const,
+    targetId: box._id,
+    previousStatus,
+    nextStatus: args.status,
+    changed,
+  };
+}
+
+async function visibleItemCountForBox(
+  ctx: MutationCtx,
+  boxId: Id<"boxes">,
+  profile: Doc<"documentationProfiles">
+) {
+  const memberships = await ctx.db
+    .query("boxItems")
+    .withIndex("by_box", (q) => q.eq("boxId", boxId))
+    .collect();
+  let visibleCount = 0;
+  for (const membership of memberships) {
+    const item = await ctx.db.get(membership.itemId);
+    if (item && publicShareItemVisibleToProfile({ item, profile })) {
+      visibleCount += 1;
+    }
+  }
+  return visibleCount;
+}

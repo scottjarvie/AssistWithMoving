@@ -339,6 +339,13 @@ test.describe("authenticated product flow", () => {
       await ensureProfiles.click();
       await expect(ensureProfiles).toBeDisabled();
     }
+    await documentationPackets
+      .getByRole("button", { name: "Packet profile Moving company" })
+      .click();
+    await expect(documentationPackets.getByLabel("Packet profile name")).toHaveValue(
+      "Moving company",
+      { timeout: 30_000 }
+    );
     await expect(
       documentationPackets.getByRole("button", { name: "Inventory CSV" })
     ).toBeEnabled({ timeout: 30_000 });
@@ -357,6 +364,36 @@ test.describe("authenticated product flow", () => {
     await documentationPackets
       .getByRole("button", { name: "Create link token" })
       .click();
+    const openShareLink = documentationPackets.getByRole("link", {
+      name: "Open share link",
+    });
+    await expect(openShareLink).toBeVisible({ timeout: 30_000 });
+    await expect(openShareLink).toHaveAttribute("href", /\/share\//);
+    const sharePath = await openShareLink.getAttribute("href");
+    expect(sharePath).toBeTruthy();
+
+    await page.goto(sharePath!);
+    await expect(
+      page.getByRole("heading", { name: "Moving company", exact: true })
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("status updates")).toBeVisible();
+    const publicItemStatus = page.getByLabel(`Status for ${itemName}`);
+    await expect(publicItemStatus).toBeVisible({ timeout: 30_000 });
+    await publicItemStatus.selectOption("loaded");
+    await expect(page.getByText("Status updated to loaded.")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(publicItemStatus).toHaveValue("loaded", { timeout: 30_000 });
+
+    await gotoDashboard(page);
+    await waitForWorkspaceAuth(page);
+    await page.getByLabel("Selected household").selectOption({
+      label: `${householdName} - owner`,
+    });
+    await page.getByLabel("Selected move").selectOption({ label: moveTitle });
+    await expect(
+      page.getByRole("heading", { name: "Documentation packets", exact: true })
+    ).toBeVisible({ timeout: 30_000 });
     const revokeShareLink = documentationPackets
       .getByRole("button", { name: "Revoke" })
       .first();
