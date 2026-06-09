@@ -219,6 +219,13 @@ export function requiredScopesForRestRoute({
     if (segments.includes("planning-suggestions")) {
       return ["inventory/read"];
     }
+    if (
+      segments.includes("ai-jobs") ||
+      segments.includes("ai-text-suggestions") ||
+      segments.includes("ai-photo-suggestions")
+    ) {
+      return ["inventory/read"];
+    }
     if (segments.includes("photos")) {
       return ["inventory/read"];
     }

@@ -28,6 +28,9 @@ import {
   getApiContext,
   getCapacityReport,
   getMoveSummary,
+  listAiJobs,
+  listAiPhotoSuggestions,
+  listAiTextSuggestions,
   listDocumentationProfiles,
   listExports,
   listMoves,
@@ -105,6 +108,21 @@ const documentationImageRuleSchema = z.enum([
 const documentationStatusSchema = z.enum(["draft", "active", "archived"]);
 
 const planningSuggestionStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "edited",
+  "rejected",
+]);
+
+const aiJobStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+]);
+
+const aiSuggestionStatusSchema = z.enum([
   "pending",
   "approved",
   "edited",
@@ -526,6 +544,45 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listPlanningSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "list_ai_jobs", {
+    title: "List AI jobs",
+    description:
+      "List AI job status summaries for a move without returning raw provider input/output references.",
+    inputSchema: {
+      moveId: z.string(),
+      status: aiJobStatusSchema.optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listAiJobs(apiConfig, input),
+  });
+
+  registerTool(target, "list_ai_text_suggestions", {
+    title: "List AI text suggestions",
+    description:
+      "List text-intake AI review suggestions for a move. This is read-only; approvals still require the app review path.",
+    inputSchema: {
+      moveId: z.string(),
+      status: aiSuggestionStatusSchema.optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listAiTextSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "list_ai_photo_suggestions", {
+    title: "List AI photo suggestions",
+    description:
+      "List photo-intake AI review suggestions for a move. This is read-only; approvals still require the app review path.",
+    inputSchema: {
+      moveId: z.string(),
+      status: aiSuggestionStatusSchema.optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listAiPhotoSuggestions(apiConfig, input),
   });
 
   registerTool(target, "generate_planning_suggestions", {

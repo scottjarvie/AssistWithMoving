@@ -293,6 +293,36 @@ export async function listPlanningSuggestions(config, input) {
   });
 }
 
+export async function listAiJobs(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/ai-jobs`,
+    query: {
+      limit: input.limit,
+      status: input.status,
+    },
+  });
+}
+
+export async function listAiTextSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/ai-text-suggestions`,
+    query: {
+      limit: input.limit,
+      status: input.status,
+    },
+  });
+}
+
+export async function listAiPhotoSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/ai-photo-suggestions`,
+    query: {
+      limit: input.limit,
+      status: input.status,
+    },
+  });
+}
+
 export async function generatePlanningSuggestions(config, input) {
   if (input.dryRun) {
     return {

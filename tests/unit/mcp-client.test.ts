@@ -21,6 +21,9 @@ import {
   getApiContext,
   getCapacityReport,
   getMoveSummary,
+  listAiJobs,
+  listAiPhotoSuggestions,
+  listAiTextSuggestions,
   listDocumentationProfiles,
   listMovePeople,
   listPlanningSuggestions,
@@ -743,6 +746,64 @@ describe("MovingManifest MCP API client", () => {
           "idempotency-key": expect.any(String),
         },
         body: JSON.stringify({ suggestionIds: ["suggestion2"] }),
+      }
+    );
+  });
+
+  it("lists AI job and intake review queues through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listAiJobs(config, {
+      moveId: "move1",
+      status: "succeeded",
+      limit: 5,
+    });
+    await listAiTextSuggestions(config, {
+      moveId: "move1",
+      status: "pending",
+      limit: 10,
+    });
+    await listAiPhotoSuggestions(config, {
+      moveId: "move1",
+      status: "rejected",
+      limit: 15,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/moves/move1/ai-jobs?limit=5&status=succeeded"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL(
+        "https://example.com/api/v1/moves/move1/ai-text-suggestions?limit=10&status=pending"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL(
+        "https://example.com/api/v1/moves/move1/ai-photo-suggestions?limit=15&status=rejected"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
       }
     );
   });

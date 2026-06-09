@@ -132,6 +132,19 @@ const restPlanningSuggestionStatuses = [
   "edited",
   "rejected",
 ] as const;
+const restAiJobStatuses = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "canceled",
+] as const;
+const restAiSuggestionStatuses = [
+  "pending",
+  "approved",
+  "edited",
+  "rejected",
+] as const;
 const restMovePersonRoles = [
   "owner",
   "householdMember",
@@ -549,6 +562,15 @@ async function routeRequest(
       nestedId,
       segments[4]
     );
+  }
+  if (nested === "ai-jobs") {
+    return await routeAiJobs(ctx, args, auth, moveId, nestedId);
+  }
+  if (nested === "ai-text-suggestions") {
+    return await routeAiTextSuggestions(ctx, args, auth, moveId, nestedId);
+  }
+  if (nested === "ai-photo-suggestions") {
+    return await routeAiPhotoSuggestions(ctx, args, auth, moveId, nestedId);
   }
   if (nested === "documentation-profiles") {
     return await routeDocumentationProfiles(
@@ -2096,6 +2118,134 @@ async function routePlanningSuggestions(
   });
 }
 
+async function routeAiJobs(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  aiJobIdSegment?: string
+) {
+  if (args.method !== "GET") {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "AI job route not found.",
+    });
+  }
+
+  const jobs = await ctx.db
+    .query("aiJobs")
+    .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+    .order("desc")
+    .collect();
+  const status = parseAiJobStatus(args.query.status);
+  const visibleJobs = jobs.filter(
+    (job) =>
+      job.householdId === auth.householdId &&
+      (status ? job.status === status : true)
+  );
+
+  if (aiJobIdSegment) {
+    const job = visibleJobs.find((entry) => entry._id === aiJobIdSegment);
+    if (!job) {
+      throw new Error("AI job not found.");
+    }
+    return restOk({ data: safeAiJob(job) });
+  }
+
+  return restOk(paginate(visibleJobs.map((job) => safeAiJob(job)), args.query));
+}
+
+async function routeAiTextSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  suggestionIdSegment?: string
+) {
+  if (args.method !== "GET") {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "AI text suggestion route not found.",
+    });
+  }
+
+  const suggestions = await ctx.db
+    .query("aiTextSuggestions")
+    .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+    .order("desc")
+    .collect();
+  const status = parseAiSuggestionStatus(args.query.status);
+  const visibleSuggestions = suggestions.filter(
+    (suggestion) =>
+      suggestion.householdId === auth.householdId &&
+      (status ? suggestion.status === status : true)
+  );
+
+  if (suggestionIdSegment) {
+    const suggestion = visibleSuggestions.find(
+      (entry) => entry._id === suggestionIdSegment
+    );
+    if (!suggestion) {
+      throw new Error("AI text suggestion not found.");
+    }
+    return restOk({ data: safeAiTextSuggestion(suggestion) });
+  }
+
+  return restOk(
+    paginate(
+      visibleSuggestions.map((suggestion) => safeAiTextSuggestion(suggestion)),
+      args.query
+    )
+  );
+}
+
+async function routeAiPhotoSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  suggestionIdSegment?: string
+) {
+  if (args.method !== "GET") {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "AI photo suggestion route not found.",
+    });
+  }
+
+  const suggestions = await ctx.db
+    .query("aiPhotoSuggestions")
+    .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+    .order("desc")
+    .collect();
+  const status = parseAiSuggestionStatus(args.query.status);
+  const visibleSuggestions = suggestions.filter(
+    (suggestion) =>
+      suggestion.householdId === auth.householdId &&
+      (status ? suggestion.status === status : true)
+  );
+
+  if (suggestionIdSegment) {
+    const suggestion = visibleSuggestions.find(
+      (entry) => entry._id === suggestionIdSegment
+    );
+    if (!suggestion) {
+      throw new Error("AI photo suggestion not found.");
+    }
+    return restOk({ data: safeAiPhotoSuggestion(suggestion) });
+  }
+
+  return restOk(
+    paginate(
+      visibleSuggestions.map((suggestion) => safeAiPhotoSuggestion(suggestion)),
+      args.query
+    )
+  );
+}
+
 async function routeDocumentationProfiles(
   ctx: MutationCtx,
   args: RestRequestInput,
@@ -3205,6 +3355,74 @@ function safePlanningSuggestion(suggestion: Doc<"aiPlanningSuggestions">) {
     assumptions: suggestion.assumptions,
     estimateDraft: suggestion.estimateDraft,
     assignmentDraft: suggestion.assignmentDraft,
+    reviewedAt: suggestion.reviewedAt,
+    createdAt: suggestion.createdAt,
+    updatedAt: suggestion.updatedAt,
+  };
+}
+
+function safeAiJob(job: Doc<"aiJobs">) {
+  return {
+    aiJobId: job._id,
+    type: job.type,
+    status: job.status,
+    modality: job.modality,
+    provider: job.provider,
+    model: job.model,
+    inputSummary: job.inputSummary,
+    outputSummary: job.outputSummary,
+    confidence: job.confidence,
+    reviewStatus: job.reviewStatus,
+    tokenUsage: job.tokenUsage,
+    cost: job.cost,
+    maxCostCents: job.maxCostCents,
+    retryCount: job.retryCount,
+    maxRetries: job.maxRetries,
+    error: job.error,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    canceledAt: job.canceledAt,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+function safeAiTextSuggestion(suggestion: Doc<"aiTextSuggestions">) {
+  return {
+    suggestionId: suggestion._id,
+    aiJobId: suggestion.aiJobId,
+    type: suggestion.type,
+    status: suggestion.status,
+    sourceLine: suggestion.sourceLine,
+    sourceIndex: suggestion.sourceIndex,
+    confidence: suggestion.confidence,
+    reasoning: suggestion.reasoning,
+    itemDraft: suggestion.itemDraft,
+    boxDraft: suggestion.boxDraft,
+    approvedItemId: suggestion.approvedItemId,
+    approvedBoxId: suggestion.approvedBoxId,
+    reviewedAt: suggestion.reviewedAt,
+    createdAt: suggestion.createdAt,
+    updatedAt: suggestion.updatedAt,
+  };
+}
+
+function safeAiPhotoSuggestion(suggestion: Doc<"aiPhotoSuggestions">) {
+  return {
+    suggestionId: suggestion._id,
+    photoId: suggestion.photoId,
+    aiJobId: suggestion.aiJobId,
+    type: suggestion.type,
+    status: suggestion.status,
+    sourceDerivativeVariant: suggestion.sourceDerivativeVariant,
+    sourceSummary: suggestion.sourceSummary,
+    confidence: suggestion.confidence,
+    reasoning: suggestion.reasoning,
+    itemDraft: suggestion.itemDraft,
+    boxDraft: suggestion.boxDraft,
+    duplicatePhotoIds: suggestion.duplicatePhotoIds,
+    approvedItemId: suggestion.approvedItemId,
+    approvedBoxId: suggestion.approvedBoxId,
     reviewedAt: suggestion.reviewedAt,
     createdAt: suggestion.createdAt,
     updatedAt: suggestion.updatedAt,
@@ -4362,6 +4580,22 @@ function parsePlanningSuggestionStatus(value: unknown) {
     throw new Error("Unsupported planning suggestion status.");
   }
   return value as Doc<"aiPlanningSuggestions">["status"];
+}
+
+function parseAiJobStatus(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(restAiJobStatuses, value)) {
+    throw new Error("Unsupported AI job status.");
+  }
+  return value as Doc<"aiJobs">["status"];
+}
+
+function parseAiSuggestionStatus(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(restAiSuggestionStatuses, value)) {
+    throw new Error("Unsupported AI suggestion status.");
+  }
+  return value as Doc<"aiTextSuggestions">["status"];
 }
 
 function parsePlanningApprovals(body: unknown): PlanningSuggestionApprovalInput[] {

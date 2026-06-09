@@ -186,6 +186,32 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
   },
   {
+    id: "aiReviewVisibility",
+    title: "AI job and review queue visibility",
+    status: "available",
+    purpose:
+      "Inspect AI job status plus text/photo intake suggestions so agents can summarize pending review work without approving mutations.",
+    requiredScopes: ["inventory/read"],
+    restEndpoints: [
+      "GET /api/v1/moves/:moveId/ai-jobs",
+      "GET /api/v1/moves/:moveId/ai-jobs/:aiJobId",
+      "GET /api/v1/moves/:moveId/ai-text-suggestions",
+      "GET /api/v1/moves/:moveId/ai-text-suggestions/:suggestionId",
+      "GET /api/v1/moves/:moveId/ai-photo-suggestions",
+      "GET /api/v1/moves/:moveId/ai-photo-suggestions/:suggestionId",
+    ],
+    mcpTools: [
+      "list_ai_jobs",
+      "list_ai_text_suggestions",
+      "list_ai_photo_suggestions",
+    ],
+    agentWorkflows: [
+      "Summarize pending AI text/photo suggestions for a human reviewer.",
+      "Inspect AI job success, failure, cost, and token summaries without exposing raw provider refs.",
+      "Guide review in the app rather than silently approving AI-created inventory.",
+    ],
+  },
+  {
     id: "photoEvidence",
     title: "Photo evidence intake",
     status: "availableWithOperationalBlocker",

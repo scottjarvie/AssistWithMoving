@@ -491,6 +491,32 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/planning-suggestion
 Rejecting requires `inventory/write` and marks only pending suggestions as
 rejected. API-key actions are audited as API-key actions.
 
+List AI job summaries:
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-jobs?status=succeeded&limit=50" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+List text-intake suggestions:
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-text-suggestions?status=pending&limit=50" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+List photo-intake suggestions:
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-photo-suggestions?status=pending&limit=50" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+These AI visibility endpoints require `inventory/read`. They are read-only and
+return job/suggestion status, review fields, drafts, summaries, token/cost
+summaries, and timestamps, but not raw provider input/output refs. Approving or
+rejecting AI text/photo intake suggestions remains an app review workflow.
+
 Attach or update photo evidence metadata after upload finalization:
 
 ```bash
@@ -814,6 +840,9 @@ Available MCP tools:
 | `suggest_assignments` | Generate deterministic box-to-resource/zone suggestions without writing. |
 | `apply_assignments` | Apply explicit box-to-resource/zone assignments, with API-side `dryRun` validation. |
 | `list_planning_suggestions` | List AI planning review suggestions by status. |
+| `list_ai_jobs` | List AI job status summaries without raw provider refs. |
+| `list_ai_text_suggestions` | List text-intake AI review suggestions for human review. |
+| `list_ai_photo_suggestions` | List photo-intake AI review suggestions for human review. |
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
