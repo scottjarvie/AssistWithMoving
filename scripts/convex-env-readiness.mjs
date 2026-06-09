@@ -44,6 +44,18 @@ const alternativeGroups = [
   },
 ];
 
+export const optionalGroups = [
+  {
+    label: "Cloudflare image delivery Convex env names",
+    alternatives: [
+      "CLOUDFLARE_IMAGE_DELIVERY_URL",
+      "CLOUDFLARE_IMAGES_ACCOUNT_HASH",
+    ],
+    helperKeys: ["CLOUDFLARE_IMAGE_DELIVERY_DOMAIN"],
+    issue: "MOVE-140",
+  },
+];
+
 function deploymentArg() {
   const index = process.argv.indexOf("--deployment");
   if (index !== -1) {
@@ -140,6 +152,42 @@ function checkAlternativeGroups(output) {
       group.label,
       `missing one of ${group.alternatives.join(", ")}; tracked by ${group.issue}`
     );
+  }
+}
+
+export function optionalGroupResults(output) {
+  const nextResults = [];
+  for (const group of optionalGroups) {
+    const present = group.alternatives.filter((key) =>
+      outputMentionsKey(output, key)
+    );
+    const helpers = group.helperKeys.filter((key) =>
+      outputMentionsKey(output, key)
+    );
+    if (present.length) {
+      nextResults.push({
+        status: "pass",
+        label: group.label,
+        detail: helpers.length
+          ? `configured through ${present.join(" or ")} with ${helpers.join(", ")}`
+          : `configured through ${present.join(" or ")}`,
+      });
+      continue;
+    }
+
+    nextResults.push({
+      status: "warn",
+      label: group.label,
+      detail: `optional Cloudflare Images delivery is inactive in Convex; signed Backblaze derivative URLs remain the fallback; tracked by ${group.issue}`,
+    });
+  }
+
+  return nextResults;
+}
+
+function checkOptionalGroups(output) {
+  for (const result of optionalGroupResults(output)) {
+    record(result.status, result.label, result.detail);
   }
 }
 
@@ -257,6 +305,7 @@ async function main() {
   );
   checkRequiredGroups(response.stdout);
   checkAlternativeGroups(response.stdout);
+  checkOptionalGroups(response.stdout);
   if (compareLocalStorage) {
     checkLocalStorageAlignment(response.stdout);
   }

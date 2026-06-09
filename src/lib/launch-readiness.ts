@@ -119,14 +119,19 @@ export const launchReadinessBlockers = [
 
 export const launchReadinessOptionalChecks = [
   {
-    issue: "MOVE-138",
+    issue: "MOVE-140",
     title: "Cloudflare image delivery readiness is optional",
     owner: "storage",
     currentPosture:
-      "Cloudflare Images delivery is inactive until delivery env names are configured; signed Backblaze derivative URLs remain the runtime fallback.",
+      "Cloudflare Images delivery is inactive until Convex delivery env names are configured; signed Backblaze derivative URLs remain the runtime fallback.",
     why:
-      "The product is wired for Cloudflare image delivery, but the media account setup is not a hard launch blocker while B2 derivatives serve app thumbnails and cards.",
-    verify: ["npm run doctor:vercel-env", "npm run doctor:vercel-preview-env"],
+      "The product is wired for Cloudflare image delivery, but the Convex photo display action safely falls back to B2 derivatives while media delivery setup is phased in.",
+    verify: [
+      "npm run doctor:convex-env",
+      "npm run doctor:convex-dev-env",
+      "npm run doctor:vercel-env",
+      "npm run doctor:vercel-preview-env",
+    ],
   },
 ] satisfies LaunchReadinessOptionalCheck[];
 

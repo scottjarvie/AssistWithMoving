@@ -40,15 +40,20 @@ describe("admin launch readiness blockers", () => {
   it("keeps optional Cloudflare posture separate from blocker count", () => {
     expect(launchReadinessOptionalChecks).toEqual([
       expect.objectContaining({
-        issue: "MOVE-138",
+        issue: "MOVE-140",
         title: "Cloudflare image delivery readiness is optional",
         owner: "storage",
         currentPosture: expect.stringContaining("signed Backblaze derivative URLs"),
-        verify: ["npm run doctor:vercel-env", "npm run doctor:vercel-preview-env"],
+        verify: [
+          "npm run doctor:convex-env",
+          "npm run doctor:convex-dev-env",
+          "npm run doctor:vercel-env",
+          "npm run doctor:vercel-preview-env",
+        ],
       }),
     ]);
     expect(launchReadinessBlockers.map((blocker) => blocker.issue)).not.toContain(
-      "MOVE-138"
+      "MOVE-140"
     );
   });
 

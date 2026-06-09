@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   deploymentReferenceFromEnvValue,
   localStorageAlignmentResults,
+  optionalGroupResults,
   parseEnvAssignments,
 } from "../../scripts/convex-env-readiness.mjs";
 
@@ -77,5 +78,42 @@ B2_REGION=us-west-004
       detail:
         "B2_BUCKET_NAME, B2_ENDPOINT, B2_REGION match local .env.local without printing values",
     });
+  });
+
+  it("warns when optional Cloudflare image delivery is inactive in Convex", () => {
+    expect(optionalGroupResults("B2_BUCKET_NAME=movingmanifest")).toEqual([
+      {
+        status: "warn",
+        label: "Cloudflare image delivery Convex env names",
+        detail:
+          "optional Cloudflare Images delivery is inactive in Convex; signed Backblaze derivative URLs remain the fallback; tracked by MOVE-140",
+      },
+    ]);
+  });
+
+  it("passes when Convex has Cloudflare delivery URL or account hash env names", () => {
+    expect(
+      optionalGroupResults("CLOUDFLARE_IMAGE_DELIVERY_URL=https://example.test")
+    ).toEqual([
+      {
+        status: "pass",
+        label: "Cloudflare image delivery Convex env names",
+        detail: "configured through CLOUDFLARE_IMAGE_DELIVERY_URL",
+      },
+    ]);
+
+    expect(
+      optionalGroupResults(`
+CLOUDFLARE_IMAGES_ACCOUNT_HASH=hash
+CLOUDFLARE_IMAGE_DELIVERY_DOMAIN=movingmanifest.com
+`)
+    ).toEqual([
+      {
+        status: "pass",
+        label: "Cloudflare image delivery Convex env names",
+        detail:
+          "configured through CLOUDFLARE_IMAGES_ACCOUNT_HASH with CLOUDFLARE_IMAGE_DELIVERY_DOMAIN",
+      },
+    ]);
   });
 });
