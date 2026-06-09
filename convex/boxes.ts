@@ -587,7 +587,12 @@ export const update = mutation({
       action: "box.updated",
       objectTable: "boxes",
       objectId: args.boxId,
-      metadata: { changedKeys: Object.keys(patch) },
+      metadata: {
+        changedKeys: Object.keys(patch),
+        ...(patch.status && patch.status !== box.status
+          ? { statusFrom: box.status, statusTo: patch.status }
+          : {}),
+      },
     });
   },
 });

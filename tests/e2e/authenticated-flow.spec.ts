@@ -249,6 +249,13 @@ test.describe("authenticated product flow", () => {
     await expect(evidenceDensity).toContainText("Average score");
     await expect(evidenceDensity).toContainText("Top evidence gaps");
 
+    const claimsCenter = page.locator("#claims-center");
+    await expect(claimsCenter.getByText("Claims Center")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(claimsCenter).toContainText("Top claim items");
+    await expect(claimsCenter).toContainText("Claim timeline");
+
     const duplicateReview = page
       .getByRole("heading", { name: "Duplicate review", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");

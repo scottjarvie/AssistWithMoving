@@ -446,6 +446,16 @@ export const update = mutation({
       ownerPersonId: args.ownerPersonId,
     });
 
+    const item = await ctx.db.get(args.itemId);
+    if (
+      !item ||
+      item.householdId !== args.householdId ||
+      item.moveId !== args.moveId ||
+      item.deletedAt
+    ) {
+      throw new Error("Item not found.");
+    }
+
     const patch: Partial<Doc<"items">> = {
       updatedByUserId: actor.userId,
       updatedAt: Date.now(),
@@ -575,7 +585,12 @@ export const update = mutation({
       action: "item.updated",
       objectTable: "items",
       objectId: args.itemId,
-      metadata: { changedKeys: Object.keys(patch) },
+      metadata: {
+        changedKeys: Object.keys(patch),
+        ...(patch.status && patch.status !== item.status
+          ? { statusFrom: item.status, statusTo: patch.status }
+          : {}),
+      },
     });
   },
 });
