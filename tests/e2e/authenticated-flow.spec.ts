@@ -5,6 +5,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 
 const e2eUserEmail = process.env.E2E_CLERK_USER_EMAIL;
+const e2eCleanupMaxBatches = 25;
 
 async function gotoDashboard(page: Page) {
   await page.waitForLoadState("domcontentloaded");
@@ -93,7 +94,17 @@ async function cleanupE2eData(page: Page) {
 
   const token = await page
     .evaluate(async () => {
-      return (await window.Clerk?.session?.getToken({ template: "convex" })) ?? null;
+      const session = window.Clerk?.session;
+      if (!session) {
+        return null;
+      }
+
+      const defaultToken = await session.getToken().catch(() => null);
+      if (defaultToken) {
+        return defaultToken;
+      }
+
+      return (await session.getToken({ template: "convex" }).catch(() => null)) ?? null;
     })
     .catch(() => null);
   if (!token) {
@@ -102,7 +113,21 @@ async function cleanupE2eData(page: Page) {
 
   const client = new ConvexHttpClient(convexUrl);
   client.setAuth(token);
-  return await client.mutation(api.testSupport.cleanupE2eDataForCurrentUser, {});
+  let lastResult = null;
+  for (let attempt = 0; attempt < e2eCleanupMaxBatches; attempt += 1) {
+    const result = await client.mutation(
+      api.testSupport.cleanupE2eDataForCurrentUser,
+      { batchSize: 10 }
+    );
+    lastResult = result;
+    if (!result.mayHaveMore) {
+      return result;
+    }
+  }
+
+  throw new Error(
+    `E2E cleanup did not finish after ${e2eCleanupMaxBatches} batches. Last result: ${JSON.stringify(lastResult)}`
+  );
 }
 
 test.describe("authenticated product flow", () => {
@@ -147,6 +172,7 @@ test.describe("authenticated product flow", () => {
     const householdName = `E2E household ${runId}`;
     const moveTitle = `E2E PCS move ${runId}`;
     const itemName = `E2E road bike ${runId}`;
+    const freeItemName = `E2E porch lamp ${runId}`;
     const roomWalkItemName = `E2E office binder ${runId}`;
     const duplicateItemName = `E2E red toolbox ${runId}`;
     const duplicateMatchName = `E2E tool box ${runId}`;
@@ -223,6 +249,13 @@ test.describe("authenticated product flow", () => {
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await expect(page.getByLabel(`Status for ${itemName}`)).toBeVisible();
 
+    await page.getByLabel("New item name").fill(freeItemName);
+    await page.getByLabel("New item room").fill("Porch");
+    await page.getByLabel("New item category").fill("Lighting");
+    await page.getByLabel("New item disposition").selectOption("free");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(page.getByLabel(`Status for ${freeItemName}`)).toBeVisible();
+
     for (const duplicateName of [duplicateItemName, duplicateMatchName]) {
       await page.getByLabel("New item name").fill(duplicateName);
       await page.getByLabel("New item room").fill("Garage");
@@ -241,6 +274,14 @@ test.describe("authenticated product flow", () => {
     await expect(packingDebt).toContainText("Loose load items");
     await expect(packingDebt).toContainText("High-value without photos");
     await expect(packingDebt).toContainText("Boxes not assigned");
+
+    const dispositionPipelines = page.locator("#disposition-pipelines");
+    await expect(
+      dispositionPipelines.getByText("Disposition pipelines")
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(dispositionPipelines).toContainText("Free / giveaway");
+    await expect(dispositionPipelines).toContainText("Free pickup link");
+    await expect(dispositionPipelines).toContainText(freeItemName);
 
     const evidenceDensity = page.locator("#evidence-density");
     await expect(evidenceDensity.getByText("Evidence density")).toBeVisible({

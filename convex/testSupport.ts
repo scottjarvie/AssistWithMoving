@@ -80,10 +80,12 @@ export const cleanupE2eDataForCurrentUser = mutation({
     moveTitlePrefix: v.optional(v.string()),
     householdNamePrefix: v.optional(v.string()),
     apiKeyNamePrefix: v.optional(v.string()),
+    batchSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     assertDevDeployment();
     const user = await requireCurrentUser(ctx);
+    const batchSize = cleanupBatchSize(args.batchSize);
     const moveTitlePrefix = safeE2ePrefix(
       args.moveTitlePrefix,
       defaultMoveTitlePrefix,
@@ -105,7 +107,7 @@ export const cleanupE2eDataForCurrentUser = mutation({
       await ctx.db
         .query("moves")
         .withIndex("by_created_by", (q) => q.eq("createdByUserId", user._id))
-        .collect()
+        .take(batchSize)
     ).filter((move) => move.title.startsWith(moveTitlePrefix));
     const targetMoveIds = new Set(targetMoves.map((move) => String(move._id)));
 
@@ -120,11 +122,18 @@ export const cleanupE2eDataForCurrentUser = mutation({
       await cleanupMove(ctx, move._id, move.householdId, counts);
     }
 
+    if (targetMoves.length) {
+      return {
+        ...counts,
+        mayHaveMore: targetMoves.length === batchSize,
+      };
+    }
+
     const targetHouseholds = (
       await ctx.db
         .query("households")
         .withIndex("by_owner", (q) => q.eq("ownerUserId", user._id))
-        .collect()
+        .take(batchSize)
     ).filter((household) => household.name.startsWith(householdNamePrefix));
 
     for (const household of targetHouseholds) {
@@ -143,13 +152,22 @@ export const cleanupE2eDataForCurrentUser = mutation({
       });
     }
 
-    return counts;
+    return {
+      ...counts,
+      mayHaveMore: targetHouseholds.length === batchSize,
+    };
   },
 });
 
 function assertDevDeployment() {
-  if (!process.env.CONVEX_DEPLOYMENT?.startsWith("dev:")) {
-    throw new Error("E2E cleanup is only available in Convex dev deployments.");
+  const localDevDeployment = process.env.CONVEX_DEPLOYMENT?.startsWith("dev:");
+  const cloudE2eCleanupEnabled =
+    process.env.CONVEX_E2E_CLEANUP_ENABLED === "true";
+
+  if (!localDevDeployment && !cloudE2eCleanupEnabled) {
+    throw new Error(
+      "E2E cleanup is only available in opted-in development deployments."
+    );
   }
 }
 
@@ -159,6 +177,14 @@ function safeE2ePrefix(value: string | undefined, fallback: string, label: strin
     throw new Error(`Refusing to clean non-E2E ${label} records.`);
   }
   return prefix;
+}
+
+function cleanupBatchSize(value: number | undefined) {
+  if (!value || !Number.isFinite(value)) {
+    return 10;
+  }
+
+  return Math.min(Math.max(Math.floor(value), 1), 25);
 }
 
 function emptyCounts(): CleanupCounts {

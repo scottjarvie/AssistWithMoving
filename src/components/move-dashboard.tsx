@@ -25,6 +25,7 @@ import { AiTextIntake } from "@/components/ai-text-intake";
 import { BoxManager } from "@/components/box-manager";
 import { ClaimsCenterPanel } from "@/components/claims-center-panel";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
+import { DispositionPipelinePanel } from "@/components/disposition-pipeline-panel";
 import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
 import { EvidenceDensityPanel } from "@/components/evidence-density-panel";
 import { EstimateSummary } from "@/components/estimate-summary";
@@ -853,6 +854,8 @@ export function MoveDashboard() {
       <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
 
       <PackingDebtDashboard householdId={householdId} moveId={moveId} />
+
+      <DispositionPipelinePanel householdId={householdId} moveId={moveId} />
 
       <EvidenceDensityPanel householdId={householdId} moveId={moveId} />
 
