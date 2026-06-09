@@ -32,6 +32,7 @@ import { InventoryTable } from "@/components/inventory-table";
 import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { MoveDayView } from "@/components/move-day-view";
 import { MovePeopleManager } from "@/components/move-people-manager";
+import { PackingDebtDashboard } from "@/components/packing-debt-dashboard";
 import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
 import { RoomWalkIntake } from "@/components/room-walk-intake";
 import { Badge } from "@/components/ui/badge";
@@ -843,11 +844,13 @@ export function MoveDashboard() {
 
       <RoomWalkIntake householdId={householdId} moveId={moveId} />
 
-      <section>
+      <section id="inventory">
         <InventoryTable householdId={householdId} moveId={moveId} />
       </section>
 
       <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
+
+      <PackingDebtDashboard householdId={householdId} moveId={moveId} />
 
       <EstimateSummary householdId={householdId} moveId={moveId} />
 

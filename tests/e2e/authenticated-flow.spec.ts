@@ -234,6 +234,14 @@ test.describe("authenticated product flow", () => {
       });
     }
 
+    const packingDebt = page.locator("#packing-debt");
+    await expect(packingDebt.getByText("Packing debt")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(packingDebt).toContainText("Loose load items");
+    await expect(packingDebt).toContainText("High-value without photos");
+    await expect(packingDebt).toContainText("Boxes not assigned");
+
     const duplicateReview = page
       .getByRole("heading", { name: "Duplicate review", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
