@@ -651,6 +651,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_household", ["householdId"])
     .index("by_household_user", ["householdId", "userId"])
     .index("by_user_status", ["userId", "status"])
     .index("by_household_status_role", ["householdId", "status", "role"])

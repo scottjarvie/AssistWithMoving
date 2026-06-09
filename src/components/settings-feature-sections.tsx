@@ -8,6 +8,7 @@ import { AccountPrivacyControls } from "@/components/account-privacy-controls";
 import { ApiKeyManager } from "@/components/api-key-manager";
 import { BillingReadinessPanel } from "@/components/billing-readiness-panel";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { HouseholdMemberManager } from "@/components/household-member-manager";
 import { SettingsPostureOverview } from "@/components/settings-posture-overview";
 import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
 
@@ -37,6 +38,12 @@ export function SettingsFeatureSections() {
         households={households}
         flags={flags}
       />
+      <div className="mt-6">
+        <HouseholdMemberManager
+          households={households}
+          enabled={authReady && authenticated}
+        />
+      </div>
       <div className="mt-6">
         {apiMcpEnabled ? (
           <ApiKeyManager enabled={authReady && authenticated} />
