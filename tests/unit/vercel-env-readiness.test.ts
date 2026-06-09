@@ -31,6 +31,9 @@ CLERK_SECRET_KEY                 Encrypted  Production  1d ago
     expect(details).toContain(
       "missing NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, CLERK_JWT_ISSUER_DOMAIN, CLERK_FRONTEND_API_URL, NEXT_PUBLIC_CLERK_SIGN_IN_URL, NEXT_PUBLIC_CLERK_SIGN_UP_URL, NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL, NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL; tracked by MOVE-63"
     );
+    expect(details).toContain(
+      "missing CONVEX_DEPLOY_KEY; tracked by MOVE-143"
+    );
   });
 
   it("routes preview missing groups through the Preview env blocker", () => {
@@ -49,6 +52,9 @@ CLERK_SECRET_KEY                 Encrypted  Production  1d ago
     );
     expect(details).toContain(
       "missing B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME, B2_ENDPOINT, B2_REGION; tracked by MOVE-106; source setup MOVE-66"
+    );
+    expect(details).toContain(
+      "missing CONVEX_DEPLOY_KEY; tracked by MOVE-106; source setup MOVE-143"
     );
     expect(webhookDetails).toContain(
       "missing one of CLERK_WEBHOOK_SIGNING_SECRET, CLERK_WEBHOOK_SECRET; tracked by MOVE-106; source setup MOVE-68"

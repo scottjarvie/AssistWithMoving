@@ -36,6 +36,11 @@ export const requiredGroups = [
     issue: "MOVE-59",
   },
   {
+    label: "Convex deploy key env name",
+    keys: ["CONVEX_DEPLOY_KEY"],
+    issue: "MOVE-143",
+  },
+  {
     label: "Backblaze B2 env names",
     keys: [
       "B2_APPLICATION_KEY_ID",
