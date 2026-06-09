@@ -7,6 +7,7 @@ type BoxLabelPathInput = {
 type BoxLabelSheetPathInput = {
   householdId: string;
   moveId: string;
+  layout?: string;
 };
 
 export function buildBoxLookupPath({
@@ -25,7 +26,11 @@ export function buildBoxLookupUrl(origin: string, input: BoxLabelPathInput) {
 export function buildBoxLabelSheetPath({
   householdId,
   moveId,
+  layout,
 }: BoxLabelSheetPathInput) {
   const params = new URLSearchParams({ householdId, moveId });
+  if (layout) {
+    params.set("layout", layout);
+  }
   return `/app/box-labels?${params.toString()}`;
 }

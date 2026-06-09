@@ -458,6 +458,22 @@ test.describe("authenticated product flow", () => {
       .getAttribute("href");
     expect(employerPacketHref).toBeTruthy();
 
+    const boxLabelsHref = await boxManager
+      .getByRole("link", { name: "Labels" })
+      .first()
+      .getAttribute("href");
+    expect(boxLabelsHref).toContain("/app/box-labels");
+    await page.goto(`${boxLabelsHref!}&layout=thermal4x6`);
+    await expect(
+      page.getByRole("heading", { name: "Box labels", exact: true })
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByRole("group", { name: "Box label print layout" })
+    ).toBeVisible();
+    await expect(page.getByText("4 x 6 thermal")).toBeVisible();
+    await page.getByRole("button", { name: "3 x 2" }).click();
+    await expect(page.getByText("3 x 2 compact")).toBeVisible();
+
     await page.goto("/settings");
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
       timeout: 30_000,
