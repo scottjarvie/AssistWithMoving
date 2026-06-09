@@ -104,7 +104,7 @@ export async function listMoves(config, input = {}) {
 
 export async function createMove(config, input) {
   if (input.dryRun) {
-    return { dryRun: true, request: { path: "/moves", body: input } };
+    return { dryRun: true, request: { method: "POST", path: "/moves", body: input } };
   }
   return await movingManifestRequest(config, {
     method: "POST",
@@ -149,7 +149,10 @@ export async function searchInventory(config, input) {
 
 export async function createItem(config, input) {
   if (input.dryRun) {
-    return { dryRun: true, request: { path: `/moves/${input.moveId}/items`, body: input } };
+    return {
+      dryRun: true,
+      request: { method: "POST", path: `/moves/${input.moveId}/items`, body: input },
+    };
   }
   return await movingManifestRequest(config, {
     method: "POST",
@@ -173,7 +176,11 @@ export async function updateItem(config, input) {
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { path: `/moves/${input.moveId}/items/${input.itemId}`, body: input },
+      request: {
+        method: "PATCH",
+        path: `/moves/${input.moveId}/items/${input.itemId}`,
+        body: input,
+      },
     };
   }
   return await movingManifestRequest(config, {
@@ -203,7 +210,10 @@ export async function deleteItem(config, input) {
 
 export async function createBox(config, input) {
   if (input.dryRun) {
-    return { dryRun: true, request: { path: `/moves/${input.moveId}/boxes`, body: input } };
+    return {
+      dryRun: true,
+      request: { method: "POST", path: `/moves/${input.moveId}/boxes`, body: input },
+    };
   }
   return await movingManifestRequest(config, {
     method: "POST",
@@ -392,6 +402,7 @@ export async function generatePlanningSuggestions(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "POST",
         path: `/moves/${input.moveId}/planning-suggestions/generate`,
         body: {},
       },
@@ -409,6 +420,7 @@ export async function approvePlanningSuggestions(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "POST",
         path: `/moves/${input.moveId}/planning-suggestions/approve`,
         body: {
           approvals: input.approvals,
@@ -430,6 +442,7 @@ export async function rejectPlanningSuggestions(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "POST",
         path: `/moves/${input.moveId}/planning-suggestions/reject`,
         body: {
           suggestionIds: input.suggestionIds,
@@ -458,7 +471,7 @@ export async function finalizePhotoUpload(config, input) {
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { path: "/photos/finalize", body: input },
+      request: { method: "POST", path: "/photos/finalize", body: input },
     };
   }
   return await movingManifestRequest(config, {
@@ -472,7 +485,7 @@ export async function attachPhoto(config, input) {
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { path: `/photos/${input.photoId}/attach`, body: input },
+      request: { method: "POST", path: `/photos/${input.photoId}/attach`, body: input },
     };
   }
   return await movingManifestRequest(config, {
@@ -505,6 +518,7 @@ export async function createMovePerson(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "POST",
         path: `/moves/${input.moveId}/people`,
         body: input,
       },
@@ -529,6 +543,7 @@ export async function updateMovePerson(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "PATCH",
         path: `/moves/${input.moveId}/people/${input.personId}`,
         body: input,
       },
@@ -569,7 +584,11 @@ export async function createTransportResource(config, input) {
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { path: `/moves/${input.moveId}/resources`, body: input },
+      request: {
+        method: "POST",
+        path: `/moves/${input.moveId}/resources`,
+        body: input,
+      },
     };
   }
   return await movingManifestRequest(config, {
@@ -584,6 +603,7 @@ export async function updateTransportResource(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "PATCH",
         path: `/moves/${input.moveId}/resources/${input.resourceId}`,
         body: input,
       },
@@ -600,7 +620,7 @@ export async function createTransportZone(config, input) {
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { path: `/moves/${input.moveId}/zones`, body: input },
+      request: { method: "POST", path: `/moves/${input.moveId}/zones`, body: input },
     };
   }
   return await movingManifestRequest(config, {
@@ -614,7 +634,11 @@ export async function updateTransportZone(config, input) {
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { path: `/moves/${input.moveId}/zones/${input.zoneId}`, body: input },
+      request: {
+        method: "PATCH",
+        path: `/moves/${input.moveId}/zones/${input.zoneId}`,
+        body: input,
+      },
     };
   }
   return await movingManifestRequest(config, {
@@ -643,6 +667,7 @@ export async function createDocumentationProfile(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "POST",
         path: `/moves/${input.moveId}/documentation-profiles`,
         body: input,
       },
@@ -670,6 +695,7 @@ export async function updateDocumentationProfile(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "PATCH",
         path: `/moves/${input.moveId}/documentation-profiles/${input.documentationProfileId}`,
         body: input,
       },
@@ -756,6 +782,7 @@ export async function createShareLink(config, input) {
     return {
       dryRun: true,
       request: {
+        method: "POST",
         path: `/moves/${input.moveId}/share-links`,
         body: input,
       },

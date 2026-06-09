@@ -44,6 +44,7 @@ import {
   startPhotoUpload,
   suggestAssignments,
   updateDocumentationProfile,
+  updateItem,
   updateMovePerson,
   updateTransportResource,
   updateTransportZone,
@@ -1477,9 +1478,64 @@ describe("MovingManifest MCP API client", () => {
     expect(result).toEqual({
       dryRun: true,
       request: {
+        method: "POST",
         path: "/moves/move1/items",
         body: { moveId: "move1", name: "Chair", dryRun: true },
       },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("includes HTTP methods in representative dry-run request previews", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await expect(
+      createMove(config, {
+        title: "PCS move",
+        type: "pcs",
+        dryRun: true,
+      })
+    ).resolves.toMatchObject({
+      dryRun: true,
+      request: { method: "POST", path: "/moves" },
+    });
+    await expect(
+      updateItem(config, {
+        moveId: "move1",
+        itemId: "item1",
+        status: "packed",
+        dryRun: true,
+      })
+    ).resolves.toMatchObject({
+      dryRun: true,
+      request: { method: "PATCH", path: "/moves/move1/items/item1" },
+    });
+    await expect(
+      finalizePhotoUpload(config, {
+        moveId: "move1",
+        uploadSessionId: "session1",
+        dryRun: true,
+      })
+    ).resolves.toMatchObject({
+      dryRun: true,
+      request: { method: "POST", path: "/photos/finalize" },
+    });
+    await expect(
+      createShareLink(config, {
+        moveId: "move1",
+        documentationProfileId: "profile1",
+        label: "PCS packet",
+        role: "guest",
+        dryRun: true,
+      })
+    ).resolves.toMatchObject({
+      dryRun: true,
+      request: { method: "POST", path: "/moves/move1/share-links" },
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
