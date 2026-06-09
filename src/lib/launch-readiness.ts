@@ -16,6 +16,15 @@ export type LaunchReadinessBlocker = {
   verify: string[];
 };
 
+export type LaunchReadinessOptionalCheck = {
+  issue: string;
+  title: string;
+  owner: LaunchReadinessOwner;
+  currentPosture: string;
+  why: string;
+  verify: string[];
+};
+
 export const launchReadinessBlockers = [
   {
     issue: "MOVE-63",
@@ -108,11 +117,27 @@ export const launchReadinessBlockers = [
   },
 ] satisfies LaunchReadinessBlocker[];
 
+export const launchReadinessOptionalChecks = [
+  {
+    issue: "MOVE-138",
+    title: "Cloudflare image delivery readiness is optional",
+    owner: "storage",
+    currentPosture:
+      "Cloudflare Images delivery is inactive until delivery env names are configured; signed Backblaze derivative URLs remain the runtime fallback.",
+    why:
+      "The product is wired for Cloudflare image delivery, but the media account setup is not a hard launch blocker while B2 derivatives serve app thumbnails and cards.",
+    verify: ["npm run doctor:vercel-env", "npm run doctor:vercel-preview-env"],
+  },
+] satisfies LaunchReadinessOptionalCheck[];
+
 export function launchReadinessSummary(
-  blockers: readonly LaunchReadinessBlocker[] = launchReadinessBlockers
+  blockers: readonly LaunchReadinessBlocker[] = launchReadinessBlockers,
+  optionalChecks: readonly LaunchReadinessOptionalCheck[] =
+    launchReadinessOptionalChecks
 ) {
   return {
     blockerCount: blockers.length,
+    optionalCheckCount: optionalChecks.length,
     ownerAreas: Array.from(new Set(blockers.map((blocker) => blocker.owner))),
     nextIssue: blockers[0]?.issue,
     finalIssue: blockers.at(-1)?.issue,

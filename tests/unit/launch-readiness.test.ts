@@ -6,6 +6,7 @@ import {
 } from "../../scripts/launch-next-steps.mjs";
 import {
   launchReadinessBlockers,
+  launchReadinessOptionalChecks,
   launchReadinessSummary,
 } from "@/lib/launch-readiness";
 
@@ -21,6 +22,7 @@ describe("admin launch readiness blockers", () => {
   it("keeps blocker order and summary focused on safe launch sequencing", () => {
     expect(launchReadinessSummary()).toEqual({
       blockerCount: 7,
+      optionalCheckCount: 1,
       ownerAreas: [
         "auth",
         "operations",
@@ -35,8 +37,26 @@ describe("admin launch readiness blockers", () => {
     });
   });
 
+  it("keeps optional Cloudflare posture separate from blocker count", () => {
+    expect(launchReadinessOptionalChecks).toEqual([
+      expect.objectContaining({
+        issue: "MOVE-138",
+        title: "Cloudflare image delivery readiness is optional",
+        owner: "storage",
+        currentPosture: expect.stringContaining("signed Backblaze derivative URLs"),
+        verify: ["npm run doctor:vercel-env", "npm run doctor:vercel-preview-env"],
+      }),
+    ]);
+    expect(launchReadinessBlockers.map((blocker) => blocker.issue)).not.toContain(
+      "MOVE-138"
+    );
+  });
+
   it("does not expose secret values or direct external mutation commands", () => {
-    const uiText = JSON.stringify(launchReadinessBlockers);
+    const uiText = JSON.stringify({
+      blockers: launchReadinessBlockers,
+      optionalChecks: launchReadinessOptionalChecks,
+    });
     const cliPlan = renderLaunchRemediationPlan();
 
     expect(uiText).not.toMatch(/sk_(test|live)_/);

@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/card";
 import {
   launchReadinessBlockers,
+  launchReadinessOptionalChecks,
   launchReadinessSummary,
   type LaunchReadinessBlocker,
+  type LaunchReadinessOptionalCheck,
 } from "@/lib/launch-readiness";
 
 export function LaunchReadinessPanel() {
@@ -34,7 +36,7 @@ export function LaunchReadinessPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <SummaryTile
             label="Open blockers"
             value={String(summary.blockerCount)}
@@ -50,6 +52,11 @@ export function LaunchReadinessPanel() {
             value={summary.finalIssue ?? "None"}
             detail="After identity, storage, and routing settle"
           />
+          <SummaryTile
+            label="Optional checks"
+            value={String(summary.optionalCheckCount)}
+            detail="Visible posture, not launch blockers"
+          />
         </div>
         <ol className="space-y-3">
           {launchReadinessBlockers.map((blocker, index) => (
@@ -60,6 +67,18 @@ export function LaunchReadinessPanel() {
             />
           ))}
         </ol>
+        <div className="space-y-3">
+          <div>
+            <h3 className="text-sm font-medium">Optional readiness</h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Non-blocking product posture that should stay visible while
+              external services are phased in.
+            </p>
+          </div>
+          {launchReadinessOptionalChecks.map((check) => (
+            <OptionalReadinessRow key={check.issue} check={check} />
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
@@ -136,6 +155,44 @@ function LaunchBlockerRow({
         </div>
       </div>
     </li>
+  );
+}
+
+function OptionalReadinessRow({
+  check,
+}: {
+  check: LaunchReadinessOptionalCheck;
+}) {
+  return (
+    <div className="rounded-md border border-dashed border-border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">{check.issue}</Badge>
+        <Badge variant="ghost">{ownerLabel(check.owner)}</Badge>
+        <Badge variant="outline">Optional</Badge>
+      </div>
+      <p className="mt-2 text-sm font-medium leading-snug">{check.title}</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        {check.currentPosture}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        {check.why}
+      </p>
+      <div className="mt-3 rounded-md bg-muted/50 p-3">
+        <p className="flex items-center gap-2 text-xs font-medium">
+          <CheckCircle2 className="size-3.5" aria-hidden="true" />
+          Verify
+        </p>
+        <ul className="mt-1 space-y-1">
+          {check.verify.map((command) => (
+            <li key={command} className="text-xs leading-5 text-muted-foreground">
+              <code className="break-words rounded bg-background px-1 py-0.5">
+                {command}
+              </code>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
