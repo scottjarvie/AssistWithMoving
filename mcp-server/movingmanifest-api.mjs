@@ -320,6 +320,13 @@ export async function listAiJobs(config, input) {
   });
 }
 
+export async function getAiProviderStatus(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/ai-jobs/provider-status`,
+  });
+  return response.data;
+}
+
 export async function listAiTextSuggestions(config, input) {
   return await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/ai-text-suggestions`,

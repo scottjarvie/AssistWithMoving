@@ -5,6 +5,7 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
 import { hashApiKey } from "./lib/apiKeys";
+import { getAiProviderStatus } from "./lib/aiProvider";
 import {
   aiUsageLimits,
   assertAiUsageAllowed,
@@ -2199,6 +2200,15 @@ async function routeAiJobs(
       status: 404,
       code: "not_found",
       message: "AI job route not found.",
+    });
+  }
+
+  if (aiJobIdSegment === "provider-status") {
+    return restOk({
+      data: {
+        ...getAiProviderStatus(),
+        generatedAt: Date.now(),
+      },
     });
   }
 

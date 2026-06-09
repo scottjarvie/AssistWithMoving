@@ -29,6 +29,7 @@ import {
   generatePlanningSuggestions,
   generateAiPhotoSuggestions,
   generateAiTextSuggestions,
+  getAiProviderStatus,
   getApiCapabilities,
   getApiContext,
   getCapacityReport,
@@ -655,6 +656,17 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listAiJobs(apiConfig, input),
+  });
+
+  registerTool(target, "get_ai_provider_status", {
+    title: "Get AI provider status",
+    description:
+      "Fetch safe AI provider readiness for a move, including default provider/model and whether OpenAI is configured, without exposing secrets.",
+    inputSchema: {
+      moveId: z.string(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => getAiProviderStatus(apiConfig, input),
   });
 
   registerTool(target, "list_ai_text_suggestions", {

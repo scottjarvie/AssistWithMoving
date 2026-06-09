@@ -23,6 +23,7 @@ import {
   generateAiPhotoSuggestions,
   generateAiTextSuggestions,
   generatePlanningSuggestions,
+  getAiProviderStatus,
   getApiContext,
   getCapacityReport,
   getMoveQuestions,
@@ -869,6 +870,47 @@ describe("MovingManifest MCP API client", () => {
         headers: { authorization: "Bearer mmk_test_secret" },
       }
     );
+  });
+
+  it("fetches safe AI provider status through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          defaultProvider: "openai",
+          defaultModel: "gpt-5-mini",
+          openai: {
+            configured: true,
+            defaultModel: "gpt-5-mini",
+          },
+          generatedAt: 123,
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getAiProviderStatus(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/ai-jobs/provider-status"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(result).toEqual({
+      defaultProvider: "openai",
+      defaultModel: "gpt-5-mini",
+      openai: {
+        configured: true,
+        defaultModel: "gpt-5-mini",
+      },
+      generatedAt: 123,
+    });
   });
 
   it("generates AI intake suggestions through review-queue endpoints", async () => {

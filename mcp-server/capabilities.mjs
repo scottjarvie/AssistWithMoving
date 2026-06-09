@@ -207,6 +207,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "Inspect AI job status and route text/photo intake suggestions through explicit dry-run, approval, or rejection review.",
     requiredScopes: ["inventory/read", "inventory/write"],
     restEndpoints: [
+      "GET /api/v1/moves/:moveId/ai-jobs/provider-status",
       "GET /api/v1/moves/:moveId/ai-jobs",
       "GET /api/v1/moves/:moveId/ai-jobs/:aiJobId",
       "GET /api/v1/moves/:moveId/ai-text-suggestions",
@@ -221,6 +222,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "POST /api/v1/moves/:moveId/ai-photo-suggestions/reject",
     ],
     mcpTools: [
+      "get_ai_provider_status",
       "list_ai_jobs",
       "list_ai_text_suggestions",
       "list_ai_photo_suggestions",
@@ -232,6 +234,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "reject_ai_photo_suggestions",
     ],
     agentWorkflows: [
+      "Check whether model-backed review is configured before recommending OpenAI-backed work.",
       "Summarize pending AI text/photo suggestions for a human reviewer.",
       "Inspect AI job success, failure, cost, and token summaries without exposing raw provider refs.",
       "Generate pending review suggestions from source text or already-uploaded photo evidence.",

@@ -528,6 +528,17 @@ Generation requires `inventory/write`. It creates an audited `aiJobs` record and
 pending text-intake suggestions. It does not create trusted items, boxes, or
 assignments until exact pending suggestion IDs are approved.
 
+Check AI provider readiness:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-jobs/provider-status \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+The provider-status response includes the default provider/model, whether
+OpenAI is configured, OpenAI's default model, and `generatedAt`. It never
+returns provider API keys or raw environment variables.
+
 List text-intake suggestions:
 
 ```bash
@@ -984,6 +995,7 @@ Available MCP tools:
 | `suggest_assignments` | Generate deterministic box-to-resource/zone suggestions without writing. |
 | `apply_assignments` | Apply explicit box-to-resource/zone assignments, with API-side `dryRun` validation. |
 | `list_planning_suggestions` | List AI planning review suggestions by status. |
+| `get_ai_provider_status` | Fetch safe AI provider readiness without exposing provider secrets. |
 | `list_ai_jobs` | List AI job status summaries without raw provider refs. |
 | `list_ai_text_suggestions` | List text-intake AI review suggestions for human review. |
 | `list_ai_photo_suggestions` | List photo-intake AI review suggestions for human review. |
