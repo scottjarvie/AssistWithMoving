@@ -69,6 +69,9 @@ export function AppShell({
               <AuthControls />
             </div>
           </div>
+          <div className="xl:hidden">
+            <WorkspaceNav variant="mobile" />
+          </div>
         </header>
         <main id="main-content" tabIndex={-1} aria-label="Workspace content">
           {children}

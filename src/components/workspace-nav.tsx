@@ -31,11 +31,23 @@ const navItems: {
   { section: "ai", label: "AI Review", icon: Bot },
 ];
 
-export function WorkspaceNav() {
+export function WorkspaceNav({
+  variant = "sidebar",
+}: {
+  variant?: "sidebar" | "mobile";
+}) {
   const pathname = usePathname();
+  const mobile = variant === "mobile";
 
   return (
-    <nav aria-label="Primary" className="mt-8 space-y-1">
+    <nav
+      aria-label="Primary"
+      className={cn(
+        mobile
+          ? "-mx-4 flex gap-1 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6"
+          : "mt-8 space-y-1"
+      )}
+    >
       {navItems.map((item) => {
         const href = workspaceNavHref(pathname, item.section);
         const active =
@@ -46,7 +58,10 @@ export function WorkspaceNav() {
             key={item.label}
             href={href}
             className={cn(
-              "flex h-9 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              "flex items-center text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              mobile
+                ? "h-10 shrink-0 gap-2 rounded-md border border-transparent px-3"
+                : "h-9 gap-3 rounded-md px-3",
               active && "bg-sidebar-accent text-sidebar-accent-foreground"
             )}
           >
