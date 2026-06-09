@@ -46,7 +46,9 @@ Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
 The move summary endpoint requires `moves/read`, `inventory/read`, and
 `exports/read` because it returns move, inventory, photo metadata, documentation,
-and export state in one response.
+and export state in one response. The move questions endpoint requires
+`moves/read` and `inventory/read` because it summarizes missing setup,
+inventory, evidence, resource, load, PCS, and packet details.
 
 Top-level object aliases such as `/items/{itemId}`, `/boxes/{boxId}`, and
 `/photos/{photoId}/attach` still validate object ownership server-side. For
@@ -206,6 +208,18 @@ The summary response includes the move, resources, zones, people/contacts,
 items, boxes, assignments, photo metadata, planning suggestions, documentation
 profiles, export jobs, share-link metadata, counts, and a `generatedAt`
 timestamp. It omits storage keys and original photo URLs.
+
+Get structured unanswered questions for one move:
+
+```bash
+curl https://movingmanifest.com/api/v1/moves/MOVE_ID/questions \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+The questions response includes the move id/title/type, all prompt definitions,
+the top open prompts, severity counts, category counts, and `generatedAt`. It is
+the same question-readiness logic used by the app UI for setup, PCS, resources,
+inventory, evidence, load planning, and documentation packet prompts.
 
 List move people and contacts:
 
@@ -958,6 +972,7 @@ Available MCP tools:
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
+| `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |

@@ -85,6 +85,20 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
   },
   {
+    id: "moveQuestions",
+    title: "Move question readiness",
+    status: "available",
+    purpose:
+      "Fetch structured unanswered-question prompts that tell agents what setup, PCS, resource, inventory, evidence, load, and packet details still need human attention.",
+    requiredScopes: ["moves/read", "inventory/read"],
+    restEndpoints: ["GET /api/v1/moves/:moveId/questions"],
+    mcpTools: ["get_move_questions"],
+    agentWorkflows: [
+      "Ask what is still missing before producing a PCS, moving-company, employer, storage, donation, or claims packet.",
+      "Guide a user through the highest-severity missing move details without scraping the browser UI.",
+    ],
+  },
+  {
     id: "inventory",
     title: "Inventory intake and item updates",
     status: "available",

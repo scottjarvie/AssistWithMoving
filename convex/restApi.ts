@@ -45,6 +45,7 @@ import {
   roundEstimate,
   sumEstimateValues,
 } from "./lib/estimateEngine";
+import { summarizeMoveQuestionsFromDocs } from "./lib/moveQuestionDocuments";
 import {
   boxStatuses,
   documentationProfileTypes,
@@ -526,6 +527,9 @@ async function routeRequest(
   if (nested === "summary" && args.method === "GET" && segments.length === 3) {
     return await routeMoveSummary(ctx, auth, move);
   }
+  if (nested === "questions" && args.method === "GET" && segments.length === 3) {
+    return await routeMoveQuestions(ctx, auth, move);
+  }
   if (
     nested === "capacity-report" &&
     args.method === "GET" &&
@@ -799,6 +803,62 @@ async function routeMe(
         restrictedMove && restrictedMove.householdId === auth.householdId
           ? safeMove(restrictedMove)
           : null,
+      generatedAt: Date.now(),
+    },
+  });
+}
+
+async function routeMoveQuestions(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  move: Doc<"moves">
+) {
+  const [items, boxes, memberships, photos, resources, zones] = await Promise.all([
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("boxItems")
+      .withIndex("by_move", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("itemPhotos")
+      .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+  ]);
+
+  const summary = summarizeMoveQuestionsFromDocs({
+    householdId: auth.householdId,
+    move,
+    items,
+    boxes,
+    memberships,
+    photos,
+    resources,
+    zones,
+  });
+
+  return restOk({
+    data: {
+      move: {
+        moveId: move._id,
+        title: move.title,
+        type: move.type,
+      },
+      ...summary,
       generatedAt: Date.now(),
     },
   });

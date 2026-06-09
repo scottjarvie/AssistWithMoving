@@ -32,6 +32,7 @@ import {
   getApiCapabilities,
   getApiContext,
   getCapacityReport,
+  getMoveQuestions,
   getMoveSummary,
   listAiJobs,
   listAiPhotoSuggestions,
@@ -399,6 +400,17 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => getMoveSummary(apiConfig, input),
+  });
+
+  registerTool(target, "get_move_questions", {
+    title: "Get move questions",
+    description:
+      "Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets.",
+    inputSchema: {
+      moveId: z.string().describe("MovingManifest move id."),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => getMoveQuestions(apiConfig, input),
   });
 
   registerTool(target, "search_inventory", {

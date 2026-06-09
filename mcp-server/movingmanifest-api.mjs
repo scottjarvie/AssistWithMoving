@@ -120,6 +120,13 @@ export async function getMoveSummary(config, input) {
   return response.data;
 }
 
+export async function getMoveQuestions(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/questions`,
+  });
+  return response.data;
+}
+
 export async function searchInventory(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/items`,

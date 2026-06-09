@@ -78,6 +78,7 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(payload.capabilities.map((entry) => entry.id)).toEqual(
       expect.arrayContaining([
         "moveSetup",
+        "moveQuestions",
         "inventory",
         "transportPlanning",
         "documentationProfiles",

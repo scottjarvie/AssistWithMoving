@@ -25,6 +25,7 @@ import {
   generatePlanningSuggestions,
   getApiContext,
   getCapacityReport,
+  getMoveQuestions,
   getMoveSummary,
   listAiJobs,
   listAiPhotoSuggestions,
@@ -229,6 +230,55 @@ describe("MovingManifest MCP API client", () => {
     expect(result).toEqual({
       move: { moveId: "move1", title: "PCS move" },
       counts: { items: 2, boxes: 1 },
+    });
+  });
+
+  it("fetches move questions through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          move: { moveId: "move1", title: "PCS move", type: "pcs" },
+          topPrompts: [
+            {
+              key: "pcs-orders-allowance",
+              category: "pcs",
+              severity: "critical",
+              title: "Orders and allowance",
+              count: 2,
+            },
+          ],
+          counts: { openPrompts: 1, critical: 1 },
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getMoveQuestions(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1/questions"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(result).toEqual({
+      move: { moveId: "move1", title: "PCS move", type: "pcs" },
+      topPrompts: [
+        {
+          key: "pcs-orders-allowance",
+          category: "pcs",
+          severity: "critical",
+          title: "Orders and allowance",
+          count: 2,
+        },
+      ],
+      counts: { openPrompts: 1, critical: 1 },
     });
   });
 
