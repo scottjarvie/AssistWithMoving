@@ -13,7 +13,11 @@ import {
   verifyApiKeyHash,
   type ApiKeyScope,
 } from "../../convex/lib/apiKeys";
-import { apiKeyStatusLabel, formatApiKeyDate } from "@/lib/api-keys";
+import {
+  apiKeyRestrictionLabel,
+  apiKeyStatusLabel,
+  formatApiKeyDate,
+} from "@/lib/api-keys";
 
 describe("api key primitives", () => {
   it("generates previewable keys with lookup prefixes", () => {
@@ -133,5 +137,15 @@ describe("api key UI helpers", () => {
     expect(apiKeyStatusLabel("active")).toBe("Active");
     expect(apiKeyStatusLabel("revoked")).toBe("Revoked");
     expect(formatApiKeyDate(undefined)).toBe("Never");
+  });
+
+  it("labels household-wide and move-restricted keys", () => {
+    expect(apiKeyRestrictionLabel(undefined, undefined)).toBe("All moves");
+    expect(apiKeyRestrictionLabel("move1", "PCS Utah to Virginia")).toBe(
+      "Move: PCS Utah to Virginia"
+    );
+    expect(apiKeyRestrictionLabel("move1", undefined)).toBe(
+      "Move: restricted move"
+    );
   });
 });

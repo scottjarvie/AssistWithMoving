@@ -634,6 +634,10 @@ test.describe("authenticated product flow", () => {
       .first()
       .getAttribute("href");
     expect(boxLabelsHref).toContain("/app/box-labels");
+    const e2eMoveId = new URL(boxLabelsHref!, page.url()).searchParams.get(
+      "moveId"
+    );
+    expect(e2eMoveId).toBeTruthy();
     await page.goto(`${boxLabelsHref!}&layout=thermal4x6`);
     await expect(
       page.getByRole("heading", { name: "Box labels", exact: true })
@@ -658,8 +662,17 @@ test.describe("authenticated product flow", () => {
     await expect(apiKeys.getByLabel("Household for API keys")).toBeVisible({
       timeout: 30_000,
     });
+    await expect(apiKeys.getByLabel("API key move restriction")).toBeVisible({
+      timeout: 30_000,
+    });
     const apiKeyName = `E2E local agent ${runId}`;
     await apiKeys.getByLabel("API key name").fill(apiKeyName);
+    await apiKeys
+      .getByLabel("API key move restriction")
+      .selectOption({ label: moveTitle });
+    await expect(apiKeys.getByText(`Move: ${moveTitle}`)).toBeVisible({
+      timeout: 30_000,
+    });
     await apiKeys.getByRole("button", { name: "Create key" }).click();
     await expect(
       apiKeys.getByText(
@@ -670,22 +683,32 @@ test.describe("authenticated product flow", () => {
     const rawApiKey = await apiKeys
       .getByLabel("One-time API key secret")
       .inputValue();
-    const apiReadResponse = await page.request.get("/api/v1/moves", {
-      headers: { authorization: `Bearer ${rawApiKey}` },
-    });
+    const apiReadResponse = await page.request.get(
+      `/api/v1/moves/${e2eMoveId}/summary`,
+      {
+        headers: { authorization: `Bearer ${rawApiKey}` },
+      }
+    );
     expect(apiReadResponse.status()).toBe(200);
     expect(apiReadResponse.headers()["x-ratelimit-limit"]).toBeTruthy();
     expect(apiReadResponse.headers()["x-ratelimit-remaining"]).toBeTruthy();
     expect(apiReadResponse.headers()["x-ratelimit-reset"]).toBeTruthy();
     const apiReadBody = (await apiReadResponse.json()) as {
-      data?: unknown[];
+      data?: { move?: { moveId?: string; title?: string } };
     };
-    expect(Array.isArray(apiReadBody.data)).toBe(true);
+    expect(apiReadBody.data?.move?.moveId).toBe(e2eMoveId);
+    expect(apiReadBody.data?.move?.title).toBe(moveTitle);
+
+    const broadApiReadResponse = await page.request.get("/api/v1/moves", {
+      headers: { authorization: `Bearer ${rawApiKey}` },
+    });
+    expect(broadApiReadResponse.status()).toBe(403);
 
     const apiKeyRow = apiKeys.getByRole("group", {
       name: `API key ${apiKeyName}`,
     });
     await expect(apiKeyRow).toBeVisible({ timeout: 30_000 });
+    await expect(apiKeyRow.getByText(`Move: ${moveTitle}`)).toBeVisible();
     await apiKeyRow.scrollIntoViewIfNeeded();
     const revokeApiKey = apiKeyRow.getByRole("button", { name: "Revoke" });
     for (let attempt = 0; attempt < 3; attempt += 1) {

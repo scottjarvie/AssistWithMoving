@@ -21,3 +21,10 @@ export function formatApiKeyDate(timestamp: number | undefined) {
     timeStyle: "short",
   }).format(timestamp);
 }
+
+export function apiKeyRestrictionLabel(
+  moveId: string | undefined,
+  moveTitle: string | undefined
+) {
+  return moveId ? `Move: ${moveTitle ?? "restricted move"}` : "All moves";
+}

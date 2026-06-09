@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   apiKeyScopeOptions,
+  apiKeyRestrictionLabel,
   apiKeyStatusLabel,
   formatApiKeyDate,
   type ApiKeyScope,
@@ -36,6 +37,7 @@ type HouseholdEntry = {
 type ApiKeySummary = {
   apiKeyId: Id<"apiKeys">;
   name: string;
+  moveId?: Id<"moves">;
   tokenPreview: string;
   scopes: ApiKeyScope[];
   status: "active" | "revoked";
@@ -44,6 +46,12 @@ type ApiKeySummary = {
   lastUsedAt?: number;
   lastUsedAction?: string;
   createdAt: number;
+};
+
+type MoveSummary = {
+  _id: Id<"moves">;
+  title: string;
+  status: string;
 };
 
 const defaultScopes: ApiKeyScope[] = [
@@ -60,6 +68,12 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
     useState<Id<"households"> | null>(null);
   const effectiveHouseholdId =
     selectedHouseholdId ?? households?.[0]?.household._id ?? null;
+  const moves = useQuery(
+    api.moves.listForHousehold,
+    effectiveHouseholdId
+      ? { householdId: effectiveHouseholdId, includeArchived: true }
+      : "skip"
+  ) as MoveSummary[] | undefined;
   const keys = useQuery(
     api.apiKeys.listForHousehold,
     effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip"
@@ -70,6 +84,9 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
 
   const [name, setName] = useState("Local agent key");
   const [expiresInDays, setExpiresInDays] = useState("90");
+  const [selectedMoveRestrictionId, setSelectedMoveRestrictionId] = useState<
+    Id<"moves"> | "all"
+  >("all");
   const [scopes, setScopes] = useState<ApiKeyScope[]>(defaultScopes);
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -81,6 +98,19 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
       )?.household,
     [households, effectiveHouseholdId]
   );
+  const activeMoves = useMemo(
+    () => moves?.filter((move) => move.status !== "archived") ?? [],
+    [moves]
+  );
+  const moveTitleById = useMemo(
+    () => new Map(moves?.map((move) => [move._id, move.title]) ?? []),
+    [moves]
+  );
+  const moveRestrictionId =
+    selectedMoveRestrictionId !== "all" &&
+    activeMoves.some((move) => move._id === selectedMoveRestrictionId)
+      ? selectedMoveRestrictionId
+      : "all";
 
   async function handleCreateKey() {
     if (!effectiveHouseholdId) return;
@@ -95,6 +125,7 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
           : undefined;
       const result = await createKey({
         householdId: effectiveHouseholdId,
+        moveId: moveRestrictionId === "all" ? undefined : moveRestrictionId,
         name,
         scopes,
         expiresAt,
@@ -171,9 +202,10 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
             <select
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={effectiveHouseholdId ?? ""}
-              onChange={(event) =>
-                setSelectedHouseholdId(event.target.value as Id<"households">)
-              }
+              onChange={(event) => {
+                setSelectedHouseholdId(event.target.value as Id<"households">);
+                setSelectedMoveRestrictionId("all");
+              }}
               aria-label="Household for API keys"
             >
               {households.map((entry) => (
@@ -191,6 +223,35 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
             Create a household before adding API keys.
           </p>
         )}
+
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={moveRestrictionId}
+            onChange={(event) =>
+              setSelectedMoveRestrictionId(
+                event.target.value as Id<"moves"> | "all"
+              )
+            }
+            aria-label="API key move restriction"
+            disabled={!effectiveHouseholdId || moves === undefined}
+          >
+            <option value="all">All moves in selected household</option>
+            {activeMoves.map((move) => (
+              <option key={move._id} value={move._id}>
+                {move.title}
+              </option>
+            ))}
+          </select>
+          <Badge variant={moveRestrictionId === "all" ? "outline" : "secondary"}>
+            {moveRestrictionId === "all"
+              ? "All moves"
+              : apiKeyRestrictionLabel(
+                  moveRestrictionId,
+                  moveTitleById.get(moveRestrictionId)
+                )}
+          </Badge>
+        </div>
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px]">
           <Input
@@ -300,6 +361,12 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
                       {key.lastUsedAction ? ` for ${key.lastUsedAction}` : ""}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1">
+                      <Badge variant={key.moveId ? "secondary" : "outline"}>
+                        {apiKeyRestrictionLabel(
+                          key.moveId,
+                          key.moveId ? moveTitleById.get(key.moveId) : undefined
+                        )}
+                      </Badge>
                       {key.scopes.map((scope) => (
                         <Badge key={scope} variant="outline">
                           {scope}
