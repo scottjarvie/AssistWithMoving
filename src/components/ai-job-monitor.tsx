@@ -24,6 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  aiProviderModelLabel,
+  aiProviderModelLabelFromKey,
+} from "@/lib/ai-display";
 
 type AiJobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 
@@ -73,7 +77,7 @@ export function AiJobMonitor({
     return statusCounts;
   }, [jobs]);
 
-  async function createMockReview() {
+  async function createLocalReview() {
     if (!householdId || !moveId) {
       return;
     }
@@ -102,7 +106,7 @@ export function AiJobMonitor({
         aiJobId,
         maxOutputTokens: 128,
       });
-      setMessage("Mock AI review completed.");
+      setMessage("Local demo review completed.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "AI review failed.");
     } finally {
@@ -164,8 +168,11 @@ export function AiJobMonitor({
           <div className="flex flex-wrap items-center justify-end gap-2">
             {providerStatus ? (
               <Badge variant="outline">
-                Default: {providerStatus.defaultProvider}/
-                {providerStatus.defaultModel}
+                Default:{" "}
+                {aiProviderModelLabel(
+                  providerStatus.defaultProvider,
+                  providerStatus.defaultModel
+                )}
               </Badge>
             ) : null}
             <Button
@@ -173,14 +180,14 @@ export function AiJobMonitor({
               size="sm"
               variant="outline"
               disabled={!moveId || running}
-              onClick={() => void createMockReview()}
+              onClick={() => void createLocalReview()}
             >
               {running ? (
                 <RefreshCw className="animate-spin" aria-hidden="true" />
               ) : (
                 <Play aria-hidden="true" />
               )}
-              Mock review
+              Local review
             </Button>
             <Button
               type="button"
@@ -277,7 +284,7 @@ export function AiJobMonitor({
               <div className="mt-3 flex flex-wrap gap-2">
                 {Object.entries(usage.byProviderModel).map(([provider, count]) => (
                   <Badge key={provider} variant="outline">
-                    {provider}: {count}
+                    {aiProviderModelLabelFromKey(provider)}: {count}
                   </Badge>
                 ))}
               </div>
@@ -295,7 +302,7 @@ export function AiJobMonitor({
                     <div key={job.id} className="rounded-md bg-muted/40 p-2">
                       <p className="font-medium">{job.type}</p>
                       <p className="text-muted-foreground">
-                        {job.provider}/{job.model}
+                        {aiProviderModelLabel(job.provider, job.model)}
                         {job.error ? ` - ${job.error}` : ""}
                       </p>
                     </div>
@@ -311,7 +318,8 @@ export function AiJobMonitor({
                     <div key={job.id} className="rounded-md bg-muted/40 p-2">
                       <p className="font-medium">{job.type}</p>
                       <p className="text-muted-foreground">
-                        {job.provider}/{job.model} - {formatCost(job.costCents)}
+                        {aiProviderModelLabel(job.provider, job.model)} -{" "}
+                        {formatCost(job.costCents)}
                       </p>
                     </div>
                   ))}
@@ -356,7 +364,7 @@ export function AiJobMonitor({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {job.provider} / {job.model}
+                      {aiProviderModelLabel(job.provider, job.model)}
                     </TableCell>
                     <TableCell>{job.reviewStatus}</TableCell>
                     <TableCell className="text-right">
@@ -369,8 +377,8 @@ export function AiJobMonitor({
           </div>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-            No AI jobs yet. Run a mock review to exercise the provider boundary
-            without calling a paid model.
+            No AI jobs yet. Run a local review to exercise the auditable AI
+            boundary without calling a paid model.
           </div>
         )}
       </CardContent>
