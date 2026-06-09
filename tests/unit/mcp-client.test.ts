@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   addItemsToBox,
+  approveAiPhotoSuggestions,
+  approveAiTextSuggestions,
   approvePlanningSuggestions,
   batchUpsertItems,
   applyAssignments,
@@ -31,6 +33,8 @@ import {
   listShareLinks,
   movingManifestRequest,
   removeItemFromBox,
+  rejectAiPhotoSuggestions,
+  rejectAiTextSuggestions,
   rejectPlanningSuggestions,
   revokeShareLink,
   searchInventory,
@@ -804,6 +808,137 @@ describe("MovingManifest MCP API client", () => {
       {
         method: "GET",
         headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+  });
+
+  it("approves and rejects AI intake suggestions through exact review endpoints", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { ok: true } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await approveAiTextSuggestions(config, {
+      moveId: "move1",
+      dryRun: true,
+      approvals: [
+        {
+          suggestionId: "textSuggestion1",
+          itemDraft: {
+            name: "Coffee mugs",
+            room: "Kitchen",
+            destinationRoom: "Kitchen",
+            disposition: "mover",
+            quantity: 8,
+            suggestedBoxLabel: "Kitchen fragile",
+          },
+        },
+      ],
+    });
+    await rejectAiTextSuggestions(config, {
+      moveId: "move1",
+      suggestionIds: ["textSuggestion2"],
+    });
+    await approveAiPhotoSuggestions(config, {
+      moveId: "move1",
+      dryRun: true,
+      approvals: [
+        {
+          suggestionId: "photoSuggestion1",
+          boxDraft: {
+            label: "Garage shelf",
+            room: "Garage",
+          },
+        },
+      ],
+    });
+    await rejectAiPhotoSuggestions(config, {
+      moveId: "move1",
+      suggestionIds: ["photoSuggestion2"],
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/moves/move1/ai-text-suggestions/approve"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          dryRun: true,
+          approvals: [
+            {
+              suggestionId: "textSuggestion1",
+              itemDraft: {
+                name: "Coffee mugs",
+                room: "Kitchen",
+                destinationRoom: "Kitchen",
+                disposition: "mover",
+                quantity: 8,
+                suggestedBoxLabel: "Kitchen fragile",
+              },
+            },
+          ],
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/ai-text-suggestions/reject"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ suggestionIds: ["textSuggestion2"] }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL("https://example.com/api/v1/moves/move1/ai-photo-suggestions/approve"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          dryRun: true,
+          approvals: [
+            {
+              suggestionId: "photoSuggestion1",
+              boxDraft: {
+                label: "Garage shelf",
+                room: "Garage",
+              },
+            },
+          ],
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      new URL("https://example.com/api/v1/moves/move1/ai-photo-suggestions/reject"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ suggestionIds: ["photoSuggestion2"] }),
       }
     );
   });

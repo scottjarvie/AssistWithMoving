@@ -253,6 +253,12 @@ export function requiredScopesForRestRoute({
     if (segments.includes("planning-suggestions")) {
       return ["inventory/write"];
     }
+    if (
+      segments.includes("ai-text-suggestions") ||
+      segments.includes("ai-photo-suggestions")
+    ) {
+      return ["inventory/write"];
+    }
     return ["moves/write"];
   }
   return [];

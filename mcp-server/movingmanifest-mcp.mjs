@@ -11,6 +11,8 @@ import {
   attachPhoto,
   archiveMovePerson,
   archiveDocumentationProfile,
+  approveAiPhotoSuggestions,
+  approveAiTextSuggestions,
   createApiConfig,
   createBox,
   createDocumentationProfile,
@@ -40,6 +42,8 @@ import {
   listShareLinks,
   listTransportResources,
   removeItemFromBox,
+  rejectAiPhotoSuggestions,
+  rejectAiTextSuggestions,
   rejectPlanningSuggestions,
   revokeShareLink,
   searchInventory,
@@ -129,6 +133,33 @@ const aiSuggestionStatusSchema = z.enum([
   "rejected",
 ]);
 
+const itemDispositionSchema = z.enum([
+  "undecided",
+  "take",
+  "sell",
+  "donate",
+  "dump",
+  "free",
+  "storage",
+  "mover",
+  "personalTransport",
+]);
+
+const itemFragilitySchema = z.enum(["low", "medium", "high"]);
+
+const planningDefaultKeySchema = z.enum([
+  "firstNight",
+  "doNotLetMoversTouch",
+  "highValue",
+  "documents",
+  "medication",
+  "electronics",
+  "sensitive",
+  "fragile",
+  "irreplaceable",
+  "restrictedReview",
+]);
+
 const estimateConfidenceSchema = z.enum([
   "none",
   "low",
@@ -158,6 +189,52 @@ const planningApprovalSchema = z.object({
   estimateDraft: planningEstimateDraftSchema.optional(),
   assignmentDraft: planningAssignmentDraftSchema.optional(),
   assignmentOverrideReason: z.string().optional(),
+});
+
+const aiItemDraftBaseSchema = z.object({
+  name: z.string().min(1),
+  room: z.string().optional(),
+  category: z.string().optional(),
+  disposition: itemDispositionSchema.optional(),
+  quantity: z.number().positive().optional(),
+  description: z.string().optional(),
+  suggestedBoxLabel: z.string().optional(),
+  fragility: itemFragilitySchema.optional(),
+  highValue: z.boolean().optional(),
+  planningDefaultKeys: z.array(planningDefaultKeySchema).optional(),
+});
+
+const aiTextItemDraftSchema = aiItemDraftBaseSchema.extend({
+  destinationRoom: z.string().optional(),
+});
+
+const aiPhotoItemDraftSchema = aiItemDraftBaseSchema;
+
+const aiTextBoxDraftSchema = z.object({
+  code: z.string().optional(),
+  label: z.string().min(1),
+  room: z.string().optional(),
+  destinationRoom: z.string().optional(),
+  description: z.string().optional(),
+});
+
+const aiPhotoBoxDraftSchema = z.object({
+  code: z.string().optional(),
+  label: z.string().min(1),
+  room: z.string().optional(),
+  description: z.string().optional(),
+});
+
+const aiTextApprovalSchema = z.object({
+  suggestionId: z.string(),
+  itemDraft: aiTextItemDraftSchema.optional(),
+  boxDraft: aiTextBoxDraftSchema.optional(),
+});
+
+const aiPhotoApprovalSchema = z.object({
+  suggestionId: z.string(),
+  itemDraft: aiPhotoItemDraftSchema.optional(),
+  boxDraft: aiPhotoBoxDraftSchema.optional(),
 });
 
 const movePersonRoleSchema = z.enum([
@@ -562,7 +639,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "list_ai_text_suggestions", {
     title: "List AI text suggestions",
     description:
-      "List text-intake AI review suggestions for a move. This is read-only; approvals still require the app review path.",
+      "List text-intake AI review suggestions for a move before exact-ID approval or rejection.",
     inputSchema: {
       moveId: z.string(),
       status: aiSuggestionStatusSchema.optional(),
@@ -575,7 +652,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "list_ai_photo_suggestions", {
     title: "List AI photo suggestions",
     description:
-      "List photo-intake AI review suggestions for a move. This is read-only; approvals still require the app review path.",
+      "List photo-intake AI review suggestions for a move before exact-ID approval or rejection.",
     inputSchema: {
       moveId: z.string(),
       status: aiSuggestionStatusSchema.optional(),
@@ -583,6 +660,56 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listAiPhotoSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "approve_ai_text_suggestions", {
+    title: "Approve AI text suggestions",
+    description:
+      "Approve exact pending text-intake suggestion IDs. Use dryRun true first to validate and preview created items, boxes, and assignments without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      approvals: z.array(aiTextApprovalSchema).min(1).max(100),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => approveAiTextSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "reject_ai_text_suggestions", {
+    title: "Reject AI text suggestions",
+    description:
+      "Reject exact pending text-intake suggestion IDs without creating inventory.",
+    inputSchema: {
+      moveId: z.string(),
+      suggestionIds: z.array(z.string()).min(1).max(100),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => rejectAiTextSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "approve_ai_photo_suggestions", {
+    title: "Approve AI photo suggestions",
+    description:
+      "Approve exact pending photo-intake suggestion IDs. Use dryRun true first to validate and preview created items or boxes without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      approvals: z.array(aiPhotoApprovalSchema).min(1).max(100),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => approveAiPhotoSuggestions(apiConfig, input),
+  });
+
+  registerTool(target, "reject_ai_photo_suggestions", {
+    title: "Reject AI photo suggestions",
+    description:
+      "Reject exact pending photo-intake suggestion IDs without creating inventory or changing photo evidence links.",
+    inputSchema: {
+      moveId: z.string(),
+      suggestionIds: z.array(z.string()).min(1).max(100),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => rejectAiPhotoSuggestions(apiConfig, input),
   });
 
   registerTool(target, "generate_planning_suggestions", {

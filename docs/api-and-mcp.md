@@ -512,10 +512,77 @@ curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-photo-suggestions?statu
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-These AI visibility endpoints require `inventory/read`. They are read-only and
-return job/suggestion status, review fields, drafts, summaries, token/cost
-summaries, and timestamps, but not raw provider input/output refs. Approving or
-rejecting AI text/photo intake suggestions remains an app review workflow.
+These AI visibility endpoints require `inventory/read` and return job/suggestion
+status, review fields, drafts, summaries, token/cost summaries, and timestamps,
+but not raw provider input/output refs.
+
+Dry-run exact text-intake approvals:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-text-suggestions/approve \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: approve-ai-text-suggestions-dry-run-001" \
+  -d '{
+    "dryRun": true,
+    "approvals": [
+      {
+        "suggestionId": "SUGGESTION_ID",
+        "itemDraft": {
+          "name": "Coffee mugs",
+          "room": "Kitchen",
+          "disposition": "mover",
+          "quantity": 8,
+          "suggestedBoxLabel": "Kitchen fragile"
+        }
+      }
+    ]
+  }'
+```
+
+Approve reviewed text-intake suggestions:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-text-suggestions/approve \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: approve-ai-text-suggestions-001" \
+  -d '{ "approvals": [{ "suggestionId": "SUGGESTION_ID" }] }'
+```
+
+Reject text-intake suggestions:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-text-suggestions/reject \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reject-ai-text-suggestions-001" \
+  -d '{ "suggestionIds": ["SUGGESTION_ID"] }'
+```
+
+Approve or reject photo-intake suggestions with the equivalent endpoints:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-photo-suggestions/approve \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: approve-ai-photo-suggestions-001" \
+  -d '{ "dryRun": true, "approvals": [{ "suggestionId": "SUGGESTION_ID" }] }'
+
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/ai-photo-suggestions/reject \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: reject-ai-photo-suggestions-001" \
+  -d '{ "suggestionIds": ["SUGGESTION_ID"] }'
+```
+
+Approving and rejecting text/photo intake suggestions requires
+`inventory/write`. Callers must pass exact pending suggestion IDs. Approval
+supports `dryRun: true`, which validates access and pending status and reports
+planned creates without writing. Non-dry-run text approvals may create trusted
+items, boxes, and item-to-box assignments. Non-dry-run photo approvals may
+create trusted items/boxes and mark the source photo verified. All API-key review
+actions are audited as API-key actions.
 
 Attach or update photo evidence metadata after upload finalization:
 
@@ -843,6 +910,10 @@ Available MCP tools:
 | `list_ai_jobs` | List AI job status summaries without raw provider refs. |
 | `list_ai_text_suggestions` | List text-intake AI review suggestions for human review. |
 | `list_ai_photo_suggestions` | List photo-intake AI review suggestions for human review. |
+| `approve_ai_text_suggestions` | Approve exact pending text-intake suggestion IDs, with API-side `dryRun` validation and optional edited item/box drafts. |
+| `reject_ai_text_suggestions` | Reject exact pending text-intake suggestion IDs. |
+| `approve_ai_photo_suggestions` | Approve exact pending photo-intake suggestion IDs, with API-side `dryRun` validation and optional edited item/box drafts. |
+| `reject_ai_photo_suggestions` | Reject exact pending photo-intake suggestion IDs. |
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |

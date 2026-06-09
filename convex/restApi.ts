@@ -47,6 +47,7 @@ import {
   exifHandlingStatuses,
   itemConditions,
   itemDispositions,
+  itemFragilities,
   itemStatuses,
   normalizeDocumentationProfileTypes,
   normalizeBoxCode,
@@ -2163,6 +2164,14 @@ async function routeAiTextSuggestions(
   moveId: Id<"moves">,
   suggestionIdSegment?: string
 ) {
+  if (args.method === "POST" && suggestionIdSegment === "approve") {
+    return await routeApproveAiTextSuggestions(ctx, args, auth, moveId);
+  }
+
+  if (args.method === "POST" && suggestionIdSegment === "reject") {
+    return await routeRejectAiTextSuggestions(ctx, args, auth, moveId);
+  }
+
   if (args.method !== "GET") {
     return restError({
       status: 404,
@@ -2208,6 +2217,14 @@ async function routeAiPhotoSuggestions(
   moveId: Id<"moves">,
   suggestionIdSegment?: string
 ) {
+  if (args.method === "POST" && suggestionIdSegment === "approve") {
+    return await routeApproveAiPhotoSuggestions(ctx, args, auth, moveId);
+  }
+
+  if (args.method === "POST" && suggestionIdSegment === "reject") {
+    return await routeRejectAiPhotoSuggestions(ctx, args, auth, moveId);
+  }
+
   if (args.method !== "GET") {
     return restError({
       status: 404,
@@ -2244,6 +2261,975 @@ async function routeAiPhotoSuggestions(
       args.query
     )
   );
+}
+
+type RestAiTextItemDraft = NonNullable<Doc<"aiTextSuggestions">["itemDraft"]>;
+type RestAiTextBoxDraft = NonNullable<Doc<"aiTextSuggestions">["boxDraft"]>;
+type RestAiPhotoItemDraft = NonNullable<Doc<"aiPhotoSuggestions">["itemDraft"]>;
+type RestAiPhotoBoxDraft = NonNullable<Doc<"aiPhotoSuggestions">["boxDraft"]>;
+
+type RestAiTextApproval = {
+  suggestionId: Id<"aiTextSuggestions">;
+  itemDraft?: RestAiTextItemDraft;
+  boxDraft?: RestAiTextBoxDraft;
+};
+
+type RestAiPhotoApproval = {
+  suggestionId: Id<"aiPhotoSuggestions">;
+  itemDraft?: RestAiPhotoItemDraft;
+  boxDraft?: RestAiPhotoBoxDraft;
+};
+
+async function routeApproveAiTextSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const { dryRun, approvals } = parseAiTextApprovals(args.body);
+  const loaded = await loadPendingApiAiTextSuggestions(
+    ctx,
+    auth.householdId,
+    moveId,
+    approvals
+  );
+  const now = Date.now();
+  const boxIdsByLabel = new Map<string, Id<"boxes">>();
+  const createdItemIds: Id<"items">[] = [];
+  const createdBoxIds: Id<"boxes">[] = [];
+  const assignmentIds: Id<"boxItems">[] = [];
+  const results = [];
+
+  for (const { suggestion, approval } of loaded.filter(
+    (entry) => entry.suggestion.type === "box"
+  )) {
+    const draft =
+      approval.boxDraft ?? normalizeApiAiTextBoxDraft(suggestion.boxDraft);
+    if (!draft) {
+      results.push({
+        suggestionId: suggestion._id,
+        type: suggestion.type,
+        action: "skipped",
+        reason: "Suggestion has no box draft.",
+        dryRun,
+      });
+      continue;
+    }
+    const action = approval.boxDraft ? "edit" : "approve";
+    if (dryRun) {
+      results.push({
+        suggestionId: suggestion._id,
+        type: suggestion.type,
+        action,
+        plannedBoxLabel: draft.label,
+        plannedBoxCode: draft.code,
+        dryRun,
+      });
+      continue;
+    }
+
+    const { boxId, created } = await ensureApiBoxFromAiTextDraft(ctx, {
+      auth,
+      moveId,
+      draft,
+      now,
+    });
+    boxIdsByLabel.set(normalizeApiAiBoxLabelKey(draft.label), boxId);
+    if (created) pushUniqueId(createdBoxIds, boxId);
+    await ctx.db.patch(suggestion._id, {
+      status: action === "edit" ? "edited" : "approved",
+      approvedBoxId: boxId,
+      reviewedByUserId: auth.createdByUserId,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+    results.push({
+      suggestionId: suggestion._id,
+      type: suggestion.type,
+      action,
+      approvedBoxId: boxId,
+      createdBox: created,
+      dryRun,
+    });
+  }
+
+  for (const { suggestion, approval } of loaded.filter(
+    (entry) => entry.suggestion.type === "item"
+  )) {
+    const draft =
+      approval.itemDraft ?? normalizeApiAiTextItemDraft(suggestion.itemDraft);
+    if (!draft) {
+      results.push({
+        suggestionId: suggestion._id,
+        type: suggestion.type,
+        action: "skipped",
+        reason: "Suggestion has no item draft.",
+        dryRun,
+      });
+      continue;
+    }
+    const action = approval.itemDraft ? "edit" : "approve";
+    if (dryRun) {
+      const existingBox = draft.suggestedBoxLabel
+        ? await findApiAiBoxByLabel(ctx, moveId, draft.suggestedBoxLabel)
+        : null;
+      results.push({
+        suggestionId: suggestion._id,
+        type: suggestion.type,
+        action,
+        plannedItemName: draft.name,
+        plannedBoxLabel: draft.suggestedBoxLabel,
+        wouldUseExistingBox: Boolean(existingBox),
+        dryRun,
+      });
+      continue;
+    }
+
+    const itemId = await createApiItemFromAiTextDraft(ctx, {
+      auth,
+      moveId,
+      draft,
+      now,
+    });
+    createdItemIds.push(itemId);
+    let approvedBoxId: Id<"boxes"> | undefined;
+    let assignmentId: Id<"boxItems"> | undefined;
+
+    if (draft.suggestedBoxLabel) {
+      const labelKey = normalizeApiAiBoxLabelKey(draft.suggestedBoxLabel);
+      approvedBoxId = boxIdsByLabel.get(labelKey);
+      if (!approvedBoxId) {
+        const createdBox = await ensureApiBoxFromAiTextDraft(ctx, {
+          auth,
+          moveId,
+          draft: {
+            label: draft.suggestedBoxLabel,
+            room: draft.room,
+            destinationRoom: draft.destinationRoom,
+            description: "Created from approved AI text intake contents.",
+          },
+          now,
+        });
+        approvedBoxId = createdBox.boxId;
+        boxIdsByLabel.set(labelKey, approvedBoxId);
+        if (createdBox.created) pushUniqueId(createdBoxIds, approvedBoxId);
+      }
+      assignmentId = await addApiAiTextItemToBox(ctx, {
+        auth,
+        moveId,
+        boxId: approvedBoxId,
+        itemId,
+        quantity: draft.quantity,
+        now,
+      });
+      assignmentIds.push(assignmentId);
+    }
+
+    await ctx.db.patch(suggestion._id, {
+      status: action === "edit" ? "edited" : "approved",
+      approvedItemId: itemId,
+      approvedBoxId,
+      reviewedByUserId: auth.createdByUserId,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+    results.push({
+      suggestionId: suggestion._id,
+      type: suggestion.type,
+      action,
+      approvedItemId: itemId,
+      approvedBoxId,
+      assignmentId,
+      dryRun,
+    });
+  }
+
+  if (!dryRun) {
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "ai_text_intake.api_approved",
+      "aiTextSuggestions",
+      moveId,
+      {
+        suggestionIds: loaded.map((entry) => entry.suggestion._id),
+        createdItemIds,
+        createdBoxIds,
+        assignmentIds,
+      }
+    );
+  }
+
+  return restOk({
+    data: {
+      dryRun,
+      reviewedSuggestionIds: loaded.map((entry) => entry.suggestion._id),
+      createdItemIds,
+      createdBoxIds,
+      assignmentIds,
+      results,
+    },
+  });
+}
+
+async function routeRejectAiTextSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const suggestionIds = parseAiSuggestionIds(
+    bodyObject(args.body).suggestionIds,
+    "suggestionIds"
+  ) as Id<"aiTextSuggestions">[];
+  const loaded = await loadPendingApiAiTextSuggestions(
+    ctx,
+    auth.householdId,
+    moveId,
+    suggestionIds.map((suggestionId) => ({ suggestionId }))
+  );
+  const now = Date.now();
+  for (const { suggestion } of loaded) {
+    await ctx.db.patch(suggestion._id, {
+      status: "rejected",
+      reviewedByUserId: auth.createdByUserId,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+  }
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "ai_text_intake.api_rejected",
+    "aiTextSuggestions",
+    moveId,
+    { suggestionIds }
+  );
+  return restOk({ data: { rejectedSuggestionIds: suggestionIds } });
+}
+
+async function routeApproveAiPhotoSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const { dryRun, approvals } = parseAiPhotoApprovals(args.body);
+  const loaded = await loadPendingApiAiPhotoSuggestions(
+    ctx,
+    auth.householdId,
+    moveId,
+    approvals
+  );
+  const now = Date.now();
+  const createdItemIds: Id<"items">[] = [];
+  const createdBoxIds: Id<"boxes">[] = [];
+  const results = [];
+
+  for (const { suggestion, approval } of loaded) {
+    const itemDraft =
+      approval.itemDraft ?? normalizeApiAiPhotoItemDraft(suggestion.itemDraft);
+    const boxDraft =
+      approval.boxDraft ?? normalizeApiAiPhotoBoxDraft(suggestion.boxDraft);
+    const action = approval.itemDraft || approval.boxDraft ? "edit" : "approve";
+
+    if (dryRun) {
+      results.push({
+        suggestionId: suggestion._id,
+        type: suggestion.type,
+        action,
+        plannedItemName: itemDraft?.name,
+        plannedBoxLabel: boxDraft?.label,
+        dryRun,
+      });
+      continue;
+    }
+
+    let approvedItemId: Id<"items"> | undefined;
+    let approvedBoxId: Id<"boxes"> | undefined;
+
+    if (boxDraft) {
+      approvedBoxId = await createApiBoxFromAiPhotoDraft(ctx, {
+        auth,
+        moveId,
+        draft: boxDraft,
+        now,
+      });
+      createdBoxIds.push(approvedBoxId);
+      await ctx.db.patch(suggestion.photoId, {
+        boxId: approvedBoxId,
+        verificationStatus: "verified",
+        reviewedByUserId: auth.createdByUserId,
+        reviewedAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (itemDraft) {
+      approvedItemId = await createApiItemFromAiPhotoDraft(ctx, {
+        auth,
+        moveId,
+        draft: itemDraft,
+        photoId: suggestion.photoId,
+        now,
+      });
+      createdItemIds.push(approvedItemId);
+      await ctx.db.patch(suggestion.photoId, {
+        itemId: approvedItemId,
+        verificationStatus: "verified",
+        reviewedByUserId: auth.createdByUserId,
+        reviewedAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.patch(suggestion._id, {
+      status: action === "edit" ? "edited" : "approved",
+      approvedItemId,
+      approvedBoxId,
+      reviewedByUserId: auth.createdByUserId,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+    results.push({
+      suggestionId: suggestion._id,
+      type: suggestion.type,
+      action,
+      approvedItemId,
+      approvedBoxId,
+      dryRun,
+    });
+  }
+
+  if (!dryRun) {
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "ai_photo_intake.api_approved",
+      "aiPhotoSuggestions",
+      moveId,
+      {
+        suggestionIds: loaded.map((entry) => entry.suggestion._id),
+        createdItemIds,
+        createdBoxIds,
+      }
+    );
+  }
+
+  return restOk({
+    data: {
+      dryRun,
+      reviewedSuggestionIds: loaded.map((entry) => entry.suggestion._id),
+      createdItemIds,
+      createdBoxIds,
+      results,
+    },
+  });
+}
+
+async function routeRejectAiPhotoSuggestions(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">
+) {
+  const suggestionIds = parseAiSuggestionIds(
+    bodyObject(args.body).suggestionIds,
+    "suggestionIds"
+  ) as Id<"aiPhotoSuggestions">[];
+  const loaded = await loadPendingApiAiPhotoSuggestions(
+    ctx,
+    auth.householdId,
+    moveId,
+    suggestionIds.map((suggestionId) => ({ suggestionId }))
+  );
+  const now = Date.now();
+  for (const { suggestion } of loaded) {
+    await ctx.db.patch(suggestion._id, {
+      status: "rejected",
+      reviewedByUserId: auth.createdByUserId,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+  }
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "ai_photo_intake.api_rejected",
+    "aiPhotoSuggestions",
+    moveId,
+    { suggestionIds }
+  );
+  return restOk({ data: { rejectedSuggestionIds: suggestionIds } });
+}
+
+async function loadPendingApiAiTextSuggestions(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  approvals: RestAiTextApproval[]
+) {
+  const loaded: {
+    suggestion: Doc<"aiTextSuggestions">;
+    approval: RestAiTextApproval;
+  }[] = [];
+  for (const approval of approvals) {
+    const suggestion = await ctx.db.get(approval.suggestionId);
+    if (
+      !suggestion ||
+      suggestion.householdId !== householdId ||
+      suggestion.moveId !== moveId
+    ) {
+      throw new Error("AI text suggestion not found.");
+    }
+    if (suggestion.status !== "pending") {
+      throw new Error("Only pending AI text suggestions can be reviewed.");
+    }
+    loaded.push({ suggestion, approval });
+  }
+  return loaded;
+}
+
+async function loadPendingApiAiPhotoSuggestions(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  approvals: RestAiPhotoApproval[]
+) {
+  const loaded: {
+    suggestion: Doc<"aiPhotoSuggestions">;
+    approval: RestAiPhotoApproval;
+  }[] = [];
+  for (const approval of approvals) {
+    const suggestion = await ctx.db.get(approval.suggestionId);
+    if (
+      !suggestion ||
+      suggestion.householdId !== householdId ||
+      suggestion.moveId !== moveId
+    ) {
+      throw new Error("AI photo suggestion not found.");
+    }
+    if (suggestion.status !== "pending") {
+      throw new Error("Only pending AI photo suggestions can be reviewed.");
+    }
+    loaded.push({ suggestion, approval });
+  }
+  return loaded;
+}
+
+async function createApiItemFromAiTextDraft(
+  ctx: MutationCtx,
+  args: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    draft: RestAiTextItemDraft;
+    now: number;
+  }
+) {
+  const name = normalizeItemName(args.draft.name);
+  const itemId = await ctx.db.insert("items", {
+    householdId: args.auth.householdId,
+    moveId: args.moveId,
+    name,
+    normalizedName: normalizedSearchName(name),
+    description: normalizeOptionalText(args.draft.description),
+    room: normalizeOptionalText(args.draft.room),
+    destinationRoom: normalizeOptionalText(args.draft.destinationRoom),
+    category: normalizeOptionalText(args.draft.category),
+    disposition: args.draft.disposition,
+    status: "active",
+    quantity: positiveNumber(args.draft.quantity) ?? 1,
+    condition: "unknown",
+    weightConfidence: "none",
+    volumeConfidence: "none",
+    fragility: args.draft.fragility ?? "low",
+    stackable: true,
+    hazardousFlag: false,
+    highValue: args.draft.highValue ?? false,
+    requiresPersonalTransport:
+      args.draft.disposition === "personalTransport" ||
+      args.draft.planningDefaultKeys?.includes("sensitive") === true,
+    planningDefaultKeys: args.draft.planningDefaultKeys ?? [],
+    needsReview: false,
+    reviewFlags: [],
+    aiSummary: `Approved from text intake: ${args.draft.suggestedBoxLabel ?? args.draft.room ?? "move notes"}.`,
+    aiTags: ["textIntake"],
+    createdVia: "textAI",
+    reviewedAt: args.now,
+    createdByUserId: args.auth.createdByUserId,
+    updatedByUserId: args.auth.createdByUserId,
+    createdAt: args.now,
+    updatedAt: args.now,
+  });
+  await auditApiWrite(
+    ctx,
+    args.auth,
+    args.moveId,
+    "item.api_created_from_ai_text",
+    "items",
+    itemId,
+    { name, disposition: args.draft.disposition }
+  );
+  return itemId;
+}
+
+async function ensureApiBoxFromAiTextDraft(
+  ctx: MutationCtx,
+  args: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    draft: RestAiTextBoxDraft;
+    now: number;
+  }
+) {
+  const label = normalizeOptionalText(args.draft.label) ?? "AI text intake box";
+  const existing = await findApiAiBoxByLabel(ctx, args.moveId, label);
+  if (existing) return { boxId: existing._id, created: false };
+
+  const code = await uniqueApiAiBoxCode(
+    ctx,
+    args.moveId,
+    args.draft.code ?? label,
+    "AI-BOX"
+  );
+  const boxId = await ctx.db.insert("boxes", {
+    householdId: args.auth.householdId,
+    moveId: args.moveId,
+    code,
+    label,
+    room: normalizeOptionalText(args.draft.room),
+    destinationRoom: normalizeOptionalText(args.draft.destinationRoom),
+    description: normalizeOptionalText(args.draft.description),
+    status: "open",
+    assignmentLocked: false,
+    assignmentWarnings: [],
+    assignmentHardBlocks: [],
+    assignmentValidatedAt: args.now,
+    createdByUserId: args.auth.createdByUserId,
+    createdAt: args.now,
+    updatedAt: args.now,
+  });
+  await auditApiWrite(
+    ctx,
+    args.auth,
+    args.moveId,
+    "box.api_created_from_ai_text",
+    "boxes",
+    boxId,
+    { code, label }
+  );
+  return { boxId, created: true };
+}
+
+async function addApiAiTextItemToBox(
+  ctx: MutationCtx,
+  args: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    boxId: Id<"boxes">;
+    itemId: Id<"items">;
+    quantity: number;
+    now: number;
+  }
+) {
+  const assignmentId = await ctx.db.insert("boxItems", {
+    householdId: args.auth.householdId,
+    moveId: args.moveId,
+    boxId: args.boxId,
+    itemId: args.itemId,
+    quantity: positiveNumber(args.quantity) ?? 1,
+    notes: "Approved from AI text intake.",
+    createdAt: args.now,
+    updatedAt: args.now,
+  });
+  await ctx.db.patch(args.itemId, {
+    status: "packed",
+    updatedAt: args.now,
+  });
+  await ctx.db.patch(args.boxId, {
+    status: "packing",
+    updatedAt: args.now,
+  });
+  await auditApiWrite(
+    ctx,
+    args.auth,
+    args.moveId,
+    "assignment.api_created_from_ai_text",
+    "boxItems",
+    assignmentId,
+    { boxId: args.boxId, itemId: args.itemId }
+  );
+  return assignmentId;
+}
+
+async function createApiItemFromAiPhotoDraft(
+  ctx: MutationCtx,
+  args: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    draft: RestAiPhotoItemDraft;
+    photoId: Id<"itemPhotos">;
+    now: number;
+  }
+) {
+  const name = normalizeItemName(args.draft.name);
+  const itemId = await ctx.db.insert("items", {
+    householdId: args.auth.householdId,
+    moveId: args.moveId,
+    name,
+    normalizedName: normalizedSearchName(name),
+    description: normalizeOptionalText(args.draft.description),
+    room: normalizeOptionalText(args.draft.room),
+    category: normalizeOptionalText(args.draft.category),
+    disposition: args.draft.disposition,
+    status: "active",
+    quantity: positiveNumber(args.draft.quantity) ?? 1,
+    condition: "unknown",
+    weightConfidence: "none",
+    volumeConfidence: "none",
+    fragility: args.draft.fragility ?? "low",
+    stackable: true,
+    hazardousFlag: false,
+    highValue: args.draft.highValue ?? false,
+    requiresPersonalTransport:
+      args.draft.disposition === "personalTransport" ||
+      args.draft.planningDefaultKeys?.includes("sensitive") === true,
+    planningDefaultKeys: args.draft.planningDefaultKeys ?? [],
+    needsReview: false,
+    reviewFlags: [],
+    aiSummary: `Approved from photo intake ${args.photoId}.`,
+    aiTags: ["photoIntake"],
+    createdVia: "photoAI",
+    reviewedAt: args.now,
+    createdByUserId: args.auth.createdByUserId,
+    updatedByUserId: args.auth.createdByUserId,
+    createdAt: args.now,
+    updatedAt: args.now,
+  });
+  await auditApiWrite(
+    ctx,
+    args.auth,
+    args.moveId,
+    "item.api_created_from_ai_photo",
+    "items",
+    itemId,
+    { photoId: args.photoId, name }
+  );
+  return itemId;
+}
+
+async function createApiBoxFromAiPhotoDraft(
+  ctx: MutationCtx,
+  args: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    draft: RestAiPhotoBoxDraft;
+    now: number;
+  }
+) {
+  const label = normalizeOptionalText(args.draft.label) ?? "AI photo box";
+  const code = await uniqueApiAiBoxCode(
+    ctx,
+    args.moveId,
+    args.draft.code ?? label,
+    "AI-PHOTO-BOX"
+  );
+  const boxId = await ctx.db.insert("boxes", {
+    householdId: args.auth.householdId,
+    moveId: args.moveId,
+    code,
+    label,
+    room: normalizeOptionalText(args.draft.room),
+    description: normalizeOptionalText(args.draft.description),
+    status: "open",
+    assignmentLocked: false,
+    assignmentWarnings: [],
+    assignmentHardBlocks: [],
+    assignmentValidatedAt: args.now,
+    createdByUserId: args.auth.createdByUserId,
+    createdAt: args.now,
+    updatedAt: args.now,
+  });
+  await auditApiWrite(
+    ctx,
+    args.auth,
+    args.moveId,
+    "box.api_created_from_ai_photo",
+    "boxes",
+    boxId,
+    { code, label }
+  );
+  return boxId;
+}
+
+async function findApiAiBoxByLabel(
+  ctx: MutationCtx,
+  moveId: Id<"moves">,
+  label: string
+) {
+  const normalizedLabel = normalizeApiAiBoxLabelKey(label);
+  const boxes = await ctx.db
+    .query("boxes")
+    .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
+    .collect();
+  return (
+    boxes.find(
+      (box) =>
+        !box.archivedAt &&
+        (normalizeApiAiBoxLabelKey(box.label ?? "") === normalizedLabel ||
+          normalizeApiAiBoxLabelKey(box.code) === normalizedLabel)
+    ) ?? null
+  );
+}
+
+async function uniqueApiAiBoxCode(
+  ctx: MutationCtx,
+  moveId: Id<"moves">,
+  label: string,
+  fallback: string
+) {
+  const base = normalizeBoxCode(label) || fallback;
+  const boxes = await ctx.db
+    .query("boxes")
+    .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
+    .collect();
+  const codes = new Set(boxes.map((box) => box.code));
+  if (!codes.has(base)) return base;
+  for (let index = 2; index < 1000; index += 1) {
+    const code = normalizeBoxCode(`${base}-${index}`);
+    if (code && !codes.has(code)) return code;
+  }
+  throw new Error("Could not create a unique box code.");
+}
+
+function parseAiTextApprovals(body: unknown) {
+  const input = bodyObject(body);
+  const rows = Array.isArray(input.approvals) ? input.approvals : [];
+  assertAiReviewBatchSize(rows, "AI text suggestion approvals");
+  const approvals = rows.map((row) => {
+    const approval = bodyObject(row);
+    const suggestionId = optionalString(approval.suggestionId);
+    if (!suggestionId) {
+      throw new Error("approval.suggestionId is required.");
+    }
+    return {
+      suggestionId: suggestionId as Id<"aiTextSuggestions">,
+      itemDraft: parseApiAiTextItemDraft(approval.itemDraft, "approval.itemDraft"),
+      boxDraft: parseApiAiTextBoxDraft(approval.boxDraft, "approval.boxDraft"),
+    };
+  });
+  assertUniqueReviewIds(
+    approvals.map((approval) => approval.suggestionId),
+    "Duplicate AI text suggestion approval."
+  );
+  return { dryRun: Boolean(input.dryRun), approvals };
+}
+
+function parseAiPhotoApprovals(body: unknown) {
+  const input = bodyObject(body);
+  const rows = Array.isArray(input.approvals) ? input.approvals : [];
+  assertAiReviewBatchSize(rows, "AI photo suggestion approvals");
+  const approvals = rows.map((row) => {
+    const approval = bodyObject(row);
+    const suggestionId = optionalString(approval.suggestionId);
+    if (!suggestionId) {
+      throw new Error("approval.suggestionId is required.");
+    }
+    return {
+      suggestionId: suggestionId as Id<"aiPhotoSuggestions">,
+      itemDraft: parseApiAiPhotoItemDraft(approval.itemDraft, "approval.itemDraft"),
+      boxDraft: parseApiAiPhotoBoxDraft(approval.boxDraft, "approval.boxDraft"),
+    };
+  });
+  assertUniqueReviewIds(
+    approvals.map((approval) => approval.suggestionId),
+    "Duplicate AI photo suggestion approval."
+  );
+  return { dryRun: Boolean(input.dryRun), approvals };
+}
+
+function parseAiSuggestionIds(value: unknown, label: string) {
+  const ids = parseIdArray(value);
+  assertAiReviewBatchSize(ids, label);
+  assertUniqueReviewIds(ids, `Duplicate ${label} value.`);
+  return ids;
+}
+
+function assertAiReviewBatchSize(rows: unknown[], label: string) {
+  if (!rows.length) {
+    throw new Error(`${label} must include at least one suggestion.`);
+  }
+  if (rows.length > 100) {
+    throw new Error(`${label} are limited to 100 suggestions.`);
+  }
+}
+
+function assertUniqueReviewIds(ids: string[], message: string) {
+  if (new Set(ids).size !== ids.length) {
+    throw new Error(message);
+  }
+}
+
+function parseApiAiTextItemDraft(value: unknown, label: string) {
+  if (value === undefined) return undefined;
+  return parseApiAiItemDraft(value, label, true) as RestAiTextItemDraft;
+}
+
+function parseApiAiPhotoItemDraft(value: unknown, label: string) {
+  if (value === undefined) return undefined;
+  return parseApiAiItemDraft(value, label, false) as RestAiPhotoItemDraft;
+}
+
+function parseApiAiItemDraft(
+  value: unknown,
+  label: string,
+  includeDestinationRoom: boolean
+) {
+  const input = bodyObject(value);
+  const name = normalizeItemName(String(input.name ?? ""));
+  if (!name) {
+    throw new Error(`${label}.name is required.`);
+  }
+  const disposition = parseDisposition(input.disposition) ?? "undecided";
+  return removeUndefined({
+    name,
+    room: normalizeOptionalText(asString(input.room)),
+    destinationRoom: includeDestinationRoom
+      ? normalizeOptionalText(asString(input.destinationRoom))
+      : undefined,
+    category: normalizeOptionalText(asString(input.category)),
+    disposition,
+    quantity: positiveNumber(input.quantity) ?? 1,
+    description: normalizeOptionalText(asString(input.description)),
+    suggestedBoxLabel: normalizeOptionalText(asString(input.suggestedBoxLabel)),
+    fragility: parseItemFragility(input.fragility, `${label}.fragility`),
+    highValue:
+      input.highValue === undefined ? undefined : Boolean(input.highValue),
+    planningDefaultKeys:
+      parseLiteralArray(
+        input.planningDefaultKeys,
+        planningDefaultKeys,
+        `${label}.planningDefaultKeys`
+      ) ?? [],
+  });
+}
+
+function parseApiAiTextBoxDraft(value: unknown, label: string) {
+  if (value === undefined) return undefined;
+  const draft = parseApiAiBoxDraft(value, label, true);
+  return draft as RestAiTextBoxDraft;
+}
+
+function parseApiAiPhotoBoxDraft(value: unknown, label: string) {
+  if (value === undefined) return undefined;
+  const draft = parseApiAiBoxDraft(value, label, false);
+  return draft as RestAiPhotoBoxDraft;
+}
+
+function parseApiAiBoxDraft(
+  value: unknown,
+  label: string,
+  includeDestinationRoom: boolean
+) {
+  const input = bodyObject(value);
+  const draftLabel = normalizeOptionalText(asString(input.label));
+  if (!draftLabel) {
+    throw new Error(`${label}.label is required.`);
+  }
+  return removeUndefined({
+    code:
+      input.code === undefined
+        ? undefined
+        : normalizeBoxCode(String(input.code)) || undefined,
+    label: draftLabel,
+    room: normalizeOptionalText(asString(input.room)),
+    destinationRoom: includeDestinationRoom
+      ? normalizeOptionalText(asString(input.destinationRoom))
+      : undefined,
+    description: normalizeOptionalText(asString(input.description)),
+  });
+}
+
+function normalizeApiAiTextItemDraft(
+  draft: RestAiTextItemDraft | undefined
+): RestAiTextItemDraft | undefined {
+  if (!draft?.name.trim()) return undefined;
+  return {
+    name: normalizeItemName(draft.name),
+    room: normalizeOptionalText(draft.room),
+    destinationRoom: normalizeOptionalText(draft.destinationRoom),
+    category: normalizeOptionalText(draft.category),
+    disposition: draft.disposition,
+    quantity: positiveNumber(draft.quantity) ?? 1,
+    description: normalizeOptionalText(draft.description),
+    suggestedBoxLabel: normalizeOptionalText(draft.suggestedBoxLabel),
+    fragility: draft.fragility,
+    highValue: draft.highValue,
+    planningDefaultKeys: draft.planningDefaultKeys ?? [],
+  };
+}
+
+function normalizeApiAiTextBoxDraft(
+  draft: RestAiTextBoxDraft | undefined
+): RestAiTextBoxDraft | undefined {
+  if (!draft?.label.trim()) return undefined;
+  return {
+    code: draft.code ? normalizeBoxCode(draft.code) : undefined,
+    label: normalizeOptionalText(draft.label) ?? "AI text intake box",
+    room: normalizeOptionalText(draft.room),
+    destinationRoom: normalizeOptionalText(draft.destinationRoom),
+    description: normalizeOptionalText(draft.description),
+  };
+}
+
+function normalizeApiAiPhotoItemDraft(
+  draft: RestAiPhotoItemDraft | undefined
+): RestAiPhotoItemDraft | undefined {
+  if (!draft?.name.trim()) return undefined;
+  return {
+    name: normalizeItemName(draft.name),
+    room: normalizeOptionalText(draft.room),
+    category: normalizeOptionalText(draft.category),
+    disposition: draft.disposition,
+    quantity: positiveNumber(draft.quantity) ?? 1,
+    description: normalizeOptionalText(draft.description),
+    suggestedBoxLabel: normalizeOptionalText(draft.suggestedBoxLabel),
+    fragility: draft.fragility,
+    highValue: draft.highValue,
+    planningDefaultKeys: draft.planningDefaultKeys ?? [],
+  };
+}
+
+function normalizeApiAiPhotoBoxDraft(
+  draft: RestAiPhotoBoxDraft | undefined
+): RestAiPhotoBoxDraft | undefined {
+  if (!draft?.label.trim()) return undefined;
+  return {
+    code: draft.code ? normalizeBoxCode(draft.code) : undefined,
+    label: normalizeOptionalText(draft.label) ?? "AI photo box",
+    room: normalizeOptionalText(draft.room),
+    description: normalizeOptionalText(draft.description),
+  };
+}
+
+function parseItemFragility(value: unknown, label: string) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(itemFragilities, value)) {
+    throw new Error(`Unsupported ${label}.`);
+  }
+  return value as RestAiTextItemDraft["fragility"];
+}
+
+function normalizeApiAiBoxLabelKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function pushUniqueId<TId extends string>(ids: TId[], id: TId) {
+  if (!ids.includes(id)) ids.push(id);
 }
 
 async function routeDocumentationProfiles(

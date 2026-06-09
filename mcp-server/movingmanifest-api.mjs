@@ -323,6 +323,48 @@ export async function listAiPhotoSuggestions(config, input) {
   });
 }
 
+export async function approveAiTextSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/ai-text-suggestions/approve`,
+    body: {
+      dryRun: input.dryRun,
+      approvals: input.approvals,
+    },
+  });
+}
+
+export async function rejectAiTextSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/ai-text-suggestions/reject`,
+    body: {
+      suggestionIds: input.suggestionIds,
+    },
+  });
+}
+
+export async function approveAiPhotoSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/ai-photo-suggestions/approve`,
+    body: {
+      dryRun: input.dryRun,
+      approvals: input.approvals,
+    },
+  });
+}
+
+export async function rejectAiPhotoSuggestions(config, input) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/ai-photo-suggestions/reject`,
+    body: {
+      suggestionIds: input.suggestionIds,
+    },
+  });
+}
+
 export async function generatePlanningSuggestions(config, input) {
   if (input.dryRun) {
     return {
