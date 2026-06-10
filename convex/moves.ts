@@ -21,6 +21,8 @@ import {
   requireMovePermission,
 } from "./lib/permissions";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
+import { insertTransportResourceFromPreset } from "./transportResources";
+import { transportPresetsForMoveType } from "./lib/transportPresets";
 
 export const listForHousehold = query({
   args: {
@@ -157,6 +159,19 @@ export const create = mutation({
       moveId,
     });
 
+    // Template pre-load: a new move starts with the transport resources its
+    // template suggests, so the load plan is never an empty page.
+    const templatePresets = transportPresetsForMoveType(args.type);
+    for (const [index, presetKey] of templatePresets.entries()) {
+      await insertTransportResourceFromPreset(ctx, {
+        householdId: args.householdId,
+        moveId,
+        presetKey,
+        userId: actor.userId,
+        sortOrder: now + index,
+      });
+    }
+
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId,
@@ -171,6 +186,7 @@ export const create = mutation({
         type: args.type,
         documentationProfileTypes,
         planningDefaultCount: planningDefaultIds.length,
+        templateTransportPresets: templatePresets,
       },
     });
 

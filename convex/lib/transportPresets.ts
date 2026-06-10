@@ -212,3 +212,26 @@ export const transportResourcePresets: Record<
 export function getTransportResourcePreset(key: TransportResourcePresetKey) {
   return transportResourcePresets[key];
 }
+
+// Default transport resources pre-loaded when a move is created from a
+// template, so a new move feels set up instead of empty. Users can archive
+// any of these or add their own.
+export const moveTemplateTransportPresets: Record<
+  string,
+  TransportResourcePresetKey[]
+> = {
+  local: ["boxTruck", "donate", "dump"],
+  longDistance: ["boxTruck", "storageUnit", "donate", "dump"],
+  pcs: ["militaryMovers", "personalVehicle", "donate", "dump"],
+  storage: ["storageUnit"],
+  estate: ["sell", "donate", "dump", "freeGiveaway"],
+  decluttering: ["sell", "donate", "dump", "freeGiveaway"],
+  claimsInventory: [],
+  other: [],
+};
+
+export function transportPresetsForMoveType(
+  moveType: string,
+): TransportResourcePresetKey[] {
+  return moveTemplateTransportPresets[moveType] ?? [];
+}

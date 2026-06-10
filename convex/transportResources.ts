@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { recordAuditEvent } from "./lib/audit";
 import {
   capacityReviewStatusValidator,
@@ -15,7 +16,62 @@ import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
-import { getTransportResourcePreset } from "./lib/transportPresets";
+import {
+  getTransportResourcePreset,
+  type TransportResourcePresetKey,
+} from "./lib/transportPresets";
+
+// Shared by the createFromPreset mutation and template pre-loading in
+// moves.create. Caller is responsible for permission checks.
+export async function insertTransportResourceFromPreset(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    presetKey: TransportResourcePresetKey;
+    userId: Id<"users">;
+    name?: string;
+    capacity?: Doc<"transportResources">["capacity"];
+    sortOrder?: number;
+  },
+) {
+  const preset = getTransportResourcePreset(args.presetKey);
+  const now = Date.now();
+  const resourceId = await ctx.db.insert("transportResources", {
+    householdId: args.householdId,
+    moveId: args.moveId,
+    type: preset.type,
+    name: normalizeOptionalText(args.name) ?? preset.name,
+    description: preset.description,
+    capacity: args.capacity ?? preset.capacity,
+    capacityReviewStatus: "unreviewed",
+    rules: normalizeRuleList(preset.rules),
+    sortOrder: args.sortOrder ?? now,
+    createdByUserId: args.userId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const zoneIds = [];
+  for (const [index, zone] of preset.zones.entries()) {
+    const zoneId = await ctx.db.insert("transportZones", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      resourceId,
+      name: zone.name,
+      description: zone.description,
+      capacity: {},
+      preferredTags: normalizeRuleList(zone.preferredTags ?? []),
+      sortOrder: (args.sortOrder ?? now) + index,
+      createdByUserId: args.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    zoneIds.push(zoneId);
+  }
+
+  return { resourceId, zoneIds, preset };
+}
 
 export const listForMove = query({
   args: {
@@ -147,40 +203,15 @@ export const createFromPreset = mutation({
       throw new Error(directConvexUserContextRequiredMessage);
     }
 
-    const preset = getTransportResourcePreset(args.presetKey);
-    const now = Date.now();
-    const resourceId = await ctx.db.insert("transportResources", {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      type: preset.type,
-      name: normalizeOptionalText(args.name) ?? preset.name,
-      description: preset.description,
-      capacity: args.capacity ?? preset.capacity,
-      capacityReviewStatus: "unreviewed",
-      rules: normalizeRuleList(preset.rules),
-      sortOrder: now,
-      createdByUserId: actor.userId,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const zoneIds = [];
-    for (const [index, zone] of preset.zones.entries()) {
-      const zoneId = await ctx.db.insert("transportZones", {
+    const { resourceId, zoneIds, preset } =
+      await insertTransportResourceFromPreset(ctx, {
         householdId: args.householdId,
         moveId: args.moveId,
-        resourceId,
-        name: zone.name,
-        description: zone.description,
-        capacity: {},
-        preferredTags: normalizeRuleList(zone.preferredTags ?? []),
-        sortOrder: now + index,
-        createdByUserId: actor.userId,
-        createdAt: now,
-        updatedAt: now,
+        presetKey: args.presetKey,
+        userId: actor.userId,
+        name: args.name,
+        capacity: args.capacity,
       });
-      zoneIds.push(zoneId);
-    }
 
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
