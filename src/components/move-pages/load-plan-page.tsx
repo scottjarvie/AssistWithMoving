@@ -19,6 +19,7 @@ export function LoadPlanWorkspacePage() {
         householdId={householdId}
         moveId={moveId}
         moveTitle={selectedMove?.title}
+        moveType={selectedMove?.type}
       />
       <LoadPlannerBoard householdId={householdId} moveId={moveId} />
       <AiPlanningSuggestions householdId={householdId} moveId={moveId} />

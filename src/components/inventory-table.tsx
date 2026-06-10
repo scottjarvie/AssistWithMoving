@@ -362,7 +362,7 @@ export function InventoryTable({
               <SignalBadge
                 label={`evidence ${evidencePhotoCount}`}
                 active={evidencePhotoCount > 0}
-                title={`${evidencePhotoCount} claim, condition, serial, receipt, mover, or PCS evidence photos are attached.`}
+                title={`${evidencePhotoCount} claim, condition, serial, receipt, or handoff evidence photos are attached.`}
               />
               <SignalBadge
                 label={`boxes ${boxCount}`}

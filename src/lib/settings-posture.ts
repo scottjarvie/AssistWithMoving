@@ -103,7 +103,7 @@ export function buildSettingsPosture({
       label: "Packet Privacy",
       value: packetsEnabled ? "Scoped" : "Disabled",
       detail: packetsEnabled
-        ? "Mover, PCS, employer, claims, and share packets default to scoped visibility."
+        ? "Mover, employer, claims, and share packets default to scoped visibility."
         : "Documentation packet surfaces are hidden by feature flag.",
       tone: packetsEnabled ? "ready" : "attention",
     },

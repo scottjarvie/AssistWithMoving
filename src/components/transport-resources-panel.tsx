@@ -25,11 +25,17 @@ export function TransportResourcesPanel({
   householdId,
   moveId,
   moveTitle,
+  moveType,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   moveTitle?: string;
+  moveType?: string;
 }) {
+  // Military presets only surface for moves using the Military PCS template.
+  const presetOptions = transportResourcePresetOptions.filter(
+    ([key]) => key !== "militaryMovers" || moveType === "pcs"
+  );
   const resourcesWithZones = useQuery(
     api.transportResources.listForMoveWithZones,
     householdId && moveId ? { householdId, moveId } : "skip"
@@ -113,7 +119,7 @@ export function TransportResourcesPanel({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {transportResourcePresetOptions.map(([key, label, detail]) => (
+            {presetOptions.map(([key, label, detail]) => (
               <Button
                 key={key}
                 type="button"

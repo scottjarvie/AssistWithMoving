@@ -102,7 +102,7 @@ export function MovePeopleManager({
               Move contacts
             </CardTitle>
             <CardDescription>
-              Track household helpers, movers, PCS offices, employer contacts,
+              Track household helpers, movers, offices, employer contacts,
               adjusters, storage, and pickup coordination.
             </CardDescription>
           </div>

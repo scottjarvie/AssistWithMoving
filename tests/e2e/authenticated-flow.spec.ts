@@ -185,7 +185,7 @@ test.describe("authenticated product flow", () => {
 
     await expect(page.getByLabel("Move title")).toBeEnabled({ timeout: 30_000 });
     await page.getByLabel("Move title").fill(moveTitle);
-    await page.getByLabel("Move type").selectOption("pcs");
+    await page.getByLabel("Move template").selectOption("pcs");
     await page.getByLabel("Military branch").selectOption("army");
     await page.getByLabel("PCS shipment type").selectOption("ppm");
     await page.getByLabel("Rank or pay grade").fill("E-6");

@@ -130,7 +130,7 @@ export function AiJobMonitor({
         provider: "openai",
         model: providerStatus.openai.defaultModel,
         inputSummary:
-          "Review current move records for missing assignment, evidence, capacity, PCS, privacy, and packet readiness signals.",
+          "Review current move records for missing assignment, evidence, capacity, privacy, and packet readiness signals.",
         inputRef: {
           source: "dashboard",
           scope: "move-readiness",

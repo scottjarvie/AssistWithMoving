@@ -26,6 +26,7 @@ export function PacketsWorkspacePage() {
         <DocumentationPacketBuilder
           householdId={householdId}
           moveId={moveId}
+          moveType={selectedMove?.type}
           selectedProfileTypes={selectedMove?.documentationProfileTypes ?? []}
         />
       ) : (

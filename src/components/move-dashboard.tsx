@@ -366,7 +366,7 @@ export function MoveDashboard() {
                 <select
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                   value={moveType}
-                  aria-label="Move type"
+                  aria-label="Move template"
                   onChange={(event) => {
                     const nextMoveType = event.target.value as MoveType;
                     setMoveType(nextMoveType);
@@ -382,6 +382,10 @@ export function MoveDashboard() {
                     </option>
                   ))}
                 </select>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  The template sets wording, suggested packets, and defaults.
+                  Military options only appear with the Military PCS template.
+                </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Input
                     value={origin}
@@ -532,7 +536,11 @@ export function MoveDashboard() {
                     </Badge>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {documentationProfileOptions.map(([value, label]) => (
+                    {documentationProfileOptions
+                      .filter(
+                        ([value]) => value !== "pcsMove" || moveType === "pcs"
+                      )
+                      .map(([value, label]) => (
                       <label
                         key={value}
                         className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"

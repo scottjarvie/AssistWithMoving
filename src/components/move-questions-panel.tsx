@@ -96,7 +96,7 @@ export function MoveQuestionsPanel({
               Questions to resolve
             </CardTitle>
             <CardDescription>
-              Missing details that affect move planning, PCS support packets,
+              Missing details that affect move planning, documentation packets,
               evidence quality, and load readiness.
             </CardDescription>
           </div>
@@ -219,7 +219,7 @@ export function MoveQuestionsPanel({
                   aria-hidden="true"
                 />
                 <p className="text-muted-foreground">
-                  PCS and claim-related prompts use user-entered fields and
+                  Template- and claim-related prompts use user-entered fields and
                   should be verified against current official guidance before
                   documents are relied on.
                 </p>

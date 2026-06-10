@@ -145,12 +145,18 @@ const profileLabel = new Map(documentationProfileOptions);
 export function DocumentationPacketBuilder({
   householdId,
   moveId,
+  moveType,
   selectedProfileTypes,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
+  moveType?: string;
   selectedProfileTypes: DocumentationProfileType[];
 }) {
+  // The PCS profile type is only offered on Military PCS template moves.
+  const profileTypeOptions = documentationProfileOptions.filter(
+    ([value]) => value !== "pcsMove" || moveType === "pcs"
+  );
   const profiles = useQuery(
     api.documentationProfiles.listForMove,
     householdId && moveId ? { householdId, moveId } : "skip"
@@ -171,7 +177,7 @@ export function DocumentationPacketBuilder({
   const createCsvExport = useMutation(api.exports.createCsv);
 
   const [profileType, setProfileType] =
-    useState<DocumentationProfileType>("pcsMove");
+    useState<DocumentationProfileType>("movingCompany");
   const [selectedProfileId, setSelectedProfileId] =
     useState<Id<"documentationProfiles"> | null>(null);
   const [draftProfileId, setDraftProfileId] =
@@ -498,7 +504,7 @@ export function DocumentationPacketBuilder({
               setProfileType(event.target.value as DocumentationProfileType)
             }
           >
-            {documentationProfileOptions.map(([value, label]) => (
+            {profileTypeOptions.map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>

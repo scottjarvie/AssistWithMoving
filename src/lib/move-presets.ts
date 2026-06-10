@@ -1,10 +1,13 @@
+// Move templates: each choice tunes wording, suggested packets, and defaults.
+// The neutral options lead; Military PCS is one template among several and is
+// the only place military terminology may surface.
 export const moveTypeOptions = [
-  ["pcs", "Military PCS"],
   ["local", "Local move"],
   ["longDistance", "Long-distance"],
   ["storage", "Storage inventory"],
   ["estate", "Estate / cleanout"],
   ["decluttering", "Decluttering"],
+  ["pcs", "Military PCS"],
   ["claimsInventory", "Claims inventory"],
   ["other", "Other"],
 ] as const;
