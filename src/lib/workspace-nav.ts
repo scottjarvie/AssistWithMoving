@@ -6,7 +6,13 @@ export function workspaceBasePathFromPathname(pathname: string) {
   return "/app/dashboard";
 }
 
+// Sections are real pages under the selected move. Outside a move workspace
+// there is no section to open, so links fall back to the dashboard where the
+// user creates or picks a move.
 export function workspaceNavHref(pathname: string, section?: string) {
   const basePath = workspaceBasePathFromPathname(pathname);
-  return section ? `${basePath}#${section}` : basePath;
+  if (!section || basePath === "/app/dashboard") {
+    return basePath;
+  }
+  return `${basePath}/${section}`;
 }

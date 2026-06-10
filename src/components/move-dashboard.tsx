@@ -1,15 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useUser } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
+import { useMutation } from "convex/react";
 import {
-  Archive,
   ArrowRight,
   CalendarDays,
-  CheckCircle2,
   ClipboardList,
   FileStack,
   Home,
@@ -21,28 +18,8 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { AiJobMonitor } from "@/components/ai-job-monitor";
-import { AiPhotoIntake } from "@/components/ai-photo-intake";
-import { AiPlanningSuggestions } from "@/components/ai-planning-suggestions";
-import { AiReviewQueue } from "@/components/ai-review-queue";
-import { AiTextIntake } from "@/components/ai-text-intake";
-import { BoxManager } from "@/components/box-manager";
-import { ClaimsCenterPanel } from "@/components/claims-center-panel";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
-import { DispositionPipelinePanel } from "@/components/disposition-pipeline-panel";
-import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
-import { EvidenceDensityPanel } from "@/components/evidence-density-panel";
-import { EstimateSummary } from "@/components/estimate-summary";
-import { FeatureUnavailable } from "@/components/feature-unavailable";
-import { InventoryDuplicateReview } from "@/components/inventory-duplicate-review";
-import { InventoryTable } from "@/components/inventory-table";
-import { LoadPlannerBoard } from "@/components/load-planner-board";
-import { MoveDayView } from "@/components/move-day-view";
-import { MovePeopleManager } from "@/components/move-people-manager";
-import { MoveQuestionsPanel } from "@/components/move-questions-panel";
-import { PackingDebtDashboard } from "@/components/packing-debt-dashboard";
-import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
-import { RoomWalkIntake } from "@/components/room-walk-intake";
+import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,50 +53,34 @@ import {
   type PcsDependentStatus,
   type PcsShipmentType,
 } from "@/lib/move-presets";
-import {
-  transportResourcePresetOptions,
-  type TransportResourcePresetKey,
-} from "@/lib/transport-presets";
-import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
 import { moveWorkspacePath } from "@/lib/move-links";
 
-export function MoveDashboard({
-  initialMoveId,
-}: {
-  initialMoveId?: string | null;
-} = {}) {
-  const pathname = usePathname();
+const DEFAULT_MOVE_TYPE: MoveType = "local";
+
+export function MoveDashboard() {
   const router = useRouter();
-  const { user } = useUser();
-  const currentUser = useQuery(api.users.current);
-  const upsertCurrentUser = useMutation(api.users.upsertCurrent);
-  const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
+  const {
+    householdId,
+    selectHousehold,
+    households,
+    activeMoves,
+    moveId,
+    selectMove,
+    loadingIdentity,
+    loadingHouseholds,
+    loadingMoves,
+    moveLinkMessage,
+  } = useMoveWorkspace();
+
   const createHousehold = useMutation(api.households.create);
-  const featureFlags = useQuery(api.featureFlags.effective, {}) as
-    | EffectiveFeatureFlag[]
-    | undefined;
   const createMove = useMutation(api.moves.create);
-  const createTransportResourceFromPreset = useMutation(
-    api.transportResources.createFromPreset
-  );
-  const updateTransportResourceCapacityReview = useMutation(
-    api.transportResources.updateCapacityReview
-  );
-  const ensurePlanningDefaults = useMutation(
-    api.movePlanningDefaults.ensureForMove
-  );
 
   const [householdName, setHouseholdName] = useState("My household");
-  const [selectedHouseholdId, setSelectedHouseholdId] =
-    useState<Id<"households"> | null>(null);
-  const [selectedMoveId, setSelectedMoveId] = useState<Id<"moves"> | null>(
-    initialMoveId ? (initialMoveId as Id<"moves">) : null
-  );
   const [moveTitle, setMoveTitle] = useState("");
-  const [moveType, setMoveType] = useState<MoveType>("pcs");
+  const [moveType, setMoveType] = useState<MoveType>(DEFAULT_MOVE_TYPE);
   const [documentationProfileTypes, setDocumentationProfileTypes] = useState<
     DocumentationProfileType[]
-  >(defaultDocumentationProfilesForMoveType("pcs"));
+  >(defaultDocumentationProfilesForMoveType(DEFAULT_MOVE_TYPE));
   const [pcsBranch, setPcsBranch] = useState<PcsBranch | "">("");
   const [pcsShipmentType, setPcsShipmentType] = useState<PcsShipmentType | "">(
     "mixed"
@@ -138,73 +99,10 @@ export function MoveDashboard({
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [saving, setSaving] = useState(false);
-  const [addingPreset, setAddingPreset] =
-    useState<TransportResourcePresetKey | null>(null);
-  const [reviewingResourceId, setReviewingResourceId] =
-    useState<Id<"transportResources"> | null>(null);
-  const [ensuringDefaults, setEnsuringDefaults] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (currentUser || !user) {
-      return;
-    }
-
-    void upsertCurrentUser({
-      email: user.primaryEmailAddress?.emailAddress,
-      name: user.fullName ?? user.username ?? undefined,
-      imageUrl: user.imageUrl,
-    });
-  }, [currentUser, upsertCurrentUser, user]);
-
-  const firstHousehold = households?.[0]?.household;
-  const householdId = selectedHouseholdId ?? firstHousehold?._id ?? null;
-  const moves = useQuery(
-    api.moves.listForHousehold,
-    householdId ? { householdId } : "skip"
-  );
-
-  const activeMoves = useMemo(
-    () => moves?.filter((move) => move.status !== "archived") ?? [],
-    [moves]
-  );
-
-  const firstMove = activeMoves[0];
-  const selectedMoveIsAccessible = selectedMoveId
-    ? activeMoves.some((move) => move._id === selectedMoveId)
-    : false;
-  const moveId = selectedMoveIsAccessible
-    ? selectedMoveId
-    : firstMove?._id ?? null;
-  const selectedMove = activeMoves.find((move) => move._id === moveId);
-  const resourcesWithZones = useQuery(
-    api.transportResources.listForMoveWithZones,
-    householdId && moveId ? { householdId, moveId } : "skip"
-  );
-  const planningDefaults = useQuery(
-    api.movePlanningDefaults.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
-  );
   const selectedPacketCount = documentationProfileTypes.length;
-  const documentationPacketsEnabled = flagEnabled(
-    featureFlags,
-    "documentationPackets",
-    true
-  );
-  const aiPhotoIntakeEnabled = flagEnabled(featureFlags, "aiPhotoIntake", true);
-  const moveLinkMessage =
-    selectedMoveId && moves && !selectedMoveIsAccessible
-      ? "That move link is not available in this household."
-      : null;
   const statusMessage = moveLinkMessage ?? message;
-
-  useEffect(() => {
-    if (selectedMoveId && moves && !selectedMoveIsAccessible) {
-      if (pathname.startsWith("/app/moves/") && firstMove?._id) {
-        router.replace(moveWorkspacePath(firstMove._id));
-      }
-    }
-  }, [firstMove?._id, moves, pathname, router, selectedMoveId, selectedMoveIsAccessible]);
 
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -218,7 +116,7 @@ export function MoveDashboard({
 
     try {
       const id = await createHousehold({ name: nextHouseholdName });
-      setSelectedHouseholdId(id);
+      selectHousehold(id);
       setHouseholdName("My household");
       setMessage("Household created.");
     } catch {
@@ -274,10 +172,11 @@ export function MoveDashboard({
       setMoveTitle("");
       setOrigin("");
       setDestination("");
-      setSelectedMoveId(id);
+      selectMove(id);
       setPcsOrdersNumber("");
       setMoveLevelWeightAllowanceLb("");
       setMessage("Move created.");
+      router.push(moveWorkspacePath(id));
     } catch {
       setMessage("Could not create the move yet.");
     } finally {
@@ -285,100 +184,19 @@ export function MoveDashboard({
     }
   }
 
-  async function handleAddResourcePreset(presetKey: TransportResourcePresetKey) {
-    if (!householdId || !moveId) {
-      return;
-    }
-
-    setAddingPreset(presetKey);
-    setMessage(null);
-
-    try {
-      await createTransportResourceFromPreset({
-        householdId,
-        moveId,
-        presetKey,
-      });
-      setMessage("Resource preset added.");
-    } catch {
-      setMessage("Could not add that resource preset yet.");
-    } finally {
-      setAddingPreset(null);
-    }
-  }
-
-  async function handleCapacityReview(
-    resourceId: Id<"transportResources">,
-    status: "estimated" | "confirmed"
-  ) {
-    if (!householdId || !moveId) {
-      return;
-    }
-
-    setReviewingResourceId(resourceId);
-    setMessage(null);
-
-    try {
-      await updateTransportResourceCapacityReview({
-        householdId,
-        moveId,
-        resourceId,
-        status,
-      });
-      setMessage(
-        status === "confirmed"
-          ? "Resource capacity marked as confirmed."
-          : "Resource capacity marked as estimated."
-      );
-    } catch {
-      setMessage("Could not update that resource capacity review yet.");
-    } finally {
-      setReviewingResourceId(null);
-    }
-  }
-
-  async function handleEnsurePlanningDefaults() {
-    if (!householdId || !moveId) {
-      return;
-    }
-
-    setEnsuringDefaults(true);
-    setMessage(null);
-
-    try {
-      const insertedIds = await ensurePlanningDefaults({ householdId, moveId });
-      setMessage(
-        insertedIds.length
-          ? "Planning defaults added."
-          : "Planning defaults already exist."
-      );
-    } catch {
-      setMessage("Could not add planning defaults yet.");
-    } finally {
-      setEnsuringDefaults(false);
-    }
-  }
-
-  const loadingIdentity = currentUser === undefined;
-  const loadingHouseholds = currentUser && households === undefined;
-  const loadingMoves = householdId && moves === undefined;
-  const loadingResources = moveId && resourcesWithZones === undefined;
-  const loadingPlanningDefaults = moveId && planningDefaults === undefined;
-
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rounded-lg border border-border bg-card p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <Badge variant="secondary">Phase 2 setup</Badge>
-              <h2 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
-                Move command center
+              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                Dashboard
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-                Start a real move record, define the household context, then add
-                resources, zones, inventory, photos, and documentation packets
-                from the same permission-checked backend.
+                Create your household, start a move, then open its workspace to
+                manage inventory, boxes, photos, the load plan, move day, and
+                documentation packets.
               </p>
             </div>
             <Badge>
@@ -404,17 +222,33 @@ export function MoveDashboard({
           note="you can access"
         />
         <Metric
-          label="Resources"
-          value={resourcesWithZones?.length ?? 0}
-          icon={Archive}
-          note="selected move"
-        />
-        <Metric
-          label="Packets"
+          label="Packet profiles"
           value={documentationProfileOptions.length}
           icon={FileStack}
-          note="profile types"
+          note="recipient types"
         />
+        <Card>
+          <CardHeader className="space-y-0 pb-2">
+            <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
+              Workspace
+              <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {moveId ? (
+              <Button asChild size="sm" className="mt-1">
+                <Link href={moveWorkspacePath(moveId)}>
+                  Open selected move
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </Button>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Create a move to unlock its workspace pages.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -442,9 +276,7 @@ export function MoveDashboard({
                     value={householdId ?? ""}
                     aria-label="Selected household"
                     onChange={(event) =>
-                      setSelectedHouseholdId(
-                        event.target.value as Id<"households">
-                      )
+                      selectHousehold(event.target.value as Id<"households">)
                     }
                   >
                     {households.map(({ household, role }) => (
@@ -480,6 +312,10 @@ export function MoveDashboard({
                 </>
               ) : (
                 <form className="space-y-3" onSubmit={handleCreateHousehold}>
+                  <p className="rounded-md border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground">
+                    Start here: create your household. It is the permission
+                    boundary that moves, inventory, and packets belong to.
+                  </p>
                   <Input
                     value={householdName}
                     onChange={(event) => setHouseholdName(event.target.value)}
@@ -510,6 +346,15 @@ export function MoveDashboard({
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {!householdId && !loadingIdentity && !loadingHouseholds ? (
+                <p
+                  className="mb-3 rounded-md border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground"
+                  role="status"
+                >
+                  Create a household first — these fields unlock once one
+                  exists.
+                </p>
+              ) : null}
               <form className="space-y-3" onSubmit={handleCreateMove}>
                 <Input
                   value={moveTitle}
@@ -519,7 +364,7 @@ export function MoveDashboard({
                   disabled={!householdId}
                 />
                 <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                   value={moveType}
                   aria-label="Move type"
                   onChange={(event) => {
@@ -565,7 +410,7 @@ export function MoveDashboard({
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                         value={pcsBranch}
                         aria-label="Military branch"
                         onChange={(event) =>
@@ -581,7 +426,7 @@ export function MoveDashboard({
                         ))}
                       </select>
                       <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                         value={pcsShipmentType}
                         aria-label="PCS shipment type"
                         onChange={(event) =>
@@ -607,7 +452,7 @@ export function MoveDashboard({
                         disabled={!householdId}
                       />
                       <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                         value={pcsDependentStatus}
                         aria-label="PCS dependent status"
                         onChange={(event) =>
@@ -744,7 +589,8 @@ export function MoveDashboard({
               Active moves
             </CardTitle>
             <CardDescription>
-              Real Convex records from the selected household.
+              Open a move to work in its inventory, boxes, photos, load plan,
+              move day, packets, and AI review pages.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -755,65 +601,45 @@ export function MoveDashboard({
                 <Skeleton className="h-10 w-3/4" />
               </div>
             ) : activeMoves.length ? (
-              <div className="space-y-3">
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={moveId ?? ""}
-                  aria-label="Selected move"
-                  onChange={(event) => {
-                    const nextMoveId = event.target.value as Id<"moves">;
-                    setSelectedMoveId(nextMoveId);
-                    if (pathname.startsWith("/app/moves/")) {
-                      router.replace(moveWorkspacePath(nextMoveId));
-                    }
-                  }}
-                >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Move</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Profiles</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Route</TableHead>
+                    <TableHead className="text-right">Workspace</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {activeMoves.map((move) => (
-                    <option key={move._id} value={move._id}>
-                      {move.title}
-                    </option>
-                  ))}
-                </select>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Move</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Profiles</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Route</TableHead>
-                      <TableHead className="text-right">Workspace</TableHead>
+                    <TableRow key={move._id}>
+                      <TableCell className="font-medium">{move.title}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{move.type}</Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {move.documentationProfileTypes?.length ?? 0}
+                      </TableCell>
+                      <TableCell>{move.status}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {[move.origin, move.destination]
+                          .filter(Boolean)
+                          .join(" -> ") || "not set"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={moveWorkspacePath(move._id)}>
+                            Open
+                            <ArrowRight aria-hidden="true" />
+                          </Link>
+                        </Button>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activeMoves.map((move) => (
-                      <TableRow key={move._id}>
-                        <TableCell className="font-medium">{move.title}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{move.type}</Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {move.documentationProfileTypes?.length ?? 0}
-                        </TableCell>
-                        <TableCell>{move.status}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {[move.origin, move.destination]
-                            .filter(Boolean)
-                            .join(" -> ") || "not set"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild size="sm" variant="outline">
-                            <Link href={moveWorkspacePath(move._id)}>
-                              Open
-                              <ArrowRight aria-hidden="true" />
-                            </Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
               <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
                 Create the first move to unlock resources, zones, inventory, AI
@@ -823,368 +649,8 @@ export function MoveDashboard({
           </CardContent>
         </Card>
       </section>
-
-      <MovePeopleManager householdId={householdId} moveId={moveId} />
-
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card id="transport-resources">
-          <CardHeader>
-            <CardTitle>Transport resources</CardTitle>
-            <CardDescription>
-              Presets create useful default zones for{" "}
-              {selectedMove?.title ?? "the selected move"}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {transportResourcePresetOptions.map(([key, label, detail]) => (
-                <Button
-                  key={key}
-                  type="button"
-                  variant="outline"
-                  className="h-auto justify-start whitespace-normal p-3 text-left"
-                  disabled={!moveId || addingPreset !== null}
-                  onClick={() => void handleAddResourcePreset(key)}
-                >
-                  <span>
-                    <span className="block text-sm font-medium">{label}</span>
-                    <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                      {detail}
-                    </span>
-                  </span>
-                </Button>
-              ))}
-            </div>
-
-            {loadingResources ? (
-              <div className="space-y-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-4/5" />
-              </div>
-            ) : resourcesWithZones?.length ? (
-              <div className="grid gap-3 xl:grid-cols-2">
-                {resourcesWithZones.map(({ resource, zones }) => (
-                  <div
-                    key={resource._id}
-                    className="rounded-md border border-border p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{resource.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {resource.description ?? resource.type}
-                        </p>
-                      </div>
-                      <Badge variant="outline">{resource.type}</Badge>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {zones.map((zone) => (
-                        <Badge key={zone._id} variant="secondary">
-                          {zone.name}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          resource.capacityReviewStatus === "confirmed"
-                            ? "secondary"
-                            : "outline"
-                        }
-                      >
-                        {capacityReviewLabel(resource.capacityReviewStatus)}
-                      </Badge>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={reviewingResourceId === resource._id}
-                        onClick={() =>
-                          void handleCapacityReview(resource._id, "estimated")
-                        }
-                      >
-                        Estimated
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={reviewingResourceId === resource._id}
-                        onClick={() =>
-                          void handleCapacityReview(resource._id, "confirmed")
-                        }
-                      >
-                        <CheckCircle2 aria-hidden="true" />
-                        Confirmed
-                      </Button>
-                    </div>
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      {resource.rules.length
-                        ? resource.rules.join(" · ")
-                        : "No resource rules yet"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Add trucks, trailers, movers, storage, sell/donate/dump/free,
-                or unknown resources to start the load plan.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card id="capacity-posture">
-          <CardHeader>
-            <CardTitle>Capacity posture</CardTitle>
-            <CardDescription>
-              Resource caps are planning limits, while PCS allowances stay on
-              the move.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              Trucks and trailers get weight/volume defaults. Mover, storage,
-              sell, donate, dump, free, and unknown buckets can be unlimited for
-              app planning.
-            </p>
-            <p>
-              Capacity warnings become meaningful after inventory, boxes, and
-              assignments land.
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <RoomWalkIntake householdId={householdId} moveId={moveId} />
-
-      <section id="inventory">
-        <InventoryTable householdId={householdId} moveId={moveId} />
-      </section>
-
-      <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
-
-      <MoveQuestionsPanel householdId={householdId} moveId={moveId} />
-
-      <PackingDebtDashboard householdId={householdId} moveId={moveId} />
-
-      <DispositionPipelinePanel householdId={householdId} moveId={moveId} />
-
-      <EvidenceDensityPanel householdId={householdId} moveId={moveId} />
-
-      <ClaimsCenterPanel householdId={householdId} moveId={moveId} />
-
-      <EstimateSummary householdId={householdId} moveId={moveId} />
-
-      <AiPlanningSuggestions householdId={householdId} moveId={moveId} />
-
-      <LoadPlannerBoard householdId={householdId} moveId={moveId} />
-
-      <MoveDayView householdId={householdId} moveId={moveId} />
-
-      {documentationPacketsEnabled ? (
-        <DocumentationPacketBuilder
-          householdId={householdId}
-          moveId={moveId}
-          selectedProfileTypes={selectedMove?.documentationProfileTypes ?? []}
-        />
-      ) : (
-        <FeatureUnavailable
-          title="Documentation packets disabled"
-          description="PCS, mover, employer, claim, load-plan, and sub-manifest packets are currently hidden by rollout controls."
-        />
-      )}
-
-      <section>
-        <BoxManager householdId={householdId} moveId={moveId} />
-      </section>
-
-      <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
-
-      <AiReviewQueue householdId={householdId} moveId={moveId} />
-
-      {aiPhotoIntakeEnabled ? (
-        <AiPhotoIntake householdId={householdId} moveId={moveId} />
-      ) : (
-        <FeatureUnavailable
-          title="AI photo intake disabled"
-          description="Photo-based AI suggestions are currently hidden by rollout controls. Existing photo review remains available."
-        />
-      )}
-
-      <AiTextIntake householdId={householdId} moveId={moveId} />
-
-      <AiJobMonitor householdId={householdId} moveId={moveId} />
-
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle>Planning defaults</CardTitle>
-                <CardDescription>
-                  These tags steer personal transport, evidence, packet
-                  visibility, and later AI/load suggestions.
-                </CardDescription>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!moveId || ensuringDefaults}
-                onClick={() => void handleEnsurePlanningDefaults()}
-              >
-                <Plus aria-hidden="true" />
-                Ensure
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingPlanningDefaults ? (
-              <div className="space-y-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-5/6" />
-              </div>
-            ) : planningDefaults?.length ? (
-              <div className="grid gap-3 xl:grid-cols-2">
-                {planningDefaults.map((defaultRecord) => (
-                  <div
-                    key={defaultRecord._id}
-                    className="rounded-md border border-border p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {defaultRecord.label}
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          {defaultRecord.description}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={
-                          defaultRecord.sensitiveByDefault
-                            ? "secondary"
-                            : "outline"
-                        }
-                      >
-                        {defaultRecord.handling}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {defaultRecord.recommendedResourceTypes.map((type) => (
-                        <Badge key={type} variant="outline">
-                          {type}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Add first-night, personal transport, high-value, document,
-                medication, electronics, fragile, sensitive, and restricted
-                review defaults for the selected move.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Privacy posture</CardTitle>
-            <CardDescription>
-              Sensitive defaults hide fields from helper and mover-safe views.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              Values, serials, private notes, and sensitive photos stay out of
-              helper/mover packets unless an owner explicitly changes the
-              packet.
-            </p>
-            <p>
-              AI suggestions should use these defaults as hints, not automatic
-              trusted decisions.
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup pipeline</CardTitle>
-            <CardDescription>
-              The next records are resources, zones, inventory, photos, and
-              packets.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Surface</TableHead>
-                  <TableHead>Backend status</TableHead>
-                  <TableHead className="text-right">Next issue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {[
-                  ["Moves", "schema and basic create/list are live", "MOVE-11"],
-                  ["PCS presets", "structured fields and profiles", "MOVE-12"],
-                  ["Resources", "schema and create/list are live", "MOVE-13"],
-                  ["Inventory", "item schema/functions are live", "MOVE-16"],
-                  ["Packets", "audit/visibility foundation ready", "MOVE-37"],
-                ].map(([surface, status, issue]) => (
-                  <TableRow key={surface}>
-                    <TableCell className="font-medium">{surface}</TableCell>
-                    <TableCell className="text-muted-foreground">{status}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{issue}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Packet profiles</CardTitle>
-            <CardDescription>
-              Common recipient modes remain explicit and redacted by default.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {documentationProfileOptions.map(([, packet]) => (
-              <div
-                key={packet}
-                className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
-              >
-                <span>{packet}</span>
-                <Badge variant="outline">planned</Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
     </div>
   );
-}
-
-function capacityReviewLabel(status?: string) {
-  switch (status) {
-    case "estimated":
-      return "Capacity estimated";
-    case "confirmed":
-      return "Capacity confirmed";
-    default:
-      return "Capacity needs review";
-  }
 }
 
 function Metric({

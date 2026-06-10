@@ -13,7 +13,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { workspaceNavHref } from "@/lib/workspace-nav";
+import {
+  workspaceBasePathFromPathname,
+  workspaceNavHref,
+} from "@/lib/workspace-nav";
 import { cn } from "@/lib/utils";
 
 const navItems: {
@@ -27,8 +30,8 @@ const navItems: {
   { section: "photos", label: "Photos", icon: Images },
   { section: "load-plan", label: "Load Plan", icon: Truck },
   { section: "move-day", label: "Move Day", icon: ClipboardList },
-  { section: "documents", label: "Packets", icon: FileStack },
-  { section: "ai", label: "AI Review", icon: Bot },
+  { section: "packets", label: "Packets", icon: FileStack },
+  { section: "ai-review", label: "AI Review", icon: Bot },
 ];
 
 export function WorkspaceNav({
@@ -50,9 +53,11 @@ export function WorkspaceNav({
     >
       {navItems.map((item) => {
         const href = workspaceNavHref(pathname, item.section);
+        const basePath = workspaceBasePathFromPathname(pathname);
         const active =
-          item.section === undefined &&
-          (pathname === "/app/dashboard" || pathname.startsWith("/app/moves/"));
+          item.section === undefined
+            ? pathname === basePath
+            : href !== basePath && pathname === href;
         return (
           <Link
             key={item.label}

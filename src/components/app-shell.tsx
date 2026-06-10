@@ -25,7 +25,13 @@ export function AppShell({
         Skip to main content
       </a>
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-sidebar/75 px-4 py-5 backdrop-blur xl:block">
-        <BrandMark />
+        <Link
+          href="/"
+          aria-label="MovingManifest home"
+          className="inline-block rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <BrandMark />
+        </Link>
         <WorkspaceNav />
         <Separator className="my-6" />
         <div className="space-y-3 rounded-lg border border-border bg-card/60 p-3">
@@ -45,7 +51,9 @@ export function AppShell({
           <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <div className="min-w-0">
               <div className="xl:hidden">
-                <BrandMark />
+                <Link href="/" aria-label="MovingManifest home">
+                  <BrandMark />
+                </Link>
               </div>
               <div className="hidden xl:block">
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">

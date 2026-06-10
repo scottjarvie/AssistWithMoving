@@ -1,10 +1,5 @@
-import { MoveDashboard } from "@/components/move-dashboard";
+import { MoveOverviewPage } from "@/components/move-pages/overview-page";
 
-export default async function MoveWorkspacePage({
-  params,
-}: {
-  params: Promise<{ moveId: string }>;
-}) {
-  const { moveId } = await params;
-  return <MoveDashboard key={moveId} initialMoveId={moveId} />;
+export default function MoveWorkspaceOverviewRoute() {
+  return <MoveOverviewPage />;
 }

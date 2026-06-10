@@ -43,6 +43,41 @@ export const listForHousehold = query({
   },
 });
 
+// Resolve a deep-linked move to its household so the workspace can load the
+// right household even when the user belongs to several. Returns null instead
+// of throwing so a stale or foreign link degrades to the dashboard fallback.
+export const getForLink = query({
+  args: {
+    // Accepts any string so malformed URLs resolve to null instead of a
+    // validator error crashing the page.
+    moveId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const moveId = ctx.db.normalizeId("moves", args.moveId);
+    if (!moveId) {
+      return null;
+    }
+
+    const move = await ctx.db.get(moveId);
+    if (!move || move.status === "archived") {
+      return null;
+    }
+
+    try {
+      await requireMovePermission(
+        ctx,
+        move.householdId,
+        moveId,
+        "household:read",
+      );
+    } catch {
+      return null;
+    }
+
+    return move;
+  },
+});
+
 export const create = mutation({
   args: {
     householdId: v.id("households"),

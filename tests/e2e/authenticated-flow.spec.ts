@@ -131,7 +131,7 @@ async function cleanupE2eData(page: Page) {
 }
 
 test.describe("authenticated product flow", () => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
 
   test.skip(
     !e2eUserEmail,
@@ -149,7 +149,7 @@ test.describe("authenticated product flow", () => {
     }
   });
 
-  test("creates a PCS move and reaches core workspace surfaces", async ({
+  test("creates a PCS move and works through every workspace page", async ({
     context,
     page,
   }) => {
@@ -191,13 +191,40 @@ test.describe("authenticated product flow", () => {
     await page.getByLabel("Rank or pay grade").fill("E-6");
     await page.getByLabel("Official weight allowance in pounds").fill("11000");
     await page.getByRole("button", { name: "Create move" }).click();
-    await expect(page.getByText("Move created.")).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(page.getByRole("cell", { name: moveTitle })).toBeVisible({
-      timeout: 30_000,
-    });
 
+    // Creating a move opens its workspace overview at a real URL.
+    await page.waitForURL(/\/app\/moves\/[^/]+$/, { timeout: 30_000 });
+    const e2eMoveId = decodeURIComponent(
+      new URL(page.url()).pathname.split("/").pop() ?? ""
+    );
+    expect(e2eMoveId).toBeTruthy();
+    const movePath = (section?: string) =>
+      section
+        ? `/app/moves/${encodeURIComponent(e2eMoveId)}/${section}`
+        : `/app/moves/${encodeURIComponent(e2eMoveId)}`;
+    await expect(
+      page.getByRole("heading", { name: moveTitle, exact: true })
+    ).toBeVisible({ timeout: 30_000 });
+
+    // Nav links point at the per-section pages of this move. Desktop shows
+    // the sidebar nav; mobile shows the header nav — both are labeled
+    // "Primary" and only the visible one is in the accessibility tree.
+    const sidebar = page.getByRole("navigation", { name: "Primary" });
+    for (const [label, section] of [
+      ["Inventory", "inventory"],
+      ["Boxes", "boxes"],
+      ["Photos", "photos"],
+      ["Load Plan", "load-plan"],
+      ["Move Day", "move-day"],
+      ["Packets", "packets"],
+      ["AI Review", "ai-review"],
+    ] as const) {
+      await expect(
+        sidebar.getByRole("link", { name: label, exact: true })
+      ).toHaveAttribute("href", movePath(section));
+    }
+
+    // Overview page: move contacts.
     await page.getByLabel("Contact name").fill(contactName);
     await page.getByLabel("Contact role").selectOption("contact");
     await page.getByLabel("Contact email").fill(`office-${runId}@example.test`);
@@ -214,6 +241,8 @@ test.describe("authenticated product flow", () => {
       timeout: 30_000,
     });
 
+    // Load Plan page: transport resources.
+    await page.goto(movePath("load-plan"));
     const transportResources = page
       .getByRole("heading", { name: "Transport resources", exact: true })
       .locator("xpath=ancestor::section[1]");
@@ -222,8 +251,10 @@ test.describe("authenticated product flow", () => {
       .click();
     await expect(
       transportResources.getByText("Pro gear review").first()
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
 
+    // Inventory page: room walk intake.
+    await page.goto(movePath("inventory"));
     await page.getByLabel("Room walk active room").fill("Office");
     await page.getByLabel("Room walk item name").fill(roomWalkItemName);
     await page.getByLabel("Room walk item category").fill("Documents");
@@ -267,14 +298,6 @@ test.describe("authenticated product flow", () => {
       });
     }
 
-    const packingDebt = page.locator("#packing-debt");
-    await expect(packingDebt.getByText("Packing debt")).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(packingDebt).toContainText("Loose load items");
-    await expect(packingDebt).toContainText("High-value without photos");
-    await expect(packingDebt).toContainText("Boxes not assigned");
-
     const dispositionPipelines = page.locator("#disposition-pipelines");
     await expect(
       dispositionPipelines.getByText("Disposition pipelines")
@@ -282,20 +305,6 @@ test.describe("authenticated product flow", () => {
     await expect(dispositionPipelines).toContainText("Free / giveaway");
     await expect(dispositionPipelines).toContainText("Free pickup link");
     await expect(dispositionPipelines).toContainText(freeItemName);
-
-    const evidenceDensity = page.locator("#evidence-density");
-    await expect(evidenceDensity.getByText("Evidence density")).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(evidenceDensity).toContainText("Average score");
-    await expect(evidenceDensity).toContainText("Top evidence gaps");
-
-    const claimsCenter = page.locator("#claims-center");
-    await expect(claimsCenter.getByText("Claims Center")).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(claimsCenter).toContainText("Top claim items");
-    await expect(claimsCenter).toContainText("Claim timeline");
 
     const duplicateReview = page
       .getByRole("heading", { name: "Duplicate review", exact: true })
@@ -349,18 +358,32 @@ test.describe("authenticated product flow", () => {
     await expect(itemDialog.getByText(`${contactName} (contact)`)).toBeVisible();
     await itemDialog.getByRole("button", { name: "Close" }).first().click();
 
+    // Overview page: packing debt reflects the new inventory; archive contact.
+    await page.goto(movePath());
+    const packingDebt = page.locator("#packing-debt");
+    await expect(packingDebt.getByText("Packing debt")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(packingDebt).toContainText("Loose load items");
+    await expect(packingDebt).toContainText("High-value without photos");
+    await expect(packingDebt).toContainText("Boxes not assigned");
+
     await page.getByRole("button", { name: `Archive ${contactName}` }).click();
     await expect(page.getByText(`${contactName} archived.`)).toBeVisible({
       timeout: 30_000,
     });
 
+    // Boxes page: create a box and pack an item.
+    await page.goto(movePath("boxes"));
     const createBoxForm = page.getByRole("form", { name: "Create box" });
     await createBoxForm.getByLabel("New box code").fill(boxCode);
     await createBoxForm.getByLabel("New box label").fill(boxLabel);
     await createBoxForm.getByLabel("New box room").fill("Garage");
     await createBoxForm.getByLabel("New box destination room").fill("Storage");
     await createBoxForm.getByRole("button", { name: "Create" }).click();
-    await expect(page.getByRole("cell", { name: boxCode })).toBeVisible();
+    await expect(page.getByRole("cell", { name: boxCode })).toBeVisible({
+      timeout: 30_000,
+    });
 
     const boxManager = page
       .getByRole("heading", { name: "Box manager", exact: true })
@@ -377,7 +400,18 @@ test.describe("authenticated product flow", () => {
     await expect(boxManager.getByText("contents-derived").first()).toBeVisible({
       timeout: 30_000,
     });
+    const boxLabelsHref = await boxManager
+      .getByRole("link", { name: "Labels" })
+      .first()
+      .getAttribute("href");
+    expect(boxLabelsHref).toContain("/app/box-labels");
+    const boxLabelsMoveId = new URL(boxLabelsHref!, page.url()).searchParams.get(
+      "moveId"
+    );
+    expect(boxLabelsMoveId).toBe(e2eMoveId);
 
+    // Load Plan page: assign and lock the box.
+    await page.goto(movePath("load-plan"));
     const loadPlanner = page
       .getByRole("heading", { name: "Load planner", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
@@ -411,12 +445,56 @@ test.describe("authenticated product flow", () => {
       loadPlanner.getByRole("button", { name: "Unassign", exact: true })
     ).toBeDisabled();
 
+    // Photos page: evidence tooling renders.
+    await page.goto(movePath("photos"));
+    const roomSweep = page
+      .getByRole("heading", { name: "Room sweep", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(roomSweep.getByLabel("Room or area")).toBeEnabled({
+      timeout: 30_000,
+    });
+    await expect(roomSweep.getByLabel("Room photo")).toBeEnabled();
+    const photoEvidence = page
+      .getByRole("heading", { name: "Photo evidence", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(
+      photoEvidence.getByRole("button", { name: "Claim / evidence" })
+    ).toBeVisible();
+    await expect(
+      photoEvidence.getByRole("button", { name: "AI not processed" })
+    ).toBeVisible();
+    await expect(
+      photoEvidence.getByRole("button", { name: "Quality issues" })
+    ).toBeVisible();
+    const evidenceDensity = page.locator("#evidence-density");
+    await expect(evidenceDensity.getByText("Evidence density")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(evidenceDensity).toContainText("Average score");
+    await expect(evidenceDensity).toContainText("Top evidence gaps");
+
+    // Move Day page renders the crew view.
+    await page.goto(movePath("move-day"));
+    await expect(
+      page.getByRole("heading", { name: "Move Day", exact: true, level: 2 })
+    ).toBeVisible({ timeout: 30_000 });
+
+    // Packets page: claims center and documentation packets.
+    await page.goto(movePath("packets"));
+    const claimsCenter = page.locator("#claims-center");
+    await expect(claimsCenter.getByText("Claims Center")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(claimsCenter).toContainText("Top claim items");
+    await expect(claimsCenter).toContainText("Claim timeline");
+
     const documentationPackets = page
       .getByRole("heading", { name: "Documentation packets", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
     const ensureProfiles = documentationPackets.getByRole("button", {
       name: "Ensure move profiles",
     });
+    await expect(ensureProfiles).toBeVisible({ timeout: 30_000 });
     if (await ensureProfiles.isEnabled()) {
       await ensureProfiles.click();
       await expect(ensureProfiles).toBeDisabled();
@@ -467,12 +545,8 @@ test.describe("authenticated product flow", () => {
     });
     await expect(publicItemStatus).toHaveValue("loaded", { timeout: 30_000 });
 
-    await gotoDashboard(page);
-    await waitForWorkspaceAuth(page);
-    await page.getByLabel("Selected household").selectOption({
-      label: `${householdName} - owner`,
-    });
-    await page.getByLabel("Selected move").selectOption({ label: moveTitle });
+    // Deep link straight back into this move's packets page.
+    await page.goto(movePath("packets"));
     await expect(
       page.getByRole("heading", { name: "Documentation packets", exact: true })
     ).toBeVisible({ timeout: 30_000 });
@@ -519,12 +593,7 @@ test.describe("authenticated product flow", () => {
     await page.getByRole("button", { name: "Send note" }).click();
     await expect(page.getByText("Note sent.")).toBeVisible({ timeout: 30_000 });
 
-    await gotoDashboard(page);
-    await waitForWorkspaceAuth(page);
-    await page.getByLabel("Selected household").selectOption({
-      label: `${householdName} - owner`,
-    });
-    await page.getByLabel("Selected move").selectOption({ label: moveTitle });
+    await page.goto(movePath("packets"));
     await expect(
       documentationPackets.getByText(publicComment)
     ).toBeVisible({ timeout: 30_000 });
@@ -538,37 +607,35 @@ test.describe("authenticated product flow", () => {
     ).toBeVisible({ timeout: 30_000 });
     await expect(revokeCommentShareLink).toBeHidden({ timeout: 30_000 });
 
+    const pcsPacketHref = await documentationPackets
+      .getByRole("link", { name: "PCS packet" })
+      .getAttribute("href");
+    expect(pcsPacketHref).toBeTruthy();
+    await documentationPackets
+      .getByRole("button")
+      .filter({ hasText: "Moving company" })
+      .first()
+      .click();
+    const moverPacketHref = await documentationPackets
+      .getByRole("link", { name: "Mover packet" })
+      .getAttribute("href");
+    expect(moverPacketHref).toBeTruthy();
+    await documentationPackets
+      .getByLabel("Documentation profile type")
+      .selectOption("employerRelocation");
+    await documentationPackets
+      .getByRole("button", { name: "Create profile" })
+      .click();
     await expect(
-      page.getByRole("heading", { name: "Inventory", exact: true })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Move Day", exact: true })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Load planner", exact: true })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Documentation packets", exact: true })
-    ).toBeVisible();
+      documentationPackets.getByText("Packet profile created.")
+    ).toBeVisible({ timeout: 30_000 });
+    const employerPacketHref = await documentationPackets
+      .getByRole("link", { name: "Employer packet" })
+      .getAttribute("href");
+    expect(employerPacketHref).toBeTruthy();
 
-    const roomSweep = page
-      .getByRole("heading", { name: "Room sweep", exact: true })
-      .locator("xpath=ancestor::*[@data-slot='card'][1]");
-    await expect(roomSweep.getByLabel("Room or area")).toBeEnabled();
-    await expect(roomSweep.getByLabel("Room photo")).toBeEnabled();
-    const photoEvidence = page
-      .getByRole("heading", { name: "Photo evidence", exact: true })
-      .locator("xpath=ancestor::*[@data-slot='card'][1]");
-    await expect(
-      photoEvidence.getByRole("button", { name: "Claim / evidence" })
-    ).toBeVisible();
-    await expect(
-      photoEvidence.getByRole("button", { name: "AI not processed" })
-    ).toBeVisible();
-    await expect(
-      photoEvidence.getByRole("button", { name: "Quality issues" })
-    ).toBeVisible();
-
+    // AI Review page: text intake and the local job monitor.
+    await page.goto(movePath("ai-review"));
     const aiTextIntake = page
       .getByRole("heading", { name: "AI text intake", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
@@ -602,42 +669,7 @@ test.describe("authenticated product flow", () => {
     await aiJobMonitor.getByRole("button", { name: "Local review" }).click();
     await waitForAiOutcome(aiJobMonitor, /Local demo review completed\./);
 
-    const pcsPacketHref = await documentationPackets
-      .getByRole("link", { name: "PCS packet" })
-      .getAttribute("href");
-    expect(pcsPacketHref).toBeTruthy();
-    await documentationPackets
-      .getByRole("button")
-      .filter({ hasText: "Moving company" })
-      .first()
-      .click();
-    const moverPacketHref = await documentationPackets
-      .getByRole("link", { name: "Mover packet" })
-      .getAttribute("href");
-    expect(moverPacketHref).toBeTruthy();
-    await documentationPackets
-      .getByLabel("Documentation profile type")
-      .selectOption("employerRelocation");
-    await documentationPackets
-      .getByRole("button", { name: "Create profile" })
-      .click();
-    await expect(
-      documentationPackets.getByText("Packet profile created.")
-    ).toBeVisible({ timeout: 30_000 });
-    const employerPacketHref = await documentationPackets
-      .getByRole("link", { name: "Employer packet" })
-      .getAttribute("href");
-    expect(employerPacketHref).toBeTruthy();
-
-    const boxLabelsHref = await boxManager
-      .getByRole("link", { name: "Labels" })
-      .first()
-      .getAttribute("href");
-    expect(boxLabelsHref).toContain("/app/box-labels");
-    const e2eMoveId = new URL(boxLabelsHref!, page.url()).searchParams.get(
-      "moveId"
-    );
-    expect(e2eMoveId).toBeTruthy();
+    // Printable box labels still work from the boxes page link.
     await page.goto(`${boxLabelsHref!}&layout=thermal4x6`);
     await expect(
       page.getByRole("heading", { name: "Box labels", exact: true })
@@ -647,7 +679,9 @@ test.describe("authenticated product flow", () => {
     ).toBeVisible();
     await expect(page.getByText("4 x 6 thermal")).toBeVisible();
     await page.getByRole("button", { name: "3 x 2" }).click();
-    await expect(page.getByText("3 x 2 compact")).toBeVisible();
+    await expect(page.getByText("3 x 2 compact")).toBeVisible({
+      timeout: 30_000,
+    });
 
     await page.goto("/settings");
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
