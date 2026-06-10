@@ -1,6 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+import {
+  ingestionQueueStatusValidator,
+  ingestionScopeHintValidator,
+} from "./lib/ingestionQueue";
+
 export const appRole = v.union(v.literal("member"), v.literal("admin"));
 
 export const householdRole = v.union(
@@ -1099,6 +1104,37 @@ export default defineSchema({
     .index("by_status_expires", ["status", "expiresAt"])
     .index("by_expires", ["expiresAt"])
     .index("by_household", ["householdId"]),
+
+  // Capture-now, process-later work orders for the user's own AI agent.
+  // Evidence lives in itemPhotos (image/audio/video); entries reference it.
+  ingestionQueueEntries: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    status: ingestionQueueStatusValidator,
+    instructions: v.optional(v.string()),
+    roomHint: v.optional(v.string()),
+    // Free string so user-defined dispositions keep working later.
+    dispositionHint: v.optional(v.string()),
+    scopeHint: v.optional(ingestionScopeHintValidator),
+    mediaPhotoIds: v.array(v.id("itemPhotos")),
+    sortOrder: v.number(),
+    claimedByUserId: v.optional(v.id("users")),
+    claimedByApiKeyId: v.optional(v.id("apiKeys")),
+    claimedByAgentLabel: v.optional(v.string()),
+    claimedAt: v.optional(v.number()),
+    claimExpiresAt: v.optional(v.number()),
+    agentSummary: v.optional(v.string()),
+    agentQuestion: v.optional(v.string()),
+    resultItemIds: v.optional(v.array(v.id("items"))),
+    processedAt: v.optional(v.number()),
+    resolvedAt: v.optional(v.number()),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_move_status_order", ["moveId", "status", "sortOrder"])
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_household_status", ["householdId", "status"]),
 
   aiJobs: defineTable({
     householdId: v.id("households"),
