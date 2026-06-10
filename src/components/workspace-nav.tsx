@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Archive,
   Bot,
+  Camera,
   ClipboardList,
   FileStack,
   Images,
@@ -25,6 +26,7 @@ const navItems: {
   icon: LucideIcon;
 }[] = [
   { label: "Dashboard", icon: LayoutDashboard },
+  { section: "capture", label: "Capture", icon: Camera },
   { section: "inventory", label: "Inventory", icon: ClipboardList },
   { section: "boxes", label: "Boxes", icon: Archive },
   { section: "photos", label: "Photos", icon: Images },

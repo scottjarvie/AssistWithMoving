@@ -211,6 +211,7 @@ test.describe("authenticated product flow", () => {
     // "Primary" and only the visible one is in the accessibility tree.
     const sidebar = page.getByRole("navigation", { name: "Primary" });
     for (const [label, section] of [
+      ["Capture", "capture"],
       ["Inventory", "inventory"],
       ["Boxes", "boxes"],
       ["Photos", "photos"],
@@ -668,6 +669,16 @@ test.describe("authenticated product flow", () => {
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
     await aiJobMonitor.getByRole("button", { name: "Local review" }).click();
     await waitForAiOutcome(aiJobMonitor, /Local demo review completed\./);
+
+    // Capture page: agent queue surfaces render.
+    await page.goto(movePath("capture"));
+    await expect(
+      page.getByRole("heading", { name: "Capture for your AI agent" })
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByLabel("Directions for your agent")).toBeEnabled();
+    await expect(
+      page.getByRole("heading", { name: "Agent queue", exact: true })
+    ).toBeVisible();
 
     // Printable box labels still work from the boxes page link.
     await page.goto(`${boxLabelsHref!}&layout=thermal4x6`);
