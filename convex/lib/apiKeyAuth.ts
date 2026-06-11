@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
+  apiKeyHasScopes,
   apiKeyPrefix,
   validateApiKeyRecord,
   verifyApiKeyHash,
@@ -41,6 +42,33 @@ export async function authenticateApiKey(
   if (!hashMatches) {
     throw new Error("Invalid API key.");
   }
+  const effectiveMoveId =
+    allowRestrictedKeyWithoutMoveId && !moveId ? key.moveId : moveId;
+  if (key.status !== "active") {
+    throw new Error("API key is revoked or inactive.");
+  }
+  if (key.expiresAt !== undefined && key.expiresAt <= Date.now()) {
+    throw new Error("API key is expired.");
+  }
+  if (householdId && key.householdId !== householdId) {
+    throw new Error("API key is not scoped to this household.");
+  }
+  if (key.moveId && effectiveMoveId && key.moveId !== effectiveMoveId) {
+    throw new Error("API key is restricted to a different move.");
+  }
+  if (key.moveId && !effectiveMoveId) {
+    throw new Error("API key is move-restricted; use a move-scoped endpoint.");
+  }
+  if (!apiKeyHasScopes(key.scopes, requiredScopes)) {
+    const missingScopes = requiredScopes.filter(
+      (scope) => !key.scopes.includes(scope),
+    );
+    throw new Error(
+      `API key is missing required scope${
+        missingScopes.length === 1 ? "" : "s"
+      }: ${missingScopes.join(", ")}. Create or rotate a key in Settings with the needed scope.`,
+    );
+  }
   if (
     !validateApiKeyRecord({
       record: {
@@ -51,8 +79,7 @@ export async function authenticateApiKey(
         expiresAt: key.expiresAt,
       },
       householdId,
-      moveId:
-        allowRestrictedKeyWithoutMoveId && !moveId ? key.moveId : moveId,
+      moveId: effectiveMoveId,
       requiredScopes,
     })
   ) {
