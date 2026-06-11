@@ -26,7 +26,8 @@ type E2eApiKeyScope =
   | "plans/write"
   | "photos/write"
   | "exports/read"
-  | "exports/create";
+  | "exports/create"
+  | "members/manage";
 
 function apiHeaders(rawKey: string, idempotencyKey?: string) {
   return {

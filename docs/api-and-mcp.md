@@ -43,6 +43,7 @@ API keys can include these scopes:
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
 | `exports/create` | Create export jobs and create/revoke documentation share links. |
+| `members/manage` | List household members and add already-registered collaborators by email. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
@@ -182,6 +183,44 @@ curl https://movingmanifest.com/api/v1/me \
 The context response includes the household id/name, key scopes, whether the
 key is move-restricted, and the restricted move when applicable. This endpoint
 does not return the raw key or secret hash.
+
+## Household Members
+
+Use household members for spouses, family, or trusted collaborators who should
+sign in and work on the same household/move. This is different from move
+people/contact records, which are mover/helper/office/contact rows inside a
+move and do not grant login access.
+
+List current household members:
+
+```bash
+curl https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
+  -H "Authorization: Bearer mmk_replace_with_a_members_manage_key"
+```
+
+Add a registered collaborator by email:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
+  -H "Authorization: Bearer mmk_replace_with_a_members_manage_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: add-spouse-001" \
+  -d '{ "email": "person@example.com", "role": "editor" }'
+```
+
+Member management requires `members/manage` and a household-scoped key. The
+target email must have signed in to MovingManifest once before the API can add
+the account. Owner access cannot be granted through the API.
+
+Supported roles:
+
+| Role | Use |
+| --- | --- |
+| `admin` | Trusted household administrator who can manage members/settings/keys. |
+| `editor` | Full move and inventory editing helper. |
+| `packer` | Packing-focused collaborator. |
+| `viewer` | Read-focused collaborator. |
+| `guest` | Minimal household access. |
 
 List moves:
 
@@ -1397,6 +1436,8 @@ Available MCP tools:
 | --- | --- |
 | `get_api_capabilities` | Inspect supported REST/MCP workflows, required scopes, tools, and known launch blockers without calling the API. |
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
+| `list_household_members` | List real household login access for the API key household. |
+| `add_household_member` | Add an already-registered user to the household by email, with `dryRun` support. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |

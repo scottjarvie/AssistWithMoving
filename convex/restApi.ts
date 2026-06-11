@@ -53,6 +53,10 @@ import {
 import { itemDimensionsConfidenceForRead } from "../src/lib/inventory-measurements";
 import { summarizeMoveQuestionsFromDocs } from "./lib/moveQuestionDocuments";
 import {
+  normalizeCollaboratorEmail,
+  parseManagedHouseholdMemberRole,
+} from "./lib/householdMembers";
+import {
   boxStatuses,
   documentationProfileTypes,
   defaultDocumentationProfilesForMoveType,
@@ -540,6 +544,9 @@ async function routeRequest(
   if (resource === "plans") {
     return await routePlans(ctx, args, auth, moveIdSegment, nested);
   }
+  if (resource === "households") {
+    return await routeHouseholds(ctx, args, auth, moveIdSegment, nested, nestedId);
+  }
   if (resource !== "moves") {
     return restError({ status: 404, code: "not_found", message: "Not found." });
   }
@@ -789,6 +796,217 @@ async function routePlans(
     code: "not_found",
     message: "Plan route not found.",
   });
+}
+
+async function routeHouseholds(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  householdIdSegment?: string,
+  nested?: string,
+  nestedId?: string
+) {
+  const householdId = householdIdSegment as Id<"households"> | undefined;
+  if (!householdId || nested !== "members" || nestedId) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Household route not found.",
+    });
+  }
+  if (householdId !== auth.householdId) {
+    return restError({
+      status: 403,
+      code: "forbidden",
+      message: "API key is not scoped to this household.",
+    });
+  }
+
+  if (args.method === "GET") {
+    return restOk({
+      data: await listApiHouseholdMembers(ctx, householdId),
+    });
+  }
+
+  if (args.method === "POST") {
+    return await routeAddHouseholdMember(ctx, args, auth, householdId);
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Household member route not found.",
+  });
+}
+
+async function listApiHouseholdMembers(
+  ctx: MutationCtx,
+  householdId: Id<"households">
+) {
+  const memberships = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_household", (q) => q.eq("householdId", householdId))
+    .collect();
+
+  const members = await Promise.all(
+    memberships
+      .filter((membership) => membership.status !== "disabled")
+      .map(async (membership) => {
+        const user = await ctx.db.get(membership.userId);
+        return {
+          membershipId: membership._id,
+          userId: membership.userId,
+          email: user?.email ?? membership.invitedEmail,
+          name: user?.name,
+          role: membership.role,
+          status: membership.status,
+          createdAt: membership.createdAt,
+          updatedAt: membership.updatedAt,
+        };
+      })
+  );
+
+  return members.sort((left, right) => {
+    if (left.role === "owner") return -1;
+    if (right.role === "owner") return 1;
+    return (left.email ?? left.name ?? "").localeCompare(
+      right.email ?? right.name ?? ""
+    );
+  });
+}
+
+async function routeAddHouseholdMember(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  householdId: Id<"households">
+) {
+  const body = bodyObject(args.body);
+  const normalizedEmail = normalizeCollaboratorEmail(
+    requiredBodyString(body.email, "email is required.")
+  );
+  if (!normalizedEmail) {
+    throw new Error("Enter a collaborator email.");
+  }
+
+  const role = parseManagedHouseholdMemberRole(
+    requiredBodyString(body.role, "role is required.")
+  );
+  if (!role) {
+    throw new Error("Owner access cannot be granted from the API.");
+  }
+
+  const targetUser =
+    (await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .unique()) ??
+    (normalizedEmail === String(body.email).trim()
+      ? null
+      : await ctx.db
+          .query("users")
+          .withIndex("by_email", (q) => q.eq("email", String(body.email).trim()))
+          .unique());
+
+  if (!targetUser || targetUser.status !== "active") {
+    return restError({
+      status: 409,
+      code: "user_not_registered",
+      message:
+        "That person needs to sign in to MovingManifest once before they can be added by email.",
+    });
+  }
+
+  if (targetUser._id === auth.createdByUserId) {
+    throw new Error("The API key creator is already a member of this household.");
+  }
+
+  const now = Date.now();
+  const existing = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_household_user", (q) =>
+      q.eq("householdId", householdId).eq("userId", targetUser._id)
+    )
+    .unique();
+
+  if (existing?.role === "owner") {
+    throw new Error("Owner access cannot be changed from the API.");
+  }
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      role,
+      status: "active",
+      invitedEmail: normalizedEmail,
+      updatedAt: now,
+    });
+    await recordAuditEvent(ctx, {
+      householdId,
+      actorType: "apiKey",
+      actorApiKeyId: auth.actor.apiKeyId,
+      category: "household",
+      action: "household.member_reactivated",
+      objectTable: "householdMemberships",
+      objectId: existing._id,
+      metadata: {
+        targetUserId: targetUser._id,
+        role,
+        email: normalizedEmail,
+      },
+    });
+    return restOk(
+      {
+        data: {
+          membershipId: existing._id,
+          userId: targetUser._id,
+          email: normalizedEmail,
+          role,
+          status: "active",
+          reactivated: true,
+        },
+      },
+      200
+    );
+  }
+
+  const membershipId = await ctx.db.insert("householdMemberships", {
+    householdId,
+    userId: targetUser._id,
+    role,
+    status: "active",
+    invitedEmail: normalizedEmail,
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await recordAuditEvent(ctx, {
+    householdId,
+    actorType: "apiKey",
+    actorApiKeyId: auth.actor.apiKeyId,
+    category: "household",
+    action: "household.member_added",
+    objectTable: "householdMemberships",
+    objectId: membershipId,
+    metadata: {
+      targetUserId: targetUser._id,
+      role,
+      email: normalizedEmail,
+    },
+  });
+
+  return restOk(
+    {
+      data: {
+        membershipId,
+        userId: targetUser._id,
+        email: normalizedEmail,
+        role,
+        status: "active",
+        reactivated: false,
+      },
+    },
+    201
+  );
 }
 
 async function routePlanOps(

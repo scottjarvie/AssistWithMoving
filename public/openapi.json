@@ -27,6 +27,49 @@
         }
       }
     },
+    "/households/{householdId}/members": {
+      "get": {
+        "summary": "List household members",
+        "operationId": "listHouseholdMembers",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/householdId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Real household login access records. Requires members/manage."
+          }
+        }
+      },
+      "post": {
+        "summary": "Add an already-registered household member by email",
+        "operationId": "addHouseholdMember",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/householdId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HouseholdMemberAdd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Household member access created."
+          },
+          "409": {
+            "description": "The email has not signed in to MovingManifest yet."
+          }
+        }
+      }
+    },
     "/moves": {
       "get": {
         "summary": "List moves",
@@ -368,6 +411,14 @@
       }
     },
     "parameters": {
+      "householdId": {
+        "name": "householdId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "moveId": {
         "name": "moveId",
         "in": "path",
@@ -378,6 +429,21 @@
       }
     },
     "schemas": {
+      "HouseholdMemberAdd": {
+        "type": "object",
+        "required": ["email", "role"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["admin", "editor", "packer", "viewer", "guest"],
+            "description": "Owner access cannot be granted through the API."
+          }
+        }
+      },
       "MoveCreate": {
         "type": "object",
         "properties": {

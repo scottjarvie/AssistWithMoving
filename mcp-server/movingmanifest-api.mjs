@@ -95,6 +95,37 @@ export async function getApiContext(config) {
   });
 }
 
+export async function listHouseholdMembers(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/households/${input.householdId}/members`,
+  });
+  return response.data;
+}
+
+export async function addHouseholdMember(config, input) {
+  const body = {
+    email: input.email,
+    role: input.role,
+  };
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: `/households/${input.householdId}/members`,
+        body,
+      },
+      note: "The target email must already have signed in to MovingManifest once.",
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/households/${input.householdId}/members`,
+    body,
+    idempotencyKey: input.idempotencyKey,
+  });
+}
+
 export async function listMoves(config, input = {}) {
   return await movingManifestRequest(config, {
     path: "/moves",

@@ -59,6 +59,7 @@ const mcpCards = [
 const toolGroups = [
   "get_api_capabilities and get_api_context",
   "list_moves, create_move, setup_move",
+  "list_household_members and add_household_member",
   "get_agent_context and get_move_questions",
   "search_inventory, create_item, batch_upsert_items, update_item",
   "list_move_spaces and create_move_space",

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   addItemsToBox,
+  addHouseholdMember,
   approveAiPhotoSuggestions,
   approveAiTextSuggestions,
   approvePlanningSuggestions,
@@ -31,6 +32,7 @@ import {
   getMoveDayChecklist,
   getMoveQuestions,
   getMoveSummary,
+  listHouseholdMembers,
   listAiJobs,
   listAiPhotoSuggestions,
   listAiTextSuggestions,
@@ -111,6 +113,49 @@ describe("MovingManifest MCP API client", () => {
       {
         method: "GET",
         headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+  });
+
+  it("lists and adds household members through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+    await listHouseholdMembers(config, { householdId: "household1" });
+    await addHouseholdMember(config, {
+      householdId: "household1",
+      email: "person@example.com",
+      role: "editor",
+      idempotencyKey: "add-member-1",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/households/household1/members"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/households/household1/members"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "add-member-1",
+        },
+        body: JSON.stringify({ email: "person@example.com", role: "editor" }),
       }
     );
   });

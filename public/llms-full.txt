@@ -32,6 +32,10 @@ language:
   help with the move.
 - "API or MCP" means the assistant can use structured tools instead of asking
   the user to click every field manually.
+- "Household member" means a signed-in person who can access the owner's
+  household and moves according to their role.
+- "Move person" means a contact/helper/mover record inside one move. It does not
+  grant login access.
 
 ## Public vs Private
 
@@ -69,6 +73,33 @@ If a user says: "Go to movingmanifest.com and help me use it"
 8. Use `GET /api/v1/moves` to find or create the move.
 9. Use `GET /api/v1/moves/{moveId}/agent-context` before writing.
 10. Use dry runs for bulk changes when available.
+
+## Spouse And Collaborator Access
+
+If a spouse, family member, or trusted collaborator should sign in and work on
+the same move, they need household membership.
+
+Current flow:
+
+1. The owner creates the household/move.
+2. The spouse creates their own MovingManifest account and signs in once.
+3. An owner/admin adds the spouse by email from Settings, or an assistant uses
+   `POST /api/v1/households/{householdId}/members` with a key that has
+   `members/manage`.
+4. The spouse then sees the shared household/move when signed in.
+
+Allowed member roles:
+
+- `admin` - can manage household settings, members, API keys, and sensitive
+  access.
+- `editor` - can help edit move and inventory records.
+- `packer` - can help with packing-focused workflows.
+- `viewer` - can view without broad editing.
+- `guest` - minimal collaboration access.
+
+Do not grant household membership when the user only needs a public packet,
+mover packet, pickup list, or contact entry. For those cases use share links,
+documentation profiles, exports, or move people/contact records.
 
 ## Common User Types
 

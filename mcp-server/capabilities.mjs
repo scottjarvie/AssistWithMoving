@@ -95,6 +95,24 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
   },
   {
+    id: "householdMembers",
+    title: "Household member access",
+    status: "available",
+    purpose:
+      "List real household login access and add an already-registered user to the household by email. Use this for spouses or family members who should sign in to the same move.",
+    requiredScopes: ["members/manage"],
+    restEndpoints: [
+      "GET /api/v1/households/:householdId/members",
+      "POST /api/v1/households/:householdId/members",
+    ],
+    mcpTools: ["list_household_members", "add_household_member"],
+    agentWorkflows: [
+      "After a spouse signs in once, add them to the owner household as editor, packer, viewer, guest, or admin.",
+      "Explain the difference between household members who can log in and move people/contact records used for movers, helpers, offices, and adjusters.",
+      "Use a key with explicit members/manage scope because granting household access is more sensitive than inventory intake.",
+    ],
+  },
+  {
     id: "moveSpaces",
     title: "First-class move spaces",
     status: "available",

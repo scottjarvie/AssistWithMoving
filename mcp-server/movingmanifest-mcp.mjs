@@ -11,6 +11,7 @@ import {
   attachPhoto,
   archiveMovePerson,
   archiveDocumentationProfile,
+  addHouseholdMember,
   approveAiPhotoSuggestions,
   approveAiTextSuggestions,
   createApiConfig,
@@ -39,6 +40,7 @@ import {
   getMoveDayChecklist,
   getMoveQuestions,
   getMoveSummary,
+  listHouseholdMembers,
   listAiJobs,
   listAiPhotoSuggestions,
   listAiTextSuggestions,
@@ -448,6 +450,14 @@ const movePersonRoleSchema = z.enum([
   "contact",
 ]);
 
+const householdMemberRoleSchema = z.enum([
+  "admin",
+  "editor",
+  "packer",
+  "viewer",
+  "guest",
+]);
+
 const shareLinkActionSchema = z.enum([
   "view",
   "viewPlan",
@@ -758,6 +768,32 @@ export function registerTools(target, apiConfig) {
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: () => getApiContext(apiConfig),
+  });
+
+  registerTool(target, "list_household_members", {
+    title: "List household members",
+    description:
+      "List real household login access for the current API key household. This is different from move people/contact records. Requires members/manage.",
+    inputSchema: {
+      householdId: z.string().describe("MovingManifest household id from get_api_context."),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listHouseholdMembers(apiConfig, input),
+  });
+
+  registerTool(target, "add_household_member", {
+    title: "Add household member",
+    description:
+      "Grant an already-registered MovingManifest user real household login access by email. Requires members/manage. The target person must have signed in once before this can succeed.",
+    inputSchema: {
+      householdId: z.string().describe("MovingManifest household id from get_api_context."),
+      email: z.string().email(),
+      role: householdMemberRoleSchema.default("editor"),
+      idempotencyKey: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => addHouseholdMember(apiConfig, input),
   });
 
   registerTool(target, "list_moves", {

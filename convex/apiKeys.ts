@@ -22,7 +22,8 @@ const apiKeyScopeValidator = v.union(
   v.literal("plans/write"),
   v.literal("photos/write"),
   v.literal("exports/read"),
-  v.literal("exports/create")
+  v.literal("exports/create"),
+  v.literal("members/manage")
 );
 
 const apiKeyWriteArgs = {

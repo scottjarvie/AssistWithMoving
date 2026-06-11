@@ -67,6 +67,7 @@ const scopes = [
   "photos/write",
   "exports/read",
   "exports/create",
+  "members/manage",
 ];
 
 export default function ApiPage() {
@@ -123,12 +124,13 @@ export default function ApiPage() {
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <h2 className="text-2xl font-semibold tracking-normal">
-              Recommended AI helper scopes.
+              Available AI helper scopes.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               The Settings screen defaults to a useful assistant key. Users can
               still remove scopes, restrict a key to one move, rotate it, or
-              revoke it after the helper session.
+              revoke it after the helper session. Member management is an
+              explicit extra scope because it grants real account access.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

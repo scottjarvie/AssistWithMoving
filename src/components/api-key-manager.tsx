@@ -76,6 +76,8 @@ const photoIntakeScopes: ApiKeyScope[] = [
   "photos/write",
 ];
 
+const memberManagerScopes: ApiKeyScope[] = ["moves/read", "members/manage"];
+
 export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
   const households = useQuery(api.households.listMine, enabled ? {} : "skip") as
     | HouseholdEntry[]
@@ -328,7 +330,8 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
               <h3 className="text-sm font-medium">What this helper can do</h3>
               <p className="mt-1 text-xs text-muted-foreground">
                 The default allows most assistant workflows. Use a preset or
-                uncheck individual permissions for narrower access.
+                uncheck individual permissions for narrower access. Member
+                management is separate because it grants real account access.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -355,6 +358,14 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
                 onClick={() => applyPreset("Photo intake assistant key", photoIntakeScopes)}
               >
                 Photo intake
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => applyPreset("Member manager key", memberManagerScopes)}
+              >
+                Members
               </Button>
             </div>
           </div>

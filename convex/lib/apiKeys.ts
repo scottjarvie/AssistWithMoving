@@ -11,6 +11,7 @@ export const apiKeyScopes = [
   "photos/write",
   "exports/read",
   "exports/create",
+  "members/manage",
 ] as const;
 
 export type ApiKeyScope = (typeof apiKeyScopes)[number];
@@ -94,6 +95,7 @@ export function scopesForPermissionAction(action: PermissionAction): ApiKeyScope
     case "documentation:create":
       return ["exports/create"];
     case "household:manage_members":
+      return ["members/manage"];
     case "household:manage_settings":
     case "documentation:manage":
     case "api_keys:manage":

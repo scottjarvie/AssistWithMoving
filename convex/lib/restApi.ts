@@ -217,6 +217,9 @@ export function requiredScopesForRestRoute({
   if (segments[0] === "plans") {
     return method === "GET" ? ["plans/read"] : ["plans/write"];
   }
+  if (segments[0] === "households" && segments[2] === "members") {
+    return ["members/manage"];
+  }
   if (segments[0] === "items") {
     return method === "GET" ? ["inventory/read"] : ["inventory/write"];
   }
