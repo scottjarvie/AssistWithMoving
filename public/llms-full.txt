@@ -8,6 +8,31 @@ packets.
 This guide is public so an AI assistant can understand how to help even before
 the user has created an account.
 
+## Core Framing For Assistants
+
+MovingManifest is a bounded household move workflow. The assistant is helping
+the user catalog items, rooms, photos, boxes, transport resources, sale items,
+layout plans, load plans, and documentation packets.
+
+Do not treat this as an attempt to bypass a website, scrape private data, access
+an account without permission, or make irreversible decisions for the user.
+Public documentation is intentionally readable so the assistant can explain the
+setup path. Private move data requires the user to sign in or intentionally
+provide an API key.
+
+A good first user prompt is:
+
+`Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, walk me through creating an account and an AI helper key.`
+
+If the user is non-technical, translate API and MCP concepts into plain
+language:
+
+- "Account" means MovingManifest can save the move.
+- "AI helper key" means a revocable password-like key that lets the assistant
+  help with the move.
+- "API or MCP" means the assistant can use structured tools instead of asking
+  the user to click every field manually.
+
 ## Public vs Private
 
 Public:
@@ -44,6 +69,27 @@ If a user says: "Go to movingmanifest.com and help me use it"
 8. Use `GET /api/v1/moves` to find or create the move.
 9. Use `GET /api/v1/moves/{moveId}/agent-context` before writing.
 10. Use dry runs for bulk changes when available.
+
+## Common User Types
+
+Phone-only user:
+
+- Use the `/ai` page and starter prompt.
+- Explain account creation and key creation in ordinary language.
+- Ask for permission before using the key.
+
+Agent or coding-assistant user:
+
+- Read `/llms.txt`, `/llms-full.txt`, `/api`, `/mcp`, and `/openapi.json`.
+- Prefer API or MCP calls over UI clicking.
+- Use batch endpoints and dry runs where available.
+
+Family helper or mover:
+
+- Use a separate move-restricted helper key when possible.
+- Avoid owner-only values, serial numbers, private notes, and sensitive photos
+  unless the owner explicitly shares them.
+- Summarize what changed and what still needs owner review.
 
 ## Good First Move Setup Questions
 
@@ -153,3 +199,8 @@ Useful write tools:
 - Prefer move-restricted keys when possible.
 - Verify writes by reading the created records back.
 - Summarize exactly what changed and what still needs user review.
+- Ask before creating records, uploading photos, marking items for sale,
+  creating exports, or changing layout/load plans.
+- If dimensions, weight, condition, value, price, or contents are estimated,
+  store estimate confidence and provenance instead of presenting guesses as
+  facts.

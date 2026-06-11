@@ -67,6 +67,32 @@ const setupSteps = [
   "Have the assistant call /api/v1/me, then /api/v1/moves, then /api/v1/moves/{moveId}/agent-context before writing data.",
 ];
 
+const starterPrompt =
+  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, walk me through creating an account and an AI helper key.";
+
+const userPaths = [
+  {
+    title: "I just have Claude or ChatGPT on my phone",
+    copy: "Paste the starter prompt. Your assistant should explain the account step, ask before using any key, and guide you through photos, rooms, and inventory.",
+  },
+  {
+    title: "I can use Codex, Claude Code, or another agent",
+    copy: "Have the agent read this page, /llms.txt, and /openapi.json. It should use the API or MCP instead of clicking around whenever possible.",
+  },
+  {
+    title: "I am helping someone else move",
+    copy: "Use a separate move-restricted helper key. The owner can revoke it later, and private values or serial numbers should stay owner-only unless shared.",
+  },
+];
+
+const assistantGroundRules = [
+  "This is a household moving, inventory, photo, room, box, sale-prep, and layout-planning app.",
+  "Public pages are safe to read. Private move data requires the user to sign in or intentionally provide an API key.",
+  "Do not scrape private pages, guess credentials, or claim access you do not have.",
+  "Ask before creating records, uploading photos, marking items for sale, exporting packets, or using an API key.",
+  "Preserve uncertainty: if dimensions, weight, condition, value, or price are estimated, record that they are estimates and need review.",
+];
+
 const examples = [
   "Create a move from Nashua, New Hampshire to Tucson, Arizona with a Ram truck, Toyota Tundra, trailer, and moving company shipment.",
   "Add these 20 photos as inventory in the Den. Estimate dimensions and mark all estimates as low confidence.",
@@ -81,11 +107,86 @@ export default function AiAssistantPage() {
     <PublicPageChrome
       eyebrow="AI assistant ready"
       title="Let your AI assistant help build the move with you."
-      description="MovingManifest is built so a person can use Claude, ChatGPT, Codex, or another assistant to create a move, add inventory from photos, organize rooms, prepare sale listings, and export useful packets. The public docs explain the path before the person even has an account."
+      description="MovingManifest helps Claude, ChatGPT, Codex, or another assistant set up a move, add inventory from photos, organize rooms, prepare sale listings, and plan layouts. The public docs explain the path before the person has an account."
       visual={<AssistantVisual />}
     >
       <PublicBand>
+        <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr]">
+          <div>
+            <Badge variant="secondary">Start here</Badge>
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal">
+              The one prompt to give your assistant.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              This is intentionally short enough to paste into a phone assistant.
+              It tells the assistant where to go, what the task is, and when it
+              needs to stop and ask you for account or key access.
+            </p>
+          </div>
+          <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <MessageSquareText className="size-4 text-primary" aria-hidden="true" />
+              Paste this into Claude, ChatGPT, Codex, or another assistant
+            </div>
+            <blockquote className="mt-3 border-l-2 border-primary pl-3 text-sm leading-6">
+              {starterPrompt}
+            </blockquote>
+          </div>
+        </div>
+      </PublicBand>
+
+      <PublicBand>
         <FeatureGrid cards={assistantCards} />
+      </PublicBand>
+
+      <PublicBand>
+        <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <Badge variant="secondary">Different comfort levels</Badge>
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal">
+              Three common ways people will use this.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              MovingManifest should not require the person to understand API,
+              MCP, schemas, or agent tooling. The site gives their assistant
+              enough structure to choose the right path.
+            </p>
+          </div>
+          <div className="grid gap-3">
+            {userPaths.map((path) => (
+              <div key={path.title} className="rounded-md border border-border p-4">
+                <h3 className="text-sm font-medium">{path.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {path.copy}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </PublicBand>
+
+      <PublicBand>
+        <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <Badge variant="secondary">For AI assistants</Badge>
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal">
+              This is the safe working boundary.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              The assistant should feel clear about what is happening here:
+              cataloging household move information, not bypassing privacy,
+              scraping accounts, or making irreversible decisions without the
+              user.
+            </p>
+          </div>
+          <ul className="grid gap-3">
+            {assistantGroundRules.map((rule) => (
+              <li key={rule} className="rounded-md border border-border p-4 text-sm leading-6">
+                {rule}
+              </li>
+            ))}
+          </ul>
+        </div>
       </PublicBand>
 
       <PublicBand>
@@ -185,6 +286,12 @@ function AssistantVisual() {
         </Badge>
       </div>
       <div className="mt-4 space-y-3">
+        <div className="rounded-md border border-primary/25 bg-primary/5 p-3">
+          <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+            Paste-ready prompt
+          </div>
+          <p className="mt-2 text-sm leading-6">{starterPrompt}</p>
+        </div>
         {[
           ["User", "Here are photos of the Den. Add these to my move."],
           [

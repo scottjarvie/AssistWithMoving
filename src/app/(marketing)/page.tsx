@@ -38,8 +38,8 @@ const signalCards = [
 
 const assistantLinks = [
   {
-    title: "AI assistant ready",
-    copy: "Point Claude, ChatGPT, or Codex at /ai before you even create an account.",
+    title: "For your assistant",
+    copy: "Public instructions explain the move workflow before you create an account.",
     icon: Bot,
     href: "/ai",
   },
@@ -50,6 +50,9 @@ const assistantLinks = [
     href: "/api",
   },
 ];
+
+const starterPrompt =
+  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, walk me through creating an account and an AI helper key.";
 
 export default function MarketingPage() {
   return (
@@ -114,6 +117,25 @@ export default function MarketingPage() {
             <Button asChild variant="outline" size="lg">
               <Link href="/sign-up">Create account</Link>
             </Button>
+          </div>
+          <div className="mt-6 rounded-md border border-primary/25 bg-primary/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Bot className="size-4 text-primary" aria-hidden="true" />
+              If you already use Claude, ChatGPT, or Codex
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Tell it:
+            </p>
+            <blockquote className="mt-2 border-l-2 border-primary pl-3 text-sm leading-6">
+              {starterPrompt}
+            </blockquote>
+            <Link
+              href="/ai"
+              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary"
+            >
+              Open the assistant guide
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
           </div>
         </div>
 
@@ -212,6 +234,21 @@ export default function MarketingPage() {
                     {item.copy}
                   </p>
                 </Link>
+              ))}
+            </div>
+            <Separator />
+            <div className="grid gap-3 p-4 md:grid-cols-3">
+              {[
+                ["New user", "Paste the starter prompt into a phone assistant."],
+                ["Assistant", "Read /ai and /llms.txt before asking for private access."],
+                ["Power user", "Use API or MCP tools with a revocable helper key."],
+              ].map(([title, copy]) => (
+                <div key={title} className="rounded-md bg-muted/45 p-3">
+                  <div className="text-sm font-medium">{title}</div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    {copy}
+                  </p>
+                </div>
               ))}
             </div>
             <Separator />

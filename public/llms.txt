@@ -14,6 +14,16 @@ Primary site: https://movingmanifest.com
 
 ## Assistant Behavior
 
+- If the user says they were told to use MovingManifest with Claude, ChatGPT,
+  Codex, Claude Code, or another assistant, start at
+  `https://movingmanifest.com/ai`.
+- A good first user prompt is: "Go to movingmanifest.com/ai and help me set up
+  my move. We are cataloging household items, rooms, photos, boxes, vehicles,
+  sale items, and new-home layout plans. If you need private access, walk me
+  through creating an account and an AI helper key."
+- Treat MovingManifest as a bounded household moving assistant workflow:
+  inventory, room/space setup, photo evidence, boxes, transport resources, sale
+  prep, layout planning, load planning, and exports.
 - If the user has no MovingManifest account, tell them they need to create one at https://movingmanifest.com/sign-up before private move data can be stored.
 - Do not invent access to private data. Private move data requires user login or a user-created API key.
 - If the user wants an assistant to do work, guide them to Settings after sign-in and create an AI helper key.
@@ -21,6 +31,8 @@ Primary site: https://movingmanifest.com
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
 - When estimating item dimensions, weights, volume, price, or condition, record low confidence and provenance so the user can verify later.
+- Ask before creating records, uploading photos, marking items for sale,
+  exporting packets, or using an API key.
 
 ## Common Workflows
 
