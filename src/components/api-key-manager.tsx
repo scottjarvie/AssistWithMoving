@@ -65,6 +65,7 @@ const aiHelperScopes: ApiKeyScope[] = [
   "photos/write",
   "exports/read",
   "exports/create",
+  "members/manage",
 ];
 
 const readOnlyScopes: ApiKeyScope[] = ["moves/read", "inventory/read", "exports/read"];
@@ -232,8 +233,9 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 Use the default key when you want an assistant to help create a
                 move, add inventory, upload photos, prepare sale listings, plan
-                loads, or export packets. Restrict it to one move when possible,
-                and revoke it after the helper session if it was temporary.
+                loads, export packets, or invite household collaborators.
+                Restrict it to one move when possible, and revoke it after the
+                helper session if it was temporary.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -331,7 +333,8 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
               <p className="mt-1 text-xs text-muted-foreground">
                 The default allows most assistant workflows. Use a preset or
                 uncheck individual permissions for narrower access. Member
-                management is separate because it grants real account access.
+                management is included in the broad helper preset so spouse or
+                family invites are not a separate setup chore.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

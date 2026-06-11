@@ -1526,7 +1526,9 @@ Recommended MCP key scopes depend on the intended agent:
 | Inventory intake helper | `moves/read`, `inventory/read`, `inventory/write` |
 | Load planning helper | `moves/read`, `moves/write`, `inventory/read`, `inventory/write` |
 | Photo intake helper | `moves/read`, `inventory/read`, `photos/write` |
+| Household setup helper | `moves/read`, `members/manage` |
 | Documentation helper | `moves/read`, `inventory/read`, `exports/read`, `exports/create` |
+| Broad move assistant | `moves/read`, `moves/write`, `inventory/read`, `inventory/write`, `plans/read`, `plans/write`, `photos/write`, `exports/read`, `exports/create`, `members/manage` |
 | Layout Studio helper | `plans/read`, `plans/write`, plus `inventory/read` when placing real items or boxes |
 
 Prefer move-restricted API keys for local agents.
