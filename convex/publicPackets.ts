@@ -14,6 +14,7 @@ import {
   publicPacketKindForProfileType,
   publicPacketTitleForProfileType,
 } from "./lib/publicPackets";
+import { buildPublicPlanView } from "./lib/publicPlanView";
 import { publicSubManifestKindForProfileType } from "./lib/subManifest";
 
 const shareLinkScopeValidator = v.union(v.literal("move"), v.literal("profile"));
@@ -27,6 +28,7 @@ const shareLinkRoleValidator = v.union(
 );
 const shareLinkActionValidator = v.union(
   v.literal("view"),
+  v.literal("viewPlan"),
   v.literal("download"),
   v.literal("statusUpdate"),
   v.literal("comment"),
@@ -50,11 +52,26 @@ export const getForShareLink = internalQuery({
     label: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const shareLink = publicShareLinkMetadata(args);
+    const publicPlan = args.allowedActions.includes("viewPlan")
+      ? await buildPublicPlanView(ctx, args)
+      : null;
+
     if (!args.documentationProfileId) {
+      if (publicPlan) {
+        return {
+          status: "ready" as const,
+          kind: "plan" as const,
+          shareLink,
+          plan: publicPlan,
+        };
+      }
       return {
         status: "unsupported" as const,
-        reason: "This share link is not tied to a documentation profile yet.",
-        shareLink: publicShareLinkMetadata(args),
+        reason: args.allowedActions.includes("viewPlan")
+          ? "No active Layout Studio plan is available for this move yet."
+          : "This share link is not tied to a documentation profile yet.",
+        shareLink,
       };
     }
 
@@ -81,7 +98,7 @@ export const getForShareLink = internalQuery({
       return {
         status: "ready" as const,
         kind: "subManifest" as const,
-        shareLink: publicShareLinkMetadata(args),
+        shareLink,
         profile: publicProfileMetadata(profile),
         packet,
       };
@@ -92,7 +109,7 @@ export const getForShareLink = internalQuery({
       return {
         status: "unsupported" as const,
         reason: `${profile.name} links are created, but public rendering for this packet type is not enabled yet.`,
-        shareLink: publicShareLinkMetadata(args),
+        shareLink,
         profile: publicProfileMetadata(profile),
       };
     }
@@ -100,7 +117,7 @@ export const getForShareLink = internalQuery({
     return {
       status: "ready" as const,
       kind: "documentationPacket" as const,
-      shareLink: publicShareLinkMetadata(args),
+      shareLink,
       profile: publicProfileMetadata(profile),
       packet: await buildPublicDocumentationPacket(ctx, {
         householdId: args.householdId,
@@ -512,7 +529,12 @@ function publicShareLinkMetadata(args: {
   scope: "move" | "profile";
   role: "owner" | "admin" | "editor" | "packer" | "viewer" | "guest";
   allowedActions: Array<
-    "view" | "download" | "statusUpdate" | "comment" | "uploadEvidence"
+    | "view"
+    | "viewPlan"
+    | "download"
+    | "statusUpdate"
+    | "comment"
+    | "uploadEvidence"
   >;
   expiresAt: number;
   label?: string;
@@ -528,6 +550,7 @@ function publicShareLinkMetadata(args: {
     canStatusUpdate: args.allowedActions.includes("statusUpdate"),
     canComment: args.allowedActions.includes("comment"),
     canUploadEvidence: args.allowedActions.includes("uploadEvidence"),
+    canViewPlan: args.allowedActions.includes("viewPlan"),
   };
 }
 

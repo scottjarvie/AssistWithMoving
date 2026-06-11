@@ -22,6 +22,8 @@ describe("feature flags", () => {
     expect(defaultFlagEnabled("adminTools", "production")).toBe(true);
     expect(defaultFlagEnabled("billingGates", "production")).toBe(false);
     expect(defaultFlagEnabled("billingGates", "preview")).toBe(true);
+    expect(defaultFlagEnabled("layoutStudio", "development")).toBe(true);
+    expect(defaultFlagEnabled("layoutStudio", "production")).toBe(false);
   });
 
   it("applies runtime overrides over environment defaults", () => {
@@ -47,6 +49,7 @@ describe("feature flags", () => {
 
   it("validates supported keys", () => {
     expect(isFeatureFlagKey("adminTools")).toBe(true);
+    expect(isFeatureFlagKey("layoutStudio")).toBe(true);
     expect(isFeatureFlagKey("unknown")).toBe(false);
   });
 

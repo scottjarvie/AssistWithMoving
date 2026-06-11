@@ -41,6 +41,7 @@ import {
   parseOptionalCurrencyCents,
   parseOptionalNumber,
 } from "@/lib/inventory-detail";
+import { itemDimensionsConfidenceForRead } from "@/lib/inventory-measurements";
 import {
   estimateConfidenceOptions,
   itemConditionOptions,
@@ -176,6 +177,14 @@ export function ItemDetailSheet({
   const [heightIn, setHeightIn] = useState(
     formatOptionalNumber(item?.dimensionsIn?.heightIn)
   );
+  const [dimensionsConfidence, setDimensionsConfidence] = useState<
+    InventoryItem["dimensionsConfidence"]
+  >(
+    itemDimensionsConfidenceForRead({
+      dimensionsIn: item?.dimensionsIn,
+      dimensionsConfidence: item?.dimensionsConfidence,
+    }) ?? "none",
+  );
   const [estimatedWeightLb, setEstimatedWeightLb] = useState(
     formatOptionalNumber(item?.estimatedWeightLb)
   );
@@ -258,6 +267,14 @@ export function ItemDetailSheet({
       ? "Personal transport"
       : "None";
 
+  function updateDimensionInput(
+    value: string,
+    setter: (nextValue: string) => void,
+  ) {
+    setter(value);
+    setDimensionsConfidence("manual");
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -288,6 +305,7 @@ export function ItemDetailSheet({
             : {}),
         serialNumber,
         modelNumber,
+        dimensionsConfidence,
         weightConfidence,
         volumeConfidence,
         reviewFlags: parseCommaList(reviewFlags),
@@ -589,21 +607,27 @@ export function ItemDetailSheet({
                     <Input
                       inputMode="decimal"
                       value={lengthIn}
-                      onChange={(event) => setLengthIn(event.target.value)}
+                      onChange={(event) =>
+                        updateDimensionInput(event.target.value, setLengthIn)
+                      }
                     />
                   </Field>
                   <Field label="Width (in)">
                     <Input
                       inputMode="decimal"
                       value={widthIn}
-                      onChange={(event) => setWidthIn(event.target.value)}
+                      onChange={(event) =>
+                        updateDimensionInput(event.target.value, setWidthIn)
+                      }
                     />
                   </Field>
                   <Field label="Height (in)">
                     <Input
                       inputMode="decimal"
                       value={heightIn}
-                      onChange={(event) => setHeightIn(event.target.value)}
+                      onChange={(event) =>
+                        updateDimensionInput(event.target.value, setHeightIn)
+                      }
                     />
                   </Field>
                 </div>
@@ -662,6 +686,24 @@ export function ItemDetailSheet({
                         setEstimatedPackedVolumeCuFt(event.target.value)
                       }
                     />
+                  </Field>
+                  <Field label="Dimensions confidence">
+                    <select
+                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                      value={dimensionsConfidence}
+                      onChange={(event) =>
+                        setDimensionsConfidence(
+                          event.target
+                            .value as InventoryItem["dimensionsConfidence"]
+                        )
+                      }
+                    >
+                      {estimateConfidenceOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                   <Field label="Weight confidence">
                     <select

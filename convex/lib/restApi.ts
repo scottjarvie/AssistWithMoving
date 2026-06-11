@@ -211,6 +211,9 @@ export function requiredScopesForRestRoute({
   if (segments[0] === "photos" && method !== "GET") {
     return ["photos/write"];
   }
+  if (segments[0] === "plans") {
+    return method === "GET" ? ["plans/read"] : ["plans/write"];
+  }
   if (segments[0] === "items") {
     return method === "GET" ? ["inventory/read"] : ["inventory/write"];
   }
@@ -256,7 +259,11 @@ export function requiredScopesForRestRoute({
     if (segments.includes("people")) {
       return ["moves/read"];
     }
-    if (segments.includes("items") || segments.includes("boxes")) {
+    if (
+      segments.includes("items") ||
+      segments.includes("planned-items") ||
+      segments.includes("boxes")
+    ) {
       return ["inventory/read"];
     }
     if (segments.includes("assignments")) {
@@ -290,7 +297,11 @@ export function requiredScopesForRestRoute({
     if (segments.includes("people")) {
       return ["moves/write"];
     }
-    if (segments.includes("items") || segments.includes("boxes")) {
+    if (
+      segments.includes("items") ||
+      segments.includes("planned-items") ||
+      segments.includes("boxes")
+    ) {
       return ["inventory/write"];
     }
     if (segments.includes("assignments")) {

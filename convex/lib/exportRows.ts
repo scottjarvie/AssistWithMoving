@@ -3,7 +3,8 @@ export type ExportJobType =
   | "inventory"
   | "boxes"
   | "assignments"
-  | "documentationProfile";
+  | "documentationProfile"
+  | "floorPlan";
 
 export type ExportableItem = {
   name: string;

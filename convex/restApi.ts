@@ -1,3 +1,4 @@
+import { anyApi, type FunctionReference } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -28,7 +29,6 @@ import {
   exportFilename,
   exportMimeType,
   inventoryCsvRows,
-  type ExportJobType,
   type ExportVisibility,
 } from "./lib/exportRows";
 import {
@@ -50,6 +50,7 @@ import {
   roundEstimate,
   sumEstimateValues,
 } from "./lib/estimateEngine";
+import { itemDimensionsConfidenceForRead } from "../src/lib/inventory-measurements";
 import { summarizeMoveQuestionsFromDocs } from "./lib/moveQuestionDocuments";
 import {
   boxStatuses,
@@ -99,6 +100,15 @@ import { parseTextIntakeSuggestions } from "./lib/textIntakeParser";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import {
+  describePlanDocument,
+  normalizePlanDocument,
+  renderPlanSnapshotSvg,
+  type PlanDocumentInput,
+  type PlanEntitySummary,
+  type PlanPlacementSummary,
+  type PlanSourceSummary,
+} from "../src/lib/plan-describe";
+import {
   bearerToken,
   bodyRecord as bodyObject,
   moveIdFromRestBodyOrQuery,
@@ -126,6 +136,7 @@ const restExportJobTypes = [
   "assignments",
   "documentationProfile",
 ] as const;
+type RestExportJobType = (typeof restExportJobTypes)[number];
 const restShareLinkStatuses = ["active", "revoked"] as const;
 const restShareLinkScopes = ["move", "profile"] as const;
 const restShareLinkRoles = [
@@ -143,6 +154,12 @@ const restEstimateConfidences = [
   "high",
   "manual",
   "actual",
+] as const;
+const restPlannedItemStatuses = [
+  "idea",
+  "decided",
+  "purchased",
+  "dropped",
 ] as const;
 const restPlanningSuggestionStatuses = [
   "pending",
@@ -171,6 +188,25 @@ const restMovePersonRoles = [
   "contact",
 ] as const;
 const maxBatchUpsertItems = 100;
+
+const internalFunctions = anyApi as unknown as {
+  planOps: {
+    applyApiOps: FunctionReference<
+      "mutation",
+      "internal",
+      {
+        householdId: Id<"households">;
+        moveId: Id<"moves">;
+        planId: Id<"floorPlans">;
+        batchId: string;
+        ops: unknown[];
+        apiKeyId: Id<"apiKeys">;
+        agentLabel?: string;
+      },
+      unknown
+    >;
+  };
+};
 
 export const handle = internalMutation({
   args: {
@@ -222,7 +258,8 @@ export const handle = internalMutation({
         requiredScopes,
         moveId,
         action,
-        allowRestrictedKeyWithoutMoveId: segments[0] === "me",
+        allowRestrictedKeyWithoutMoveId:
+          segments[0] === "me" || segments[0] === "plans",
       });
 
       const rateLimit = await checkApiRateLimit(ctx, {
@@ -495,6 +532,9 @@ async function routeRequest(
   if (resource === "photos") {
     return await routeTopLevelPhoto(ctx, args, auth, moveIdSegment, nested);
   }
+  if (resource === "plans") {
+    return await routePlans(ctx, args, auth, moveIdSegment, nested);
+  }
   if (resource !== "moves") {
     return restError({ status: 404, code: "not_found", message: "Not found." });
   }
@@ -579,6 +619,9 @@ async function routeRequest(
   if (nested === "items") {
     return await routeItems(ctx, args, auth, moveId, nestedId);
   }
+  if (nested === "planned-items") {
+    return await routePlannedItems(ctx, args, auth, moveId, nestedId, segments[4]);
+  }
   if (nested === "boxes") {
     return await routeBoxes(ctx, args, auth, moveId, nestedId);
   }
@@ -650,6 +693,233 @@ async function routeRequest(
   }
 
   return restError({ status: 404, code: "not_found", message: "Not found." });
+}
+
+async function routePlans(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  planIdSegment?: string,
+  nested?: string
+) {
+  if (args.method === "GET" && !planIdSegment) {
+    const moveId = planListMoveId(args, auth);
+    if (!moveId) {
+      return restError({
+        status: 400,
+        code: "move_required",
+        message: "moveId is required for listing plans.",
+      });
+    }
+    await requireApiMove(ctx, auth.householdId, moveId);
+    const plans = await ctx.db
+      .query("floorPlans")
+      .withIndex("by_move_status", (q) => q.eq("moveId", moveId))
+      .collect();
+    const activePlans = plans.filter((plan) => !plan.archivedAt);
+    const summaries = await Promise.all(
+      activePlans.map(async (plan) => ({
+        planId: plan._id,
+        moveId: plan.moveId,
+        name: plan.name,
+        kind: plan.kind,
+        status: plan.status,
+        levels: await planLevelSummaries(ctx, plan._id),
+        updatedAt: plan.updatedAt,
+      })),
+    );
+    return restOk(paginate(summaries, args.query));
+  }
+
+  if (!planIdSegment) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Plan route not found.",
+    });
+  }
+
+  const plan = await requireApiPlan(ctx, auth, planIdSegment);
+  if (args.method === "GET" && !nested) {
+    return restOk({ data: await planDocumentForApi(ctx, plan) });
+  }
+  if (args.method === "GET" && nested === "summary") {
+    const document = await planDocumentForApi(ctx, plan);
+    return restOk({ data: { planId: plan._id, summary: describePlanDocument(document) } });
+  }
+  if (args.method === "GET" && nested === "snapshot.svg") {
+    const document = await planDocumentForApi(ctx, plan);
+    return {
+      status: 200,
+      body: renderPlanSnapshotSvg(document, args.query.level),
+      headers: { "Content-Type": "image/svg+xml; charset=utf-8" },
+    };
+  }
+  if (nested === "proposals") {
+    return await routePlanProposals(ctx, args, auth, plan);
+  }
+  if (args.method === "POST" && nested === "ops") {
+    return await routePlanOps(ctx, args, auth, plan);
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Plan route not found.",
+  });
+}
+
+async function routePlanOps(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">
+) {
+  const body = bodyObject(args.body);
+  const batchId = requiredBodyString(body.batchId, "batchId is required.");
+  const ops = requiredOps(body.ops);
+  const agentLabel = optionalString(body.agentLabel);
+
+  try {
+    const result = await ctx.runMutation(internalFunctions.planOps.applyApiOps, {
+      householdId: auth.householdId,
+      moveId: plan.moveId,
+      planId: plan._id,
+      batchId,
+      ops,
+      apiKeyId: auth.apiKeyId,
+      agentLabel,
+    });
+    return restOk({ data: result }, 201);
+  } catch (error) {
+    const structured = structuredPlanOpError(error);
+    if (structured) {
+      return {
+        status: 400,
+        body: {
+          error: {
+            code: structured.code,
+            message: structured.reason,
+            index: structured.index,
+          },
+        },
+      };
+    }
+    throw error;
+  }
+}
+
+async function routePlanProposals(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">
+) {
+  if (args.method === "GET") {
+    const statuses = args.query.includeReviewed === "true"
+      ? (["pending", "applied", "partiallyApplied", "rejected"] as const)
+      : (["pending"] as const);
+    const proposals = (
+      await Promise.all(
+        statuses.map((status) =>
+          ctx.db
+            .query("planProposals")
+            .withIndex("by_plan_status", (q) =>
+              q.eq("planId", plan._id).eq("status", status)
+            )
+            .collect(),
+        ),
+      )
+    ).flat();
+    return restOk(
+      paginate(
+        proposals
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map((proposal) => safePlanProposal(proposal)),
+        args.query,
+      ),
+    );
+  }
+
+  if (args.method === "POST") {
+    const body = bodyObject(args.body);
+    const batchId = requiredBodyString(body.batchId, "batchId is required.");
+    const ops = requiredOps(body.ops);
+    const reasoning = requiredBodyString(body.reasoning, "reasoning is required.");
+    const agentLabel = optionalString(body.agentLabel);
+    const now = Date.now();
+    const proposalId = await ctx.db.insert("planProposals", {
+      householdId: auth.householdId,
+      moveId: plan.moveId,
+      planId: plan._id,
+      batchId,
+      ops,
+      agentLabel,
+      reasoning: reasoning.slice(0, 8000),
+      status: "pending",
+      appliedOpIndexes: [],
+      createdByApiKeyId: auth.apiKeyId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await recordAuditEvent(ctx, {
+      householdId: auth.householdId,
+      moveId: plan.moveId,
+      actorType: "apiKey",
+      actorApiKeyId: auth.actor.apiKeyId,
+      category: "plan",
+      action: "plan.proposal_created",
+      objectTable: "planProposals",
+      objectId: proposalId,
+      metadata: {
+        planId: plan._id,
+        batchId,
+        opCount: ops.length,
+        agentLabel,
+      },
+    });
+    const proposal = await ctx.db.get(proposalId);
+    return restOk(
+      { data: proposal ? safePlanProposal(proposal) : { proposalId } },
+      201,
+    );
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Plan proposal route not found.",
+  });
+}
+
+function planListMoveId(
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+) {
+  return (
+    auth.moveId ??
+    moveIdFromRestBodyOrQuery({
+      body: args.body,
+      query: args.query,
+    })
+  ) as Id<"moves"> | undefined;
+}
+
+async function planLevelSummaries(ctx: MutationCtx, planId: Id<"floorPlans">) {
+  const levels = await ctx.db
+    .query("planLevels")
+    .withIndex("by_plan_sort", (q) => q.eq("planId", planId))
+    .collect();
+  return levels
+    .filter((level) => !level.archivedAt)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((level) => ({
+      levelId: level._id,
+      name: level.name,
+      levelType: level.levelType,
+      sortOrder: level.sortOrder,
+      ceilingHeightIn: level.ceilingHeightIn,
+    }));
 }
 
 async function routeMoveSummary(
@@ -1634,6 +1904,156 @@ async function routeItems(
   }
 
   return restError({ status: 404, code: "not_found", message: "Item route not found." });
+}
+
+async function routePlannedItems(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  plannedItemIdSegment?: string,
+  action?: string
+) {
+  if (args.method === "GET" && !plannedItemIdSegment) {
+    const includeArchived = args.query.includeArchived === "true";
+    const plannedItems = await ctx.db
+      .query("plannedItems")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+      .order("desc")
+      .collect();
+    return restOk(
+      paginate(
+        plannedItems
+          .filter((plannedItem) => plannedItem.householdId === auth.householdId)
+          .filter((plannedItem) => includeArchived || !plannedItem.archivedAt)
+          .map((plannedItem) => safePlannedItem(plannedItem)),
+        args.query,
+      ),
+    );
+  }
+
+  if (args.method === "GET" && plannedItemIdSegment) {
+    const plannedItem = await requireApiPlannedItem(
+      ctx,
+      auth.householdId,
+      moveId,
+      plannedItemIdSegment,
+      args.query.includeArchived === "true",
+    );
+    return restOk({ data: safePlannedItem(plannedItem) });
+  }
+
+  if (args.method === "POST" && !plannedItemIdSegment) {
+    const body = bodyObject(args.body);
+    const name = normalizeItemName(String(body.name ?? ""));
+    if (!name) {
+      throw new Error("name is required.");
+    }
+    const now = Date.now();
+    const plannedItemId = await ctx.db.insert("plannedItems", {
+      householdId: auth.householdId,
+      moveId,
+      name,
+      normalizedName: normalizedSearchName(name),
+      category: normalizeOptionalText(asString(body.category)),
+      subcategory: normalizeOptionalText(asString(body.subcategory)),
+      description: normalizeOptionalText(asString(body.description)),
+      dimensionsIn: parseDimensionsIn(body.dimensionsIn),
+      dimensionsConfidence: parsePlanningConfidence(
+        body.dimensionsConfidence,
+        "dimensionsConfidence",
+      ),
+      estimatedPriceCents: optionalNumber(body.estimatedPriceCents),
+      url: normalizeOptionalText(asString(body.url)),
+      priority: normalizePlannedItemPriority(optionalNumber(body.priority)),
+      notes: normalizeOptionalText(asString(body.notes)),
+      status: parsePlannedItemStatus(body.status) ?? "idea",
+      createdVia: "api",
+      createdByUserId: auth.createdByUserId,
+      updatedByUserId: auth.createdByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "planned_item.api_created",
+      "plannedItems",
+      plannedItemId,
+      { name },
+    );
+    return restOk({ data: { plannedItemId } }, 201);
+  }
+
+  if (args.method === "PATCH" && plannedItemIdSegment) {
+    const plannedItem = await requireApiPlannedItem(
+      ctx,
+      auth.householdId,
+      moveId,
+      plannedItemIdSegment,
+      false,
+    );
+    const patch = plannedItemPatch(args.body, auth.createdByUserId);
+    await ctx.db.patch(plannedItem._id, patch);
+    const updated = await ctx.db.get(plannedItem._id);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "planned_item.api_updated",
+      "plannedItems",
+      plannedItem._id,
+      { changedKeys: Object.keys(patch) },
+    );
+    return restOk({
+      data: updated ? safePlannedItem(updated) : { plannedItemId: plannedItem._id },
+    });
+  }
+
+  if (args.method === "POST" && plannedItemIdSegment && action === "convert") {
+    const plannedItem = await requireApiPlannedItem(
+      ctx,
+      auth.householdId,
+      moveId,
+      plannedItemIdSegment,
+      false,
+    );
+    const result = await convertApiPlannedItem(ctx, auth, plannedItem);
+    return restOk({ data: result }, 201);
+  }
+
+  if (args.method === "DELETE" && plannedItemIdSegment) {
+    const plannedItem = await requireApiPlannedItem(
+      ctx,
+      auth.householdId,
+      moveId,
+      plannedItemIdSegment,
+      false,
+    );
+    const now = Date.now();
+    await ctx.db.patch(plannedItem._id, {
+      archivedAt: now,
+      updatedAt: now,
+      updatedByUserId: auth.createdByUserId,
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "planned_item.api_archived",
+      "plannedItems",
+      plannedItem._id,
+      {},
+    );
+    return restOk({ data: { plannedItemId: plannedItem._id, archivedAt: now } });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Planned item route not found.",
+  });
 }
 
 async function routeBatchUpsertItems(
@@ -3195,6 +3615,7 @@ async function createApiItemFromAiTextDraft(
     status: "active",
     quantity: positiveNumber(args.draft.quantity) ?? 1,
     condition: "unknown",
+    dimensionsConfidence: "none",
     weightConfidence: "none",
     volumeConfidence: "none",
     fragility: args.draft.fragility ?? "low",
@@ -3340,6 +3761,7 @@ async function createApiItemFromAiPhotoDraft(
     status: "active",
     quantity: positiveNumber(args.draft.quantity) ?? 1,
     condition: "unknown",
+    dimensionsConfidence: "none",
     weightConfidence: "none",
     volumeConfidence: "none",
     fragility: args.draft.fragility ?? "low",
@@ -4465,6 +4887,206 @@ async function requireApiMove(
   return move;
 }
 
+async function requireApiPlan(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  planIdSegment: string
+) {
+  const plan = await ctx.db.get(planIdSegment as Id<"floorPlans">);
+  if (
+    !plan ||
+    plan.householdId !== auth.householdId ||
+    plan.archivedAt ||
+    plan.status !== "active"
+  ) {
+    throw new Error("Plan not found.");
+  }
+  if (auth.moveId && auth.moveId !== plan.moveId) {
+    throw new Error("Plan not found.");
+  }
+  await requireApiMove(ctx, auth.householdId, plan.moveId);
+  return plan;
+}
+
+async function planDocumentForApi(
+  ctx: MutationCtx,
+  plan: Doc<"floorPlans">
+): Promise<PlanDocumentInput> {
+  const [levels, entities, placements, items, boxes, plannedItems, pendingProposals] =
+    await Promise.all([
+      ctx.db
+        .query("planLevels")
+        .withIndex("by_plan_sort", (q) => q.eq("planId", plan._id))
+        .collect(),
+      ctx.db
+        .query("planEntities")
+        .withIndex("by_plan_type", (q) => q.eq("planId", plan._id))
+        .collect(),
+      ctx.db
+        .query("planPlacements")
+        .withIndex("by_plan", (q) => q.eq("planId", plan._id))
+        .collect(),
+      ctx.db
+        .query("items")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
+        .collect(),
+      ctx.db
+        .query("boxes")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
+        .collect(),
+      ctx.db
+        .query("plannedItems")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
+        .collect(),
+      ctx.db
+        .query("planProposals")
+        .withIndex("by_plan_status", (q) =>
+          q.eq("planId", plan._id).eq("status", "pending")
+        )
+        .collect(),
+    ]);
+  const itemsById = new Map(items.map((item) => [String(item._id), item]));
+  const boxesById = new Map(boxes.map((box) => [String(box._id), box]));
+  const plannedItemsById = new Map(
+    plannedItems.map((plannedItem) => [String(plannedItem._id), plannedItem]),
+  );
+
+  return normalizePlanDocument({
+    plan: {
+      planId: plan._id,
+      moveId: plan.moveId,
+      name: plan.name,
+      kind: plan.kind,
+      northAngleDeg: plan.northAngleDeg,
+      defaultWallThicknessIn: plan.defaultWallThicknessIn,
+      defaultCeilingHeightIn: plan.defaultCeilingHeightIn,
+      gridSnapIn: plan.gridSnapIn,
+      shortIdCounters: plan.shortIdCounters,
+      nextSeq: plan.nextSeq,
+      status: plan.status,
+      createdAt: plan.createdAt,
+      updatedAt: plan.updatedAt,
+    },
+    levels: levels
+      .filter((level) => !level.archivedAt)
+      .map((level) => ({
+        levelId: level._id,
+        name: level.name,
+        levelType: level.levelType,
+        sortOrder: level.sortOrder,
+        ceilingHeightIn: level.ceilingHeightIn,
+      })),
+    entities: entities
+      .filter((entity) => !entity.archivedAt)
+      .map((entity): PlanEntitySummary => ({
+        entityId: entity._id,
+        levelId: entity.levelId,
+        shortId: entity.shortId,
+        entityType: entity.entityType,
+        name: entity.name,
+        color: entity.color,
+        locked: entity.locked,
+        wall: entity.wall,
+        room: entity.room,
+        opening: entity.opening,
+        feature: entity.feature,
+        zone: entity.zone,
+        annotation: entity.annotation,
+      })),
+    placements: placements
+      .filter((placement) => !placement.archivedAt)
+      .map((placement): PlanPlacementSummary => ({
+        placementId: placement._id,
+        levelId: placement.levelId,
+        shortId: placement.shortId,
+        source: placementSourceForApi(
+          placement,
+          itemsById,
+          boxesById,
+          plannedItemsById,
+        ),
+        x: placement.x,
+        y: placement.y,
+        rotationDeg: placement.rotationDeg,
+        footprintOverrideIn: placement.footprintOverrideIn,
+        parentPlacementId: placement.parentPlacementId,
+        containmentMode: placement.containmentMode,
+        zOrder: placement.zOrder,
+        color: placement.color,
+        locked: placement.locked,
+      })),
+    pendingProposalCount: pendingProposals.length,
+  });
+}
+
+function placementSourceForApi(
+  placement: Doc<"planPlacements">,
+  itemsById: Map<string, Doc<"items">>,
+  boxesById: Map<string, Doc<"boxes">>,
+  plannedItemsById: Map<string, Doc<"plannedItems">>,
+): PlanSourceSummary | undefined {
+  if (placement.itemId) {
+    const item = itemsById.get(String(placement.itemId));
+    return {
+      kind: "item",
+      sourceId: String(placement.itemId),
+      label: item?.name ?? "Item",
+      dimensionsIn: item?.dimensionsIn,
+      confidence: itemDimensionsConfidenceForRead({
+        dimensionsIn: item?.dimensionsIn,
+        dimensionsConfidence: item?.dimensionsConfidence,
+      }),
+    };
+  }
+  if (placement.boxId) {
+    const box = boxesById.get(String(placement.boxId));
+    return {
+      kind: "box",
+      sourceId: String(placement.boxId),
+      label: box?.label ?? box?.code ?? "Box",
+      dimensionsIn: box?.dimensionsIn,
+    };
+  }
+  if (placement.plannedItemId) {
+    const plannedItem = plannedItemsById.get(String(placement.plannedItemId));
+    return {
+      kind: "plannedItem",
+      sourceId: String(placement.plannedItemId),
+      label: plannedItem?.name ?? `Planned item ${placement.plannedItemId}`,
+      dimensionsIn: plannedItem?.dimensionsIn,
+      confidence: plannedItem?.dimensionsConfidence,
+    };
+  }
+  if (placement.templateKey) {
+    return {
+      kind: "template",
+      sourceId: placement.templateKey,
+      label: placement.templateKey,
+      confidence: "medium",
+    };
+  }
+  return undefined;
+}
+
+function safePlanProposal(proposal: Doc<"planProposals">) {
+  return {
+    proposalId: proposal._id,
+    planId: proposal.planId,
+    moveId: proposal.moveId,
+    batchId: proposal.batchId,
+    ops: proposal.ops,
+    agentLabel: proposal.agentLabel,
+    reasoning: proposal.reasoning,
+    status: proposal.status,
+    appliedOpIndexes: proposal.appliedOpIndexes,
+    reviewedByUserId: proposal.reviewedByUserId,
+    reviewedAt: proposal.reviewedAt,
+    createdByApiKeyId: proposal.createdByApiKeyId,
+    createdAt: proposal.createdAt,
+    updatedAt: proposal.updatedAt,
+  };
+}
+
 async function requireApiItem(
   ctx: MutationCtx,
   householdId: Id<"households">,
@@ -4476,6 +5098,25 @@ async function requireApiItem(
     throw new Error("Item not found.");
   }
   return item;
+}
+
+async function requireApiPlannedItem(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  plannedItemIdSegment: string,
+  includeArchived = false
+) {
+  const plannedItem = await ctx.db.get(plannedItemIdSegment as Id<"plannedItems">);
+  if (
+    !plannedItem ||
+    plannedItem.householdId !== householdId ||
+    plannedItem.moveId !== moveId ||
+    (!includeArchived && plannedItem.archivedAt)
+  ) {
+    throw new Error("Planned item not found.");
+  }
+  return plannedItem;
 }
 
 async function requireApiItemById(
@@ -4715,10 +5356,38 @@ function safeItem(item: Doc<"items">) {
     replacementValueCents: item.replacementValueCents,
     serialNumber: item.serialNumber,
     modelNumber: item.modelNumber,
+    dimensionsIn: item.dimensionsIn,
+    dimensionsConfidence: itemDimensionsConfidenceForRead({
+      dimensionsIn: item.dimensionsIn,
+      dimensionsConfidence: item.dimensionsConfidence,
+    }),
     highValue: item.highValue,
     needsReview: item.needsReview,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+  };
+}
+
+function safePlannedItem(plannedItem: Doc<"plannedItems">) {
+  return {
+    plannedItemId: plannedItem._id,
+    moveId: plannedItem.moveId,
+    name: plannedItem.name,
+    category: plannedItem.category,
+    subcategory: plannedItem.subcategory,
+    description: plannedItem.description,
+    dimensionsIn: plannedItem.dimensionsIn,
+    dimensionsConfidence: plannedItem.dimensionsConfidence,
+    estimatedPriceCents: plannedItem.estimatedPriceCents,
+    url: plannedItem.url,
+    priority: plannedItem.priority,
+    notes: plannedItem.notes,
+    status: plannedItem.status,
+    convertedItemId: plannedItem.convertedItemId,
+    createdVia: plannedItem.createdVia,
+    createdAt: plannedItem.createdAt,
+    updatedAt: plannedItem.updatedAt,
+    archivedAt: plannedItem.archivedAt,
   };
 }
 
@@ -5263,9 +5932,13 @@ async function createApiItem(
     replacementValueCents: optionalNumber(body.replacementValueCents),
     serialNumber: normalizeOptionalText(asString(body.serialNumber)),
     modelNumber: normalizeOptionalText(asString(body.modelNumber)),
+    dimensionsIn: parseDimensionsIn(body.dimensionsIn),
     estimatedWeightLb: optionalNumber(body.estimatedWeightLb),
     actualWeightLb: optionalNumber(body.actualWeightLb),
     estimatedVolumeCuFt: optionalNumber(body.estimatedVolumeCuFt),
+    dimensionsConfidence:
+      parsePlanningConfidence(body.dimensionsConfidence, "dimensionsConfidence") ??
+      "none",
     weightConfidence: "none",
     volumeConfidence: "none",
     fragility: "low",
@@ -5288,12 +5961,104 @@ async function createApiItem(
   return { itemId, name, ...externalKey };
 }
 
+async function convertApiPlannedItem(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plannedItem: Doc<"plannedItems">
+) {
+  if (plannedItem.convertedItemId) {
+    return {
+      itemId: plannedItem.convertedItemId,
+      reparentedPlacementCount: 0,
+    };
+  }
+
+  const now = Date.now();
+  const itemId = await ctx.db.insert("items", {
+    householdId: plannedItem.householdId,
+    moveId: plannedItem.moveId,
+    name: plannedItem.name,
+    normalizedName: plannedItem.normalizedName,
+    description: plannedItem.description,
+    category: plannedItem.category,
+    subcategory: plannedItem.subcategory,
+    disposition: "take",
+    status: "active",
+    quantity: 1,
+    condition: "unknown",
+    dimensionsIn: plannedItem.dimensionsIn,
+    dimensionsConfidence: plannedItem.dimensionsConfidence ?? "medium",
+    weightConfidence: "none",
+    volumeConfidence: "none",
+    fragility: "low",
+    stackable: true,
+    hazardousFlag: false,
+    highValue: false,
+    requiresPersonalTransport: false,
+    planningDefaultKeys: [],
+    needsReview: false,
+    reviewFlags: [],
+    privateNotes: plannedItem.notes,
+    aiTags: [],
+    createdVia: "api",
+    reviewedAt: now,
+    createdByUserId: auth.createdByUserId,
+    updatedByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const placements = (
+    await ctx.db
+      .query("planPlacements")
+      .withIndex("by_planned_item", (q) => q.eq("plannedItemId", plannedItem._id))
+      .collect()
+  ).filter(
+    (placement) =>
+      placement.householdId === plannedItem.householdId &&
+      placement.moveId === plannedItem.moveId &&
+      !placement.archivedAt,
+  );
+
+  await Promise.all(
+    placements.map((placement) =>
+      ctx.db.patch(placement._id, {
+        itemId,
+        plannedItemId: undefined,
+        updatedAt: now,
+      }),
+    ),
+  );
+
+  await ctx.db.patch(plannedItem._id, {
+    status: "purchased",
+    convertedItemId: itemId,
+    updatedByUserId: auth.createdByUserId,
+    updatedAt: now,
+  });
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    plannedItem.moveId,
+    "planned_item.api_converted",
+    "plannedItems",
+    plannedItem._id,
+    {
+      itemId,
+      reparentedPlacementCount: placements.length,
+    },
+  );
+
+  return { itemId, reparentedPlacementCount: placements.length };
+}
+
 async function createApiCsvExport(
   ctx: MutationCtx,
   args: {
     auth: Awaited<ReturnType<typeof authenticateApiKey>>;
     moveId: Id<"moves">;
-    type: ExportJobType;
+    type: RestExportJobType;
     documentationProfileId?: Id<"documentationProfiles">;
   }
 ) {
@@ -5454,7 +6219,7 @@ function rowsForExport({
   zoneNameById,
   visibility,
 }: {
-  type: ExportJobType;
+  type: RestExportJobType;
   items: Doc<"items">[];
   boxes: Doc<"boxes">[];
   boxItems: Doc<"boxItems">[];
@@ -5658,6 +6423,15 @@ function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
   if (input.modelNumber !== undefined) {
     patch.modelNumber = normalizeOptionalText(asString(input.modelNumber));
   }
+  if (input.dimensionsIn !== undefined) {
+    patch.dimensionsIn = parseDimensionsIn(input.dimensionsIn);
+  }
+  if (input.dimensionsConfidence !== undefined) {
+    patch.dimensionsConfidence = parsePlanningConfidence(
+      input.dimensionsConfidence,
+      "dimensionsConfidence"
+    );
+  }
   if (input.highValue !== undefined) patch.highValue = Boolean(input.highValue);
   if (input.needsReview !== undefined) patch.needsReview = Boolean(input.needsReview);
   if (input.externalSource !== undefined || input.externalId !== undefined) {
@@ -5666,6 +6440,77 @@ function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
     patch.externalId = externalKey?.externalId;
   }
   return patch;
+}
+
+function plannedItemPatch(
+  body: unknown,
+  userId: Id<"users">
+): Partial<Doc<"plannedItems">> {
+  const input = bodyObject(body);
+  const patch: Partial<Doc<"plannedItems">> = {
+    updatedByUserId: userId,
+    updatedAt: Date.now(),
+  };
+  if (input.name !== undefined) {
+    const name = normalizeItemName(String(input.name));
+    if (!name) {
+      throw new Error("name is required.");
+    }
+    patch.name = name;
+    patch.normalizedName = normalizedSearchName(name);
+  }
+  if (input.category !== undefined) {
+    patch.category = normalizeOptionalText(asString(input.category));
+  }
+  if (input.subcategory !== undefined) {
+    patch.subcategory = normalizeOptionalText(asString(input.subcategory));
+  }
+  if (input.description !== undefined) {
+    patch.description = normalizeOptionalText(asString(input.description));
+  }
+  if (input.dimensionsIn !== undefined) {
+    patch.dimensionsIn = parseDimensionsIn(input.dimensionsIn);
+  }
+  if (input.dimensionsConfidence !== undefined) {
+    patch.dimensionsConfidence = parsePlanningConfidence(
+      input.dimensionsConfidence,
+      "dimensionsConfidence"
+    );
+  }
+  if (input.estimatedPriceCents !== undefined) {
+    patch.estimatedPriceCents = optionalNumber(input.estimatedPriceCents);
+  }
+  if (input.url !== undefined) {
+    patch.url = normalizeOptionalText(asString(input.url));
+  }
+  if (input.priority !== undefined) {
+    patch.priority = normalizePlannedItemPriority(optionalNumber(input.priority));
+  }
+  if (input.notes !== undefined) {
+    patch.notes = normalizeOptionalText(asString(input.notes));
+  }
+  if (input.status !== undefined) {
+    patch.status = parsePlannedItemStatus(input.status) ?? "idea";
+  }
+  return patch;
+}
+
+function parseDimensionsIn(
+  value: unknown
+): Doc<"items">["dimensionsIn"] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("dimensionsIn must be an object.");
+  }
+  const input = value as Record<string, unknown>;
+  const dimensions = removeUndefined({
+    lengthIn: optionalNumber(input.lengthIn),
+    widthIn: optionalNumber(input.widthIn),
+    heightIn: optionalNumber(input.heightIn),
+  });
+  return Object.keys(dimensions).length ? dimensions : undefined;
 }
 
 function boxPatch(body: unknown): Partial<Doc<"boxes">> {
@@ -5859,6 +6704,11 @@ function positiveNumber(value: unknown) {
   return number && number > 0 ? number : undefined;
 }
 
+function normalizePlannedItemPriority(value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value)) return undefined;
+  return Math.min(4, Math.max(1, Math.round(value)));
+}
+
 function boundedInteger(value: unknown, min: number, max: number, fallback: number) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
@@ -5872,6 +6722,45 @@ function asString(value: unknown) {
 
 function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function requiredBodyString(value: unknown, message: string) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(message);
+  }
+  return value.trim();
+}
+
+function requiredOps(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new Error("ops must be an array.");
+  }
+  return value;
+}
+
+function structuredPlanOpError(error: unknown) {
+  if (!(error instanceof Error)) return null;
+  try {
+    const parsed = JSON.parse(error.message) as {
+      code?: unknown;
+      index?: unknown;
+      reason?: unknown;
+    };
+    if (
+      parsed.code === "plan_op_invalid" &&
+      typeof parsed.index === "number" &&
+      typeof parsed.reason === "string"
+    ) {
+      return {
+        code: parsed.code,
+        index: parsed.index,
+        reason: parsed.reason,
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function normalizeExternalKeyPart(value: unknown, label: string) {
@@ -5978,6 +6867,12 @@ function parsePcsShipmentType(value: unknown) {
 function parseItemStatus(value: unknown) {
   return includesLiteral(itemStatuses, value)
     ? (value as Doc<"items">["status"])
+    : undefined;
+}
+
+function parsePlannedItemStatus(value: unknown) {
+  return includesLiteral(restPlannedItemStatuses, value)
+    ? (value as Doc<"plannedItems">["status"])
     : undefined;
 }
 
@@ -6157,7 +7052,7 @@ function parseDocumentationProfileTypes(value: unknown) {
 
 function parseExportJobType(value: unknown) {
   return includesLiteral(restExportJobTypes, value)
-    ? (value as ExportJobType)
+    ? (value as RestExportJobType)
     : undefined;
 }
 

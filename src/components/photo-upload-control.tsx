@@ -24,6 +24,12 @@ type PhotoUploadTarget = {
   room?: string;
 };
 
+type UploadedPhoto = {
+  photoId: Id<"itemPhotos">;
+  width: number;
+  height: number;
+};
+
 export function PhotoUploadControl({
   householdId,
   moveId,
@@ -31,8 +37,16 @@ export function PhotoUploadControl({
   boxId,
   room,
   label = "Upload photo",
+  photoType,
+  privacyLevel = "normal",
+  visibilityScope = "moveCollaborators",
+  onUploaded,
 }: PhotoUploadTarget & {
   label?: string;
+  photoType?: "item" | "boxContents" | "blueprint";
+  privacyLevel?: "normal" | "private";
+  visibilityScope?: "moveCollaborators" | "private";
+  onUploaded?: (photo: UploadedPhoto) => void;
 }) {
   const initUpload = useAction(api.photos.initUpload);
   const finalizeUpload = useAction(api.photos.finalizeUpload);
@@ -143,7 +157,7 @@ export function PhotoUploadControl({
       }
       setProgress(96);
 
-      await finalizeUpload({
+      const photoId = (await finalizeUpload({
         householdId,
         moveId,
         uploadSessionId: activeUploadSessionId,
@@ -151,15 +165,16 @@ export function PhotoUploadControl({
         height,
         originalHash,
         caption,
-        photoType: boxId ? "boxContents" : "item",
-        privacyLevel: "normal",
-        visibilityScope: "moveCollaborators",
+        photoType: photoType ?? (boxId ? "boxContents" : "item"),
+        privacyLevel,
+        visibilityScope,
         exifHandlingStatus: "pending",
         confidence: "manual",
         verificationStatus: "unreviewed",
-      });
+      })) as Id<"itemPhotos">;
 
       setStatus("Photo uploaded.");
+      onUploaded?.({ photoId, width, height });
       setFile(null);
       setCaption("");
       setUploadSessionId(null);

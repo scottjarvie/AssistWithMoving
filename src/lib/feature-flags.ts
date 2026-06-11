@@ -3,7 +3,8 @@ export type FeatureFlagKey =
   | "apiMcp"
   | "documentationPackets"
   | "adminTools"
-  | "billingGates";
+  | "billingGates"
+  | "layoutStudio";
 
 export type EffectiveFeatureFlag = {
   key: FeatureFlagKey;

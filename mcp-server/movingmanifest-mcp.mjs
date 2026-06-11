@@ -29,6 +29,7 @@ import {
   generatePlanningSuggestions,
   generateAiPhotoSuggestions,
   generateAiTextSuggestions,
+  archivePlannedItem,
   getAiProviderStatus,
   getApiCapabilities,
   getApiContext,
@@ -43,10 +44,18 @@ import {
   listExports,
   listMoves,
   listMovePeople,
+  listPlannedItems,
   listPlanningSuggestions,
   listShareLinkComments,
   listShareLinks,
   listTransportResources,
+  planApplyOps,
+  planGet,
+  planProposeOps,
+  planSnapshot,
+  planSummary,
+  plansList,
+  convertPlannedItem,
   removeItemFromBox,
   rejectAiPhotoSuggestions,
   rejectAiTextSuggestions,
@@ -57,11 +66,13 @@ import {
   suggestAssignments,
   textResult,
   toolErrorResult,
+  createPlannedItem,
   updateDocumentationProfile,
   updateMovePerson,
   updateTransportResource,
   updateTransportZone,
   updateItem,
+  updatePlannedItem,
   createShareLink,
 } from "./movingmanifest-api.mjs";
 
@@ -192,6 +203,19 @@ const estimateConfidenceSchema = z.enum([
   "actual",
 ]);
 
+const plannedItemStatusSchema = z.enum([
+  "idea",
+  "decided",
+  "purchased",
+  "dropped",
+]);
+
+const dimensionsInSchema = z.object({
+  lengthIn: z.number().nonnegative().optional(),
+  widthIn: z.number().nonnegative().optional(),
+  heightIn: z.number().nonnegative().optional(),
+});
+
 const capacityReviewStatusSchema = z.enum([
   "unreviewed",
   "estimated",
@@ -284,10 +308,227 @@ const movePersonRoleSchema = z.enum([
 
 const shareLinkActionSchema = z.enum([
   "view",
+  "viewPlan",
   "download",
   "statusUpdate",
   "comment",
   "uploadEvidence",
+]);
+
+const planPointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+
+const planUnderlaySchema = z.object({
+  photoId: z.string(),
+  opacity: z.number(),
+  originX: z.number(),
+  originY: z.number(),
+  scaleInPerPx: z.number().positive(),
+  rotationDeg: z.number(),
+});
+
+const planWallSchema = z.object({
+  x1: z.number(),
+  y1: z.number(),
+  x2: z.number(),
+  y2: z.number(),
+  thicknessIn: z.number().positive(),
+  heightIn: z.number().positive(),
+});
+
+const planRoomSchema = z.object({
+  points: z.array(planPointSchema).min(3),
+  fillColor: z.string().optional(),
+});
+
+const planOpeningSchema = z.object({
+  wallShortId: z.string().min(1),
+  offsetAlongWallIn: z.number(),
+  widthIn: z.number().positive(),
+  kind: z.enum(["door", "window", "passage"]),
+  swing: z.enum(["left", "right", "none"]),
+  sillHeightIn: z.number().optional(),
+  headHeightIn: z.number().optional(),
+});
+
+const planFeatureSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  rotationDeg: z.number(),
+  featureKind: z.enum([
+    "stairs",
+    "sink",
+    "toilet",
+    "tub",
+    "shower",
+    "waterHeater",
+    "fireplace",
+    "counter",
+    "custom",
+  ]),
+  widthIn: z.number().positive(),
+  depthIn: z.number().positive(),
+  label: z.string().optional(),
+});
+
+const planZoneSchema = z.object({
+  points: z.array(planPointSchema).min(3),
+  zoneKind: z.enum(["driveway", "shed", "garden", "fence", "patio", "custom"]),
+});
+
+const planAnnotationSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  text: z.string().min(1),
+  fontSizeIn: z.number().positive().optional(),
+});
+
+const planLevelInputSchema = z.object({
+  name: z.string().min(1),
+  levelType: z.enum(["indoor", "outdoor"]),
+  sortOrder: z.number(),
+  ceilingHeightIn: z.number().positive().optional(),
+  underlay: planUnderlaySchema.optional(),
+});
+
+const planEntityInputSchema = z.object({
+  levelId: z.string().min(1),
+  entityType: z.enum(["wall", "room", "opening", "feature", "zone", "annotation"]),
+  name: z.string().optional(),
+  color: z.string().optional(),
+  locked: z.boolean().optional(),
+  wall: planWallSchema.optional(),
+  room: planRoomSchema.optional(),
+  opening: planOpeningSchema.optional(),
+  feature: planFeatureSchema.optional(),
+  zone: planZoneSchema.optional(),
+  annotation: planAnnotationSchema.optional(),
+});
+
+const planPlacementSourceSchema = z.union([
+  z.object({ itemId: z.string().min(1) }),
+  z.object({ boxId: z.string().min(1) }),
+  z.object({ plannedItemId: z.string().min(1) }),
+  z.object({ templateKey: z.string().min(1) }),
+]);
+
+const planPlacementInputSchema = planPlacementSourceSchema.and(
+  z.object({
+    levelId: z.string().min(1),
+    x: z.number(),
+    y: z.number(),
+    rotationDeg: z.number(),
+    footprintOverrideIn: z
+      .object({
+        lengthIn: z.number().positive(),
+        widthIn: z.number().positive(),
+      })
+      .optional(),
+    parentPlacementId: z.string().optional(),
+    containmentMode: z.enum(["inside", "onTop"]).optional(),
+    zOrder: z.number().optional(),
+    color: z.string().optional(),
+    locked: z.boolean().optional(),
+  })
+);
+
+const planEntityPatchSchema = z.object({
+  name: z.string().optional(),
+  color: z.string().optional(),
+  locked: z.boolean().optional(),
+  wall: planWallSchema.optional(),
+  room: planRoomSchema.optional(),
+  opening: planOpeningSchema.optional(),
+  feature: planFeatureSchema.optional(),
+  zone: planZoneSchema.optional(),
+  annotation: planAnnotationSchema.optional(),
+});
+
+const planPlacementPatchSchema = z.object({
+  itemId: z.string().min(1).optional(),
+  boxId: z.string().min(1).optional(),
+  plannedItemId: z.string().min(1).optional(),
+  templateKey: z.string().min(1).optional(),
+  footprintOverrideIn: z
+    .object({
+      lengthIn: z.number().positive(),
+      widthIn: z.number().positive(),
+    })
+    .optional(),
+  color: z.string().optional(),
+  locked: z.boolean().optional(),
+  zOrder: z.number().optional(),
+});
+
+export const planOpSchema = z.union([
+  z.object({ type: z.literal("createLevel"), level: planLevelInputSchema }),
+  z.object({
+    type: z.literal("updateLevel"),
+    levelId: z.string().min(1),
+    patch: planLevelInputSchema.partial(),
+  }),
+  z.object({ type: z.literal("deleteLevel"), levelId: z.string().min(1) }),
+  z.object({
+    type: z.literal("restoreLevel"),
+    level: z.record(z.string(), z.unknown()),
+  }),
+  z.object({
+    type: z.literal("setLevelUnderlay"),
+    levelId: z.string().min(1),
+    underlay: planUnderlaySchema.optional(),
+  }),
+  z.object({ type: z.literal("createEntity"), entity: planEntityInputSchema }),
+  z.object({
+    type: z.literal("updateEntity"),
+    entityId: z.string().min(1),
+    patch: planEntityPatchSchema,
+  }),
+  z.object({
+    type: z.literal("renameEntity"),
+    entityId: z.string().min(1),
+    name: z.string().optional(),
+  }),
+  z.object({ type: z.literal("deleteEntity"), entityId: z.string().min(1) }),
+  z.object({
+    type: z.literal("restoreEntity"),
+    entity: z.record(z.string(), z.unknown()),
+  }),
+  z.object({ type: z.literal("createPlacement"), placement: planPlacementInputSchema }),
+  z.object({
+    type: z.literal("movePlacement"),
+    placementId: z.string().min(1),
+    x: z.number(),
+    y: z.number(),
+    rotationDeg: z.number(),
+  }),
+  z.object({
+    type: z.literal("updatePlacement"),
+    placementId: z.string().min(1),
+    patch: planPlacementPatchSchema,
+  }),
+  z.object({
+    type: z.literal("setContainment"),
+    placementId: z.string().min(1),
+    parentPlacementId: z.string().optional(),
+    containmentMode: z.enum(["inside", "onTop"]).optional(),
+  }),
+  z.object({ type: z.literal("deletePlacement"), placementId: z.string().min(1) }),
+  z.object({
+    type: z.literal("restorePlacement"),
+    placement: z.record(z.string(), z.unknown()),
+  }),
+  z.object({
+    type: z.literal("updatePlanSettings"),
+    patch: z.object({
+      name: z.string().optional(),
+      northAngleDeg: z.number().optional(),
+      defaultWallThicknessIn: z.number().positive().optional(),
+      defaultCeilingHeightIn: z.number().positive().optional(),
+      gridSnapIn: z.number().positive().optional(),
+    }),
+  }),
 ]);
 
 const documentationFiltersSchema = z.object({
@@ -455,6 +696,91 @@ export function registerTools(target, apiConfig) {
     handler: (input) => getMoveDayChecklist(apiConfig, input),
   });
 
+  registerTool(target, "plans_list", {
+    title: "List floor plans",
+    description:
+      "List Layout Studio floor plans for a move, including level summaries. Requires plans/read. Move-restricted keys may omit moveId.",
+    inputSchema: {
+      moveId: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => plansList(apiConfig, input),
+  });
+
+  registerTool(target, "plan_get", {
+    title: "Get floor plan document",
+    description:
+      "Fetch the full Layout Studio plan document: settings, levels, entities, placements, source metadata, and pending proposal count. Always read this before writing plan ops.",
+    inputSchema: {
+      planId: z.string(),
+      moveId: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => planGet(apiConfig, input),
+  });
+
+  registerTool(target, "plan_summary", {
+    title: "Summarize floor plan",
+    description:
+      "Fetch a plain-text Layout Studio plan summary for text-only agents and sanity checks before editing.",
+    inputSchema: {
+      planId: z.string(),
+      moveId: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => planSummary(apiConfig, input),
+  });
+
+  registerTool(target, "plan_apply_ops", {
+    title: "Apply floor plan ops",
+    description:
+      "Apply a batch of Layout Studio ops directly. Prefer plan_propose_ops unless the user explicitly wants immediate writes. Set dryRun true to preview the HTTP request.",
+    inputSchema: {
+      planId: z.string(),
+      moveId: z.string().optional(),
+      batchId: z.string().min(1),
+      ops: z.array(planOpSchema).min(1).max(250),
+      agentLabel: z.string().optional(),
+      idempotencyKey: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => planApplyOps(apiConfig, input),
+  });
+
+  registerTool(target, "plan_propose_ops", {
+    title: "Propose floor plan ops",
+    description:
+      "Create a pending Layout Studio proposal instead of mutating the plan. This is the recommended default for agents. Include human-readable reasoning.",
+    inputSchema: {
+      planId: z.string(),
+      moveId: z.string().optional(),
+      batchId: z.string().min(1),
+      ops: z.array(planOpSchema).min(1).max(250),
+      reasoning: z.string().min(1),
+      agentLabel: z.string().optional(),
+      idempotencyKey: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => planProposeOps(apiConfig, input),
+  });
+
+  registerTool(target, "plan_snapshot", {
+    title: "Get floor plan SVG snapshot",
+    description:
+      "Fetch a no-underlay SVG snapshot of a plan level. Vision-capable agents should render and inspect this after large edits to self-check geometry mistakes.",
+    inputSchema: {
+      planId: z.string(),
+      moveId: z.string().optional(),
+      levelId: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => planSnapshot(apiConfig, input),
+  });
+
   registerTool(target, "search_inventory", {
     title: "Search inventory",
     description:
@@ -491,6 +817,8 @@ export function registerTools(target, apiConfig) {
       replacementValueCents: z.number().int().nonnegative().optional(),
       serialNumber: z.string().optional(),
       modelNumber: z.string().optional(),
+      dimensionsIn: dimensionsInSchema.optional(),
+      dimensionsConfidence: estimateConfidenceSchema.optional(),
       highValue: z.boolean().optional(),
       needsReview: z.boolean().optional(),
       dryRun: z.boolean().optional(),
@@ -525,6 +853,8 @@ export function registerTools(target, apiConfig) {
             replacementValueCents: z.number().int().nonnegative().optional(),
             serialNumber: z.string().optional(),
             modelNumber: z.string().optional(),
+            dimensionsIn: dimensionsInSchema.optional(),
+            dimensionsConfidence: estimateConfidenceSchema.optional(),
             estimatedWeightLb: z.number().nonnegative().optional(),
             actualWeightLb: z.number().nonnegative().optional(),
             estimatedVolumeCuFt: z.number().nonnegative().optional(),
@@ -562,6 +892,8 @@ export function registerTools(target, apiConfig) {
       replacementValueCents: z.number().int().nonnegative().optional(),
       serialNumber: z.string().optional(),
       modelNumber: z.string().optional(),
+      dimensionsIn: dimensionsInSchema.optional(),
+      dimensionsConfidence: estimateConfidenceSchema.optional(),
       highValue: z.boolean().optional(),
       needsReview: z.boolean().optional(),
       dryRun: z.boolean().optional(),
@@ -581,6 +913,94 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     handler: (input) => deleteItem(apiConfig, input),
+  });
+
+  registerTool(target, "list_planned_items", {
+    title: "List planned items",
+    description:
+      "List desired or future-purchase items for a move. These are excluded from owned inventory totals until converted.",
+    inputSchema: {
+      moveId: z.string(),
+      query: z.string().optional(),
+      includeArchived: z.boolean().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listPlannedItems(apiConfig, input),
+  });
+
+  registerTool(target, "create_planned_item", {
+    title: "Create planned item",
+    description:
+      "Create one desired future item for Layout Studio planning. Set dryRun true to preview without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      name: z.string().min(1),
+      category: z.string().optional(),
+      subcategory: z.string().optional(),
+      description: z.string().optional(),
+      dimensionsIn: dimensionsInSchema.optional(),
+      dimensionsConfidence: estimateConfidenceSchema.optional(),
+      estimatedPriceCents: z.number().int().nonnegative().optional(),
+      url: z.string().optional(),
+      priority: z.number().int().min(1).max(4).optional(),
+      notes: z.string().optional(),
+      status: plannedItemStatusSchema.optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createPlannedItem(apiConfig, input),
+  });
+
+  registerTool(target, "update_planned_item", {
+    title: "Update planned item",
+    description:
+      "Update selected fields on a desired future item. Set dryRun true to preview without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      plannedItemId: z.string(),
+      name: z.string().min(1).optional(),
+      category: z.string().optional(),
+      subcategory: z.string().optional(),
+      description: z.string().optional(),
+      dimensionsIn: dimensionsInSchema.optional(),
+      dimensionsConfidence: estimateConfidenceSchema.optional(),
+      estimatedPriceCents: z.number().int().nonnegative().optional(),
+      url: z.string().optional(),
+      priority: z.number().int().min(1).max(4).optional(),
+      notes: z.string().optional(),
+      status: plannedItemStatusSchema.optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => updatePlannedItem(apiConfig, input),
+  });
+
+  registerTool(target, "convert_planned_item", {
+    title: "Convert planned item",
+    description:
+      "Convert one planned item into owned inventory and re-point any Layout Studio placements that referenced it.",
+    inputSchema: {
+      moveId: z.string(),
+      plannedItemId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => convertPlannedItem(apiConfig, input),
+  });
+
+  registerTool(target, "archive_planned_item", {
+    title: "Archive planned item",
+    description:
+      "Archive one planned future item. Set dryRun true to preview the request without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      plannedItemId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (input) => archivePlannedItem(apiConfig, input),
   });
 
   registerTool(target, "create_box", {
@@ -1239,7 +1659,14 @@ export function registerTools(target, apiConfig) {
         .optional(),
       allowedActions: z
         .array(
-          z.enum(["view", "download", "statusUpdate", "comment", "uploadEvidence"])
+          z.enum([
+            "view",
+            "viewPlan",
+            "download",
+            "statusUpdate",
+            "comment",
+            "uploadEvidence",
+          ])
         )
         .optional(),
       expiresAt: z.number().optional(),

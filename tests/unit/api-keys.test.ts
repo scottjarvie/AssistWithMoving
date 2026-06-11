@@ -68,6 +68,9 @@ describe("api key primitives", () => {
     expect(canApiKeyPerformAction(["inventory/read"], "inventory:edit")).toBe(
       false
     );
+    expect(canApiKeyPerformAction(["plans/read"], "plan:read")).toBe(true);
+    expect(canApiKeyPerformAction(["plans/read"], "plan:edit")).toBe(false);
+    expect(canApiKeyPerformAction(["plans/write"], "plan:edit")).toBe(true);
     expect(canApiKeyPerformAction(["moves/read"], "api_keys:manage")).toBe(
       false
     );

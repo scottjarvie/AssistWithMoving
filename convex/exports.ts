@@ -18,8 +18,12 @@ import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
+import { buildPublicPlanView } from "./lib/publicPlanView";
+import { renderPublicPlanPrintHtml } from "../src/lib/plan-public";
 
-const exportJobTypeValidator = v.union(
+type CsvExportJobType = Exclude<ExportJobType, "floorPlan">;
+
+const csvExportJobTypeValidator = v.union(
   v.literal("inventory"),
   v.literal("boxes"),
   v.literal("assignments"),
@@ -30,7 +34,7 @@ export const createCsv = mutation({
   args: {
     householdId: v.id("households"),
     moveId: v.id("moves"),
-    type: exportJobTypeValidator,
+    type: csvExportJobTypeValidator,
     documentationProfileId: v.optional(v.id("documentationProfiles")),
   },
   handler: async (ctx, args) => {
@@ -168,6 +172,104 @@ export const createCsv = mutation({
       exportJobId,
       filename,
       rowCount: Math.max(rows.length - 1, 0),
+    };
+  },
+});
+
+export const createFloorPlanPrint = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "documentation:create",
+    );
+    if (policy.actor.type !== "user") {
+      throw new Error(directConvexUserContextRequiredMessage);
+    }
+
+    await assertHouseholdEntitlement(ctx, {
+      householdId: args.householdId,
+      dimension: "exportJobsMonthly",
+    });
+
+    const planView = await buildPublicPlanView(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+    });
+    if (!planView) {
+      throw new Error("No active Layout Studio plan is available for export.");
+    }
+
+    const artifactText = renderPublicPlanPrintHtml(planView);
+    const now = Date.now();
+    const roomCount = planView.levels.reduce(
+      (total, level) => total + level.rooms.length,
+      0,
+    );
+    const placementCount = planView.levels.reduce(
+      (total, level) =>
+        total +
+        level.rooms.reduce((levelTotal, room) => levelTotal + room.placed.length, 0),
+      0,
+    );
+    const filename = exportFilename({
+      type: "floorPlan",
+      format: "print",
+      slug: planView.plan.name,
+    });
+    const exportJobId = await ctx.db.insert("exportJobs", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      type: "floorPlan",
+      format: "print",
+      status: "completed",
+      version: 1,
+      filename,
+      mimeType: exportMimeType("print"),
+      artifactText,
+      rowCount: roomCount,
+      sizeBytes: artifactText.length,
+      filters: {
+        planId: planView.plan.planId,
+        privacy: planView.privacy,
+      },
+      createdByUserId: policy.actor.userId,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: now,
+      expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: policy.actor.userId,
+      category: "export",
+      action: "export_job.completed",
+      objectTable: "exportJobs",
+      objectId: exportJobId,
+      metadata: {
+        type: "floorPlan",
+        format: "print",
+        planId: planView.plan.planId,
+        levelCount: planView.levels.length,
+        roomCount,
+        placementCount,
+      },
+    });
+
+    return {
+      exportJobId,
+      filename,
+      levelCount: planView.levels.length,
+      roomCount,
+      placementCount,
     };
   },
 });
@@ -349,7 +451,7 @@ function rowsForExport({
   zoneNameById,
   visibility,
 }: {
-  type: ExportJobType;
+  type: CsvExportJobType;
   items: Doc<"items">[];
   boxes: Doc<"boxes">[];
   boxItems: Doc<"boxItems">[];

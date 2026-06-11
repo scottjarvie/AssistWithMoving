@@ -138,6 +138,7 @@ export const photoTypes = [
   "boxLabel",
   "receipt",
   "room",
+  "blueprint",
   "other",
 ] as const;
 
@@ -530,6 +531,7 @@ export const photoTypeValidator = v.union(
   v.literal("boxLabel"),
   v.literal("receipt"),
   v.literal("room"),
+  v.literal("blueprint"),
   v.literal("other")
 );
 

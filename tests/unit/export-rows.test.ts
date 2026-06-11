@@ -92,6 +92,13 @@ describe("export row builders", () => {
         slug: "PCS / HHG Packet",
       })
     ).toBe("movingmanifest-pcs-hhg-packet.csv");
+    expect(
+      exportFilename({
+        type: "floorPlan",
+        format: "print",
+        slug: "Unload Plan",
+      })
+    ).toBe("movingmanifest-unload-plan.html");
     expect(exportMimeType("csv")).toBe("text/csv;charset=utf-8");
     expect(exportMimeType("print")).toBe("text/html;charset=utf-8");
   });

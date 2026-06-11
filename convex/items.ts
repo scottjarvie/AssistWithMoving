@@ -37,6 +37,7 @@ const itemWriteArgs = {
   serialNumber: v.optional(v.string()),
   modelNumber: v.optional(v.string()),
   dimensionsIn: v.optional(dimensionsValidator),
+  dimensionsConfidence: v.optional(estimateConfidenceValidator),
   estimatedWeightLb: v.optional(v.number()),
   estimatedWeightLowLb: v.optional(v.number()),
   estimatedWeightHighLb: v.optional(v.number()),
@@ -409,6 +410,7 @@ export const create = mutation({
       serialNumber: normalizeOptionalText(args.serialNumber),
       modelNumber: normalizeOptionalText(args.modelNumber),
       dimensionsIn: args.dimensionsIn,
+      dimensionsConfidence: args.dimensionsConfidence ?? "none",
       estimatedWeightLb: args.estimatedWeightLb,
       estimatedWeightLowLb: args.estimatedWeightLowLb,
       estimatedWeightHighLb: args.estimatedWeightHighLb,
@@ -546,6 +548,9 @@ export const update = mutation({
     }
     if (args.dimensionsIn !== undefined) {
       patch.dimensionsIn = args.dimensionsIn;
+    }
+    if (args.dimensionsConfidence !== undefined) {
+      patch.dimensionsConfidence = args.dimensionsConfidence;
     }
     if (args.estimatedWeightLb !== undefined) {
       patch.estimatedWeightLb = args.estimatedWeightLb;

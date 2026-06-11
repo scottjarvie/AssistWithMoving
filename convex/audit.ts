@@ -23,6 +23,7 @@ export const record = internalMutation({
       v.literal("auth"),
       v.literal("household"),
       v.literal("inventory"),
+      v.literal("plan"),
       v.literal("assignment"),
       v.literal("photo"),
       v.literal("documentation"),

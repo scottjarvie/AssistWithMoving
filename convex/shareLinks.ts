@@ -59,7 +59,12 @@ type ShareLinkAccessResult = {
   scope: "move" | "profile";
   role: "owner" | "admin" | "editor" | "packer" | "viewer" | "guest";
   allowedActions: Array<
-    "view" | "download" | "statusUpdate" | "comment" | "uploadEvidence"
+    | "view"
+    | "viewPlan"
+    | "download"
+    | "statusUpdate"
+    | "comment"
+    | "uploadEvidence"
   >;
   expiresAt: number;
   label?: string;
@@ -301,7 +306,10 @@ export const resolvePublicView = action({
       }
     );
 
-    if (!access.allowedActions.includes("view")) {
+    if (
+      !access.allowedActions.includes("view") &&
+      !access.allowedActions.includes("viewPlan")
+    ) {
       throw new Error("Share link does not allow viewing.");
     }
 

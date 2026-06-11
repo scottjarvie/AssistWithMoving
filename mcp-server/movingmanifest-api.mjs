@@ -140,6 +140,96 @@ export async function getMoveDayChecklist(config, input) {
   return response.data;
 }
 
+export async function plansList(config, input = {}) {
+  return await movingManifestRequest(config, {
+    path: "/plans",
+    query: {
+      moveId: input.moveId,
+      limit: input.limit,
+      cursor: input.cursor,
+    },
+  });
+}
+
+export async function planGet(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/plans/${input.planId}`,
+    query: { moveId: input.moveId },
+  });
+  return response.data;
+}
+
+export async function planSummary(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/plans/${input.planId}/summary`,
+    query: { moveId: input.moveId },
+  });
+  return response.data;
+}
+
+export async function planApplyOps(config, input) {
+  const body = {
+    batchId: input.batchId,
+    ops: input.ops,
+    agentLabel: input.agentLabel,
+  };
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: `/plans/${input.planId}/ops`,
+        query: { moveId: input.moveId },
+        body,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/plans/${input.planId}/ops`,
+    query: { moveId: input.moveId },
+    body,
+    idempotencyKey: input.idempotencyKey,
+  });
+}
+
+export async function planProposeOps(config, input) {
+  const body = {
+    batchId: input.batchId,
+    ops: input.ops,
+    agentLabel: input.agentLabel,
+    reasoning: input.reasoning,
+  };
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: `/plans/${input.planId}/proposals`,
+        query: { moveId: input.moveId },
+        body,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/plans/${input.planId}/proposals`,
+    query: { moveId: input.moveId },
+    body,
+    idempotencyKey: input.idempotencyKey,
+  });
+}
+
+export async function planSnapshot(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/plans/${input.planId}/snapshot.svg`,
+    query: {
+      moveId: input.moveId,
+      level: input.levelId,
+    },
+  });
+}
+
 export async function searchInventory(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/items`,
@@ -225,6 +315,95 @@ export async function deleteItem(config, input) {
     method: "DELETE",
     path: `/items/${input.itemId}`,
     query: { moveId: input.moveId },
+  });
+}
+
+export async function listPlannedItems(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/planned-items`,
+    query: {
+      limit: input.limit ?? 50,
+      cursor: input.cursor,
+      includeArchived: input.includeArchived,
+    },
+  });
+  const query = input.query?.trim().toLowerCase();
+  if (!query) return response;
+  return {
+    ...response,
+    data: response.data.filter((item) =>
+      [item.name, item.description, item.category, item.subcategory, item.url]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    ),
+  };
+}
+
+export async function createPlannedItem(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: `/moves/${input.moveId}/planned-items`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/planned-items`,
+    body: input,
+  });
+}
+
+export async function updatePlannedItem(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "PATCH",
+        path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "PATCH",
+    path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}`,
+    body: input,
+  });
+}
+
+export async function convertPlannedItem(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}/convert`,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}/convert`,
+  });
+}
+
+export async function archivePlannedItem(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "DELETE",
+        path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}`,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "DELETE",
+    path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}`,
   });
 }
 

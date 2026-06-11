@@ -80,6 +80,9 @@ describe("share link helpers", () => {
     expect(
       normalizeShareLinkActions(["download", "comment"], ["view", "download"])
     ).toEqual(["download"]);
+    expect(
+      normalizeShareLinkActions(["viewPlan"], ["view", "viewPlan", "download"])
+    ).toEqual(["viewPlan"]);
   });
 
   it("keeps token hashes out of share link list summaries", () => {

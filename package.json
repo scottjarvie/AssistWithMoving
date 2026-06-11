@@ -22,6 +22,7 @@
     "doctor:convex-env": "node scripts/convex-env-readiness.mjs",
     "doctor:convex-dev-env": "node --env-file=.env.local scripts/convex-env-readiness.mjs --deployment-from-env --compare-local-storage",
     "doctor:storage": "node --no-warnings --env-file=.env.local scripts/storage-readiness.mjs",
+    "doctor:layout-studio-qa": "node --env-file=.env.local scripts/layout-studio-qa-readiness.mjs",
     "doctor:webhooks": "node --env-file=.env.local scripts/webhook-readiness.mjs",
     "doctor:all": "npm run doctor:launch && npm run doctor:vercel-env && npm run doctor:vercel-preview-env && npm run doctor:release && npm run doctor:convex-env && npm run doctor:convex-dev-env && npm run doctor:storage && npm run doctor:webhooks",
     "doctor:next": "node scripts/launch-next-steps.mjs",

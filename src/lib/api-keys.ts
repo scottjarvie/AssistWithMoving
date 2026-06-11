@@ -3,6 +3,8 @@ export const apiKeyScopeOptions = [
   ["moves/write", "Write moves"],
   ["inventory/read", "Read inventory"],
   ["inventory/write", "Write inventory"],
+  ["plans/read", "Read plans"],
+  ["plans/write", "Write plans"],
   ["photos/write", "Upload photos"],
   ["exports/read", "Read exports"],
   ["exports/create", "Create exports"],

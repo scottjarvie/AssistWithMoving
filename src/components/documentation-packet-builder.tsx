@@ -90,7 +90,7 @@ type ShareLinkComment = {
 
 type ExportJobSummary = {
   exportJobId: Id<"exportJobs">;
-  type: "inventory" | "boxes" | "assignments" | "documentationProfile";
+  type: "inventory" | "boxes" | "assignments" | "documentationProfile" | "floorPlan";
   format: "pdf" | "csv" | "print";
   status: "queued" | "processing" | "completed" | "failed" | "expired";
   filename?: string;
@@ -175,6 +175,7 @@ export function DocumentationPacketBuilder({
   const createShareLink = useAction(api.shareLinks.create);
   const revokeShareLink = useMutation(api.shareLinks.revoke);
   const createCsvExport = useMutation(api.exports.createCsv);
+  const createFloorPlanPrintExport = useMutation(api.exports.createFloorPlanPrint);
 
   const [profileType, setProfileType] =
     useState<DocumentationProfileType>("movingCompany");
@@ -407,6 +408,36 @@ export function DocumentationPacketBuilder({
     }
   }
 
+  async function handleCreatePlanShareLink() {
+    if (!householdId || !moveId) return;
+    const parsedDays = Number(expiresInDays);
+    const safeDays = Number.isFinite(parsedDays)
+      ? Math.min(Math.max(parsedDays, 1), 366)
+      : 30;
+    setBusy("plan-link");
+    setCreatedToken(null);
+    setMessage(null);
+    try {
+      const result = await createShareLink({
+        householdId,
+        moveId,
+        scope: "move",
+        label: "Unload plan",
+        role: linkRole,
+        allowedActions: ["viewPlan"],
+        expiresAt: Date.now() + safeDays * 24 * 60 * 60 * 1000,
+      });
+      setCreatedToken(result.token);
+      setMessage("Plan share link token created.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not create plan link."
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function handleCreateCsvExport(type: ExportJobType) {
     if (!householdId || !moveId) return;
     if (type === "documentationProfile" && !selectedProfile) return;
@@ -437,6 +468,41 @@ export function DocumentationPacketBuilder({
       setMessage(`CSV export created with ${result.rowCount} rows.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not create export.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleCreateFloorPlanPrintExport() {
+    if (!householdId || !moveId) return;
+    setBusy("export-floorPlan");
+    setMessage(null);
+    try {
+      const result = await createFloorPlanPrintExport({
+        householdId,
+        moveId,
+      });
+      setRecentExports((current) => [
+        {
+          exportJobId: result.exportJobId as Id<"exportJobs">,
+          type: "floorPlan",
+          format: "print",
+          status: "completed",
+          filename: result.filename,
+          rowCount: result.roomCount,
+          createdAt: Date.now(),
+          moveId,
+        },
+        ...current,
+      ]);
+      setDownloadExportJobId(result.exportJobId as Id<"exportJobs">);
+      setMessage(
+        `Plan print pack created with ${result.levelCount} levels and ${result.roomCount} rooms.`
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not create plan export."
+      );
     } finally {
       setBusy(null);
     }
@@ -691,8 +757,8 @@ export function DocumentationPacketBuilder({
                     <div>
                       <h3 className="text-sm font-medium">Server exports</h3>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Create permission-checked CSV artifacts with export
-                        history.
+                        Create permission-checked CSV and print artifacts with
+                        export history.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -719,6 +785,11 @@ export function DocumentationPacketBuilder({
                           void handleCreateCsvExport("documentationProfile")
                         }
                       />
+                      <ExportButton
+                        label="Plan print pack"
+                        busy={busy === "export-floorPlan"}
+                        onClick={() => void handleCreateFloorPlanPrintExport()}
+                      />
                     </div>
                   </div>
                   <div className="mt-3 space-y-2">
@@ -735,7 +806,7 @@ export function DocumentationPacketBuilder({
                             {" "}
                             {job.status}
                             {typeof job.rowCount === "number"
-                              ? ` - ${job.rowCount} rows`
+                              ? ` - ${job.rowCount} ${job.type === "floorPlan" ? "rooms" : "rows"}`
                               : ""}
                           </span>
                           {job.status === "completed" ? (
@@ -930,7 +1001,7 @@ export function DocumentationPacketBuilder({
                     <Link2 className="size-4 text-primary" aria-hidden="true" />
                     Scoped share link
                   </h3>
-                  <div className="mt-3 grid gap-3 md:grid-cols-[160px_160px_minmax(0,1fr)]">
+                  <div className="mt-3 grid gap-3 md:grid-cols-[160px_160px_minmax(0,1fr)_minmax(0,1fr)]">
                     <select
                       className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                       value={linkRole}
@@ -957,6 +1028,14 @@ export function DocumentationPacketBuilder({
                       onClick={() => void handleCreateShareLink()}
                     >
                       Create link token
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy === "plan-link"}
+                      onClick={() => void handleCreatePlanShareLink()}
+                    >
+                      Create plan link
                     </Button>
                   </div>
                   {createdToken ? (

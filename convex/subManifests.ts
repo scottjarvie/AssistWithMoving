@@ -76,6 +76,7 @@ export const getForShareLink = internalQuery({
     allowedActions: v.array(
       v.union(
         v.literal("view"),
+        v.literal("viewPlan"),
         v.literal("download"),
         v.literal("statusUpdate"),
         v.literal("comment"),
@@ -367,7 +368,12 @@ function publicShareLinkMetadata(args: {
   scope: "move" | "profile";
   role: "owner" | "admin" | "editor" | "packer" | "viewer" | "guest";
   allowedActions: Array<
-    "view" | "download" | "statusUpdate" | "comment" | "uploadEvidence"
+    | "view"
+    | "viewPlan"
+    | "download"
+    | "statusUpdate"
+    | "comment"
+    | "uploadEvidence"
   >;
   expiresAt: number;
   label?: string;

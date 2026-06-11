@@ -23,6 +23,7 @@ export const documentationImageRuleOptions = [
 
 export const shareLinkActionOptions = [
   ["view", "View"],
+  ["viewPlan", "View plan"],
   ["download", "Download"],
   ["statusUpdate", "Status updates"],
   ["comment", "Comment"],

@@ -10,31 +10,34 @@ import {
   FileStack,
   Images,
   LayoutDashboard,
+  Map,
   Truck,
   type LucideIcon,
 } from "lucide-react";
 
+import { useOptionalMoveWorkspace } from "@/components/move-workspace-context";
+import {
+  workspaceNavItems,
+  type WorkspaceNavItem,
+} from "@/lib/workspace-nav-items";
 import {
   workspaceBasePathFromPathname,
   workspaceNavHref,
 } from "@/lib/workspace-nav";
 import { cn } from "@/lib/utils";
 
-const navItems: {
-  section?: string;
-  label: string;
-  icon: LucideIcon;
-}[] = [
-  { label: "Dashboard", icon: LayoutDashboard },
-  { section: "capture", label: "Capture", icon: Camera },
-  { section: "inventory", label: "Inventory", icon: ClipboardList },
-  { section: "boxes", label: "Boxes", icon: Archive },
-  { section: "photos", label: "Photos", icon: Images },
-  { section: "load-plan", label: "Load Plan", icon: Truck },
-  { section: "move-day", label: "Move Day", icon: ClipboardList },
-  { section: "packets", label: "Packets", icon: FileStack },
-  { section: "ai-review", label: "AI Review", icon: Bot },
-];
+const navIcons = {
+  dashboard: LayoutDashboard,
+  capture: Camera,
+  inventory: ClipboardList,
+  boxes: Archive,
+  photos: Images,
+  layout: Map,
+  loadPlan: Truck,
+  moveDay: ClipboardList,
+  packets: FileStack,
+  aiReview: Bot,
+} satisfies Record<WorkspaceNavItem["iconKey"], LucideIcon>;
 
 export function WorkspaceNav({
   variant = "sidebar",
@@ -42,7 +45,9 @@ export function WorkspaceNav({
   variant?: "sidebar" | "mobile";
 }) {
   const pathname = usePathname();
+  const workspace = useOptionalMoveWorkspace();
   const mobile = variant === "mobile";
+  const navItems = workspaceNavItems(workspace?.featureFlags);
 
   return (
     <nav
@@ -54,6 +59,7 @@ export function WorkspaceNav({
       )}
     >
       {navItems.map((item) => {
+        const Icon = navIcons[item.iconKey];
         const href = workspaceNavHref(pathname, item.section);
         const basePath = workspaceBasePathFromPathname(pathname);
         const active =
@@ -72,7 +78,7 @@ export function WorkspaceNav({
               active && "bg-sidebar-accent text-sidebar-accent-foreground"
             )}
           >
-            <item.icon className="size-4" aria-hidden="true" />
+            <Icon className="size-4" aria-hidden="true" />
             {item.label}
           </Link>
         );

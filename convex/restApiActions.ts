@@ -38,6 +38,7 @@ const photoTypes = [
   "boxLabel",
   "receipt",
   "room",
+  "blueprint",
   "other",
 ] as const;
 const privacyLevels = [

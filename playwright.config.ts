@@ -14,7 +14,7 @@ export default defineConfig({
     command: "npm run build && npm run start",
     url: "http://localhost:3827",
     reuseExistingServer: false,
-    timeout: 240_000,
+    timeout: 480_000,
   },
   projects: [
     {

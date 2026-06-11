@@ -64,6 +64,36 @@ describe("REST API helpers", () => {
     ).toEqual(["inventory/write"]);
     expect(
       requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["moves", "move1", "planned-items"],
+      })
+    ).toEqual(["inventory/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "planned-items"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "PATCH",
+        segments: ["moves", "move1", "planned-items", "planned1"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "planned-items", "planned1", "convert"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "DELETE",
+        segments: ["moves", "move1", "planned-items", "planned1"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
         method: "PATCH",
         segments: ["items", "item1"],
       })
@@ -98,6 +128,42 @@ describe("REST API helpers", () => {
         segments: ["photos", "photo1", "attach"],
       })
     ).toEqual(["photos/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["plans"],
+      })
+    ).toEqual(["plans/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["plans", "plan1", "summary"],
+      })
+    ).toEqual(["plans/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["plans", "plan1", "snapshot.svg"],
+      })
+    ).toEqual(["plans/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "GET",
+        segments: ["plans", "plan1", "proposals"],
+      })
+    ).toEqual(["plans/read"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["plans", "plan1", "ops"],
+      })
+    ).toEqual(["plans/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["plans", "plan1", "proposals"],
+      })
+    ).toEqual(["plans/write"]);
     expect(
       requiredScopesForRestRoute({
         method: "GET",
@@ -392,6 +458,14 @@ describe("REST API helpers", () => {
         query: {},
       })
     ).toBe("photo-move");
+
+    expect(
+      moveIdFromRestRequest({
+        segments: ["plans", "plan1"],
+        body: {},
+        query: { moveId: "plan-move" },
+      })
+    ).toBe("plan-move");
   });
 
   it("keeps body/query move context parsing safe for non-object bodies", () => {

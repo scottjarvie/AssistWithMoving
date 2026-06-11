@@ -4,6 +4,7 @@ import {
   workspaceBasePathFromPathname,
   workspaceNavHref,
 } from "../../src/lib/workspace-nav";
+import { workspaceNavItems } from "../../src/lib/workspace-nav-items";
 
 describe("workspace nav links", () => {
   it("uses dashboard links outside a specific move workspace", () => {
@@ -22,5 +23,43 @@ describe("workspace nav links", () => {
     expect(workspaceNavHref("/app/moves/move_123/inventory", "boxes")).toBe(
       "/app/moves/move_123/boxes"
     );
+    expect(workspaceNavHref("/app/moves/move_123/photos", "plan")).toBe(
+      "/app/moves/move_123/plan"
+    );
+  });
+
+  it("hides Layout Studio navigation when the flag is off or unresolved", () => {
+    expect(workspaceNavItems(undefined).map((item) => item.label)).not.toContain(
+      "Layout"
+    );
+    expect(
+      workspaceNavItems([
+        {
+          key: "layoutStudio",
+          label: "Layout Studio",
+          description: "Experimental planner",
+          environment: "production",
+          enabled: false,
+          source: "default",
+        },
+      ]).map((item) => item.label)
+    ).not.toContain("Layout");
+  });
+
+  it("shows Layout Studio navigation near planning tools when the flag is on", () => {
+    const labels = workspaceNavItems([
+      {
+        key: "layoutStudio",
+        label: "Layout Studio",
+        description: "Experimental planner",
+        environment: "development",
+        enabled: true,
+        source: "default",
+      },
+    ]).map((item) => item.label);
+
+    expect(labels).toContain("Layout");
+    expect(labels.indexOf("Layout")).toBeGreaterThan(labels.indexOf("Photos"));
+    expect(labels.indexOf("Layout")).toBeLessThan(labels.indexOf("Load Plan"));
   });
 });

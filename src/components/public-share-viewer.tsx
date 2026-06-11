@@ -35,6 +35,7 @@ type ShareMetadata = {
   canStatusUpdate: boolean;
   canComment: boolean;
   canUploadEvidence: boolean;
+  canViewPlan: boolean;
 };
 
 type PublicSubManifestPacket = {
@@ -180,6 +181,63 @@ type PublicDocumentationPacket = {
   };
 };
 
+type PublicPlanPacket = {
+  plan: {
+    planId: string;
+    moveId: string;
+    name: string;
+    kind: string;
+    moveTitle: string;
+    updatedAt: number;
+  };
+  privacy: {
+    underlayHidden: boolean;
+    valuesHidden: boolean;
+    privateNotesHidden: boolean;
+    annotationsHidden: boolean;
+  };
+  levels: Array<{
+    levelId: string;
+    name: string;
+    levelType: string;
+    svg: string;
+    rooms: Array<{
+      roomId: string;
+      shortId: string;
+      name: string;
+      areaSqFt: number;
+      placed: Array<{
+        placementId: string;
+        shortId: string;
+        label: string;
+      }>;
+      items: Array<{
+        itemId: string;
+        name: string;
+        quantity: number;
+        room?: string;
+        category?: string;
+        status: string;
+        fragility: string;
+        doNotLetMoversTouch: boolean;
+        fragile: boolean;
+      }>;
+      boxes: Array<{
+        boxId: string;
+        code: string;
+        label?: string;
+        room?: string;
+        status: string;
+        itemCount: number;
+      }>;
+    }>;
+  }>;
+  unplaced: {
+    items: PublicPlanPacket["levels"][number]["rooms"][number]["items"];
+    boxes: PublicPlanPacket["levels"][number]["rooms"][number]["boxes"];
+  };
+};
+
 type PublicShareView =
   | {
       status: "ready";
@@ -194,6 +252,12 @@ type PublicShareView =
       shareLink: ShareMetadata;
       profile: { name: string; type: string; disclaimer?: string };
       packet: PublicDocumentationPacket;
+    }
+  | {
+      status: "ready";
+      kind: "plan";
+      shareLink: ShareMetadata;
+      plan: PublicPlanPacket;
     }
   | {
       status: "unsupported";
@@ -294,11 +358,7 @@ export function PublicShareViewer({ token }: { token: string }) {
       } catch (unknownError) {
         if (alive) {
           setView(null);
-          setError(
-            unknownError instanceof Error
-              ? unknownError.message
-              : "This share link could not be opened."
-          );
+          setError(publicShareErrorMessage(unknownError));
         }
       } finally {
         if (alive) {
@@ -440,7 +500,9 @@ export function PublicShareViewer({ token }: { token: string }) {
           message={commentMessage}
         />
       ) : null}
-      {view.kind === "documentationPacket" ? (
+      {view.kind === "plan" ? (
+        <PublicPlanView view={view} />
+      ) : view.kind === "documentationPacket" ? (
         <PublicDocumentationPacketView
           view={view}
           onStatusUpdate={handleStatusUpdate}
@@ -455,6 +517,16 @@ export function PublicShareViewer({ token }: { token: string }) {
       )}
     </PublicShareShell>
   );
+}
+
+function publicShareErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    /not found|expired|revoked|does not allow viewing|Server Error/i.test(message)
+  ) {
+    return "This token is invalid, expired, or revoked.";
+  }
+  return "This share link could not be opened.";
 }
 
 function PublicCommentPanel({
@@ -514,6 +586,210 @@ function PublicCommentPanel({
         ) : null}
       </form>
     </section>
+  );
+}
+
+function PublicPlanView({
+  view,
+}: {
+  view: Extract<PublicShareView, { status: "ready"; kind: "plan" }>;
+}) {
+  const { plan, shareLink } = view;
+  const [activeLevelId, setActiveLevelId] = useState(
+    plan.levels[0]?.levelId ?? ""
+  );
+  const activeLevel =
+    plan.levels.find((level) => level.levelId === activeLevelId) ??
+    plan.levels[0];
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const selectedRoom =
+    activeLevel?.rooms.find((room) => room.roomId === selectedRoomId) ??
+    activeLevel?.rooms[0] ??
+    null;
+
+  if (!activeLevel) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{plan.plan.name}</CardTitle>
+          <CardDescription>No plan levels are available.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <section className="space-y-4">
+      <Card>
+        <CardHeader className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm text-muted-foreground">MovingManifest plan</p>
+              <CardTitle>{plan.plan.name}</CardTitle>
+              <CardDescription>{plan.plan.moveTitle}</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">{shareLink.role}</Badge>
+              <Badge variant="secondary">Plan</Badge>
+            </div>
+          </div>
+          <div className="print-hidden flex flex-wrap gap-2">
+            {plan.levels.map((level) => (
+              <Button
+                key={level.levelId}
+                type="button"
+                size="sm"
+                variant={level.levelId === activeLevel.levelId ? "secondary" : "outline"}
+                onClick={() => {
+                  setActiveLevelId(level.levelId);
+                  setSelectedRoomId(null);
+                }}
+              >
+                {level.name}
+              </Button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="overflow-hidden rounded-md border border-border bg-background">
+            <div
+              className="public-plan-svg overflow-auto p-2 [&_svg]:h-auto [&_svg]:min-h-[320px] [&_svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: activeLevel.svg }}
+            />
+          </div>
+          <div className="grid content-start gap-2">
+            {activeLevel.rooms.map((room) => (
+              <button
+                key={room.roomId}
+                type="button"
+                className={
+                  selectedRoom?.roomId === room.roomId
+                    ? "rounded-md border border-primary bg-primary/10 p-3 text-left"
+                    : "rounded-md border border-border bg-background p-3 text-left"
+                }
+                onClick={() => setSelectedRoomId(room.roomId)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold">{room.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {room.shortId} / {room.areaSqFt} sq ft
+                    </div>
+                  </div>
+                  <Badge variant="outline">
+                    {room.items.length + room.boxes.length}
+                  </Badge>
+                </div>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {selectedRoom ? <PublicPlanRoomManifest room={selectedRoom} /> : null}
+
+      {plan.unplaced.items.length || plan.unplaced.boxes.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Unplaced</CardTitle>
+            <CardDescription>
+              {plan.unplaced.items.length} items / {plan.unplaced.boxes.length} boxes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PublicPlanManifestRows
+              items={plan.unplaced.items}
+              boxes={plan.unplaced.boxes}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+    </section>
+  );
+}
+
+function PublicPlanRoomManifest({
+  room,
+}: {
+  room: PublicPlanPacket["levels"][number]["rooms"][number];
+}) {
+  return (
+    <Card className="sticky bottom-3 z-10 shadow-lg lg:static lg:shadow-none">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>{room.name}</CardTitle>
+            <CardDescription>
+              {room.items.length} items / {room.boxes.length} boxes /{" "}
+              {room.placed.length} placements
+            </CardDescription>
+          </div>
+          <Badge variant="outline">{room.shortId}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <PublicPlanManifestRows items={room.items} boxes={room.boxes} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function PublicPlanManifestRows({
+  items,
+  boxes,
+}: {
+  items: PublicPlanPacket["levels"][number]["rooms"][number]["items"];
+  boxes: PublicPlanPacket["levels"][number]["rooms"][number]["boxes"];
+}) {
+  if (!items.length && !boxes.length) {
+    return <p className="text-sm text-muted-foreground">No unload rows.</p>;
+  }
+
+  return (
+    <div className="grid gap-2">
+      {boxes.map((box) => (
+        <div
+          key={`box-${box.boxId}`}
+          className="rounded-md border border-border bg-background p-3"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium">
+                {box.code}
+                {box.label ? ` ${box.label}` : ""}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {box.status} / {box.itemCount} items
+              </div>
+            </div>
+            <Badge variant="secondary">Box</Badge>
+          </div>
+        </div>
+      ))}
+      {items.map((item) => (
+        <div
+          key={`item-${item.itemId}`}
+          className="rounded-md border border-border bg-background p-3"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-medium">{item.name}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Qty {item.quantity} / {item.status}
+                {item.category ? ` / ${item.category}` : ""}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {item.fragile ? <Badge variant="outline">Fragile</Badge> : null}
+                {item.doNotLetMoversTouch ? (
+                  <Badge variant="destructive">Do not move</Badge>
+                ) : null}
+              </div>
+            </div>
+            <Badge variant="outline">Item</Badge>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

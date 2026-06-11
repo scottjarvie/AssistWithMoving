@@ -5,6 +5,7 @@ import {
   approveAiPhotoSuggestions,
   approveAiTextSuggestions,
   approvePlanningSuggestions,
+  archivePlannedItem,
   batchUpsertItems,
   applyAssignments,
   archiveMovePerson,
@@ -15,6 +16,7 @@ import {
   createItem,
   createMove,
   createMovePerson,
+  createPlannedItem,
   createShareLink,
   createTransportResource,
   createTransportZone,
@@ -34,10 +36,18 @@ import {
   listAiTextSuggestions,
   listDocumentationProfiles,
   listMovePeople,
+  listPlannedItems,
   listPlanningSuggestions,
   listShareLinkComments,
   listShareLinks,
+  planApplyOps,
+  planGet,
+  planProposeOps,
+  planSnapshot,
+  planSummary,
+  plansList,
   movingManifestRequest,
+  convertPlannedItem,
   removeItemFromBox,
   rejectAiPhotoSuggestions,
   rejectAiTextSuggestions,
@@ -49,6 +59,7 @@ import {
   updateDocumentationProfile,
   updateItem,
   updateMovePerson,
+  updatePlannedItem,
   updateTransportResource,
   updateTransportZone,
 } from "../../mcp-server/movingmanifest-api.mjs";
@@ -282,6 +293,149 @@ describe("MovingManifest MCP API client", () => {
       ],
       counts: { openPrompts: 1, critical: 1 },
     });
+  });
+
+  it("lists and reads floor plans through top-level plan endpoints", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { planId: "plan1", name: "Destination" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await plansList(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1", limit: 10 }
+    );
+    await planGet(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { planId: "plan1", moveId: "move1" }
+    );
+    await planSummary(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { planId: "plan1", moveId: "move1" }
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/plans?moveId=move1&limit=10"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/plans/plan1?moveId=move1"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL("https://example.com/api/v1/plans/plan1/summary?moveId=move1"),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+  });
+
+  it("supports dry-run and idempotent floor plan op writes", async () => {
+    const ops = [
+      {
+        type: "updatePlanSettings",
+        patch: { name: "Updated destination plan" },
+      },
+    ];
+    const dryRun = await planProposeOps(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        planId: "plan1",
+        moveId: "move1",
+        batchId: "batch1",
+        ops,
+        reasoning: "Rename the plan for clarity.",
+        dryRun: true,
+      }
+    );
+
+    expect(dryRun).toEqual({
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: "/plans/plan1/proposals",
+        query: { moveId: "move1" },
+        body: {
+          batchId: "batch1",
+          ops,
+          agentLabel: undefined,
+          reasoning: "Rename the plan for clarity.",
+        },
+      },
+    });
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { batchId: "batch1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await planApplyOps(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        planId: "plan1",
+        moveId: "move1",
+        batchId: "batch1",
+        ops,
+        agentLabel: "Codex test",
+        idempotencyKey: "plan-ops-1",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/plans/plan1/ops?moveId=move1"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "plan-ops-1",
+        },
+        body: JSON.stringify({
+          batchId: "batch1",
+          ops,
+          agentLabel: "Codex test",
+        }),
+      }
+    );
+  });
+
+  it("returns floor plan SVG snapshots as text", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "image/svg+xml; charset=utf-8" }),
+      text: async () => "<svg><title>Main floor</title></svg>",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await planSnapshot(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { planId: "plan1", moveId: "move1", levelId: "level1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        "https://example.com/api/v1/plans/plan1/snapshot.svg?moveId=move1&level=level1"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(result).toBe("<svg><title>Main floor</title></svg>");
   });
 
   it("fetches the Move Day checklist through the API", async () => {
@@ -1667,6 +1821,93 @@ describe("MovingManifest MCP API client", () => {
       },
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("manages planned items through move-scoped endpoints", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listPlannedItems(config, {
+      moveId: "move1",
+      query: "sofa",
+      includeArchived: true,
+      limit: 25,
+    });
+    await createPlannedItem(config, {
+      moveId: "move1",
+      name: "Future sofa",
+      dimensionsIn: { lengthIn: 84, widthIn: 36 },
+      dimensionsConfidence: "medium",
+      estimatedPriceCents: 120000,
+    });
+    await updatePlannedItem(config, {
+      moveId: "move1",
+      plannedItemId: "planned1",
+      status: "decided",
+    });
+    await convertPlannedItem(config, {
+      moveId: "move1",
+      plannedItemId: "planned1",
+    });
+    await archivePlannedItem(config, {
+      moveId: "move1",
+      plannedItemId: "planned2",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL(
+        "https://example.com/api/v1/moves/move1/planned-items?limit=25&includeArchived=true"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/planned-items"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          name: "Future sofa",
+          dimensionsIn: { lengthIn: 84, widthIn: 36 },
+          dimensionsConfidence: "medium",
+          estimatedPriceCents: 120000,
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL("https://example.com/api/v1/moves/move1/planned-items/planned1"),
+      expect.objectContaining({ method: "PATCH" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      new URL(
+        "https://example.com/api/v1/moves/move1/planned-items/planned1/convert"
+      ),
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      new URL("https://example.com/api/v1/moves/move1/planned-items/planned2"),
+      expect.objectContaining({ method: "DELETE" })
+    );
   });
 
   it("includes HTTP methods in representative dry-run request previews", async () => {

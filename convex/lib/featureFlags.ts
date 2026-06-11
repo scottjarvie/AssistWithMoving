@@ -4,6 +4,7 @@ export const featureFlagKeys = [
   "documentationPackets",
   "adminTools",
   "billingGates",
+  "layoutStudio",
 ] as const;
 
 export type FeatureFlagKey = (typeof featureFlagKeys)[number];
@@ -64,6 +65,16 @@ export const featureFlagDefinitions: FeatureFlagDefinition[] = [
     defaultEnabled: {
       development: false,
       preview: true,
+      production: false,
+    },
+  },
+  {
+    key: "layoutStudio",
+    label: "Layout Studio",
+    description: "Destination floor-plan and yard canvas for move planning.",
+    defaultEnabled: {
+      development: true,
+      preview: false,
       production: false,
     },
   },

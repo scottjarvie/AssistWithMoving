@@ -5,6 +5,24 @@ import {
   ingestionQueueStatusValidator,
   ingestionScopeHintValidator,
 } from "./lib/ingestionQueue";
+import {
+  floorPlanKindValidator,
+  floorPlanStatusValidator,
+  planAnnotationValidator,
+  planContainmentModeValidator,
+  planEntityTypeValidator,
+  planFeatureValidator,
+  planFootprintOverrideValidator,
+  planLevelTypeValidator,
+  planOpActorTypeValidator,
+  planOpValidator,
+  planOpeningValidator,
+  planRoomValidator,
+  planShortIdCountersValidator,
+  planUnderlayValidator,
+  planWallValidator,
+  planZoneValidator,
+} from "./lib/planValidators";
 
 export const appRole = v.union(v.literal("member"), v.literal("admin"));
 
@@ -48,6 +66,7 @@ export const auditCategory = v.union(
   v.literal("auth"),
   v.literal("household"),
   v.literal("inventory"),
+  v.literal("plan"),
   v.literal("assignment"),
   v.literal("photo"),
   v.literal("documentation"),
@@ -129,6 +148,7 @@ export const shareLinkStatus = v.union(
 
 export const shareLinkAction = v.union(
   v.literal("view"),
+  v.literal("viewPlan"),
   v.literal("download"),
   v.literal("statusUpdate"),
   v.literal("comment"),
@@ -145,9 +165,18 @@ export const apiKeyScope = v.union(
   v.literal("moves/write"),
   v.literal("inventory/read"),
   v.literal("inventory/write"),
+  v.literal("plans/read"),
+  v.literal("plans/write"),
   v.literal("photos/write"),
   v.literal("exports/read"),
   v.literal("exports/create")
+);
+
+export const planProposalStatus = v.union(
+  v.literal("pending"),
+  v.literal("applied"),
+  v.literal("partiallyApplied"),
+  v.literal("rejected")
 );
 
 export const pcsBranch = v.union(
@@ -272,6 +301,19 @@ export const itemCreatedVia = v.union(
   v.literal("mcp")
 );
 
+export const plannedItemStatus = v.union(
+  v.literal("idea"),
+  v.literal("decided"),
+  v.literal("purchased"),
+  v.literal("dropped")
+);
+
+export const plannedItemCreatedVia = v.union(
+  v.literal("manual"),
+  v.literal("api"),
+  v.literal("mcp")
+);
+
 export const boxStatus = v.union(
   v.literal("open"),
   v.literal("packing"),
@@ -293,6 +335,7 @@ export const photoType = v.union(
   v.literal("boxLabel"),
   v.literal("receipt"),
   v.literal("room"),
+  v.literal("blueprint"),
   v.literal("other")
 );
 
@@ -521,7 +564,8 @@ const exportJobType = v.union(
   v.literal("inventory"),
   v.literal("boxes"),
   v.literal("assignments"),
-  v.literal("documentationProfile")
+  v.literal("documentationProfile"),
+  v.literal("floorPlan")
 );
 
 export default defineSchema({
@@ -964,6 +1008,136 @@ export default defineSchema({
     .index("by_move_key", ["moveId", "key"])
     .index("by_household", ["householdId"]),
 
+  floorPlans: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    name: v.string(),
+    kind: floorPlanKindValidator,
+    northAngleDeg: v.number(),
+    defaultWallThicknessIn: v.number(),
+    defaultCeilingHeightIn: v.number(),
+    gridSnapIn: v.number(),
+    shortIdCounters: planShortIdCountersValidator,
+    nextSeq: v.number(),
+    status: floorPlanStatusValidator,
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_household", ["householdId"]),
+
+  planLevels: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.id("floorPlans"),
+    name: v.string(),
+    levelType: planLevelTypeValidator,
+    sortOrder: v.number(),
+    ceilingHeightIn: v.optional(v.number()),
+    underlay: v.optional(planUnderlayValidator),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_plan_sort", ["planId", "sortOrder"])
+    .index("by_move", ["moveId"])
+    .index("by_household", ["householdId"]),
+
+  planEntities: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.id("floorPlans"),
+    levelId: v.id("planLevels"),
+    shortId: v.string(),
+    entityType: planEntityTypeValidator,
+    name: v.optional(v.string()),
+    color: v.optional(v.string()),
+    locked: v.boolean(),
+    wall: v.optional(planWallValidator),
+    room: v.optional(planRoomValidator),
+    opening: v.optional(planOpeningValidator),
+    feature: v.optional(planFeatureValidator),
+    zone: v.optional(planZoneValidator),
+    annotation: v.optional(planAnnotationValidator),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_level", ["levelId"])
+    .index("by_plan_type", ["planId", "entityType"])
+    .index("by_plan_shortId", ["planId", "shortId"])
+    .index("by_household", ["householdId"]),
+
+  planPlacements: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.id("floorPlans"),
+    levelId: v.id("planLevels"),
+    shortId: v.string(),
+    itemId: v.optional(v.id("items")),
+    boxId: v.optional(v.id("boxes")),
+    plannedItemId: v.optional(v.id("plannedItems")),
+    templateKey: v.optional(v.string()),
+    x: v.number(),
+    y: v.number(),
+    rotationDeg: v.number(),
+    footprintOverrideIn: v.optional(planFootprintOverrideValidator),
+    parentPlacementId: v.optional(v.id("planPlacements")),
+    containmentMode: v.optional(planContainmentModeValidator),
+    zOrder: v.number(),
+    color: v.optional(v.string()),
+    locked: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_level", ["levelId"])
+    .index("by_plan", ["planId"])
+    .index("by_item", ["itemId"])
+    .index("by_planned_item", ["plannedItemId"])
+    .index("by_parent", ["parentPlacementId"])
+    .index("by_household", ["householdId"]),
+
+  planOps: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.id("floorPlans"),
+    seq: v.number(),
+    batchId: v.string(),
+    actorType: planOpActorTypeValidator,
+    actorUserId: v.optional(v.id("users")),
+    actorApiKeyId: v.optional(v.id("apiKeys")),
+    agentLabel: v.optional(v.string()),
+    op: planOpValidator,
+    inverse: planOpValidator,
+    createdAt: v.number(),
+  })
+    .index("by_plan_seq", ["planId", "seq"])
+    .index("by_batch", ["batchId"])
+    .index("by_household", ["householdId"]),
+
+  planProposals: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.id("floorPlans"),
+    batchId: v.string(),
+    ops: v.array(planOpValidator),
+    agentLabel: v.optional(v.string()),
+    reasoning: v.string(),
+    status: planProposalStatus,
+    appliedOpIndexes: v.array(v.number()),
+    reviewedByUserId: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    createdByApiKeyId: v.id("apiKeys"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_plan_status", ["planId", "status"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_household_status", ["householdId", "status"]),
+
   boxes: defineTable({
     householdId: v.id("households"),
     moveId: v.id("moves"),
@@ -1369,6 +1543,7 @@ export default defineSchema({
     serialNumber: v.optional(v.string()),
     modelNumber: v.optional(v.string()),
     dimensionsIn: v.optional(dimensionsIn),
+    dimensionsConfidence: v.optional(estimateConfidence),
     estimatedWeightLb: v.optional(v.number()),
     estimatedWeightLowLb: v.optional(v.number()),
     estimatedWeightHighLb: v.optional(v.number()),
@@ -1404,5 +1579,32 @@ export default defineSchema({
     .index("by_move_high_value", ["moveId", "highValue"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
+    .index("by_household", ["householdId"]),
+
+  plannedItems: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    name: v.string(),
+    normalizedName: v.string(),
+    category: v.optional(v.string()),
+    subcategory: v.optional(v.string()),
+    description: v.optional(v.string()),
+    dimensionsIn: v.optional(dimensionsIn),
+    dimensionsConfidence: v.optional(estimateConfidence),
+    estimatedPriceCents: v.optional(v.number()),
+    url: v.optional(v.string()),
+    priority: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    status: plannedItemStatus,
+    convertedItemId: v.optional(v.id("items")),
+    createdVia: plannedItemCreatedVia,
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_household", ["householdId"]),
 });

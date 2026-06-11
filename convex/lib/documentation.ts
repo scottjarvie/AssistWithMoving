@@ -34,6 +34,7 @@ export const documentationImageRules = [
 
 export const shareLinkActions = [
   "view",
+  "viewPlan",
   "download",
   "statusUpdate",
   "comment",
@@ -101,6 +102,7 @@ export const documentationImageRuleValidator = v.union(
 
 export const shareLinkActionValidator = v.union(
   v.literal("view"),
+  v.literal("viewPlan"),
   v.literal("download"),
   v.literal("statusUpdate"),
   v.literal("comment"),

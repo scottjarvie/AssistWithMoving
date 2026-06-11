@@ -17,6 +17,7 @@ export type AuditEventInput = {
     | "auth"
     | "household"
     | "inventory"
+    | "plan"
     | "assignment"
     | "photo"
     | "documentation"

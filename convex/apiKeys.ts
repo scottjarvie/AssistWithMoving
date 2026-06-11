@@ -18,6 +18,8 @@ const apiKeyScopeValidator = v.union(
   v.literal("moves/write"),
   v.literal("inventory/read"),
   v.literal("inventory/write"),
+  v.literal("plans/read"),
+  v.literal("plans/write"),
   v.literal("photos/write"),
   v.literal("exports/read"),
   v.literal("exports/create")

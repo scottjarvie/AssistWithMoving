@@ -5,6 +5,7 @@ import { EstimateSummary } from "@/components/estimate-summary";
 import { InventoryDuplicateReview } from "@/components/inventory-duplicate-review";
 import { InventoryTable } from "@/components/inventory-table";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
+import { PlannedItemsPanel } from "@/components/planned-items-panel";
 import { RoomWalkIntake } from "@/components/room-walk-intake";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 
@@ -18,6 +19,7 @@ export function InventoryWorkspacePage() {
         description="Every item you own, where it is, and what is happening to it: keep, sell, donate, dump, store, or move."
       />
       <RoomWalkIntake householdId={householdId} moveId={moveId} />
+      <PlannedItemsPanel householdId={householdId} moveId={moveId} />
       <section id="inventory">
         <InventoryTable householdId={householdId} moveId={moveId} />
       </section>

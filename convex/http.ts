@@ -249,6 +249,14 @@ for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"] as const) {
         body,
       });
 
+      const contentType = response.headers?.["Content-Type"];
+      if (contentType && !contentType.includes("application/json")) {
+        return new Response(String(response.body ?? ""), {
+          status: response.status,
+          headers: response.headers,
+        });
+      }
+
       return Response.json(response.body, {
         status: response.status,
         headers: response.headers,

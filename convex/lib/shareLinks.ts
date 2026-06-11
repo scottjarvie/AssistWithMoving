@@ -14,6 +14,7 @@ import {
 import { normalizeOptionalText } from "./moveFields";
 
 export const defaultMoveLinkActions = ["view", "download"] as const;
+const moveLinkAllowedActions = ["view", "viewPlan", "download"] as const;
 export const maxShareLinkLifetimeMs = 366 * 24 * 60 * 60 * 1000;
 
 export type ShareLinkRole =
@@ -130,7 +131,10 @@ export async function createShareLinkRecord(
 
   const allowedActions = normalizeShareLinkActions(
     args.allowedActions,
-    profile?.allowedActions ?? [...defaultMoveLinkActions]
+    profile?.allowedActions ??
+      (args.allowedActions
+        ? [...moveLinkAllowedActions]
+        : [...defaultMoveLinkActions])
   );
   const shareLinkId = await ctx.db.insert("shareLinks", {
     householdId: args.householdId,

@@ -38,6 +38,8 @@ API keys can include these scopes:
 | `moves/write` | Update move metadata and create/update transport resources and zones. |
 | `inventory/read` | Read items, boxes, assignments, and photo metadata. |
 | `inventory/write` | Create/update items, boxes, and assignments. |
+| `plans/read` | List/read Layout Studio plans, summaries, proposal lists, and SVG snapshots. |
+| `plans/write` | Apply Layout Studio op batches and create pending plan proposals. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
 | `exports/create` | Create export jobs and create/revoke documentation share links. |
@@ -51,6 +53,8 @@ and export state in one response. The move questions endpoint requires
 inventory, evidence, resource, load, PCS, and packet details. The Move Day
 checklist endpoint also requires `moves/read` and `inventory/read` because it
 returns crew-safe box status, counts, assignments, warnings, and exception notes.
+Layout Studio plan endpoints use `plans/read` and `plans/write`; move-restricted
+keys can access only plans belonging to their restricted move.
 
 Top-level object aliases such as `/items/{itemId}`, `/boxes/{boxId}`, and
 `/photos/{photoId}/attach` still validate object ownership server-side. For
@@ -357,6 +361,41 @@ reconciliation. `externalSource` should name the upstream system or import
 stream, while `externalId` should identify the upstream row or object. The pair
 is scoped to one MovingManifest move. Direct item create/update requests may also
 set or clear the pair; providing only one side is rejected.
+
+Item payloads may include `dimensionsIn` and `dimensionsConfidence`. Confidence
+uses the same values as weight/volume confidence: `none`, `low`, `medium`,
+`high`, `manual`, or `actual`. Legacy rows with dimensions but no stored
+`dimensionsConfidence` are read as `medium` so Layout Studio and API clients
+treat them as estimated measurements rather than unknown measurements.
+
+Planned items represent desired future purchases or furniture ideas for the
+destination home. They can be referenced by Layout Studio placements, but they
+do not count as owned inventory, box contents, weight, volume, or Move Day load
+until converted to an item.
+
+```bash
+curl "https://movingmanifest.com/api/v1/moves/MOVE_ID/planned-items?limit=25" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/planned-items \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: create-planned-item-001" \
+  -d '{
+    "name": "Future sectional",
+    "category": "Living room",
+    "dimensionsIn": { "lengthIn": 120, "widthIn": 40 },
+    "dimensionsConfidence": "medium",
+    "estimatedPriceCents": 180000,
+    "status": "idea"
+  }'
+```
+
+Planned item statuses are `idea`, `decided`, `purchased`, and `dropped`.
+PATCH `/moves/:moveId/planned-items/:plannedItemId` updates selected fields.
+POST `/moves/:moveId/planned-items/:plannedItemId/convert` creates an owned item,
+marks the planned item `purchased`, and re-points any Layout Studio placements
+from `plannedItemId` to the new `itemId`. DELETE archives the planned item.
 
 Update an item through the top-level alias:
 
@@ -771,6 +810,238 @@ The capacity report requires `moves/read` and `inventory/read`. It returns
 move-level weight/volume estimates, allowance percentage, missing-estimate
 counts, per-box estimates and warnings, resource capacity usage, and zone usage.
 
+## Floor Plans
+
+Layout Studio plans are structured documents, not drawings. A plan has levels,
+entities, placements, an op journal, and pending proposals. Geometry is stored
+in inches. Rooms, walls, openings, features, zones, annotations, and placements
+have stable short IDs such as `W12`, `R3`, and `P7`; always read those IDs from
+the plan before editing. The full plan document also returns `shortIdCounters`,
+which lets an agent predict IDs inside a brand-new batch when it is creating
+dependent entities. Prefer proposals over direct apply unless the user has
+explicitly asked for immediate mutation.
+
+Plan endpoint scopes:
+
+| Endpoint | Scope | Purpose |
+| --- | --- | --- |
+| `GET /plans?moveId=MOVE_ID` | `plans/read` | List plans and level summaries. |
+| `GET /plans/PLAN_ID` | `plans/read` | Read the full plan document for editing. |
+| `GET /plans/PLAN_ID/summary` | `plans/read` | Read a plain-text plan summary. |
+| `GET /plans/PLAN_ID/proposals` | `plans/read` | List pending proposals; add `?includeReviewed=true` for proposal history. |
+| `GET /plans/PLAN_ID/snapshot.svg` | `plans/read` | Render a no-underlay SVG snapshot. |
+| `POST /plans/PLAN_ID/ops` | `plans/write` | Apply ops directly. |
+| `POST /plans/PLAN_ID/proposals` | `plans/write` | Create a pending proposal for review. |
+
+### Op Catalog
+
+Every write is an array of ops. The same language is used by mouse edits,
+REST, and MCP.
+
+| Op type | Required fields | Common errors |
+| --- | --- | --- |
+| `createLevel` | `level.name`, `level.levelType`, `level.sortOrder` | Missing name or invalid level type. |
+| `updateLevel` | `levelId`, `patch` | Unknown or archived level. |
+| `deleteLevel` | `levelId` | Locked or missing child records can block deletion. |
+| `setLevelUnderlay` | `levelId`, optional `underlay` | Underlay photo not on the move. |
+| `createEntity` | `entity.levelId`, `entity.entityType`, matching geometry object | Missing geometry for the type. |
+| `updateEntity` | `entityId`, `patch` | Locked entity or invalid geometry. |
+| `renameEntity` | `entityId`, optional `name` | Locked entity. |
+| `deleteEntity` | `entityId` | Locked entity. |
+| `createPlacement` | exactly one source plus `levelId`, `x`, `y`, `rotationDeg` | Missing source or multiple sources. |
+| `movePlacement` | `placementId`, `x`, `y`, `rotationDeg` | Locked placement. |
+| `updatePlacement` | `placementId`, `patch` | Locked placement, invalid footprint, or source patch without exactly one source. |
+| `setContainment` | `placementId`, optional `parentPlacementId`, optional `containmentMode` | Cycles, missing parent, or locked placement. |
+| `deletePlacement` | `placementId` | Locked placement or locked contained children. |
+| `updatePlanSettings` | `patch` | Non-positive defaults or grid values. |
+
+Example entity op:
+
+```json
+{
+  "type": "createEntity",
+  "entity": {
+    "levelId": "LEVEL_MAIN",
+    "entityType": "room",
+    "name": "Kitchen",
+    "room": {
+      "points": [
+        { "x": 0, "y": 0 },
+        { "x": 144, "y": 0 },
+        { "x": 144, "y": 168 },
+        { "x": 0, "y": 168 }
+      ]
+    }
+  }
+}
+```
+
+Example placement op:
+
+```json
+{
+  "type": "createPlacement",
+  "placement": {
+    "levelId": "LEVEL_MAIN",
+    "itemId": "ITEM_SOFA",
+    "x": 72,
+    "y": 84,
+    "rotationDeg": 0
+  }
+}
+```
+
+Use `updatePlacement` for color, lock, z-order, footprint override, or source
+changes. A source-change patch must contain exactly one new source:
+`itemId`, `boxId`, `plannedItemId`, or `templateKey`. The op layer clears the
+previous source fields and journals the inverse. When linking a template
+placement to an owned item, include `footprintOverrideIn` to preserve the visual
+footprint, then update the inventory item dimensions if the user accepts that
+backfill.
+
+### Recipe: Build From Text
+
+User request: "Kitchen is 12x14, dining is 12x14 east of it, with an opening
+between them."
+
+1. Call `plan_get`.
+2. Use the returned main `levelId`.
+3. If the plan is empty and `shortIdCounters.nextWall` is `1`, this single
+proposal can create the rooms, walls, and opening. If the plan already has
+walls, do not assume `W*`; use the wall short IDs from `plan_get`.
+
+```json
+{
+  "batchId": "agent_text_kitchen_dining_001",
+  "agentLabel": "Claude - text layout",
+  "reasoning": "Create adjacent 12x14 kitchen and dining rooms with a 48 inch passage on the shared wall.",
+  "ops": [
+    {
+      "type": "createEntity",
+      "entity": {
+        "levelId": "LEVEL_MAIN",
+        "entityType": "room",
+        "name": "Kitchen",
+        "room": {
+          "points": [
+            { "x": 0, "y": 0 },
+            { "x": 144, "y": 0 },
+            { "x": 144, "y": 168 },
+            { "x": 0, "y": 168 }
+          ]
+        }
+      }
+    },
+    {
+      "type": "createEntity",
+      "entity": {
+        "levelId": "LEVEL_MAIN",
+        "entityType": "room",
+        "name": "Dining",
+        "room": {
+          "points": [
+            { "x": 144, "y": 0 },
+            { "x": 288, "y": 0 },
+            { "x": 288, "y": 168 },
+            { "x": 144, "y": 168 }
+          ]
+        }
+      }
+    },
+    {
+      "type": "createEntity",
+      "entity": {
+        "levelId": "LEVEL_MAIN",
+        "entityType": "wall",
+        "wall": {
+          "x1": 144,
+          "y1": 0,
+          "x2": 144,
+          "y2": 168,
+          "thicknessIn": 4.5,
+          "heightIn": 96
+        }
+      }
+    },
+    {
+      "type": "createEntity",
+      "entity": {
+        "levelId": "LEVEL_MAIN",
+        "entityType": "opening",
+        "name": "Kitchen to dining passage",
+        "opening": {
+          "wallShortId": "W1",
+          "offsetAlongWallIn": 60,
+          "widthIn": 48,
+          "kind": "passage",
+          "swing": "none"
+        }
+      }
+    }
+  ]
+}
+```
+
+Send this with `plan_propose_ops`, not `plan_apply_ops`, unless the user has
+asked for direct application. After applying or proposing, fetch
+`plan_snapshot` and inspect the SVG for obvious geometry mistakes.
+
+### Recipe: Build From Blueprint Photos
+
+Blueprint intake is completed in a later issue, but the intended agent flow is:
+
+1. Claim or inspect the capture-queue entry for blueprint photos.
+2. Download the photos through the media/capture tooling.
+3. Call `plan_get` to read levels, existing rooms, and counters.
+4. Use `plan_propose_ops` with `reasoning` that explains scale assumptions,
+   room labels, and uncertain walls.
+5. Call `plan_snapshot` for the target level and inspect the SVG. Vision-capable
+   agents should compare the snapshot with the blueprint photo.
+6. Refine with another proposal instead of silently overwriting the first batch.
+
+### Recipe: Edit Conversationally
+
+User request: "The kitchen's south wall, W12, needs the door moved."
+
+1. Call `plan_get`.
+2. Confirm `W12` exists and find the door/opening whose `opening.wallShortId`
+   is `W12`.
+3. Propose the exact `updateEntity` patch.
+
+```json
+{
+  "batchId": "agent_move_kitchen_door_001",
+  "agentLabel": "Claude - conversational edit",
+  "reasoning": "Move the existing kitchen south-wall door farther east while preserving its width and swing.",
+  "ops": [
+    {
+      "type": "updateEntity",
+      "entityId": "OPENING_ENTITY_ID",
+      "patch": {
+        "opening": {
+          "wallShortId": "W12",
+          "offsetAlongWallIn": 84,
+          "widthIn": 36,
+          "kind": "door",
+          "swing": "right"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Agent Etiquette
+
+- Always call `plan_get` before writing.
+- Never assume existing short IDs; read them from the plan.
+- Batch related ops under one `batchId`.
+- Prefer `plan_propose_ops` and include clear human-readable `reasoning`.
+- Use `plan_apply_ops` only for user-approved immediate writes.
+- Re-fetch the plan and inspect `plan_snapshot` after substantial changes.
+- Do not include blueprint underlay images in generated SVG snapshots; snapshots
+  are geometry feedback only.
+
 ## Evidence Media
 
 Evidence media upload is a two-step flow. The current product UI is still
@@ -921,6 +1192,11 @@ to their `expiresAt` value. Generic inventory exports omit value, serial, and
 private note fields. Documentation-profile exports include only fields allowed
 by the selected profile.
 
+The in-app Layout Studio export uses the same `exportJobs` history and download
+artifact path with `type: "floorPlan"` and `format: "print"`. That artifact is
+print-ready HTML with sanitized SVG snapshots and room manifests; it hides
+blueprint underlays, values/prices, private notes, and free-text annotations.
+
 List safe share-link metadata:
 
 ```bash
@@ -948,6 +1224,26 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
 The create response includes the raw `token` and `/share/{token}` URL once.
 List responses only include safe metadata such as `shareLinkId`, `tokenPreview`,
 status, scope, allowed actions, expiration, and access counts.
+
+Create a move-scoped plan share link:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: plan-share-link-001" \
+  -d '{
+    "scope": "move",
+    "label": "Unload plan for crew",
+    "role": "guest",
+    "allowedActions": ["viewPlan"],
+    "expiresAt": 1780876800000
+  }'
+```
+
+`viewPlan` exposes the public read-only Layout Studio plan surface. The public
+payload hides blueprint underlays, values/prices, private notes, raw storage
+metadata, and free-text plan annotations.
 
 List recent public-recipient comments for all share links on a move:
 
@@ -1025,11 +1321,22 @@ Available MCP tools:
 | `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
 | `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |
 | `get_move_day_checklist` | Fetch a crew-safe Move Day checklist with box status, item counts, load assignment names, warnings, exception notes, and progress counts. |
+| `plans_list` | List Layout Studio floor plans for a move. |
+| `plan_get` | Fetch the full plan document before writing ops. |
+| `plan_summary` | Fetch a plain-text plan summary for text-only agents and sanity checks. |
+| `plan_apply_ops` | Apply Layout Studio ops directly, with `dryRun` support. |
+| `plan_propose_ops` | Create a pending Layout Studio proposal, with `dryRun` support. |
+| `plan_snapshot` | Fetch a no-underlay SVG snapshot for visual self-checks. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
 | `update_item` | Update selected item fields, with `dryRun` support. |
 | `delete_item` | Soft-delete one item, with `dryRun` support. |
+| `list_planned_items` | List desired future items that can be used in Layout Studio before they are owned inventory. |
+| `create_planned_item` | Create one planned future item, with `dryRun` support. |
+| `update_planned_item` | Update selected planned item fields, with `dryRun` support. |
+| `convert_planned_item` | Convert a planned item into owned inventory and re-point Layout Studio placements. |
+| `archive_planned_item` | Archive one planned item, with `dryRun` support. |
 | `create_box` | Create a box, with `dryRun` support. |
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
 | `remove_item_from_box` | Remove one item-to-box assignment without deleting the item, with `dryRun` support. |
@@ -1083,6 +1390,7 @@ Recommended MCP key scopes depend on the intended agent:
 | Load planning helper | `moves/read`, `moves/write`, `inventory/read`, `inventory/write` |
 | Photo intake helper | `moves/read`, `inventory/read`, `photos/write` |
 | Documentation helper | `moves/read`, `inventory/read`, `exports/read`, `exports/create` |
+| Layout Studio helper | `plans/read`, `plans/write`, plus `inventory/read` when placing real items or boxes |
 
 Prefer move-restricted API keys for local agents.
 

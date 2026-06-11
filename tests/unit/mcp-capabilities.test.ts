@@ -7,7 +7,10 @@ import {
   getCapabilityToolNames,
   MOVINGMANIFEST_API_CAPABILITIES,
 } from "../../mcp-server/capabilities.mjs";
-import { registerTools } from "../../mcp-server/movingmanifest-mcp.mjs";
+import {
+  planOpSchema,
+  registerTools,
+} from "../../mcp-server/movingmanifest-mcp.mjs";
 
 type ToolResult = {
   content: Array<{
@@ -151,6 +154,23 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(registeredToolNames).toEqual([...getCapabilityToolNames()].sort());
   });
 
+  it("advertises the Layout Studio floor-plan tools and scopes", () => {
+    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+      expect.objectContaining({
+        id: "floorPlans",
+        requiredScopes: ["plans/read", "plans/write"],
+        mcpTools: [
+          "plans_list",
+          "plan_get",
+          "plan_summary",
+          "plan_apply_ops",
+          "plan_propose_ops",
+          "plan_snapshot",
+        ],
+      }),
+    );
+  });
+
   it("keeps capability ids unique for agent discovery", () => {
     const ids = MOVINGMANIFEST_API_CAPABILITIES.map((entry) => entry.id);
 
@@ -180,6 +200,27 @@ describe("MovingManifest MCP capability discovery", () => {
 
     for (const toolName of getCapabilityToolNames()) {
       expect(docs).toContain(`\`${toolName}\``);
+    }
+  });
+
+  it("keeps documented floor-plan JSON op examples valid", () => {
+    const docs = readFileSync(
+      resolve(process.cwd(), "docs/api-and-mcp.md"),
+      "utf8"
+    );
+    const start = docs.indexOf("## Floor Plans");
+    const end = docs.indexOf("## Evidence Media", start);
+    const section = docs.slice(start, end);
+    const blocks = [...section.matchAll(/```json\n([\s\S]*?)\n```/g)].map(
+      (match) => JSON.parse(match[1])
+    );
+
+    expect(blocks.length).toBeGreaterThanOrEqual(4);
+    for (const block of blocks) {
+      const ops = Array.isArray(block.ops) ? block.ops : [block];
+      for (const op of ops) {
+        expect(() => planOpSchema.parse(op)).not.toThrow();
+      }
     }
   });
 

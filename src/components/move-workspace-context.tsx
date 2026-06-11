@@ -54,7 +54,14 @@ export function MoveWorkspaceProvider({
   const currentUser = useQuery(api.users.current);
   const upsertCurrentUser = useMutation(api.users.upsertCurrent);
   const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
-  const featureFlags = useQuery(api.featureFlags.effective, {}) as
+  const featureFlagEnvironment =
+    process.env.NODE_ENV === "development" ||
+    process.env.NEXT_PUBLIC_LAYOUT_STUDIO_CURRENT_DB_QA === "true"
+      ? "development"
+      : undefined;
+  const featureFlags = useQuery(api.featureFlags.effective, {
+    environment: featureFlagEnvironment,
+  }) as
     | EffectiveFeatureFlag[]
     | undefined;
 
@@ -180,4 +187,8 @@ export function useMoveWorkspace(): MoveWorkspaceValue {
     );
   }
   return value;
+}
+
+export function useOptionalMoveWorkspace(): MoveWorkspaceValue | null {
+  return useContext(MoveWorkspaceContext);
 }
