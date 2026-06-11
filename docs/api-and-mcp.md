@@ -214,6 +214,14 @@ registered yet, MovingManifest stores a pending invitation and activates
 household access when that person signs in with the same email. Owner access
 cannot be granted through the API.
 
+Expected write responses:
+
+| Status | Meaning |
+| --- | --- |
+| `201` | Existing MovingManifest user was added as an active household member. |
+| `202` | Pending invitation was created for an email without an account yet. |
+| `200` | Existing member/invitation was updated or refreshed. |
+
 Supported roles:
 
 | Role | Use |
