@@ -43,7 +43,7 @@
         }
       },
       "post": {
-        "summary": "Add an already-registered household member by email",
+        "summary": "Add or invite a household member by email",
         "operationId": "addHouseholdMember",
         "parameters": [
           {
@@ -64,8 +64,8 @@
           "201": {
             "description": "Household member access created."
           },
-          "409": {
-            "description": "The email has not signed in to MovingManifest yet."
+          "202": {
+            "description": "Pending household invitation created for an email that has not signed in yet."
           }
         }
       }

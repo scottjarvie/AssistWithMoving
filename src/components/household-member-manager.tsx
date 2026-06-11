@@ -62,7 +62,7 @@ export function HouseholdMemberManager({
           Member access
         </h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Add registered collaborators and assign the least access they need for
+          Add collaborators by email and assign the least access they need for
           packing, viewing, or managing a household.
         </p>
       </div>
@@ -108,6 +108,7 @@ function HouseholdMemberPanel({
   const addExistingMember = useMutation(api.households.addExistingMember);
   const updateMemberRole = useMutation(api.households.updateMemberRole);
   const disableMember = useMutation(api.households.disableMember);
+  const revokeInvitation = useMutation(api.households.revokeInvitation);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<ManageableRole>("editor");
   const [workingMemberId, setWorkingMemberId] = useState<string | null>(null);
@@ -122,9 +123,17 @@ function HouseholdMemberPanel({
     setAdding(true);
     setMessage(null);
     try {
-      await addExistingMember({ householdId, email: trimmedEmail, role });
+      const result = await addExistingMember({
+        householdId,
+        email: trimmedEmail,
+        role,
+      });
       setEmail("");
-      setMessage("Collaborator access added.");
+      setMessage(
+        result.kind === "invitation"
+          ? "Invitation saved. They will get access after signing in with that email."
+          : "Collaborator access added.",
+      );
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -167,6 +176,23 @@ function HouseholdMemberPanel({
         error instanceof Error
           ? error.message
           : "Could not disable that collaborator.",
+      );
+    } finally {
+      setWorkingMemberId(null);
+    }
+  }
+
+  async function handleRevoke(invitationId: Id<"householdInvitations">) {
+    setWorkingMemberId(invitationId);
+    setMessage(null);
+    try {
+      await revokeInvitation({ householdId, invitationId });
+      setMessage("Pending invitation revoked.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not revoke that invitation.",
       );
     } finally {
       setWorkingMemberId(null);
@@ -229,9 +255,9 @@ function HouseholdMemberPanel({
               </Button>
             </form>
             <p className="text-xs leading-5 text-muted-foreground">
-              For now, collaborators must sign in once before they can be added
-              by email. Clerk email invitations should be wired after production
-              Clerk is finalized.
+              If that email does not have an account yet, MovingManifest keeps a
+              pending invitation and activates it when they sign in with the same
+              email.
             </p>
           </>
         ) : (
@@ -268,12 +294,17 @@ function HouseholdMemberPanel({
               </TableHeader>
               <TableBody>
                 {members.map((member) => {
+                  const membershipId = member.membershipId;
+                  const invitationId = member.invitationId;
+                  const rowId = membershipId ?? invitationId;
+                  const isPendingInvite = member.status === "invited";
                   const canEdit =
+                    membershipId !== null &&
                     member.role !== "owner" &&
                     !member.isCurrentUser &&
                     member.status !== "disabled";
                   return (
-                    <TableRow key={member.membershipId}>
+                    <TableRow key={rowId}>
                       <TableCell>
                         <div className="font-medium">
                           {member.name ?? member.email ?? "Unnamed member"}
@@ -289,10 +320,10 @@ function HouseholdMemberPanel({
                             className="h-8 rounded-md border border-input bg-background px-2 text-sm"
                             value={member.role}
                             aria-label={`Role for ${member.email ?? member.name}`}
-                            disabled={workingMemberId === member.membershipId}
+                            disabled={workingMemberId === membershipId}
                             onChange={(event) =>
                               void handleRoleChange(
-                                member.membershipId,
+                                membershipId,
                                 event.target.value as ManageableRole,
                               )
                             }
@@ -316,12 +347,25 @@ function HouseholdMemberPanel({
                             type="button"
                             size="icon-sm"
                             variant="outline"
-                            disabled={workingMemberId === member.membershipId}
-                            onClick={() => void handleDisable(member.membershipId)}
+                            disabled={workingMemberId === membershipId}
+                            onClick={() => void handleDisable(membershipId)}
                           >
                             <X aria-hidden="true" />
                             <span className="sr-only">
                               Disable {member.email ?? member.name}
+                            </span>
+                          </Button>
+                        ) : isPendingInvite && invitationId ? (
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="outline"
+                            disabled={workingMemberId === invitationId}
+                            onClick={() => void handleRevoke(invitationId)}
+                          >
+                            <X aria-hidden="true" />
+                            <span className="sr-only">
+                              Revoke invitation for {member.email}
                             </span>
                           </Button>
                         ) : (

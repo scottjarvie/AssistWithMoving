@@ -784,7 +784,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "add_household_member", {
     title: "Add household member",
     description:
-      "Grant an already-registered MovingManifest user real household login access by email. Requires members/manage. The target person must have signed in once before this can succeed.",
+      "Grant real household login access by email, or create a pending invitation if the email has not signed in yet. Requires members/manage.",
     inputSchema: {
       householdId: z.string().describe("MovingManifest household id from get_api_context."),
       email: z.string().email(),

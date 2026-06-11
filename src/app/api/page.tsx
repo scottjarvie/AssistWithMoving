@@ -52,7 +52,7 @@ const apiCards = [
   },
   {
     title: "Scoped access",
-    copy: "Use revocable API keys with explicit scopes. Keep user data private until the user signs in and shares a key.",
+    copy: "Use revocable API keys with explicit scopes. Add or invite household collaborators by email with the members/manage scope.",
     icon: ShieldCheck,
   },
 ];
@@ -130,7 +130,9 @@ export default function ApiPage() {
               The Settings screen defaults to a useful assistant key. Users can
               still remove scopes, restrict a key to one move, rotate it, or
               revoke it after the helper session. Member management is an
-              explicit extra scope because it grants real account access.
+              explicit extra scope because it grants real account access. A
+              spouse or collaborator can be invited by email before they create
+              an account; access activates when they sign in with that email.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

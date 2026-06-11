@@ -41,6 +41,12 @@ export const membershipStatus = v.union(
   v.literal("disabled")
 );
 
+export const householdInvitationStatus = v.union(
+  v.literal("invited"),
+  v.literal("accepted"),
+  v.literal("revoked")
+);
+
 export const clerkOrganizationStatus = v.union(
   v.literal("active"),
   v.literal("deleted")
@@ -789,6 +795,26 @@ export default defineSchema({
     .index("by_user_status", ["userId", "status"])
     .index("by_household_status_role", ["householdId", "status", "role"])
     .index("by_invited_email", ["invitedEmail"]),
+
+  householdInvitations: defineTable({
+    householdId: v.id("households"),
+    invitedEmail: v.string(),
+    role: householdRole,
+    status: householdInvitationStatus,
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    acceptedByUserId: v.optional(v.id("users")),
+    acceptedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_household_status", ["householdId", "status"])
+    .index("by_email_status", ["invitedEmail", "status"])
+    .index("by_household_email_status", [
+      "householdId",
+      "invitedEmail",
+      "status",
+    ]),
 
   moveRoleGrants: defineTable({
     householdId: v.id("households"),

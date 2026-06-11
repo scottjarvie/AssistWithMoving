@@ -24,9 +24,10 @@ Primary site: https://movingmanifest.com
 - Treat MovingManifest as a bounded household moving assistant workflow:
   inventory, room/space setup, photo evidence, boxes, transport resources, sale
   prep, layout planning, load planning, and exports.
-- If a spouse or family member needs to sign in to the same move, add them as a
-  household member after they have created a MovingManifest account and signed
-  in once. Use `GET /api/v1/households/{householdId}/members` and
+- If a spouse or family member needs to sign in to the same move, add or invite
+  them as a household member by email. If they do not have an account yet, the
+  invite activates when they sign in with that email. Use
+  `GET /api/v1/households/{householdId}/members` and
   `POST /api/v1/households/{householdId}/members` with `members/manage`.
 - Do not confuse household members with move people/contact records. Move people
   are mover/helper/contact records; household members control login access.

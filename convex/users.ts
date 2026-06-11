@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { appRoleForEmail } from "./lib/admin";
 import { getCurrentUser } from "./lib/auth";
+import { claimPendingHouseholdInvitationsForUser } from "./lib/householdInvitations";
 
 export const current = query({
   args: {},
@@ -44,10 +45,16 @@ export const upsertCurrent = mutation({
         lastSeenAt: now,
       });
 
+      await claimPendingHouseholdInvitationsForUser(ctx, {
+        userId: existing._id,
+        email,
+        actorType: "user",
+      });
+
       return existing._id;
     }
 
-    return await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
       clerkUserId: identity.subject,
       email,
       name,
@@ -58,5 +65,13 @@ export const upsertCurrent = mutation({
       updatedAt: now,
       lastSeenAt: now,
     });
+
+    await claimPendingHouseholdInvitationsForUser(ctx, {
+      userId,
+      email,
+      actorType: "user",
+    });
+
+    return userId;
   },
 });

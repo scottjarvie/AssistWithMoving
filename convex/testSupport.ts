@@ -39,6 +39,7 @@ const photoUploadSessionStatuses = [
   "failed",
 ] as const;
 const membershipStatuses = ["active", "invited", "disabled"] as const;
+const householdInvitationStatuses = ["invited", "accepted", "revoked"] as const;
 const householdRoles = [
   "owner",
   "admin",
@@ -52,6 +53,7 @@ type CleanupCounts = {
   households: number;
   householdBillingProfiles: number;
   householdMemberships: number;
+  householdInvitations: number;
   moves: number;
   moveRoleGrants: number;
   movePeople: number;
@@ -192,6 +194,7 @@ function emptyCounts(): CleanupCounts {
     households: 0,
     householdBillingProfiles: 0,
     householdMemberships: 0,
+    householdInvitations: 0,
     moves: 0,
     moveRoleGrants: 0,
     movePeople: 0,
@@ -450,6 +453,18 @@ async function cleanupHousehold(
       .withIndex("by_household", (q) => q.eq("householdId", householdId))
       .collect()
   );
+
+  for (const status of householdInvitationStatuses) {
+    counts.householdInvitations += await deleteDocs(
+      ctx,
+      await ctx.db
+        .query("householdInvitations")
+        .withIndex("by_household_status", (q) =>
+          q.eq("householdId", householdId).eq("status", status)
+        )
+        .collect()
+    );
+  }
 
   for (const status of membershipStatuses) {
     for (const role of householdRoles) {

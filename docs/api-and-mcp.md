@@ -43,7 +43,7 @@ API keys can include these scopes:
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
 | `exports/create` | Create export jobs and create/revoke documentation share links. |
-| `members/manage` | List household members and add already-registered collaborators by email. |
+| `members/manage` | List household members and add or invite collaborators by email. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
@@ -198,7 +198,7 @@ curl https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
   -H "Authorization: Bearer mmk_replace_with_a_members_manage_key"
 ```
 
-Add a registered collaborator by email:
+Add or invite a collaborator by email:
 
 ```bash
 curl -X POST https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
@@ -209,8 +209,10 @@ curl -X POST https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
 ```
 
 Member management requires `members/manage` and a household-scoped key. The
-target email must have signed in to MovingManifest once before the API can add
-the account. Owner access cannot be granted through the API.
+target email can be added before the person has an account. If the email is not
+registered yet, MovingManifest stores a pending invitation and activates
+household access when that person signs in with the same email. Owner access
+cannot be granted through the API.
 
 Supported roles:
 
@@ -1437,7 +1439,7 @@ Available MCP tools:
 | `get_api_capabilities` | Inspect supported REST/MCP workflows, required scopes, tools, and known launch blockers without calling the API. |
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `list_household_members` | List real household login access for the API key household. |
-| `add_household_member` | Add an already-registered user to the household by email, with `dryRun` support. |
+| `add_household_member` | Add an existing user or create a pending household invitation by email, with `dryRun` support. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |

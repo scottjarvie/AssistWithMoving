@@ -41,7 +41,7 @@ const mcpCards = [
   },
   {
     title: "Scoped credentials",
-    copy: "Use separate keys for separate assistants. Rotate or revoke keys from Settings after a helper session ends.",
+    copy: "Use separate keys for separate assistants. With members/manage, assistants can add existing members or create pending email invitations.",
     icon: KeyRound,
   },
   {
@@ -59,7 +59,7 @@ const mcpCards = [
 const toolGroups = [
   "get_api_capabilities and get_api_context",
   "list_moves, create_move, setup_move",
-  "list_household_members and add_household_member",
+  "list_household_members and add_household_member, including pending invitations",
   "get_agent_context and get_move_questions",
   "search_inventory, create_item, batch_upsert_items, update_item",
   "list_move_spaces and create_move_space",
@@ -93,7 +93,9 @@ export default function McpPage() {
               The current MCP option is for desktop or agent environments that
               can run a local Node process. Phone-only assistants can still use
               this page and the REST API docs to guide the user through account
-              and key setup.
+              and key setup. Household collaborators can be invited by email
+              before they create an account, then access activates when they
+              sign in with that email.
             </p>
           </div>
           <div className="rounded-md border border-border bg-card p-4">
@@ -162,7 +164,7 @@ function McpVisual() {
         {[
           ["1", "User creates a MovingManifest account and key."],
           ["2", "Assistant configures local MCP with the key."],
-          ["3", "Assistant calls structured tools instead of scraping the UI."],
+          ["3", "Assistant calls structured tools, including pending household invites."],
           ["4", "User can revoke the key when finished."],
         ].map(([step, copy]) => (
           <div

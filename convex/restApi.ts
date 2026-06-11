@@ -56,6 +56,7 @@ import {
   normalizeCollaboratorEmail,
   parseManagedHouseholdMemberRole,
 } from "./lib/householdMembers";
+import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
 import {
   boxStatuses,
   documentationProfileTypes,
@@ -847,6 +848,12 @@ async function listApiHouseholdMembers(
     .query("householdMemberships")
     .withIndex("by_household", (q) => q.eq("householdId", householdId))
     .collect();
+  const invitations = await ctx.db
+    .query("householdInvitations")
+    .withIndex("by_household_status", (q) =>
+      q.eq("householdId", householdId).eq("status", "invited")
+    )
+    .collect();
 
   const members = await Promise.all(
     memberships
@@ -855,9 +862,10 @@ async function listApiHouseholdMembers(
         const user = await ctx.db.get(membership.userId);
         return {
           membershipId: membership._id,
+          invitationId: null,
           userId: membership.userId,
-          email: user?.email ?? membership.invitedEmail,
-          name: user?.name,
+          email: user?.email ?? membership.invitedEmail ?? null,
+          name: user?.name ?? null,
           role: membership.role,
           status: membership.status,
           createdAt: membership.createdAt,
@@ -866,9 +874,23 @@ async function listApiHouseholdMembers(
       })
   );
 
-  return members.sort((left, right) => {
+  const pendingInvitations = invitations.map((invitation) => ({
+    membershipId: null,
+    invitationId: invitation._id,
+    userId: null,
+    email: invitation.invitedEmail,
+    name: null,
+    role: invitation.role,
+    status: invitation.status,
+    createdAt: invitation.createdAt,
+    updatedAt: invitation.updatedAt,
+  }));
+
+  return [...members, ...pendingInvitations].sort((left, right) => {
     if (left.role === "owner") return -1;
     if (right.role === "owner") return 1;
+    if (left.status === "invited" && right.status !== "invited") return 1;
+    if (right.status === "invited" && left.status !== "invited") return -1;
     return (left.email ?? left.name ?? "").localeCompare(
       right.email ?? right.name ?? ""
     );
@@ -896,116 +918,46 @@ async function routeAddHouseholdMember(
     throw new Error("Owner access cannot be granted from the API.");
   }
 
-  const targetUser =
-    (await ctx.db
-      .query("users")
-      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
-      .unique()) ??
-    (normalizedEmail === String(body.email).trim()
-      ? null
-      : await ctx.db
-          .query("users")
-          .withIndex("by_email", (q) => q.eq("email", String(body.email).trim()))
-          .unique());
+  const result = await addOrInviteHouseholdMemberByEmail(ctx, {
+    householdId,
+    email: normalizedEmail,
+    role,
+    actor: {
+      type: "apiKey",
+      apiKeyId: auth.actor.apiKeyId,
+      apiKeyRecordId: auth.apiKeyId,
+      createdByUserId: auth.createdByUserId,
+    },
+  });
 
-  if (!targetUser || targetUser.status !== "active") {
-    return restError({
-      status: 409,
-      code: "user_not_registered",
-      message:
-        "That person needs to sign in to MovingManifest once before they can be added by email.",
-    });
-  }
-
-  if (targetUser._id === auth.createdByUserId) {
-    throw new Error("The API key creator is already a member of this household.");
-  }
-
-  const now = Date.now();
-  const existing = await ctx.db
-    .query("householdMemberships")
-    .withIndex("by_household_user", (q) =>
-      q.eq("householdId", householdId).eq("userId", targetUser._id)
-    )
-    .unique();
-
-  if (existing?.role === "owner") {
-    throw new Error("Owner access cannot be changed from the API.");
-  }
-
-  if (existing) {
-    await ctx.db.patch(existing._id, {
-      role,
-      status: "active",
-      invitedEmail: normalizedEmail,
-      updatedAt: now,
-    });
-    await recordAuditEvent(ctx, {
-      householdId,
-      actorType: "apiKey",
-      actorApiKeyId: auth.actor.apiKeyId,
-      category: "household",
-      action: "household.member_reactivated",
-      objectTable: "householdMemberships",
-      objectId: existing._id,
-      metadata: {
-        targetUserId: targetUser._id,
-        role,
-        email: normalizedEmail,
-      },
-    });
+  if (result.kind === "member") {
     return restOk(
       {
         data: {
-          membershipId: existing._id,
-          userId: targetUser._id,
-          email: normalizedEmail,
-          role,
-          status: "active",
-          reactivated: true,
+          membershipId: result.membershipId,
+          userId: result.userId,
+          email: result.email,
+          role: result.role,
+          status: result.status,
+          reactivated: result.reactivated,
         },
       },
-      200
+      result.reactivated ? 200 : 201
     );
   }
-
-  const membershipId = await ctx.db.insert("householdMemberships", {
-    householdId,
-    userId: targetUser._id,
-    role,
-    status: "active",
-    invitedEmail: normalizedEmail,
-    createdByUserId: auth.createdByUserId,
-    createdAt: now,
-    updatedAt: now,
-  });
-  await recordAuditEvent(ctx, {
-    householdId,
-    actorType: "apiKey",
-    actorApiKeyId: auth.actor.apiKeyId,
-    category: "household",
-    action: "household.member_added",
-    objectTable: "householdMemberships",
-    objectId: membershipId,
-    metadata: {
-      targetUserId: targetUser._id,
-      role,
-      email: normalizedEmail,
-    },
-  });
 
   return restOk(
     {
       data: {
-        membershipId,
-        userId: targetUser._id,
-        email: normalizedEmail,
-        role,
-        status: "active",
-        reactivated: false,
+        invitationId: result.invitationId,
+        email: result.email,
+        role: result.role,
+        status: result.status,
+        alreadyInvited: result.alreadyInvited,
+        requiresSignup: true,
       },
     },
-    201
+    result.alreadyInvited ? 200 : 202
   );
 }
 

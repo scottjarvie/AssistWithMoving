@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
+import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
 import {
   memberManagementBlockReason,
   normalizeCollaboratorEmail,
@@ -154,6 +155,12 @@ export const listMembers = query({
       .query("householdMemberships")
       .withIndex("by_household", (q) => q.eq("householdId", args.householdId))
       .collect();
+    const invitations = await ctx.db
+      .query("householdInvitations")
+      .withIndex("by_household_status", (q) =>
+        q.eq("householdId", args.householdId).eq("status", "invited"),
+      )
+      .collect();
 
     const members = await Promise.all(
       memberships
@@ -162,10 +169,11 @@ export const listMembers = query({
           const user = await ctx.db.get(membership.userId);
           return {
             membershipId: membership._id,
+            invitationId: null,
             userId: membership.userId,
-            email: user?.email ?? membership.invitedEmail,
-            name: user?.name,
-            imageUrl: user?.imageUrl,
+            email: user?.email ?? membership.invitedEmail ?? null,
+            name: user?.name ?? null,
+            imageUrl: user?.imageUrl ?? null,
             role: membership.role,
             status: membership.status,
             isCurrentUser:
@@ -177,9 +185,25 @@ export const listMembers = query({
         }),
     );
 
-    return members.sort((left, right) => {
+    const pendingInvitations = invitations.map((invitation) => ({
+      membershipId: null,
+      invitationId: invitation._id,
+      userId: null,
+      email: invitation.invitedEmail,
+      name: null,
+      imageUrl: null,
+      role: invitation.role,
+      status: invitation.status,
+      isCurrentUser: false,
+      createdAt: invitation.createdAt,
+      updatedAt: invitation.updatedAt,
+    }));
+
+    return [...members, ...pendingInvitations].sort((left, right) => {
       if (left.role === "owner") return -1;
       if (right.role === "owner") return 1;
+      if (left.status === "invited" && right.status !== "invited") return 1;
+      if (right.status === "invited" && left.status !== "invited") return -1;
       return (left.email ?? left.name ?? "").localeCompare(
         right.email ?? right.name ?? "",
       );
@@ -211,97 +235,63 @@ export const addExistingMember = mutation({
       throw new Error("Enter a collaborator email.");
     }
 
-    const targetUser =
-      (await ctx.db
-        .query("users")
-        .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
-        .unique()) ??
-      (normalizedEmail === args.email.trim()
-        ? null
-        : await ctx.db
-            .query("users")
-            .withIndex("by_email", (q) => q.eq("email", args.email.trim()))
-            .unique());
-
-    if (!targetUser || targetUser.status !== "active") {
-      throw new Error(
-        "That person needs to sign in to MovingManifest once before they can be added by email.",
-      );
-    }
-
-    if (actor.type === "user" && targetUser._id === actor.userId) {
-      throw new Error("You are already a member of this household.");
-    }
-
-    const now = Date.now();
-    const existing = await ctx.db
-      .query("householdMemberships")
-      .withIndex("by_household_user", (q) =>
-        q.eq("householdId", args.householdId).eq("userId", targetUser._id),
-      )
-      .unique();
-
-    if (existing?.role === "owner") {
-      throw new Error(
-        "Owner access cannot be changed from this collaborator manager.",
-      );
-    }
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        role,
-        status: "active",
-        invitedEmail: normalizedEmail,
-        updatedAt: now,
-      });
-
-      await recordAuditEvent(ctx, {
-        householdId: args.householdId,
-        actorType: actor.type,
-        actorUserId: actor.type === "user" ? actor.userId : undefined,
-        actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
-        category: "household",
-        action: "household.member_reactivated",
-        objectTable: "householdMemberships",
-        objectId: existing._id,
-        metadata: {
-          targetUserId: targetUser._id,
-          role,
-          email: normalizedEmail,
-        },
-      });
-
-      return existing._id;
-    }
-
-    const membershipId = await ctx.db.insert("householdMemberships", {
+    return await addOrInviteHouseholdMemberByEmail(ctx, {
       householdId: args.householdId,
-      userId: targetUser._id,
+      email: normalizedEmail,
       role,
-      status: "active",
-      invitedEmail: normalizedEmail,
-      createdByUserId: actor.type === "user" ? actor.userId : undefined,
-      createdAt: now,
-      updatedAt: now,
+      actor:
+        actor.type === "user"
+          ? { type: "user", userId: actor.userId }
+          : {
+              type: "apiKey",
+              apiKeyId: actor.apiKeyId,
+            },
+    });
+  },
+});
+
+export const revokeInvitation = mutation({
+  args: {
+    householdId: v.id("households"),
+    invitationId: v.id("householdInvitations"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireHouseholdPermission(
+      ctx,
+      args.householdId,
+      "household:manage_members",
+    );
+    if (actor.type !== "user") {
+      throw new Error("Invitation changes require a signed-in user.");
+    }
+
+    const invitation = await ctx.db.get(args.invitationId);
+    if (
+      !invitation ||
+      invitation.householdId !== args.householdId ||
+      invitation.status !== "invited"
+    ) {
+      throw new Error("Pending invitation not found.");
+    }
+
+    await ctx.db.patch(args.invitationId, {
+      status: "revoked",
+      updatedAt: Date.now(),
     });
 
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       actorType: actor.type,
-      actorUserId: actor.type === "user" ? actor.userId : undefined,
-      actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
+      actorUserId: actor.userId,
       category: "household",
-      action: "household.member_added",
-      objectTable: "householdMemberships",
-      objectId: membershipId,
+      action: "household.invitation_revoked",
+      objectTable: "householdInvitations",
+      objectId: args.invitationId,
       metadata: {
-        targetUserId: targetUser._id,
-        role,
-        email: normalizedEmail,
+        email: invitation.invitedEmail,
+        role: invitation.role,
       },
     });
-
-    return membershipId;
   },
 });
 

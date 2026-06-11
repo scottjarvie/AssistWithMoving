@@ -598,6 +598,7 @@ async function cleanupHousehold(
   await deleteMatching(ctx, "apiKeys", (doc) => doc.householdId === householdId, counts);
   await deleteMatching(ctx, "moves", (doc) => doc.householdId === householdId, counts);
   await deleteMatching(ctx, "householdBillingProfiles", (doc) => doc.householdId === householdId, counts);
+  await deleteMatching(ctx, "householdInvitations", (doc) => doc.householdId === householdId, counts);
   await deleteMatching(ctx, "householdMemberships", (doc) => doc.householdId === householdId, counts);
   await deleteMatching(ctx, "auditLogs", (doc) => doc.householdId === householdId, counts);
   await ctx.db.delete(householdId);

@@ -115,7 +115,7 @@ export async function addHouseholdMember(config, input) {
         path: `/households/${input.householdId}/members`,
         body,
       },
-      note: "The target email must already have signed in to MovingManifest once.",
+      note: "If the target email does not have an account yet, MovingManifest creates a pending invitation that activates when they sign in with that email.",
     };
   }
   return await movingManifestRequest(config, {
