@@ -171,6 +171,17 @@ describe("MovingManifest MCP capability discovery", () => {
     );
   });
 
+  it("advertises the one-call move setup tool and scopes", () => {
+    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+      expect.objectContaining({
+        id: "moveSetup",
+        requiredScopes: ["moves/read", "moves/write", "inventory/write"],
+        restEndpoints: expect.arrayContaining(["POST /api/v1/moves/setup"]),
+        mcpTools: expect.arrayContaining(["setup_move"]),
+      }),
+    );
+  });
+
   it("keeps capability ids unique for agent discovery", () => {
     const ids = MOVINGMANIFEST_API_CAPABILITIES.map((entry) => entry.id);
 

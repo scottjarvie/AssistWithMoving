@@ -210,6 +210,51 @@ Move creation requires `moves/write` and a household-scoped key. Keys already
 restricted to one move cannot create additional moves. New moves receive default
 documentation profile types and planning defaults just like app-created moves.
 
+Set up a move from an AI-agent conversation:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/moves/setup \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: setup-nashua-tucson-001" \
+  -d '{
+    "title": "Nashua NH to Tucson AZ Move",
+    "updateExisting": true,
+    "origin": "House in Nashua, New Hampshire",
+    "destination": "House in Tucson, Arizona",
+    "originRooms": ["Garage", "Barn", "Kitchen", "Living room"],
+    "transportResources": [
+      { "presetKey": "pickupTruck", "name": "Ram truck" },
+      {
+        "type": "trailer",
+        "name": "Trailer behind Toyota Tundra",
+        "zones": [{ "name": "Front" }, { "name": "Middle" }, { "name": "Rear" }]
+      }
+    ],
+    "items": [
+      {
+        "externalSource": "agent:photo-walkthrough",
+        "externalId": "photo-1-table-set",
+        "name": "Dark wood dining table set with 4 chairs",
+        "room": "Living room",
+        "category": "Furniture",
+        "dimensionsConfidence": "estimated",
+        "weightConfidence": "estimated",
+        "needsReview": true,
+        "reviewFlags": ["measurements estimated from photo"]
+      }
+    ]
+  }'
+```
+
+`POST /moves/setup` is for first-pass AI setup. It can create a move, match an
+existing non-archived move by exact title when `updateExisting` is not `false`,
+append origin/destination room lists into move notes, upsert transport
+resources/zones by name, and batch upsert starter inventory. It requires
+`moves/read`, `moves/write`, `inventory/write`, and a household-scoped key
+because it may choose or create a move. Move-restricted keys should use the
+narrow per-move endpoints after setup.
+
 Get one move:
 
 ```bash
@@ -364,9 +409,11 @@ set or clear the pair; providing only one side is rejected.
 
 Item payloads may include `dimensionsIn` and `dimensionsConfidence`. Confidence
 uses the same values as weight/volume confidence: `none`, `low`, `medium`,
-`high`, `manual`, or `actual`. Legacy rows with dimensions but no stored
-`dimensionsConfidence` are read as `medium` so Layout Studio and API clients
-treat them as estimated measurements rather than unknown measurements.
+`high`, `manual`, or `actual`; API and MCP clients may send `estimated` as a
+friendly alias for low-confidence photo or conversation estimates. Legacy rows
+with dimensions but no stored `dimensionsConfidence` are read as `medium` so
+Layout Studio and API clients treat them as estimated measurements rather than
+unknown measurements.
 
 Planned items represent desired future purchases or furniture ideas for the
 destination home. They can be referenced by Layout Studio placements, but they
@@ -1318,6 +1365,7 @@ Available MCP tools:
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
+| `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |
 | `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
 | `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |
 | `get_move_day_checklist` | Fetch a crew-safe Move Day checklist with box status, item counts, load assignment names, warnings, exception notes, and progress counts. |

@@ -54,6 +54,7 @@ import {
   rejectPlanningSuggestions,
   revokeShareLink,
   searchInventory,
+  setupMove,
   startPhotoUpload,
   suggestAssignments,
   updateDocumentationProfile,
@@ -186,6 +187,64 @@ describe("MovingManifest MCP API client", () => {
           origin: "Utah",
           destination: "Virginia",
           pcsShipmentType: "mixed",
+        }),
+      }
+    );
+  });
+
+  it("sets up moves through the one-call setup endpoint", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          action: "create",
+          move: { moveId: "move1", title: "Nashua NH to Tucson AZ Move" },
+          setupResults: { resources: [], items: [] },
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await setupMove(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        title: "Nashua NH to Tucson AZ Move",
+        originRooms: ["Garage", "Kitchen"],
+        transportResources: [{ presetKey: "pickupTruck", name: "Ram truck" }],
+        items: [
+          {
+            externalSource: "agent:photo-walkthrough",
+            externalId: "photo-1-table",
+            name: "Dark wood dining table set with 4 chairs",
+            weightConfidence: "estimated",
+          },
+        ],
+        idempotencyKey: "setup1",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/setup"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "setup1",
+        },
+        body: JSON.stringify({
+          title: "Nashua NH to Tucson AZ Move",
+          originRooms: ["Garage", "Kitchen"],
+          transportResources: [{ presetKey: "pickupTruck", name: "Ram truck" }],
+          items: [
+            {
+              externalSource: "agent:photo-walkthrough",
+              externalId: "photo-1-table",
+              name: "Dark wood dining table set with 4 chairs",
+              weightConfidence: "estimated",
+            },
+          ],
         }),
       }
     );

@@ -71,16 +71,18 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     title: "Move setup and summaries",
     status: "available",
     purpose:
-      "Create PCS, local, long-distance, storage, estate, and decluttering moves and fetch compact move state.",
-    requiredScopes: ["moves/read", "moves/write"],
+      "Create PCS, local, long-distance, storage, estate, and decluttering moves, including one-call agent setup with room lists, transport resources/zones, and starter inventory.",
+    requiredScopes: ["moves/read", "moves/write", "inventory/write"],
     restEndpoints: [
       "GET /api/v1/moves",
       "POST /api/v1/moves",
+      "POST /api/v1/moves/setup",
       "GET /api/v1/moves/:moveId/summary",
     ],
-    mcpTools: ["list_moves", "create_move", "get_move_summary"],
+    mcpTools: ["list_moves", "create_move", "setup_move", "get_move_summary"],
     agentWorkflows: [
       "Create a PCS mixed move with official fields and default documentation profiles.",
+      "Set up a new move from a user conversation in one write call, then use detailed endpoints for follow-up edits.",
       "Fetch one compact move summary before planning, exporting, or bulk updates.",
     ],
   },

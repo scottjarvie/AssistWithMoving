@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
@@ -227,33 +228,61 @@ export const updateBasics = mutation({
       "household:edit",
     );
 
-    await ctx.db.patch(args.moveId, {
-      title: normalizeOptionalText(args.title),
-      status: args.status,
-      origin: normalizeOptionalText(args.origin),
-      destination: normalizeOptionalText(args.destination),
-      dateStart: normalizeOptionalText(args.dateStart),
-      dateEnd: normalizeOptionalText(args.dateEnd),
-      documentationProfileTypes: args.documentationProfileTypes
-        ? normalizeDocumentationProfileTypes(args.documentationProfileTypes)
-        : undefined,
-      moveLevelWeightAllowanceLb: args.moveLevelWeightAllowanceLb,
-      pcsBranch: args.pcsBranch,
-      pcsRankPayGrade: normalizeOptionalText(args.pcsRankPayGrade),
-      pcsDependentStatus: args.pcsDependentStatus,
-      pcsShipmentType: args.pcsShipmentType,
-      pcsOrdersNumber: normalizeOptionalText(args.pcsOrdersNumber),
-      pcsAllowanceNotes: normalizeOptionalText(args.pcsAllowanceNotes),
-      pcsTransportationOfficeNotes: normalizeOptionalText(
+    const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
+    if (args.title !== undefined) {
+      patch.title = normalizeOptionalText(args.title);
+    }
+    if (args.status !== undefined) patch.status = args.status;
+    if (args.origin !== undefined) patch.origin = normalizeOptionalText(args.origin);
+    if (args.destination !== undefined) {
+      patch.destination = normalizeOptionalText(args.destination);
+    }
+    if (args.dateStart !== undefined) {
+      patch.dateStart = normalizeOptionalText(args.dateStart);
+    }
+    if (args.dateEnd !== undefined) {
+      patch.dateEnd = normalizeOptionalText(args.dateEnd);
+    }
+    if (args.documentationProfileTypes !== undefined) {
+      patch.documentationProfileTypes = normalizeDocumentationProfileTypes(
+        args.documentationProfileTypes,
+      );
+    }
+    if (args.moveLevelWeightAllowanceLb !== undefined) {
+      patch.moveLevelWeightAllowanceLb = args.moveLevelWeightAllowanceLb;
+    }
+    if (args.pcsBranch !== undefined) patch.pcsBranch = args.pcsBranch;
+    if (args.pcsRankPayGrade !== undefined) {
+      patch.pcsRankPayGrade = normalizeOptionalText(args.pcsRankPayGrade);
+    }
+    if (args.pcsDependentStatus !== undefined) {
+      patch.pcsDependentStatus = args.pcsDependentStatus;
+    }
+    if (args.pcsShipmentType !== undefined) {
+      patch.pcsShipmentType = args.pcsShipmentType;
+    }
+    if (args.pcsOrdersNumber !== undefined) {
+      patch.pcsOrdersNumber = normalizeOptionalText(args.pcsOrdersNumber);
+    }
+    if (args.pcsAllowanceNotes !== undefined) {
+      patch.pcsAllowanceNotes = normalizeOptionalText(args.pcsAllowanceNotes);
+    }
+    if (args.pcsTransportationOfficeNotes !== undefined) {
+      patch.pcsTransportationOfficeNotes = normalizeOptionalText(
         args.pcsTransportationOfficeNotes,
-      ),
-      pcsRestrictedItemsNotes: normalizeOptionalText(
+      );
+    }
+    if (args.pcsRestrictedItemsNotes !== undefined) {
+      patch.pcsRestrictedItemsNotes = normalizeOptionalText(
         args.pcsRestrictedItemsNotes,
-      ),
-      proGearNotes: normalizeOptionalText(args.proGearNotes),
-      notes: normalizeOptionalText(args.notes),
-      updatedAt: Date.now(),
-    });
+      );
+    }
+    if (args.proGearNotes !== undefined) {
+      patch.proGearNotes = normalizeOptionalText(args.proGearNotes);
+    }
+    if (args.notes !== undefined) patch.notes = normalizeOptionalText(args.notes);
+
+    await ctx.db.patch(args.moveId, patch);
 
     await recordAuditEvent(ctx, {
       householdId: args.householdId,

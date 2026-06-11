@@ -58,6 +58,9 @@ export function moveIdFromRestRequest({
   body?: unknown;
   query: Record<string, string>;
 }) {
+  if (segments[0] === "moves" && segments[1] === "setup") {
+    return moveIdFromRestBodyOrQuery({ body, query });
+  }
   if (segments[0] === "moves" && segments[1]) {
     return segments[1];
   }
@@ -224,6 +227,9 @@ export function requiredScopesForRestRoute({
     return ["exports/read"];
   }
   if (segments[0] !== "moves") return [];
+  if (segments[1] === "setup" && method === "POST") {
+    return ["moves/read", "moves/write", "inventory/write"];
+  }
   if (segments.length === 1 && method === "POST") {
     return ["moves/write"];
   }

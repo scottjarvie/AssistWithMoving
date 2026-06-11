@@ -555,6 +555,9 @@ async function routeRequest(
       )
     );
   }
+  if (args.method === "POST" && segments[1] === "setup" && segments.length === 2) {
+    return await routeSetupMove(ctx, args, auth);
+  }
   if (args.method === "POST" && segments.length === 1) {
     return await routeCreateMove(ctx, args, auth);
   }
@@ -1286,6 +1289,206 @@ async function routeCreateMove(
       },
     },
     201
+  );
+}
+
+async function routeSetupMove(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+) {
+  if (auth.moveId) {
+    return restError({
+      status: 403,
+      code: "move_restricted_key",
+      message: "Move-restricted API keys cannot create or select moves.",
+    });
+  }
+
+  const body = bodyObject(args.body);
+  const dryRun = Boolean(body.dryRun);
+  const updateExisting = body.updateExisting !== false;
+  const requestedMoveId = optionalString(body.moveId);
+  const normalizedRequestedMoveId = requestedMoveId
+    ? ctx.db.normalizeId("moves", requestedMoveId)
+    : null;
+  if (requestedMoveId && !normalizedRequestedMoveId) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Move not found.",
+    });
+  }
+  const title = normalizeOptionalText(asString(body.title));
+  const existingMove = normalizedRequestedMoveId
+    ? await requireApiMove(ctx, auth.householdId, normalizedRequestedMoveId)
+    : title && updateExisting
+      ? await findApiMoveByTitle(ctx, auth.householdId, title)
+      : null;
+
+  if (!existingMove && !title) {
+    return restError({
+      status: 400,
+      code: "invalid_move_setup",
+      message: "title is required when setup is creating a move.",
+    });
+  }
+
+  const roomSetupNote = setupRoomsNote(body);
+  const baseNotes = normalizeOptionalText(asString(body.notes));
+  const notes =
+    roomSetupNote && baseNotes
+      ? `${baseNotes}\n\n${roomSetupNote}`
+      : (baseNotes ?? roomSetupNote);
+
+  if (dryRun) {
+    return restOk({
+      data: {
+        dryRun: true,
+        action: existingMove ? "update" : "create",
+        matchedMoveId: existingMove?._id,
+        title,
+        transportResourceCount: setupTransportInputs(body).length,
+        itemCount: setupItemInputs(body).length,
+        notes,
+      },
+    });
+  }
+
+  const now = Date.now();
+  let moveId: Id<"moves">;
+  let moveAction: "create" | "update";
+  if (existingMove) {
+    moveId = existingMove._id;
+    moveAction = "update";
+    const patch = setupMovePatch(body, notes);
+    if (Object.keys(patch).length > 1) {
+      await ctx.db.patch(moveId, patch);
+      await auditApiWrite(ctx, auth, moveId, "move.api_setup_updated", "moves", moveId, {
+        changedKeys: Object.keys(patch),
+      });
+    }
+  } else {
+    moveAction = "create";
+    const type = parseMoveType(body.type) ?? "other";
+    await assertHouseholdEntitlement(ctx, {
+      householdId: auth.householdId,
+      dimension: "activeMoves",
+    });
+    const documentationProfileTypes = Array.isArray(body.documentationProfileTypes)
+      ? parseDocumentationProfileTypes(body.documentationProfileTypes)
+      : [...defaultDocumentationProfilesForMoveType(type)];
+    moveId = await ctx.db.insert("moves", {
+      householdId: auth.householdId,
+      title: title!,
+      type,
+      status: parseMoveStatus(body.status) ?? "planning",
+      origin: normalizeOptionalText(asString(body.origin)),
+      destination: normalizeOptionalText(asString(body.destination)),
+      dateStart: normalizeOptionalText(asString(body.dateStart)),
+      dateEnd: normalizeOptionalText(asString(body.dateEnd)),
+      unitSystem: parseUnitSystem(body.unitSystem) ?? "imperial",
+      documentationProfileTypes,
+      moveLevelWeightAllowanceLb: optionalNumber(body.moveLevelWeightAllowanceLb),
+      pcsBranch: parsePcsBranch(body.pcsBranch),
+      pcsRankPayGrade: normalizeOptionalText(asString(body.pcsRankPayGrade)),
+      pcsDependentStatus: parsePcsDependentStatus(body.pcsDependentStatus),
+      pcsShipmentType: parsePcsShipmentType(body.pcsShipmentType),
+      pcsOrdersNumber: normalizeOptionalText(asString(body.pcsOrdersNumber)),
+      pcsAllowanceNotes: normalizeOptionalText(asString(body.pcsAllowanceNotes)),
+      pcsTransportationOfficeNotes: normalizeOptionalText(
+        asString(body.pcsTransportationOfficeNotes),
+      ),
+      pcsRestrictedItemsNotes: normalizeOptionalText(
+        asString(body.pcsRestrictedItemsNotes),
+      ),
+      proGearNotes: normalizeOptionalText(asString(body.proGearNotes)),
+      notes,
+      createdByUserId: auth.createdByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const planningDefaultIds = await insertMissingMovePlanningDefaults(ctx, {
+      householdId: auth.householdId,
+      moveId,
+    });
+    await auditApiWrite(ctx, auth, moveId, "move.api_setup_created", "moves", moveId, {
+      title,
+      type,
+      planningDefaultCount: planningDefaultIds.length,
+    });
+  }
+
+  const resourceResults = [];
+  for (const [index, input] of setupTransportInputs(body).entries()) {
+    resourceResults.push(
+      await upsertApiTransportResourceForSetup(ctx, auth, moveId, input, index),
+    );
+  }
+
+  let itemBatchResult: unknown = {
+    dryRun: false,
+    total: 0,
+    succeeded: 0,
+    failed: 0,
+    results: [],
+  };
+  const items = setupItemInputs(body);
+  if (items.length) {
+    const batchResponse = await routeBatchUpsertItems(
+      ctx,
+      {
+        ...args,
+        method: "POST",
+        path: `/moves/${moveId}/items/batch-upsert`,
+        body: { items },
+      },
+      auth,
+      moveId,
+    );
+    if (batchResponse.status >= 400) {
+      throw new Error("Item setup failed.");
+    }
+    itemBatchResult =
+      typeof batchResponse.body === "object" &&
+      batchResponse.body &&
+      "data" in batchResponse.body
+        ? (batchResponse.body as { data?: unknown }).data
+        : itemBatchResult;
+  }
+
+  const [move, resources, zones] = await Promise.all([
+    ctx.db.get(moveId),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect(),
+  ]);
+
+  return restOk(
+    {
+      data: {
+        action: moveAction,
+        move: move ? safeMove(move) : { moveId },
+        resources: resources
+          .filter((resource) => resource.householdId === auth.householdId)
+          .filter((resource) => !resource.archivedAt)
+          .map((resource) => safeTransportResource(resource)),
+        zones: zones
+          .filter((zone) => zone.householdId === auth.householdId)
+          .filter((zone) => !zone.archivedAt)
+          .map((zone) => safeTransportZone(zone)),
+        setupResults: {
+          resources: resourceResults,
+          items: itemBatchResult,
+        },
+      },
+    },
+    moveAction === "create" ? 201 : 200,
   );
 }
 
@@ -5670,6 +5873,297 @@ function artifactForApiExport(job: Doc<"exportJobs">) {
   };
 }
 
+async function findApiMoveByTitle(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  title: string,
+) {
+  const normalized = title.trim().toLowerCase();
+  const moves = await ctx.db
+    .query("moves")
+    .withIndex("by_household_status", (q) => q.eq("householdId", householdId))
+    .collect();
+  return (
+    moves.find(
+      (move) =>
+        move.status !== "archived" &&
+        move.title.trim().toLowerCase() === normalized,
+    ) ?? null
+  );
+}
+
+function setupMovePatch(
+  body: Record<string, unknown>,
+  notes: string | undefined,
+): Partial<Doc<"moves">> {
+  const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
+  if (body.title !== undefined) {
+    const title = normalizeOptionalText(asString(body.title));
+    if (!title) throw new Error("title cannot be empty.");
+    patch.title = title;
+  }
+  if (body.status !== undefined) {
+    patch.status = parseMoveStatus(body.status) ?? "planning";
+  }
+  if (body.type !== undefined) {
+    patch.type = parseMoveType(body.type) ?? "other";
+  }
+  if (body.origin !== undefined) {
+    patch.origin = normalizeOptionalText(asString(body.origin));
+  }
+  if (body.destination !== undefined) {
+    patch.destination = normalizeOptionalText(asString(body.destination));
+  }
+  if (body.dateStart !== undefined) {
+    patch.dateStart = normalizeOptionalText(asString(body.dateStart));
+  }
+  if (body.dateEnd !== undefined) {
+    patch.dateEnd = normalizeOptionalText(asString(body.dateEnd));
+  }
+  if (body.unitSystem !== undefined) {
+    patch.unitSystem = parseUnitSystem(body.unitSystem) ?? "imperial";
+  }
+  if (body.documentationProfileTypes !== undefined) {
+    patch.documentationProfileTypes = Array.isArray(body.documentationProfileTypes)
+      ? parseDocumentationProfileTypes(body.documentationProfileTypes)
+      : undefined;
+  }
+  if (body.moveLevelWeightAllowanceLb !== undefined) {
+    patch.moveLevelWeightAllowanceLb = optionalNumber(
+      body.moveLevelWeightAllowanceLb,
+    );
+  }
+  if (
+    body.notes !== undefined ||
+    body.originRooms !== undefined ||
+    body.destinationRooms !== undefined
+  ) {
+    patch.notes = notes;
+  }
+  return patch;
+}
+
+function setupRoomsNote(body: Record<string, unknown>) {
+  const originRooms = parseStringArray(body.originRooms);
+  const destinationRooms = parseStringArray(body.destinationRooms);
+  const lines = [];
+  if (originRooms?.length) {
+    lines.push(`Origin rooms/spaces: ${originRooms.join("; ")}.`);
+  }
+  if (destinationRooms?.length) {
+    lines.push(`Destination rooms/spaces: ${destinationRooms.join("; ")}.`);
+  }
+  return lines.length ? `AI setup room list\n${lines.join("\n")}` : undefined;
+}
+
+function setupTransportInputs(body: Record<string, unknown>) {
+  const inputs = Array.isArray(body.transportResources)
+    ? body.transportResources
+    : [];
+  if (inputs.length > 25) {
+    throw new Error("transportResources are limited to 25 rows.");
+  }
+  return inputs.map((input) => bodyObject(input));
+}
+
+function setupItemInputs(body: Record<string, unknown>) {
+  const inputs = Array.isArray(body.items) ? body.items : [];
+  if (inputs.length > maxBatchUpsertItems) {
+    throw new Error(`items are limited to ${maxBatchUpsertItems} rows.`);
+  }
+  return inputs.map((input) => bodyObject(input));
+}
+
+async function upsertApiTransportResourceForSetup(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  input: Record<string, unknown>,
+  index: number,
+) {
+  const name = normalizeOptionalText(asString(input.name));
+  const presetKey = parseTransportResourcePresetKey(input.presetKey);
+  const preset = presetKey ? getTransportResourcePreset(presetKey) : null;
+  const resolvedName = name ?? preset?.name;
+  if (!resolvedName) {
+    throw new Error("transportResources[].name is required unless presetKey is provided.");
+  }
+
+  const existing = await findApiTransportResourceByName(
+    ctx,
+    auth.householdId,
+    moveId,
+    resolvedName,
+  );
+  const now = Date.now();
+  let resourceId: Id<"transportResources">;
+  let action: "create" | "update";
+  if (existing) {
+    action = "update";
+    resourceId = existing._id;
+    const patch = transportResourcePatch(input, auth);
+    if (preset && input.type === undefined) patch.type = preset.type;
+    if (input.name === undefined) patch.name = resolvedName;
+    if (input.description === undefined && preset?.description) {
+      patch.description = preset.description;
+    }
+    if (input.capacity === undefined && preset?.capacity) {
+      patch.capacity = preset.capacity;
+    }
+    if (input.rules === undefined && preset?.rules) {
+      patch.rules = normalizeRuleList(preset.rules);
+    }
+    await ctx.db.patch(resourceId, patch);
+  } else {
+    action = "create";
+    const type = preset?.type ?? parseTransportResourceType(input.type);
+    if (!type) {
+      throw new Error("transportResources[].type is required unless presetKey is provided.");
+    }
+    resourceId = await ctx.db.insert("transportResources", {
+      householdId: auth.householdId,
+      moveId,
+      type,
+      name: resolvedName,
+      description:
+        normalizeOptionalText(asString(input.description)) ?? preset?.description,
+      capacity: parseCapacity(input.capacity) ?? preset?.capacity ?? {},
+      capacityReviewStatus:
+        parseCapacityReviewStatus(input.capacityReviewStatus) ?? "unreviewed",
+      capacityNotes: normalizeOptionalText(asString(input.capacityNotes)),
+      rules: normalizeRuleList(parseStringArray(input.rules) ?? preset?.rules ?? []),
+      sortOrder:
+        input.sortOrder !== undefined
+          ? normalizeSortOrder(optionalNumber(input.sortOrder))
+          : now + index,
+      createdByUserId: auth.createdByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const explicitZones = Array.isArray(input.zones)
+    ? input.zones.map((zone) => bodyObject(zone))
+    : [];
+  const presetZones =
+    !explicitZones.length && preset
+      ? preset.zones.map((zone, zoneIndex) => ({
+          name: zone.name,
+          description: zone.description,
+          preferredTags: [...(zone.preferredTags ?? [])],
+          sortOrder: now + index + zoneIndex + 1,
+        }))
+      : [];
+  const zones = [...explicitZones, ...presetZones];
+  const zoneResults = [];
+  for (const [zoneIndex, zone] of zones.entries()) {
+    zoneResults.push(
+      await upsertApiTransportZoneForSetup(ctx, auth, moveId, resourceId, zone, zoneIndex),
+    );
+  }
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    `transport_resource.api_setup_${action}`,
+    "transportResources",
+    resourceId,
+    { name: resolvedName, zoneCount: zoneResults.length },
+  );
+  return { action, resourceId, name: resolvedName, zones: zoneResults };
+}
+
+async function upsertApiTransportZoneForSetup(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  resourceId: Id<"transportResources">,
+  input: Record<string, unknown>,
+  index: number,
+) {
+  const name = normalizeOptionalText(asString(input.name));
+  if (!name) throw new Error("transportResources[].zones[].name is required.");
+  const existing = await findApiTransportZoneByName(
+    ctx,
+    auth.householdId,
+    moveId,
+    resourceId,
+    name,
+  );
+  if (existing) {
+    const patch = await transportZonePatch(ctx, auth.householdId, moveId, {
+      ...input,
+      resourceId,
+    });
+    await ctx.db.patch(existing._id, patch);
+    return { action: "update" as const, zoneId: existing._id, name };
+  }
+
+  const now = Date.now();
+  const zoneId = await ctx.db.insert("transportZones", {
+    householdId: auth.householdId,
+    moveId,
+    resourceId,
+    name,
+    description: normalizeOptionalText(asString(input.description)),
+    capacity: parseCapacity(input.capacity) ?? {},
+    preferredTags: normalizeRuleList(parseStringArray(input.preferredTags) ?? []),
+    sortOrder:
+      input.sortOrder !== undefined
+        ? normalizeSortOrder(optionalNumber(input.sortOrder))
+        : now + index,
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return { action: "create" as const, zoneId, name };
+}
+
+async function findApiTransportResourceByName(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  name: string,
+) {
+  const normalized = name.trim().toLowerCase();
+  const resources = await ctx.db
+    .query("transportResources")
+    .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+    .collect();
+  return (
+    resources.find(
+      (resource) =>
+        resource.householdId === householdId &&
+        !resource.archivedAt &&
+        resource.name.trim().toLowerCase() === normalized,
+    ) ?? null
+  );
+}
+
+async function findApiTransportZoneByName(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  resourceId: Id<"transportResources">,
+  name: string,
+) {
+  const normalized = name.trim().toLowerCase();
+  const zones = await ctx.db
+    .query("transportZones")
+    .withIndex("by_resource_sort", (q) => q.eq("resourceId", resourceId))
+    .collect();
+  return (
+    zones.find(
+      (zone) =>
+        zone.householdId === householdId &&
+        zone.moveId === moveId &&
+        !zone.archivedAt &&
+        zone.name.trim().toLowerCase() === normalized,
+    ) ?? null
+  );
+}
+
 async function createApiTransportResource(
   ctx: MutationCtx,
   args: RestRequestInput,
@@ -5934,23 +6428,29 @@ async function createApiItem(
     modelNumber: normalizeOptionalText(asString(body.modelNumber)),
     dimensionsIn: parseDimensionsIn(body.dimensionsIn),
     estimatedWeightLb: optionalNumber(body.estimatedWeightLb),
+    estimatedWeightLowLb: optionalNumber(body.estimatedWeightLowLb),
+    estimatedWeightHighLb: optionalNumber(body.estimatedWeightHighLb),
     actualWeightLb: optionalNumber(body.actualWeightLb),
     estimatedVolumeCuFt: optionalNumber(body.estimatedVolumeCuFt),
+    estimatedPackedVolumeCuFt: optionalNumber(body.estimatedPackedVolumeCuFt),
     dimensionsConfidence:
       parsePlanningConfidence(body.dimensionsConfidence, "dimensionsConfidence") ??
       "none",
-    weightConfidence: "none",
-    volumeConfidence: "none",
-    fragility: "low",
-    stackable: true,
+    weightConfidence:
+      parsePlanningConfidence(body.weightConfidence, "weightConfidence") ?? "none",
+    volumeConfidence:
+      parsePlanningConfidence(body.volumeConfidence, "volumeConfidence") ?? "none",
+    fragility: parseFragility(body.fragility) ?? "low",
+    stackable: body.stackable === undefined ? true : Boolean(body.stackable),
     hazardousFlag: Boolean(body.hazardousFlag),
     highValue: Boolean(body.highValue),
     requiresPersonalTransport: Boolean(body.requiresPersonalTransport),
-    planningDefaultKeys: [],
+    planningDefaultKeys: parsePlanningDefaultKeys(body.planningDefaultKeys) ?? [],
     needsReview: Boolean(body.needsReview),
-    reviewFlags: [],
+    reviewFlags: normalizeRuleList(parseStringArray(body.reviewFlags) ?? []),
     privateNotes: normalizeOptionalText(asString(body.privateNotes)),
-    aiTags: [],
+    aiSummary: normalizeOptionalText(asString(body.aiSummary)),
+    aiTags: normalizeRuleList(parseStringArray(body.aiTags) ?? []),
     createdVia: "api",
     createdByUserId: auth.createdByUserId,
     updatedByUserId: auth.createdByUserId,
@@ -6432,8 +6932,59 @@ function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
       "dimensionsConfidence"
     );
   }
+  if (input.estimatedWeightLb !== undefined) {
+    patch.estimatedWeightLb = optionalNumber(input.estimatedWeightLb);
+  }
+  if (input.estimatedWeightLowLb !== undefined) {
+    patch.estimatedWeightLowLb = optionalNumber(input.estimatedWeightLowLb);
+  }
+  if (input.estimatedWeightHighLb !== undefined) {
+    patch.estimatedWeightHighLb = optionalNumber(input.estimatedWeightHighLb);
+  }
+  if (input.actualWeightLb !== undefined) {
+    patch.actualWeightLb = optionalNumber(input.actualWeightLb);
+  }
+  if (input.estimatedVolumeCuFt !== undefined) {
+    patch.estimatedVolumeCuFt = optionalNumber(input.estimatedVolumeCuFt);
+  }
+  if (input.estimatedPackedVolumeCuFt !== undefined) {
+    patch.estimatedPackedVolumeCuFt = optionalNumber(input.estimatedPackedVolumeCuFt);
+  }
+  if (input.weightConfidence !== undefined) {
+    patch.weightConfidence =
+      parsePlanningConfidence(input.weightConfidence, "weightConfidence") ?? "none";
+  }
+  if (input.volumeConfidence !== undefined) {
+    patch.volumeConfidence =
+      parsePlanningConfidence(input.volumeConfidence, "volumeConfidence") ?? "none";
+  }
+  if (input.fragility !== undefined) {
+    patch.fragility = parseFragility(input.fragility) ?? "low";
+  }
+  if (input.stackable !== undefined) patch.stackable = Boolean(input.stackable);
+  if (input.hazardousFlag !== undefined) {
+    patch.hazardousFlag = Boolean(input.hazardousFlag);
+  }
   if (input.highValue !== undefined) patch.highValue = Boolean(input.highValue);
+  if (input.requiresPersonalTransport !== undefined) {
+    patch.requiresPersonalTransport = Boolean(input.requiresPersonalTransport);
+  }
+  if (input.planningDefaultKeys !== undefined) {
+    patch.planningDefaultKeys = parsePlanningDefaultKeys(input.planningDefaultKeys) ?? [];
+  }
   if (input.needsReview !== undefined) patch.needsReview = Boolean(input.needsReview);
+  if (input.reviewFlags !== undefined) {
+    patch.reviewFlags = normalizeRuleList(parseStringArray(input.reviewFlags) ?? []);
+  }
+  if (input.privateNotes !== undefined) {
+    patch.privateNotes = normalizeOptionalText(asString(input.privateNotes));
+  }
+  if (input.aiSummary !== undefined) {
+    patch.aiSummary = normalizeOptionalText(asString(input.aiSummary));
+  }
+  if (input.aiTags !== undefined) {
+    patch.aiTags = normalizeRuleList(parseStringArray(input.aiTags) ?? []);
+  }
   if (input.externalSource !== undefined || input.externalId !== undefined) {
     const externalKey = externalItemKeyFromInput(input);
     patch.externalSource = externalKey?.externalSource;
@@ -7037,10 +7588,29 @@ function parseAssignmentDraftPatch(
 
 function parsePlanningConfidence(value: unknown, label: string) {
   if (value === undefined || value === "") return undefined;
+  if (value === "estimated") return "low";
   if (!includesLiteral(restEstimateConfidences, value)) {
     throw new Error(`Unsupported ${label}.`);
   }
   return value as Doc<"aiPlanningSuggestions">["confidence"];
+}
+
+function parseFragility(value: unknown): Doc<"items">["fragility"] | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(itemFragilities, value)) {
+    throw new Error("Unsupported fragility.");
+  }
+  return value as Doc<"items">["fragility"];
+}
+
+function parsePlanningDefaultKeys(
+  value: unknown,
+): Doc<"items">["planningDefaultKeys"] | undefined {
+  return parseLiteralArray(
+    value,
+    planningDefaultKeys,
+    "planningDefaultKeys",
+  ) as Doc<"items">["planningDefaultKeys"] | undefined;
 }
 
 function parseDocumentationProfileTypes(value: unknown) {

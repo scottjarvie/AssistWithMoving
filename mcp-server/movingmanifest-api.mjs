@@ -113,6 +113,22 @@ export async function createMove(config, input) {
   });
 }
 
+export async function setupMove(config, input) {
+  const { idempotencyKey, ...body } = input;
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: { method: "POST", path: "/moves/setup", body },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: "/moves/setup",
+    body,
+    idempotencyKey,
+  });
+}
+
 export async function getMoveSummary(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/summary`,

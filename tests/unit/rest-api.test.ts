@@ -53,6 +53,12 @@ describe("REST API helpers", () => {
     expect(
       requiredScopesForRestRoute({
         method: "POST",
+        segments: ["moves", "setup"],
+      })
+    ).toEqual(["moves/read", "moves/write", "inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
         segments: ["moves", "move1", "items"],
       })
     ).toEqual(["inventory/write"]);
@@ -432,6 +438,22 @@ describe("REST API helpers", () => {
         segments: ["moves"],
         body: { moveId: "ignored" },
         query: { moveId: "also-ignored" },
+      })
+    ).toBeUndefined();
+
+    expect(
+      moveIdFromRestRequest({
+        segments: ["moves", "setup"],
+        body: { moveId: "move-from-setup" },
+        query: {},
+      })
+    ).toBe("move-from-setup");
+
+    expect(
+      moveIdFromRestRequest({
+        segments: ["moves", "setup"],
+        body: { title: "New move setup" },
+        query: {},
       })
     ).toBeUndefined();
 
