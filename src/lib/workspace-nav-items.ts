@@ -7,6 +7,8 @@ export type WorkspaceNavItem = {
     | "dashboard"
     | "capture"
     | "inventory"
+    | "spaces"
+    | "sell"
     | "boxes"
     | "photos"
     | "layout"
@@ -20,6 +22,8 @@ const baseWorkspaceNavItems: WorkspaceNavItem[] = [
   { label: "Dashboard", iconKey: "dashboard" },
   { section: "capture", label: "Capture", iconKey: "capture" },
   { section: "inventory", label: "Inventory", iconKey: "inventory" },
+  { section: "spaces", label: "Spaces", iconKey: "spaces" },
+  { section: "sell", label: "Sell", iconKey: "sell" },
   { section: "boxes", label: "Boxes", iconKey: "boxes" },
   { section: "photos", label: "Photos", iconKey: "photos" },
   { section: "load-plan", label: "Load Plan", iconKey: "loadPlan" },
@@ -39,9 +43,13 @@ export function workspaceNavItems(flags: EffectiveFeatureFlag[] | undefined) {
     return baseWorkspaceNavItems;
   }
 
+  const photosIndex = baseWorkspaceNavItems.findIndex(
+    (item) => item.section === "photos"
+  );
+  const insertAt = photosIndex >= 0 ? photosIndex + 1 : baseWorkspaceNavItems.length;
   return [
-    ...baseWorkspaceNavItems.slice(0, 5),
+    ...baseWorkspaceNavItems.slice(0, insertAt),
     layoutStudioNavItem,
-    ...baseWorkspaceNavItems.slice(5),
+    ...baseWorkspaceNavItems.slice(insertAt),
   ];
 }

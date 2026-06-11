@@ -147,10 +147,12 @@ function ProvenanceCard({
   title,
   entry,
   fallbackConfidence,
+  onConfirm,
 }: {
   title: string;
   entry: MeasurementProvenanceEntry | undefined;
   fallbackConfidence: string | undefined;
+  onConfirm?: () => void;
 }) {
   return (
     <div className="rounded-md border border-border p-3">
@@ -200,6 +202,17 @@ function ProvenanceCard({
           </div>
         ) : null}
       </dl>
+      {entry?.needsVerification && onConfirm ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-3 w-full"
+          onClick={onConfirm}
+        >
+          Mark verified
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -479,6 +492,33 @@ export function ItemDetailSheet({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleConfirmMeasurement(
+    key: keyof MeasurementProvenance,
+  ) {
+    if (!item?.measurementProvenance?.[key]) return;
+    const now = Date.now();
+    await onSave({
+      measurementProvenance: {
+        ...item.measurementProvenance,
+        [key]: {
+          ...item.measurementProvenance[key],
+          sourceType: "manualMeasurement",
+          confidence: "manual",
+          recordedAt: now,
+          recordedByLabel: "Signed-in user",
+          needsVerification: false,
+          notes: [
+            item.measurementProvenance[key]?.notes,
+            "Measurement source marked verified in item detail.",
+          ]
+            .filter(Boolean)
+            .join(" "),
+        },
+      },
+    });
+    setMessage(`${key} marked verified.`);
   }
 
   return (
@@ -878,16 +918,19 @@ export function ItemDetailSheet({
                       title="Dimensions"
                       entry={item.measurementProvenance?.dimensions}
                       fallbackConfidence={dimensionsConfidence}
+                      onConfirm={() => void handleConfirmMeasurement("dimensions")}
                     />
                     <ProvenanceCard
                       title="Weight"
                       entry={item.measurementProvenance?.weight}
                       fallbackConfidence={weightConfidence}
+                      onConfirm={() => void handleConfirmMeasurement("weight")}
                     />
                     <ProvenanceCard
                       title="Volume"
                       entry={item.measurementProvenance?.volume}
                       fallbackConfidence={volumeConfidence}
+                      onConfirm={() => void handleConfirmMeasurement("volume")}
                     />
                   </div>
                 </div>

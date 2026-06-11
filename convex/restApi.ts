@@ -75,6 +75,10 @@ import {
   photoTypes,
   photoVerificationStatuses,
   photoVisibilityScopes,
+  moveSpaceKinds,
+  saleListingPlatforms,
+  saleListingStatuses,
+  saleResearchDepths,
   moveTypes,
   pcsBranches,
   pcsDependentStatuses,
@@ -600,6 +604,17 @@ async function routeRequest(
   ) {
     return await routeCapacityReport(ctx, auth, move);
   }
+  if (nested === "agent-context" && args.method === "GET" && segments.length === 3) {
+    return await routeAgentContext(ctx, auth, move);
+  }
+
+  if (nested === "spaces") {
+    return await routeMoveSpaces(ctx, args, auth, moveId, nestedId);
+  }
+
+  if (nested === "sale-listings") {
+    return await routeSaleListings(ctx, args, auth, moveId, nestedId);
+  }
 
   if (nested === "resources") {
     return await routeTransportResources(
@@ -679,6 +694,9 @@ async function routeRequest(
           photoId: photo._id,
           itemId: photo.itemId,
           boxId: photo.boxId,
+          spaceId: photo.spaceId,
+          transportResourceId: photo.transportResourceId,
+          transportZoneId: photo.transportZoneId,
           room: photo.room,
           photoType: photo.photoType,
           privacyLevel: photo.privacyLevel,
@@ -1349,6 +1367,7 @@ async function routeSetupMove(
         action: existingMove ? "update" : "create",
         matchedMoveId: existingMove?._id,
         title,
+        spaceCount: setupSpaceInputs(body).length,
         transportResourceCount: setupTransportInputs(body).length,
         itemCount: setupItemInputs(body).length,
         notes,
@@ -1420,6 +1439,11 @@ async function routeSetupMove(
     });
   }
 
+  const spaceResults = [];
+  for (const [index, input] of setupSpaceInputs(body).entries()) {
+    spaceResults.push(await upsertApiMoveSpaceForSetup(ctx, auth, moveId, input, index));
+  }
+
   const resourceResults = [];
   for (const [index, input] of setupTransportInputs(body).entries()) {
     resourceResults.push(
@@ -1484,6 +1508,7 @@ async function routeSetupMove(
           .filter((zone) => !zone.archivedAt)
           .map((zone) => safeTransportZone(zone)),
         setupResults: {
+          spaces: spaceResults,
           resources: resourceResults,
           items: itemBatchResult,
         },
@@ -1491,6 +1516,418 @@ async function routeSetupMove(
     },
     moveAction === "create" ? 201 : 200,
   );
+}
+
+async function routeAgentContext(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  move: Doc<"moves">
+) {
+  const [
+    items,
+    photos,
+    spaces,
+    resources,
+    zones,
+    saleListings,
+    plans,
+  ] = await Promise.all([
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("itemPhotos")
+      .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("moveSpaces")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportResources")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("transportZones")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("saleListings")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("floorPlans")
+      .withIndex("by_move_status", (q) => q.eq("moveId", move._id))
+      .collect(),
+  ]);
+
+  const activeItems = items.filter(
+    (item) => item.householdId === auth.householdId && !item.deletedAt,
+  );
+  const activePhotos = photos.filter(
+    (photo) => photo.householdId === auth.householdId && !photo.archivedAt,
+  );
+  const photosByItemId = new Map<string, number>();
+  for (const photo of activePhotos) {
+    if (!photo.itemId) continue;
+    photosByItemId.set(
+      String(photo.itemId),
+      (photosByItemId.get(String(photo.itemId)) ?? 0) + 1,
+    );
+  }
+  const listingByItemId = new Map(
+    saleListings
+      .filter((listing) => listing.householdId === auth.householdId)
+      .filter((listing) => !listing.archivedAt)
+      .map((listing) => [String(listing.itemId), listing]),
+  );
+  const sellItems = activeItems.filter((item) => item.disposition === "sell");
+  const saleResearchSourceCount = Array.from(listingByItemId.values()).reduce(
+    (total, listing) => total + listing.researchSourceCount,
+    0,
+  );
+
+  return restOk({
+    data: {
+      move: safeMove(move),
+      aiContract: {
+        preferredSetupOrder: [
+          "spaces",
+          "transportResources",
+          "transportZones",
+          "items",
+          "photos",
+          "saleListings",
+          "layoutPlan",
+        ],
+        roomCompatibility:
+          "Use currentSpaceId/destinationSpaceId when available; keep room/destinationRoom names for readable fallback.",
+        saleWorkflow:
+          "Items with disposition=sell should have a linked saleListing for pricing, marketplace draft, research, and status.",
+        measurementRule:
+          "If dimensions or weights are estimated, include measurementProvenance with sourceType, confidence, recordedByLabel, recordedAt, and needsVerification.",
+      },
+      counts: {
+        items: activeItems.length,
+        photos: activePhotos.length,
+        spaces: spaces.filter(
+          (space) =>
+            space.householdId === auth.householdId && space.status !== "archived",
+        ).length,
+        transportResources: resources.filter(
+          (resource) =>
+            resource.householdId === auth.householdId && !resource.archivedAt,
+        ).length,
+        transportZones: zones.filter(
+          (zone) => zone.householdId === auth.householdId && !zone.archivedAt,
+        ).length,
+        sellItems: sellItems.length,
+        saleListings: listingByItemId.size,
+        saleResearchSourceCount,
+      },
+      spaces: spaces
+        .filter(
+          (space) =>
+            space.householdId === auth.householdId && space.status !== "archived",
+        )
+        .map((space) => safeMoveSpace(space)),
+      transportResources: resources
+        .filter(
+          (resource) =>
+            resource.householdId === auth.householdId && !resource.archivedAt,
+        )
+        .map((resource) => safeTransportResource(resource)),
+      transportZones: zones
+        .filter((zone) => zone.householdId === auth.householdId && !zone.archivedAt)
+        .map((zone) => safeTransportZone(zone)),
+      items: activeItems.map((item) => ({
+        ...safeItem(item),
+        photoCount: photosByItemId.get(String(item._id)) ?? 0,
+        saleListingId: listingByItemId.get(String(item._id))?._id,
+      })),
+      salePipeline: sellItems.map((item) => {
+        const listing = listingByItemId.get(String(item._id));
+        return {
+          item: safeItem(item),
+          photoCount: photosByItemId.get(String(item._id)) ?? 0,
+          listing: listing ? safeSaleListing(listing) : undefined,
+          needsListing: !listing,
+          needsMorePhotos: listing?.needsMorePhotos ?? true,
+          researchDepth: listing?.researchDepth ?? "none",
+          researchSourceCount: listing?.researchSourceCount ?? 0,
+        };
+      }),
+      photos: activePhotos.slice(0, 250).map((photo) => safePhoto(photo)),
+      layoutPlans: plans
+        .filter((plan) => plan.householdId === auth.householdId && !plan.archivedAt)
+        .map((plan) => ({
+          planId: plan._id,
+          name: plan.name,
+          kind: plan.kind,
+          status: plan.status,
+          updatedAt: plan.updatedAt,
+        })),
+    },
+  });
+}
+
+async function routeMoveSpaces(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  spaceIdSegment?: string
+) {
+  if (args.method === "GET" && !spaceIdSegment) {
+    const spaces = await ctx.db
+      .query("moveSpaces")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+      .collect();
+    return restOk(
+      paginate(
+        spaces
+          .filter((space) => space.householdId === auth.householdId)
+          .filter((space) => space.status !== "archived")
+          .map((space) => safeMoveSpace(space)),
+        args.query,
+      ),
+    );
+  }
+
+  if (args.method === "POST" && !spaceIdSegment) {
+    const body = bodyObject(args.body);
+    const now = Date.now();
+    const name = requiredBodyString(body.name, "name is required.");
+    const kind = parseMoveSpaceKind(body.kind) ?? "custom";
+    const spaceId = await ctx.db.insert("moveSpaces", {
+      householdId: auth.householdId,
+      moveId,
+      kind,
+      name,
+      aliases: parseStringArray(body.aliases) ?? [],
+      notes: normalizeOptionalText(asString(body.notes)),
+      floorLevel: normalizeOptionalText(asString(body.floorLevel)),
+      sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
+      status: "active",
+      transportResourceId: optionalString(body.transportResourceId) as
+        | Id<"transportResources">
+        | undefined,
+      transportZoneId: optionalString(body.transportZoneId) as
+        | Id<"transportZones">
+        | undefined,
+      linkedPlanEntityId: optionalString(body.linkedPlanEntityId) as
+        | Id<"planEntities">
+        | undefined,
+      capacity: parseCapacity(body.capacity) ?? {},
+      createdByUserId: auth.createdByUserId,
+      createdByApiKeyId: auth.apiKeyId,
+      updatedByApiKeyId: auth.apiKeyId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await auditApiWrite(ctx, auth, moveId, "space.api_created", "moveSpaces", spaceId, {
+      name,
+      kind,
+    });
+    const created = await ctx.db.get(spaceId);
+    return restOk({ data: created ? safeMoveSpace(created) : { spaceId } }, 201);
+  }
+
+  if ((args.method === "PATCH" || args.method === "PUT") && spaceIdSegment) {
+    const spaceId = spaceIdSegment as Id<"moveSpaces">;
+    const space = await ctx.db.get(spaceId);
+    if (!space || space.householdId !== auth.householdId || space.moveId !== moveId) {
+      return restError({ status: 404, code: "not_found", message: "Space not found." });
+    }
+    const body = bodyObject(args.body);
+    const patch: Partial<Doc<"moveSpaces">> = {
+      updatedByApiKeyId: auth.apiKeyId,
+      updatedAt: Date.now(),
+    };
+    if (body.kind !== undefined) patch.kind = parseMoveSpaceKind(body.kind) ?? space.kind;
+    if (body.name !== undefined) patch.name = requiredBodyString(body.name, "name cannot be empty.");
+    if (body.aliases !== undefined) patch.aliases = parseStringArray(body.aliases) ?? [];
+    if (body.notes !== undefined) patch.notes = normalizeOptionalText(asString(body.notes));
+    if (body.floorLevel !== undefined) {
+      patch.floorLevel = normalizeOptionalText(asString(body.floorLevel));
+    }
+    if (body.sortOrder !== undefined) patch.sortOrder = normalizeSortOrder(optionalNumber(body.sortOrder));
+    if (body.status !== undefined) {
+      patch.status = parseMoveSpaceStatus(body.status) ?? space.status;
+      patch.archivedAt = patch.status === "archived" ? Date.now() : undefined;
+    }
+    if (body.capacity !== undefined) patch.capacity = parseCapacity(body.capacity) ?? {};
+    await ctx.db.patch(spaceId, patch);
+    await auditApiWrite(ctx, auth, moveId, "space.api_updated", "moveSpaces", spaceId, {
+      changedKeys: Object.keys(patch),
+    });
+    const updated = await ctx.db.get(spaceId);
+    return restOk({ data: updated ? safeMoveSpace(updated) : { spaceId } });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Space route not found.",
+  });
+}
+
+async function routeSaleListings(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  listingIdSegment?: string
+) {
+  if (args.method === "GET" && !listingIdSegment) {
+    const [listings, items, photos] = await Promise.all([
+      ctx.db
+        .query("saleListings")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+        .collect(),
+      ctx.db
+        .query("items")
+        .withIndex("by_move_disposition", (q) =>
+          q.eq("moveId", moveId).eq("disposition", "sell"),
+        )
+        .collect(),
+      ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+        .collect(),
+    ]);
+    const listingByItemId = new Map(
+      listings
+        .filter((listing) => listing.householdId === auth.householdId)
+        .filter((listing) => !listing.archivedAt)
+        .map((listing) => [String(listing.itemId), listing]),
+    );
+    const photoCounts = new Map<string, number>();
+    for (const photo of photos) {
+      if (photo.householdId !== auth.householdId || photo.archivedAt || !photo.itemId) {
+        continue;
+      }
+      photoCounts.set(
+        String(photo.itemId),
+        (photoCounts.get(String(photo.itemId)) ?? 0) + 1,
+      );
+    }
+    return restOk(
+      paginate(
+        items
+          .filter((item) => item.householdId === auth.householdId && !item.deletedAt)
+          .map((item) => ({
+            item: safeItem(item),
+            photoCount: photoCounts.get(String(item._id)) ?? 0,
+            listing: listingByItemId.get(String(item._id))
+              ? safeSaleListing(listingByItemId.get(String(item._id))!)
+              : undefined,
+          })),
+        args.query,
+      ),
+    );
+  }
+
+  if (args.method === "POST" && !listingIdSegment) {
+    const body = bodyObject(args.body);
+    const itemId = requiredBodyString(body.itemId, "itemId is required.") as Id<"items">;
+    const item = await ctx.db.get(itemId);
+    if (!item || item.householdId !== auth.householdId || item.moveId !== moveId || item.deletedAt) {
+      return restError({ status: 404, code: "not_found", message: "Item not found." });
+    }
+    const existing = (
+      await ctx.db
+        .query("saleListings")
+        .withIndex("by_item", (q) => q.eq("itemId", itemId))
+        .collect()
+    ).find((listing) => !listing.archivedAt);
+    const patch = saleListingPatchFromBody(body, auth);
+    const now = Date.now();
+    let listingId: Id<"saleListings">;
+    if (existing) {
+      listingId = existing._id;
+      await ctx.db.patch(listingId, {
+        ...patch,
+        updatedByApiKeyId: auth.apiKeyId,
+        updatedAt: now,
+      });
+    } else {
+      listingId = await ctx.db.insert("saleListings", {
+        householdId: auth.householdId,
+        moveId,
+        itemId,
+        status: "needsPrep",
+        platform: "facebookMarketplace",
+        listingTitle: item.name,
+        listingDescription: item.description,
+        category: item.category,
+        condition: item.condition === "unknown" ? undefined : item.condition,
+        locationLabel: item.room,
+        selectedPhotoIds: [],
+        currency: "USD",
+        pricingConfidence: "none",
+        userOverrodePrice: false,
+        researchDepth: "none",
+        researchSourceCount: 0,
+        researchSources: [],
+        interestedCount: 0,
+        needsMorePhotos: true,
+        createdByApiKeyId: auth.apiKeyId,
+        updatedByApiKeyId: auth.apiKeyId,
+        createdAt: now,
+        updatedAt: now,
+        ...patch,
+      });
+      if (item.disposition !== "sell") {
+        await ctx.db.patch(itemId, {
+          disposition: "sell",
+          updatedByUserId: item.updatedByUserId,
+          updatedAt: now,
+        });
+      }
+    }
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      existing ? "sale_listing.api_updated" : "sale_listing.api_created",
+      "saleListings",
+      listingId,
+      { itemId },
+    );
+    const listing = await ctx.db.get(listingId);
+    return restOk({ data: listing ? safeSaleListing(listing) : { listingId } }, existing ? 200 : 201);
+  }
+
+  if ((args.method === "PATCH" || args.method === "PUT") && listingIdSegment) {
+    const listingId = listingIdSegment as Id<"saleListings">;
+    const listing = await ctx.db.get(listingId);
+    if (!listing || listing.householdId !== auth.householdId || listing.moveId !== moveId || listing.archivedAt) {
+      return restError({
+        status: 404,
+        code: "not_found",
+        message: "Sale listing not found.",
+      });
+    }
+    const patch = saleListingPatchFromBody(bodyObject(args.body), auth);
+    await ctx.db.patch(listingId, {
+      ...patch,
+      updatedByApiKeyId: auth.apiKeyId,
+      updatedAt: Date.now(),
+    });
+    await auditApiWrite(ctx, auth, moveId, "sale_listing.api_updated", "saleListings", listingId, {
+      changedKeys: Object.keys(patch),
+    });
+    const updated = await ctx.db.get(listingId);
+    return restOk({ data: updated ? safeSaleListing(updated) : { listingId } });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Sale listing route not found.",
+  });
 }
 
 async function routeCapacityReport(
@@ -5551,6 +5988,8 @@ function safeItem(item: Doc<"items">) {
     description: item.description,
     room: item.room,
     destinationRoom: item.destinationRoom,
+    currentSpaceId: item.currentSpaceId,
+    destinationSpaceId: item.destinationSpaceId,
     category: item.category,
     disposition: item.disposition,
     status: item.status,
@@ -5561,10 +6000,19 @@ function safeItem(item: Doc<"items">) {
     serialNumber: item.serialNumber,
     modelNumber: item.modelNumber,
     dimensionsIn: item.dimensionsIn,
+    measurementProvenance: item.measurementProvenance,
     dimensionsConfidence: itemDimensionsConfidenceForRead({
       dimensionsIn: item.dimensionsIn,
       dimensionsConfidence: item.dimensionsConfidence,
     }),
+    estimatedWeightLb: item.estimatedWeightLb,
+    estimatedWeightLowLb: item.estimatedWeightLowLb,
+    estimatedWeightHighLb: item.estimatedWeightHighLb,
+    actualWeightLb: item.actualWeightLb,
+    estimatedVolumeCuFt: item.estimatedVolumeCuFt,
+    estimatedPackedVolumeCuFt: item.estimatedPackedVolumeCuFt,
+    weightConfidence: item.weightConfidence,
+    volumeConfidence: item.volumeConfidence,
     highValue: item.highValue,
     needsReview: item.needsReview,
     createdAt: item.createdAt,
@@ -5660,6 +6108,68 @@ function safeTransportZone(zone: Doc<"transportZones">) {
     sortOrder: zone.sortOrder,
     createdAt: zone.createdAt,
     updatedAt: zone.updatedAt,
+  };
+}
+
+function safeMoveSpace(space: Doc<"moveSpaces">) {
+  return {
+    spaceId: space._id,
+    kind: space.kind,
+    name: space.name,
+    aliases: space.aliases,
+    notes: space.notes,
+    floorLevel: space.floorLevel,
+    sortOrder: space.sortOrder,
+    status: space.status,
+    transportResourceId: space.transportResourceId,
+    transportZoneId: space.transportZoneId,
+    linkedPlanEntityId: space.linkedPlanEntityId,
+    capacity: space.capacity,
+    createdAt: space.createdAt,
+    updatedAt: space.updatedAt,
+  };
+}
+
+function safeSaleListing(listing: Doc<"saleListings">) {
+  return {
+    listingId: listing._id,
+    itemId: listing.itemId,
+    status: listing.status,
+    platform: listing.platform,
+    platformLabel: listing.platformLabel,
+    listingTitle: listing.listingTitle,
+    listingDescription: listing.listingDescription,
+    category: listing.category,
+    condition: listing.condition,
+    locationLabel: listing.locationLabel,
+    selectedPhotoIds: listing.selectedPhotoIds,
+    listingUrl: listing.listingUrl,
+    listedAt: listing.listedAt,
+    lastRefreshedAt: listing.lastRefreshedAt,
+    suggestedPriceLowCents: listing.suggestedPriceLowCents,
+    suggestedPriceHighCents: listing.suggestedPriceHighCents,
+    officialPriceCents: listing.officialPriceCents,
+    currency: listing.currency,
+    pricingConfidence: listing.pricingConfidence,
+    priceDecisionSource: listing.priceDecisionSource,
+    userOverrodePrice: listing.userOverrodePrice,
+    researchDepth: listing.researchDepth,
+    researchSourceCount: listing.researchSourceCount,
+    researchSources: listing.researchSources,
+    researchedAt: listing.researchedAt,
+    researchedByApiKeyId: listing.researchedByApiKeyId,
+    researchedByLabel: listing.researchedByLabel,
+    researchNotes: listing.researchNotes,
+    interestedCount: listing.interestedCount,
+    inquiryNotes: listing.inquiryNotes,
+    offerNotes: listing.offerNotes,
+    buyerNotes: listing.buyerNotes,
+    pickupStatus: listing.pickupStatus,
+    soldPriceCents: listing.soldPriceCents,
+    soldAt: listing.soldAt,
+    needsMorePhotos: listing.needsMorePhotos,
+    createdAt: listing.createdAt,
+    updatedAt: listing.updatedAt,
   };
 }
 
@@ -5767,6 +6277,9 @@ function safePhoto(photo: Doc<"itemPhotos">) {
     photoId: photo._id,
     itemId: photo.itemId,
     boxId: photo.boxId,
+    spaceId: photo.spaceId,
+    transportResourceId: photo.transportResourceId,
+    transportZoneId: photo.transportZoneId,
     room: photo.room,
     documentationProfileTypes: photo.documentationProfileTypes,
     photoType: photo.photoType,
@@ -5967,12 +6480,110 @@ function setupTransportInputs(body: Record<string, unknown>) {
   return inputs.map((input) => bodyObject(input));
 }
 
+function setupSpaceInputs(body: Record<string, unknown>) {
+  const explicitSpaces = Array.isArray(body.spaces)
+    ? body.spaces.map((input) => bodyObject(input))
+    : [];
+  const originRooms = (parseStringArray(body.originRooms) ?? []).map((name, index) => ({
+    kind: "originRoom",
+    name,
+    sortOrder: index,
+  }));
+  const destinationRooms = (parseStringArray(body.destinationRooms) ?? []).map(
+    (name, index) => ({
+      kind: "destinationRoom",
+      name,
+      sortOrder: 1000 + index,
+    }),
+  );
+  const inputs = [...originRooms, ...destinationRooms, ...explicitSpaces];
+  if (inputs.length > 100) {
+    throw new Error("spaces plus origin/destination rooms are limited to 100 rows.");
+  }
+  return inputs;
+}
+
 function setupItemInputs(body: Record<string, unknown>) {
   const inputs = Array.isArray(body.items) ? body.items : [];
   if (inputs.length > maxBatchUpsertItems) {
     throw new Error(`items are limited to ${maxBatchUpsertItems} rows.`);
   }
   return inputs.map((input) => bodyObject(input));
+}
+
+async function upsertApiMoveSpaceForSetup(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  input: Record<string, unknown>,
+  index: number,
+) {
+  const name = requiredBodyString(input.name, "spaces[].name is required.");
+  const kind = parseMoveSpaceKind(input.kind) ?? "custom";
+  const existing = (
+    await ctx.db
+      .query("moveSpaces")
+      .withIndex("by_move_name", (q) => q.eq("moveId", moveId).eq("name", name))
+      .collect()
+  ).find(
+    (space) =>
+      space.householdId === auth.householdId &&
+      space.kind === kind &&
+      space.status !== "archived",
+  );
+  const now = Date.now();
+  const patch: Partial<Doc<"moveSpaces">> = {
+    aliases: parseStringArray(input.aliases) ?? existing?.aliases ?? [],
+    notes: normalizeOptionalText(asString(input.notes)),
+    floorLevel: normalizeOptionalText(asString(input.floorLevel)),
+    sortOrder: normalizeSortOrder(optionalNumber(input.sortOrder) ?? index),
+    transportResourceId: optionalString(input.transportResourceId) as
+      | Id<"transportResources">
+      | undefined,
+    transportZoneId: optionalString(input.transportZoneId) as
+      | Id<"transportZones">
+      | undefined,
+    capacity: parseCapacity(input.capacity) ?? existing?.capacity ?? {},
+    updatedByApiKeyId: auth.apiKeyId,
+    updatedAt: now,
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, patch);
+    return { action: "updated" as const, spaceId: existing._id, name, kind };
+  }
+
+  const spaceId = await ctx.db.insert("moveSpaces", {
+    householdId: auth.householdId,
+    moveId,
+    kind,
+    name,
+    aliases: parseStringArray(input.aliases) ?? [],
+    notes: normalizeOptionalText(asString(input.notes)),
+    floorLevel: normalizeOptionalText(asString(input.floorLevel)),
+    sortOrder: normalizeSortOrder(optionalNumber(input.sortOrder) ?? index),
+    status: "active",
+    transportResourceId: optionalString(input.transportResourceId) as
+      | Id<"transportResources">
+      | undefined,
+    transportZoneId: optionalString(input.transportZoneId) as
+      | Id<"transportZones">
+      | undefined,
+    linkedPlanEntityId: optionalString(input.linkedPlanEntityId) as
+      | Id<"planEntities">
+      | undefined,
+    capacity: parseCapacity(input.capacity) ?? {},
+    createdByUserId: auth.createdByUserId,
+    createdByApiKeyId: auth.apiKeyId,
+    updatedByApiKeyId: auth.apiKeyId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await auditApiWrite(ctx, auth, moveId, "space.api_setup_created", "moveSpaces", spaceId, {
+    name,
+    kind,
+  });
+  return { action: "created" as const, spaceId, name, kind };
 }
 
 async function upsertApiTransportResourceForSetup(
@@ -7316,6 +7927,55 @@ async function photoAttachPatch(
     }
     patch.boxId = boxId;
   }
+  if (input.spaceId !== undefined) {
+    const spaceId = optionalString(input.spaceId) as Id<"moveSpaces"> | undefined;
+    if (spaceId) {
+      const space = await ctx.db.get(spaceId);
+      if (
+        !space ||
+        space.householdId !== args.householdId ||
+        space.moveId !== args.moveId ||
+        space.status === "archived"
+      ) {
+        throw new Error("Space not found.");
+      }
+    }
+    patch.spaceId = spaceId;
+  }
+  if (input.transportResourceId !== undefined) {
+    const transportResourceId = optionalString(input.transportResourceId) as
+      | Id<"transportResources">
+      | undefined;
+    if (transportResourceId) {
+      const resource = await ctx.db.get(transportResourceId);
+      if (
+        !resource ||
+        resource.householdId !== args.householdId ||
+        resource.moveId !== args.moveId ||
+        resource.archivedAt
+      ) {
+        throw new Error("Transport resource not found.");
+      }
+    }
+    patch.transportResourceId = transportResourceId;
+  }
+  if (input.transportZoneId !== undefined) {
+    const transportZoneId = optionalString(input.transportZoneId) as
+      | Id<"transportZones">
+      | undefined;
+    if (transportZoneId) {
+      const zone = await ctx.db.get(transportZoneId);
+      if (
+        !zone ||
+        zone.householdId !== args.householdId ||
+        zone.moveId !== args.moveId ||
+        zone.archivedAt
+      ) {
+        throw new Error("Transport zone not found.");
+      }
+    }
+    patch.transportZoneId = transportZoneId;
+  }
   if (input.room !== undefined) {
     patch.room = normalizeOptionalText(asString(input.room));
   }
@@ -7631,6 +8291,173 @@ function parseDisposition(value: unknown) {
   return includesLiteral(itemDispositions, value)
     ? (value as Doc<"items">["disposition"])
     : undefined;
+}
+
+function parseMoveSpaceKind(value: unknown) {
+  return includesLiteral(moveSpaceKinds, value)
+    ? (value as Doc<"moveSpaces">["kind"])
+    : undefined;
+}
+
+function parseMoveSpaceStatus(value: unknown) {
+  return value === "active" || value === "archived"
+    ? (value as Doc<"moveSpaces">["status"])
+    : undefined;
+}
+
+function parseSaleListingStatus(value: unknown) {
+  return includesLiteral(saleListingStatuses, value)
+    ? (value as Doc<"saleListings">["status"])
+    : undefined;
+}
+
+function parseSaleListingPlatform(value: unknown) {
+  return includesLiteral(saleListingPlatforms, value)
+    ? (value as Doc<"saleListings">["platform"])
+    : undefined;
+}
+
+function parseSaleResearchDepth(value: unknown) {
+  return includesLiteral(saleResearchDepths, value)
+    ? (value as Doc<"saleListings">["researchDepth"])
+    : undefined;
+}
+
+function parseSaleResearchSources(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  return value.slice(0, 25).map((entry) => {
+    const source = bodyObject(entry);
+    return {
+      title: normalizeOptionalText(asString(source.title)),
+      url: normalizeOptionalText(asString(source.url)),
+      summary: normalizeOptionalText(asString(source.summary)),
+      priceCents: optionalNumber(source.priceCents),
+      checkedAt: optionalNumber(source.checkedAt),
+    };
+  });
+}
+
+function parsePhotoIdArray(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .map((entry) => optionalString(entry))
+    .filter((entry): entry is string => Boolean(entry))
+    .slice(0, 20) as Id<"itemPhotos">[];
+}
+
+function saleListingPatchFromBody(
+  body: Record<string, unknown>,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+): Partial<Doc<"saleListings">> {
+  const patch: Partial<Doc<"saleListings">> = {};
+  if (body.status !== undefined) {
+    patch.status = parseSaleListingStatus(body.status) ?? "needsPrep";
+  }
+  if (body.platform !== undefined) {
+    patch.platform = parseSaleListingPlatform(body.platform) ?? "facebookMarketplace";
+  }
+  if (body.platformLabel !== undefined) {
+    patch.platformLabel = normalizeOptionalText(asString(body.platformLabel));
+  }
+  if (body.listingTitle !== undefined) {
+    patch.listingTitle = normalizeOptionalText(asString(body.listingTitle));
+  }
+  if (body.listingDescription !== undefined) {
+    patch.listingDescription = normalizeOptionalText(asString(body.listingDescription));
+  }
+  if (body.category !== undefined) {
+    patch.category = normalizeOptionalText(asString(body.category));
+  }
+  if (body.condition !== undefined) {
+    patch.condition = normalizeOptionalText(asString(body.condition));
+  }
+  if (body.locationLabel !== undefined) {
+    patch.locationLabel = normalizeOptionalText(asString(body.locationLabel));
+  }
+  if (body.selectedPhotoIds !== undefined) {
+    patch.selectedPhotoIds = parsePhotoIdArray(body.selectedPhotoIds) ?? [];
+  }
+  if (body.listingUrl !== undefined) {
+    patch.listingUrl = normalizeOptionalText(asString(body.listingUrl));
+  }
+  if (body.listedAt !== undefined) patch.listedAt = optionalNumber(body.listedAt);
+  if (body.lastRefreshedAt !== undefined) {
+    patch.lastRefreshedAt = optionalNumber(body.lastRefreshedAt);
+  }
+  if (body.suggestedPriceLowCents !== undefined) {
+    patch.suggestedPriceLowCents = optionalNumber(body.suggestedPriceLowCents);
+  }
+  if (body.suggestedPriceHighCents !== undefined) {
+    patch.suggestedPriceHighCents = optionalNumber(body.suggestedPriceHighCents);
+  }
+  if (body.officialPriceCents !== undefined) {
+    patch.officialPriceCents = optionalNumber(body.officialPriceCents);
+  }
+  if (body.currency !== undefined) {
+    const currency = normalizeOptionalText(asString(body.currency))?.toUpperCase();
+    patch.currency = currency && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
+  }
+  if (body.pricingConfidence !== undefined) {
+    patch.pricingConfidence = parseConfidence(body.pricingConfidence) ?? "none";
+  }
+  if (body.priceDecisionSource !== undefined) {
+    patch.priceDecisionSource = normalizeOptionalText(asString(body.priceDecisionSource));
+  }
+  if (body.userOverrodePrice !== undefined) {
+    patch.userOverrodePrice = Boolean(body.userOverrodePrice);
+  }
+  if (body.researchDepth !== undefined) {
+    patch.researchDepth = parseSaleResearchDepth(body.researchDepth) ?? "none";
+  }
+  if (body.researchSources !== undefined) {
+    patch.researchSources = parseSaleResearchSources(body.researchSources) ?? [];
+    patch.researchSourceCount = patch.researchSources.length;
+  }
+  if (body.researchSourceCount !== undefined) {
+    patch.researchSourceCount = Math.max(
+      0,
+      Math.floor(optionalNumber(body.researchSourceCount) ?? 0),
+    );
+  }
+  if (
+    body.researchDepth !== undefined ||
+    body.researchSources !== undefined ||
+    body.researchSourceCount !== undefined ||
+    body.researchNotes !== undefined
+  ) {
+    patch.researchedAt = optionalNumber(body.researchedAt) ?? Date.now();
+    patch.researchedByApiKeyId = auth.apiKeyId;
+    patch.researchedByLabel = `API key: ${auth.apiKeyName} (${auth.apiKeyTokenPreview})`;
+  }
+  if (body.researchNotes !== undefined) {
+    patch.researchNotes = normalizeOptionalText(asString(body.researchNotes));
+  }
+  if (body.interestedCount !== undefined) {
+    patch.interestedCount = Math.max(
+      0,
+      Math.floor(optionalNumber(body.interestedCount) ?? 0),
+    );
+  }
+  if (body.inquiryNotes !== undefined) {
+    patch.inquiryNotes = normalizeOptionalText(asString(body.inquiryNotes));
+  }
+  if (body.offerNotes !== undefined) {
+    patch.offerNotes = normalizeOptionalText(asString(body.offerNotes));
+  }
+  if (body.buyerNotes !== undefined) {
+    patch.buyerNotes = normalizeOptionalText(asString(body.buyerNotes));
+  }
+  if (body.pickupStatus !== undefined) {
+    patch.pickupStatus = normalizeOptionalText(asString(body.pickupStatus));
+  }
+  if (body.soldPriceCents !== undefined) {
+    patch.soldPriceCents = optionalNumber(body.soldPriceCents);
+  }
+  if (body.soldAt !== undefined) patch.soldAt = optionalNumber(body.soldAt);
+  if (body.needsMorePhotos !== undefined) {
+    patch.needsMorePhotos = Boolean(body.needsMorePhotos);
+  }
+  return patch;
 }
 
 function parseCondition(value: unknown) {

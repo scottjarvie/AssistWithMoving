@@ -26,6 +26,8 @@ export type InventoryItemPatch = {
   description?: string;
   room?: string;
   destinationRoom?: string;
+  currentSpaceId?: Id<"moveSpaces">;
+  destinationSpaceId?: Id<"moveSpaces">;
   category?: string;
   subcategory?: string;
   ownerPersonId?: Id<"movePeople">;

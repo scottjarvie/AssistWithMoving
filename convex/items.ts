@@ -26,6 +26,8 @@ const itemWriteArgs = {
   description: v.optional(v.string()),
   room: v.optional(v.string()),
   destinationRoom: v.optional(v.string()),
+  currentSpaceId: v.optional(v.id("moveSpaces")),
+  destinationSpaceId: v.optional(v.id("moveSpaces")),
   category: v.optional(v.string()),
   subcategory: v.optional(v.string()),
   ownerPersonId: v.optional(v.id("movePeople")),
@@ -363,6 +365,29 @@ async function assertMovePersonTarget(
   }
 }
 
+async function assertItemSpaceTargets(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    currentSpaceId?: Id<"moveSpaces">;
+    destinationSpaceId?: Id<"moveSpaces">;
+  },
+) {
+  for (const spaceId of [args.currentSpaceId, args.destinationSpaceId]) {
+    if (!spaceId) continue;
+    const space = await ctx.db.get(spaceId);
+    if (
+      !space ||
+      space.householdId !== args.householdId ||
+      space.moveId !== args.moveId ||
+      space.status === "archived"
+    ) {
+      throw new Error("Item space is not available for this move.");
+    }
+  }
+}
+
 export const listForMove = query({
   args: itemListArgs,
   handler: async (ctx, args) => {
@@ -546,6 +571,12 @@ export const create = mutation({
       moveId: args.moveId,
       ownerPersonId: args.ownerPersonId,
     });
+    await assertItemSpaceTargets(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      currentSpaceId: args.currentSpaceId,
+      destinationSpaceId: args.destinationSpaceId,
+    });
 
     const now = Date.now();
     const name = normalizeItemName(args.name);
@@ -557,6 +588,8 @@ export const create = mutation({
       description: normalizeOptionalText(args.description),
       room: normalizeOptionalText(args.room),
       destinationRoom: normalizeOptionalText(args.destinationRoom),
+      currentSpaceId: args.currentSpaceId,
+      destinationSpaceId: args.destinationSpaceId,
       category: normalizeOptionalText(args.category),
       subcategory: normalizeOptionalText(args.subcategory),
       ownerPersonId: args.ownerPersonId,
@@ -648,6 +681,12 @@ export const update = mutation({
       moveId: args.moveId,
       ownerPersonId: args.ownerPersonId,
     });
+    await assertItemSpaceTargets(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      currentSpaceId: args.currentSpaceId,
+      destinationSpaceId: args.destinationSpaceId,
+    });
 
     const item = await ctx.db.get(args.itemId);
     if (
@@ -677,6 +716,12 @@ export const update = mutation({
     }
     if (args.destinationRoom !== undefined) {
       patch.destinationRoom = normalizeOptionalText(args.destinationRoom);
+    }
+    if (args.currentSpaceId !== undefined) {
+      patch.currentSpaceId = args.currentSpaceId;
+    }
+    if (args.destinationSpaceId !== undefined) {
+      patch.destinationSpaceId = args.destinationSpaceId;
     }
     if (args.category !== undefined) {
       patch.category = normalizeOptionalText(args.category);

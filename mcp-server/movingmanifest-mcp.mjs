@@ -29,10 +29,12 @@ import {
   generatePlanningSuggestions,
   generateAiPhotoSuggestions,
   generateAiTextSuggestions,
+  createMoveSpace,
   archivePlannedItem,
   getAiProviderStatus,
   getApiCapabilities,
   getApiContext,
+  getAgentContext,
   getCapacityReport,
   getMoveDayChecklist,
   getMoveQuestions,
@@ -44,6 +46,7 @@ import {
   listExports,
   listMoves,
   listMovePeople,
+  listMoveSpaces,
   listPlannedItems,
   listPlanningSuggestions,
   listShareLinkComments,
@@ -72,6 +75,7 @@ import {
   updateMovePerson,
   updateTransportResource,
   updateTransportZone,
+  upsertSaleListing,
   updateItem,
   updatePlannedItem,
   createShareLink,
@@ -247,6 +251,48 @@ const itemMeasurementProvenanceSchema = z.object({
   dimensions: measurementProvenanceEntrySchema.optional(),
   weight: measurementProvenanceEntrySchema.optional(),
   volume: measurementProvenanceEntrySchema.optional(),
+});
+
+const moveSpaceKindSchema = z.enum([
+  "originRoom",
+  "destinationRoom",
+  "yardOutdoor",
+  "storage",
+  "transportResource",
+  "transportZone",
+  "custom",
+]);
+
+const saleListingStatusSchema = z.enum([
+  "needsPrep",
+  "researchingPrice",
+  "draftReady",
+  "listed",
+  "interestReceived",
+  "offerPending",
+  "sold",
+  "removed",
+  "kept",
+  "donated",
+]);
+
+const saleListingPlatformSchema = z.enum([
+  "facebookMarketplace",
+  "craigslist",
+  "offerUp",
+  "nextdoor",
+  "ebay",
+  "other",
+]);
+
+const saleResearchDepthSchema = z.enum(["none", "quick", "standard", "deep"]);
+
+const saleResearchSourceSchema = z.object({
+  title: z.string().optional(),
+  url: z.string().url().optional(),
+  summary: z.string().optional(),
+  priceCents: z.number().int().nonnegative().optional(),
+  checkedAt: z.number().optional(),
 });
 
 const capacityReviewStatusSchema = z.enum([
@@ -775,6 +821,20 @@ export function registerTools(target, apiConfig) {
       notes: z.string().optional(),
       originRooms: z.array(z.string()).optional(),
       destinationRooms: z.array(z.string()).optional(),
+      spaces: z
+        .array(
+          z.object({
+            kind: moveSpaceKindSchema,
+            name: z.string().min(1),
+            aliases: z.array(z.string()).optional(),
+            notes: z.string().optional(),
+            floorLevel: z.string().optional(),
+            sortOrder: z.number().optional(),
+            capacity: capacityInputSchema.optional(),
+          })
+        )
+        .max(100)
+        .optional(),
       transportResources: z.array(setupTransportResourceSchema).max(25).optional(),
       items: z.array(inventoryItemWriteSchema).max(100).optional(),
       idempotencyKey: z.string().optional(),
@@ -793,6 +853,17 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => getMoveSummary(apiConfig, input),
+  });
+
+  registerTool(target, "get_agent_context", {
+    title: "Get agent context",
+    description:
+      "Fetch one compact structured context payload for AI agents: move, spaces, transport resources/zones, items, photos, sale pipeline, counts, and write-contract guidance.",
+    inputSchema: {
+      moveId: z.string().describe("MovingManifest move id."),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => getAgentContext(apiConfig, input),
   });
 
   registerTool(target, "get_move_questions", {
@@ -976,6 +1047,87 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     handler: (input) => deleteItem(apiConfig, input),
+  });
+
+  registerTool(target, "list_move_spaces", {
+    title: "List move spaces",
+    description:
+      "List first-class rooms/spaces for a move, including origin rooms, destination rooms, storage, outdoor areas, and transport-related spaces.",
+    inputSchema: {
+      moveId: z.string(),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listMoveSpaces(apiConfig, input),
+  });
+
+  registerTool(target, "create_move_space", {
+    title: "Create move space",
+    description:
+      "Create a first-class room/space target for inventory, photos, transport planning, selling context, and Layout Studio.",
+    inputSchema: {
+      moveId: z.string(),
+      kind: moveSpaceKindSchema,
+      name: z.string().min(1),
+      aliases: z.array(z.string()).optional(),
+      notes: z.string().optional(),
+      floorLevel: z.string().optional(),
+      sortOrder: z.number().optional(),
+      transportResourceId: z.string().optional(),
+      transportZoneId: z.string().optional(),
+      linkedPlanEntityId: z.string().optional(),
+      capacity: capacityInputSchema.optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => createMoveSpace(apiConfig, input),
+  });
+
+  registerTool(target, "upsert_sale_listing", {
+    title: "Upsert sale listing",
+    description:
+      "Create or update the sale workflow record for a sell-marked item: marketplace draft, price range, official price, research trail, status, interest, and sold details.",
+    inputSchema: {
+      moveId: z.string(),
+      listingId: z.string().optional(),
+      itemId: z.string().optional(),
+      status: saleListingStatusSchema.optional(),
+      platform: saleListingPlatformSchema.optional(),
+      platformLabel: z.string().optional(),
+      listingTitle: z.string().optional(),
+      listingDescription: z.string().optional(),
+      category: z.string().optional(),
+      condition: z.string().optional(),
+      locationLabel: z.string().optional(),
+      selectedPhotoIds: z.array(z.string()).max(20).optional(),
+      listingUrl: z.string().url().optional(),
+      listedAt: z.number().optional(),
+      lastRefreshedAt: z.number().optional(),
+      suggestedPriceLowCents: z.number().int().nonnegative().optional(),
+      suggestedPriceHighCents: z.number().int().nonnegative().optional(),
+      officialPriceCents: z.number().int().nonnegative().optional(),
+      currency: z.string().optional(),
+      pricingConfidence: estimateConfidenceSchema.optional(),
+      priceDecisionSource: z.string().optional(),
+      userOverrodePrice: z.boolean().optional(),
+      researchDepth: saleResearchDepthSchema.optional(),
+      researchSourceCount: z.number().int().nonnegative().optional(),
+      researchSources: z.array(saleResearchSourceSchema).max(25).optional(),
+      researchNotes: z.string().optional(),
+      interestedCount: z.number().int().nonnegative().optional(),
+      inquiryNotes: z.string().optional(),
+      offerNotes: z.string().optional(),
+      buyerNotes: z.string().optional(),
+      pickupStatus: z.string().optional(),
+      soldPriceCents: z.number().int().nonnegative().optional(),
+      soldAt: z.number().optional(),
+      needsMorePhotos: z.boolean().optional(),
+      idempotencyKey: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => upsertSaleListing(apiConfig, input),
   });
 
   registerTool(target, "list_planned_items", {
@@ -1340,6 +1492,9 @@ export function registerTools(target, apiConfig) {
       moveId: z.string(),
       itemId: z.string().optional(),
       boxId: z.string().optional(),
+      spaceId: z.string().optional(),
+      transportResourceId: z.string().optional(),
+      transportZoneId: z.string().optional(),
       room: z.string().optional(),
       mimeType: z.enum(allowedOriginalMediaMimeTypes),
       sizeBytes: z.number().int().positive().max(500 * 1024 * 1024),
@@ -1395,6 +1550,9 @@ export function registerTools(target, apiConfig) {
       photoId: z.string(),
       itemId: z.string().optional(),
       boxId: z.string().optional(),
+      spaceId: z.string().optional(),
+      transportResourceId: z.string().optional(),
+      transportZoneId: z.string().optional(),
       room: z.string().optional(),
       claimId: z.string().optional(),
       documentationProfileTypes: z.array(z.string()).optional(),

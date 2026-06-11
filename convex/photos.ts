@@ -75,6 +75,9 @@ const derivativeRefsValidator = v.object({
 const photoWriteArgs = {
   itemId: v.optional(v.id("items")),
   boxId: v.optional(v.id("boxes")),
+  spaceId: v.optional(v.id("moveSpaces")),
+  transportResourceId: v.optional(v.id("transportResources")),
+  transportZoneId: v.optional(v.id("transportZones")),
   room: v.optional(v.string()),
   claimId: v.optional(v.string()),
   documentationProfileTypes: v.optional(
@@ -207,6 +210,9 @@ async function assertPhotoTargets(
     moveId: Doc<"moves">["_id"];
     itemId?: Doc<"items">["_id"];
     boxId?: Doc<"boxes">["_id"];
+    spaceId?: Doc<"moveSpaces">["_id"];
+    transportResourceId?: Doc<"transportResources">["_id"];
+    transportZoneId?: Doc<"transportZones">["_id"];
   },
 ) {
   if (args.itemId) {
@@ -220,6 +226,27 @@ async function assertPhotoTargets(
     const box = await ctx.db.get(args.boxId);
     if (!box || box.moveId !== args.moveId || box.archivedAt) {
       throw new Error("Invalid photo box target.");
+    }
+  }
+
+  if (args.spaceId) {
+    const space = await ctx.db.get(args.spaceId);
+    if (!space || space.moveId !== args.moveId || space.status === "archived") {
+      throw new Error("Invalid photo space target.");
+    }
+  }
+
+  if (args.transportResourceId) {
+    const resource = await ctx.db.get(args.transportResourceId);
+    if (!resource || resource.moveId !== args.moveId || resource.archivedAt) {
+      throw new Error("Invalid photo transport resource target.");
+    }
+  }
+
+  if (args.transportZoneId) {
+    const zone = await ctx.db.get(args.transportZoneId);
+    if (!zone || zone.moveId !== args.moveId || zone.archivedAt) {
+      throw new Error("Invalid photo transport zone target.");
     }
   }
 }
@@ -447,6 +474,9 @@ export const initUpload = action({
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
     boxId: v.optional(v.id("boxes")),
+    spaceId: v.optional(v.id("moveSpaces")),
+    transportResourceId: v.optional(v.id("transportResources")),
+    transportZoneId: v.optional(v.id("transportZones")),
     room: v.optional(v.string()),
     mimeType: v.string(),
     sizeBytes: v.number(),
@@ -517,6 +547,9 @@ export const initUpload = action({
         moveId: args.moveId,
         itemId: args.itemId,
         boxId: args.boxId,
+        spaceId: args.spaceId,
+        transportResourceId: args.transportResourceId,
+        transportZoneId: args.transportZoneId,
         room: args.room,
         originalStorageKey: objectKey,
         originalBucket: config.bucketName,
@@ -1034,6 +1067,9 @@ export const createUploadSession = internalMutation({
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
     boxId: v.optional(v.id("boxes")),
+    spaceId: v.optional(v.id("moveSpaces")),
+    transportResourceId: v.optional(v.id("transportResources")),
+    transportZoneId: v.optional(v.id("transportZones")),
     room: v.optional(v.string()),
     originalStorageKey: v.string(),
     originalBucket: v.string(),
@@ -1095,6 +1131,9 @@ export const createUploadSession = internalMutation({
       moveId: args.moveId,
       itemId: args.itemId,
       boxId: args.boxId,
+      spaceId: args.spaceId,
+      transportResourceId: args.transportResourceId,
+      transportZoneId: args.transportZoneId,
       room: normalizeOptionalText(args.room),
       originalStorageKey: args.originalStorageKey,
       originalBucket: args.originalBucket,
@@ -1330,6 +1369,9 @@ export const completeUploadSession = internalMutation({
       moveId: args.moveId,
       itemId: session.itemId,
       boxId: session.boxId,
+      spaceId: session.spaceId,
+      transportResourceId: session.transportResourceId,
+      transportZoneId: session.transportZoneId,
       room: session.room,
       documentationProfileTypes: [],
       originalStorageKey: session.originalStorageKey,
@@ -1449,6 +1491,13 @@ export const updateEvidence = mutation({
     const patch: Partial<Doc<"itemPhotos">> = { updatedAt: now };
     if (args.itemId !== undefined) patch.itemId = args.itemId;
     if (args.boxId !== undefined) patch.boxId = args.boxId;
+    if (args.spaceId !== undefined) patch.spaceId = args.spaceId;
+    if (args.transportResourceId !== undefined) {
+      patch.transportResourceId = args.transportResourceId;
+    }
+    if (args.transportZoneId !== undefined) {
+      patch.transportZoneId = args.transportZoneId;
+    }
     if (args.room !== undefined) patch.room = normalizeOptionalText(args.room);
     if (args.claimId !== undefined) {
       patch.claimId = normalizeOptionalText(args.claimId);

@@ -1,4 +1,4 @@
-export const MOVINGMANIFEST_CAPABILITY_VERSION = "2026-06-09";
+export const MOVINGMANIFEST_CAPABILITY_VERSION = "2026-06-11";
 
 export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
   {
@@ -78,12 +78,58 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "POST /api/v1/moves",
       "POST /api/v1/moves/setup",
       "GET /api/v1/moves/:moveId/summary",
+      "GET /api/v1/moves/:moveId/agent-context",
     ],
-    mcpTools: ["list_moves", "create_move", "setup_move", "get_move_summary"],
+    mcpTools: [
+      "list_moves",
+      "create_move",
+      "setup_move",
+      "get_move_summary",
+      "get_agent_context",
+    ],
     agentWorkflows: [
       "Create a PCS mixed move with official fields and default documentation profiles.",
       "Set up a new move from a user conversation in one write call, then use detailed endpoints for follow-up edits.",
       "Fetch one compact move summary before planning, exporting, or bulk updates.",
+      "Fetch one compact agent context before making multi-step AI edits so the agent sees spaces, transport, inventory, photos, sales state, and write guidance in one call.",
+    ],
+  },
+  {
+    id: "moveSpaces",
+    title: "First-class move spaces",
+    status: "available",
+    purpose:
+      "Create and read durable origin rooms, destination rooms, yards, storage areas, and transport-related spaces for inventory, photos, Layout Studio, and sale context.",
+    requiredScopes: ["moves/read", "moves/write"],
+    restEndpoints: [
+      "GET /api/v1/moves/:moveId/spaces",
+      "POST /api/v1/moves/:moveId/spaces",
+      "PATCH /api/v1/moves/:moveId/spaces/:spaceId",
+    ],
+    mcpTools: ["list_move_spaces", "create_move_space"],
+    agentWorkflows: [
+      "Turn a user-provided room list into durable space targets instead of appending free-text notes.",
+      "Attach future room, destination, storage, and transport photos to stable IDs.",
+      "Use currentSpaceId/destinationSpaceId on inventory while preserving readable room names.",
+    ],
+  },
+  {
+    id: "salePipeline",
+    title: "Sell item marketplace pipeline",
+    status: "available",
+    purpose:
+      "Track sell-marked inventory items through listing prep, marketplace draft, pricing, research trail, buyer interest, listing status, and sold details.",
+    requiredScopes: ["inventory/read", "inventory/write"],
+    restEndpoints: [
+      "GET /api/v1/moves/:moveId/sale-listings",
+      "POST /api/v1/moves/:moveId/sale-listings",
+      "PATCH /api/v1/moves/:moveId/sale-listings/:listingId",
+    ],
+    mcpTools: ["upsert_sale_listing"],
+    agentWorkflows: [
+      "Create a Facebook Marketplace-style draft from inventory title, photos, dimensions, room/context, and user notes.",
+      "Save pricing research with source count, comparable prices, source links/summaries, confidence, and where the AI left off.",
+      "Update listing status, official decided price, buyer interest, offers, sold price, and pickup status.",
     ],
   },
   {

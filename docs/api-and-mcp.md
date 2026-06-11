@@ -1401,6 +1401,7 @@ Available MCP tools:
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |
 | `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
+| `get_agent_context` | Fetch one compact structured context payload for AI agents: move, spaces, transport, inventory, photos, sale pipeline, counts, and write guidance. |
 | `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |
 | `get_move_day_checklist` | Fetch a crew-safe Move Day checklist with box status, item counts, load assignment names, warnings, exception notes, and progress counts. |
 | `plans_list` | List Layout Studio floor plans for a move. |
@@ -1414,6 +1415,9 @@ Available MCP tools:
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
 | `update_item` | Update selected item fields, with `dryRun` support. |
 | `delete_item` | Soft-delete one item, with `dryRun` support. |
+| `list_move_spaces` | List durable rooms/spaces for a move. |
+| `create_move_space` | Create a durable room/space target, with `dryRun` support. |
+| `upsert_sale_listing` | Create or update sale listing workflow fields, pricing research, status, buyer interest, and sold details. |
 | `list_planned_items` | List desired future items that can be used in Layout Studio before they are owned inventory. |
 | `create_planned_item` | Create one planned future item, with `dryRun` support. |
 | `update_planned_item` | Update selected planned item fields, with `dryRun` support. |

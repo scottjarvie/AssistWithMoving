@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Archive,
+  BadgeDollarSign,
   Bot,
   Camera,
   ClipboardList,
+  DoorOpen,
   FileStack,
   Images,
   LayoutDashboard,
@@ -30,6 +32,8 @@ const navIcons = {
   dashboard: LayoutDashboard,
   capture: Camera,
   inventory: ClipboardList,
+  spaces: DoorOpen,
+  sell: BadgeDollarSign,
   boxes: Archive,
   photos: Images,
   layout: Map,

@@ -136,6 +136,13 @@ export async function getMoveSummary(config, input) {
   return response.data;
 }
 
+export async function getAgentContext(config, input) {
+  const response = await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/agent-context`,
+  });
+  return response.data;
+}
+
 export async function getMoveQuestions(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/questions`,
@@ -331,6 +338,51 @@ export async function deleteItem(config, input) {
     method: "DELETE",
     path: `/items/${input.itemId}`,
     query: { moveId: input.moveId },
+  });
+}
+
+export async function listMoveSpaces(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/spaces`,
+    query: {
+      limit: input.limit ?? 100,
+      cursor: input.cursor,
+    },
+  });
+}
+
+export async function createMoveSpace(config, input) {
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: `/moves/${input.moveId}/spaces`,
+        body: input,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/spaces`,
+    body: input,
+  });
+}
+
+export async function upsertSaleListing(config, input) {
+  const { idempotencyKey, dryRun, ...body } = input;
+  const path = input.listingId
+    ? `/moves/${input.moveId}/sale-listings/${input.listingId}`
+    : `/moves/${input.moveId}/sale-listings`;
+  const method = input.listingId ? "PATCH" : "POST";
+  if (dryRun) {
+    return { dryRun: true, request: { method, path, body } };
+  }
+  return await movingManifestRequest(config, {
+    method,
+    path,
+    body,
+    idempotencyKey,
   });
 }
 

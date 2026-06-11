@@ -253,6 +253,9 @@ export function requiredScopesForRestRoute({
     if (segments[2] === "capacity-report") {
       return ["moves/read", "inventory/read"];
     }
+    if (segments[2] === "agent-context") {
+      return ["moves/read", "inventory/read", "plans/read"];
+    }
     if (segments.includes("exports")) {
       return ["exports/read"];
     }
@@ -264,6 +267,12 @@ export function requiredScopesForRestRoute({
     }
     if (segments.includes("people")) {
       return ["moves/read"];
+    }
+    if (segments.includes("spaces")) {
+      return ["moves/read"];
+    }
+    if (segments.includes("sale-listings")) {
+      return ["inventory/read"];
     }
     if (
       segments.includes("items") ||
@@ -302,6 +311,12 @@ export function requiredScopesForRestRoute({
     }
     if (segments.includes("people")) {
       return ["moves/write"];
+    }
+    if (segments.includes("spaces")) {
+      return ["moves/write"];
+    }
+    if (segments.includes("sale-listings")) {
+      return ["inventory/write"];
     }
     if (
       segments.includes("items") ||

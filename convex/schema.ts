@@ -478,6 +478,50 @@ export const capacityReviewStatus = v.union(
   v.literal("confirmed")
 );
 
+export const moveSpaceKind = v.union(
+  v.literal("originRoom"),
+  v.literal("destinationRoom"),
+  v.literal("yardOutdoor"),
+  v.literal("storage"),
+  v.literal("transportResource"),
+  v.literal("transportZone"),
+  v.literal("custom")
+);
+
+export const moveSpaceStatus = v.union(
+  v.literal("active"),
+  v.literal("archived")
+);
+
+export const saleListingStatus = v.union(
+  v.literal("needsPrep"),
+  v.literal("researchingPrice"),
+  v.literal("draftReady"),
+  v.literal("listed"),
+  v.literal("interestReceived"),
+  v.literal("offerPending"),
+  v.literal("sold"),
+  v.literal("removed"),
+  v.literal("kept"),
+  v.literal("donated")
+);
+
+export const saleListingPlatform = v.union(
+  v.literal("facebookMarketplace"),
+  v.literal("craigslist"),
+  v.literal("offerUp"),
+  v.literal("nextdoor"),
+  v.literal("ebay"),
+  v.literal("other")
+);
+
+export const saleResearchDepth = v.union(
+  v.literal("none"),
+  v.literal("quick"),
+  v.literal("standard"),
+  v.literal("deep")
+);
+
 export const movePersonRole = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
@@ -1023,6 +1067,34 @@ export default defineSchema({
     .index("by_move_sort", ["moveId", "sortOrder"])
     .index("by_household", ["householdId"]),
 
+  moveSpaces: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    kind: moveSpaceKind,
+    name: v.string(),
+    aliases: v.array(v.string()),
+    notes: v.optional(v.string()),
+    floorLevel: v.optional(v.string()),
+    sortOrder: v.number(),
+    status: moveSpaceStatus,
+    transportResourceId: v.optional(v.id("transportResources")),
+    transportZoneId: v.optional(v.id("transportZones")),
+    linkedPlanEntityId: v.optional(v.id("planEntities")),
+    capacity,
+    createdByUserId: v.id("users"),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    updatedByUserId: v.optional(v.id("users")),
+    updatedByApiKeyId: v.optional(v.id("apiKeys")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_move_kind", ["moveId", "kind"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_name", ["moveId", "name"])
+    .index("by_household", ["householdId"]),
+
   movePlanningDefaults: defineTable({
     householdId: v.id("households"),
     moveId: v.id("moves"),
@@ -1224,6 +1296,9 @@ export default defineSchema({
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
     boxId: v.optional(v.id("boxes")),
+    spaceId: v.optional(v.id("moveSpaces")),
+    transportResourceId: v.optional(v.id("transportResources")),
+    transportZoneId: v.optional(v.id("transportZones")),
     room: v.optional(v.string()),
     claimId: v.optional(v.string()),
     documentationProfileTypes: v.array(documentationProfileType),
@@ -1261,6 +1336,12 @@ export default defineSchema({
     .index("by_move_created", ["moveId", "createdAt"])
     .index("by_item_created", ["itemId", "createdAt"])
     .index("by_box_created", ["boxId", "createdAt"])
+    .index("by_space_created", ["spaceId", "createdAt"])
+    .index("by_transport_resource_created", [
+      "transportResourceId",
+      "createdAt",
+    ])
+    .index("by_transport_zone_created", ["transportZoneId", "createdAt"])
     .index("by_move_ai_processed", ["moveId", "aiProcessed"])
     .index("by_move_verification", ["moveId", "verificationStatus"])
     .index("by_move_privacy", ["moveId", "privacyLevel"])
@@ -1271,6 +1352,9 @@ export default defineSchema({
     moveId: v.id("moves"),
     itemId: v.optional(v.id("items")),
     boxId: v.optional(v.id("boxes")),
+    spaceId: v.optional(v.id("moveSpaces")),
+    transportResourceId: v.optional(v.id("transportResources")),
+    transportZoneId: v.optional(v.id("transportZones")),
     room: v.optional(v.string()),
     originalStorageKey: v.string(),
     originalBucket: v.string(),
@@ -1564,6 +1648,8 @@ export default defineSchema({
     description: v.optional(v.string()),
     room: v.optional(v.string()),
     destinationRoom: v.optional(v.string()),
+    currentSpaceId: v.optional(v.id("moveSpaces")),
+    destinationSpaceId: v.optional(v.id("moveSpaces")),
     category: v.optional(v.string()),
     subcategory: v.optional(v.string()),
     ownerPersonId: v.optional(v.id("movePeople")),
@@ -1608,11 +1694,74 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_disposition", ["moveId", "disposition"])
     .index("by_move_room", ["moveId", "room"])
+    .index("by_current_space", ["currentSpaceId"])
+    .index("by_destination_space", ["destinationSpaceId"])
     .index("by_move_category", ["moveId", "category"])
     .index("by_move_needs_review", ["moveId", "needsReview"])
     .index("by_move_high_value", ["moveId", "highValue"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
+    .index("by_household", ["householdId"]),
+
+  saleListings: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+    status: saleListingStatus,
+    platform: saleListingPlatform,
+    platformLabel: v.optional(v.string()),
+    listingTitle: v.optional(v.string()),
+    listingDescription: v.optional(v.string()),
+    category: v.optional(v.string()),
+    condition: v.optional(v.string()),
+    locationLabel: v.optional(v.string()),
+    selectedPhotoIds: v.array(v.id("itemPhotos")),
+    listingUrl: v.optional(v.string()),
+    listedAt: v.optional(v.number()),
+    lastRefreshedAt: v.optional(v.number()),
+    suggestedPriceLowCents: v.optional(v.number()),
+    suggestedPriceHighCents: v.optional(v.number()),
+    officialPriceCents: v.optional(v.number()),
+    currency: v.string(),
+    pricingConfidence: estimateConfidence,
+    priceDecisionSource: v.optional(v.string()),
+    userOverrodePrice: v.boolean(),
+    researchDepth: saleResearchDepth,
+    researchSourceCount: v.number(),
+    researchSources: v.array(
+      v.object({
+        title: v.optional(v.string()),
+        url: v.optional(v.string()),
+        summary: v.optional(v.string()),
+        priceCents: v.optional(v.number()),
+        checkedAt: v.optional(v.number()),
+      })
+    ),
+    researchedAt: v.optional(v.number()),
+    researchedByUserId: v.optional(v.id("users")),
+    researchedByApiKeyId: v.optional(v.id("apiKeys")),
+    researchedByLabel: v.optional(v.string()),
+    researchNotes: v.optional(v.string()),
+    interestedCount: v.number(),
+    inquiryNotes: v.optional(v.string()),
+    offerNotes: v.optional(v.string()),
+    buyerNotes: v.optional(v.string()),
+    pickupStatus: v.optional(v.string()),
+    soldPriceCents: v.optional(v.number()),
+    soldAt: v.optional(v.number()),
+    needsMorePhotos: v.boolean(),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    updatedByUserId: v.optional(v.id("users")),
+    updatedByApiKeyId: v.optional(v.id("apiKeys")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_item", ["itemId"])
+    .index("by_platform_status", ["platform", "status"])
     .index("by_household", ["householdId"]),
 
   plannedItems: defineTable({

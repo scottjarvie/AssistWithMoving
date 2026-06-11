@@ -132,6 +132,47 @@ export const itemCreatedViaValues = [
   "mcp",
 ] as const;
 
+export const moveSpaceKinds = [
+  "originRoom",
+  "destinationRoom",
+  "yardOutdoor",
+  "storage",
+  "transportResource",
+  "transportZone",
+  "custom",
+] as const;
+
+export const moveSpaceStatuses = ["active", "archived"] as const;
+
+export const saleListingStatuses = [
+  "needsPrep",
+  "researchingPrice",
+  "draftReady",
+  "listed",
+  "interestReceived",
+  "offerPending",
+  "sold",
+  "removed",
+  "kept",
+  "donated",
+] as const;
+
+export const saleListingPlatforms = [
+  "facebookMarketplace",
+  "craigslist",
+  "offerUp",
+  "nextdoor",
+  "ebay",
+  "other",
+] as const;
+
+export const saleResearchDepths = [
+  "none",
+  "quick",
+  "standard",
+  "deep",
+] as const;
+
 export const boxStatuses = [
   "open",
   "packing",
@@ -538,6 +579,50 @@ export const itemCreatedViaValidator = v.union(
   v.literal("photoAI"),
   v.literal("api"),
   v.literal("mcp")
+);
+
+export const moveSpaceKindValidator = v.union(
+  v.literal("originRoom"),
+  v.literal("destinationRoom"),
+  v.literal("yardOutdoor"),
+  v.literal("storage"),
+  v.literal("transportResource"),
+  v.literal("transportZone"),
+  v.literal("custom")
+);
+
+export const moveSpaceStatusValidator = v.union(
+  v.literal("active"),
+  v.literal("archived")
+);
+
+export const saleListingStatusValidator = v.union(
+  v.literal("needsPrep"),
+  v.literal("researchingPrice"),
+  v.literal("draftReady"),
+  v.literal("listed"),
+  v.literal("interestReceived"),
+  v.literal("offerPending"),
+  v.literal("sold"),
+  v.literal("removed"),
+  v.literal("kept"),
+  v.literal("donated")
+);
+
+export const saleListingPlatformValidator = v.union(
+  v.literal("facebookMarketplace"),
+  v.literal("craigslist"),
+  v.literal("offerUp"),
+  v.literal("nextdoor"),
+  v.literal("ebay"),
+  v.literal("other")
+);
+
+export const saleResearchDepthValidator = v.union(
+  v.literal("none"),
+  v.literal("quick"),
+  v.literal("standard"),
+  v.literal("deep")
 );
 
 export const boxStatusValidator = v.union(
