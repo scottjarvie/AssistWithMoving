@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Copy, KeyRound, RefreshCw, RotateCw, Trash2 } from "lucide-react";
+import { Bot, Copy, KeyRound, RefreshCw, RotateCw, Trash2 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -54,10 +55,25 @@ type MoveSummary = {
   status: string;
 };
 
-const defaultScopes: ApiKeyScope[] = [
+const aiHelperScopes: ApiKeyScope[] = [
+  "moves/read",
+  "moves/write",
+  "inventory/read",
+  "inventory/write",
+  "plans/read",
+  "plans/write",
+  "photos/write",
+  "exports/read",
+  "exports/create",
+];
+
+const readOnlyScopes: ApiKeyScope[] = ["moves/read", "inventory/read", "exports/read"];
+
+const photoIntakeScopes: ApiKeyScope[] = [
   "moves/read",
   "inventory/read",
-  "exports/read",
+  "inventory/write",
+  "photos/write",
 ];
 
 export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
@@ -82,12 +98,12 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
   const revokeKey = useMutation(api.apiKeys.revoke);
   const rotateKey = useMutation(api.apiKeys.rotate);
 
-  const [name, setName] = useState("Local agent key");
+  const [name, setName] = useState("AI helper key");
   const [expiresInDays, setExpiresInDays] = useState("90");
   const [selectedMoveRestrictionId, setSelectedMoveRestrictionId] = useState<
     Id<"moves"> | "all"
   >("all");
-  const [scopes, setScopes] = useState<ApiKeyScope[]>(defaultScopes);
+  const [scopes, setScopes] = useState<ApiKeyScope[]>(aiHelperScopes);
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -131,7 +147,9 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
         expiresAt,
       });
       setOneTimeSecret(result.rawKey);
-      setMessage("API key created. Store the secret now; it will not be shown again.");
+      setMessage(
+        "AI helper key created. Copy the secret now; it will not be shown again."
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not create API key.");
     } finally {
@@ -183,6 +201,12 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
     );
   }
 
+  function applyPreset(nextName: string, nextScopes: ApiKeyScope[]) {
+    setName(nextName);
+    setScopes(nextScopes);
+    setMessage(null);
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -191,10 +215,39 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
           API and MCP keys
         </CardTitle>
         <CardDescription>
-          Create hashed, scoped, revocable keys for API clients and local agents.
+          Create revocable helper keys for Claude, ChatGPT, Codex, MCP clients,
+          scripts, and other trusted assistants.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="rounded-md border border-primary/25 bg-primary/5 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-medium">
+                <Bot className="size-4 text-primary" aria-hidden="true" />
+                Recommended for AI assistants
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Use the default key when you want an assistant to help create a
+                move, add inventory, upload photos, prepare sale listings, plan
+                loads, or export packets. Restrict it to one move when possible,
+                and revoke it after the helper session if it was temporary.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href="/ai">AI guide</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/api">API docs</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/mcp">MCP docs</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {!enabled || households === undefined ? (
           <Skeleton className="h-10 w-full" />
         ) : households.length ? (
@@ -270,7 +323,41 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
         </div>
 
         <div className="rounded-md border border-border p-3">
-          <h3 className="text-sm font-medium">Scopes</h3>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-medium">What this helper can do</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The default allows most assistant workflows. Use a preset or
+                uncheck individual permissions for narrower access.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => applyPreset("AI helper key", aiHelperScopes)}
+              >
+                AI helper
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => applyPreset("Read-only assistant key", readOnlyScopes)}
+              >
+                Read only
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => applyPreset("Photo intake assistant key", photoIntakeScopes)}
+              >
+                Photo intake
+              </Button>
+            </div>
+          </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {apiKeyScopeOptions.map(([scope, label]) => (
               <label key={scope} className="flex items-center gap-2 text-sm">
@@ -306,7 +393,9 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
               <div>
                 <h3 className="text-sm font-medium">One-time secret</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  This raw key is not stored and will not be shown again.
+                  This raw key is not stored and will not be shown again. Copy
+                  it into the trusted assistant, MCP client, or password manager
+                  that will do the move work.
                 </p>
               </div>
               <Button type="button" size="sm" variant="outline" onClick={() => void handleCopySecret()}>

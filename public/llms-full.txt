@@ -1,0 +1,155 @@
+# MovingManifest AI Assistant Guide
+
+MovingManifest helps people organize a household move. It stores move records,
+origin and destination spaces, transport resources, transport zones, inventory,
+boxes, photos, sale listings, layout plans, load plans, and documentation
+packets.
+
+This guide is public so an AI assistant can understand how to help even before
+the user has created an account.
+
+## Public vs Private
+
+Public:
+
+- Marketing and product pages.
+- `/ai`, `/api`, `/mcp`, `/llms.txt`, `/llms-full.txt`, `/openapi.json`.
+- General workflow guidance.
+
+Private:
+
+- Move records.
+- Household members.
+- Inventory.
+- Photos.
+- Values, serial numbers, private notes, and evidence files.
+- API keys.
+
+Never claim you can access private data unless the user has signed in or given
+you a valid API key.
+
+## Phone User Flow
+
+If a user says: "Go to movingmanifest.com and help me use it"
+
+1. Open `https://movingmanifest.com/ai`.
+2. Explain that MovingManifest can work with their assistant, but private data
+   requires an account.
+3. If they do not have an account, guide them to `https://movingmanifest.com/sign-up`.
+4. After account creation, guide them to create or select a move.
+5. Guide them to Settings and create an AI helper key.
+6. Ask the user to copy the one-time secret into the assistant or MCP client
+   only if they trust that assistant with the move work.
+7. Use `GET /api/v1/me` to verify the key and scopes.
+8. Use `GET /api/v1/moves` to find or create the move.
+9. Use `GET /api/v1/moves/{moveId}/agent-context` before writing.
+10. Use dry runs for bulk changes when available.
+
+## Good First Move Setup Questions
+
+- What is the move title?
+- What address, city, or label describes the origin?
+- What address, city, or label describes the destination?
+- What rooms/spaces exist at the origin?
+- What rooms/spaces should exist at the destination?
+- What transport resources exist: moving company, truck, trailer, car, storage,
+  donation pickup, dump run?
+- Which items should be kept, sold, donated, given away, dumped, stored, or
+  moved personally?
+- Does the user want photos attached to items, rooms, boxes, or transport zones?
+
+## Data Entry Guidance
+
+For photo-based inventory:
+
+- Create concise item names.
+- Use readable room names and space IDs when available.
+- Store descriptions based on what is visible and what the user says.
+- Use estimated dimensions only when the user accepts estimates.
+- Store dimensions, weight, and volume confidence as `low` unless directly
+  measured or researched.
+- Add review flags such as `confirm-disposition`, `photo-estimated-weight`,
+  `photo-estimated-dimensions`, `capture-model-serial`, or
+  `confirm-contents`.
+- For sell items, create or update a sale listing with listing status,
+  platform, title, description, pricing range, research depth, and sources.
+
+For measurements:
+
+- `dimensionsIn.lengthIn` is the long horizontal dimension.
+- `dimensionsIn.widthIn` is depth.
+- `dimensionsIn.heightIn` is height.
+- Use `measurementProvenance` to record source type, confidence, notes,
+  recorded time, and whether verification is needed.
+
+## REST API
+
+Base URL:
+
+`https://movingmanifest.com/api/v1`
+
+Auth header:
+
+`Authorization: Bearer mmk_...`
+
+Suggested discovery order:
+
+1. `GET /me`
+2. `GET /moves`
+3. `GET /moves/{moveId}/agent-context`
+4. Read spaces, transport resources, zones, item counts, sale pipeline, and
+   existing photos before writing.
+
+Important endpoints:
+
+- `POST /moves`
+- `POST /moves/setup`
+- `GET /moves/{moveId}/agent-context`
+- `GET /moves/{moveId}/items`
+- `POST /moves/{moveId}/items`
+- `POST /moves/{moveId}/items/batch-upsert`
+- `GET /moves/{moveId}/spaces`
+- `POST /moves/{moveId}/spaces`
+- `POST /moves/{moveId}/sale-listings`
+- `POST /uploads/init`
+- `POST /photos/finalize`
+- `GET /moves/{moveId}/capacity-report`
+- `GET /moves/{moveId}/move-day`
+- `POST /moves/{moveId}/exports`
+
+Use `/openapi.json` for machine-readable endpoint details.
+
+## MCP
+
+The MovingManifest MCP server currently runs locally and wraps the REST API.
+It is useful for assistants that support local MCP servers.
+
+Suggested first MCP tools:
+
+- `get_api_capabilities`
+- `get_api_context`
+- `list_moves`
+- `get_agent_context`
+
+Useful write tools:
+
+- `setup_move`
+- `create_move_space`
+- `batch_upsert_items`
+- `start_photo_upload`
+- `finalize_photo_upload`
+- `upsert_sale_listing`
+- `create_box`
+- `add_items_to_box`
+- `plan_propose_ops`
+- `create_export`
+
+## Safety Rules For Assistants
+
+- Ask before using a key if the user has not clearly authorized it.
+- Do not store the raw key in generated files.
+- Do not expose private values, serials, notes, photos, or addresses in public
+  outputs.
+- Prefer move-restricted keys when possible.
+- Verify writes by reading the created records back.
+- Summarize exactly what changed and what still needs user review.

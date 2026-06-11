@@ -1,0 +1,52 @@
+# MovingManifest
+
+> MovingManifest is a move inventory, room/space, box manifest, photo evidence, load planning, sale prep, and documentation packet system for household moves.
+
+Primary site: https://movingmanifest.com
+
+## Best Pages For AI Assistants
+
+- https://movingmanifest.com/ai - human-friendly guide for using MovingManifest with Claude, ChatGPT, Codex, or another assistant.
+- https://movingmanifest.com/api - public REST API overview, scopes, and assistant workflow.
+- https://movingmanifest.com/mcp - public MCP setup overview for agents that can run local tools.
+- https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
+- https://movingmanifest.com/llms-full.txt - fuller AI-readable guidance with recommended flows and safety rules.
+
+## Assistant Behavior
+
+- If the user has no MovingManifest account, tell them they need to create one at https://movingmanifest.com/sign-up before private move data can be stored.
+- Do not invent access to private data. Private move data requires user login or a user-created API key.
+- If the user wants an assistant to do work, guide them to Settings after sign-in and create an AI helper key.
+- Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
+- Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
+- Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
+- When estimating item dimensions, weights, volume, price, or condition, record low confidence and provenance so the user can verify later.
+
+## Common Workflows
+
+- Create a move, rooms/spaces, transport resources, zones, and starter inventory.
+- Add inventory from photos or dictated room walks.
+- Mark items sell, donate, free, dump, storage, or keep.
+- Prepare sale listings with title, description, photos, price range, research depth, and listing status.
+- Create boxes, assign items to boxes, and plan transport/resource loading.
+- Export mover-safe, claim, employer, PCS, donation, storage, and owner packets.
+
+## API
+
+Base URL: `https://movingmanifest.com/api/v1`
+
+Auth: `Authorization: Bearer mmk_...`
+
+Recommended broad AI helper scopes:
+
+- `moves/read`
+- `moves/write`
+- `inventory/read`
+- `inventory/write`
+- `plans/read`
+- `plans/write`
+- `photos/write`
+- `exports/read`
+- `exports/create`
+
+Prefer move-restricted keys when the assistant only needs one move.

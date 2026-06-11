@@ -2,9 +2,11 @@ import Link from "next/link";
 import {
   ArrowRight,
   BadgeCheck,
+  Bot,
   Boxes,
   Camera,
   FileText,
+  KeyRound,
   Lock,
   Map,
   PackageCheck,
@@ -34,6 +36,21 @@ const signalCards = [
   { label: "Load resources", value: "6", icon: Truck },
 ];
 
+const assistantLinks = [
+  {
+    title: "AI assistant ready",
+    copy: "Point Claude, ChatGPT, or Codex at /ai before you even create an account.",
+    icon: Bot,
+    href: "/ai",
+  },
+  {
+    title: "API and MCP keys",
+    copy: "Create a revocable helper key so your assistant can work through structured tools.",
+    icon: KeyRound,
+    href: "/api",
+  },
+];
+
 export default function MarketingPage() {
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
@@ -42,6 +59,12 @@ export default function MarketingPage() {
         <nav aria-label="Public navigation" className="hidden items-center gap-6 md:flex">
           <Link className="text-sm text-muted-foreground hover:text-foreground" href="/features">
             Features
+          </Link>
+          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/ai">
+            AI assistants
+          </Link>
+          <Link className="text-sm text-muted-foreground hover:text-foreground" href="/api">
+            API
           </Link>
           <Link className="text-sm text-muted-foreground hover:text-foreground" href="/pcs-moving">
             PCS moving
@@ -83,8 +106,8 @@ export default function MarketingPage() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg">
-              <Link href="/app/dashboard" prefetch={false}>
-                Open workspace preview
+              <Link href="/ai">
+                Use with your AI assistant
                 <ArrowRight aria-hidden="true" />
               </Link>
             </Button>
@@ -169,6 +192,27 @@ export default function MarketingPage() {
                   ))}
                 </div>
               </div>
+            </div>
+            <Separator />
+            <div className="grid gap-3 p-4 md:grid-cols-2">
+              {assistantLinks.map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className="rounded-md border border-border bg-background/65 p-3 hover:bg-muted/40"
+                >
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <item.icon
+                      className="size-4 text-primary"
+                      aria-hidden="true"
+                    />
+                    {item.title}
+                  </div>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    {item.copy}
+                  </p>
+                </Link>
+              ))}
             </div>
             <Separator />
             <div className="grid gap-3 p-4 md:grid-cols-3" id="privacy">

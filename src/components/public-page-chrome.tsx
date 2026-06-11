@@ -9,10 +9,12 @@ import { product } from "@/lib/product";
 
 const publicNav = [
   { href: "/features", label: "Features" },
+  { href: "/ai", label: "AI assistants" },
+  { href: "/api", label: "API" },
+  { href: "/mcp", label: "MCP" },
   { href: "/pcs-moving", label: "PCS moving" },
   { href: "/claims-inventory", label: "Claims inventory" },
   { href: "/privacy", label: "Privacy" },
-  { href: "/terms", label: "Terms" },
 ] as const;
 
 export type PublicFeatureCard = {
@@ -74,7 +76,7 @@ export function PublicHeader() {
   return (
     <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
       <BrandMark />
-      <nav aria-label="Public navigation" className="hidden items-center gap-5 lg:flex">
+      <nav aria-label="Public navigation" className="hidden items-center gap-4 lg:flex">
         {publicNav.map((item) => (
           <Link
             key={item.href}
@@ -106,6 +108,9 @@ export function PublicFooter() {
               {item.label}
             </Link>
           ))}
+          <Link href="/terms" className="hover:text-foreground">
+            Terms
+          </Link>
         </div>
       </div>
     </footer>

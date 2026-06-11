@@ -1,0 +1,649 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MovingManifest REST API",
+    "version": "1.0.0",
+    "description": "Agent-friendly REST API for move setup, inventory, spaces, photos, sale prep, planning context, and exports."
+  },
+  "servers": [
+    {
+      "url": "https://movingmanifest.com/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearerApiKey": []
+    }
+  ],
+  "paths": {
+    "/me": {
+      "get": {
+        "summary": "Inspect API key context",
+        "operationId": "getApiContext",
+        "responses": {
+          "200": {
+            "description": "API key, household, scopes, and move restriction."
+          }
+        }
+      }
+    },
+    "/moves": {
+      "get": {
+        "summary": "List moves",
+        "operationId": "listMoves",
+        "responses": {
+          "200": {
+            "description": "Accessible moves."
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a move",
+        "operationId": "createMove",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Move created."
+          }
+        }
+      }
+    },
+    "/moves/setup": {
+      "post": {
+        "summary": "Create or update a move with spaces, transport, zones, and starter items",
+        "operationId": "setupMove",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "move": {
+                    "$ref": "#/components/schemas/MoveCreate"
+                  },
+                  "spaces": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/MoveSpace"
+                    }
+                  },
+                  "transportResources": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ItemInput"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Move setup result."
+          },
+          "201": {
+            "description": "Move created and setup applied."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/agent-context": {
+      "get": {
+        "summary": "Fetch compact move context for AI agents",
+        "operationId": "getAgentContext",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Move, spaces, transport, items, photos, sale pipeline, layout plans, and AI contract."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/items": {
+      "get": {
+        "summary": "List move items",
+        "operationId": "listItems",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inventory items."
+          }
+        }
+      },
+      "post": {
+        "summary": "Create an item",
+        "operationId": "createItem",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Item created."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/items/batch-upsert": {
+      "post": {
+        "summary": "Create or update up to 100 items",
+        "operationId": "batchUpsertItems",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["items"],
+                "properties": {
+                  "dryRun": {
+                    "type": "boolean"
+                  },
+                  "items": {
+                    "type": "array",
+                    "maxItems": 100,
+                    "items": {
+                      "$ref": "#/components/schemas/ItemInput"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-row create/update result."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/spaces": {
+      "get": {
+        "summary": "List spaces",
+        "operationId": "listMoveSpaces",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Origin, destination, transport, and custom spaces."
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a space",
+        "operationId": "createMoveSpace",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveSpace"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Space created."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/sale-listings": {
+      "post": {
+        "summary": "Create or update sale listing for an item",
+        "operationId": "upsertSaleListing",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaleListingInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sale listing updated."
+          },
+          "201": {
+            "description": "Sale listing created."
+          }
+        }
+      }
+    },
+    "/uploads/init": {
+      "post": {
+        "summary": "Start photo upload",
+        "operationId": "startPhotoUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadInit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Presigned upload session."
+          }
+        }
+      }
+    },
+    "/photos/finalize": {
+      "post": {
+        "summary": "Finalize photo upload",
+        "operationId": "finalizePhotoUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoFinalize"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Photo record created."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/capacity-report": {
+      "get": {
+        "summary": "Get capacity report",
+        "operationId": "getCapacityReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Capacity estimates and warnings."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/move-day": {
+      "get": {
+        "summary": "Get move-day checklist",
+        "operationId": "getMoveDayChecklist",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Move-day checklist."
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/exports": {
+      "post": {
+        "summary": "Create export",
+        "operationId": "createExport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/moveId"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Export job created."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "MovingManifest API key beginning with mmk_."
+      }
+    },
+    "parameters": {
+      "moveId": {
+        "name": "moveId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "MoveCreate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "originLabel": {
+            "type": "string"
+          },
+          "destinationLabel": {
+            "type": "string"
+          },
+          "moveType": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["planning", "active", "completed", "archived"]
+          }
+        }
+      },
+      "MoveSpace": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          },
+          "floorLevel": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "number"
+          }
+        }
+      },
+      "ItemInput": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "externalSource": {
+            "type": "string"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "subcategory": {
+            "type": "string"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["keep", "sell", "donate", "free", "dump", "storage", "undecided"]
+          },
+          "status": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "dimensionsIn": {
+            "$ref": "#/components/schemas/DimensionsIn"
+          },
+          "estimatedWeightLb": {
+            "type": "number"
+          },
+          "estimatedWeightLowLb": {
+            "type": "number"
+          },
+          "estimatedWeightHighLb": {
+            "type": "number"
+          },
+          "estimatedVolumeCuFt": {
+            "type": "number"
+          },
+          "estimatedPackedVolumeCuFt": {
+            "type": "number"
+          },
+          "dimensionsConfidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "weightConfidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "volumeConfidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "measurementProvenance": {
+            "type": "object"
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "reviewFlags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "privateNotes": {
+            "type": "string"
+          },
+          "aiSummary": {
+            "type": "string"
+          },
+          "aiTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DimensionsIn": {
+        "type": "object",
+        "properties": {
+          "lengthIn": {
+            "type": "number"
+          },
+          "widthIn": {
+            "type": "number"
+          },
+          "heightIn": {
+            "type": "number"
+          }
+        }
+      },
+      "Confidence": {
+        "type": "string",
+        "enum": ["none", "low", "medium", "high", "manual", "actual"]
+      },
+      "SaleListingInput": {
+        "type": "object",
+        "required": ["itemId"],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "default": "facebookMarketplace"
+          },
+          "status": {
+            "type": "string"
+          },
+          "listingTitle": {
+            "type": "string"
+          },
+          "listingDescription": {
+            "type": "string"
+          },
+          "askingPriceCents": {
+            "type": "number"
+          },
+          "priceLowCents": {
+            "type": "number"
+          },
+          "priceHighCents": {
+            "type": "number"
+          },
+          "researchDepth": {
+            "type": "string"
+          },
+          "researchSourceCount": {
+            "type": "number"
+          },
+          "researchSources": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "needsMorePhotos": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UploadInit": {
+        "type": "object",
+        "required": ["moveId", "mimeType", "sizeBytes"],
+        "properties": {
+          "moveId": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "boxId": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "number"
+          }
+        }
+      },
+      "PhotoFinalize": {
+        "type": "object",
+        "required": ["moveId", "uploadSessionId"],
+        "properties": {
+          "moveId": {
+            "type": "string"
+          },
+          "uploadSessionId": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "photoType": {
+            "type": "string"
+          },
+          "privacyLevel": {
+            "type": "string"
+          },
+          "visibilityScope": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "verificationStatus": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
