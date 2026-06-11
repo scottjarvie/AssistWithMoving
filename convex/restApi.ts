@@ -6937,6 +6937,7 @@ function apiMeasurementProvenanceEntry({
   const confidence =
     parsePlanningConfidence(input.confidence, "measurementProvenance.confidence") ??
     fallbackConfidence;
+  const apiKeyLabel = `${auth.apiKeyName} (${auth.apiKeyTokenPreview})`;
   return {
     sourceType:
       parseMeasurementProvenanceSource(input.sourceType) ?? fallbackSourceType,
@@ -6944,12 +6945,11 @@ function apiMeasurementProvenanceEntry({
     label: normalizeOptionalText(asString(input.label)) ?? fallbackLabel,
     notes: normalizeOptionalText(asString(input.notes)) ?? fallbackNotes,
     recordedAt: optionalNumber(input.recordedAt) ?? now,
-    recordedByUserId: optionalString(input.recordedByUserId) as
-      | Id<"users">
-      | undefined,
+    recordedByUserId: auth.createdByUserId,
     recordedByApiKeyId: auth.apiKeyId,
     recordedByLabel:
-      normalizeOptionalText(asString(input.recordedByLabel)) ?? "API key",
+      normalizeOptionalText(asString(input.recordedByLabel)) ??
+      `API key: ${apiKeyLabel}`,
     needsVerification:
       input.needsVerification === undefined
         ? verificationNeeded(confidence)

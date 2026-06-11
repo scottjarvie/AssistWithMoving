@@ -278,6 +278,12 @@ verification. API writes default missing `recordedAt` to the request time. This
 lets future agents distinguish photo estimates from manual measurements,
 manufacturer specs, mover confirmations, or product research.
 
+When an API key writes measurement provenance, MovingManifest also stores the
+specific `recordedByApiKeyId` and defaults `recordedByLabel` to the API key name
+plus safe token preview. General API writes are also audited with
+`actorApiKeyId`, so non-measurement item changes can be traced to the API key
+that made them.
+
 Get one move:
 
 ```bash

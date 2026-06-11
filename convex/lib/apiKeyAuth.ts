@@ -73,6 +73,8 @@ export async function authenticateApiKey(
       scopes: key.scopes,
     },
     apiKeyId: key._id,
+    apiKeyName: key.name,
+    apiKeyTokenPreview: key.tokenPreview,
     createdByUserId: key.createdByUserId,
     householdId: key.householdId,
     moveId: key.moveId,
