@@ -41,4 +41,19 @@ export const estimateConfidenceOptions = [
   "actual",
 ] as const;
 
+export const measurementProvenanceSourceOptions = [
+  "unknown",
+  "photoEstimate",
+  "conversationEstimate",
+  "aiEstimate",
+  "manualEstimate",
+  "manualMeasurement",
+  "productResearch",
+  "manufacturerSpec",
+  "moverEstimate",
+  "moverConfirmed",
+  "import",
+  "api",
+] as const;
+
 export const itemFragilityOptions = ["low", "medium", "high"] as const;

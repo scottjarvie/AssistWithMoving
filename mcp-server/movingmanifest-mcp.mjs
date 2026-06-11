@@ -205,6 +205,21 @@ const estimateConfidenceSchema = z.enum([
   "estimated",
 ]);
 
+const measurementProvenanceSourceSchema = z.enum([
+  "unknown",
+  "photoEstimate",
+  "conversationEstimate",
+  "aiEstimate",
+  "manualEstimate",
+  "manualMeasurement",
+  "productResearch",
+  "manufacturerSpec",
+  "moverEstimate",
+  "moverConfirmed",
+  "import",
+  "api",
+]);
+
 const plannedItemStatusSchema = z.enum([
   "idea",
   "decided",
@@ -216,6 +231,22 @@ const dimensionsInSchema = z.object({
   lengthIn: z.number().nonnegative().optional(),
   widthIn: z.number().nonnegative().optional(),
   heightIn: z.number().nonnegative().optional(),
+});
+
+const measurementProvenanceEntrySchema = z.object({
+  sourceType: measurementProvenanceSourceSchema,
+  confidence: estimateConfidenceSchema.optional(),
+  label: z.string().optional(),
+  notes: z.string().optional(),
+  recordedAt: z.number().optional(),
+  recordedByLabel: z.string().optional(),
+  needsVerification: z.boolean().optional(),
+});
+
+const itemMeasurementProvenanceSchema = z.object({
+  dimensions: measurementProvenanceEntrySchema.optional(),
+  weight: measurementProvenanceEntrySchema.optional(),
+  volume: measurementProvenanceEntrySchema.optional(),
 });
 
 const capacityReviewStatusSchema = z.enum([
@@ -243,6 +274,7 @@ const inventoryItemWriteSchema = z.object({
   serialNumber: z.string().optional(),
   modelNumber: z.string().optional(),
   dimensionsIn: dimensionsInSchema.optional(),
+  measurementProvenance: itemMeasurementProvenanceSchema.optional(),
   dimensionsConfidence: estimateConfidenceSchema.optional(),
   estimatedWeightLb: z.number().nonnegative().optional(),
   estimatedWeightLowLb: z.number().nonnegative().optional(),

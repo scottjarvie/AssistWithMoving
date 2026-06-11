@@ -286,6 +286,21 @@ export const estimateConfidence = v.union(
   v.literal("actual")
 );
 
+export const measurementProvenanceSource = v.union(
+  v.literal("unknown"),
+  v.literal("photoEstimate"),
+  v.literal("conversationEstimate"),
+  v.literal("aiEstimate"),
+  v.literal("manualEstimate"),
+  v.literal("manualMeasurement"),
+  v.literal("productResearch"),
+  v.literal("manufacturerSpec"),
+  v.literal("moverEstimate"),
+  v.literal("moverConfirmed"),
+  v.literal("import"),
+  v.literal("api")
+);
+
 export const itemFragility = v.union(
   v.literal("low"),
   v.literal("medium"),
@@ -475,6 +490,24 @@ const dimensionsIn = v.object({
   lengthIn: v.optional(v.number()),
   widthIn: v.optional(v.number()),
   heightIn: v.optional(v.number()),
+});
+
+export const measurementProvenanceEntry = v.object({
+  sourceType: measurementProvenanceSource,
+  confidence: estimateConfidence,
+  label: v.optional(v.string()),
+  notes: v.optional(v.string()),
+  recordedAt: v.number(),
+  recordedByUserId: v.optional(v.id("users")),
+  recordedByApiKeyId: v.optional(v.id("apiKeys")),
+  recordedByLabel: v.optional(v.string()),
+  needsVerification: v.boolean(),
+});
+
+export const itemMeasurementProvenance = v.object({
+  dimensions: v.optional(measurementProvenanceEntry),
+  weight: v.optional(measurementProvenanceEntry),
+  volume: v.optional(measurementProvenanceEntry),
 });
 
 const capacity = v.object({
@@ -1543,6 +1576,7 @@ export default defineSchema({
     serialNumber: v.optional(v.string()),
     modelNumber: v.optional(v.string()),
     dimensionsIn: v.optional(dimensionsIn),
+    measurementProvenance: v.optional(itemMeasurementProvenance),
     dimensionsConfidence: v.optional(estimateConfidence),
     estimatedWeightLb: v.optional(v.number()),
     estimatedWeightLowLb: v.optional(v.number()),

@@ -218,6 +218,15 @@ describe("MovingManifest MCP API client", () => {
             externalId: "photo-1-table",
             name: "Dark wood dining table set with 4 chairs",
             weightConfidence: "estimated",
+            measurementProvenance: {
+              dimensions: {
+                sourceType: "photoEstimate",
+                confidence: "estimated",
+                label: "Photo 1",
+                recordedByLabel: "Codex",
+                needsVerification: true,
+              },
+            },
           },
         ],
         idempotencyKey: "setup1",
@@ -243,6 +252,15 @@ describe("MovingManifest MCP API client", () => {
               externalId: "photo-1-table",
               name: "Dark wood dining table set with 4 chairs",
               weightConfidence: "estimated",
+              measurementProvenance: {
+                dimensions: {
+                  sourceType: "photoEstimate",
+                  confidence: "estimated",
+                  label: "Photo 1",
+                  recordedByLabel: "Codex",
+                  needsVerification: true,
+                },
+              },
             },
           ],
         }),

@@ -106,6 +106,21 @@ export const estimateConfidences = [
   "actual",
 ] as const;
 
+export const measurementProvenanceSources = [
+  "unknown",
+  "photoEstimate",
+  "conversationEstimate",
+  "aiEstimate",
+  "manualEstimate",
+  "manualMeasurement",
+  "productResearch",
+  "manufacturerSpec",
+  "moverEstimate",
+  "moverConfirmed",
+  "import",
+  "api",
+] as const;
+
 export const itemFragilities = ["low", "medium", "high"] as const;
 
 export const itemCreatedViaValues = [
@@ -493,6 +508,21 @@ export const estimateConfidenceValidator = v.union(
   v.literal("high"),
   v.literal("manual"),
   v.literal("actual")
+);
+
+export const measurementProvenanceSourceValidator = v.union(
+  v.literal("unknown"),
+  v.literal("photoEstimate"),
+  v.literal("conversationEstimate"),
+  v.literal("aiEstimate"),
+  v.literal("manualEstimate"),
+  v.literal("manualMeasurement"),
+  v.literal("productResearch"),
+  v.literal("manufacturerSpec"),
+  v.literal("moverEstimate"),
+  v.literal("moverConfirmed"),
+  v.literal("import"),
+  v.literal("api")
 );
 
 export const itemFragilityValidator = v.union(

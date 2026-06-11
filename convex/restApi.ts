@@ -61,6 +61,7 @@ import {
   itemDispositions,
   itemFragilities,
   itemStatuses,
+  measurementProvenanceSources,
   normalizeDocumentationProfileTypes,
   normalizeBoxCode,
   normalizeItemName,
@@ -2098,7 +2099,7 @@ async function routeItems(
       args.body,
       item._id
     );
-    const patch = itemPatch(args.body, auth.createdByUserId);
+    const patch = itemPatch(args.body, auth, item);
     await ctx.db.patch(item._id, patch);
     await auditApiWrite(ctx, auth, moveId, "item.api_updated", "items", item._id, {
       changedKeys: Object.keys(patch),
@@ -2296,7 +2297,7 @@ async function routeBatchUpsertItems(
       itemId = itemId ?? externalMatch?._id;
       if (itemId) {
         const item = await requireApiItem(ctx, auth.householdId, moveId, itemId);
-        const patch = itemPatch(input, auth.createdByUserId);
+        const patch = itemPatch(input, auth, item);
         if (
           externalKey &&
           (item.externalSource !== externalKey.externalSource ||
@@ -4790,7 +4791,7 @@ async function routeTopLevelItem(
   }
 
   if (args.method === "PATCH") {
-    const patch = itemPatch(args.body, auth.createdByUserId);
+    const patch = itemPatch(args.body, auth, item);
     await ctx.db.patch(item._id, patch);
     const updated = await ctx.db.get(item._id);
     await auditApiWrite(
@@ -6427,6 +6428,9 @@ async function createApiItem(
     serialNumber: normalizeOptionalText(asString(body.serialNumber)),
     modelNumber: normalizeOptionalText(asString(body.modelNumber)),
     dimensionsIn: parseDimensionsIn(body.dimensionsIn),
+    measurementProvenance:
+      parseMeasurementProvenance(body.measurementProvenance, auth, now) ??
+      inferredApiMeasurementProvenance(body, auth, now),
     estimatedWeightLb: optionalNumber(body.estimatedWeightLb),
     estimatedWeightLowLb: optionalNumber(body.estimatedWeightLowLb),
     estimatedWeightHighLb: optionalNumber(body.estimatedWeightHighLb),
@@ -6888,11 +6892,190 @@ function movePersonPatch(
   return patch;
 }
 
-function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
+function verificationNeeded(confidence: Doc<"items">["weightConfidence"]) {
+  return confidence !== "manual" && confidence !== "actual";
+}
+
+function hasDimensionsIn(dimensions: Doc<"items">["dimensionsIn"] | undefined) {
+  return Boolean(
+    dimensions &&
+      (dimensions.lengthIn !== undefined ||
+        dimensions.widthIn !== undefined ||
+        dimensions.heightIn !== undefined),
+  );
+}
+
+function parseMeasurementProvenanceSource(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(measurementProvenanceSources, value)) {
+    throw new Error("Unsupported measurement provenance sourceType.");
+  }
+  return value as NonNullable<
+    NonNullable<Doc<"items">["measurementProvenance"]>["weight"]
+  >["sourceType"];
+}
+
+function apiMeasurementProvenanceEntry({
+  input,
+  auth,
+  now,
+  fallbackSourceType,
+  fallbackConfidence,
+  fallbackLabel,
+  fallbackNotes,
+}: {
+  input: Record<string, unknown>;
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+  now: number;
+  fallbackSourceType: NonNullable<
+    NonNullable<Doc<"items">["measurementProvenance"]>["weight"]
+  >["sourceType"];
+  fallbackConfidence: Doc<"items">["weightConfidence"];
+  fallbackLabel: string;
+  fallbackNotes?: string;
+}): NonNullable<NonNullable<Doc<"items">["measurementProvenance"]>["weight"]> {
+  const confidence =
+    parsePlanningConfidence(input.confidence, "measurementProvenance.confidence") ??
+    fallbackConfidence;
+  return {
+    sourceType:
+      parseMeasurementProvenanceSource(input.sourceType) ?? fallbackSourceType,
+    confidence,
+    label: normalizeOptionalText(asString(input.label)) ?? fallbackLabel,
+    notes: normalizeOptionalText(asString(input.notes)) ?? fallbackNotes,
+    recordedAt: optionalNumber(input.recordedAt) ?? now,
+    recordedByUserId: optionalString(input.recordedByUserId) as
+      | Id<"users">
+      | undefined,
+    recordedByApiKeyId: auth.apiKeyId,
+    recordedByLabel:
+      normalizeOptionalText(asString(input.recordedByLabel)) ?? "API key",
+    needsVerification:
+      input.needsVerification === undefined
+        ? verificationNeeded(confidence)
+        : Boolean(input.needsVerification),
+  };
+}
+
+function parseMeasurementProvenance(
+  value: unknown,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  now: number,
+): Doc<"items">["measurementProvenance"] | undefined {
+  if (value === undefined) return undefined;
+  const input = bodyObject(value);
+  const provenance: NonNullable<Doc<"items">["measurementProvenance"]> = {};
+  if (input.dimensions !== undefined) {
+    provenance.dimensions = apiMeasurementProvenanceEntry({
+      input: bodyObject(input.dimensions),
+      auth,
+      now,
+      fallbackSourceType: "api",
+      fallbackConfidence: "low",
+      fallbackLabel: "Dimensions",
+    });
+  }
+  if (input.weight !== undefined) {
+    provenance.weight = apiMeasurementProvenanceEntry({
+      input: bodyObject(input.weight),
+      auth,
+      now,
+      fallbackSourceType: "api",
+      fallbackConfidence: "low",
+      fallbackLabel: "Weight",
+    });
+  }
+  if (input.volume !== undefined) {
+    provenance.volume = apiMeasurementProvenanceEntry({
+      input: bodyObject(input.volume),
+      auth,
+      now,
+      fallbackSourceType: "api",
+      fallbackConfidence: "low",
+      fallbackLabel: "Volume",
+    });
+  }
+  return Object.keys(provenance).length ? provenance : undefined;
+}
+
+function inferredApiMeasurementProvenance(
+  body: Record<string, unknown>,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  now: number,
+  existing?: Doc<"items">,
+): Doc<"items">["measurementProvenance"] | undefined {
+  const provenance: NonNullable<Doc<"items">["measurementProvenance"]> = {
+    ...(existing?.measurementProvenance ?? {}),
+  };
+  let changed = false;
+  const dimensions = parseDimensionsIn(body.dimensionsIn);
+  if (body.dimensionsIn !== undefined && hasDimensionsIn(dimensions)) {
+    changed = true;
+    const confidence =
+      parsePlanningConfidence(body.dimensionsConfidence, "dimensionsConfidence") ??
+      "low";
+    provenance.dimensions = apiMeasurementProvenanceEntry({
+      input: {},
+      auth,
+      now,
+      fallbackSourceType: "api",
+      fallbackConfidence: confidence,
+      fallbackLabel: "Dimensions",
+      fallbackNotes: "Measurement values were supplied through the API.",
+    });
+  }
+  if (
+    body.actualWeightLb !== undefined ||
+    body.estimatedWeightLb !== undefined ||
+    body.estimatedWeightLowLb !== undefined ||
+    body.estimatedWeightHighLb !== undefined
+  ) {
+    changed = true;
+    const confidence =
+      body.actualWeightLb !== undefined
+        ? "actual"
+        : (parsePlanningConfidence(body.weightConfidence, "weightConfidence") ??
+          "low");
+    provenance.weight = apiMeasurementProvenanceEntry({
+      input: {},
+      auth,
+      now,
+      fallbackSourceType: "api",
+      fallbackConfidence: confidence,
+      fallbackLabel: "Weight",
+      fallbackNotes: "Weight values were supplied through the API.",
+    });
+  }
+  if (
+    body.estimatedVolumeCuFt !== undefined ||
+    body.estimatedPackedVolumeCuFt !== undefined
+  ) {
+    changed = true;
+    const confidence =
+      parsePlanningConfidence(body.volumeConfidence, "volumeConfidence") ?? "low";
+    provenance.volume = apiMeasurementProvenanceEntry({
+      input: {},
+      auth,
+      now,
+      fallbackSourceType: "api",
+      fallbackConfidence: confidence,
+      fallbackLabel: "Volume",
+      fallbackNotes: "Volume values were supplied through the API.",
+    });
+  }
+  return changed ? provenance : undefined;
+}
+
+function itemPatch(
+  body: unknown,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  existing?: Doc<"items">,
+): Partial<Doc<"items">> {
   const input = bodyObject(body);
+  const now = Date.now();
   const patch: Partial<Doc<"items">> = {
-    updatedByUserId: userId,
-    updatedAt: Date.now(),
+    updatedByUserId: auth.createdByUserId,
+    updatedAt: now,
   };
   if (input.name !== undefined) {
     const name = normalizeItemName(String(input.name));
@@ -6925,6 +7108,12 @@ function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
   }
   if (input.dimensionsIn !== undefined) {
     patch.dimensionsIn = parseDimensionsIn(input.dimensionsIn);
+  }
+  if (input.measurementProvenance !== undefined) {
+    patch.measurementProvenance = {
+      ...(existing?.measurementProvenance ?? {}),
+      ...parseMeasurementProvenance(input.measurementProvenance, auth, now),
+    };
   }
   if (input.dimensionsConfidence !== undefined) {
     patch.dimensionsConfidence = parsePlanningConfidence(
@@ -6989,6 +7178,17 @@ function itemPatch(body: unknown, userId: Id<"users">): Partial<Doc<"items">> {
     const externalKey = externalItemKeyFromInput(input);
     patch.externalSource = externalKey?.externalSource;
     patch.externalId = externalKey?.externalId;
+  }
+  if (input.measurementProvenance === undefined) {
+    const inferredProvenance = inferredApiMeasurementProvenance(
+      input,
+      auth,
+      now,
+      existing,
+    );
+    if (inferredProvenance) {
+      patch.measurementProvenance = inferredProvenance;
+    }
   }
   return patch;
 }

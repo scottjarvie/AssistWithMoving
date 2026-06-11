@@ -43,6 +43,7 @@ export type InventoryItemPatch = {
     widthIn?: number;
     heightIn?: number;
   };
+  measurementProvenance?: InventoryItem["measurementProvenance"];
   dimensionsConfidence?: InventoryItem["dimensionsConfidence"];
   estimatedWeightLb?: number;
   estimatedWeightLowLb?: number;

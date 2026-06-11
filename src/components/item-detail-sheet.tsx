@@ -6,6 +6,7 @@ import {
   Boxes,
   Camera,
   ClipboardList,
+  Ruler,
   PackageCheck,
   Sparkles,
   UserRound,
@@ -113,6 +114,92 @@ function InfoBlock({
         {title}
       </div>
       <p className="mt-2 text-sm text-muted-foreground">{value}</p>
+    </div>
+  );
+}
+
+type MeasurementProvenance = NonNullable<
+  InventoryItem["measurementProvenance"]
+>;
+type MeasurementProvenanceEntry = NonNullable<
+  MeasurementProvenance["dimensions"]
+>;
+
+const provenanceSourceLabels: Record<
+  MeasurementProvenanceEntry["sourceType"],
+  string
+> = {
+  unknown: "Unknown source",
+  photoEstimate: "Photo estimate",
+  conversationEstimate: "Conversation estimate",
+  aiEstimate: "AI estimate",
+  manualEstimate: "Manual estimate",
+  manualMeasurement: "Manual measurement",
+  productResearch: "Product research",
+  manufacturerSpec: "Manufacturer spec",
+  moverEstimate: "Mover estimate",
+  moverConfirmed: "Mover confirmed",
+  import: "Imported",
+  api: "API supplied",
+};
+
+function ProvenanceCard({
+  title,
+  entry,
+  fallbackConfidence,
+}: {
+  title: string;
+  entry: MeasurementProvenanceEntry | undefined;
+  fallbackConfidence: string | undefined;
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">{title}</p>
+        <Badge
+          variant={
+            !entry ? "outline" : entry.needsVerification ? "destructive" : "secondary"
+          }
+        >
+          {!entry ? "no source" : entry.needsVerification ? "verify" : "recorded"}
+        </Badge>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs text-muted-foreground">
+        <div>
+          <dt className="font-medium text-foreground">Source</dt>
+          <dd>
+            {entry
+              ? provenanceSourceLabels[entry.sourceType]
+              : "No source recorded"}
+          </dd>
+        </div>
+        <div>
+          <dt className="font-medium text-foreground">Confidence</dt>
+          <dd>{entry?.confidence ?? fallbackConfidence ?? "none"}</dd>
+        </div>
+        <div>
+          <dt className="font-medium text-foreground">Recorded</dt>
+          <dd>
+            {entry
+              ? `${new Date(entry.recordedAt).toLocaleDateString()}${
+                  entry.recordedByLabel ? ` by ${entry.recordedByLabel}` : ""
+                }`
+              : "Not recorded"}
+          </dd>
+        </div>
+        {entry?.label ? (
+          <div>
+            <dt className="font-medium text-foreground">Label</dt>
+            <dd>{entry.label}</dd>
+          </div>
+        ) : null}
+        {entry?.notes ? (
+          <div>
+            <dt className="font-medium text-foreground">Notes</dt>
+            <dd>{entry.notes}</dd>
+          </div>
+        ) : null}
+      </dl>
     </div>
   );
 }
@@ -273,6 +360,27 @@ export function ItemDetailSheet({
   ) {
     setter(value);
     setDimensionsConfidence("manual");
+  }
+
+  function updateWeightEstimateInput(
+    value: string,
+    setter: (nextValue: string) => void,
+  ) {
+    setter(value);
+    setWeightConfidence("manual");
+  }
+
+  function updateActualWeightInput(value: string) {
+    setActualWeightLb(value);
+    setWeightConfidence("actual");
+  }
+
+  function updateVolumeInput(
+    value: string,
+    setter: (nextValue: string) => void,
+  ) {
+    setter(value);
+    setVolumeConfidence("manual");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -638,7 +746,10 @@ export function ItemDetailSheet({
                       inputMode="decimal"
                       value={estimatedWeightLb}
                       onChange={(event) =>
-                        setEstimatedWeightLb(event.target.value)
+                        updateWeightEstimateInput(
+                          event.target.value,
+                          setEstimatedWeightLb,
+                        )
                       }
                     />
                   </Field>
@@ -647,7 +758,10 @@ export function ItemDetailSheet({
                       inputMode="decimal"
                       value={estimatedWeightLowLb}
                       onChange={(event) =>
-                        setEstimatedWeightLowLb(event.target.value)
+                        updateWeightEstimateInput(
+                          event.target.value,
+                          setEstimatedWeightLowLb,
+                        )
                       }
                     />
                   </Field>
@@ -656,7 +770,10 @@ export function ItemDetailSheet({
                       inputMode="decimal"
                       value={estimatedWeightHighLb}
                       onChange={(event) =>
-                        setEstimatedWeightHighLb(event.target.value)
+                        updateWeightEstimateInput(
+                          event.target.value,
+                          setEstimatedWeightHighLb,
+                        )
                       }
                     />
                   </Field>
@@ -665,7 +782,7 @@ export function ItemDetailSheet({
                       inputMode="decimal"
                       value={actualWeightLb}
                       onChange={(event) =>
-                        setActualWeightLb(event.target.value)
+                        updateActualWeightInput(event.target.value)
                       }
                     />
                   </Field>
@@ -674,7 +791,10 @@ export function ItemDetailSheet({
                       inputMode="decimal"
                       value={estimatedVolumeCuFt}
                       onChange={(event) =>
-                        setEstimatedVolumeCuFt(event.target.value)
+                        updateVolumeInput(
+                          event.target.value,
+                          setEstimatedVolumeCuFt,
+                        )
                       }
                     />
                   </Field>
@@ -683,7 +803,10 @@ export function ItemDetailSheet({
                       inputMode="decimal"
                       value={estimatedPackedVolumeCuFt}
                       onChange={(event) =>
-                        setEstimatedPackedVolumeCuFt(event.target.value)
+                        updateVolumeInput(
+                          event.target.value,
+                          setEstimatedPackedVolumeCuFt,
+                        )
                       }
                     />
                   </Field>
@@ -741,6 +864,32 @@ export function ItemDetailSheet({
                       ))}
                     </select>
                   </Field>
+                </div>
+
+                <Separator />
+
+                <div className="rounded-md border border-border p-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Ruler className="size-4 text-primary" aria-hidden="true" />
+                    Measurement source
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <ProvenanceCard
+                      title="Dimensions"
+                      entry={item.measurementProvenance?.dimensions}
+                      fallbackConfidence={dimensionsConfidence}
+                    />
+                    <ProvenanceCard
+                      title="Weight"
+                      entry={item.measurementProvenance?.weight}
+                      fallbackConfidence={weightConfidence}
+                    />
+                    <ProvenanceCard
+                      title="Volume"
+                      entry={item.measurementProvenance?.volume}
+                      fallbackConfidence={volumeConfidence}
+                    />
+                  </div>
                 </div>
               </TabsContent>
 

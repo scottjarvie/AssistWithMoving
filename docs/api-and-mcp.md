@@ -240,6 +240,22 @@ curl -X POST https://movingmanifest.com/api/v1/moves/setup \
         "category": "Furniture",
         "dimensionsConfidence": "estimated",
         "weightConfidence": "estimated",
+        "measurementProvenance": {
+          "dimensions": {
+            "sourceType": "photoEstimate",
+            "confidence": "estimated",
+            "label": "Photo 1",
+            "notes": "Approximate from uploaded image; confirm with tape measure.",
+            "recordedByLabel": "Codex"
+          },
+          "weight": {
+            "sourceType": "aiEstimate",
+            "confidence": "estimated",
+            "label": "Photo 1 weight estimate",
+            "notes": "Range estimated from visible furniture type.",
+            "recordedByLabel": "Codex"
+          }
+        },
         "needsReview": true,
         "reviewFlags": ["measurements estimated from photo"]
       }
@@ -254,6 +270,13 @@ resources/zones by name, and batch upsert starter inventory. It requires
 `moves/read`, `moves/write`, `inventory/write`, and a household-scoped key
 because it may choose or create a move. Move-restricted keys should use the
 narrow per-move endpoints after setup.
+
+Items can carry structured `measurementProvenance` for dimensions, weight, and
+volume. Each entry records `sourceType`, `confidence`, `recordedAt`,
+`recordedByLabel`, optional notes, and whether the value still needs
+verification. API writes default missing `recordedAt` to the request time. This
+lets future agents distinguish photo estimates from manual measurements,
+manufacturer specs, mover confirmations, or product research.
 
 Get one move:
 
@@ -414,6 +437,11 @@ friendly alias for low-confidence photo or conversation estimates. Legacy rows
 with dimensions but no stored `dimensionsConfidence` are read as `medium` so
 Layout Studio and API clients treat them as estimated measurements rather than
 unknown measurements.
+
+For measurement provenance, `sourceType` supports `unknown`, `photoEstimate`,
+`conversationEstimate`, `aiEstimate`, `manualEstimate`, `manualMeasurement`,
+`productResearch`, `manufacturerSpec`, `moverEstimate`, `moverConfirmed`,
+`import`, and `api`.
 
 Planned items represent desired future purchases or furniture ideas for the
 destination home. They can be referenced by Layout Studio placements, but they

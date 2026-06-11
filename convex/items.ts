@@ -11,6 +11,7 @@ import {
   itemDispositionValidator,
   itemFragilityValidator,
   itemStatusValidator,
+  measurementProvenanceSourceValidator,
   normalizeItemName,
   normalizeOptionalText,
   normalizedSearchName,
@@ -37,6 +38,49 @@ const itemWriteArgs = {
   serialNumber: v.optional(v.string()),
   modelNumber: v.optional(v.string()),
   dimensionsIn: v.optional(dimensionsValidator),
+  measurementProvenance: v.optional(
+    v.object({
+      dimensions: v.optional(
+        v.object({
+          sourceType: measurementProvenanceSourceValidator,
+          confidence: estimateConfidenceValidator,
+          label: v.optional(v.string()),
+          notes: v.optional(v.string()),
+          recordedAt: v.number(),
+          recordedByUserId: v.optional(v.id("users")),
+          recordedByApiKeyId: v.optional(v.id("apiKeys")),
+          recordedByLabel: v.optional(v.string()),
+          needsVerification: v.boolean(),
+        }),
+      ),
+      weight: v.optional(
+        v.object({
+          sourceType: measurementProvenanceSourceValidator,
+          confidence: estimateConfidenceValidator,
+          label: v.optional(v.string()),
+          notes: v.optional(v.string()),
+          recordedAt: v.number(),
+          recordedByUserId: v.optional(v.id("users")),
+          recordedByApiKeyId: v.optional(v.id("apiKeys")),
+          recordedByLabel: v.optional(v.string()),
+          needsVerification: v.boolean(),
+        }),
+      ),
+      volume: v.optional(
+        v.object({
+          sourceType: measurementProvenanceSourceValidator,
+          confidence: estimateConfidenceValidator,
+          label: v.optional(v.string()),
+          notes: v.optional(v.string()),
+          recordedAt: v.number(),
+          recordedByUserId: v.optional(v.id("users")),
+          recordedByApiKeyId: v.optional(v.id("apiKeys")),
+          recordedByLabel: v.optional(v.string()),
+          needsVerification: v.boolean(),
+        }),
+      ),
+    }),
+  ),
   dimensionsConfidence: v.optional(estimateConfidenceValidator),
   estimatedWeightLb: v.optional(v.number()),
   estimatedWeightLowLb: v.optional(v.number()),
@@ -102,6 +146,121 @@ function normalizeStringList(values: string[] | undefined) {
         .map((value) => value.slice(0, 80)),
     ),
   );
+}
+
+function hasDimensions(dimensions: Doc<"items">["dimensionsIn"] | undefined) {
+  return Boolean(
+    dimensions &&
+      (dimensions.lengthIn !== undefined ||
+        dimensions.widthIn !== undefined ||
+        dimensions.heightIn !== undefined),
+  );
+}
+
+function verificationNeeded(confidence: Doc<"items">["weightConfidence"]) {
+  return confidence !== "manual" && confidence !== "actual";
+}
+
+function provenanceEntry({
+  sourceType,
+  confidence,
+  userId,
+  now,
+  label,
+  notes,
+}: {
+  sourceType: NonNullable<
+    NonNullable<Doc<"items">["measurementProvenance"]>["weight"]
+  >["sourceType"];
+  confidence: Doc<"items">["weightConfidence"];
+  userId: Id<"users">;
+  now: number;
+  label: string;
+  notes?: string;
+}) {
+  return {
+    sourceType,
+    confidence,
+    label,
+    notes,
+    recordedAt: now,
+    recordedByUserId: userId,
+    recordedByLabel: "Signed-in user",
+    needsVerification: verificationNeeded(confidence),
+  };
+}
+
+function inferredMeasurementProvenanceForUser({
+  args,
+  existing,
+  userId,
+  now,
+}: {
+  args: Partial<Doc<"items">>;
+  existing?: Doc<"items">;
+  userId: Id<"users">;
+  now: number;
+}): Doc<"items">["measurementProvenance"] | undefined {
+  const next: NonNullable<Doc<"items">["measurementProvenance"]> = {
+    ...(existing?.measurementProvenance ?? {}),
+  };
+  let changed = false;
+
+  if (args.dimensionsIn !== undefined && hasDimensions(args.dimensionsIn)) {
+    changed = true;
+    const confidence = args.dimensionsConfidence ?? "manual";
+    next.dimensions = provenanceEntry({
+      sourceType:
+        confidence === "actual" || confidence === "manual"
+          ? "manualMeasurement"
+          : "manualEstimate",
+      confidence,
+      userId,
+      now,
+      label: "Dimensions",
+      notes: "Recorded from item detail measurements.",
+    });
+  }
+
+  if (
+    args.actualWeightLb !== undefined ||
+    args.estimatedWeightLb !== undefined ||
+    args.estimatedWeightLowLb !== undefined ||
+    args.estimatedWeightHighLb !== undefined
+  ) {
+    changed = true;
+    const confidence =
+      args.actualWeightLb !== undefined ? "actual" : (args.weightConfidence ?? "manual");
+    next.weight = provenanceEntry({
+      sourceType: confidence === "actual" ? "manualMeasurement" : "manualEstimate",
+      confidence,
+      userId,
+      now,
+      label: "Weight",
+      notes:
+        args.actualWeightLb !== undefined
+          ? "Recorded from item detail actual weight."
+          : "Recorded from item detail estimated weight.",
+    });
+  }
+
+  if (
+    args.estimatedVolumeCuFt !== undefined ||
+    args.estimatedPackedVolumeCuFt !== undefined
+  ) {
+    changed = true;
+    const confidence = args.volumeConfidence ?? "manual";
+    next.volume = provenanceEntry({
+      sourceType: "manualEstimate",
+      confidence,
+      userId,
+      now,
+      label: "Volume",
+      notes: "Recorded from item detail volume estimate.",
+    });
+  }
+
+  return changed ? next : undefined;
 }
 
 function redactItemForVisibility(
@@ -410,6 +569,13 @@ export const create = mutation({
       serialNumber: normalizeOptionalText(args.serialNumber),
       modelNumber: normalizeOptionalText(args.modelNumber),
       dimensionsIn: args.dimensionsIn,
+      measurementProvenance:
+        args.measurementProvenance ??
+        inferredMeasurementProvenanceForUser({
+          args,
+          userId: actor.userId,
+          now,
+        }),
       dimensionsConfidence: args.dimensionsConfidence ?? "none",
       estimatedWeightLb: args.estimatedWeightLb,
       estimatedWeightLowLb: args.estimatedWeightLowLb,
@@ -493,9 +659,10 @@ export const update = mutation({
       throw new Error("Item not found.");
     }
 
+    const now = Date.now();
     const patch: Partial<Doc<"items">> = {
       updatedByUserId: actor.userId,
-      updatedAt: Date.now(),
+      updatedAt: now,
     };
 
     if (args.name !== undefined) {
@@ -548,6 +715,9 @@ export const update = mutation({
     }
     if (args.dimensionsIn !== undefined) {
       patch.dimensionsIn = args.dimensionsIn;
+    }
+    if (args.measurementProvenance !== undefined) {
+      patch.measurementProvenance = args.measurementProvenance;
     }
     if (args.dimensionsConfidence !== undefined) {
       patch.dimensionsConfidence = args.dimensionsConfidence;
@@ -612,6 +782,17 @@ export const update = mutation({
     }
     if (args.createdVia !== undefined) {
       patch.createdVia = args.createdVia;
+    }
+    if (args.measurementProvenance === undefined) {
+      const inferredProvenance = inferredMeasurementProvenanceForUser({
+        args,
+        existing: item,
+        userId: actor.userId,
+        now,
+      });
+      if (inferredProvenance) {
+        patch.measurementProvenance = inferredProvenance;
+      }
     }
 
     await ctx.db.patch(args.itemId, patch);
