@@ -113,6 +113,9 @@ describe("MoveDashboard", () => {
     expect(
       screen.getByRole("tab", { name: "AI connection" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("Open the move you are working on before setup tasks."),
+    ).toBeInTheDocument();
     const activeMoves = screen.getByRole("list", { name: "Active moves" });
     const activeMove = within(activeMoves).getByText("Summer move");
     const summary = screen.getByText("Workspace summary");
@@ -161,6 +164,9 @@ describe("MoveDashboard", () => {
 
     await user.click(screen.getByRole("tab", { name: "Create move" }));
 
+    expect(
+      screen.getByText("Start a new move without hiding your active move list."),
+    ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Basics" })).toHaveAttribute(
       "data-state",
       "active",
@@ -210,6 +216,9 @@ describe("MoveDashboard", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText("Start a new move without hiding your active move list."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Documentation profiles")).toBeInTheDocument();
     expect(screen.queryByLabelText("Move title")).not.toBeInTheDocument();
     expect(screen.queryByText("Summer move")).not.toBeInTheDocument();
@@ -230,6 +239,11 @@ describe("MoveDashboard", () => {
         "active",
       ),
     );
+    expect(
+      screen.getByText(
+        "Manage the household permission boundary for these moves.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Selected household")).toBeInTheDocument();
     expect(screen.getByLabelText("Household name")).toBeInTheDocument();
     expect(screen.queryByText("Summer move")).not.toBeInTheDocument();
@@ -246,6 +260,9 @@ describe("MoveDashboard", () => {
         "active",
       ),
     );
+    expect(
+      screen.getByText("Create assistant access only when an AI needs to help."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Do you need an AI connection?")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Set up AI connection" }),

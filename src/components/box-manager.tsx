@@ -66,14 +66,46 @@ type BoxCardTask = "contents" | "details" | "photos" | "load";
 type BoxTask = "boxes" | "add" | BoxCardTask | "labels";
 type BoxStatusFilter = "all" | Doc<"boxes">["status"];
 
-const boxTaskTabs: { value: BoxTask; label: string }[] = [
-  { value: "boxes", label: "Boxes" },
-  { value: "add", label: "Add box" },
-  { value: "contents", label: "Contents" },
-  { value: "details", label: "Details" },
-  { value: "photos", label: "Photos" },
-  { value: "load", label: "Load" },
-  { value: "labels", label: "Labels" },
+const boxTaskTabs: { value: BoxTask; label: string; description: string }[] = [
+  {
+    value: "boxes",
+    label: "Boxes",
+    description:
+      "Scan existing boxes before opening contents, details, photos, or labels.",
+  },
+  {
+    value: "add",
+    label: "Add box",
+    description:
+      "Create a new code, label, and room target without crowding the box list.",
+  },
+  {
+    value: "contents",
+    label: "Contents",
+    description: "Choose one box, then manage the items packed inside it.",
+  },
+  {
+    value: "details",
+    label: "Details",
+    description:
+      "Choose one box, then edit label, room, weight, volume, and notes.",
+  },
+  {
+    value: "photos",
+    label: "Photos",
+    description: "Choose one box, then add or review box evidence photos.",
+  },
+  {
+    value: "load",
+    label: "Load",
+    description:
+      "Choose one box, then assign it to a resource, zone, or exception flow.",
+  },
+  {
+    value: "labels",
+    label: "Labels",
+    description: "Print box labels separately from editing box records.",
+  },
 ];
 
 const boxTaskHashes = {
@@ -1132,7 +1164,7 @@ export function BoxManager({
           onValueChange={handleActiveTaskChange}
           className="gap-4"
         >
-          <MoveWorkspaceTabList tabs={boxTaskTabs} />
+          <MoveWorkspaceTabList tabs={boxTaskTabs} activeValue={activeTask} />
 
           <TabsContent value="boxes" id="boxes" className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

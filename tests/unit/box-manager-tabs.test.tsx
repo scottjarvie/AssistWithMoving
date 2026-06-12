@@ -156,6 +156,11 @@ describe("BoxManager", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Scan existing boxes before opening contents, details, photos, or labels.",
+      ),
+    ).toBeInTheDocument();
     const boxList = screen.getByRole("list", { name: "Box records" });
     expect(within(boxList).getByText("B-001")).toBeInTheDocument();
     expect(within(boxList).getByText("B-002")).toBeInTheDocument();
@@ -177,6 +182,11 @@ describe("BoxManager", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Choose one box, then edit label, room, weight, volume, and notes.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
     expect(screen.getByLabelText("Box label")).toBeInTheDocument();
     expect(screen.queryByText("B-002")).not.toBeInTheDocument();
@@ -190,6 +200,11 @@ describe("BoxManager", () => {
     expect(screen.getByText("B-002")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Add box" }));
+    expect(
+      screen.getByText(
+        "Create a new code, label, and room target without crowding the box list.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("form", { name: "Create box" }),
     ).toBeInTheDocument();

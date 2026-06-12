@@ -137,6 +137,37 @@ const moveDayTabHashes = {
   "#move-day-offline": "offline",
 } as const;
 
+const moveDayTabs: Array<{
+  value: MoveDayTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "checklist",
+    label: "Checklist",
+    description:
+      "Scan, filter, and update ready boxes during the active crew workflow.",
+  },
+  {
+    value: "exceptions",
+    label: "Exceptions",
+    description:
+      "Focus only on missing, damaged, warning, and hard-blocked boxes.",
+  },
+  {
+    value: "progress",
+    label: "Progress",
+    description:
+      "Check loaded, delivered, and exception totals without the scan list.",
+  },
+  {
+    value: "offline",
+    label: "Offline",
+    description:
+      "Review safe mode, cached checklist state, and reconnect guidance.",
+  },
+];
+
 export function MoveDayView({
   householdId,
   moveId,
@@ -763,14 +794,7 @@ export function MoveDayView({
           onValueChange={setMoveDayTask}
           className="gap-4"
         >
-          <MoveWorkspaceTabList
-            tabs={[
-              { value: "checklist", label: "Checklist" },
-              { value: "exceptions", label: "Exceptions" },
-              { value: "progress", label: "Progress" },
-              { value: "offline", label: "Offline" },
-            ]}
-          />
+          <MoveWorkspaceTabList tabs={moveDayTabs} activeValue={moveDayTask} />
 
           <TabsContent value="checklist" className="space-y-4">
             {renderLookupPanel({ showFilters: true })}

@@ -18,6 +18,33 @@ const aiReviewTabHashes = {
   "#ai-text-intake": "text",
 } as const;
 
+const aiReviewTabs = [
+  {
+    value: "queue",
+    label: "Queue",
+    description:
+      "Approve or reject pending AI suggestions before they change move data.",
+  },
+  {
+    value: "text",
+    label: "Text intake",
+    description:
+      "Turn short notes into structured suggestions without reviewing photos.",
+  },
+  {
+    value: "photos",
+    label: "Photo intake",
+    description:
+      "Review photo-based suggestions after images are attached to the move.",
+  },
+  {
+    value: "jobs",
+    label: "Jobs",
+    description:
+      "Check background AI work and retry stuck processing separately.",
+  },
+];
+
 export function AiReviewWorkspacePage() {
   const { householdId, moveId, featureFlags } = useMoveWorkspace();
   const aiPhotoIntakeEnabled = flagEnabled(featureFlags, "aiPhotoIntake", true);
@@ -30,14 +57,7 @@ export function AiReviewWorkspacePage() {
         description="AI suggestions stay suggestions until you approve them here — text intake, photo intake, and the review queue."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "queue", label: "Queue" },
-            { value: "text", label: "Text intake" },
-            { value: "photos", label: "Photo intake" },
-            { value: "jobs", label: "Jobs" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={aiReviewTabs} activeValue={activeTab} />
 
         <TabsContent value="queue">
           <AiReviewQueue householdId={householdId} moveId={moveId} />

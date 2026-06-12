@@ -144,6 +144,11 @@ describe("move workspace task tabs", () => {
     expect(screen.getByRole("tab", { name: "Readiness" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "People" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Defaults" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Answer unresolved move questions before they affect packing, estimates, or packets.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Decision questions surface")).toBeInTheDocument();
     expect(
       screen.queryByText("Readiness dashboard surface")
@@ -196,6 +201,11 @@ describe("move workspace task tabs", () => {
       "active"
     );
     expect(screen.getByRole("tab", { name: "Queue" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Add rough notes, photos, and room observations without opening the review queue.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Capture form surface")).toBeInTheDocument();
     expect(screen.queryByText("Ingestion queue surface")).not.toBeInTheDocument();
   });
@@ -229,6 +239,11 @@ describe("move workspace task tabs", () => {
     expect(screen.getByRole("tab", { name: "Add photos" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Gaps" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Coverage" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Browse attached photos and adjust evidence metadata without uploading more.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Photo review surface")).toBeInTheDocument();
     expect(screen.queryByText("Photo upload surface")).not.toBeInTheDocument();
     expect(screen.queryByText("Photo gaps surface")).not.toBeInTheDocument();
@@ -301,6 +316,11 @@ describe("move workspace task tabs", () => {
     );
     expect(screen.getByRole("tab", { name: "Resources" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "AI suggestions" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Assign boxes and zones on the load board before editing resources.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Load board surface")).toBeInTheDocument();
     expect(
       screen.queryByText("Transport resources surface")
@@ -372,6 +392,11 @@ describe("move workspace task tabs", () => {
       "active"
     );
     expect(screen.getByRole("tab", { name: "Claims" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Configure recipient packets, exports, share links, and privacy-scoped views.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Packet builder surface")).toBeInTheDocument();
     expect(screen.queryByText("Claims center surface")).not.toBeInTheDocument();
   });

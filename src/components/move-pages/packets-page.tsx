@@ -23,6 +23,21 @@ const packetTabHashes = {
   "#packet-views": "builder",
 } as const;
 
+const packetTabs = [
+  {
+    value: "builder",
+    label: "Builder",
+    description:
+      "Configure recipient packets, exports, share links, and privacy-scoped views.",
+  },
+  {
+    value: "claims",
+    label: "Claims",
+    description:
+      "Work claim items, timelines, and evidence without crowding packet setup.",
+  },
+];
+
 export function PacketsWorkspacePage() {
   const { householdId, moveId, selectedMove, featureFlags } =
     useMoveWorkspace();
@@ -40,12 +55,7 @@ export function PacketsWorkspacePage() {
         description="Scoped documentation for each recipient — movers, employers, insurers, and your own full record — with privacy defaults applied."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "builder", label: "Builder" },
-            { value: "claims", label: "Claims" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={packetTabs} activeValue={activeTab} />
 
         <TabsContent value="builder">
           {documentationPacketsEnabled ? (

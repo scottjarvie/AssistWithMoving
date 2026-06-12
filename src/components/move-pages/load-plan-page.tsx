@@ -18,6 +18,27 @@ const loadPlanTabHashes = {
   "#transport-resources": "resources",
 } as const;
 
+const loadPlanTabs = [
+  {
+    value: "board",
+    label: "Board",
+    description:
+      "Assign boxes and zones on the load board before editing resources.",
+  },
+  {
+    value: "resources",
+    label: "Resources",
+    description:
+      "Manage trucks, trailers, movers, helpers, zones, and capacity assumptions.",
+  },
+  {
+    value: "ai",
+    label: "AI suggestions",
+    description:
+      "Review suggested load changes separately from the working board.",
+  },
+];
+
 export function LoadPlanWorkspacePage() {
   const { householdId, moveId, selectedMove } = useMoveWorkspace();
   const [activeTab, setActiveTab] = useHashTab("board", loadPlanTabHashes);
@@ -29,13 +50,7 @@ export function LoadPlanWorkspacePage() {
         description="Trucks, trailers, movers, and helpers — what goes in each one, zone by zone, with capacity rollups."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "board", label: "Board" },
-            { value: "resources", label: "Resources" },
-            { value: "ai", label: "AI suggestions" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={loadPlanTabs} activeValue={activeTab} />
 
         <TabsContent value="board">
           <LoadPlannerBoard householdId={householdId} moveId={moveId} />

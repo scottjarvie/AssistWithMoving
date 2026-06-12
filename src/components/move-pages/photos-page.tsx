@@ -20,6 +20,33 @@ const photoTabHashes = {
   "#photos": "review",
 } as const;
 
+const photoTabs = [
+  {
+    value: "review",
+    label: "Review",
+    description:
+      "Browse attached photos and adjust evidence metadata without uploading more.",
+  },
+  {
+    value: "upload",
+    label: "Add photos",
+    description:
+      "Add room-level photos quickly, then let review and gaps stay separate.",
+  },
+  {
+    value: "gaps",
+    label: "Gaps",
+    description:
+      "Find high-risk items that still need photo evidence.",
+  },
+  {
+    value: "coverage",
+    label: "Coverage",
+    description:
+      "Check photo coverage by room, item, and documentation need.",
+  },
+];
+
 export function PhotosWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
   const [activeTab, setActiveTab] = useHashTab("review", photoTabHashes);
@@ -31,14 +58,7 @@ export function PhotosWorkspacePage() {
         description="Photo evidence for items, boxes, and rooms — originals stay private, and claim-readiness is scored as you go."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "review", label: "Review" },
-            { value: "upload", label: "Add photos" },
-            { value: "gaps", label: "Gaps" },
-            { value: "coverage", label: "Coverage" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={photoTabs} activeValue={activeTab} />
 
         <TabsContent value="review">
           <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />

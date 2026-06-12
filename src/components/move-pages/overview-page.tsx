@@ -17,6 +17,33 @@ const overviewTabHashes = {
   "#planning-defaults": "defaults",
 } as const;
 
+const overviewTabs = [
+  {
+    value: "decisions",
+    label: "Decisions",
+    description:
+      "Answer unresolved move questions before they affect packing, estimates, or packets.",
+  },
+  {
+    value: "readiness",
+    label: "Readiness",
+    description:
+      "Review packing debt and move health when you need the big picture.",
+  },
+  {
+    value: "people",
+    label: "People",
+    description:
+      "Manage contacts, roles, and responsibility outside the decision list.",
+  },
+  {
+    value: "defaults",
+    label: "Defaults",
+    description:
+      "Set reusable planning rules that steer inventory and AI suggestions.",
+  },
+];
+
 export function MoveOverviewPage() {
   const { householdId, moveId, selectedMove } = useMoveWorkspace();
   const [activeTab, setActiveTab] = useHashTab("decisions", overviewTabHashes);
@@ -28,14 +55,7 @@ export function MoveOverviewPage() {
         description="What still needs a decision, who is involved, and the defaults that steer packing, packets, and AI suggestions."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "decisions", label: "Decisions" },
-            { value: "readiness", label: "Readiness" },
-            { value: "people", label: "People" },
-            { value: "defaults", label: "Defaults" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={overviewTabs} activeValue={activeTab} />
 
         <TabsContent value="decisions">
           <MoveQuestionsPanel householdId={householdId} moveId={moveId} />

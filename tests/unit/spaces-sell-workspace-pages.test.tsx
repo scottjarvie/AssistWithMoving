@@ -73,6 +73,9 @@ describe("SpacesWorkspacePage", () => {
       "active"
     );
     expect(screen.getByRole("tab", { name: "Add space" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Browse rooms and zones before adding setup records.")
+    ).toBeInTheDocument();
     expect(screen.getByText("Kitchen")).toBeInTheDocument();
     expect(screen.getByText("Origin room: 1")).toBeInTheDocument();
     expect(screen.queryByLabelText("Space name")).not.toBeInTheDocument();
@@ -167,6 +170,11 @@ describe("SellWorkspacePage", () => {
     expect(screen.getByText("Oak bookcase")).toBeInTheDocument();
     expect(screen.getByText("Vintage lamp")).toBeInTheDocument();
     expect(
+      screen.getByText(
+        "Scan sell items and choose whether pricing, copy, or status needs work."
+      )
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("button", { name: "Price Oak bookcase" })
     ).toBeInTheDocument();
 
@@ -187,6 +195,11 @@ describe("SellWorkspacePage", () => {
     expect(screen.queryByRole("button", { name: "Mark listed" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Pricing" }));
+    expect(
+      screen.getByText(
+        "Price one sale item at a time instead of stacking every listing form."
+      )
+    ).toBeInTheDocument();
     expect(
       screen.getByLabelText("Oak bookcase low suggested price")
     ).toBeInTheDocument();

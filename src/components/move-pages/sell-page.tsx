@@ -68,11 +68,35 @@ const sellFilters: Array<{
   },
 ];
 
-const sellRowTasks: Array<{ value: SellRowTask; label: string }> = [
-  { value: "overview", label: "Overview" },
-  { value: "pricing", label: "Pricing" },
-  { value: "listing", label: "Listing copy" },
-  { value: "status", label: "Status" },
+const sellRowTasks: Array<{
+  value: SellRowTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "overview",
+    label: "Overview",
+    description:
+      "Scan sell items and choose whether pricing, copy, or status needs work.",
+  },
+  {
+    value: "pricing",
+    label: "Pricing",
+    description:
+      "Price one sale item at a time instead of stacking every listing form.",
+  },
+  {
+    value: "listing",
+    label: "Listing copy",
+    description:
+      "Edit marketplace copy for the focused item after the overview is clear.",
+  },
+  {
+    value: "status",
+    label: "Status",
+    description:
+      "Move focused sale items from draft to listed or buyer follow-up.",
+  },
 ];
 
 const sellTaskHashes = {
@@ -368,7 +392,10 @@ export function SellWorkspacePage() {
                   ) : null}
                 </div>
               </div>
-              <MoveWorkspaceTabList tabs={sellRowTasks} />
+              <MoveWorkspaceTabList
+                tabs={sellRowTasks}
+                activeValue={activeTask}
+              />
               <TabsContent value={activeTask} className="space-y-2">
                 {activeRows.length ? (
                   activeTask === "overview" ? (

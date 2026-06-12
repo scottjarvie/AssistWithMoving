@@ -112,6 +112,11 @@ describe("MoveDayView task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Scan, filter, and update ready boxes during the active crew workflow.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Move Day box lookup")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Ready: 1 boxes" }),
@@ -166,11 +171,21 @@ describe("MoveDayView task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Focus only on missing, damaged, warning, and hard-blocked boxes.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("BOX-DAMAGE")).toBeInTheDocument();
     expect(screen.getByText("needs review")).toBeInTheDocument();
     expect(screen.queryByText("BOX-READY")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Progress" }));
+    expect(
+      screen.getByText(
+        "Check loaded, delivered, and exception totals without the scan list.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Status progress")).toBeInTheDocument();
     expect(screen.getByText("2 boxes")).toBeInTheDocument();
     expect(

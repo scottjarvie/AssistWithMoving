@@ -71,6 +71,33 @@ const dashboardTaskHashes = {
   "#household-setup": "household",
 } as const;
 
+const dashboardTaskTabs: Array<{
+  value: DashboardTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "moves",
+    label: "Moves",
+    description: "Open the move you are working on before setup tasks.",
+  },
+  {
+    value: "create",
+    label: "Create move",
+    description: "Start a new move without hiding your active move list.",
+  },
+  {
+    value: "household",
+    label: "Household",
+    description: "Manage the household permission boundary for these moves.",
+  },
+  {
+    value: "ai",
+    label: "AI connection",
+    description: "Create assistant access only when an AI needs to help.",
+  },
+];
+
 const createMoveTasks: Array<{ value: CreateMoveTask; label: string }> = [
   { value: "basics", label: "Basics" },
   { value: "pcs", label: "PCS details" },
@@ -240,14 +267,7 @@ export function MoveDashboard() {
         onValueChange={setActiveDashboardTask}
         className="gap-4"
       >
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "moves", label: "Moves" },
-            { value: "create", label: "Create move" },
-            { value: "household", label: "Household" },
-            { value: "ai", label: "AI connection" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={dashboardTaskTabs} activeValue={activeDashboardTask} />
 
         <TabsContent value="moves" className="space-y-5">
           <section

@@ -53,6 +53,21 @@ const spaceTabHashes = {
   "#spaces": "spaces",
 } as const;
 
+const spaceTabs = [
+  {
+    value: "spaces",
+    label: "Spaces",
+    description:
+      "Browse rooms and zones before adding setup records.",
+  },
+  {
+    value: "add",
+    label: "Add space",
+    description:
+      "Create one room, storage area, transport resource, or zone at a time.",
+  },
+];
+
 export function SpacesWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
   const spaces = useQuery(
@@ -120,12 +135,7 @@ export function SpacesWorkspacePage() {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "spaces", label: "Spaces" },
-            { value: "add", label: "Add space" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={spaceTabs} activeValue={activeTab} />
 
         <TabsContent value="spaces">
           <Card id="spaces">

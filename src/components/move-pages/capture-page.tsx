@@ -14,6 +14,21 @@ const captureTabHashes = {
   "#ingestion-queue": "queue",
 } as const;
 
+const captureTabs = [
+  {
+    value: "capture",
+    label: "Capture",
+    description:
+      "Add rough notes, photos, and room observations without opening the review queue.",
+  },
+  {
+    value: "queue",
+    label: "Queue",
+    description:
+      "Review captured inputs after they are saved or ready for cleanup.",
+  },
+];
+
 export function CaptureWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
   const [activeTab, setActiveTab] = useHashTab("capture", captureTabHashes);
@@ -25,12 +40,7 @@ export function CaptureWorkspacePage() {
         description="Walk the house with your phone: photos, voice notes, and directions go into a queue your own AI agent works through later."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList
-          tabs={[
-            { value: "capture", label: "Capture" },
-            { value: "queue", label: "Queue" },
-          ]}
-        />
+        <MoveWorkspaceTabList tabs={captureTabs} activeValue={activeTab} />
 
         <TabsContent value="capture">
           <IngestionCaptureForm householdId={householdId} moveId={moveId} />
