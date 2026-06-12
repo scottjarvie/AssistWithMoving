@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   defaultDocumentationProfilesForMoveType,
@@ -56,6 +56,13 @@ import { moveWorkspacePath } from "@/lib/move-links";
 
 const DEFAULT_MOVE_TYPE: MoveType = "local";
 type DashboardMove = MoveWorkspaceValue["activeMoves"][number];
+type CreateMoveTask = "basics" | "pcs" | "packets";
+
+const createMoveTasks: Array<{ value: CreateMoveTask; label: string }> = [
+  { value: "basics", label: "Basics" },
+  { value: "pcs", label: "PCS details" },
+  { value: "packets", label: "Packets" },
+];
 
 export function MoveDashboard() {
   const router = useRouter();
@@ -83,7 +90,7 @@ export function MoveDashboard() {
   >(defaultDocumentationProfilesForMoveType(DEFAULT_MOVE_TYPE));
   const [pcsBranch, setPcsBranch] = useState<PcsBranch | "">("");
   const [pcsShipmentType, setPcsShipmentType] = useState<PcsShipmentType | "">(
-    "mixed"
+    "mixed",
   );
   const [pcsDependentStatus, setPcsDependentStatus] =
     useState<PcsDependentStatus>("unknown");
@@ -153,15 +160,15 @@ export function MoveDashboard() {
         pcsBranch: moveType === "pcs" && pcsBranch ? pcsBranch : undefined,
         pcsShipmentType:
           moveType === "pcs" && pcsShipmentType ? pcsShipmentType : undefined,
-        pcsDependentStatus:
-          moveType === "pcs" ? pcsDependentStatus : undefined,
+        pcsDependentStatus: moveType === "pcs" ? pcsDependentStatus : undefined,
         pcsRankPayGrade:
           moveType === "pcs" ? pcsRankPayGrade || undefined : undefined,
         pcsOrdersNumber:
           moveType === "pcs" ? pcsOrdersNumber || undefined : undefined,
         pcsAllowanceNotes:
           moveType === "pcs" ? pcsAllowanceNotes || undefined : undefined,
-        proGearNotes: moveType === "pcs" ? proGearNotes || undefined : undefined,
+        proGearNotes:
+          moveType === "pcs" ? proGearNotes || undefined : undefined,
         pcsTransportationOfficeNotes:
           moveType === "pcs"
             ? pcsTransportationOfficeNotes || undefined
@@ -317,7 +324,10 @@ export function MoveDashboard() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <ClipboardList className="size-4 text-primary" aria-hidden="true" />
+                <ClipboardList
+                  className="size-4 text-primary"
+                  aria-hidden="true"
+                />
                 New move
               </CardTitle>
               <CardDescription>
@@ -335,213 +345,252 @@ export function MoveDashboard() {
                 </p>
               ) : null}
               <form className="space-y-3" onSubmit={handleCreateMove}>
-                <Input
-                  value={moveTitle}
-                  onChange={(event) => setMoveTitle(event.target.value)}
-                  placeholder="Move title"
-                  aria-label="Move title"
-                  disabled={!householdId}
-                />
-                <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                  value={moveType}
-                  aria-label="Move template"
-                  onChange={(event) => {
-                    const nextMoveType = event.target.value as MoveType;
-                    setMoveType(nextMoveType);
-                    setDocumentationProfileTypes(
-                      defaultDocumentationProfilesForMoveType(nextMoveType)
-                    );
-                  }}
-                  disabled={!householdId}
-                >
-                  {moveTypeOptions.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  The template sets wording, suggested packets, and defaults.
-                  Military options only appear with the Military PCS template.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    value={origin}
-                    onChange={(event) => setOrigin(event.target.value)}
-                    placeholder="Origin"
-                    aria-label="Move origin"
-                    disabled={!householdId}
-                  />
-                  <Input
-                    value={destination}
-                    onChange={(event) => setDestination(event.target.value)}
-                    placeholder="Destination"
-                    aria-label="Move destination"
-                    disabled={!householdId}
-                  />
-                </div>
-                {moveType === "pcs" ? (
-                  <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
-                    <div>
-                      <p className="text-sm font-medium">PCS details</p>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        Track what you know, then verify allowances,
-                        restrictions, and required forms with the current
-                        transportation office or official guidance.
-                      </p>
-                    </div>
+                <Tabs defaultValue="basics" className="gap-4">
+                  <div className="overflow-x-auto pb-1">
+                    <TabsList
+                      className="min-w-max"
+                      aria-label="Create move setup sections"
+                    >
+                      {createMoveTasks.map((task) => (
+                        <TabsTrigger key={task.value} value={task.value}>
+                          {task.label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
+
+                  <TabsContent value="basics" className="space-y-3">
+                    <Input
+                      value={moveTitle}
+                      onChange={(event) => setMoveTitle(event.target.value)}
+                      placeholder="Move title"
+                      aria-label="Move title"
+                      disabled={!householdId}
+                    />
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                      value={moveType}
+                      aria-label="Move template"
+                      onChange={(event) => {
+                        const nextMoveType = event.target.value as MoveType;
+                        setMoveType(nextMoveType);
+                        setDocumentationProfileTypes(
+                          defaultDocumentationProfilesForMoveType(nextMoveType),
+                        );
+                      }}
+                      disabled={!householdId}
+                    >
+                      {moveTypeOptions.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      The template sets wording, suggested packets, and
+                      defaults. Military options only appear with the Military
+                      PCS template.
+                    </p>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                        value={pcsBranch}
-                        aria-label="Military branch"
-                        onChange={(event) =>
-                          setPcsBranch(event.target.value as PcsBranch | "")
-                        }
-                        disabled={!householdId}
-                      >
-                        <option value="">Branch</option>
-                        {pcsBranchOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                        value={pcsShipmentType}
-                        aria-label="PCS shipment type"
-                        onChange={(event) =>
-                          setPcsShipmentType(
-                            event.target.value as PcsShipmentType
-                          )
-                        }
-                        disabled={!householdId}
-                      >
-                        {pcsShipmentTypeOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
                       <Input
-                        value={pcsRankPayGrade}
-                        onChange={(event) =>
-                          setPcsRankPayGrade(event.target.value)
-                        }
-                        placeholder="Rank / pay grade"
-                        aria-label="Rank or pay grade"
-                        disabled={!householdId}
-                      />
-                      <select
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                        value={pcsDependentStatus}
-                        aria-label="PCS dependent status"
-                        onChange={(event) =>
-                          setPcsDependentStatus(
-                            event.target.value as PcsDependentStatus
-                          )
-                        }
-                        disabled={!householdId}
-                      >
-                        {pcsDependentStatusOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                      <Input
-                        value={pcsOrdersNumber}
-                        onChange={(event) =>
-                          setPcsOrdersNumber(event.target.value)
-                        }
-                        placeholder="Orders number"
-                        aria-label="Orders number"
+                        value={origin}
+                        onChange={(event) => setOrigin(event.target.value)}
+                        placeholder="Origin"
+                        aria-label="Move origin"
                         disabled={!householdId}
                       />
                       <Input
-                        inputMode="numeric"
-                        value={moveLevelWeightAllowanceLb}
-                        onChange={(event) =>
-                          setMoveLevelWeightAllowanceLb(event.target.value)
-                        }
-                        placeholder="Official allowance lb"
-                        aria-label="Official weight allowance in pounds"
+                        value={destination}
+                        onChange={(event) => setDestination(event.target.value)}
+                        placeholder="Destination"
+                        aria-label="Move destination"
                         disabled={!householdId}
                       />
                     </div>
-                    <Textarea
-                      value={pcsAllowanceNotes}
-                      onChange={(event) =>
-                        setPcsAllowanceNotes(event.target.value)
-                      }
-                      placeholder="Allowance notes"
-                      aria-label="Allowance notes"
-                      disabled={!householdId}
-                    />
-                    <Textarea
-                      value={proGearNotes}
-                      onChange={(event) => setProGearNotes(event.target.value)}
-                      placeholder="Pro gear / PBP&E notes"
-                      aria-label="Pro gear notes"
-                      disabled={!householdId}
-                    />
-                    <Textarea
-                      value={pcsTransportationOfficeNotes}
-                      onChange={(event) =>
-                        setPcsTransportationOfficeNotes(event.target.value)
-                      }
-                      placeholder="Transportation office notes"
-                      aria-label="Transportation office notes"
-                      disabled={!householdId}
-                    />
-                    <Textarea
-                      value={pcsRestrictedItemsNotes}
-                      onChange={(event) =>
-                        setPcsRestrictedItemsNotes(event.target.value)
-                      }
-                      placeholder="Restricted item notes"
-                      aria-label="Restricted item notes"
-                      disabled={!householdId}
-                    />
-                  </div>
-                ) : null}
-                <div className="space-y-2 rounded-md border border-border p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium">Documentation profiles</p>
-                    <Badge variant="secondary">
-                      {selectedPacketCount} selected
-                    </Badge>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {documentationProfileOptions
-                      .filter(
-                        ([value]) => value !== "pcsMove" || moveType === "pcs"
-                      )
-                      .map(([value, label]) => (
-                      <label
-                        key={value}
-                        className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
-                      >
-                        <input
-                          type="checkbox"
-                          className="size-3.5 accent-primary"
-                          checked={documentationProfileTypes.includes(value)}
+                  </TabsContent>
+
+                  <TabsContent value="pcs">
+                    {moveType === "pcs" ? (
+                      <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+                        <div>
+                          <p className="text-sm font-medium">PCS details</p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            Track what you know, then verify allowances,
+                            restrictions, and required forms with the current
+                            transportation office or official guidance.
+                          </p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            value={pcsBranch}
+                            aria-label="Military branch"
+                            onChange={(event) =>
+                              setPcsBranch(event.target.value as PcsBranch | "")
+                            }
+                            disabled={!householdId}
+                          >
+                            <option value="">Branch</option>
+                            {pcsBranchOptions.map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            value={pcsShipmentType}
+                            aria-label="PCS shipment type"
+                            onChange={(event) =>
+                              setPcsShipmentType(
+                                event.target.value as PcsShipmentType,
+                              )
+                            }
+                            disabled={!householdId}
+                          >
+                            {pcsShipmentTypeOptions.map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <Input
+                            value={pcsRankPayGrade}
+                            onChange={(event) =>
+                              setPcsRankPayGrade(event.target.value)
+                            }
+                            placeholder="Rank / pay grade"
+                            aria-label="Rank or pay grade"
+                            disabled={!householdId}
+                          />
+                          <select
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            value={pcsDependentStatus}
+                            aria-label="PCS dependent status"
+                            onChange={(event) =>
+                              setPcsDependentStatus(
+                                event.target.value as PcsDependentStatus,
+                              )
+                            }
+                            disabled={!householdId}
+                          >
+                            {pcsDependentStatusOptions.map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <Input
+                            value={pcsOrdersNumber}
+                            onChange={(event) =>
+                              setPcsOrdersNumber(event.target.value)
+                            }
+                            placeholder="Orders number"
+                            aria-label="Orders number"
+                            disabled={!householdId}
+                          />
+                          <Input
+                            inputMode="numeric"
+                            value={moveLevelWeightAllowanceLb}
+                            onChange={(event) =>
+                              setMoveLevelWeightAllowanceLb(event.target.value)
+                            }
+                            placeholder="Official allowance lb"
+                            aria-label="Official weight allowance in pounds"
+                            disabled={!householdId}
+                          />
+                        </div>
+                        <Textarea
+                          value={pcsAllowanceNotes}
+                          onChange={(event) =>
+                            setPcsAllowanceNotes(event.target.value)
+                          }
+                          placeholder="Allowance notes"
+                          aria-label="Allowance notes"
                           disabled={!householdId}
-                          onChange={(event) => {
-                            setDocumentationProfileTypes((current) =>
-                              event.target.checked
-                                ? Array.from(new Set([...current, value]))
-                                : current.filter((profile) => profile !== value)
-                            );
-                          }}
                         />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                        <Textarea
+                          value={proGearNotes}
+                          onChange={(event) =>
+                            setProGearNotes(event.target.value)
+                          }
+                          placeholder="Pro gear / PBP&E notes"
+                          aria-label="Pro gear notes"
+                          disabled={!householdId}
+                        />
+                        <Textarea
+                          value={pcsTransportationOfficeNotes}
+                          onChange={(event) =>
+                            setPcsTransportationOfficeNotes(event.target.value)
+                          }
+                          placeholder="Transportation office notes"
+                          aria-label="Transportation office notes"
+                          disabled={!householdId}
+                        />
+                        <Textarea
+                          value={pcsRestrictedItemsNotes}
+                          onChange={(event) =>
+                            setPcsRestrictedItemsNotes(event.target.value)
+                          }
+                          placeholder="Restricted item notes"
+                          aria-label="Restricted item notes"
+                          disabled={!householdId}
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground">
+                        Choose the Military PCS template in Basics when this
+                        move needs branch, allowance, orders, transportation
+                        office, or restricted item tracking.
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="packets">
+                    <div className="space-y-2 rounded-md border border-border p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium">
+                          Documentation profiles
+                        </p>
+                        <Badge variant="secondary">
+                          {selectedPacketCount} selected
+                        </Badge>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {documentationProfileOptions
+                          .filter(
+                            ([value]) =>
+                              value !== "pcsMove" || moveType === "pcs",
+                          )
+                          .map(([value, label]) => (
+                            <label
+                              key={value}
+                              className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
+                            >
+                              <input
+                                type="checkbox"
+                                className="size-3.5 accent-primary"
+                                checked={documentationProfileTypes.includes(
+                                  value,
+                                )}
+                                disabled={!householdId}
+                                onChange={(event) => {
+                                  setDocumentationProfileTypes((current) =>
+                                    event.target.checked
+                                      ? Array.from(new Set([...current, value]))
+                                      : current.filter(
+                                          (profile) => profile !== value,
+                                        ),
+                                  );
+                                }}
+                              />
+                              {label}
+                            </label>
+                          ))}
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
                 <Button
                   type="submit"
                   size="sm"

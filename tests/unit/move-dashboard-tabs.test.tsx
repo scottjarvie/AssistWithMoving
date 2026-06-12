@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
@@ -76,22 +77,63 @@ describe("MoveDashboard", () => {
 
     expect(screen.getByRole("tab", { name: "Moves" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
-    expect(screen.getByRole("tab", { name: "Create move" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Create move" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Household" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "AI connection" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "AI connection" }),
+    ).toBeInTheDocument();
     const activeMove = screen.getByText("Summer move");
     const summary = screen.getByText("Workspace summary");
     expect(activeMove.compareDocumentPosition(summary)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(
-      screen.getByRole("link", { name: "Open workspace" })
+      screen.getByRole("link", { name: "Open workspace" }),
     ).toHaveAttribute("href", "/app/moves/move_123");
     expect(
-      screen.getByRole("link", { name: "Open selected move" })
+      screen.getByRole("link", { name: "Open selected move" }),
     ).toHaveAttribute("href", "/app/moves/move_123");
     expect(screen.queryByLabelText("Move title")).not.toBeInTheDocument();
+  });
+
+  it("keeps create-move basics, PCS fields, and packets in separate tasks", async () => {
+    const user = userEvent.setup();
+
+    render(<MoveDashboard />);
+
+    await user.click(screen.getByRole("tab", { name: "Create move" }));
+
+    expect(screen.getByRole("tab", { name: "Basics" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.getByLabelText("Move title")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move template")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Documentation profiles"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Military branch")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Packets" }));
+    expect(screen.getByText("Documentation profiles")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Move title")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "PCS details" }));
+    expect(
+      screen.getByText(/Choose the Military PCS template/),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Military branch")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Basics" }));
+    await user.selectOptions(screen.getByLabelText("Move template"), "pcs");
+    await user.click(screen.getByRole("tab", { name: "PCS details" }));
+    expect(screen.getByLabelText("Military branch")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Official weight allowance in pounds"),
+    ).toBeInTheDocument();
   });
 });
