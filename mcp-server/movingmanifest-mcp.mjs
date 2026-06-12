@@ -1599,7 +1599,7 @@ export function registerTools(target, apiConfig) {
       filePath: z
         .string()
         .optional()
-        .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path."),
+        .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path. The MCP helper reads and sends the original bytes directly; do not base64-wrap local files."),
       sourceUrl: z
         .string()
         .url()

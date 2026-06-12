@@ -148,8 +148,9 @@ JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or JSON
 with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`. MovingManifest
 stores the original, reads dimensions, finalizes the evidence record, and
 creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
-server-side. Do not ask users for dimensions, thumbnail sizes, or derivative
-files for ordinary photos.
+server-side. For local `filePath`, the MCP helper sends the original image bytes
+directly instead of putting the file into a JSON/base64 payload. Do not ask users
+for dimensions, thumbnail sizes, or derivative files for ordinary photos.
 
 After uploading, tell the user the caption, room/item/box attachment, privacy
 choice, and any confidence or assumption you used so they can correct it without

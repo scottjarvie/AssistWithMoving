@@ -1870,25 +1870,45 @@ describe("MovingManifest MCP API client", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("https://example.com/api/v1/photos/upload"),
-      {
+      expect.objectContaining({
         method: "POST",
         headers: {
           authorization: "Bearer mmk_test_secret",
           "content-type": "application/json",
           "idempotency-key": "upload-image-1",
         },
-        body: JSON.stringify({
+      })
+    );
+    const sourceUploadCall = fetchMock.mock.calls[0] as unknown as [
+      URL,
+      { body: string },
+    ];
+    expect(JSON.parse(sourceUploadCall[1].body)).toEqual({
+      moveId: "move1",
+      sourceUrl: "https://images.test/garage-shelf.jpg",
+      room: "Garage",
+      caption: "Garage shelf before packing",
+      photoType: "room",
+      privacyLevel: "normal",
+      visibilityScope: "moveCollaborators",
+      source: "mcp",
+      exifHandlingStatus: "pending",
+    });
+  });
+
+  it("rejects ambiguous one-call image upload sources", async () => {
+    await expect(
+      uploadEvidenceImage(
+        { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+        {
           moveId: "move1",
           sourceUrl: "https://images.test/garage-shelf.jpg",
-          room: "Garage",
-          caption: "Garage shelf before packing",
-          photoType: "room",
-          privacyLevel: "normal",
-          visibilityScope: "moveCollaborators",
-          source: "mcp",
-          exifHandlingStatus: "pending",
-        }),
-      }
+          fileBase64: "iVBORw0KGgo=",
+          mimeType: "image/png",
+        }
+      )
+    ).rejects.toThrow(
+      "Provide exactly one of filePath, sourceUrl, dataUrl, or fileBase64."
     );
   });
 
@@ -1937,28 +1957,91 @@ describe("MovingManifest MCP API client", () => {
     }
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      new URL("https://example.com/api/v1/photos/upload"),
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      URL,
       {
-        method: "POST",
-        headers: {
-          authorization: "Bearer mmk_test_secret",
-          "content-type": "application/json",
-          "idempotency-key": "local-image-1",
-        },
-        body: JSON.stringify({
-          moveId: "move1",
-          fileBase64: pngBytes.toString("base64"),
-          fileName: "closet-bin.png",
-          mimeType: "image/png",
-          room: "Closet",
-          caption: "Closet bin before packing",
-          photoType: "item",
-          source: "mcp",
-          exifHandlingStatus: "pending",
-        }),
-      }
+        method: string;
+        headers: Record<string, string>;
+        body: Buffer;
+      },
+    ];
+    expect(url).toBeInstanceOf(URL);
+    expect(url.pathname).toBe("/api/v1/photos/upload");
+    expect(Object.fromEntries(url.searchParams)).toMatchObject({
+      moveId: "move1",
+      fileName: "closet-bin.png",
+      mimeType: "image/png",
+      room: "Closet",
+      caption: "Closet bin before packing",
+      photoType: "item",
+      source: "mcp",
+      exifHandlingStatus: "pending",
+    });
+    expect(init).toEqual({
+      method: "POST",
+      headers: {
+        authorization: "Bearer mmk_test_secret",
+        "content-type": "image/png",
+        "content-length": String(pngBytes.length),
+        "x-movingmanifest-file-name": "closet-bin.png",
+        "idempotency-key": "local-image-1",
+      },
+      body: pngBytes,
+    });
+  });
+
+  it("keeps one-call image upload dry runs free of image bytes", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const filePath = path.join(tempDir, "entry-table.png");
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
+      "base64"
     );
+    await writeFile(filePath, pngBytes);
+
+    try {
+      const result = await uploadEvidenceImage(
+        { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+        {
+          moveId: "move1",
+          filePath,
+          room: "Entry",
+          caption: "Entry table before packing",
+          dryRun: true,
+        }
+      );
+
+      expect(result).toMatchObject({
+        dryRun: true,
+        media: {
+          source: "filePath",
+          fileName: "entry-table.png",
+          mimeType: "image/png",
+          sizeBytes: pngBytes.length,
+        },
+        request: {
+          method: "POST",
+          path: "/photos/upload",
+          query: {
+            moveId: "move1",
+            fileName: "entry-table.png",
+            mimeType: "image/png",
+            room: "Entry",
+            caption: "Entry table before packing",
+            source: "mcp",
+            exifHandlingStatus: "pending",
+          },
+          headers: {
+            "Content-Type": "image/png",
+            "X-MovingManifest-File-Name": "entry-table.png",
+          },
+          note: expect.stringContaining("does not upload image bytes"),
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain(pngBytes.toString("base64"));
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("lists, creates, updates, and archives documentation profiles through the API", async () => {

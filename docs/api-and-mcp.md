@@ -1210,7 +1210,10 @@ For MCP agents, prefer `upload_evidence_image` for normal image work. The
 assistant can pass a local `filePath`, public `sourceUrl`, `dataUrl`, or
 `fileBase64`; MovingManifest stores the original, finalizes evidence metadata,
 creates web-ready derivatives in the background, and returns the `photoId`.
-Use `upload_evidence_file` for audio/video or when a client wants the explicit
+For local `filePath`, the MCP helper reads the file and sends the original image
+bytes directly to `POST /photos/upload`; it does not require the agent to
+base64-wrap the photo, calculate dimensions, or create display files. Use
+`upload_evidence_file` for audio/video or when a client wants the explicit
 presigned upload flow.
 
 Quick rule for agents: one user photo should normally mean one
@@ -1268,9 +1271,10 @@ curl -X POST https://movingmanifest.com/api/v1/photos/upload \
 multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
 `fileBase64`. It is intentionally image-only and server-preps `thumb`, `card`,
 `detail`, and `full` derivatives after storing the original. MCP clients should
-pass `filePath` to `upload_evidence_image` and let the local MCP server read the
-file. Use the presigned flow below for larger/custom upload clients, audio/video
-evidence, progress bars, or client-created derivatives.
+pass `filePath` to `upload_evidence_image` and let the local MCP server read and
+send the original file bytes. Use the presigned flow below for larger/custom
+upload clients, audio/video evidence, progress bars, or client-created
+derivatives.
 
 The lower-level REST flow is still useful for custom clients, browser clients,
 and clients that already create web-ready image derivatives. API/MCP clients can

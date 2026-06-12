@@ -49,7 +49,8 @@ Primary site: https://movingmanifest.com
   params, multipart form data, or JSON with exactly one of `sourceUrl`,
   `dataUrl`, or `fileBase64`. MovingManifest stores the original and creates
   web-ready derivatives server-side; do not ask users for thumbnail sizes or
-  dimensions.
+  dimensions. For local `filePath`, the MCP helper sends original image bytes
+  directly; do not base64-wrap local files unless you already only have base64.
 - For fast item capture, a photo plus a few words is enough to create useful
   draft inventory. Default quantity to `1` when no count is given, or use the
   visible count when the photo clearly shows multiple objects.

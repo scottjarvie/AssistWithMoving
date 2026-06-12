@@ -60,6 +60,53 @@ export async function movingManifestRequest(
   return payload;
 }
 
+export async function movingManifestBinaryRequest(
+  config,
+  { method = "POST", path, query, bytes, mimeType, fileName, idempotencyKey }
+) {
+  const url = new URL(`${config.baseUrl}/${path.replace(/^\/+/g, "")}`);
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, String(value));
+    }
+  }
+
+  const headers = {
+    authorization: `Bearer ${config.apiKey}`,
+    "content-type": mimeType,
+    "content-length": String(bytes.byteLength),
+  };
+  if (fileName) {
+    headers["x-movingmanifest-file-name"] = fileName;
+  }
+  if (method !== "GET") {
+    headers["idempotency-key"] = idempotencyKey ?? randomUUID();
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: bytes,
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" && payload?.error?.message
+        ? payload.error.message
+        : `MovingManifest API request failed with ${response.status}.`;
+    const error = new Error(message);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
 export function textResult(data) {
   return {
     content: [
@@ -887,12 +934,8 @@ export async function uploadEvidenceFile(config, input) {
 }
 
 export async function uploadEvidenceImage(config, input) {
-  const localImage = input.filePath
-    ? await loadLocalImageForDirectUpload(input)
-    : undefined;
-
   const sourceCount = [
-    localImage,
+    input.filePath,
     input.sourceUrl,
     input.dataUrl,
     input.fileBase64,
@@ -901,13 +944,17 @@ export async function uploadEvidenceImage(config, input) {
     throw new Error("Provide exactly one of filePath, sourceUrl, dataUrl, or fileBase64.");
   }
 
-  const body = {
+  const directImage = input.filePath
+    ? await loadLocalImageForDirectUpload(input)
+    : input.dataUrl
+      ? loadDataUrlImageForDirectUpload(input)
+      : input.fileBase64
+        ? loadBase64ImageForDirectUpload(input)
+        : undefined;
+  const metadata = {
     moveId: input.moveId,
-    sourceUrl: input.sourceUrl,
-    dataUrl: input.dataUrl,
-    fileBase64: localImage?.fileBase64 ?? input.fileBase64,
-    fileName: input.fileName ?? localImage?.fileName,
-    mimeType: input.mimeType ?? localImage?.mimeType,
+    fileName: input.fileName ?? directImage?.fileName,
+    mimeType: input.mimeType ?? directImage?.mimeType,
     itemId: input.itemId,
     boxId: input.boxId,
     spaceId: input.spaceId,
@@ -926,22 +973,55 @@ export async function uploadEvidenceImage(config, input) {
     verificationStatus: input.verificationStatus,
     capturedAt: input.capturedAt,
   };
+  const body = {
+    ...metadata,
+    sourceUrl: input.sourceUrl,
+  };
 
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { method: "POST", path: "/photos/upload", body },
+      media: directImage
+        ? {
+            source: directImage.source,
+            fileName: directImage.fileName,
+            mimeType: directImage.mimeType,
+            sizeBytes: directImage.bytes.byteLength,
+          }
+        : undefined,
+      request: directImage
+        ? {
+            method: "POST",
+            path: "/photos/upload",
+            query: removeUndefined(metadata),
+            headers: removeUndefined({
+              "Content-Type": directImage.mimeType,
+              "X-MovingManifest-File-Name": directImage.fileName,
+            }),
+            note: "Dry run does not upload image bytes or include them in the transcript.",
+          }
+        : { method: "POST", path: "/photos/upload", body },
       derivativeNote:
         "MovingManifest stores the original image and creates web-ready derivatives server-side.",
     };
   }
 
-  const response = await movingManifestRequest(config, {
-    method: "POST",
-    path: "/photos/upload",
-    body,
-    idempotencyKey: input.idempotencyKey,
-  });
+  const response = directImage
+    ? await movingManifestBinaryRequest(config, {
+        method: "POST",
+        path: "/photos/upload",
+        query: removeUndefined(metadata),
+        bytes: directImage.bytes,
+        mimeType: directImage.mimeType,
+        fileName: directImage.fileName,
+        idempotencyKey: input.idempotencyKey,
+      })
+    : await movingManifestRequest(config, {
+        method: "POST",
+        path: "/photos/upload",
+        body,
+        idempotencyKey: input.idempotencyKey,
+      });
   const data = response.data ?? response;
   return {
     ...data,
@@ -955,14 +1035,57 @@ async function loadLocalImageForDirectUpload(input) {
   const mimeType = normalizeMimeType(
     input.mimeType ?? sniffMimeType(bytes) ?? mimeTypeForFilename(fileName)
   );
+  return finalizeImageForDirectUpload({
+    bytes,
+    source: "filePath",
+    fileName,
+    mimeType,
+  });
+}
+
+function loadDataUrlImageForDirectUpload(input) {
+  const match = input.dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/i);
+  if (!match || match[2]?.toLowerCase() !== ";base64") {
+    throw new Error("dataUrl must be a base64 image data URL.");
+  }
+  const bytes = Buffer.from(decodeURIComponent(match[3]).replace(/\s/g, ""), "base64");
+  return finalizeImageForDirectUpload({
+    bytes,
+    source: "dataUrl",
+    fileName: input.fileName,
+    mimeType:
+      normalizeMimeType(input.mimeType ?? match[1]) ??
+      sniffMimeType(bytes) ??
+      mimeTypeForFilename(input.fileName ?? ""),
+  });
+}
+
+function loadBase64ImageForDirectUpload(input) {
+  const bytes = Buffer.from(input.fileBase64.replace(/\s/g, ""), "base64");
+  return finalizeImageForDirectUpload({
+    bytes,
+    source: "fileBase64",
+    fileName: input.fileName,
+    mimeType:
+      normalizeMimeType(input.mimeType ?? "") ??
+      sniffMimeType(bytes) ??
+      mimeTypeForFilename(input.fileName ?? ""),
+  });
+}
+
+function finalizeImageForDirectUpload({ bytes, source, fileName, mimeType }) {
   if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType ?? "")) {
     throw new Error(
       "upload_evidence_image accepts JPEG, PNG, or WebP files. Use upload_evidence_file for audio, video, or unsupported media."
     );
   }
+  if (!bytes.byteLength) {
+    throw new Error("Image upload data was empty.");
+  }
 
   return {
-    fileBase64: bytes.toString("base64"),
+    bytes,
+    source,
     fileName,
     mimeType,
   };
@@ -1061,7 +1184,7 @@ async function putEvidenceBytes({ uploadUrl, contentType, bytes }) {
 }
 
 function normalizeMimeType(mimeType) {
-  return mimeType.trim().toLowerCase().split(";")[0] || undefined;
+  return mimeType?.trim().toLowerCase().split(";")[0] || undefined;
 }
 
 function mimeTypeForFilename(filename) {
