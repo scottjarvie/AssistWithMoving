@@ -226,54 +226,59 @@ export function AccountPrivacyControls({
             </div>
 
             {privacyStatus.exports.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Export</TableHead>
-                    <TableHead>Summary</TableHead>
-                    <TableHead>Expires</TableHead>
-                    <TableHead className="w-28">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {privacyStatus.exports.map((job) => (
-                    <TableRow key={job.exportJobId}>
-                      <TableCell>
-                        <div className="font-medium">{job.filename}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatBytes(job.sizeBytes)} /{" "}
-                          {formatDate(job.createdAt)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {Object.entries(job.summary).map(([key, value]) => (
-                            <Badge key={key} variant="outline">
-                              {labelize(key)}: {value}
-                            </Badge>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatDate(job.expiresAt)}</TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={job.status !== "completed"}
-                          onClick={() => {
-                            downloadedArtifactId.current = null;
-                            setSelectedExportId(job.exportJobId);
-                          }}
-                        >
-                          <Download aria-hidden="true" />
-                          JSON
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <>
+                <AccountExportCards
+                  exports={privacyStatus.exports}
+                  onDownload={(exportJobId) => {
+                    downloadedArtifactId.current = null;
+                    setSelectedExportId(exportJobId);
+                  }}
+                />
+                <div className="hidden md:block">
+                  <Table aria-label="Account export table">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Export</TableHead>
+                        <TableHead>Summary</TableHead>
+                        <TableHead>Expires</TableHead>
+                        <TableHead className="w-28">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {privacyStatus.exports.map((job) => (
+                        <TableRow key={job.exportJobId}>
+                          <TableCell>
+                            <div className="font-medium">{job.filename}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatBytes(job.sizeBytes)} /{" "}
+                              {formatDate(job.createdAt)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <ExportSummaryBadges summary={job.summary} />
+                          </TableCell>
+                          <TableCell>{formatDate(job.expiresAt)}</TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={job.status !== "completed"}
+                              onClick={() => {
+                                downloadedArtifactId.current = null;
+                                setSelectedExportId(job.exportJobId);
+                              }}
+                            >
+                              <Download aria-hidden="true" />
+                              JSON
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : (
               <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
                 No account exports yet.
@@ -385,6 +390,79 @@ export function AccountPrivacyControls({
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function AccountExportCards({
+  exports,
+  onDownload,
+}: {
+  exports: AccountExport[];
+  onDownload: (exportJobId: Id<"accountExportJobs">) => void;
+}) {
+  return (
+    <div
+      role="list"
+      aria-label="Account export cards"
+      className="grid gap-3 md:hidden"
+    >
+      {exports.map((job) => (
+        <article
+          key={job.exportJobId}
+          role="listitem"
+          className="rounded-md border border-border bg-card p-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-sm font-semibold">
+                {job.filename}
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {formatBytes(job.sizeBytes)} / {formatDate(job.createdAt)}
+              </p>
+            </div>
+            <Badge variant={job.status === "completed" ? "secondary" : "outline"}>
+              {job.status}
+            </Badge>
+          </div>
+
+          <div className="mt-3">
+            <ExportSummaryBadges summary={job.summary} />
+          </div>
+
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div>
+              <p className="text-[11px] font-medium uppercase text-muted-foreground">
+                Expires
+              </p>
+              <p className="mt-1">{formatDate(job.expiresAt)}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={job.status !== "completed"}
+              onClick={() => onDownload(job.exportJobId)}
+            >
+              <Download aria-hidden="true" />
+              JSON
+            </Button>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function ExportSummaryBadges({ summary }: { summary: ExportSummary }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {Object.entries(summary).map(([key, value]) => (
+        <Badge key={key} variant="outline">
+          {labelize(key)}: {value}
+        </Badge>
+      ))}
+    </div>
   );
 }
 
