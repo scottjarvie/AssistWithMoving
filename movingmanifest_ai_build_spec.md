@@ -2134,7 +2134,7 @@ These are not implementation docs embedded forever. The coding agent should chec
 - OWASP API Security Top 10
 - Model Context Protocol official introduction
 - Military OneSource PCS FAQ and entitlements pages
-- Live check that the original `themoveplanner.com` naming direction was unavailable because the domain resolved to an existing site
+- Live check that the original pre-rename domain direction was unavailable because the domain resolved to an existing site
 
 # 27. One-Sentence Product North Star
 

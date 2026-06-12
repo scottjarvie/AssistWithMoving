@@ -138,12 +138,14 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(payload.capabilities).toContainEqual(
       expect.objectContaining({
         id: "photoEvidence",
-        status: "availableWithOperationalBlocker",
-        operationalBlockers: ["MOVE-66"],
+        status: "available",
       })
     );
     expect(payload.knownLaunchBlockers.map((blocker) => blocker.issue)).toEqual(
-      expect.arrayContaining(["MOVE-63", "MOVE-66", "MOVE-68"])
+      expect.arrayContaining(["MOVE-63", "MOVE-68"])
+    );
+    expect(payload.knownLaunchBlockers.map((blocker) => blocker.issue)).not.toContain(
+      "MOVE-66"
     );
 
     vi.unstubAllGlobals();
@@ -410,9 +412,11 @@ describe("MovingManifest MCP capability discovery", () => {
       summary: {
         statuses: {
           available: expect.any(Number),
-          availableWithOperationalBlocker: 1,
         },
       },
     });
+    expect(getApiCapabilities().summary.statuses).not.toHaveProperty(
+      "availableWithOperationalBlocker"
+    );
   });
 });

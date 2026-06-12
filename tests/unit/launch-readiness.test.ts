@@ -21,13 +21,12 @@ describe("admin launch readiness blockers", () => {
 
   it("keeps blocker order and summary focused on safe launch sequencing", () => {
     expect(launchReadinessSummary()).toEqual({
-      blockerCount: 7,
+      blockerCount: 6,
       optionalCheckCount: 1,
       ownerAreas: [
         "auth",
         "operations",
         "auth-sync",
-        "storage",
         "deployment",
         "security",
         "routing",

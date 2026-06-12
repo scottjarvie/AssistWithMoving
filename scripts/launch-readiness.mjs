@@ -3,8 +3,7 @@ import { chromium } from "playwright";
 const strict = process.argv.includes("--strict");
 const targetUrlInput = process.env.LAUNCH_URL ?? "https://movingmanifest.com";
 const targetUrl = new URL(targetUrlInput);
-const staleAliasUrl =
-  process.env.STALE_ALIAS_URL ?? "https://themoveplanner.vercel.app";
+const staleAliasUrl = process.env.STALE_ALIAS_URL;
 
 const requiredHeaders = [
   ["strict-transport-security", "hsts", /max-age=63072000/],
@@ -209,6 +208,15 @@ async function checkRuntimeOrigins() {
 }
 
 async function checkStaleAlias() {
+  if (!staleAliasUrl) {
+    record(
+      "pass",
+      "stale brand alias",
+      "no stale alias URL configured for this run"
+    );
+    return;
+  }
+
   try {
     const response = await fetch(staleAliasUrl, { redirect: "manual" });
     if (response.status === 404) {

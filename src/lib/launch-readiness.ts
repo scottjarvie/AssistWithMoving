@@ -69,21 +69,6 @@ export const launchReadinessBlockers = [
     ],
   },
   {
-    issue: "MOVE-66",
-    title: "Fix Backblaze B2 dev credentials and CORS for photo-upload e2e",
-    owner: "storage",
-    why:
-      "Photo evidence is core product data, so uploads need a valid scoped key and browser CORS before launch.",
-    ownerAction:
-      "Generate a bucket-scoped Backblaze key, then allow upload origins for local dev, production, and Vercel previews.",
-    verify: [
-      "npm run doctor:storage",
-      "npm run doctor:vercel-env",
-      "npm run doctor:convex-env",
-      "npm run doctor:convex-dev-env",
-    ],
-  },
-  {
     issue: "MOVE-106",
     title: "Configure Vercel preview environment variables",
     owner: "deployment",
@@ -105,15 +90,13 @@ export const launchReadinessBlockers = [
   },
   {
     issue: "MOVE-67",
-    title: "Remove stale TheMovePlanner Vercel alias after brand rename",
+    title: "Remove stale legacy Vercel alias after brand rename",
     owner: "routing",
     why:
-      "The old preview-style brand URL should stop serving the product once MovingManifest is the public name.",
+      "The old pre-rename preview URL should stop serving the product once MovingManifest is the public name.",
     ownerAction:
       "After explicit approval, remove the stale alias from Vercel project/domain settings.",
-    verify: [
-      "STALE_ALIAS_URL=https://themoveplanner.vercel.app npm run doctor:launch",
-    ],
+    verify: ["STALE_ALIAS_URL=<legacy-alias-url> npm run doctor:launch"],
   },
 ] satisfies LaunchReadinessBlocker[];
 

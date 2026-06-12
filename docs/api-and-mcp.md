@@ -1689,8 +1689,8 @@ or Clerk.
 Agents should usually call `get_api_capabilities` first. It returns a
 code-backed capability matrix with supported workflows, required scopes,
 REST endpoints, MCP tool names, and known launch blockers. This keeps agents
-from guessing from a long tool list and makes operational gaps explicit, such
-as `MOVE-66` for Backblaze-backed photo upload verification.
+from guessing from a long tool list and makes operational gaps explicit without
+treating verified storage/upload support as unavailable.
 
 Run locally:
 
@@ -1802,9 +1802,9 @@ Available MCP tools:
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
 | `upload_photo` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload for ordinary household photos. |
-| `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos. |
+| `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos or several new photos attached to one existing item. |
 | `upload_image` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload when the user or agent says image instead of photo. |
-| `upload_images` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload when the user or agent says images instead of photos. |
+| `upload_images` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload when the user or agent says images instead of photos, including several new images for one existing item. |
 | `upload_evidence_image` | Easiest MCP single-image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
 | `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status plus `agentReview`. |
 | `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |

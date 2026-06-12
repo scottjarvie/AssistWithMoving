@@ -1,4 +1,4 @@
-export const MOVINGMANIFEST_CAPABILITY_VERSION = "2026-06-11";
+export const MOVINGMANIFEST_CAPABILITY_VERSION = "2026-06-12";
 
 export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
   {
@@ -26,14 +26,6 @@ export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
     owner: "external-account",
   },
   {
-    issue: "MOVE-66",
-    title: "Fix Backblaze B2 credentials and CORS for photo-upload e2e",
-    area: "storage",
-    impact:
-      "Photo evidence code is implemented, but live upload verification is blocked by invalid B2 auth/CORS.",
-    owner: "external-account",
-  },
-  {
     issue: "MOVE-64",
     title: "Evaluate and enforce a Content Security Policy after production origins settle",
     area: "security",
@@ -43,10 +35,10 @@ export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
   },
   {
     issue: "MOVE-67",
-    title: "Remove stale TheMovePlanner Vercel alias after brand rename",
+    title: "Remove stale legacy Vercel alias after brand rename",
     area: "routing",
     impact:
-      "Old generated aliases can confuse QA and support notes after the MovingManifest rename.",
+      "Old pre-rename aliases can confuse QA and support notes after the MovingManifest rename.",
     owner: "external-account",
   },
 ];
@@ -367,7 +359,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
   {
     id: "photoEvidence",
     title: "Evidence media intake",
-    status: "availableWithOperationalBlocker",
+    status: "available",
     purpose:
       "Upload image evidence through a one-call agent path, or use lower-level upload sessions for audio, video, progress bars, and custom clients.",
     requiredScopes: ["moves/read", "inventory/read", "inventory/write", "photos/write"],
@@ -405,7 +397,6 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "Attach reviewed evidence media to items, boxes, rooms, and documentation profiles.",
       "Keep original file delivery separate from recipient-safe packet thumbnails.",
     ],
-    operationalBlockers: ["MOVE-66"],
   },
   {
     id: "peopleAndContacts",

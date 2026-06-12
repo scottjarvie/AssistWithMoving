@@ -56,33 +56,6 @@ export const launchBlockerRemediations = [
     ],
   },
   {
-    issue: "MOVE-66",
-    title: "Fix Backblaze B2 dev credentials and CORS for photo-upload e2e",
-    why:
-      "Photo evidence is core product data, so uploads need a valid scoped key and browser CORS before launch.",
-    ownerAction:
-      "Generate a Backblaze application key scoped to the production bucket, then allow PUT, GET, and HEAD from localhost:3827, movingmanifest.com, www.movingmanifest.com, and Vercel preview origins.",
-    actions: [
-      "npx vercel env add B2_APPLICATION_KEY_ID production",
-      "npx vercel env add B2_APPLICATION_KEY production",
-      "npx vercel env add B2_BUCKET_NAME production",
-      "npx vercel env add B2_ENDPOINT production",
-      "npx vercel env add B2_REGION production",
-      "npx vercel env add B2_BUCKET_ID production",
-      "npx convex env set B2_APPLICATION_KEY_ID <backblaze-key-id> --prod",
-      "npx convex env set B2_APPLICATION_KEY <backblaze-application-key> --prod",
-      "npx convex env set B2_BUCKET_NAME <bucket-name> --prod",
-      "npx convex env set B2_ENDPOINT <s3-endpoint> --prod",
-      "npx convex env set B2_REGION <b2-region> --prod",
-    ],
-    verify: [
-      "npm run doctor:storage",
-      "npm run doctor:vercel-env",
-      "npm run doctor:convex-env",
-      "npm run doctor:convex-dev-env",
-    ],
-  },
-  {
     issue: "MOVE-106",
     title: "Configure Vercel preview environment variables",
     why:
@@ -118,15 +91,13 @@ export const launchBlockerRemediations = [
   },
   {
     issue: "MOVE-67",
-    title: "Remove stale TheMovePlanner Vercel alias after brand rename",
+    title: "Remove stale legacy Vercel alias after brand rename",
     why:
-      "The old preview-style brand URL should stop serving the product once Moving Manifest is the public name.",
+      "The old pre-rename preview URL should stop serving the product once MovingManifest is the public name.",
     ownerAction:
       "After explicit approval, remove the stale alias from the Vercel project/domain settings.",
     actions: ["No automatic command is provided because this is a routing change."],
-    verify: [
-      "STALE_ALIAS_URL=https://themoveplanner.vercel.app npm run doctor:launch",
-    ],
+    verify: ["STALE_ALIAS_URL=<legacy-alias-url> npm run doctor:launch"],
   },
 ];
 

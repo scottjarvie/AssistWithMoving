@@ -17,14 +17,11 @@ describe("launch next steps", () => {
       "MOVE-68 - Configure Clerk production webhook endpoint and Convex signing secret"
     );
     expect(plan).toContain(
-      "MOVE-66 - Fix Backblaze B2 dev credentials and CORS for photo-upload e2e"
-    );
-    expect(plan).toContain(
       "MOVE-64 - Evaluate and enforce a Content Security Policy after production origins settle"
     );
     expect(plan).toContain("MOVE-106 - Configure Vercel preview environment variables");
     expect(plan).toContain(
-      "MOVE-67 - Remove stale TheMovePlanner Vercel alias after brand rename"
+      "MOVE-67 - Remove stale legacy Vercel alias after brand rename"
     );
   });
 
@@ -33,7 +30,6 @@ describe("launch next steps", () => {
       "MOVE-63",
       "MOVE-62",
       "MOVE-68",
-      "MOVE-66",
       "MOVE-106",
       "MOVE-64",
       "MOVE-67",
@@ -44,12 +40,10 @@ describe("launch next steps", () => {
     const plan = renderLaunchRemediationPlan();
 
     expect(plan).toContain("ADMIN_EMAILS");
-    expect(plan).toContain("B2_APPLICATION_KEY");
-    expect(plan).toContain("Vercel preview origins");
+    expect(plan).toContain("B2_APPLICATION_KEY_ID preview");
     expect(plan).toContain("CONTENT_SECURITY_POLICY_MODE");
     expect(plan).toContain("npm run doctor:launch");
     expect(plan).toContain("npm run doctor:vercel-preview-env");
-    expect(plan).toContain("npm run doctor:convex-dev-env");
     expect(plan).toContain("<production-clerk-issuer>");
     expect(plan).toContain("<svix-signing-secret>");
     expect(plan).not.toMatch(/sk_(test|live)_/);
