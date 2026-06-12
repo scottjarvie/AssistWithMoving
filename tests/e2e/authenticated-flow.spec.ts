@@ -479,6 +479,7 @@ test.describe("authenticated product flow", () => {
 
     // Boxes page: create a box and pack an item.
     await page.goto(movePath("boxes"));
+    await page.getByRole("tab", { name: "Add box" }).click();
     const createBoxForm = page.getByRole("form", { name: "Create box" });
     await createBoxForm.getByLabel("New box code").fill(boxCode);
     await createBoxForm.getByLabel("New box label").fill(boxLabel);
@@ -488,6 +489,7 @@ test.describe("authenticated product flow", () => {
     await expect(page.getByRole("cell", { name: boxCode })).toBeVisible({
       timeout: 30_000,
     });
+    await page.getByRole("tab", { name: "Pack contents" }).click();
 
     const boxManager = page
       .getByRole("heading", { name: "Box manager", exact: true })

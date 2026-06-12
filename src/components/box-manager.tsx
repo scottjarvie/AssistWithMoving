@@ -8,6 +8,7 @@ import {
   ClipboardList,
   PackagePlus,
   Printer,
+  Search,
   Trash2,
 } from "lucide-react";
 
@@ -15,6 +16,7 @@ import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +28,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -58,6 +61,15 @@ type TransportResourceWithZones = {
 type BoxRecord = NonNullable<
   ReturnType<typeof useQuery<typeof api.boxes.listForMove>>
 >[number];
+type BoxTask = "boxes" | "add" | "contents" | "labels";
+type BoxStatusFilter = "all" | Doc<"boxes">["status"];
+
+const boxTaskTabs: { value: BoxTask; label: string }[] = [
+  { value: "boxes", label: "Boxes" },
+  { value: "add", label: "Add box" },
+  { value: "contents", label: "Pack contents" },
+  { value: "labels", label: "Labels" },
+];
 
 function BoxCard({
   householdId,
@@ -486,9 +498,49 @@ export function BoxManager({
   const [destinationRoom, setDestinationRoom] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [activeTask, setActiveTask] = useState<BoxTask>("boxes");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<BoxStatusFilter>("all");
 
-  const visibleBoxes = boxes ?? [];
-  const activeItems = (items ?? []).filter((item) => item.status !== "archived");
+  const visibleBoxes = useMemo(() => boxes ?? [], [boxes]);
+  const activeItems = useMemo(
+    () => (items ?? []).filter((item) => item.status !== "archived"),
+    [items]
+  );
+  const filteredBoxes = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return visibleBoxes.filter(({ box, contents }) => {
+      if (statusFilter !== "all" && box.status !== statusFilter) {
+        return false;
+      }
+      if (!normalizedSearch) {
+        return true;
+      }
+      const haystack = [
+        box.code,
+        box.label,
+        box.room,
+        box.destinationRoom,
+        box.description,
+        ...contents
+          .map((entry) => entry?.item.name)
+          .filter((value): value is string => typeof value === "string"),
+      ];
+      return haystack.some((value) =>
+        value?.toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [search, statusFilter, visibleBoxes]);
+  const emptyBoxes = visibleBoxes.filter((record) => record.itemCount === 0);
+  const missingWeightBoxes = visibleBoxes.filter((record) =>
+    isMissingBoxWeight(record.weightSummary)
+  );
+  const exceptionBoxes = visibleBoxes.filter((record) =>
+    ["missing", "damaged"].includes(record.box.status)
+  );
+  const assignedBoxes = visibleBoxes.filter((record) =>
+    Boolean(record.box.assignedResourceId)
+  );
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -512,6 +564,7 @@ export function BoxManager({
       setRoom("");
       setDestinationRoom("");
       setMessage("Box created.");
+      setActiveTask("boxes");
     } catch {
       setMessage("Could not create that box.");
     } finally {
@@ -543,115 +596,306 @@ export function BoxManager({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form
-          aria-label="Create box"
-          className="grid gap-2 md:grid-cols-[120px_minmax(0,1fr)_160px_160px_auto]"
-          onSubmit={handleCreate}
-        >
-          <Input
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            placeholder="B-001"
-            aria-label="New box code"
-            disabled={!moveId}
-          />
-          <Input
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-            placeholder="Label"
-            aria-label="New box label"
-            disabled={!moveId}
-          />
-          <Input
-            value={room}
-            onChange={(event) => setRoom(event.target.value)}
-            placeholder="Room"
-            aria-label="New box room"
-            disabled={!moveId}
-          />
-          <Input
-            value={destinationRoom}
-            onChange={(event) => setDestinationRoom(event.target.value)}
-            placeholder="Destination"
-            aria-label="New box destination room"
-            disabled={!moveId}
-          />
-          <Button type="submit" size="sm" disabled={!moveId || creating}>
-            <Boxes aria-hidden="true" />
-            Create
-          </Button>
-        </form>
-
-        {boxes === undefined ? (
-          <div className="space-y-2">
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-5/6" />
-          </div>
-        ) : visibleBoxes.length ? (
-          <>
-            <div className="grid gap-3 2xl:grid-cols-2">
-              {visibleBoxes.map((boxRecord) =>
-                householdId && moveId ? (
-                  <BoxCard
-                    key={`${boxRecord.box._id}:${boxRecord.box.updatedAt}:${boxRecord.itemCount}`}
-                    householdId={householdId}
-                    moveId={moveId}
-                    boxRecord={boxRecord}
-                    items={activeItems}
-                    resourcesWithZones={resourcesWithZones ?? []}
-                    onMessage={setMessage}
-                  />
-                ) : null
-              )}
-            </div>
-
-            <div className="rounded-md border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Room</TableHead>
-                    <TableHead>Destination</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead>Weight</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleBoxes.map(({ box, itemCount, weightSummary }) => (
-                    <TableRow key={box._id}>
-                      <TableCell className="font-medium">{box.code}</TableCell>
-                      <TableCell>{box.status}</TableCell>
-                      <TableCell>{box.room ?? "unassigned"}</TableCell>
-                      <TableCell>{box.destinationRoom ?? "unassigned"}</TableCell>
-                      <TableCell>{itemCount}</TableCell>
-                      <TableCell>
-                        <div className="min-w-[8rem]">
-                          <p>{formatBoxWeightValue(weightSummary)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatBoxWeightSource(weightSummary)}
-                          </p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        ) : (
-          <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-            Create the first box or container to start grouping packed items.
-          </div>
-        )}
-
         {message ? (
           <p className="flex items-center gap-2 rounded-md border border-border p-3 text-sm text-muted-foreground">
             <ClipboardList className="size-4 text-primary" aria-hidden="true" />
             {message}
           </p>
         ) : null}
+        <Tabs
+          value={activeTask}
+          onValueChange={(value) => setActiveTask(value as BoxTask)}
+          className="gap-4"
+        >
+          <MoveWorkspaceTabList tabs={boxTaskTabs} />
+
+          <TabsContent value="boxes" className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <BoxMetric label="Total" value={visibleBoxes.length} />
+              <BoxMetric label="Empty" value={emptyBoxes.length} />
+              <BoxMetric label="Assigned" value={assignedBoxes.length} />
+              <BoxMetric label="Missing weight" value={missingWeightBoxes.length} />
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-md border border-border p-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px] lg:min-w-[520px]">
+                <div className="relative">
+                  <Search
+                    className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    className="pl-8"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search codes, rooms, labels, or contents"
+                    aria-label="Search boxes"
+                  />
+                </div>
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={statusFilter}
+                  aria-label="Box status filter"
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as BoxStatusFilter)
+                  }
+                >
+                  <option value="all">All statuses</option>
+                  {boxStatusOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setActiveTask("add")}
+                >
+                  <PackagePlus aria-hidden="true" />
+                  Add box
+                </Button>
+                {householdId && moveId ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={buildBoxLabelSheetPath({ householdId, moveId })}>
+                      <Printer aria-hidden="true" />
+                      Print labels
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            {boxes === undefined ? (
+              <div className="space-y-2">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-5/6" />
+              </div>
+            ) : visibleBoxes.length ? (
+              filteredBoxes.length ? (
+                <div className="overflow-x-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Room</TableHead>
+                        <TableHead>Destination</TableHead>
+                        <TableHead>Items</TableHead>
+                        <TableHead>Weight</TableHead>
+                        <TableHead>Volume</TableHead>
+                        <TableHead>Assignment</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBoxes.map(
+                        ({ box, itemCount, weightSummary }) => (
+                          <TableRow key={box._id}>
+                            <TableCell className="min-w-[8rem] font-medium">
+                              {box.code}
+                              {box.label ? (
+                                <p className="max-w-[16rem] truncate text-xs font-normal text-muted-foreground">
+                                  {box.label}
+                                </p>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  box.status === "damaged"
+                                    ? "destructive"
+                                    : "outline"
+                                }
+                              >
+                                {box.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{box.room ?? "unassigned"}</TableCell>
+                            <TableCell>
+                              {box.destinationRoom ?? "unassigned"}
+                            </TableCell>
+                            <TableCell>{itemCount}</TableCell>
+                            <TableCell>
+                              <div className="min-w-[8rem]">
+                                <p>{formatBoxWeightValue(weightSummary)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatBoxWeightSource(weightSummary)}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>{box.estimatedVolumeCuFt ?? 0} cu ft</TableCell>
+                            <TableCell>
+                              {box.assignedResourceId ? "assigned" : "unassigned"}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  No boxes match the current search or status filter.
+                </div>
+              )
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                Create the first box or container to start grouping packed items.
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="add" className="space-y-4">
+            <form
+              aria-label="Create box"
+              className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[120px_minmax(0,1fr)_160px_160px_auto]"
+              onSubmit={handleCreate}
+            >
+              <Input
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                placeholder="B-001"
+                aria-label="New box code"
+                disabled={!moveId}
+              />
+              <Input
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                placeholder="Label"
+                aria-label="New box label"
+                disabled={!moveId}
+              />
+              <Input
+                value={room}
+                onChange={(event) => setRoom(event.target.value)}
+                placeholder="Room"
+                aria-label="New box room"
+                disabled={!moveId}
+              />
+              <Input
+                value={destinationRoom}
+                onChange={(event) => setDestinationRoom(event.target.value)}
+                placeholder="Destination"
+                aria-label="New box destination room"
+                disabled={!moveId}
+              />
+              <Button type="submit" size="sm" disabled={!moveId || creating}>
+                <Boxes aria-hidden="true" />
+                Create
+              </Button>
+            </form>
+          </TabsContent>
+
+          <TabsContent value="contents" className="space-y-4">
+            {boxes === undefined ? (
+              <div className="space-y-2">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-5/6" />
+              </div>
+            ) : visibleBoxes.length ? (
+              <div className="grid gap-3 2xl:grid-cols-2">
+                {visibleBoxes.map((boxRecord) =>
+                  householdId && moveId ? (
+                    <BoxCard
+                      key={`${boxRecord.box._id}:${boxRecord.box.updatedAt}:${boxRecord.itemCount}`}
+                      householdId={householdId}
+                      moveId={moveId}
+                      boxRecord={boxRecord}
+                      items={activeItems}
+                      resourcesWithZones={resourcesWithZones ?? []}
+                      onMessage={setMessage}
+                    />
+                  ) : null
+                )}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                Create boxes before adding contents, photos, weights, and load
+                assignments.
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="labels" className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
+              <div className="flex flex-wrap gap-1.5">
+                <Badge variant="secondary">{visibleBoxes.length} labels</Badge>
+                <Badge variant={exceptionBoxes.length ? "destructive" : "outline"}>
+                  {exceptionBoxes.length} exceptions
+                </Badge>
+              </div>
+              {householdId && moveId ? (
+                <Button asChild size="sm" variant="outline">
+                  <Link href={buildBoxLabelSheetPath({ householdId, moveId })}>
+                    <Printer aria-hidden="true" />
+                    Print labels
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+
+            {visibleBoxes.length ? (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Label</TableHead>
+                      <TableHead>Room</TableHead>
+                      <TableHead>Destination</TableHead>
+                      <TableHead>Lookup</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleBoxes.map(({ box }) => (
+                      <TableRow key={box._id}>
+                        <TableCell className="font-medium">{box.code}</TableCell>
+                        <TableCell>{box.label ?? "unlabeled"}</TableCell>
+                        <TableCell>{box.room ?? "unassigned"}</TableCell>
+                        <TableCell>
+                          {box.destinationRoom ?? "unassigned"}
+                        </TableCell>
+                        <TableCell>
+                          {householdId && moveId ? (
+                            <Button asChild size="sm" variant="outline">
+                              <Link
+                                href={buildBoxLookupPath({
+                                  householdId,
+                                  moveId,
+                                  boxId: box._id,
+                                })}
+                              >
+                                Lookup
+                              </Link>
+                            </Button>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                Create boxes before printing labels.
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
+  );
+}
+
+function BoxMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-2xl font-semibold tracking-normal">{value}</p>
+    </div>
   );
 }
