@@ -23,6 +23,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createMoveDayCachePayload,
@@ -52,6 +54,7 @@ type BoxRecord = NonNullable<
 type BoxStatus = Doc<"boxes">["status"];
 type ItemStatus = Doc<"items">["status"];
 type CrewFilter = "all" | "ready" | "staged" | "loaded" | "exceptions";
+type MoveDayTask = "checklist" | "exceptions" | "progress" | "offline";
 type FailedStatusAction = {
   boxId: Id<"boxes">;
   boxCode: string;
@@ -127,6 +130,7 @@ export function MoveDayView({
   const lookupInputRef = useRef<HTMLInputElement | null>(null);
   const [lookup, setLookup] = useState("");
   const [filter, setFilter] = useState<CrewFilter>("ready");
+  const [moveDayTask, setMoveDayTask] = useState<MoveDayTask>("checklist");
   const [safeView, setSafeView] = useState(true);
   const [updatingBoxId, setUpdatingBoxId] = useState<Id<"boxes"> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -207,6 +211,8 @@ export function MoveDayView({
         : liveChecklistBoxes,
     [liveChecklistBoxes, storedCachedPayload, usingCachedBoxes]
   );
+  const activeCrewFilter: CrewFilter =
+    moveDayTask === "exceptions" ? "exceptions" : filter;
   const filteredBoxes = useMemo(() => {
     const normalizedLookup = lookup.trim().toLowerCase();
     return activeBoxes.filter((record) => {
@@ -215,7 +221,7 @@ export function MoveDayView({
           record.box.status,
           record.box.assignmentWarnings ?? [],
           record.box.assignmentHardBlocks ?? [],
-          filter
+          activeCrewFilter
         )
       ) {
         return false;
@@ -234,7 +240,7 @@ export function MoveDayView({
         value?.toLowerCase().includes(normalizedLookup)
       );
     });
-  }, [activeBoxes, filter, lookup]);
+  }, [activeBoxes, activeCrewFilter, lookup]);
   const filteredCachedBoxes = useMemo(() => {
     const normalizedLookup = lookup.trim().toLowerCase();
     return displayedChecklistBoxes.filter((box) => {
@@ -243,7 +249,7 @@ export function MoveDayView({
           box.status,
           box.assignmentWarnings,
           box.assignmentHardBlocks,
-          filter
+          activeCrewFilter
         )
       ) {
         return false;
@@ -264,7 +270,7 @@ export function MoveDayView({
         value?.toLowerCase().includes(normalizedLookup)
       );
     });
-  }, [displayedChecklistBoxes, filter, lookup]);
+  }, [activeCrewFilter, displayedChecklistBoxes, lookup]);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<BoxStatus, number>();
@@ -404,64 +410,51 @@ export function MoveDayView({
 
   const loading = boxes === undefined || resourcesWithZones === undefined;
 
-  return (
-    <Card id="move-day">
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardCheck className="size-4 text-primary" aria-hidden="true" />
-              Move Day
-            </CardTitle>
-            <CardDescription>
-              Mobile-first load crew checklist with safe fields, lookup, and
-              real-time status updates.
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{progressPercent}% loaded/delivered</Badge>
-            {exceptionCount ? (
-              <Badge variant="destructive">{exceptionCount} exceptions</Badge>
-            ) : (
-              <Badge variant="outline">no exceptions</Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="sticky top-2 z-20 rounded-md border border-border bg-card/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="space-y-3">
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="relative">
-                  <Search
-                    className="pointer-events-none absolute left-2 top-3 size-4 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    ref={lookupInputRef}
-                    className="h-11 pl-8 text-base sm:text-sm"
-                    value={lookup}
-                    onChange={(event) => setLookup(event.target.value)}
-                    placeholder="Scan or type a box code, room, destination, or status"
-                    aria-label="Move Day box lookup"
-                    inputMode="search"
-                    autoCapitalize="characters"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11"
-                  onClick={() => {
-                    lookupInputRef.current?.focus();
-                    lookupInputRef.current?.select();
-                  }}
-                >
-                  <ScanLine aria-hidden="true" />
-                  Code
-                </Button>
+  function renderLookupPanel({
+    showFilters,
+    description,
+  }: {
+    showFilters: boolean;
+    description?: string;
+  }) {
+    return (
+      <div className="sticky top-2 z-20 rounded-md border border-border bg-card/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-2 top-3 size-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  ref={lookupInputRef}
+                  className="h-11 pl-8 text-base sm:text-sm"
+                  value={lookup}
+                  onChange={(event) => setLookup(event.target.value)}
+                  placeholder="Scan or type a box code, room, destination, or status"
+                  aria-label="Move Day box lookup"
+                  inputMode="search"
+                  autoCapitalize="characters"
+                />
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11"
+                onClick={() => {
+                  lookupInputRef.current?.focus();
+                  lookupInputRef.current?.select();
+                }}
+              >
+                <ScanLine aria-hidden="true" />
+                Code
+              </Button>
+            </div>
+            {description ? (
+              <p className="text-xs text-muted-foreground">{description}</p>
+            ) : null}
+            {showFilters ? (
               <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
                 {crewFilters.map((option) => (
                   <Button
@@ -476,56 +469,34 @@ export function MoveDayView({
                   </Button>
                 ))}
               </div>
-            </div>
+            ) : null}
+          </div>
 
-            <div className="rounded-md border border-border p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">Crew-safe mode</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Hides values, serials, private notes, and photo details.
-                  </p>
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={safeView}
-                    onChange={(event) => setSafeView(event.target.checked)}
-                  />
-                  Safe
-                </label>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                <MoveDayMetric
-                  label="Sealed"
-                  value={statusCounts.get("sealed") ?? 0}
-                />
-                <MoveDayMetric
-                  label="Staged"
-                  value={statusCounts.get("staged") ?? 0}
-                />
-                <MoveDayMetric
-                  label="Loaded"
-                  value={statusCounts.get("loaded") ?? 0}
-                />
-                <MoveDayMetric
-                  label="Delivered"
-                  value={statusCounts.get("delivered") ?? 0}
-                />
-                <MoveDayMetric
-                  label="Missing"
-                  value={statusCounts.get("missing") ?? 0}
-                />
-                <MoveDayMetric
-                  label="Damaged"
-                  value={statusCounts.get("damaged") ?? 0}
-                />
-              </div>
+          <div className="flex min-w-44 items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+            <div>
+              <p className="text-sm font-medium">Safe view</p>
+              <p className="text-xs text-muted-foreground">
+                {safeView ? "Private details hidden" : "Contents visible"}
+              </p>
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={safeView}
+                onChange={(event) => setSafeView(event.target.checked)}
+              />
+              Safe
+            </label>
           </div>
         </div>
+      </div>
+    );
+  }
 
+  function renderConnectivityBanner({ always = false } = {}) {
+    if (always || !online || usingCachedBoxes || lastFailedAction) {
+      return (
         <div
           className={cn(
             "flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3 text-sm text-muted-foreground",
@@ -550,86 +521,257 @@ export function MoveDayView({
             </Button>
           ) : null}
         </div>
+      );
+    }
 
-        {message ? (
-          <p
-            className="rounded-md border border-border p-3 text-sm text-muted-foreground"
-            role="status"
-            aria-live="polite"
-          >
-            {message}
-          </p>
-        ) : null}
+    return null;
+  }
 
-        {loading && !usingCachedBoxes ? (
-          <div className="space-y-2">
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-5/6" />
+  function renderStatusMessage() {
+    return message ? (
+      <p
+        className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+        role="status"
+        aria-live="polite"
+      >
+        {message}
+      </p>
+    ) : null;
+  }
+
+  function renderMetricGrid() {
+    return (
+      <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-3 lg:grid-cols-6">
+        {progressStatuses.map((status) => (
+          <MoveDayMetric
+            key={status}
+            label={statusLabel(status)}
+            value={statusCounts.get(status) ?? 0}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  function renderBoxList(emptyMessage: string) {
+    if (loading && !usingCachedBoxes) {
+      return (
+        <div className="space-y-2">
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-28 w-5/6" />
+        </div>
+      );
+    }
+
+    if (usingCachedBoxes && filteredCachedBoxes.length) {
+      return (
+        <div className="grid gap-3 xl:grid-cols-2">
+          {filteredCachedBoxes.slice(0, 80).map((box) => (
+            <CachedMoveDayBoxCard key={box.id} box={box} />
+          ))}
+          {filteredCachedBoxes.length > 80 ? (
+            <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+              {filteredCachedBoxes.length - 80} more cached boxes hidden by the
+              crew view limit. Use scan/search to narrow the list.
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (!usingCachedBoxes && filteredBoxes.length) {
+      return (
+        <div className="grid gap-3 xl:grid-cols-2">
+          {filteredBoxes.slice(0, 80).map((record) => (
+            <MoveDayBoxCard
+              key={record.box._id}
+              record={record}
+              safeView={safeView}
+              resourceName={
+                record.box.assignedResourceId
+                  ? resourceNameById.get(record.box.assignedResourceId)
+                  : undefined
+              }
+              zoneName={
+                record.box.assignedZoneId
+                  ? zoneNameById.get(record.box.assignedZoneId)
+                  : undefined
+              }
+              updating={updatingBoxId === record.box._id}
+              online={online}
+              exceptionNote={
+                exceptionNotes[record.box._id] ?? record.box.moveDayNote ?? ""
+              }
+              noteOpen={
+                activeNoteBoxId === record.box._id ||
+                isExceptionStatus(record.box.status) ||
+                Boolean(record.box.moveDayNote)
+              }
+              onSetExceptionNote={(note) =>
+                setExceptionNotes((current) => ({
+                  ...current,
+                  [record.box._id]: note,
+                }))
+              }
+              onOpenNote={() => setActiveNoteBoxId(record.box._id)}
+              onSetStatus={(boxStatus, itemStatus, note) => {
+                if (isExceptionStatus(boxStatus)) {
+                  setActiveNoteBoxId(record.box._id);
+                }
+                void setBoxStatus(record, boxStatus, itemStatus, note);
+              }}
+              onSaveNote={(note) =>
+                void setBoxStatus(record, record.box.status, undefined, note)
+              }
+            />
+          ))}
+          {filteredBoxes.length > 80 ? (
+            <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+              {filteredBoxes.length - 80} more boxes hidden by the crew view
+              limit. Use scan/search or filters to narrow the list.
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+        {emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <Card id="move-day">
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardCheck className="size-4 text-primary" aria-hidden="true" />
+              Move Day
+            </CardTitle>
+            <CardDescription>
+              Mobile-first load crew checklist with safe fields, lookup, and
+              real-time status updates.
+            </CardDescription>
           </div>
-        ) : usingCachedBoxes && filteredCachedBoxes.length ? (
-          <div className="grid gap-3 xl:grid-cols-2">
-            {filteredCachedBoxes.slice(0, 80).map((box) => (
-              <CachedMoveDayBoxCard key={box.id} box={box} />
-            ))}
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">{progressPercent}% loaded/delivered</Badge>
+            {exceptionCount ? (
+              <Badge variant="destructive">{exceptionCount} exceptions</Badge>
+            ) : (
+              <Badge variant="outline">no exceptions</Badge>
+            )}
           </div>
-        ) : !usingCachedBoxes && filteredBoxes.length ? (
-          <div className="grid gap-3 xl:grid-cols-2">
-            {filteredBoxes.slice(0, 80).map((record) => (
-              <MoveDayBoxCard
-                key={record.box._id}
-                record={record}
-                safeView={safeView}
-                resourceName={
-                  record.box.assignedResourceId
-                    ? resourceNameById.get(record.box.assignedResourceId)
-                    : undefined
-                }
-                zoneName={
-                  record.box.assignedZoneId
-                    ? zoneNameById.get(record.box.assignedZoneId)
-                    : undefined
-                }
-                updating={updatingBoxId === record.box._id}
-                online={online}
-                exceptionNote={
-                  exceptionNotes[record.box._id] ?? record.box.moveDayNote ?? ""
-                }
-                noteOpen={
-                  activeNoteBoxId === record.box._id ||
-                  isExceptionStatus(record.box.status) ||
-                  Boolean(record.box.moveDayNote)
-                }
-                onSetExceptionNote={(note) =>
-                  setExceptionNotes((current) => ({
-                    ...current,
-                    [record.box._id]: note,
-                  }))
-                }
-                onOpenNote={() => setActiveNoteBoxId(record.box._id)}
-                onSetStatus={(boxStatus, itemStatus, note) => {
-                  if (isExceptionStatus(boxStatus)) {
-                    setActiveNoteBoxId(record.box._id);
-                  }
-                  void setBoxStatus(record, boxStatus, itemStatus, note);
-                }}
-                onSaveNote={(note) =>
-                  void setBoxStatus(record, record.box.status, undefined, note)
-                }
-              />
-            ))}
-            {filteredBoxes.length > 80 ? (
-              <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-                {filteredBoxes.length - 80} more boxes hidden by the crew view
-                limit. Use scan/search or filters to narrow the list.
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Tabs
+          value={moveDayTask}
+          onValueChange={(value) => setMoveDayTask(value as MoveDayTask)}
+          className="gap-4"
+        >
+          <MoveWorkspaceTabList
+            tabs={[
+              { value: "checklist", label: "Checklist" },
+              { value: "exceptions", label: "Exceptions" },
+              { value: "progress", label: "Progress" },
+              { value: "offline", label: "Offline" },
+            ]}
+          />
+
+          <TabsContent value="checklist" className="space-y-4">
+            {renderLookupPanel({ showFilters: true })}
+            {renderConnectivityBanner()}
+            {renderStatusMessage()}
+            {renderBoxList("No boxes match this move-day filter.")}
+          </TabsContent>
+
+          <TabsContent value="exceptions" className="space-y-4">
+            {renderLookupPanel({
+              showFilters: false,
+              description:
+                "Shows missing, damaged, warning, and hard-blocked boxes only.",
+            })}
+            {renderConnectivityBanner()}
+            {renderStatusMessage()}
+            {renderBoxList("No move-day exceptions match this lookup.")}
+          </TabsContent>
+
+          <TabsContent value="progress" className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+              <div className="rounded-md border border-border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold">Status progress</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Crew movement by box status without the scan checklist in
+                      the way.
+                    </p>
+                  </div>
+                  <Badge variant="secondary">{displayedChecklistBoxes.length} boxes</Badge>
+                </div>
+                <div className="mt-4">{renderMetricGrid()}</div>
               </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-            No boxes match this move-day filter.
-          </div>
-        )}
+              <div className="rounded-md border border-border p-4">
+                <p className="text-sm font-medium">Loaded or delivered</p>
+                <p className="mt-2 font-mono text-3xl font-semibold">
+                  {progressPercent}%
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {completedCount} of {displayedChecklistBoxes.length} boxes are
+                  loaded or delivered.
+                </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {exceptionCount
+                    ? `${exceptionCount} boxes are currently missing or damaged.`
+                    : "No missing or damaged boxes are currently flagged."}
+                </p>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="offline" className="space-y-4">
+            {renderConnectivityBanner({ always: true })}
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-md border border-border p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold">
+                      Offline and crew safety
+                    </h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Safe mode hides values, serials, private notes, and photo
+                      details while helpers are handling boxes.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={safeView}
+                      onChange={(event) => setSafeView(event.target.checked)}
+                    />
+                    Safe
+                  </label>
+                </div>
+              </div>
+              <div className="rounded-md border border-border p-4">
+                <h3 className="text-base font-semibold">Cached checklist</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {cacheAgeLabel
+                    ? `Last saved ${cacheAgeLabel}.`
+                    : "A cached checklist will appear here after this move loads once in the browser."}
+                </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Reconnect before changing status; cached cards are read-only.
+                </p>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
@@ -905,6 +1047,10 @@ function isBoxStatus(status: string): status is BoxStatus {
 
 function isExceptionStatus(status: BoxStatus) {
   return status === "missing" || status === "damaged";
+}
+
+function statusLabel(status: BoxStatus) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function matchesCrewFilter(

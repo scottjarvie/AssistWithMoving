@@ -586,6 +586,9 @@ test.describe("authenticated product flow", () => {
     await expect(
       page.getByRole("heading", { name: "Move Day", exact: true, level: 2 })
     ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByRole("tab", { name: "Checklist" })
+    ).toBeVisible();
 
     // Packets page: claims center and documentation packets.
     await page.goto(movePath("packets"));
