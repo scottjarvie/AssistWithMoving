@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
 import {
   buildSubManifestPath,
   formatSubManifestCurrency,
@@ -42,6 +43,7 @@ type Summary = NonNullable<
 >;
 type PipelineGroup = Summary["groups"][number];
 type PipelineAction = PipelineGroup["actions"][number];
+type TopPipelineAction = Summary["topActions"][number];
 
 const actionClasses: Record<PipelineAction["severity"], string> = {
   ok: "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
@@ -70,15 +72,34 @@ const dispositionTabs = [
   { value: "storage", label: "Storage" },
 ] as const;
 
+type DispositionTab = (typeof dispositionTabs)[number]["value"];
+
+const dispositionTabHashes = {
+  "#disposition-actions": "actions",
+  "#disposition-donation": "donate",
+  "#disposition-dump": "dump",
+  "#disposition-pipelines": "actions",
+  "#disposition-sell-free": "sellFree",
+  "#disposition-shortcuts": "shortcuts",
+  "#disposition-storage": "storage",
+  "#disposition-summary": "summary",
+} as const satisfies Partial<Record<string, DispositionTab>>;
+
 export function DispositionPipelinePanel({
   householdId,
   moveId,
 }: DispositionPipelinePanelProps) {
+  const [activeTab, setActiveTab] = useHashTab<DispositionTab>(
+    "actions",
+    dispositionTabHashes,
+  );
   const summary = useQuery(
     api.dispositionPipelines.summaryForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
-  const groupByKey = new Map(summary?.groups.map((group) => [group.key, group]));
+  const groupByKey = new Map(
+    summary?.groups.map((group) => [group.key, group]),
+  );
 
   return (
     <Card id="disposition-pipelines">
@@ -86,7 +107,10 @@ export function DispositionPipelinePanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="size-4 text-primary" aria-hidden="true" />
+              <ClipboardList
+                className="size-4 text-primary"
+                aria-hidden="true"
+              />
               Disposition pipelines
             </CardTitle>
             <CardDescription>
@@ -95,7 +119,9 @@ export function DispositionPipelinePanel({
             </CardDescription>
           </div>
           {summary ? (
-            <Badge variant={summary.counts.actionCount ? "secondary" : "outline"}>
+            <Badge
+              variant={summary.counts.actionCount ? "secondary" : "outline"}
+            >
               {summary.counts.actionCount
                 ? `${summary.counts.actionCount} open queues`
                 : "clear"}
@@ -112,34 +138,55 @@ export function DispositionPipelinePanel({
             dispositions in Inventory to start these workflows.
           </div>
         ) : (
-          <Tabs defaultValue="actions" className="gap-4">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="gap-4"
+          >
             <MoveWorkspaceTabList tabs={[...dispositionTabs]} />
 
-            <TabsContent value="actions" className="space-y-4">
+            <TabsContent
+              value="actions"
+              id="disposition-actions"
+              className="space-y-4"
+            >
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <Metric
+                  label="Open queues"
+                  value={summary.counts.actionCount}
+                />
+                <Metric label="Ready now" value={summary.counts.readyCount} />
+                <Metric
+                  label="Share links"
+                  value={summary.counts.activeShareLinkCount}
+                />
+                <Metric
+                  label="Owner value"
+                  value={formatSubManifestCurrency(
+                    summary.counts.totalValueCents,
+                  )}
+                />
+              </div>
               {summary.topActions.length ? (
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {summary.topActions.map((action) => (
-                    <Link
-                      key={`${action.groupKey}-${action.key}`}
-                      href={moveWorkspaceAnchorPath(moveId, action.anchor)}
-                      className={cn(
-                        "rounded-md border p-3 transition-colors hover:bg-muted/70",
-                        actionClasses[action.severity]
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm font-medium">
-                          {action.groupLabel}: {action.label}
-                        </span>
-                        <span className="font-mono text-2xl font-semibold leading-none">
-                          {action.count}
-                        </span>
-                      </div>
-                      <p className="mt-2 line-clamp-2 text-xs opacity-80">
-                        {action.help}
-                      </p>
-                    </Link>
-                  ))}
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-medium">
+                      Next disposition work
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Clear these before scheduling pickups, publishing share
+                      links, or sending items to storage.
+                    </p>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {summary.topActions.map((action) => (
+                      <ActionQueueCard
+                        key={`${action.groupKey}-${action.key}`}
+                        action={action}
+                        moveId={moveId}
+                      />
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
@@ -154,9 +201,16 @@ export function DispositionPipelinePanel({
               )}
             </TabsContent>
 
-            <TabsContent value="summary" className="space-y-4">
+            <TabsContent
+              value="summary"
+              id="disposition-summary"
+              className="space-y-4"
+            >
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                <Metric label="Pipeline items" value={summary.counts.itemCount} />
+                <Metric
+                  label="Pipeline items"
+                  value={summary.counts.itemCount}
+                />
                 <Metric label="Quantity" value={summary.counts.quantity} />
                 <Metric label="Ready now" value={summary.counts.readyCount} />
                 <Metric
@@ -165,17 +219,23 @@ export function DispositionPipelinePanel({
                 />
                 <Metric
                   label="Owner value"
-                  value={formatSubManifestCurrency(summary.counts.totalValueCents)}
+                  value={formatSubManifestCurrency(
+                    summary.counts.totalValueCents,
+                  )}
                 />
               </div>
             </TabsContent>
 
-            <TabsContent value="shortcuts" className="space-y-4">
+            <TabsContent
+              value="shortcuts"
+              id="disposition-shortcuts"
+              className="space-y-4"
+            >
               <div className="rounded-md border border-border p-3">
                 <p className="text-sm font-medium">Go fix disposition inputs</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Disposition queues come from item records, photo evidence,
-                  box assignments, load planning, and packet links.
+                  Disposition queues come from item records, photo evidence, box
+                  assignments, load planning, and packet links.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
@@ -194,7 +254,12 @@ export function DispositionPipelinePanel({
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#documentation-packets")}>
+                    <Link
+                      href={moveWorkspaceAnchorPath(
+                        moveId,
+                        "#documentation-packets",
+                      )}
+                    >
                       Packet links
                     </Link>
                   </Button>
@@ -202,7 +267,7 @@ export function DispositionPipelinePanel({
               </div>
             </TabsContent>
 
-            <TabsContent value="sellFree">
+            <TabsContent value="sellFree" id="disposition-sell-free">
               <PipelineTabContent
                 groups={[groupByKey.get("sell"), groupByKey.get("free")]}
                 householdId={householdId}
@@ -211,7 +276,7 @@ export function DispositionPipelinePanel({
               />
             </TabsContent>
 
-            <TabsContent value="donate">
+            <TabsContent value="donate" id="disposition-donation">
               <PipelineTabContent
                 groups={[groupByKey.get("donate")]}
                 householdId={householdId}
@@ -220,7 +285,7 @@ export function DispositionPipelinePanel({
               />
             </TabsContent>
 
-            <TabsContent value="dump">
+            <TabsContent value="dump" id="disposition-dump">
               <PipelineTabContent
                 groups={[groupByKey.get("dump")]}
                 householdId={householdId}
@@ -229,7 +294,7 @@ export function DispositionPipelinePanel({
               />
             </TabsContent>
 
-            <TabsContent value="storage">
+            <TabsContent value="storage" id="disposition-storage">
               <PipelineTabContent
                 groups={[groupByKey.get("storage")]}
                 householdId={householdId}
@@ -255,8 +320,8 @@ function PipelineTabContent({
   moveId: Id<"moves"> | null;
   emptyLabel: string;
 }) {
-  const visibleGroups = groups.filter(
-    (group): group is PipelineGroup => Boolean(group)
+  const visibleGroups = groups.filter((group): group is PipelineGroup =>
+    Boolean(group),
   );
   const activeGroups = visibleGroups.filter((group) => group.itemCount > 0);
 
@@ -279,6 +344,37 @@ function PipelineTabContent({
         />
       ))}
     </div>
+  );
+}
+
+function ActionQueueCard({
+  action,
+  moveId,
+}: {
+  action: TopPipelineAction;
+  moveId: Id<"moves"> | null;
+}) {
+  return (
+    <Link
+      href={moveWorkspaceAnchorPath(moveId, action.anchor)}
+      className={cn(
+        "rounded-md border p-3 transition-colors hover:bg-muted/70",
+        actionClasses[action.severity],
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm font-medium">
+          {action.groupLabel}: {action.label}
+        </span>
+        <span className="font-mono text-2xl font-semibold leading-none">
+          {action.count}
+        </span>
+      </div>
+      <p className="mt-2 line-clamp-2 text-xs opacity-80">{action.help}</p>
+      <div className="mt-3 text-xs font-medium underline-offset-4">
+        Open related records
+      </div>
+    </Link>
   );
 }
 
@@ -319,33 +415,6 @@ function PipelineCard({
         </Badge>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-4">
-        <MiniMetric label="Ready" value={group.readyCount} />
-        <MiniMetric label="Photos" value={group.photoCount} />
-        <MiniMetric label="Boxed" value={group.boxedCount} />
-        <MiniMetric label="Assigned" value={group.assignedCount} />
-      </div>
-
-      <div className="mt-3 space-y-1.5">
-        {group.actions.map((action) => (
-          <Link
-            key={action.key}
-            href={moveWorkspaceAnchorPath(moveId, action.anchor)}
-            className="flex items-center justify-between gap-3 rounded-md bg-muted/35 px-3 py-2 text-sm hover:bg-muted"
-          >
-            <span className="min-w-0 truncate text-muted-foreground">
-              {action.label}
-            </span>
-            <Badge
-              variant={action.count ? "secondary" : "outline"}
-              className="shrink-0"
-            >
-              {action.count}
-            </Badge>
-          </Link>
-        ))}
-      </div>
-
       {group.highlights.length ? (
         <div className="mt-3 space-y-2">
           <p className="text-xs font-medium uppercase text-muted-foreground">
@@ -383,6 +452,36 @@ function PipelineCard({
           ))}
         </div>
       ) : null}
+
+      <div className="mt-3 space-y-1.5">
+        <p className="text-xs font-medium uppercase text-muted-foreground">
+          Work queue
+        </p>
+        {group.actions.map((action) => (
+          <Link
+            key={action.key}
+            href={moveWorkspaceAnchorPath(moveId, action.anchor)}
+            className="flex items-center justify-between gap-3 rounded-md bg-muted/35 px-3 py-2 text-sm hover:bg-muted"
+          >
+            <span className="min-w-0 truncate text-muted-foreground">
+              {action.label}
+            </span>
+            <Badge
+              variant={action.count ? "secondary" : "outline"}
+              className="shrink-0"
+            >
+              {action.count}
+            </Badge>
+          </Link>
+        ))}
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        <MiniMetric label="Ready" value={group.readyCount} />
+        <MiniMetric label="Photos" value={group.photoCount} />
+        <MiniMetric label="Boxed" value={group.boxedCount} />
+        <MiniMetric label="Assigned" value={group.assignedCount} />
+      </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1">

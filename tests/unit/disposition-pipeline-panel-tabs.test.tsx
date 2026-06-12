@@ -33,19 +33,31 @@ const mockData = vi.hoisted(() => ({
       },
     ],
     groups: [
-      group("sell", "Sell", "Items intended for sale, listing, and buyer pickup."),
+      group(
+        "sell",
+        "Sell",
+        "Items intended for sale, listing, and buyer pickup.",
+      ),
       group(
         "free",
         "Free / giveaway",
-        "Items offered through a limited pickup or giveaway link."
+        "Items offered through a limited pickup or giveaway link.",
       ),
-      group("donate", "Donation", "Donation pickup, drop-off, and delivered records."),
+      group(
+        "donate",
+        "Donation",
+        "Donation pickup, drop-off, and delivered records.",
+      ),
       group(
         "dump",
         "Dump run",
-        "Disposal items that need a dump or special-disposal run."
+        "Disposal items that need a dump or special-disposal run.",
       ),
-      group("storage", "Storage", "Items leaving the living space for storage inventory."),
+      group(
+        "storage",
+        "Storage",
+        "Items leaving the living space for storage inventory.",
+      ),
     ],
   },
 }));
@@ -66,19 +78,31 @@ import { DispositionPipelinePanel } from "@/components/disposition-pipeline-pane
 describe("DispositionPipelinePanel task tabs", () => {
   beforeEach(() => {
     mockData.summary.groups = [
-      group("sell", "Sell", "Items intended for sale, listing, and buyer pickup."),
+      group(
+        "sell",
+        "Sell",
+        "Items intended for sale, listing, and buyer pickup.",
+      ),
       group(
         "free",
         "Free / giveaway",
-        "Items offered through a limited pickup or giveaway link."
+        "Items offered through a limited pickup or giveaway link.",
       ),
-      group("donate", "Donation", "Donation pickup, drop-off, and delivered records."),
+      group(
+        "donate",
+        "Donation",
+        "Donation pickup, drop-off, and delivered records.",
+      ),
       group(
         "dump",
         "Dump run",
-        "Disposal items that need a dump or special-disposal run."
+        "Disposal items that need a dump or special-disposal run.",
       ),
-      group("storage", "Storage", "Items leaving the living space for storage inventory."),
+      group(
+        "storage",
+        "Storage",
+        "Items leaving the living space for storage inventory.",
+      ),
     ];
   });
 
@@ -89,68 +113,104 @@ describe("DispositionPipelinePanel task tabs", () => {
       <DispositionPipelinePanel
         householdId={"household_123" as Id<"households">}
         moveId={"move_123" as Id<"moves">}
-      />
+      />,
     );
 
     expect(screen.getByRole("tab", { name: "Actions" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
-    expect(screen.getByText("Sell: To photograph for sale")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Sell: To photograph for sale/i })
+      screen.getByText("Sell: To photograph for sale"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Sell: To photograph for sale/i }),
     ).toHaveAttribute("href", "/app/moves/move_123/photos#photos");
     expect(screen.queryByText("Pipeline items")).not.toBeInTheDocument();
-    expect(screen.queryByText("Go fix disposition inputs")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Items intended for sale, listing, and buyer pickup.")
+      screen.queryByText("Go fix disposition inputs"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Items intended for sale, listing, and buyer pickup."),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Summary" }));
     expect(screen.getByText("Pipeline items")).toBeInTheDocument();
     expect(screen.getByText("Owner value")).toBeInTheDocument();
-    expect(screen.queryByText("Sell: To photograph for sale")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Sell: To photograph for sale"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Shortcuts" }));
     expect(screen.getByText("Go fix disposition inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/inventory#inventory"
+      "/app/moves/move_123/inventory#inventory",
     );
     expect(screen.getByRole("link", { name: "Packet links" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/packets#documentation-packets"
+      "/app/moves/move_123/packets#documentation-packets",
     );
     expect(screen.queryByText("Pipeline items")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Sell / free" }));
     expect(
-      screen.getByText("Items intended for sale, listing, and buyer pickup.")
+      screen.getByText("Items intended for sale, listing, and buyer pickup."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Items offered through a limited pickup or giveaway link.")
+      screen.getByText(
+        "Items offered through a limited pickup or giveaway link.",
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Donation pickup, drop-off, and delivered records.")
+      screen.queryByText("Donation pickup, drop-off, and delivered records."),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Donation" }));
     expect(
-      screen.getByText("Donation pickup, drop-off, and delivered records.")
+      screen.getByText("Donation pickup, drop-off, and delivered records."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Items intended for sale, listing, and buyer pickup.")
+      screen.queryByText("Items intended for sale, listing, and buyer pickup."),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Dump" }));
     expect(
-      screen.getByText("Disposal items that need a dump or special-disposal run.")
+      screen.getByText(
+        "Disposal items that need a dump or special-disposal run.",
+      ),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Storage" }));
     expect(
-      screen.getByText("Items leaving the living space for storage inventory.")
+      screen.getByText("Items leaving the living space for storage inventory."),
     ).toBeInTheDocument();
+  });
+
+  it("opens a focused disposition category from the hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#disposition-storage",
+    );
+
+    render(
+      <DispositionPipelinePanel
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Storage" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(
+      screen.getByText("Items leaving the living space for storage inventory."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Donation pickup, drop-off, and delivered records."),
+    ).not.toBeInTheDocument();
   });
 });
 
