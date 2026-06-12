@@ -193,7 +193,7 @@ function renderLoadPlannerBoard() {
     <LoadPlannerBoard
       householdId={"household_123" as Id<"households">}
       moveId={"move_123" as Id<"moves">}
-    />
+    />,
   );
 }
 
@@ -207,23 +207,44 @@ describe("LoadPlannerBoard task tabs", () => {
 
     renderLoadPlannerBoard();
 
-    expect(screen.getByRole("tab", { name: "Board" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Board: 1 box" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
-    expect(screen.getByPlaceholderText("Search box codes, rooms, labels, or contents")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Scan truck and zone assignments with warnings and capacity visible.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(
+        "Search box codes, rooms, labels, or contents",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("BOX-001")).toBeInTheDocument();
     expect(screen.queryByText("Bulk assignment")).not.toBeInTheDocument();
     expect(screen.queryByText("Unboxed item queue")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Assign" }));
+    await user.click(screen.getByRole("tab", { name: "Assign: 0 selected" }));
+    expect(
+      screen.getByText(
+        "Bulk-assign selected boxes after choosing them on the board.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Bulk assignment")).toBeInTheDocument();
-    expect(screen.getByLabelText("Bulk assignment resource")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Bulk assignment resource"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Assignment workflow")).toBeInTheDocument();
     expect(screen.queryByText("BOX-001")).not.toBeInTheDocument();
     expect(screen.queryByText("Unboxed item queue")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Unboxed" }));
+    await user.click(screen.getByRole("tab", { name: "Unboxed: 1 item" }));
+    expect(
+      screen.getByText(
+        "Find loose inventory that still needs a box before load day.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Unboxed item queue")).toBeInTheDocument();
     expect(screen.getByText("Floor lamp")).toBeInTheDocument();
     expect(screen.getByText("first night")).toBeInTheDocument();

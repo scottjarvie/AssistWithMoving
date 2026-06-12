@@ -67,11 +67,40 @@ const plannerFilters: { key: PlannerFilter; label: string }[] = [
   { key: "notPacked", label: "Not packed" },
 ];
 
-const loadPlannerTasks = [
-  { value: "board", label: "Board" },
-  { value: "assign", label: "Assign" },
-  { value: "unboxed", label: "Unboxed" },
-] as const;
+type LoadPlannerTask = "board" | "assign" | "unboxed";
+
+const loadPlannerTasks: Array<{
+  value: LoadPlannerTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "board",
+    label: "Board",
+    description:
+      "Scan truck and zone assignments with warnings and capacity visible.",
+  },
+  {
+    value: "assign",
+    label: "Assign",
+    description: "Bulk-assign selected boxes after choosing them on the board.",
+  },
+  {
+    value: "unboxed",
+    label: "Unboxed",
+    description: "Find loose inventory that still needs a box before load day.",
+  },
+];
+
+function formatLoadPlannerTaskCount(task: LoadPlannerTask, count: number) {
+  if (task === "assign") {
+    return `${count} selected`;
+  }
+  if (task === "unboxed") {
+    return `${count} ${count === 1 ? "item" : "items"}`;
+  }
+  return `${count} ${count === 1 ? "box" : "boxes"}`;
+}
 
 export function LoadPlannerBoard({
   householdId,
@@ -82,19 +111,19 @@ export function LoadPlannerBoard({
 }) {
   const boxes = useQuery(
     api.boxes.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const items = useQuery(
     api.items.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const resourcesWithZones = useQuery(
     api.transportResources.listForMoveWithZones,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const report = useQuery(
     api.estimates.reportForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const updateBox = useMutation(api.boxes.update);
 
@@ -108,13 +137,16 @@ export function LoadPlannerBoard({
   const [message, setMessage] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [lockSavingBoxIds, setLockSavingBoxIds] = useState<Id<"boxes">[]>([]);
+  const [activePlannerTask, setActivePlannerTask] =
+    useState<LoadPlannerTask>("board");
 
   const reportByBoxId = useMemo(
     () =>
       new Map(
-        report?.boxReports.map((boxReport) => [boxReport.boxId, boxReport]) ?? []
+        report?.boxReports.map((boxReport) => [boxReport.boxId, boxReport]) ??
+          [],
       ),
-    [report]
+    [report],
   );
   const reportByResourceId = useMemo(
     () =>
@@ -122,16 +154,16 @@ export function LoadPlannerBoard({
         report?.resourceReports.map((resourceReport) => [
           resourceReport.resourceId,
           resourceReport,
-        ]) ?? []
+        ]) ?? [],
       ),
-    [report]
+    [report],
   );
   const zoneOptions = useMemo(
     () =>
       resourcesWithZones?.find(
-        ({ resource }) => resource._id === targetResourceId
+        ({ resource }) => resource._id === targetResourceId,
       )?.zones ?? [],
-    [resourcesWithZones, targetResourceId]
+    [resourcesWithZones, targetResourceId],
   );
   const boxedItemIds = useMemo(() => {
     const ids = new Set<string>();
@@ -146,16 +178,19 @@ export function LoadPlannerBoard({
   }, [boxes]);
   const allUnboxedItems = useMemo(
     () =>
-      (items ?? [])
-        .filter((item) => item.status !== "archived" && !boxedItemIds.has(item._id)),
-    [boxedItemIds, items]
+      (items ?? []).filter(
+        (item) => item.status !== "archived" && !boxedItemIds.has(item._id),
+      ),
+    [boxedItemIds, items],
   );
   const unboxedItems = allUnboxedItems.slice(0, 12);
 
   const filteredBoxes = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return (boxes ?? []).filter((record) => {
-      if (!matchesPlannerFilter(record, reportByBoxId.get(record.box._id), filter)) {
+      if (
+        !matchesPlannerFilter(record, reportByBoxId.get(record.box._id), filter)
+      ) {
         return false;
       }
       if (!normalizedSearch) {
@@ -172,32 +207,32 @@ export function LoadPlannerBoard({
           .filter((value): value is string => typeof value === "string"),
       ];
       return haystack.some((value) =>
-        value?.toLowerCase().includes(normalizedSearch)
+        value?.toLowerCase().includes(normalizedSearch),
       );
     });
   }, [boxes, filter, reportByBoxId, search]);
 
   const selectedTargetZones = targetResourceId ? zoneOptions : [];
   const visibleSelectedCount = selectedBoxIds.filter((boxId) =>
-    filteredBoxes.some((record) => record.box._id === boxId)
+    filteredBoxes.some((record) => record.box._id === boxId),
   ).length;
   const loadLockSummary = useMemo(
     () => summarizeLoadLocks(boxes ?? []),
-    [boxes]
+    [boxes],
   );
   const selectedBulkSplit = useMemo(
     () =>
       splitBulkAssignmentSelection(boxes ?? [], selectedBoxIds, {
         includeLocked: includeLockedInBulk,
       }),
-    [boxes, includeLockedInBulk, selectedBoxIds]
+    [boxes, includeLockedInBulk, selectedBoxIds],
   );
 
   async function assignBoxes(
     boxIds: Id<"boxes">[],
     resourceId: Id<"transportResources"> | null,
     zoneId?: Id<"transportZones">,
-    options: { includeLocked?: boolean } = {}
+    options: { includeLocked?: boolean } = {},
   ) {
     if (!householdId || !moveId || !boxIds.length) {
       return;
@@ -212,9 +247,9 @@ export function LoadPlannerBoard({
       setMessage(
         skippedLockedCount
           ? `${skippedLockedCount} locked ${boxWord(
-              skippedLockedCount
+              skippedLockedCount,
             )} skipped. Unlock ${skippedLockedCount === 1 ? "it" : "them"} first or include locked boxes deliberately.`
-          : "No selected boxes are available for assignment."
+          : "No selected boxes are available for assignment.",
       );
       return;
     }
@@ -231,27 +266,27 @@ export function LoadPlannerBoard({
             ...(resourceId
               ? { assignedResourceId: resourceId }
               : { clearAssignedResource: true }),
-            ...(zoneId ? { assignedZoneId: zoneId } : { clearAssignedZone: true }),
+            ...(zoneId
+              ? { assignedZoneId: zoneId }
+              : { clearAssignedZone: true }),
             assignmentOverrideReason: overrideReason,
-          })
-        )
+          }),
+        ),
       );
       setSelectedBoxIds((current) =>
-        current.filter((boxId) => !assignableBoxIds.includes(boxId))
+        current.filter((boxId) => !assignableBoxIds.includes(boxId)),
       );
       const actionMessage = formatAssignmentMessage({
         count: assignableBoxIds.length,
         action: resourceId ? "updated" : "cleared",
         skippedLockedCount,
       });
-      setMessage(
-        actionMessage
-      );
+      setMessage(actionMessage);
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : "Could not update the selected assignments."
+          : "Could not update the selected assignments.",
       );
     } finally {
       setAssigning(false);
@@ -262,7 +297,7 @@ export function LoadPlannerBoard({
     setSelectedBoxIds((current) =>
       current.includes(boxId)
         ? current.filter((id) => id !== boxId)
-        : [...current, boxId]
+        : [...current, boxId],
     );
   }
 
@@ -282,24 +317,24 @@ export function LoadPlannerBoard({
         assignmentLocked: nextLocked,
       });
       setMessage(
-        `${record.box.code} assignment ${nextLocked ? "locked" : "unlocked"}.`
+        `${record.box.code} assignment ${nextLocked ? "locked" : "unlocked"}.`,
       );
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : `Could not ${nextLocked ? "lock" : "unlock"} ${record.box.code}.`
+          : `Could not ${nextLocked ? "lock" : "unlock"} ${record.box.code}.`,
       );
     } finally {
       setLockSavingBoxIds((current) =>
-        current.filter((boxId) => boxId !== record.box._id)
+        current.filter((boxId) => boxId !== record.box._id),
       );
     }
   }
 
   function selectVisibleBoxes() {
     setSelectedBoxIds(
-      filteredBoxes.slice(0, 100).map((record) => record.box._id)
+      filteredBoxes.slice(0, 100).map((record) => record.box._id),
     );
   }
 
@@ -308,6 +343,14 @@ export function LoadPlannerBoard({
     resourcesWithZones === undefined ||
     report === undefined ||
     items === undefined;
+  const loadPlannerTaskCounts: Record<LoadPlannerTask, number> = {
+    board: boxes?.length ?? 0,
+    assign: selectedBoxIds.length,
+    unboxed: allUnboxedItems.length,
+  };
+  const activeLoadPlannerTask =
+    loadPlannerTasks.find((task) => task.value === activePlannerTask) ??
+    loadPlannerTasks[0];
 
   return (
     <Card id="load-plan">
@@ -328,7 +371,9 @@ export function LoadPlannerBoard({
             <Badge variant="outline">
               {loadLockSummary.lockedCount} locked
             </Badge>
-            <Badge variant="outline">{allUnboxedItems.length} unpacked queue</Badge>
+            <Badge variant="outline">
+              {allUnboxedItems.length} unpacked queue
+            </Badge>
             {householdId && moveId ? (
               <>
                 <Button asChild size="sm" variant="outline">
@@ -359,16 +404,43 @@ export function LoadPlannerBoard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Tabs defaultValue="board" className="gap-4">
+        <Tabs
+          value={activePlannerTask}
+          onValueChange={(value) =>
+            setActivePlannerTask(value as LoadPlannerTask)
+          }
+          className="gap-4"
+        >
           <div className="overflow-x-auto pb-1">
             <TabsList className="min-w-max" aria-label="Load planner tasks">
-              {loadPlannerTasks.map((task) => (
-                <TabsTrigger key={task.value} value={task.value}>
-                  {task.label}
-                </TabsTrigger>
-              ))}
+              {loadPlannerTasks.map((task) => {
+                const count = loadPlannerTaskCounts[task.value];
+                return (
+                  <TabsTrigger
+                    key={task.value}
+                    value={task.value}
+                    className="gap-2"
+                    aria-label={`${task.label}: ${formatLoadPlannerTaskCount(task.value, count)}`}
+                  >
+                    {task.label}
+                    <Badge
+                      variant={
+                        activePlannerTask === task.value
+                          ? "secondary"
+                          : "outline"
+                      }
+                      className="h-5 min-w-5 px-1"
+                    >
+                      {count}
+                    </Badge>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           </div>
+          <p className="text-sm text-muted-foreground">
+            {activeLoadPlannerTask.description}
+          </p>
 
           {message ? (
             <p
@@ -401,7 +473,7 @@ export function LoadPlannerBoard({
                   title="Unassigned"
                   subtitle="Needs a resource before load day"
                   boxes={filteredBoxes.filter(
-                    (record) => !record.box.assignedResourceId
+                    (record) => !record.box.assignedResourceId,
                   )}
                   selectedBoxIds={selectedBoxIds}
                   reportByBoxId={reportByBoxId}
@@ -416,7 +488,8 @@ export function LoadPlannerBoard({
                     resource={resource}
                     zones={zones}
                     boxes={filteredBoxes.filter(
-                      (record) => record.box.assignedResourceId === resource._id
+                      (record) =>
+                        record.box.assignedResourceId === resource._id,
                     )}
                     selectedBoxIds={selectedBoxIds}
                     reportByBoxId={reportByBoxId}
@@ -452,7 +525,7 @@ export function LoadPlannerBoard({
                   targetZoneId
                     ? (targetZoneId as Id<"transportZones">)
                     : undefined,
-                  { includeLocked: includeLockedInBulk }
+                  { includeLocked: includeLockedInBulk },
                 )
               }
               onClearSelection={() => setSelectedBoxIds([])}
@@ -563,7 +636,9 @@ function BulkAssignmentPanel({
   includeLockedInBulk: boolean;
   overrideReason: string;
   resourcesWithZones: NonNullable<
-    ReturnType<typeof useQuery<typeof api.transportResources.listForMoveWithZones>>
+    ReturnType<
+      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
+    >
   >;
   selectedBoxIds: Id<"boxes">[];
   selectedBulkSplit: ReturnType<typeof splitBulkAssignmentSelection>;
@@ -771,7 +846,9 @@ function ResourcePanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium">{resource.name}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{resource.type}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {resource.type}
+            </p>
           </div>
           <div className="flex flex-wrap justify-end gap-1">
             <Badge variant="outline">{boxes.length} boxes</Badge>
@@ -818,7 +895,9 @@ function ResourcePanel({
           key={zone._id}
           title={zone.name}
           subtitle={zone.description}
-          boxes={boxes.filter((record) => record.box.assignedZoneId === zone._id)}
+          boxes={boxes.filter(
+            (record) => record.box.assignedZoneId === zone._id,
+          )}
           selectedBoxIds={selectedBoxIds}
           reportByBoxId={reportByBoxId}
           onToggleBox={onToggleBox}
@@ -985,7 +1064,7 @@ function BoxTile({
     <div
       className={cn(
         "rounded-md border border-border bg-background p-2 text-sm",
-        selected && "border-primary bg-primary/5"
+        selected && "border-primary bg-primary/5",
       )}
       draggable
       onDragStart={(event) => {
@@ -1039,7 +1118,9 @@ function BoxTile({
           <Boxes aria-hidden="true" />
           {itemCount}
         </Badge>
-        <Badge variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}>
+        <Badge
+          variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}
+        >
           {formatBoxWeightValue(weightSummary)}
         </Badge>
         <Badge variant="outline">{formatBoxWeightSource(weightSummary)}</Badge>
@@ -1096,7 +1177,10 @@ function CapacityLine({
       {typeof percent === "number" ? (
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
           <div
-            className={cn("h-full", overCapacity ? "bg-destructive" : "bg-primary")}
+            className={cn(
+              "h-full",
+              overCapacity ? "bg-destructive" : "bg-primary",
+            )}
             style={{ width: `${Math.min(percent, 100)}%` }}
           />
         </div>
@@ -1108,7 +1192,7 @@ function CapacityLine({
 function matchesPlannerFilter(
   record: BoxRecord,
   report: BoxReport | undefined,
-  filter: PlannerFilter
+  filter: PlannerFilter,
 ) {
   switch (filter) {
     case "all":
@@ -1118,8 +1202,8 @@ function matchesPlannerFilter(
     case "warnings":
       return Boolean(
         report?.warnings.length ||
-          record.box.assignmentWarnings?.length ||
-          record.box.assignmentHardBlocks?.length
+        record.box.assignmentWarnings?.length ||
+        record.box.assignmentHardBlocks?.length,
       );
     case "fragile":
       return record.contents.some((entry) => entry?.item.fragility === "high");
@@ -1127,11 +1211,11 @@ function matchesPlannerFilter(
       return record.contents.some((entry) => entry?.item.highValue);
     case "firstNight":
       return record.contents.some((entry) =>
-        entry?.item.planningDefaultKeys.includes("firstNight")
+        entry?.item.planningDefaultKeys.includes("firstNight"),
       );
     case "notPacked":
       return !["sealed", "staged", "loaded", "delivered"].includes(
-        record.box.status
+        record.box.status,
       );
   }
 }
