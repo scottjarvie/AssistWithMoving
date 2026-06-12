@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useHashTab } from "@/components/use-hash-tab";
 
 type SellRows = FunctionReturnType<typeof api.saleListings.listForMove>;
 type SellRow = SellRows[number];
@@ -73,6 +74,13 @@ const sellRowTasks: Array<{ value: SellRowTask; label: string }> = [
   { value: "listing", label: "Listing copy" },
   { value: "status", label: "Status" },
 ];
+
+const sellTaskHashes = {
+  "#sale-pipeline": "overview",
+  "#sale-pricing": "pricing",
+  "#sale-listing": "listing",
+  "#sale-status": "status",
+} as const;
 
 const sellTaskActionLabels = {
   pricing: "Price",
@@ -156,7 +164,7 @@ export function SellWorkspacePage() {
   const ensureListings = useMutation(api.saleListings.ensureForMove);
   const [message, setMessage] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<SellFilterKey>("all");
-  const [activeTask, setActiveTask] = useState<SellRowTask>("overview");
+  const [activeTask, setActiveTask] = useHashTab("overview", sellTaskHashes);
   const [search, setSearch] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(
     null
@@ -265,7 +273,7 @@ export function SellWorkspacePage() {
         />
       </div>
 
-      <Card>
+      <Card id="sale-pipeline">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>

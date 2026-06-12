@@ -36,6 +36,10 @@ const workspaceAnchorSections: Record<string, string | null> = {
   "#planning-defaults": null,
   "#planned-items": "inventory",
   "#room-walk": "inventory",
+  "#sale-listing": "sell",
+  "#sale-pipeline": "sell",
+  "#sale-pricing": "sell",
+  "#sale-status": "sell",
   "#transport-resources": "load-plan",
 };
 

@@ -66,6 +66,14 @@ describe("disposition pipeline summary", () => {
       activeShareLinkCount: 1,
     });
     expect(action(summary, "sell", "salePhotosNeeded")?.count).toBe(1);
+    expect(action(summary, "sell", "readyToList")).toMatchObject({
+      count: 1,
+      anchor: "#sale-listing",
+    });
+    expect(action(summary, "sell", "listedOrSold")).toMatchObject({
+      count: 0,
+      anchor: "#sale-status",
+    });
     expect(action(summary, "free", "freePickupLink")?.count).toBe(0);
     expect(action(summary, "donate", "donationPacked")?.count).toBe(1);
     expect(action(summary, "donate", "donationReady")?.count).toBe(1);

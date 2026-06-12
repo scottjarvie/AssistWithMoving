@@ -56,6 +56,18 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#estimate-summary")).toBe(
       "/app/moves/move_123/inventory#estimate-summary"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#sale-pipeline")).toBe(
+      "/app/moves/move_123/sell#sale-pipeline"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#sale-listing")).toBe(
+      "/app/moves/move_123/sell#sale-listing"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#sale-pricing")).toBe(
+      "/app/moves/move_123/sell#sale-pricing"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#sale-status")).toBe(
+      "/app/moves/move_123/sell#sale-status"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#photos")).toBe(
       "/app/moves/move_123/photos#photos"
     );

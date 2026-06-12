@@ -390,8 +390,8 @@ function actionsForGroup({
       ).length;
       return [
         action("salePhotosNeeded", "To photograph for sale", photoNeeded, "warning", "#photos", "Add item photos before listing sale items."),
-        action("readyToList", "Ready to list", readyToList, "info", "#inventory", "Items with photos and no pickup/completion status yet."),
-        action("listedOrSold", "Listed / sold progress", pickupProgress, "ok", "#move-day", "Use staged, loaded, or delivered status to track sale handoff progress."),
+        action("readyToList", "Ready to list", readyToList, "info", "#sale-listing", "Items with photos and no pickup/completion status yet."),
+        action("listedOrSold", "Listed / sold progress", pickupProgress, "ok", "#sale-status", "Use the sale workflow to track listing, buyer, and handoff progress."),
       ];
     }
     case "free": {

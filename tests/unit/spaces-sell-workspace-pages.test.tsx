@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,6 +80,7 @@ describe("SpacesWorkspacePage", () => {
 
 describe("SellWorkspacePage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/sell");
     mockData.queryResult = [];
     mockData.mutation.mockReset();
   });
@@ -285,5 +286,50 @@ describe("SellWorkspacePage", () => {
     expect(screen.getByText("Choose one item for pricing.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Price Oak bookcase" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Price Vintage lamp" })).toBeInTheDocument();
+  });
+
+  it("opens listing copy when routed to the sale listing hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/sell#sale-listing"
+    );
+
+    mockData.queryResult = [
+      {
+        item: {
+          _id: "item_1",
+          name: "Oak bookcase",
+          room: "Den",
+          category: "Furniture",
+          condition: "good",
+          description: "Tall shelf with adjustable pegs.",
+        },
+        listing: {
+          status: "draftReady",
+          listingDescription: "Bookcase for office or den.",
+        },
+        status: "draftReady",
+        photoCount: 3,
+        needsMorePhotos: false,
+        researchDepth: "quick",
+        researchSourceCount: 1,
+      },
+    ];
+
+    render(<SellWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Listing copy" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(
+      screen.getByLabelText("Oak bookcase listing description")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase low suggested price")
+    ).not.toBeInTheDocument();
   });
 });
