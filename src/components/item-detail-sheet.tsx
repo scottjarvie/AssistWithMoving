@@ -539,15 +539,17 @@ export function ItemDetailSheet({
           </SheetHeader>
 
           <div className="flex-1 px-4 pb-4">
-            <Tabs defaultValue="summary" className="gap-4">
+            <Tabs defaultValue="details" className="gap-4">
               <TabsList className="flex w-full flex-wrap justify-start">
-                <TabsTrigger value="summary">Summary</TabsTrigger>
+                <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="evidence">Evidence</TabsTrigger>
                 <TabsTrigger value="measurements">Measurements</TabsTrigger>
-                <TabsTrigger value="planning">Planning</TabsTrigger>
+                <TabsTrigger value="handling">Handling</TabsTrigger>
+                <TabsTrigger value="review">Review</TabsTrigger>
                 <TabsTrigger value="activity">Activity</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="summary" className="space-y-4">
+              <TabsContent value="details" className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Name">
                     <Input
@@ -687,33 +689,36 @@ export function ItemDetailSheet({
                   </Field>
                 </div>
 
-                <div className="grid gap-2 md:grid-cols-3">
-                  <FlagField
-                    label="Stackable"
-                    checked={stackable}
-                    onChange={setStackable}
+              </TabsContent>
+
+              <TabsContent value="evidence" className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <InfoBlock
+                    icon={Camera}
+                    title="Attached photos"
+                    value={photoSummary}
                   />
-                  <FlagField
-                    label="High value"
-                    checked={highValue}
-                    onChange={setHighValue}
-                  />
-                  <FlagField
-                    label="Hazardous"
-                    checked={hazardousFlag}
-                    onChange={setHazardousFlag}
-                  />
-                  <FlagField
-                    label="Personal transport"
-                    checked={requiresPersonalTransport}
-                    onChange={setRequiresPersonalTransport}
-                  />
-                  <FlagField
-                    label="Needs review"
-                    checked={needsReview}
-                    onChange={setNeedsReview}
+                  <InfoBlock
+                    icon={PackageCheck}
+                    title="Evidence target"
+                    value={
+                      item.room ? `Item evidence in ${item.room}` : "Item evidence"
+                    }
                   />
                 </div>
+
+                <PhotoUploadControl
+                  householdId={householdId}
+                  moveId={moveId}
+                  itemId={item._id}
+                  room={item.room}
+                  label="Item photo"
+                />
+                <PhotoEvidenceStrip
+                  householdId={householdId}
+                  moveId={moveId}
+                  itemId={item._id}
+                />
               </TabsContent>
 
               <TabsContent value="measurements" className="space-y-4">
@@ -936,17 +941,12 @@ export function ItemDetailSheet({
                 </div>
               </TabsContent>
 
-              <TabsContent value="planning" className="space-y-4">
+              <TabsContent value="handling" className="space-y-4">
                 <div className="grid gap-3 lg:grid-cols-4">
                   <InfoBlock
                     icon={UserRound}
                     title="Owner"
                     value={ownerSummary}
-                  />
-                  <InfoBlock
-                    icon={Camera}
-                    title="Photos"
-                    value={photoSummary}
                   />
                   <InfoBlock
                     icon={Boxes}
@@ -960,19 +960,36 @@ export function ItemDetailSheet({
                   />
                 </div>
 
-                <PhotoUploadControl
-                  householdId={householdId}
-                  moveId={moveId}
-                  itemId={item._id}
-                  room={item.room}
-                  label="Item photo"
-                />
-                <PhotoEvidenceStrip
-                  householdId={householdId}
-                  moveId={moveId}
-                  itemId={item._id}
-                />
+                <div className="grid gap-2 md:grid-cols-2">
+                  <FlagField
+                    label="Stackable"
+                    checked={stackable}
+                    onChange={setStackable}
+                  />
+                  <FlagField
+                    label="High value"
+                    checked={highValue}
+                    onChange={setHighValue}
+                  />
+                  <FlagField
+                    label="Hazardous"
+                    checked={hazardousFlag}
+                    onChange={setHazardousFlag}
+                  />
+                  <FlagField
+                    label="Personal transport"
+                    checked={requiresPersonalTransport}
+                    onChange={setRequiresPersonalTransport}
+                  />
+                </div>
+              </TabsContent>
 
+              <TabsContent value="review" className="space-y-4">
+                <FlagField
+                  label="Needs review"
+                  checked={needsReview}
+                  onChange={setNeedsReview}
+                />
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Review flags">
                     <Input
