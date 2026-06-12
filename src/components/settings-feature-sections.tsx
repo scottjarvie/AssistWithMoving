@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { useAuth } from "@clerk/nextjs";
 
@@ -33,17 +34,55 @@ export function SettingsFeatureSections() {
   const authReady = authQueryReady && currentUser !== undefined;
   const authenticated = Boolean(currentUser);
 
+  const [activeSettingsTask, setActiveSettingsTask] = useState("overview");
   const tabs = [
-    { value: "overview", label: "Overview" },
-    { value: "household", label: "Household" },
-    { value: "ai", label: "AI access" },
-    { value: "privacy", label: "Privacy" },
-    ...(billingGatesEnabled ? [{ value: "billing", label: "Billing" }] : []),
+    {
+      value: "overview",
+      label: "Overview",
+      description:
+        "Check the account posture first, then open only the setting area that needs work.",
+    },
+    {
+      value: "household",
+      label: "Household",
+      description:
+        "Invite or review the people who can work with this household and its moves.",
+    },
+    {
+      value: "ai",
+      label: "AI access",
+      description:
+        "Create a trusted assistant key, copy the image handoff, or revoke old agent access.",
+    },
+    {
+      value: "privacy",
+      label: "Privacy",
+      description:
+        "Export account data, review retention, or stage account deletion without mixing those jobs.",
+    },
+    ...(billingGatesEnabled
+      ? [
+          {
+            value: "billing",
+            label: "Billing",
+            description:
+              "Review billing readiness when paid feature gates are enabled.",
+          },
+        ]
+      : []),
   ];
 
   return (
-    <Tabs defaultValue="overview" className="gap-4">
-      <MoveWorkspaceTabList tabs={tabs} />
+    <Tabs
+      value={activeSettingsTask}
+      onValueChange={setActiveSettingsTask}
+      className="gap-4"
+    >
+      <MoveWorkspaceTabList
+        tabs={tabs}
+        activeValue={activeSettingsTask}
+        ariaLabel="Settings tasks"
+      />
 
       <TabsContent value="overview">
         <SettingsPostureOverview

@@ -92,6 +92,11 @@ describe("ApiKeyManager task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Pick the assistant job, copy the image handoff, then create one key for that trusted tool.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Create a new AI connection")).toBeInTheDocument();
     expect(screen.getByText("Full trusted helper")).toBeInTheDocument();
     expect(screen.getByText("Add items and photos")).toBeInTheDocument();
@@ -117,6 +122,11 @@ describe("ApiKeyManager task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Review active assistant keys, rotate secrets, and revoke old access without creating another key.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Current AI connections")).toBeInTheDocument();
     expect(screen.getByText("Photo helper key")).toBeInTheDocument();
     expect(
@@ -125,6 +135,11 @@ describe("ApiKeyManager task tabs", () => {
 
     await user.click(screen.getByRole("tab", { name: "Overview" }));
 
+    expect(
+      screen.getByText(
+        "Check household, move, item, member, and AI connection counts before changing access.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Simple setup for an AI assistant")).toBeInTheDocument();
     expect(screen.getByText("Households")).toBeInTheDocument();
     expect(screen.getByText("Items")).toBeInTheDocument();
@@ -132,6 +147,11 @@ describe("ApiKeyManager task tabs", () => {
 
     await user.click(screen.getByRole("tab", { name: "Advanced" }));
 
+    expect(
+      screen.getByText(
+        "Tune key name, expiration, move restriction, and exact API scopes when presets are not enough.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Advanced API settings")).toBeInTheDocument();
     expect(screen.getByText("Exact permissions")).toBeInTheDocument();
     expect(screen.getByLabelText("Key name")).toBeInTheDocument();

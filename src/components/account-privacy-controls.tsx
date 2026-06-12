@@ -13,6 +13,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -59,9 +60,24 @@ type PrivacyStatus = {
 };
 
 const privacyTasks = [
-  { value: "export", label: "Export" },
-  { value: "retention", label: "Retention" },
-  { value: "delete", label: "Delete account" },
+  {
+    value: "export",
+    label: "Export",
+    description:
+      "Create or download a JSON package without entering retention or deletion flows.",
+  },
+  {
+    value: "retention",
+    label: "Retention",
+    description:
+      "Review how long account exports, membership data, and deletion records are kept.",
+  },
+  {
+    value: "delete",
+    label: "Delete account",
+    description:
+      "Stage, cancel, or complete account deletion separately from routine privacy exports.",
+  },
 ] as const;
 
 export function AccountPrivacyControls({
@@ -89,6 +105,9 @@ export function AccountPrivacyControls({
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [activePrivacyTask, setActivePrivacyTask] = useState<
+    (typeof privacyTasks)[number]["value"]
+  >("export");
 
   useEffect(() => {
     if (!artifact || downloadedArtifactId.current === artifact.exportJobId) {
@@ -190,16 +209,20 @@ export function AccountPrivacyControls({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <Tabs defaultValue="export" className="gap-4">
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="min-w-max" aria-label="Account privacy tasks">
-              {privacyTasks.map((task) => (
-                <TabsTrigger key={task.value} value={task.value}>
-                  {task.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+        <Tabs
+          value={activePrivacyTask}
+          onValueChange={(value) =>
+            setActivePrivacyTask(
+              value as (typeof privacyTasks)[number]["value"],
+            )
+          }
+          className="gap-4"
+        >
+          <MoveWorkspaceTabList
+            tabs={[...privacyTasks]}
+            activeValue={activePrivacyTask}
+            ariaLabel="Account privacy tasks"
+          />
 
           <TabsContent value="export" className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">

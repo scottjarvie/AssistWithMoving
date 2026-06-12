@@ -61,6 +61,11 @@ describe("AccountPrivacyControls task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Create or download a JSON package without entering retention or deletion flows.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("account-export.json")).toHaveLength(2);
     expect(
       screen.getByRole("button", { name: "Create export" }),
@@ -88,6 +93,11 @@ describe("AccountPrivacyControls task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Review how long account exports, membership data, and deletion records are kept.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Exports expire automatically.")).toBeInTheDocument();
     expect(screen.getByText("Anonymized after deletion.")).toBeInTheDocument();
     expect(screen.queryByText("account-export.json")).not.toBeInTheDocument();
@@ -102,6 +112,11 @@ describe("AccountPrivacyControls task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Stage, cancel, or complete account deletion separately from routine privacy exports.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("No pending request")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Request deletion" }),

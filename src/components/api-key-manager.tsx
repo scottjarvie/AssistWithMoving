@@ -24,6 +24,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +36,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   apiKeyRestrictionLabel,
@@ -172,10 +173,30 @@ const helperPresets: HelperPreset[] = [
 ];
 
 const aiConnectionTasks = [
-  { value: "create", label: "Create key" },
-  { value: "connections", label: "Connections" },
-  { value: "overview", label: "Overview" },
-  { value: "advanced", label: "Advanced" },
+  {
+    value: "create",
+    label: "Create key",
+    description:
+      "Pick the assistant job, copy the image handoff, then create one key for that trusted tool.",
+  },
+  {
+    value: "connections",
+    label: "Connections",
+    description:
+      "Review active assistant keys, rotate secrets, and revoke old access without creating another key.",
+  },
+  {
+    value: "overview",
+    label: "Overview",
+    description:
+      "Check household, move, item, member, and AI connection counts before changing access.",
+  },
+  {
+    value: "advanced",
+    label: "Advanced",
+    description:
+      "Tune key name, expiration, move restriction, and exact API scopes when presets are not enough.",
+  },
 ] as const;
 
 function sameScopes(left: ApiKeyScope[], right: ApiKeyScope[]) {
@@ -234,6 +255,9 @@ export function ApiKeyManager({
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [activeConnectionTask, setActiveConnectionTask] = useState<
+    (typeof aiConnectionTasks)[number]["value"]
+  >("create");
 
   const selectedHouseholdEntry = useMemo(
     () =>
@@ -906,19 +930,20 @@ export function ApiKeyManager({
                 </details>
               </>
             ) : (
-              <Tabs defaultValue="create" className="gap-4">
-                <div className="overflow-x-auto pb-1">
-                  <TabsList
-                    className="min-w-max"
-                    aria-label="AI connection tasks"
-                  >
-                    {aiConnectionTasks.map((task) => (
-                      <TabsTrigger key={task.value} value={task.value}>
-                        {task.label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
+              <Tabs
+                value={activeConnectionTask}
+                onValueChange={(value) =>
+                  setActiveConnectionTask(
+                    value as (typeof aiConnectionTasks)[number]["value"],
+                  )
+                }
+                className="gap-4"
+              >
+                <MoveWorkspaceTabList
+                  tabs={[...aiConnectionTasks]}
+                  activeValue={activeConnectionTask}
+                  ariaLabel="AI connection tasks"
+                />
 
                 <TabsContent value="create">
                   {renderCreateConnection()}

@@ -94,6 +94,11 @@ describe("SettingsFeatureSections", () => {
     expect(screen.getByRole("tab", { name: "AI access" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Privacy" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Billing" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Check the account posture first, then open only the setting area that needs work.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Security posture surface")).toBeInTheDocument();
     expect(screen.queryByText("Household members surface")).not.toBeInTheDocument();
     expect(screen.queryByText("AI access surface")).not.toBeInTheDocument();
@@ -101,18 +106,38 @@ describe("SettingsFeatureSections", () => {
     expect(screen.queryByText("Billing readiness surface")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Household" }));
+    expect(
+      screen.getByText(
+        "Invite or review the people who can work with this household and its moves.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Household members surface")).toBeInTheDocument();
     expect(screen.queryByText("Security posture surface")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "AI access" }));
+    expect(
+      screen.getByText(
+        "Create a trusted assistant key, copy the image handoff, or revoke old agent access.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("AI access surface")).toBeInTheDocument();
     expect(screen.queryByText("Household members surface")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Privacy" }));
+    expect(
+      screen.getByText(
+        "Export account data, review retention, or stage account deletion without mixing those jobs.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Privacy controls surface")).toBeInTheDocument();
     expect(screen.queryByText("AI access surface")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Billing" }));
+    expect(
+      screen.getByText(
+        "Review billing readiness when paid feature gates are enabled.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Billing readiness surface")).toBeInTheDocument();
     expect(screen.queryByText("Privacy controls surface")).not.toBeInTheDocument();
   });
