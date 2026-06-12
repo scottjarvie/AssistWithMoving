@@ -819,6 +819,8 @@ function PublicSubManifest({
       <style>{`
         @media print {
           .print-hidden { display: none !important; }
+          .packet-mobile-cards { display: none !important; }
+          .packet-desktop-table { display: block !important; }
           body { background: white !important; }
           .packet-page { color: #111 !important; }
           .packet-section { break-inside: avoid; page-break-inside: avoid; }
@@ -920,8 +922,17 @@ function PublicSubManifest({
 
         <section className="packet-section rounded-md border border-border p-4">
           <h2 className="text-xl font-semibold tracking-normal">Box map</h2>
-          <div className="mt-3 overflow-x-auto rounded-md border border-border">
-            <table className="packet-table w-full border-collapse text-left text-sm">
+          <SubManifestBoxCards
+            boxes={packet.sections.boxes}
+            canStatusUpdate={canStatusUpdate}
+            workingTarget={workingTarget}
+            onStatusUpdate={onStatusUpdate}
+          />
+          <div className="packet-desktop-table mt-3 hidden overflow-x-auto rounded-md border border-border md:block">
+            <table
+              className="packet-table w-full border-collapse text-left text-sm"
+              aria-label="Sub-manifest box table"
+            >
               <thead>
                 <tr className="border-b border-border">
                   <th className="px-2 py-2">Box</th>
@@ -981,8 +992,17 @@ function PublicSubManifest({
 
         <section className="packet-section rounded-md border border-border p-4">
           <h2 className="text-xl font-semibold tracking-normal">Manifest items</h2>
-          <div className="mt-3 overflow-x-auto rounded-md border border-border">
-            <table className="packet-table w-full border-collapse text-left text-sm">
+          <SubManifestItemCards
+            items={packet.sections.items}
+            canStatusUpdate={canStatusUpdate}
+            workingTarget={workingTarget}
+            onStatusUpdate={onStatusUpdate}
+          />
+          <div className="packet-desktop-table mt-3 hidden overflow-x-auto rounded-md border border-border md:block">
+            <table
+              className="packet-table w-full border-collapse text-left text-sm"
+              aria-label="Sub-manifest item table"
+            >
               <thead>
                 <tr className="border-b border-border">
                   <th className="px-2 py-2">Item</th>
@@ -1089,6 +1109,8 @@ function PublicDocumentationPacketView({
       <style>{`
         @media print {
           .print-hidden { display: none !important; }
+          .packet-mobile-cards { display: none !important; }
+          .packet-desktop-table { display: block !important; }
           body { background: white !important; }
           .packet-page { color: #111 !important; }
           .packet-section { break-inside: avoid; page-break-inside: avoid; }
@@ -1230,8 +1252,17 @@ function PublicDocumentationPacketView({
 
         <section className="packet-section rounded-md border border-border p-4">
           <h2 className="text-xl font-semibold tracking-normal">Box map</h2>
-          <div className="mt-3 overflow-x-auto rounded-md border border-border">
-            <table className="packet-table w-full border-collapse text-left text-sm">
+          <DocumentationPacketBoxCards
+            boxes={packet.sections.boxes}
+            canStatusUpdate={canStatusUpdate}
+            workingTarget={workingTarget}
+            onStatusUpdate={onStatusUpdate}
+          />
+          <div className="packet-desktop-table mt-3 hidden overflow-x-auto rounded-md border border-border md:block">
+            <table
+              className="packet-table w-full border-collapse text-left text-sm"
+              aria-label="Documentation packet box table"
+            >
               <thead>
                 <tr className="border-b border-border">
                   <th className="px-2 py-2">Box</th>
@@ -1306,8 +1337,18 @@ function PublicDocumentationPacketView({
 
         <section className="packet-section rounded-md border border-border p-4">
           <h2 className="text-xl font-semibold tracking-normal">Manifest items</h2>
-          <div className="mt-3 overflow-x-auto rounded-md border border-border">
-            <table className="packet-table w-full border-collapse text-left text-sm">
+          <DocumentationPacketItemCards
+            items={packet.sections.items}
+            packetKind={packet.packetKind}
+            canStatusUpdate={canStatusUpdate}
+            workingTarget={workingTarget}
+            onStatusUpdate={onStatusUpdate}
+          />
+          <div className="packet-desktop-table mt-3 hidden overflow-x-auto rounded-md border border-border md:block">
+            <table
+              className="packet-table w-full border-collapse text-left text-sm"
+              aria-label="Documentation packet item table"
+            >
               <thead>
                 <tr className="border-b border-border">
                   <th className="px-2 py-2">Item</th>
@@ -1397,6 +1438,392 @@ function PublicDocumentationPacketView({
       </div>
     </div>
   );
+}
+
+function SubManifestBoxCards({
+  boxes,
+  canStatusUpdate,
+  workingTarget,
+  onStatusUpdate,
+}: {
+  boxes: PublicSubManifestPacket["sections"]["boxes"];
+  canStatusUpdate: boolean;
+  workingTarget: string | null;
+  onStatusUpdate: PublicStatusUpdateHandler;
+}) {
+  if (!boxes.length) {
+    return (
+      <p className="packet-mobile-cards mt-3 text-sm text-muted-foreground md:hidden">
+        No boxes are included in this scoped packet.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      role="list"
+      aria-label="Sub-manifest box cards"
+      className="packet-mobile-cards mt-3 grid gap-2 md:hidden"
+    >
+      {boxes.map((box) => (
+        <article
+          key={box.boxId}
+          role="listitem"
+          className="rounded-md border border-border bg-background p-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-sm font-semibold">{box.code}</h3>
+              {box.label ? (
+                <p className="mt-1 break-words text-xs text-muted-foreground">
+                  {box.label}
+                </p>
+              ) : null}
+            </div>
+            <Badge variant="secondary">Box</Badge>
+          </div>
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <PacketCardDetail label="Room">
+              {box.room ?? "unset"}
+            </PacketCardDetail>
+            <PacketCardDetail label="Status">
+              <StatusCell
+                currentStatus={box.status}
+                control={
+                  canStatusUpdate ? (
+                    <PublicStatusControl
+                      ariaLabel={`Mobile status for box ${box.code}`}
+                      target={{
+                        type: "box",
+                        boxId: box.boxId as Id<"boxes">,
+                        status: box.status as PublicBoxStatus,
+                      }}
+                      options={publicBoxStatusOptions}
+                      workingTarget={workingTarget}
+                      onStatusUpdate={onStatusUpdate}
+                    />
+                  ) : null
+                }
+              />
+            </PacketCardDetail>
+            <PacketCardDetail label="Resource">
+              {box.assignedResource ?? "unassigned"}
+            </PacketCardDetail>
+            <PacketCardDetail label="Zone">
+              {box.assignedZone ?? "any"}
+            </PacketCardDetail>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function SubManifestItemCards({
+  items,
+  canStatusUpdate,
+  workingTarget,
+  onStatusUpdate,
+}: {
+  items: PublicSubManifestPacket["sections"]["items"];
+  canStatusUpdate: boolean;
+  workingTarget: string | null;
+  onStatusUpdate: PublicStatusUpdateHandler;
+}) {
+  if (!items.length) {
+    return (
+      <p className="packet-mobile-cards mt-3 text-sm text-muted-foreground md:hidden">
+        No items match this scoped packet yet.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      role="list"
+      aria-label="Sub-manifest item cards"
+      className="packet-mobile-cards mt-3 grid gap-2 md:hidden"
+    >
+      {items.map((item) => (
+        <article
+          key={item.itemId}
+          role="listitem"
+          className="rounded-md border border-border bg-background p-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-sm font-semibold">{item.name}</h3>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {item.description ?? item.category ?? "No description"}
+              </p>
+            </div>
+            <Badge variant="outline">Item</Badge>
+          </div>
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <PacketCardDetail label="Room">
+              {item.room ?? "unset"}
+            </PacketCardDetail>
+            <PacketCardDetail label="Quantity">
+              {item.quantity}
+            </PacketCardDetail>
+            <PacketCardDetail label="Disposition">
+              {item.disposition}
+            </PacketCardDetail>
+            <PacketCardDetail label="Status">
+              <StatusCell
+                currentStatus={item.status}
+                control={
+                  canStatusUpdate ? (
+                    <PublicStatusControl
+                      ariaLabel={`Mobile status for ${item.name}`}
+                      target={{
+                        type: "item",
+                        itemId: item.itemId as Id<"items">,
+                        status: item.status as PublicItemStatus,
+                      }}
+                      options={publicItemStatusOptions}
+                      workingTarget={workingTarget}
+                      onStatusUpdate={onStatusUpdate}
+                    />
+                  ) : null
+                }
+              />
+            </PacketCardDetail>
+            <PacketCardDetail label="Condition">
+              {item.condition}
+            </PacketCardDetail>
+            <PacketCardDetail label="Boxes">
+              {item.boxTrail.map((box) => box.code).join(", ") || "unboxed"}
+            </PacketCardDetail>
+            <PacketCardDetail label="Photos">
+              {item.photoCount}
+            </PacketCardDetail>
+            {typeof item.estimatedWeightLb === "number" ? (
+              <PacketCardDetail label="Weight">
+                {formatNumber(item.estimatedWeightLb)} lb
+              </PacketCardDetail>
+            ) : null}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function DocumentationPacketBoxCards({
+  boxes,
+  canStatusUpdate,
+  workingTarget,
+  onStatusUpdate,
+}: {
+  boxes: PublicDocumentationPacket["sections"]["boxes"];
+  canStatusUpdate: boolean;
+  workingTarget: string | null;
+  onStatusUpdate: PublicStatusUpdateHandler;
+}) {
+  if (!boxes.length) {
+    return (
+      <p className="packet-mobile-cards mt-3 text-sm text-muted-foreground md:hidden">
+        No boxes are included in this scoped packet.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      role="list"
+      aria-label="Documentation packet box cards"
+      className="packet-mobile-cards mt-3 grid gap-2 md:hidden"
+    >
+      {boxes.map((box) => (
+        <article
+          key={box.boxId}
+          role="listitem"
+          className="rounded-md border border-border bg-background p-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-sm font-semibold">{box.code}</h3>
+              {box.label ? (
+                <p className="mt-1 break-words text-xs text-muted-foreground">
+                  {box.label}
+                </p>
+              ) : null}
+            </div>
+            <Badge variant="secondary">Box</Badge>
+          </div>
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <PacketCardDetail label="Room">
+              {formatLocationPath(box.room, box.destinationRoom)}
+            </PacketCardDetail>
+            <PacketCardDetail label="Status">
+              <StatusCell
+                currentStatus={box.status}
+                control={
+                  canStatusUpdate ? (
+                    <PublicStatusControl
+                      ariaLabel={`Mobile status for box ${box.code}`}
+                      target={{
+                        type: "box",
+                        boxId: box.boxId as Id<"boxes">,
+                        status: box.status as PublicBoxStatus,
+                      }}
+                      options={publicBoxStatusOptions}
+                      workingTarget={workingTarget}
+                      onStatusUpdate={onStatusUpdate}
+                    />
+                  ) : null
+                }
+              />
+            </PacketCardDetail>
+            <PacketCardDetail label="Resource">
+              {box.assignedResource ?? "unassigned"}
+            </PacketCardDetail>
+            <PacketCardDetail label="Zone">
+              {box.assignedZone ?? "any"}
+            </PacketCardDetail>
+            <PacketCardDetail label="Items">
+              {box.itemCount}
+            </PacketCardDetail>
+            <PacketCardDetail label="Weight">
+              {typeof box.estimatedWeightLb === "number"
+                ? `${formatNumber(box.estimatedWeightLb)} lb`
+                : "unset"}
+            </PacketCardDetail>
+          </div>
+          {box.warnings.length ? (
+            <p className="mt-3 break-words text-xs text-muted-foreground">
+              Warnings: {box.warnings.join(", ")}
+            </p>
+          ) : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function DocumentationPacketItemCards({
+  items,
+  packetKind,
+  canStatusUpdate,
+  workingTarget,
+  onStatusUpdate,
+}: {
+  items: PublicDocumentationPacket["sections"]["items"];
+  packetKind: PublicDocumentationPacket["packetKind"];
+  canStatusUpdate: boolean;
+  workingTarget: string | null;
+  onStatusUpdate: PublicStatusUpdateHandler;
+}) {
+  if (!items.length) {
+    return (
+      <p className="packet-mobile-cards mt-3 text-sm text-muted-foreground md:hidden">
+        No items match this scoped packet yet.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      role="list"
+      aria-label="Documentation packet item cards"
+      className="packet-mobile-cards mt-3 grid gap-2 md:hidden"
+    >
+      {items.map((item) => (
+        <article
+          key={item.itemId}
+          role="listitem"
+          className="rounded-md border border-border bg-background p-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="break-words text-sm font-semibold">{item.name}</h3>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {item.description ?? item.category ?? "No description"}
+              </p>
+              {typeof item.estimatedWeightLb === "number" ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatNumber(item.estimatedWeightLb)} lb
+                  {typeof item.estimatedVolumeCuFt === "number"
+                    ? ` / ${formatNumber(item.estimatedVolumeCuFt)} cu ft`
+                    : ""}
+                </p>
+              ) : null}
+            </div>
+            <Badge variant="outline">Item</Badge>
+          </div>
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <PacketCardDetail label="Room">
+              {formatLocationPath(item.room, item.destinationRoom)}
+            </PacketCardDetail>
+            <PacketCardDetail label="Quantity">
+              {item.quantity}
+            </PacketCardDetail>
+            <PacketCardDetail label="Disposition">
+              {item.disposition}
+            </PacketCardDetail>
+            <PacketCardDetail label="Status">
+              <StatusCell
+                currentStatus={item.status}
+                control={
+                  canStatusUpdate ? (
+                    <PublicStatusControl
+                      ariaLabel={`Mobile status for ${item.name}`}
+                      target={{
+                        type: "item",
+                        itemId: item.itemId as Id<"items">,
+                        status: item.status as PublicItemStatus,
+                      }}
+                      options={publicItemStatusOptions}
+                      workingTarget={workingTarget}
+                      onStatusUpdate={onStatusUpdate}
+                    />
+                  ) : null
+                }
+              />
+            </PacketCardDetail>
+            <PacketCardDetail label="Condition">
+              {item.condition}
+            </PacketCardDetail>
+            <PacketCardDetail label="Boxes">
+              {item.boxCodes.join(", ") || "unboxed"}
+            </PacketCardDetail>
+            <PacketCardDetail label="Photos">
+              {item.photoCount}
+            </PacketCardDetail>
+          </div>
+          <div className="mt-3 rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+            {packetKind === "claim" ? (
+              <ClaimEvidenceSummary item={item} />
+            ) : (
+              <p>Flags: {item.flags.join(", ") || "none"}</p>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function PacketCardDetail({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-medium uppercase text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-1 min-w-0 break-words">{children}</div>
+    </div>
+  );
+}
+
+function formatLocationPath(origin?: string, destination?: string) {
+  return [origin, destination].filter(Boolean).join(" -> ") || "unset";
 }
 
 function ClaimEvidenceSummary({
