@@ -1,8 +1,8 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { Fragment, type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { ShieldCheck, UserPlus, UsersRound, X } from "lucide-react";
+import { Pencil, ShieldCheck, UserPlus, UsersRound, X } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -35,7 +35,23 @@ type HouseholdEntry = {
   role: string;
 };
 
-const manageableRoles = ["admin", "editor", "packer", "viewer", "guest"] as const;
+type HouseholdMemberRow = {
+  membershipId: Id<"householdMemberships"> | null;
+  invitationId: Id<"householdInvitations"> | null;
+  name: string | null;
+  email: string | null;
+  role: string;
+  status: string;
+  isCurrentUser: boolean;
+};
+
+const manageableRoles = [
+  "admin",
+  "editor",
+  "packer",
+  "viewer",
+  "guest",
+] as const;
 type ManageableRole = (typeof manageableRoles)[number];
 
 const roleLabels = {
@@ -118,8 +134,10 @@ function HouseholdMemberPanel({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<ManageableRole>("editor");
   const [workingMemberId, setWorkingMemberId] = useState<string | null>(null);
+  const [managingMemberId, setManagingMemberId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const memberRows = members as HouseholdMemberRow[] | undefined;
 
   async function handleAddMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -256,117 +274,151 @@ function HouseholdMemberPanel({
                     <Skeleton className="h-10 w-full" />
                     <Skeleton className="h-10 w-4/5" />
                   </div>
-                ) : members.length ? (
-                  <div className="overflow-hidden rounded-md border border-border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Member</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Access</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {members.map((member) => {
-                          const membershipId = member.membershipId;
-                          const invitationId = member.invitationId;
-                          const rowId = membershipId ?? invitationId;
-                          const isPendingInvite = member.status === "invited";
-                          const canEdit =
-                            membershipId !== null &&
-                            member.role !== "owner" &&
-                            !member.isCurrentUser &&
-                            member.status !== "disabled";
-                          return (
-                            <TableRow key={rowId}>
-                              <TableCell>
-                                <div className="font-medium">
-                                  {member.name ??
-                                    member.email ??
-                                    "Unnamed member"}
-                                </div>
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                  {member.email ?? "No email on file"}
-                                  {member.isCurrentUser ? " - you" : ""}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {canEdit ? (
-                                  <select
-                                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                                    value={member.role}
-                                    aria-label={`Role for ${member.email ?? member.name}`}
-                                    disabled={workingMemberId === membershipId}
-                                    onChange={(event) =>
-                                      void handleRoleChange(
-                                        membershipId,
-                                        event.target.value as ManageableRole,
-                                      )
-                                    }
-                                  >
-                                    {manageableRoles.map((roleOption) => (
-                                      <option
-                                        key={roleOption}
-                                        value={roleOption}
-                                      >
-                                        {roleLabels[roleOption]}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <Badge variant="outline">{member.role}</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
+                ) : memberRows?.length ? (
+                  <>
+                    <div
+                      role="list"
+                      aria-label={`${householdName} member access cards`}
+                      className="grid gap-3 md:hidden"
+                    >
+                      {memberRows.map((member) => {
+                        const membershipId = member.membershipId;
+                        const invitationId = member.invitationId;
+                        const rowId = membershipId ?? invitationId;
+                        if (!rowId) return null;
+                        const isPendingInvite = member.status === "invited";
+                        const canEdit =
+                          membershipId !== null &&
+                          member.role !== "owner" &&
+                          !member.isCurrentUser &&
+                          member.status !== "disabled";
+                        const canManageAccess =
+                          canEdit || (isPendingInvite && invitationId !== null);
+                        const isManaging = managingMemberId === rowId;
+
+                        return (
+                          <div
+                            key={rowId}
+                            role="listitem"
+                            className="rounded-md border border-border bg-card p-3"
+                          >
+                            <MemberSummary member={member} />
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap gap-2">
+                                <Badge variant="outline">
+                                  {memberRoleLabel(member.role)}
+                                </Badge>
                                 <Badge variant="secondary">
                                   {member.status}
                                 </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {canEdit ? (
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="outline"
-                                    disabled={workingMemberId === membershipId}
-                                    onClick={() =>
-                                      void handleDisable(membershipId)
-                                    }
-                                  >
-                                    <X aria-hidden="true" />
-                                    <span className="sr-only">
-                                      Disable {member.email ?? member.name}
-                                    </span>
-                                  </Button>
-                                ) : isPendingInvite && invitationId ? (
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="outline"
-                                    disabled={workingMemberId === invitationId}
-                                    onClick={() =>
-                                      void handleRevoke(invitationId)
-                                    }
-                                  >
-                                    <X aria-hidden="true" />
-                                    <span className="sr-only">
-                                      Revoke invitation for {member.email}
-                                    </span>
-                                  </Button>
-                                ) : (
-                                  <ShieldCheck
-                                    className="ml-auto size-4 text-muted-foreground"
-                                    aria-hidden="true"
-                                  />
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
+                              </div>
+                              <MemberAccessAction
+                                member={member}
+                                canManageAccess={canManageAccess}
+                                isManaging={isManaging}
+                                onManage={() => setManagingMemberId(rowId)}
+                              />
+                            </div>
+                            {isManaging ? (
+                              <MemberAccessEditor
+                                className="mt-3"
+                                member={member}
+                                canEdit={canEdit}
+                                isPendingInvite={isPendingInvite}
+                                workingMemberId={workingMemberId}
+                                onClose={() => setManagingMemberId(null)}
+                                onRoleChange={handleRoleChange}
+                                onDisable={handleDisable}
+                                onRevoke={handleRevoke}
+                              />
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="hidden overflow-hidden rounded-md border border-border md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Member</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Access</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {memberRows.map((member) => {
+                            const membershipId = member.membershipId;
+                            const invitationId = member.invitationId;
+                            const rowId = membershipId ?? invitationId;
+                            if (!rowId) return null;
+                            const isPendingInvite = member.status === "invited";
+                            const canEdit =
+                              membershipId !== null &&
+                              member.role !== "owner" &&
+                              !member.isCurrentUser &&
+                              member.status !== "disabled";
+                            const canManageAccess =
+                              canEdit ||
+                              (isPendingInvite && invitationId !== null);
+                            const isManaging = managingMemberId === rowId;
+
+                            return (
+                              <Fragment key={rowId}>
+                                <TableRow>
+                                  <TableCell>
+                                    <MemberSummary member={member} />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">
+                                      {memberRoleLabel(member.role)}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {member.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <MemberAccessAction
+                                      member={member}
+                                      canManageAccess={canManageAccess}
+                                      isManaging={isManaging}
+                                      onManage={() =>
+                                        setManagingMemberId(rowId)
+                                      }
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                                {isManaging ? (
+                                  <TableRow key={`${rowId}-editor`}>
+                                    <TableCell
+                                      colSpan={4}
+                                      className="bg-muted/20 p-3"
+                                    >
+                                      <MemberAccessEditor
+                                        member={member}
+                                        canEdit={canEdit}
+                                        isPendingInvite={isPendingInvite}
+                                        workingMemberId={workingMemberId}
+                                        onClose={() =>
+                                          setManagingMemberId(null)
+                                        }
+                                        onRoleChange={handleRoleChange}
+                                        onDisable={handleDisable}
+                                        onRevoke={handleRevoke}
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                ) : null}
+                              </Fragment>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 ) : (
                   <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
                     No active collaborators yet.
@@ -427,4 +479,152 @@ function HouseholdMemberPanel({
       </CardContent>
     </Card>
   );
+}
+
+function MemberSummary({ member }: { member: HouseholdMemberRow }) {
+  return (
+    <div className="min-w-0">
+      <div className="break-words font-medium">
+        {member.name ?? member.email ?? "Unnamed member"}
+      </div>
+      <div className="mt-1 break-all text-xs text-muted-foreground">
+        {member.email ?? "No email on file"}
+        {member.isCurrentUser ? " - you" : ""}
+      </div>
+    </div>
+  );
+}
+
+function MemberAccessAction({
+  member,
+  canManageAccess,
+  isManaging,
+  onManage,
+}: {
+  member: HouseholdMemberRow;
+  canManageAccess: boolean;
+  isManaging: boolean;
+  onManage: () => void;
+}) {
+  if (!canManageAccess) {
+    return (
+      <ShieldCheck
+        className="ml-auto size-4 text-muted-foreground"
+        aria-label={`Access locked for ${member.email ?? member.name ?? "member"}`}
+      />
+    );
+  }
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      aria-expanded={isManaging}
+      aria-label={`Manage access for ${member.email ?? member.name}`}
+      onClick={onManage}
+    >
+      <Pencil aria-hidden="true" />
+      Manage
+    </Button>
+  );
+}
+
+function MemberAccessEditor({
+  className,
+  member,
+  canEdit,
+  isPendingInvite,
+  workingMemberId,
+  onClose,
+  onRoleChange,
+  onDisable,
+  onRevoke,
+}: {
+  className?: string;
+  member: HouseholdMemberRow;
+  canEdit: boolean;
+  isPendingInvite: boolean;
+  workingMemberId: string | null;
+  onClose: () => void;
+  onRoleChange: (
+    membershipId: Id<"householdMemberships">,
+    nextRole: ManageableRole,
+  ) => void;
+  onDisable: (membershipId: Id<"householdMemberships">) => void;
+  onRevoke: (invitationId: Id<"householdInvitations">) => void;
+}) {
+  const membershipId = member.membershipId;
+  const invitationId = member.invitationId;
+  const label = member.email ?? member.name ?? "member";
+
+  return (
+    <div
+      className={[
+        "rounded-md border border-border bg-background p-3",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {canEdit && membershipId ? (
+        <div className="grid gap-2 md:grid-cols-[minmax(180px,1fr)_auto_auto]">
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={member.role}
+            aria-label={`Role for ${label}`}
+            disabled={workingMemberId === membershipId}
+            onChange={(event) =>
+              onRoleChange(membershipId, event.target.value as ManageableRole)
+            }
+          >
+            {manageableRoles.map((roleOption) => (
+              <option key={roleOption} value={roleOption}>
+                {roleLabels[roleOption]}
+              </option>
+            ))}
+          </select>
+          <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={workingMemberId === membershipId}
+            onClick={() => onDisable(membershipId)}
+          >
+            <X aria-hidden="true" />
+            Disable access
+          </Button>
+        </div>
+      ) : isPendingInvite && invitationId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Pending invitation. Revoke it if this email should not receive
+            access.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={workingMemberId === invitationId}
+              onClick={() => onRevoke(invitationId)}
+            >
+              <X aria-hidden="true" />
+              Revoke invitation
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function memberRoleLabel(role: string) {
+  return roleLabels[role as ManageableRole] ?? role;
 }

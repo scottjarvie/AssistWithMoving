@@ -75,14 +75,31 @@ describe("HouseholdMemberManager task tabs", () => {
       "data-state",
       "active",
     );
-    expect(screen.getByText("Scott Jarvie")).toBeInTheDocument();
-    expect(screen.getByText("Packing helper")).toBeInTheDocument();
+    expect(screen.getAllByText("Scott Jarvie")).toHaveLength(2);
+    expect(screen.getAllByText("Packing helper")).toHaveLength(2);
+    expect(
+      screen.queryByLabelText("Role for helper@example.com"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Add collaborator email for Jarvie household"),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(/MovingManifest keeps a pending invitation/),
     ).not.toBeInTheDocument();
+
+    const manageButtons = screen.getAllByRole("button", {
+      name: "Manage access for helper@example.com",
+    });
+    expect(manageButtons).toHaveLength(2);
+
+    await user.click(manageButtons[0]);
+
+    expect(
+      screen.getAllByLabelText("Role for helper@example.com"),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Disable access" }),
+    ).toHaveLength(2);
 
     await user.click(screen.getByRole("tab", { name: "Invite" }));
 
@@ -101,5 +118,8 @@ describe("HouseholdMemberManager task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Scott Jarvie")).not.toBeInTheDocument();
     expect(screen.queryByText("Packing helper")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Role for helper@example.com"),
+    ).not.toBeInTheDocument();
   });
 });
