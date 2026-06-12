@@ -63,6 +63,7 @@ export function PlannedItemsPanel({
   const [url, setUrl] = useState("");
   const [priority, setPriority] = useState("2");
   const [message, setMessage] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const plannedItems = useQuery(
     api.plannedItems.listForMove,
@@ -120,6 +121,7 @@ export function PlannedItemsPanel({
       setPriceDollars("");
       setUrl("");
       setPriority("2");
+      setShowAddForm(false);
       setMessage("Planned item added.");
     } catch {
       setMessage("Could not add that planned item yet.");
@@ -168,91 +170,34 @@ export function PlannedItemsPanel({
               Layout Studio without entering owned inventory totals.
             </CardDescription>
           </div>
-          <Badge variant="outline">{activePlannedItems.length} planned</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{activePlannedItems.length} planned</Badge>
+            <Button
+              type="button"
+              size="sm"
+              variant={showAddForm ? "secondary" : "outline"}
+              disabled={!moveId}
+              aria-expanded={showAddForm}
+              onClick={() => setShowAddForm((current) => !current)}
+            >
+              <PackagePlus aria-hidden="true" />
+              Add planned
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form
-          className="grid gap-2 lg:grid-cols-[minmax(0,1.2fr)_150px_repeat(3,80px)_110px_90px_minmax(0,1fr)_auto]"
-          onSubmit={handleCreate}
-        >
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Future item"
-            aria-label="Planned item name"
-            disabled={!moveId}
-          />
-          <Input
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            placeholder="Category"
-            aria-label="Planned item category"
-            disabled={!moveId}
-          />
-          <Input
-            inputMode="decimal"
-            value={lengthIn}
-            onChange={(event) => setLengthIn(event.target.value)}
-            placeholder="L"
-            aria-label="Planned item length in inches"
-            disabled={!moveId}
-          />
-          <Input
-            inputMode="decimal"
-            value={widthIn}
-            onChange={(event) => setWidthIn(event.target.value)}
-            placeholder="W"
-            aria-label="Planned item width in inches"
-            disabled={!moveId}
-          />
-          <Input
-            inputMode="decimal"
-            value={heightIn}
-            onChange={(event) => setHeightIn(event.target.value)}
-            placeholder="H"
-            aria-label="Planned item height in inches"
-            disabled={!moveId}
-          />
-          <Input
-            inputMode="decimal"
-            value={priceDollars}
-            onChange={(event) => setPriceDollars(event.target.value)}
-            placeholder="Price"
-            aria-label="Planned item estimated price"
-            disabled={!moveId}
-          />
-          <Input
-            inputMode="numeric"
-            value={priority}
-            onChange={(event) => setPriority(event.target.value)}
-            placeholder="Priority"
-            aria-label="Planned item priority"
-            disabled={!moveId}
-          />
-          <Input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="Product link"
-            aria-label="Planned item product link"
-            disabled={!moveId}
-          />
-          <Button type="submit" size="sm" disabled={!moveId || !name.trim()}>
-            <PackagePlus aria-hidden="true" />
-            Add
-          </Button>
-        </form>
-
         {plannedItems === undefined && moveId ? (
           <div className="space-y-2">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-5/6" />
           </div>
         ) : activePlannedItems.length ? (
-          <div className="grid gap-2">
+          <div className="grid gap-2" role="list" aria-label="Planned item cards">
             {activePlannedItems.map((item) => (
               <div
                 key={item._id}
+                role="listitem"
                 className="grid gap-3 rounded-md border border-border p-3 md:grid-cols-[minmax(0,1fr)_130px_auto]"
               >
                 <div className="min-w-0">
@@ -327,6 +272,93 @@ export function PlannedItemsPanel({
             become owned inventory.
           </div>
         )}
+
+        {showAddForm ? (
+          <form
+            className="space-y-3 rounded-md border border-border bg-muted/20 p-3"
+            onSubmit={handleCreate}
+          >
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px]">
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Future item"
+                aria-label="Planned item name"
+                disabled={!moveId}
+              />
+              <Input
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                placeholder="Category"
+                aria-label="Planned item category"
+                disabled={!moveId}
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-[80px_80px_80px_110px_90px_minmax(0,1fr)]">
+              <Input
+                inputMode="decimal"
+                value={lengthIn}
+                onChange={(event) => setLengthIn(event.target.value)}
+                placeholder="L"
+                aria-label="Planned item length in inches"
+                disabled={!moveId}
+              />
+              <Input
+                inputMode="decimal"
+                value={widthIn}
+                onChange={(event) => setWidthIn(event.target.value)}
+                placeholder="W"
+                aria-label="Planned item width in inches"
+                disabled={!moveId}
+              />
+              <Input
+                inputMode="decimal"
+                value={heightIn}
+                onChange={(event) => setHeightIn(event.target.value)}
+                placeholder="H"
+                aria-label="Planned item height in inches"
+                disabled={!moveId}
+              />
+              <Input
+                inputMode="decimal"
+                value={priceDollars}
+                onChange={(event) => setPriceDollars(event.target.value)}
+                placeholder="Price"
+                aria-label="Planned item estimated price"
+                disabled={!moveId}
+              />
+              <Input
+                inputMode="numeric"
+                value={priority}
+                onChange={(event) => setPriority(event.target.value)}
+                placeholder="Priority"
+                aria-label="Planned item priority"
+                disabled={!moveId}
+              />
+              <Input
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="Product link"
+                aria-label="Planned item product link"
+                disabled={!moveId}
+              />
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowAddForm(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={!moveId || !name.trim()}>
+                <PackagePlus aria-hidden="true" />
+                Save planned
+              </Button>
+            </div>
+          </form>
+        ) : null}
 
         {message ? (
           <p
