@@ -141,17 +141,44 @@ Family helper or mover:
 
 ## Data Entry Guidance
 
+Fast item capture:
+
+- Optimize for getting useful inventory into the move quickly. A user may give
+  only a photo plus a few words; that is enough to create a draft item.
+- Default quantity to `1` when the user does not specify a count. If a photo
+  clearly shows a set or multiple countable objects, use the visible count and
+  mention the assumption in the summary.
+- Fill obvious fields from context: room/current space, concise item name,
+  broad category, likely disposition, and condition when visible or stated.
+- Do not block item creation just because weight, dimensions, disposition, or
+  condition are missing. Leave unknown fields blank or estimated instead of
+  interrogating the user for every detail.
+- Use `needsReview` and review flags as a lightweight correction loop, not as a
+  hard stop. Summarize assumptions so the user can quickly correct them.
+- Before larger batches, read existing move context and nearby inventory to
+  avoid duplicates. Use `externalSource` and `externalId` when importing from a
+  repeatable photo walk, spreadsheet, note, or agent session.
+- For bulk changes, prefer this sequence: read agent context, prepare rows,
+  dry-run `batch-upsert`, explain notable assumptions or failures, write with a
+  new idempotency key, then read records back.
+
 For photo-based inventory:
 
 - Create concise item names.
 - Use readable room names and space IDs when available.
 - Store descriptions based on what is visible and what the user says.
-- Use estimated dimensions only when the user accepts estimates.
-- Store dimensions, weight, and volume confidence as `low` unless directly
-  measured or researched.
+- Use estimated dimensions when they help the move plan, but do not invent
+  precision. If the user only needs a quick inventory, dimensions can wait.
+- Choose dimensions, weight, volume, condition, and value confidence based on
+  the evidence. A clear photo of a common object may justify `medium`; measured
+  values, model research, or manufacturer specs may justify `high`, `manual`, or
+  `actual`. Use `low` when the object is ambiguous, partially hidden, unusually
+  sized, or based only on a rough conversation guess.
 - Add review flags such as `confirm-disposition`, `photo-estimated-weight`,
   `photo-estimated-dimensions`, `capture-model-serial`, or
-  `confirm-contents`.
+  `confirm-contents` only for fields that genuinely need user attention.
+- When the agent infers fields, summarize those choices after writing instead
+  of asking the user to approve every ordinary field upfront.
 - For sell items, create or update a sale listing with listing status,
   platform, title, description, pricing range, research depth, and sources.
 
@@ -234,8 +261,12 @@ Useful write tools:
 - Prefer move-restricted keys when possible.
 - Verify writes by reading the created records back.
 - Summarize exactly what changed and what still needs user review.
-- Ask before creating records, uploading photos, marking items for sale,
-  creating exports, or changing layout/load plans.
+- Get clear session or batch permission before creating records or uploading
+  photos. Once the user has asked the assistant to capture a room, photo, list,
+  or batch, do not ask for approval on every ordinary inferred item field.
+- Ask explicitly before sensitive actions: marking items for sale, creating
+  exports, changing layout/load plans, granting household access, or exposing
+  private values, serials, notes, addresses, or photos.
 - If dimensions, weight, condition, value, price, or contents are estimated,
   store estimate confidence and provenance instead of presenting guesses as
   facts.

@@ -60,7 +60,7 @@ const setupSteps = [
 
 const examplePrompts = [
   "Create a move from Nashua, New Hampshire to Tucson, Arizona with my Ram truck, Toyota Tundra, trailer, and moving company shipment.",
-  "Add these photos as inventory in the Den. Estimate sizes, mark estimates as low confidence, and tell me what needs measuring later.",
+  "Add these photos as inventory in the Den. Estimate obvious fields, choose confidence from the evidence, and tell me what needs measuring later.",
   "Find everything marked sell and draft Facebook Marketplace titles, descriptions, price ranges, and research notes.",
   "Build a move-day checklist for unboxed, fragile, high-value, first-night, or personal-transport items.",
 ];

@@ -448,6 +448,31 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/items \
   }'
 ```
 
+Fast item capture guidance:
+
+- The API is meant to make photo-plus-short-note workflows faster than manual
+  form entry. Do not ask the user for every missing field before creating a
+  normal draft item.
+- `name` is the minimum useful item field. Add `room`, `category`,
+  `disposition`, `condition`, and destination/current space IDs when they are
+  obvious from move context, the photo, or the user's short note.
+- Default `quantity` to `1` when the user gives no count. If the photo clearly
+  shows a set or multiple countable objects, use that count and summarize the
+  assumption back to the user.
+- Missing dimensions, weight, condition, value, or disposition should not block
+  item creation. Leave fields blank when unknown, or store estimates with
+  confidence/provenance when useful.
+- Use `needsReview` and `reviewFlags` for fields that genuinely need attention,
+  then summarize assumptions after the write so the user can correct them
+  naturally.
+- Before larger imports or repeated photo walks, read the move's agent context
+  and nearby existing inventory to avoid duplicates. Use stable
+  `externalSource` and `externalId` values when the same upstream row, photo, or
+  agent session may be processed again.
+- For bulk batches, use this sequence: read agent context, prepare rows, run
+  `dryRun: true`, explain notable assumptions or row failures, write with a new
+  idempotency key, then read the affected records back.
+
 Batch create/update items:
 
 ```bash
@@ -488,10 +513,13 @@ set or clear the pair; providing only one side is rejected.
 Item payloads may include `dimensionsIn` and `dimensionsConfidence`. Confidence
 uses the same values as weight/volume confidence: `none`, `low`, `medium`,
 `high`, `manual`, or `actual`; API and MCP clients may send `estimated` as a
-friendly alias for low-confidence photo or conversation estimates. Legacy rows
-with dimensions but no stored `dimensionsConfidence` are read as `medium` so
-Layout Studio and API clients treat them as estimated measurements rather than
-unknown measurements.
+friendly alias for estimated photo or conversation values when the client does
+not want to choose a more specific confidence. Photos are not automatically
+`low` confidence: a clear photo of a common object may be `medium`, while
+manual measurements, product research, manufacturer specs, or mover-confirmed
+values may be `high`, `manual`, or `actual`. Legacy rows with dimensions but no
+stored `dimensionsConfidence` are read as `medium` so Layout Studio and API
+clients treat them as estimated measurements rather than unknown measurements.
 
 For measurement provenance, `sourceType` supports `unknown`, `photoEstimate`,
 `conversationEstimate`, `aiEstimate`, `manualEstimate`, `manualMeasurement`,

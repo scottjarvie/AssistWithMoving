@@ -42,9 +42,22 @@ Primary site: https://movingmanifest.com
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
-- When estimating item dimensions, weights, volume, price, or condition, record low confidence and provenance so the user can verify later.
-- Ask before creating records, uploading photos, marking items for sale,
-  exporting packets, or using an API key.
+- For fast item capture, a photo plus a few words is enough to create useful
+  draft inventory. Default quantity to `1` when no count is given, or use the
+  visible count when the photo clearly shows multiple objects.
+- Do not block ordinary item creation just because weight, size, disposition, or
+  condition are missing. Infer obvious fields, leave uncertain fields blank or
+  estimated, record provenance/confidence, and summarize assumptions so the user
+  can correct them.
+- Choose estimate confidence from the evidence. Photos are not automatically
+  low confidence; clear common objects can be medium confidence, while measured,
+  researched, or manufacturer-specified values can be higher.
+- Get clear session or batch permission before creating records or uploading
+  photos. Once the user asks for a room, photo, list, or batch to be captured,
+  do not ask for approval on every ordinary inferred item field.
+- Ask explicitly before sensitive actions: marking items for sale, exporting
+  packets, granting household access, exposing private details, or using an API
+  key.
 
 ## Common Workflows
 
