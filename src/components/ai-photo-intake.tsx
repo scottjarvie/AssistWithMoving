@@ -25,6 +25,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+type PhotoSuggestion = NonNullable<
+  ReturnType<typeof useQuery<typeof api.aiPhotoIntake.listForMove>>
+>[number];
+
+function photoSuggestionLabel(suggestion: PhotoSuggestion) {
+  return (
+    suggestion.itemDraft?.name ??
+    suggestion.boxDraft?.label ??
+    `${suggestion.type} photo suggestion`
+  );
+}
+
 export function AiPhotoIntake({
   householdId,
   moveId,
@@ -206,54 +218,77 @@ export function AiPhotoIntake({
             <Skeleton className="h-12 w-4/5" />
           </div>
         ) : pendingSuggestions.length ? (
-          <div className="rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Use</TableHead>
-                  <TableHead>Suggestion</TableHead>
-                  <TableHead>Confidence</TableHead>
-                  <TableHead>Trace</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingSuggestions.map((suggestion) => (
-                  <TableRow key={suggestion._id}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="size-3.5 accent-primary"
-                        checked={selectedIds.has(suggestion._id)}
-                        onChange={(event) => {
-                          const next = new Set(selectedIds);
-                          if (event.target.checked) next.add(suggestion._id);
-                          else next.delete(suggestion._id);
-                          setSelectedIds(next);
-                        }}
-                        aria-label={`Use ${suggestion.type} photo suggestion`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">
-                        {suggestion.itemDraft?.name ??
-                          suggestion.boxDraft?.label ??
-                          suggestion.type}
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {suggestion.reasoning}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{suggestion.confidence}</Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[320px] text-xs leading-5 text-muted-foreground">
-                      {suggestion.sourceSummary}
-                    </TableCell>
+          <>
+            <div
+              role="list"
+              aria-label="AI photo suggestion cards"
+              className="grid gap-3 md:hidden"
+            >
+              {pendingSuggestions.map((suggestion) => (
+                <AiPhotoSuggestionCard
+                  key={suggestion._id}
+                  suggestion={suggestion}
+                  selected={selectedIds.has(suggestion._id)}
+                  onSelectedChange={(checked) => {
+                    const next = new Set(selectedIds);
+                    if (checked) next.add(suggestion._id);
+                    else next.delete(suggestion._id);
+                    setSelectedIds(next);
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="hidden rounded-md border border-border md:block">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-14">Use</TableHead>
+                    <TableHead className="w-[38%]">Suggestion</TableHead>
+                    <TableHead className="w-28">Confidence</TableHead>
+                    <TableHead>Trace</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {pendingSuggestions.map((suggestion) => {
+                    const label = photoSuggestionLabel(suggestion);
+
+                    return (
+                      <TableRow key={suggestion._id}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-primary"
+                            checked={selectedIds.has(suggestion._id)}
+                            onChange={(event) => {
+                              const next = new Set(selectedIds);
+                              if (event.target.checked) next.add(suggestion._id);
+                              else next.delete(suggestion._id);
+                              setSelectedIds(next);
+                            }}
+                            aria-label={`Use ${label}`}
+                          />
+                        </TableCell>
+                        <TableCell className="min-w-0 whitespace-normal">
+                          <PhotoSuggestionSummary suggestion={suggestion} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {suggestion.confidence}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <p className="line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+                            {suggestion.sourceSummary}
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
             No pending AI photo suggestions.
@@ -261,6 +296,61 @@ export function AiPhotoIntake({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AiPhotoSuggestionCard({
+  suggestion,
+  selected,
+  onSelectedChange,
+}: {
+  suggestion: PhotoSuggestion;
+  selected: boolean;
+  onSelectedChange: (checked: boolean) => void;
+}) {
+  const label = photoSuggestionLabel(suggestion);
+
+  return (
+    <div role="listitem" className="rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="size-3.5 accent-primary"
+            checked={selected}
+            onChange={(event) => onSelectedChange(event.target.checked)}
+            aria-label={`Use ${label}`}
+          />
+          Use suggestion
+        </label>
+        <span className="flex flex-wrap gap-1.5">
+          <Badge variant="outline">{suggestion.type}</Badge>
+          <Badge variant="secondary">{suggestion.confidence}</Badge>
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <PhotoSuggestionSummary suggestion={suggestion} />
+      </div>
+      <p className="mt-3 line-clamp-3 break-words rounded-md border border-border/70 bg-muted/30 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
+        {suggestion.sourceSummary}
+      </p>
+    </div>
+  );
+}
+
+function PhotoSuggestionSummary({
+  suggestion,
+}: {
+  suggestion: PhotoSuggestion;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="font-medium">{photoSuggestionLabel(suggestion)}</div>
+      <div className="mt-1 line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+        {suggestion.reasoning}
+      </div>
+    </div>
   );
 }
 
