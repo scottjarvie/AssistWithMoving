@@ -589,7 +589,8 @@ export function PhotoRoomSweepPanel({
           householdId={householdId}
           moveId={moveId}
           room={room || undefined}
-          label="Room photo"
+          label="Room photos"
+          multiple
         />
       </CardContent>
     </Card>

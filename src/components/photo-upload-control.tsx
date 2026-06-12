@@ -2,7 +2,7 @@
 
 import { type ChangeEvent, useRef, useState } from "react";
 import { useAction, useMutation } from "convex/react";
-import { Camera, RotateCcw, Upload, X } from "lucide-react";
+import { Camera, FileImage, RotateCcw, Upload, X } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -30,6 +30,13 @@ type UploadedPhoto = {
   height: number;
 };
 
+const uploadProgressWeights = {
+  prepare: 0.1,
+  original: 0.6,
+  derivatives: 0.25,
+  finalize: 0.05,
+};
+
 export function PhotoUploadControl({
   householdId,
   moveId,
@@ -40,18 +47,20 @@ export function PhotoUploadControl({
   photoType,
   privacyLevel = "normal",
   visibilityScope = "moveCollaborators",
+  multiple = false,
   onUploaded,
 }: PhotoUploadTarget & {
   label?: string;
   photoType?: "item" | "boxContents" | "blueprint";
   privacyLevel?: "normal" | "private";
   visibilityScope?: "moveCollaborators" | "private";
+  multiple?: boolean;
   onUploaded?: (photo: UploadedPhoto) => void;
 }) {
   const initUpload = useAction(api.photos.initUpload);
   const finalizeUpload = useAction(api.photos.finalizeUpload);
   const cancelUploadSession = useMutation(api.photos.cancelUploadSession);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState("");
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
@@ -60,34 +69,47 @@ export function PhotoUploadControl({
   const [uploading, setUploading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const uploadSessionRef = useRef<Id<"photoUploadSessions"> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const selectedCount = files.length;
 
-  function acceptSelectedFile(selectedFile: File | null) {
+  function clearFileInput() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function acceptSelectedFiles(selectedFiles: FileList | File[] | null) {
     setProgress(0);
     setStatus(null);
     setUploadSessionId(null);
     uploadSessionRef.current = null;
 
-    if (!selectedFile) {
-      setFile(null);
+    const nextFiles = Array.from(selectedFiles ?? []).slice(0, multiple ? undefined : 1);
+    if (nextFiles.length === 0) {
+      setFiles([]);
       return;
     }
 
-    const validation = validatePhotoUploadFile(selectedFile);
-    if (!validation.ok) {
-      setFile(null);
-      setStatus(validation.message ?? "Photo is not valid.");
-      return;
+    for (const selectedFile of nextFiles) {
+      const validation = validatePhotoUploadFile(selectedFile);
+      if (!validation.ok) {
+        setFiles([]);
+        clearFileInput();
+        setStatus(validation.message ?? "Photo is not valid.");
+        return;
+      }
     }
 
-    setFile(selectedFile);
+    setFiles(nextFiles);
+    setStatus(null);
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    acceptSelectedFile(event.target.files?.[0] ?? null);
+    acceptSelectedFiles(event.target.files);
   }
 
   async function handleUpload() {
-    if (!householdId || !moveId || !file) {
+    if (!householdId || !moveId || files.length === 0) {
       return;
     }
 
@@ -97,17 +119,64 @@ export function PhotoUploadControl({
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+    let uploadedCount = 0;
+
+    try {
+      for (const [index, selectedFile] of files.entries()) {
+        setStatus(formatUploadStatus(index, files.length, selectedFile.name));
+        const uploadedPhoto = await uploadSingleFile({
+          file: selectedFile,
+          abortController,
+          onProgress: (fileProgress) => {
+            const totalProgress = (index + fileProgress) / files.length;
+            setProgress(Math.round(totalProgress * 100));
+          },
+        });
+        uploadedCount += 1;
+        onUploaded?.(uploadedPhoto);
+      }
+
+      setProgress(100);
+      setStatus(formatUploadSuccess(uploadedCount));
+      setFiles([]);
+      setCaption("");
+      clearFileInput();
+      setUploadSessionId(null);
+      uploadSessionRef.current = null;
+    } catch (error) {
+      if (uploadedCount > 0) {
+        setFiles(files.slice(uploadedCount));
+      }
+      setStatus(photoUploadFailureMessage(error, uploadedCount));
+    } finally {
+      abortControllerRef.current = null;
+      setUploading(false);
+    }
+  }
+
+  async function uploadSingleFile({
+    file,
+    abortController,
+    onProgress,
+  }: {
+    file: File;
+    abortController: AbortController;
+    onProgress: (progress: number) => void;
+  }) {
     let activeUploadSessionId: Id<"photoUploadSessions"> | null = null;
 
     try {
+      onProgress(0);
       const [{ width, height }, originalHash, derivatives] = await Promise.all([
         imageDimensions(file),
         fileSha256Hex(file),
         createImageDerivatives(file),
       ]);
+      onProgress(uploadProgressWeights.prepare);
+
       const session = await initUpload({
-        householdId,
-        moveId,
+        householdId: householdId!,
+        moveId: moveId!,
         itemId,
         boxId,
         room,
@@ -130,36 +199,51 @@ export function PhotoUploadControl({
         file,
         uploadUrl: session.uploadUrl,
         contentType: session.headers["Content-Type"],
-        onProgress: (nextProgress) =>
-          setProgress(Math.round(nextProgress * 0.7)),
+        onProgress: (nextProgress) => {
+          onProgress(
+            uploadProgressWeights.prepare +
+              (nextProgress / 100) * uploadProgressWeights.original
+          );
+        },
         signal: abortController.signal,
       });
-      for (const derivativeUpload of session.derivativeUploads) {
-        const derivative = derivatives.find(
-          (entry) => entry.variant === derivativeUpload.variant
-        );
-        if (!derivative) {
-          throw new Error("Derivative upload is missing.");
+
+      const derivativeUploads = session.derivativeUploads ?? [];
+      if (derivativeUploads.length > 0) {
+        for (const [derivativeIndex, derivativeUpload] of derivativeUploads.entries()) {
+          const derivative = derivatives.find(
+            (entry) => entry.variant === derivativeUpload.variant
+          );
+          if (!derivative) {
+            throw new Error("Derivative upload is missing.");
+          }
+          await uploadFileWithProgress({
+            file: derivative.blob,
+            uploadUrl: derivativeUpload.uploadUrl,
+            contentType: derivativeUpload.headers["Content-Type"],
+            onProgress: (nextProgress) => {
+              const derivativeProgress =
+                (derivativeIndex + nextProgress / 100) / derivativeUploads.length;
+              onProgress(
+                uploadProgressWeights.prepare +
+                  uploadProgressWeights.original +
+                  derivativeProgress * uploadProgressWeights.derivatives
+              );
+            },
+            signal: abortController.signal,
+          });
         }
-        const derivativeIndex = session.derivativeUploads.indexOf(derivativeUpload);
-        await uploadFileWithProgress({
-          file: derivative.blob,
-          uploadUrl: derivativeUpload.uploadUrl,
-          contentType: derivativeUpload.headers["Content-Type"],
-          onProgress: (nextProgress) => {
-            const derivativeProgress =
-              (derivativeIndex + nextProgress / 100) /
-              session.derivativeUploads.length;
-            setProgress(Math.round(70 + derivativeProgress * 25));
-          },
-          signal: abortController.signal,
-        });
       }
-      setProgress(96);
+
+      onProgress(
+        uploadProgressWeights.prepare +
+          uploadProgressWeights.original +
+          uploadProgressWeights.derivatives
+      );
 
       const photoId = (await finalizeUpload({
-        householdId,
-        moveId,
+        householdId: householdId!,
+        moveId: moveId!,
         uploadSessionId: activeUploadSessionId,
         width,
         height,
@@ -173,12 +257,10 @@ export function PhotoUploadControl({
         verificationStatus: "unreviewed",
       })) as Id<"itemPhotos">;
 
-      setStatus("Photo uploaded.");
-      onUploaded?.({ photoId, width, height });
-      setFile(null);
-      setCaption("");
+      onProgress(1);
       setUploadSessionId(null);
       uploadSessionRef.current = null;
+      return { photoId, width, height };
     } catch (error) {
       if (
         householdId &&
@@ -192,10 +274,7 @@ export function PhotoUploadControl({
           uploadSessionId: activeUploadSessionId,
         });
       }
-      setStatus(photoUploadFailureMessage(error));
-    } finally {
-      abortControllerRef.current = null;
-      setUploading(false);
+      throw error;
     }
   }
 
@@ -214,10 +293,10 @@ export function PhotoUploadControl({
   }
 
   const canRetry =
-    file &&
+    files.length > 0 &&
     !uploading &&
     Boolean(status) &&
-    status !== "Photo uploaded.";
+    /cancelled|failed|rejected|not configured/i.test(status ?? "");
 
   return (
     <div
@@ -225,18 +304,28 @@ export function PhotoUploadControl({
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
-        acceptSelectedFile(event.dataTransfer.files?.[0] ?? null);
+        acceptSelectedFiles(event.dataTransfer.files);
       }}
     >
-      <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-        <Camera className="size-4 text-primary" aria-hidden="true" />
-        {label}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Camera className="size-4 text-primary" aria-hidden="true" />
+          {label}
+        </div>
+        {selectedCount > 0 ? (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <FileImage className="size-3.5" aria-hidden="true" />
+            {formatSelectedFiles(files)}
+          </div>
+        ) : null}
       </div>
       <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <Input
+          ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
-          capture="environment"
+          capture={multiple ? undefined : "environment"}
+          multiple={multiple}
           aria-label={label}
           disabled={!householdId || !moveId || uploading}
           onChange={handleFileChange}
@@ -245,18 +334,18 @@ export function PhotoUploadControl({
           value={caption}
           disabled={uploading}
           onChange={(event) => setCaption(event.target.value)}
-          placeholder="Caption"
+          placeholder="Caption (optional)"
           aria-label="Photo caption"
         />
         <div className="flex items-center gap-2">
           <Button
             type="button"
             size="sm"
-            disabled={!file || uploading}
+            disabled={files.length === 0 || uploading}
             onClick={() => void handleUpload()}
           >
             <Upload aria-hidden="true" />
-            Upload
+            {files.length > 1 ? `Upload ${files.length}` : "Upload"}
           </Button>
           {uploading ? (
             <Button
@@ -302,9 +391,34 @@ export function PhotoUploadControl({
   );
 }
 
-function photoUploadFailureMessage(error: unknown) {
+function formatSelectedFiles(files: File[]) {
+  if (files.length === 1) {
+    return files[0]?.name ?? "1 photo selected";
+  }
+  return `${files.length} photos selected`;
+}
+
+function formatUploadStatus(index: number, total: number, fileName: string) {
+  if (total === 1) {
+    return `Uploading ${fileName}.`;
+  }
+  return `Uploading ${index + 1} of ${total}: ${fileName}.`;
+}
+
+function formatUploadSuccess(count: number) {
+  return count === 1
+    ? "Photo uploaded. Web versions ready."
+    : `${count} photos uploaded. Web versions ready.`;
+}
+
+function photoUploadFailureMessage(error: unknown, uploadedCount = 0) {
+  const prefix =
+    uploadedCount > 0
+      ? `${uploadedCount} ${uploadedCount === 1 ? "photo" : "photos"} uploaded. `
+      : "";
+
   if (error instanceof DOMException && error.name === "AbortError") {
-    return "Upload cancelled.";
+    return `${prefix}Upload cancelled.`;
   }
 
   const message = error instanceof Error ? error.message : "";
@@ -313,7 +427,7 @@ function photoUploadFailureMessage(error: unknown) {
       message
     )
   ) {
-    return "Photo storage is not configured. Retry after setup is fixed.";
+    return `${prefix}Photo storage is not configured. Retry after setup is fixed.`;
   }
 
   if (
@@ -321,8 +435,8 @@ function photoUploadFailureMessage(error: unknown) {
       message
     )
   ) {
-    return "Photo storage rejected the upload. Check bucket CORS, credentials, and retry.";
+    return `${prefix}Photo storage rejected the upload. Check bucket CORS, credentials, and retry.`;
   }
 
-  return "Upload failed. Retry when ready.";
+  return `${prefix}Upload failed. Retry when ready.`;
 }

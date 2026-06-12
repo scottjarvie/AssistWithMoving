@@ -454,7 +454,8 @@ function BoxCard({
             moveId={moveId}
             boxId={box._id}
             room={box.room}
-            label="Box photo"
+            label="Box photos"
+            multiple
           />
           <PhotoEvidenceStrip
             householdId={householdId}

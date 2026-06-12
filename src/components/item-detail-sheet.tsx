@@ -712,7 +712,8 @@ export function ItemDetailSheet({
                   moveId={moveId}
                   itemId={item._id}
                   room={item.room}
-                  label="Item photo"
+                  label="Item photos"
+                  multiple
                 />
                 <PhotoEvidenceStrip
                   householdId={householdId}
