@@ -282,68 +282,66 @@ export function AiReviewQueue({
             <Skeleton className="h-12 w-4/5" />
           </div>
         ) : entries.length ? (
-          <div className="rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Use</TableHead>
-                  <TableHead>Suggestion</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Edit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.slice(0, 80).map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="size-3.5 accent-primary"
-                        checked={selected.has(entry.id)}
-                        onChange={() => toggle(entry.id)}
-                        aria-label={`Use ${entry.title}`}
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-[220px]">
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline">{entry.kind}</Badge>
-                        <Badge variant="outline">{entry.type}</Badge>
-                        {entry.confidence ? (
-                          <Badge
-                            variant={
-                              entry.confidence === "low" ? "secondary" : "outline"
-                            }
-                          >
-                            {entry.confidence}
-                          </Badge>
-                        ) : null}
-                        {entry.duplicateCount ? (
-                          <Badge variant="secondary">
-                            {entry.duplicateCount} duplicates
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="mt-2 font-medium">{entry.title}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {entry.detail}
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-[360px] text-xs leading-5 text-muted-foreground">
-                      {entry.reasoning}
-                    </TableCell>
-                    <TableCell>
-                      <Button asChild type="button" size="sm" variant="outline">
-                        <Link href={entry.href}>
-                          <Pencil aria-hidden="true" />
-                          Edit
-                        </Link>
-                      </Button>
-                    </TableCell>
+          <>
+            <div
+              role="list"
+              aria-label="AI review cards"
+              className="grid gap-3 md:hidden"
+            >
+              {entries.slice(0, 80).map((entry) => (
+                <AiReviewEntryCard
+                  key={entry.id}
+                  entry={entry}
+                  selected={selected.has(entry.id)}
+                  onToggle={() => toggle(entry.id)}
+                />
+              ))}
+            </div>
+
+            <div className="hidden rounded-md border border-border md:block">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Use</TableHead>
+                    <TableHead className="w-[35%]">Suggestion</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead className="w-24">Edit</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {entries.slice(0, 80).map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          className="size-3.5 accent-primary"
+                          checked={selected.has(entry.id)}
+                          onChange={() => toggle(entry.id)}
+                          aria-label={`Use ${entry.title}`}
+                        />
+                      </TableCell>
+                      <TableCell className="min-w-[220px]">
+                        <AiReviewEntrySummary entry={entry} />
+                      </TableCell>
+                      <TableCell>
+                        <p className="line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+                          {entry.reasoning}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <Button asChild type="button" size="sm" variant="outline">
+                          <Link href={entry.href}>
+                            <Pencil aria-hidden="true" />
+                            Edit
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
             No pending AI suggestions.
@@ -351,6 +349,74 @@ export function AiReviewQueue({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AiReviewEntryCard({
+  entry,
+  selected,
+  onToggle,
+}: {
+  entry: AiReviewEntry;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      role="listitem"
+      className="rounded-md border border-border bg-card p-3"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="size-3.5 accent-primary"
+            checked={selected}
+            onChange={onToggle}
+            aria-label={`Use ${entry.title}`}
+          />
+          Use
+        </label>
+        <Button asChild type="button" size="sm" variant="outline">
+          <Link href={entry.href}>
+            <Pencil aria-hidden="true" />
+            Edit
+          </Link>
+        </Button>
+      </div>
+
+      <div className="mt-3">
+        <AiReviewEntrySummary entry={entry} />
+      </div>
+      <p className="mt-3 line-clamp-4 break-words text-xs leading-5 text-muted-foreground">
+        {entry.reasoning}
+      </p>
+    </div>
+  );
+}
+
+function AiReviewEntrySummary({ entry }: { entry: AiReviewEntry }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap gap-1">
+        <Badge variant="outline">{entry.kind}</Badge>
+        <Badge variant="outline">{entry.type}</Badge>
+        {entry.confidence ? (
+          <Badge
+            variant={entry.confidence === "low" ? "secondary" : "outline"}
+          >
+            {entry.confidence}
+          </Badge>
+        ) : null}
+        {entry.duplicateCount ? (
+          <Badge variant="secondary">{entry.duplicateCount} duplicates</Badge>
+        ) : null}
+      </div>
+      <div className="mt-2 break-words font-medium">{entry.title}</div>
+      <div className="mt-1 break-words text-xs text-muted-foreground">
+        {entry.detail}
+      </div>
+    </div>
   );
 }
 
