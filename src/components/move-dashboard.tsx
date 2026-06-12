@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Bot,
   CalendarDays,
+  CircleCheck,
   ClipboardList,
   FileStack,
   Home,
@@ -268,6 +269,7 @@ export function MoveDashboard() {
                     key={move._id}
                     move={move}
                     selected={move._id === moveId}
+                    onSelect={selectMove}
                   />
                 ))}
               </div>
@@ -746,9 +748,11 @@ export function MoveDashboard() {
 function ActiveMoveCard({
   move,
   selected,
+  onSelect,
 }: {
   move: DashboardMove;
   selected: boolean;
+  onSelect: (moveId: Id<"moves">) => void;
 }) {
   const route = [move.origin, move.destination].filter(Boolean).join(" -> ");
 
@@ -778,6 +782,22 @@ function ActiveMoveCard({
           <DashboardMoveField label="System" value={move.unitSystem} />
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          {selected ? (
+            <Button type="button" size="sm" variant="outline" disabled>
+              <CircleCheck aria-hidden="true" />
+              Selected
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onSelect(move._id)}
+            >
+              <CircleCheck aria-hidden="true" />
+              Select move
+            </Button>
+          )}
           <Button asChild size="sm">
             <Link href={moveWorkspacePath(move._id)}>
               Open workspace

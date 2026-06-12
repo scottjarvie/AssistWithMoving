@@ -1,12 +1,17 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const mockRouter = vi.hoisted(() => ({
   push: vi.fn(),
+}));
+
+const workspaceActions = vi.hoisted(() => ({
+  selectHousehold: vi.fn(),
+  selectMove: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -27,7 +32,7 @@ vi.mock("@/components/move-workspace-context", () => ({
       householdId: "household_123" as Id<"households">,
       moveId: "move_123" as Id<"moves">,
       selectedMove: undefined,
-      selectHousehold: vi.fn(),
+      selectHousehold: workspaceActions.selectHousehold,
       households: [
         {
           household: {
@@ -59,8 +64,23 @@ vi.mock("@/components/move-workspace-context", () => ({
           updatedAt: 1,
           documentationProfileTypes: ["personalFullRecord"],
         },
+        {
+          _id: "move_456" as Id<"moves">,
+          _creationTime: 2,
+          householdId: "household_123" as Id<"households">,
+          title: "Fall move",
+          type: "longDistance",
+          status: "planning",
+          origin: "Storage unit",
+          destination: "Townhome",
+          unitSystem: "imperial",
+          createdByUserId: "user_123" as Id<"users">,
+          createdAt: 2,
+          updatedAt: 2,
+          documentationProfileTypes: ["personalFullRecord", "movingCompany"],
+        },
       ],
-      selectMove: vi.fn(),
+      selectMove: workspaceActions.selectMove,
       featureFlags: [],
       loadingIdentity: false,
       loadingHouseholds: false,
@@ -72,6 +92,12 @@ vi.mock("@/components/move-workspace-context", () => ({
 import { MoveDashboard } from "@/components/move-dashboard";
 
 describe("MoveDashboard", () => {
+  beforeEach(() => {
+    workspaceActions.selectHousehold.mockReset();
+    workspaceActions.selectMove.mockReset();
+    mockRouter.push.mockReset();
+  });
+
   it("opens on active moves before setup forms", () => {
     render(<MoveDashboard />);
 
@@ -86,18 +112,45 @@ describe("MoveDashboard", () => {
     expect(
       screen.getByRole("tab", { name: "AI connection" }),
     ).toBeInTheDocument();
-    const activeMove = screen.getByText("Summer move");
+    const activeMoves = screen.getByRole("list", { name: "Active moves" });
+    const activeMove = within(activeMoves).getByText("Summer move");
     const summary = screen.getByText("Workspace summary");
     expect(activeMove.compareDocumentPosition(summary)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(
-      screen.getByRole("link", { name: "Open workspace" }),
+      within(activeMoves).getAllByRole("link", { name: "Open workspace" })[0],
     ).toHaveAttribute("href", "/app/moves/move_123");
     expect(
       screen.getByRole("link", { name: "Open selected move" }),
     ).toHaveAttribute("href", "/app/moves/move_123");
+    expect(
+      within(activeMoves).getByRole("button", { name: "Selected" }),
+    ).toBeDisabled();
+    expect(
+      within(activeMoves).getByRole("button", { name: "Select move" }),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("Move title")).not.toBeInTheDocument();
+  });
+
+  it("lets the dashboard select a different active move", async () => {
+    const user = userEvent.setup();
+
+    render(<MoveDashboard />);
+
+    const activeMoves = screen.getByRole("list", { name: "Active moves" });
+    const fallMoveCard = within(activeMoves)
+      .getByText("Fall move")
+      .closest("[role='listitem']");
+
+    expect(fallMoveCard).not.toBeNull();
+    await user.click(
+      within(fallMoveCard as HTMLElement).getByRole("button", {
+        name: "Select move",
+      }),
+    );
+
+    expect(workspaceActions.selectMove).toHaveBeenCalledWith("move_456");
   });
 
   it("keeps create-move basics, PCS fields, and packets in separate tasks", async () => {
