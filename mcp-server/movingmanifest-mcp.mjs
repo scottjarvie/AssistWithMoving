@@ -1524,7 +1524,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "start_photo_upload", {
     title: "Start media evidence upload",
     description:
-      "Create a presigned evidence upload session for an image, audio file, or video. The client must PUT the file to the returned URL and then call finalize_photo_upload. Derivatives are image-only.",
+      "Create a presigned evidence upload session for an image, audio file, or video. The client must PUT the file to the returned URL and then call finalize_photo_upload. Image derivatives are optional; MovingManifest creates them server-side when API/MCP clients upload only the original.",
     inputSchema: {
       moveId: z.string(),
       itemId: z.string().optional(),
@@ -1555,7 +1555,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "upload_evidence_file", {
     title: "Upload evidence file",
     description:
-      "Easy MCP upload path: provide a local file path or source URL and this tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. It does not generate image derivatives.",
+      "Easy MCP upload path: provide a local file path or source URL and this tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. For images, MovingManifest creates web-ready derivatives server-side so agents do not need to resize or re-encode files.",
     inputSchema: {
       moveId: z.string(),
       filePath: z.string().optional(),

@@ -383,8 +383,8 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "attach_photo",
     ],
     agentWorkflows: [
-      "Use upload_evidence_file when the agent has a local path or source URL; it starts the session, uploads the original, finalizes metadata, and returns the photoId.",
-      "Use the lower-level start/finalize tools only when the client needs to manage presigned uploads or client-supplied derivatives itself.",
+      "Use upload_evidence_file when the agent has a local path or source URL; it starts the session, uploads the original, finalizes metadata, triggers server-side image derivatives, and returns the photoId.",
+      "Use the lower-level start/finalize tools only when the client needs to manage presigned uploads, upload audio/video, or supply its own image derivatives.",
       "Attach reviewed evidence media to items, boxes, rooms, and documentation profiles.",
       "Keep original file delivery separate from recipient-safe packet thumbnails.",
     ],

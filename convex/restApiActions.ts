@@ -1,10 +1,14 @@
+"use node";
+
 import {
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v } from "convex/values";
+import sharp from "sharp";
 
 import { internal } from "./_generated/api";
 import type { Id, TableNames } from "./_generated/dataModel";
@@ -29,6 +33,16 @@ import {
 
 const uploadSessionTtlMs = 15 * 60 * 1000;
 type PhotoDerivativeVariant = "thumb" | "card" | "detail" | "full";
+const serverDerivativeSpecs = [
+  { variant: "thumb", maxSide: 200, quality: 78 },
+  { variant: "card", maxSide: 600, quality: 82 },
+  { variant: "detail", maxSide: 1200, quality: 86 },
+  { variant: "full", maxSide: 2400, quality: 90 },
+] as const satisfies Array<{
+  variant: PhotoDerivativeVariant;
+  maxSide: number;
+  quality: number;
+}>;
 const photoTypes = [
   "item",
   "serialNumber",
@@ -289,7 +303,47 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         },
       });
 
-      return restOk({ data: { photoId } }, 201);
+      let derivativeStatus: "pending" | "ready" | "failed" | undefined =
+        imageDerivativeStatusForSession(session);
+      let derivativeError: string | undefined;
+      if (shouldGenerateServerDerivatives(session)) {
+        try {
+          const generated = await generateAndStoreImageDerivatives({
+            bucketName: session.originalBucket ?? config.bucketName,
+            moveId,
+            originalStorageKey: session.originalStorageKey,
+          });
+          await ctx.runMutation(internal.photos.markGeneratedDerivativesReady, {
+            householdId: auth.householdId,
+            moveId,
+            photoId,
+            derivativeRefs: generated.derivativeRefs,
+            apiActor: {
+              apiKeyId: String(auth.apiKeyId),
+              createdByUserId: auth.createdByUserId,
+            },
+          });
+          derivativeStatus = "ready";
+        } catch (error) {
+          derivativeStatus = "failed";
+          derivativeError = derivativeProcessingError(error);
+          await ctx.runMutation(internal.photos.markGeneratedDerivativesFailed, {
+            householdId: auth.householdId,
+            moveId,
+            photoId,
+            derivativeError,
+            apiActor: {
+              apiKeyId: String(auth.apiKeyId),
+              createdByUserId: auth.createdByUserId,
+            },
+          });
+        }
+      }
+
+      return restOk(
+        { data: { photoId, derivativeStatus, derivativeError } },
+        201
+      );
     } catch (error) {
       await ctx.runMutation(internal.photos.markUploadSessionFailed, {
         householdId: auth.householdId,
@@ -437,6 +491,133 @@ async function assertUploadedObject(
   if (head.ContentType && head.ContentType !== expected.mimeType) {
     throw new Error("Uploaded object type does not match the session.");
   }
+}
+
+function imageDerivativeStatusForSession(session: {
+  expectedMimeType: string;
+  mediaKind?: string;
+  derivativeUploads?: unknown[];
+}) {
+  const mediaKind = session.mediaKind ?? mediaKindForMimeType(session.expectedMimeType);
+  if (mediaKind !== "image") return undefined;
+  return Array.isArray(session.derivativeUploads) && session.derivativeUploads.length > 0
+    ? "ready"
+    : "pending";
+}
+
+function shouldGenerateServerDerivatives(session: {
+  expectedMimeType: string;
+  mediaKind?: string;
+  derivativeUploads?: unknown[];
+}) {
+  const mediaKind = session.mediaKind ?? mediaKindForMimeType(session.expectedMimeType);
+  return (
+    mediaKind === "image" &&
+    (!Array.isArray(session.derivativeUploads) ||
+      session.derivativeUploads.length === 0)
+  );
+}
+
+async function generateAndStoreImageDerivatives({
+  bucketName,
+  moveId,
+  originalStorageKey,
+}: {
+  bucketName: string;
+  moveId: Id<"moves">;
+  originalStorageKey: string;
+}) {
+  const client = b2Client();
+  const original = await client.send(
+    new GetObjectCommand({
+      Bucket: bucketName,
+      Key: originalStorageKey,
+    })
+  );
+  const originalBytes = await objectBodyToBuffer(original.Body);
+  const derivativeRefs: Partial<Record<PhotoDerivativeVariant, string>> = {};
+
+  for (const spec of serverDerivativeSpecs) {
+    const { data, info } = await sharp(originalBytes, { failOn: "none" })
+      .rotate()
+      .resize({
+        width: spec.maxSide,
+        height: spec.maxSide,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: spec.quality })
+      .toBuffer({ resolveWithObject: true });
+    const storageKey = uploadObjectKey({
+      moveId,
+      mimeType: "image/webp",
+      prefix: "photo-derivatives",
+    });
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: storageKey,
+        Body: data,
+        ContentType: "image/webp",
+        ContentLength: data.byteLength,
+        Metadata: {
+          variant: spec.variant,
+          width: String(info.width),
+          height: String(info.height),
+        },
+      })
+    );
+    derivativeRefs[spec.variant] = storageKey;
+  }
+
+  return { derivativeRefs };
+}
+
+async function objectBodyToBuffer(body: unknown) {
+  if (!body) {
+    throw new Error("Uploaded image object was empty.");
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (body instanceof ArrayBuffer) {
+    return Buffer.from(body);
+  }
+  if (
+    typeof (body as { transformToByteArray?: unknown }).transformToByteArray ===
+    "function"
+  ) {
+    const bytes = await (
+      body as { transformToByteArray: () => Promise<Uint8Array> }
+    ).transformToByteArray();
+    return Buffer.from(bytes);
+  }
+  if (typeof (body as { arrayBuffer?: unknown }).arrayBuffer === "function") {
+    const arrayBuffer = await (
+      body as { arrayBuffer: () => Promise<ArrayBuffer> }
+    ).arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+  if (
+    typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] ===
+    "function"
+  ) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body as AsyncIterable<Uint8Array>) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  throw new Error("Could not read uploaded image bytes.");
+}
+
+function derivativeProcessingError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return `Server derivative processing failed: ${error.message}`;
+  }
+  return "Server derivative processing failed.";
 }
 
 function uploadObjectKey({

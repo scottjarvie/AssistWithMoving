@@ -37,7 +37,7 @@ const apiCards = [
   },
   {
     title: "Photo evidence",
-    copy: "Start upload sessions, PUT files to storage, then finalize item, room, box, receipt, serial, and condition photos.",
+    copy: "Start upload sessions, PUT originals to storage, then finalize item, room, box, receipt, serial, and condition photos. Image uploads get web-ready derivatives server-side.",
     icon: Camera,
   },
   {

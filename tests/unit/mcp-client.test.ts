@@ -1733,7 +1733,9 @@ describe("MovingManifest MCP API client", () => {
       .mockResolvedValueOnce({
         ok: true,
         headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({ data: { photoId: "photo1" } }),
+        json: async () => ({
+          data: { photoId: "photo1", derivativeStatus: "ready" },
+        }),
       });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1754,7 +1756,8 @@ describe("MovingManifest MCP API client", () => {
       ).resolves.toMatchObject({
         photoId: "photo1",
         uploadSessionId: "session1",
-        derivativeStatus: "pending",
+        derivativeStatus: "ready",
+        derivativeNote: expect.stringContaining("web-ready image derivatives"),
         media: {
           fileName: "garage-shelf.png",
           mimeType: "image/png",

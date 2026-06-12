@@ -843,7 +843,7 @@ export async function uploadEvidenceFile(config, input) {
         finalize: { method: "POST", path: "/photos/finalize", body: finalizeBody },
       },
       derivativeNote:
-        "This helper uploads the original evidence file only. MovingManifest stores the original immediately; image derivatives may remain pending unless another client supplies them or server-side derivative processing is added.",
+        "This helper uploads the original evidence file only. MovingManifest creates web-ready image derivatives during finalization when the client does not supply them.",
     };
   }
 
@@ -859,9 +859,17 @@ export async function uploadEvidenceFile(config, input) {
     ...finalizeBody,
     uploadSessionId: data.uploadSessionId,
   });
+  const finalizedData = finalizeResponse.data ?? finalizeResponse;
+  const derivativeStatus =
+    finalizedData.derivativeStatus ??
+    (mimeType.startsWith("image/")
+      ? data.derivativeUploads && data.derivativeUploads.length > 0
+        ? "ready"
+        : "pending"
+      : undefined);
 
   return {
-    photoId: finalizeResponse.data?.photoId ?? finalizeResponse.photoId,
+    photoId: finalizedData.photoId,
     uploadSessionId: data.uploadSessionId,
     media: {
       source: media.source,
@@ -872,12 +880,9 @@ export async function uploadEvidenceFile(config, input) {
       height,
       originalHash,
     },
-    derivativeStatus:
-      data.derivativeUploads && data.derivativeUploads.length > 0
-        ? "client-supplied"
-        : "pending",
-    derivativeNote:
-      "Original evidence was uploaded and finalized. This MCP helper does not generate image derivatives; display/AI derivatives may remain pending until a derivative processor or derivative-capable client supplies them.",
+    derivativeStatus,
+    derivativeError: finalizedData.derivativeError,
+    derivativeNote: derivativeNoteForStatus(derivativeStatus),
   };
 }
 
@@ -907,6 +912,19 @@ export async function attachPhoto(config, input) {
     path: `/photos/${input.photoId}/attach`,
     body: input,
   });
+}
+
+function derivativeNoteForStatus(status) {
+  switch (status) {
+    case "ready":
+      return "Original evidence was uploaded and MovingManifest created web-ready image derivatives for display and AI review.";
+    case "failed":
+      return "Original evidence was uploaded, but server-side derivative processing failed. The photo record remains available for review and retry.";
+    case "pending":
+      return "Original evidence was uploaded. Web-ready image derivatives are queued or pending.";
+    default:
+      return "Original media evidence was uploaded. Audio and video uploads do not use image derivatives.";
+  }
 }
 
 async function loadEvidenceMedia(input) {

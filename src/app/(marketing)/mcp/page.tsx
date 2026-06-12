@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 const mcpCards = [
   {
     title: "Tool-based move work",
-    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links.",
+    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. Image tools send originals and let MovingManifest prep display versions.",
     icon: Bot,
   },
   {

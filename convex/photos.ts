@@ -1429,6 +1429,83 @@ export const completeUploadSession = internalMutation({
   },
 });
 
+export const markGeneratedDerivativesReady = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+    derivativeRefs: derivativeRefsValidator,
+    apiActor: v.optional(apiPhotoActorValidator),
+  },
+  handler: async (ctx, args) => {
+    if (args.apiActor) {
+      await assertMoveInHousehold(ctx, args);
+    } else {
+      await requireMovePermission(
+        ctx,
+        args.householdId,
+        args.moveId,
+        "inventory:edit",
+      );
+    }
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      throw new Error("Photo not found.");
+    }
+
+    await ctx.db.patch(args.photoId, {
+      derivativeRefs: args.derivativeRefs,
+      derivativeStatus: "ready",
+      derivativeError: undefined,
+      derivativesUpdatedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const markGeneratedDerivativesFailed = internalMutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+    derivativeError: v.string(),
+    apiActor: v.optional(apiPhotoActorValidator),
+  },
+  handler: async (ctx, args) => {
+    if (args.apiActor) {
+      await assertMoveInHousehold(ctx, args);
+    } else {
+      await requireMovePermission(
+        ctx,
+        args.householdId,
+        args.moveId,
+        "inventory:edit",
+      );
+    }
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      throw new Error("Photo not found.");
+    }
+
+    await ctx.db.patch(args.photoId, {
+      derivativeStatus: "failed",
+      derivativeError: args.derivativeError,
+      derivativesUpdatedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const cancelUploadSession = mutation({
   args: {
     householdId: v.id("households"),
