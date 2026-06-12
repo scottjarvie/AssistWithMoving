@@ -1117,7 +1117,7 @@ export function PlanSideRailTabs({
   );
 }
 
-function ToolPalette({
+export function ToolPalette({
   activeTool,
   onToolChange,
   snapEnabled,
@@ -1164,7 +1164,7 @@ function ToolPalette({
   ];
 
   return (
-    <div className="flex flex-col gap-2 border-b border-border p-2 lg:border-b-0 lg:border-r">
+    <div className="flex gap-2 overflow-x-auto border-b border-border p-2 lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r">
       {tools.map((item) => (
         <Button
           key={item.tool}
@@ -1178,7 +1178,7 @@ function ToolPalette({
           <item.icon className="size-4" aria-hidden />
         </Button>
       ))}
-      <div className="my-1 h-px bg-border" />
+      <div className="mx-1 w-px shrink-0 bg-border lg:mx-0 lg:my-1 lg:h-px lg:w-auto" />
       <Button
         variant={snapEnabled ? "secondary" : "ghost"}
         size="icon-lg"
@@ -1190,7 +1190,7 @@ function ToolPalette({
       </Button>
       {activeTool === "opening" ? (
         <select
-          className="h-8 w-full rounded-md border border-input bg-background text-xs"
+          className="h-10 min-w-32 rounded-md border border-input bg-background px-2 text-xs lg:h-8 lg:w-full lg:min-w-0"
           value={openingKind}
           aria-label="Opening kind"
           onChange={(event) =>
@@ -1204,7 +1204,7 @@ function ToolPalette({
       ) : null}
       {activeTool === "feature" ? (
         <select
-          className="h-8 w-full rounded-md border border-input bg-background text-xs"
+          className="h-10 min-w-36 rounded-md border border-input bg-background px-2 text-xs lg:h-8 lg:w-full lg:min-w-0"
           value={featureKind}
           aria-label="Feature kind"
           onChange={(event) =>
@@ -1229,7 +1229,7 @@ function ToolPalette({
       ) : null}
       {activeTool === "zone" ? (
         <select
-          className="h-8 w-full rounded-md border border-input bg-background text-xs"
+          className="h-10 min-w-36 rounded-md border border-input bg-background px-2 text-xs lg:h-8 lg:w-full lg:min-w-0"
           value={zoneKind}
           aria-label="Outdoor zone kind"
           disabled={levelType !== "outdoor"}

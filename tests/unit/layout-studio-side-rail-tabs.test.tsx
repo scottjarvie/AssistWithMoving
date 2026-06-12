@@ -1,8 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { PlanSideRailTabs } from "@/components/layout-studio/plan-workspace-page";
+import {
+  PlanSideRailTabs,
+  ToolPalette,
+} from "@/components/layout-studio/plan-workspace-page";
 
 describe("PlanSideRailTabs", () => {
   it("keeps Layout Studio side work separated by task", async () => {
@@ -41,5 +44,32 @@ describe("PlanSideRailTabs", () => {
     expect(
       screen.queryByText("Agent proposal review panel"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ToolPalette", () => {
+  it("uses a horizontal mobile tool strip and desktop rail", () => {
+    render(
+      <ToolPalette
+        activeTool="opening"
+        onToolChange={vi.fn()}
+        snapEnabled
+        onSnapChange={vi.fn()}
+        openingKind="door"
+        onOpeningKindChange={vi.fn()}
+        featureKind="counter"
+        onFeatureKindChange={vi.fn()}
+        zoneKind="driveway"
+        onZoneKindChange={vi.fn()}
+        levelType="indoor"
+      />,
+    );
+
+    const palette = screen.getByLabelText("Select (V)").parentElement;
+    expect(palette).toHaveClass("overflow-x-auto");
+    expect(palette).toHaveClass("lg:flex-col");
+    expect(palette).toHaveClass("lg:border-r");
+    expect(screen.getByLabelText("Opening kind")).toHaveClass("min-w-32");
+    expect(screen.getByLabelText("Outdoor zone")).toBeDisabled();
   });
 });
