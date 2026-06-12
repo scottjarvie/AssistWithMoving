@@ -4,11 +4,13 @@ import { type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Archive,
+  Pencil,
   Mail,
   Phone,
   Save,
   UserRoundPlus,
   UsersRound,
+  X,
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -71,6 +73,8 @@ export function MovePeopleManager({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [editingPersonId, setEditingPersonId] =
+    useState<Id<"movePeople"> | null>(null);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -166,6 +170,9 @@ export function MovePeopleManager({
                         householdId={householdId}
                         moveId={moveId}
                         person={person}
+                        editing={editingPersonId === person._id}
+                        onEdit={() => setEditingPersonId(person._id)}
+                        onClose={() => setEditingPersonId(null)}
                         onMessage={setMessage}
                       />
                     ) : null,
@@ -191,6 +198,9 @@ export function MovePeopleManager({
                             householdId={householdId}
                             moveId={moveId}
                             person={person}
+                            editing={editingPersonId === person._id}
+                            onEdit={() => setEditingPersonId(person._id)}
+                            onClose={() => setEditingPersonId(null)}
                             onMessage={setMessage}
                           />
                         ) : null,
@@ -276,11 +286,13 @@ function useMovePersonEditor({
   moveId,
   person,
   onMessage,
+  onDone,
 }: {
   householdId: Id<"households">;
   moveId: Id<"moves">;
   person: MovePerson;
   onMessage: (message: string) => void;
+  onDone?: () => void;
 }) {
   const updatePerson = useMutation(api.movePeople.update);
   const archivePerson = useMutation(api.movePeople.archive);
@@ -306,6 +318,7 @@ function useMovePersonEditor({
         notes,
       });
       onMessage(`${name} saved.`);
+      onDone?.();
     } catch (error) {
       onMessage(
         error instanceof Error ? error.message : `Could not save ${name}.`,
@@ -324,6 +337,7 @@ function useMovePersonEditor({
         personId: person._id,
       });
       onMessage(`${person.name} archived.`);
+      onDone?.();
     } catch (error) {
       onMessage(
         error instanceof Error
@@ -356,20 +370,19 @@ function MovePersonCard({
   householdId,
   moveId,
   person,
+  editing,
+  onEdit,
+  onClose,
   onMessage,
 }: {
   householdId: Id<"households">;
   moveId: Id<"moves">;
   person: MovePerson;
+  editing: boolean;
+  onEdit: () => void;
+  onClose: () => void;
   onMessage: (message: string) => void;
 }) {
-  const editor = useMovePersonEditor({
-    householdId,
-    moveId,
-    person,
-    onMessage,
-  });
-
   return (
     <div
       role="listitem"
@@ -378,15 +391,141 @@ function MovePersonCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="break-words font-medium">{person.name}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {[person.email, person.phone].filter(Boolean).join(" - ") ||
-              "No contact method yet"}
-          </p>
+          <ContactReach person={person} className="mt-2" />
         </div>
-        <Badge variant="outline">{editor.role}</Badge>
+        <Badge variant="outline">{movePersonRoleLabel(person.role)}</Badge>
       </div>
 
-      <div className="mt-3 grid gap-2">
+      <p className="mt-3 line-clamp-3 break-words text-sm text-muted-foreground">
+        {person.notes || "No notes yet."}
+      </p>
+
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-expanded={editing}
+          aria-label={`Edit ${person.name}`}
+          onClick={onEdit}
+        >
+          <Pencil aria-hidden="true" />
+          Edit
+        </Button>
+      </div>
+
+      {editing ? (
+        <MovePersonEditorPanel
+          className="mt-3"
+          householdId={householdId}
+          moveId={moveId}
+          person={person}
+          onMessage={onMessage}
+          onClose={onClose}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function MovePersonRow({
+  householdId,
+  moveId,
+  person,
+  editing,
+  onEdit,
+  onClose,
+  onMessage,
+}: {
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  person: MovePerson;
+  editing: boolean;
+  onEdit: () => void;
+  onClose: () => void;
+  onMessage: (message: string) => void;
+}) {
+  return (
+    <>
+      <TableRow>
+        <TableCell className="min-w-[180px]">
+          <div className="font-medium">{person.name}</div>
+        </TableCell>
+        <TableCell className="min-w-[120px]">
+          <Badge variant="outline">{movePersonRoleLabel(person.role)}</Badge>
+        </TableCell>
+        <TableCell className="min-w-[220px]">
+          <ContactReach person={person} />
+        </TableCell>
+        <TableCell className="max-w-[360px]">
+          <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+            {person.notes || "No notes yet."}
+          </p>
+        </TableCell>
+        <TableCell className="min-w-[120px] text-right">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            aria-expanded={editing}
+            aria-label={`Edit ${person.name}`}
+            onClick={onEdit}
+          >
+            <Pencil aria-hidden="true" />
+            Edit
+          </Button>
+        </TableCell>
+      </TableRow>
+      {editing ? (
+        <TableRow>
+          <TableCell colSpan={5} className="bg-muted/20 p-3">
+            <MovePersonEditorPanel
+              householdId={householdId}
+              moveId={moveId}
+              person={person}
+              onMessage={onMessage}
+              onClose={onClose}
+            />
+          </TableCell>
+        </TableRow>
+      ) : null}
+    </>
+  );
+}
+
+function MovePersonEditorPanel({
+  className,
+  householdId,
+  moveId,
+  person,
+  onMessage,
+  onClose,
+}: {
+  className?: string;
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  person: MovePerson;
+  onMessage: (message: string) => void;
+  onClose: () => void;
+}) {
+  const editor = useMovePersonEditor({
+    householdId,
+    moveId,
+    person,
+    onMessage,
+    onDone: onClose,
+  });
+
+  return (
+    <div
+      className={[
+        "rounded-md border border-border bg-background p-3",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="grid gap-2 lg:grid-cols-[minmax(180px,1fr)_150px_minmax(180px,1fr)_minmax(160px,0.8fr)]">
         <Input
           value={editor.name}
           onChange={(event) => editor.setName(event.target.value)}
@@ -406,33 +545,20 @@ function MovePersonCard({
             </option>
           ))}
         </select>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="flex items-center gap-2">
-            <Mail
-              className="size-3.5 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={editor.email}
-              onChange={(event) => editor.setEmail(event.target.value)}
-              aria-label={`Contact email for ${person.name}`}
-              placeholder="Email"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Phone
-              className="size-3.5 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={editor.phone}
-              onChange={(event) => editor.setPhone(event.target.value)}
-              aria-label={`Contact phone for ${person.name}`}
-              placeholder="Phone"
-            />
-          </div>
-        </div>
+        <Input
+          value={editor.email}
+          onChange={(event) => editor.setEmail(event.target.value)}
+          aria-label={`Contact email for ${person.name}`}
+          placeholder="Email"
+        />
+        <Input
+          value={editor.phone}
+          onChange={(event) => editor.setPhone(event.target.value)}
+          aria-label={`Contact phone for ${person.name}`}
+          placeholder="Phone"
+        />
         <Textarea
+          className="lg:col-span-4"
           value={editor.notes}
           onChange={(event) => editor.setNotes(event.target.value)}
           aria-label={`Contact notes for ${person.name}`}
@@ -441,15 +567,9 @@ function MovePersonCard({
       </div>
 
       <div className="mt-3 flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={editor.saving || !editor.name.trim()}
-          onClick={() => void editor.handleSave()}
-        >
-          <Save aria-hidden="true" />
-          Save
+        <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+          <X aria-hidden="true" />
+          Close
         </Button>
         <Button
           type="button"
@@ -461,114 +581,63 @@ function MovePersonCard({
           <Archive aria-hidden="true" />
           Archive
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={editor.saving || !editor.name.trim()}
+          onClick={() => void editor.handleSave()}
+        >
+          <Save aria-hidden="true" />
+          Save
+        </Button>
       </div>
     </div>
   );
 }
 
-function MovePersonRow({
-  householdId,
-  moveId,
+function ContactReach({
   person,
-  onMessage,
+  className,
 }: {
-  householdId: Id<"households">;
-  moveId: Id<"moves">;
   person: MovePerson;
-  onMessage: (message: string) => void;
+  className?: string;
 }) {
-  const editor = useMovePersonEditor({
-    householdId,
-    moveId,
-    person,
-    onMessage,
-  });
+  if (!person.email && !person.phone) {
+    return (
+      <p
+        className={["text-xs text-muted-foreground", className]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        No contact method yet
+      </p>
+    );
+  }
 
   return (
-    <TableRow>
-      <TableCell className="min-w-[180px]">
-        <Input
-          value={editor.name}
-          onChange={(event) => editor.setName(event.target.value)}
-          aria-label={`Contact name for ${person.name}`}
-        />
-      </TableCell>
-      <TableCell className="min-w-[140px]">
-        <select
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          value={editor.role}
-          aria-label={`Contact role for ${person.name}`}
-          onChange={(event) =>
-            editor.setRole(event.target.value as MovePersonRole)
-          }
-        >
-          {movePersonRoleOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </TableCell>
-      <TableCell className="min-w-[220px]">
-        <div className="grid gap-2">
-          <div className="flex items-center gap-2">
-            <Mail
-              className="size-3.5 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={editor.email}
-              onChange={(event) => editor.setEmail(event.target.value)}
-              aria-label={`Contact email for ${person.name}`}
-              placeholder="Email"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Phone
-              className="size-3.5 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={editor.phone}
-              onChange={(event) => editor.setPhone(event.target.value)}
-              aria-label={`Contact phone for ${person.name}`}
-              placeholder="Phone"
-            />
-          </div>
+    <div
+      className={["space-y-1 text-xs text-muted-foreground", className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {person.email ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <Mail className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="break-all">{person.email}</span>
         </div>
-      </TableCell>
-      <TableCell className="min-w-[240px]">
-        <Textarea
-          value={editor.notes}
-          onChange={(event) => editor.setNotes(event.target.value)}
-          aria-label={`Contact notes for ${person.name}`}
-          placeholder="Notes"
-        />
-      </TableCell>
-      <TableCell className="min-w-[140px] text-right">
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            aria-label={`Save ${person.name}`}
-            disabled={editor.saving || !editor.name.trim()}
-            onClick={() => void editor.handleSave()}
-          >
-            <Save aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            aria-label={`Archive ${person.name}`}
-            disabled={editor.saving}
-            onClick={() => void editor.handleArchive()}
-          >
-            <Archive aria-hidden="true" />
-          </Button>
+      ) : null}
+      {person.phone ? (
+        <div className="flex min-w-0 items-center gap-2">
+          <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="break-all">{person.phone}</span>
         </div>
-      </TableCell>
-    </TableRow>
+      ) : null}
+    </div>
+  );
+}
+
+function movePersonRoleLabel(role: MovePersonRole) {
+  return (
+    movePersonRoleOptions.find((option) => option.value === role)?.label ?? role
   );
 }

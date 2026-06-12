@@ -67,16 +67,30 @@ describe("MovePeopleManager task tabs", () => {
       "data-state",
       "active",
     );
-    const contactCards = screen.getByRole("list", { name: "Move contact cards" });
-    expect(within(contactCards).getByText("Riley Helper")).toBeInTheDocument();
+    const contactCards = screen.getByRole("list", {
+      name: "Move contact cards",
+    });
+    const contactCard = within(contactCards).getByRole("listitem");
+    expect(within(contactCard).getByText("Riley Helper")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Contact name for Riley Helper"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Contact email for Riley Helper"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Contact notes")).not.toBeInTheDocument();
+
+    await user.click(
+      within(contactCard).getByRole("button", { name: "Edit Riley Helper" }),
+    );
+
     expect(
       screen.getAllByLabelText("Contact name for Riley Helper"),
     ).toHaveLength(2);
     expect(
       screen.getAllByLabelText("Contact email for Riley Helper"),
     ).toHaveLength(2);
-    expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Contact notes")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Add contact" }));
 
