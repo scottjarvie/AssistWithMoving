@@ -119,6 +119,18 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#active-moves")).toBe(
       "/app/dashboard#active-moves"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#create-move")).toBe(
+      "/app/dashboard#create-move"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#create-move-packets")).toBe(
+      "/app/dashboard#create-move-packets"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#household-setup")).toBe(
+      "/app/dashboard#household-setup"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#ai-connection")).toBe(
+      "/app/dashboard#ai-connection"
+    );
     expect(moveWorkspaceAnchorPath(null, "#inventory")).toBe("#inventory");
     expect(moveWorkspaceAnchorPath("move_123", "#custom-section")).toBe(
       "#custom-section"

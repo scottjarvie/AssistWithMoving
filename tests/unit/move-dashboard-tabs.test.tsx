@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -93,6 +93,7 @@ import { MoveDashboard } from "@/components/move-dashboard";
 
 describe("MoveDashboard", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/dashboard");
     workspaceActions.selectHousehold.mockReset();
     workspaceActions.selectMove.mockReset();
     mockRouter.push.mockReset();
@@ -188,5 +189,67 @@ describe("MoveDashboard", () => {
     expect(
       screen.getByLabelText("Official weight allowance in pounds"),
     ).toBeInTheDocument();
+  });
+
+  it("opens create-move packets when routed to the packets hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/dashboard#create-move-packets",
+    );
+
+    render(<MoveDashboard />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Create move" })).toHaveAttribute(
+        "data-state",
+        "active",
+      ),
+    );
+    expect(screen.getByRole("tab", { name: "Packets" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.getByText("Documentation profiles")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Move title")).not.toBeInTheDocument();
+    expect(screen.queryByText("Summer move")).not.toBeInTheDocument();
+  });
+
+  it("opens household setup when routed to the household hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/dashboard#household-setup",
+    );
+
+    render(<MoveDashboard />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Household" })).toHaveAttribute(
+        "data-state",
+        "active",
+      ),
+    );
+    expect(screen.getByLabelText("Selected household")).toBeInTheDocument();
+    expect(screen.getByLabelText("Household name")).toBeInTheDocument();
+    expect(screen.queryByText("Summer move")).not.toBeInTheDocument();
+  });
+
+  it("opens AI connection setup when routed to the AI hash", async () => {
+    window.history.replaceState(null, "", "/app/dashboard#ai-connection");
+
+    render(<MoveDashboard />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "AI connection" })).toHaveAttribute(
+        "data-state",
+        "active",
+      ),
+    );
+    expect(screen.getByText("Do you need an AI connection?")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Set up AI connection" }),
+    ).toHaveAttribute("href", "/settings/ai-connections");
+    expect(screen.queryByText("Summer move")).not.toBeInTheDocument();
   });
 });

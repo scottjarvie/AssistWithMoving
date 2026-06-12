@@ -7,6 +7,16 @@ export function moveBoxesPath(moveId?: string | null) {
   return moveId ? moveWorkspacePath(moveId, "boxes") : "/app/dashboard";
 }
 
+const dashboardAnchors = new Set([
+  "#active-moves",
+  "#ai-connection",
+  "#create-move",
+  "#create-move-basics",
+  "#create-move-packets",
+  "#create-move-pcs",
+  "#household-setup",
+]);
+
 const workspaceAnchorSections: Record<string, string | null> = {
   "#ai-photo-intake": "ai-review",
   "#ai-planning-suggestions": "load-plan",
@@ -59,8 +69,8 @@ export function moveWorkspaceAnchorPath(
   moveId: string | null | undefined,
   anchor: string
 ) {
-  if (anchor === "#active-moves") {
-    return "/app/dashboard#active-moves";
+  if (dashboardAnchors.has(anchor)) {
+    return `/app/dashboard${anchor}`;
   }
 
   const section = workspaceAnchorSections[anchor];

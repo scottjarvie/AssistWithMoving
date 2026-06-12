@@ -156,4 +156,25 @@ describe("ApiKeyManager task tabs", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("sends new signed-in users to create a household before making an AI key", () => {
+    const originalHouseholds = apiKeyManagerData.households;
+    apiKeyManagerData.households = [];
+
+    try {
+      render(<ApiKeyManager enabled mode="setup" />);
+
+      expect(
+        screen.getByText("Create a household before adding AI connections."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Create household" }),
+      ).toHaveAttribute("href", "/app/dashboard#household-setup");
+      expect(
+        screen.queryByRole("button", { name: "Create key" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      apiKeyManagerData.households = originalHouseholds;
+    }
+  });
 });

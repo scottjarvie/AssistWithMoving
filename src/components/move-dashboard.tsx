@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useHashTab } from "@/components/use-hash-tab";
 import {
   defaultDocumentationProfilesForMoveType,
   documentationProfileOptions,
@@ -57,13 +58,31 @@ import { moveWorkspacePath } from "@/lib/move-links";
 
 const DEFAULT_MOVE_TYPE: MoveType = "local";
 type DashboardMove = MoveWorkspaceValue["activeMoves"][number];
+type DashboardTask = "moves" | "create" | "household" | "ai";
 type CreateMoveTask = "basics" | "pcs" | "packets";
+
+const dashboardTaskHashes = {
+  "#active-moves": "moves",
+  "#ai-connection": "ai",
+  "#create-move": "create",
+  "#create-move-basics": "create",
+  "#create-move-packets": "create",
+  "#create-move-pcs": "create",
+  "#household-setup": "household",
+} as const;
 
 const createMoveTasks: Array<{ value: CreateMoveTask; label: string }> = [
   { value: "basics", label: "Basics" },
   { value: "pcs", label: "PCS details" },
   { value: "packets", label: "Packets" },
 ];
+
+const createMoveTaskHashes = {
+  "#create-move": "basics",
+  "#create-move-basics": "basics",
+  "#create-move-packets": "packets",
+  "#create-move-pcs": "pcs",
+} as const;
 
 export function MoveDashboard() {
   const router = useRouter();
@@ -108,6 +127,12 @@ export function MoveDashboard() {
   const [destination, setDestination] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeDashboardTask, setActiveDashboardTask] =
+    useHashTab<DashboardTask>("moves", dashboardTaskHashes);
+  const [activeCreateTask, setActiveCreateTask] = useHashTab<CreateMoveTask>(
+    "basics",
+    createMoveTaskHashes
+  );
 
   const selectedPacketCount = documentationProfileTypes.length;
   const statusMessage = moveLinkMessage ?? message;
@@ -210,7 +235,11 @@ export function MoveDashboard() {
         </Badge>
       </header>
 
-      <Tabs defaultValue="moves" className="gap-4">
+      <Tabs
+        value={activeDashboardTask}
+        onValueChange={setActiveDashboardTask}
+        className="gap-4"
+      >
         <MoveWorkspaceTabList
           tabs={[
             { value: "moves", label: "Moves" },
@@ -322,7 +351,7 @@ export function MoveDashboard() {
           </section>
         </TabsContent>
 
-        <TabsContent value="create">
+        <TabsContent value="create" id="create-move">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -347,7 +376,11 @@ export function MoveDashboard() {
                 </p>
               ) : null}
               <form className="space-y-3" onSubmit={handleCreateMove}>
-                <Tabs defaultValue="basics" className="gap-4">
+                <Tabs
+                  value={activeCreateTask}
+                  onValueChange={setActiveCreateTask}
+                  className="gap-4"
+                >
                   <div className="overflow-x-auto pb-1">
                     <TabsList
                       className="min-w-max"
@@ -361,7 +394,11 @@ export function MoveDashboard() {
                     </TabsList>
                   </div>
 
-                  <TabsContent value="basics" className="space-y-3">
+                  <TabsContent
+                    value="basics"
+                    id="create-move-basics"
+                    className="space-y-3"
+                  >
                     <Input
                       value={moveTitle}
                       onChange={(event) => setMoveTitle(event.target.value)}
@@ -411,7 +448,7 @@ export function MoveDashboard() {
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="pcs">
+                  <TabsContent value="pcs" id="create-move-pcs">
                     {moveType === "pcs" ? (
                       <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
                         <div>
@@ -548,7 +585,7 @@ export function MoveDashboard() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="packets">
+                  <TabsContent value="packets" id="create-move-packets">
                     <div className="space-y-2 rounded-md border border-border p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-medium">
@@ -620,7 +657,7 @@ export function MoveDashboard() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="household">
+        <TabsContent value="household" id="household-setup">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -704,7 +741,7 @@ export function MoveDashboard() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="ai">
+        <TabsContent value="ai" id="ai-connection">
           <Card className="border-primary/25 bg-primary/5">
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-4">

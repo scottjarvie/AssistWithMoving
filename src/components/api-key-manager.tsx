@@ -985,7 +985,9 @@ export function ApiKeyManager({
               rooms, photos, and collaborators the assistant can work with.
             </p>
             <Button asChild className="mt-3" variant="outline">
-              <Link href="/app/dashboard">Create household</Link>
+              <Link href="/app/dashboard#household-setup">
+                Create household
+              </Link>
             </Button>
           </div>
         )}
