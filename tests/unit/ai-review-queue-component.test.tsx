@@ -115,9 +115,27 @@ describe("AiReviewQueue responsive review surface", () => {
         .some((node) => node.classList.contains("line-clamp-3")),
     ).toBe(true);
 
-    await user.click(screen.getByRole("button", { name: "Select all" }));
+    expect(screen.getByRole("button", { name: "All 3" })).toHaveAttribute(
+      "data-variant",
+      "default",
+    );
+    expect(screen.getByRole("button", { name: "Photo 1" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Needs closer look 2" }),
+    ).toBeInTheDocument();
 
-    for (const checkbox of screen.getAllByLabelText("Use Lamp")) {
+    await user.click(screen.getByRole("button", { name: "Photo 1" }));
+    expect(
+      within(reviewCards).getByText("Duplicate chair photo"),
+    ).toBeInTheDocument();
+    expect(
+      within(reviewCards).queryByText("Estimate suggestion"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Use Lamp")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Select visible" }));
+
+    for (const checkbox of screen.getAllByLabelText("Use Duplicate chair photo")) {
       expect(checkbox).toBeChecked();
     }
   });

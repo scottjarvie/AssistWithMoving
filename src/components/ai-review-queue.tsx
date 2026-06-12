@@ -31,6 +31,17 @@ import {
   type AiReviewEntry,
 } from "@/lib/ai-review-queue";
 
+type AiReviewFilter = "all" | "attention" | "duplicates" | AiReviewEntry["kind"];
+
+const reviewFilters: Array<{ value: AiReviewFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "attention", label: "Needs closer look" },
+  { value: "duplicates", label: "Duplicates" },
+  { value: "text", label: "Text" },
+  { value: "photo", label: "Photo" },
+  { value: "planning", label: "Planning" },
+];
+
 export function AiReviewQueue({
   householdId,
   moveId,
@@ -57,6 +68,7 @@ export function AiReviewQueue({
   const approvePlanning = useMutation(api.aiPlanningSuggestions.approveMany);
   const rejectPlanning = useMutation(api.aiPlanningSuggestions.rejectMany);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reviewFilter, setReviewFilter] = useState<AiReviewFilter>("all");
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -112,6 +124,26 @@ export function AiReviewQueue({
     [photoSuggestions, planningSuggestions, textSuggestions]
   );
   const summary = useMemo(() => summarizeAiReviewQueue(entries), [entries]);
+  const filteredEntries = useMemo(
+    () => entries.filter((entry) => matchesReviewFilter(entry, reviewFilter)),
+    [entries, reviewFilter]
+  );
+  const visibleEntries = useMemo(
+    () => filteredEntries.slice(0, 80),
+    [filteredEntries]
+  );
+  const filterCounts = useMemo(
+    () =>
+      reviewFilters.reduce<Record<AiReviewFilter, number>>((acc, filter) => {
+        acc[filter.value] =
+          filter.value === "all"
+            ? entries.length
+            : entries.filter((entry) => matchesReviewFilter(entry, filter.value))
+                .length;
+        return acc;
+      }, {} as Record<AiReviewFilter, number>),
+    [entries]
+  );
   const loading =
     textSuggestions === undefined ||
     photoSuggestions === undefined ||
@@ -204,6 +236,11 @@ export function AiReviewQueue({
     });
   }
 
+  function changeReviewFilter(nextFilter: AiReviewFilter) {
+    setReviewFilter(nextFilter);
+    setSelected(new Set());
+  }
+
   return (
     <Card id="ai-review-queue">
       <CardHeader>
@@ -230,15 +267,34 @@ export function AiReviewQueue({
           <QueueMetric label="Duplicates" value={summary.duplicateCandidates} />
         </div>
 
+        <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+          {reviewFilters.map((filter) => (
+            <Button
+              key={filter.value}
+              type="button"
+              size="sm"
+              aria-label={`${filter.label} ${filterCounts[filter.value] ?? 0}`}
+              className="h-10 shrink-0"
+              variant={reviewFilter === filter.value ? "default" : "outline"}
+              onClick={() => changeReviewFilter(filter.value)}
+            >
+              {filter.label}
+              <Badge variant="secondary">{filterCounts[filter.value] ?? 0}</Badge>
+            </Button>
+          ))}
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             size="sm"
             variant="outline"
-            disabled={!entries.length || working}
-            onClick={() => setSelected(new Set(entries.map((entry) => entry.id)))}
+            disabled={!visibleEntries.length || working}
+            onClick={() =>
+              setSelected(new Set(visibleEntries.map((entry) => entry.id)))
+            }
           >
-            Select all
+            Select visible
           </Button>
           <Button
             type="button"
@@ -283,64 +339,77 @@ export function AiReviewQueue({
           </div>
         ) : entries.length ? (
           <>
-            <div
-              role="list"
-              aria-label="AI review cards"
-              className="grid gap-3 md:hidden"
-            >
-              {entries.slice(0, 80).map((entry) => (
-                <AiReviewEntryCard
-                  key={entry.id}
-                  entry={entry}
-                  selected={selected.has(entry.id)}
-                  onToggle={() => toggle(entry.id)}
-                />
-              ))}
-            </div>
-
-            <div className="hidden rounded-md border border-border md:block">
-              <Table className="table-fixed">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-16">Use</TableHead>
-                    <TableHead className="w-[35%]">Suggestion</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead className="w-24">Edit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.slice(0, 80).map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          className="size-3.5 accent-primary"
-                          checked={selected.has(entry.id)}
-                          onChange={() => toggle(entry.id)}
-                          aria-label={`Use ${entry.title}`}
-                        />
-                      </TableCell>
-                      <TableCell className="min-w-[220px]">
-                        <AiReviewEntrySummary entry={entry} />
-                      </TableCell>
-                      <TableCell>
-                        <p className="line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
-                          {entry.reasoning}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <Button asChild type="button" size="sm" variant="outline">
-                          <Link href={entry.href}>
-                            <Pencil aria-hidden="true" />
-                            Edit
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+            {visibleEntries.length ? (
+              <>
+                <div
+                  role="list"
+                  aria-label="AI review cards"
+                  className="grid gap-3 md:hidden"
+                >
+                  {visibleEntries.map((entry) => (
+                    <AiReviewEntryCard
+                      key={entry.id}
+                      entry={entry}
+                      selected={selected.has(entry.id)}
+                      onToggle={() => toggle(entry.id)}
+                    />
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                </div>
+
+                <div className="hidden rounded-md border border-border md:block">
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16">Use</TableHead>
+                        <TableHead className="w-[35%]">Suggestion</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead className="w-24">Edit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleEntries.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              className="size-3.5 accent-primary"
+                              checked={selected.has(entry.id)}
+                              onChange={() => toggle(entry.id)}
+                              aria-label={`Use ${entry.title}`}
+                            />
+                          </TableCell>
+                          <TableCell className="min-w-[220px]">
+                            <AiReviewEntrySummary entry={entry} />
+                          </TableCell>
+                          <TableCell>
+                            <p className="line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+                              {entry.reasoning}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              asChild
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                            >
+                              <Link href={entry.href}>
+                                <Pencil aria-hidden="true" />
+                                Edit
+                              </Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                No suggestions match this review filter.
+              </div>
+            )}
           </>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
@@ -350,6 +419,19 @@ export function AiReviewQueue({
       </CardContent>
     </Card>
   );
+}
+
+function matchesReviewFilter(entry: AiReviewEntry, filter: AiReviewFilter) {
+  switch (filter) {
+    case "all":
+      return true;
+    case "attention":
+      return entry.confidence === "low" || Boolean(entry.duplicateCount);
+    case "duplicates":
+      return Boolean(entry.duplicateCount);
+    default:
+      return entry.kind === filter;
+  }
 }
 
 function AiReviewEntryCard({
