@@ -201,7 +201,17 @@ describe("MovingManifest MCP capability discovery", () => {
     const openapi = JSON.parse(
       readFileSync(resolve(process.cwd(), "public/openapi.json"), "utf8")
     ) as {
-      paths: Record<string, { post?: { operationId?: string } }>;
+      paths: Record<
+        string,
+        {
+          post?: {
+            operationId?: string;
+            requestBody: {
+              content: Record<string, unknown>;
+            };
+          };
+        }
+      >;
       components: {
         schemas: Record<
           string,
@@ -225,8 +235,17 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(openapi.paths["/photos/upload"]?.post?.operationId).toBe(
       "uploadPhotoEvidenceImage"
     );
+    expect(
+      openapi.paths["/photos/upload"]?.post?.requestBody.content
+    ).toHaveProperty("multipart/form-data");
+    expect(
+      openapi.paths["/photos/upload"]?.post?.requestBody.content
+    ).toHaveProperty("image/jpeg");
     expect(openapi.components.schemas.PhotoDirectUpload.description).toContain(
       "Provide exactly one of sourceUrl, dataUrl, or fileBase64"
+    );
+    expect(openapi.components.schemas.PhotoMultipartUpload.description).toContain(
+      "Multipart one-call"
     );
     expect(
       openapi.components.schemas.PhotoDirectUpload.properties?.fileBase64

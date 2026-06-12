@@ -1221,14 +1221,39 @@ display versions after the original is stored. Tell the user the caption,
 attachment target, and confidence/assumptions you used so they can correct the
 record without turning upload into a long interview.
 
-For REST API agents that already have an image URL or base64 image payload, use
-the one-call image endpoint:
+For REST API agents, use whichever one-call shape is easiest for the image
+source:
+
+```bash
+curl -X POST \
+  "https://movingmanifest.com/api/v1/photos/upload?moveId=MOVE_ID&room=Garage&caption=Garage%20shelf%20before%20packing&photoType=room" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: image/jpeg" \
+  -H "Idempotency-Key: photo-upload-001" \
+  --data-binary @garage-shelf.jpg
+```
+
+Multipart form upload is also accepted:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/photos/upload \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Idempotency-Key: photo-upload-002" \
+  -F moveId=MOVE_ID \
+  -F room=Garage \
+  -F caption="Garage shelf before packing" \
+  -F photoType=room \
+  -F file=@garage-shelf.jpg
+```
+
+REST agents that already have an image URL, data URL, or base64 payload can use
+JSON:
 
 ```bash
 curl -X POST https://movingmanifest.com/api/v1/photos/upload \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: photo-upload-001" \
+  -H "Idempotency-Key: photo-upload-003" \
   -d '{
     "moveId": "MOVE_ID",
     "sourceUrl": "https://example.com/garage-shelf.jpg",
@@ -1239,14 +1264,13 @@ curl -X POST https://movingmanifest.com/api/v1/photos/upload \
   }'
 ```
 
-`POST /photos/upload` accepts JPEG, PNG, or WebP images from exactly one of
-`sourceUrl`, `dataUrl`, or `fileBase64`. It is intentionally image-only and
-server-preps `thumb`, `card`, `detail`, and `full` derivatives after storing
-the original. REST clients with a local file should read the file and send
-`fileBase64`; MCP clients should pass `filePath` to `upload_evidence_image` and
-let the local MCP server read the file. Use the presigned flow below for
-larger/custom upload clients, audio/video evidence, progress bars, or
-client-created derivatives.
+`POST /photos/upload` accepts JPEG, PNG, or WebP images as raw image bytes,
+multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
+`fileBase64`. It is intentionally image-only and server-preps `thumb`, `card`,
+`detail`, and `full` derivatives after storing the original. MCP clients should
+pass `filePath` to `upload_evidence_image` and let the local MCP server read the
+file. Use the presigned flow below for larger/custom upload clients, audio/video
+evidence, progress bars, or client-created derivatives.
 
 The lower-level REST flow is still useful for custom clients, browser clients,
 and clients that already create web-ready image derivatives. API/MCP clients can

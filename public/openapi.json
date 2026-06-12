@@ -318,13 +318,70 @@
       "post": {
         "summary": "Upload image evidence in one call",
         "operationId": "uploadPhotoEvidenceImage",
-        "description": "Default REST image upload path for agents. Send exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives server-side.",
+        "description": "Default REST image upload path for agents. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives server-side.",
+        "parameters": [
+          {
+            "name": "moveId",
+            "in": "query",
+            "description": "Required when uploading raw image bytes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "room",
+            "in": "query",
+            "description": "Readable room label for raw image byte uploads.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "caption",
+            "in": "query",
+            "description": "Caption for raw image byte uploads.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "photoType",
+            "in": "query",
+            "description": "Photo type for raw image byte uploads.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PhotoDirectUpload"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoMultipartUpload"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
               }
             }
           }
@@ -685,7 +742,7 @@
       "PhotoDirectUpload": {
         "type": "object",
         "required": ["moveId"],
-        "description": "One-call JPEG, PNG, or WebP upload for agents. Provide exactly one of sourceUrl, dataUrl, or fileBase64. Local MCP clients should use upload_evidence_image with filePath so the MCP server sends fileBase64 for them.",
+        "description": "JSON shape for one-call JPEG, PNG, or WebP upload for agents. Provide exactly one of sourceUrl, dataUrl, or fileBase64. REST clients with local files can also use multipart/form-data or raw image bytes; MCP clients should use upload_evidence_image with filePath.",
         "properties": {
           "moveId": {
             "type": "string"
@@ -768,6 +825,57 @@
             "required": ["fileBase64"]
           }
         ]
+      },
+      "PhotoMultipartUpload": {
+        "type": "object",
+        "required": ["moveId", "file"],
+        "description": "Multipart one-call JPEG, PNG, or WebP upload for REST agents. Use a file, image, or photo field for the binary image and normal form fields for metadata.",
+        "properties": {
+          "moveId": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "JPEG, PNG, or WebP image file. The field may also be named image or photo."
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "boxId": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "photoType": {
+            "type": "string"
+          },
+          "privacyLevel": {
+            "type": "string"
+          },
+          "visibilityScope": {
+            "type": "string"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "verificationStatus": {
+            "type": "string"
+          },
+          "capturedAt": {
+            "type": "number"
+          }
+        }
       },
       "PhotoDirectUploadResponse": {
         "type": "object",

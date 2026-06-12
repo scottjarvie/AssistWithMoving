@@ -11,6 +11,10 @@ import {
   normalizeClerkUser,
   verifyClerkWebhookRequest,
 } from "./lib/clerk";
+import {
+  parseRestApiBody,
+  RestApiBodyParseError,
+} from "./lib/restUploadBody";
 
 const http = httpRouter();
 
@@ -239,7 +243,23 @@ for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"] as const) {
       const url = new URL(request.url);
       const path = url.pathname.replace(/^\/api\/v1\/?/, "");
       const query = Object.fromEntries(url.searchParams.entries());
-      const body = await parseJsonBody(request);
+      let body;
+      try {
+        body = await parseRestApiBody({
+          request,
+          method,
+          path,
+          query,
+        });
+      } catch (error) {
+        if (error instanceof RestApiBodyParseError) {
+          return Response.json(
+            { error: { code: error.code, message: error.message } },
+            { status: error.status },
+          );
+        }
+        throw error;
+      }
       const response = await ctx.runAction(internalActions.restApiActions.handle, {
         method,
         path,
@@ -266,18 +286,3 @@ for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"] as const) {
 }
 
 export default http;
-
-async function parseJsonBody(request: Request) {
-  if (request.method === "GET" || request.method === "DELETE") {
-    return undefined;
-  }
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    return undefined;
-  }
-  try {
-    return await request.json();
-  } catch {
-    return undefined;
-  }
-}
