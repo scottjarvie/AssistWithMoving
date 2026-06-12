@@ -887,11 +887,12 @@ export async function uploadEvidenceFile(config, input) {
 }
 
 export async function uploadEvidenceImage(config, input) {
-  if (input.filePath) {
-    return await uploadEvidenceFile(config, input);
-  }
+  const localImage = input.filePath
+    ? await loadLocalImageForDirectUpload(input)
+    : undefined;
 
   const sourceCount = [
+    localImage,
     input.sourceUrl,
     input.dataUrl,
     input.fileBase64,
@@ -904,9 +905,9 @@ export async function uploadEvidenceImage(config, input) {
     moveId: input.moveId,
     sourceUrl: input.sourceUrl,
     dataUrl: input.dataUrl,
-    fileBase64: input.fileBase64,
-    fileName: input.fileName,
-    mimeType: input.mimeType,
+    fileBase64: localImage?.fileBase64 ?? input.fileBase64,
+    fileName: input.fileName ?? localImage?.fileName,
+    mimeType: input.mimeType ?? localImage?.mimeType,
     itemId: input.itemId,
     boxId: input.boxId,
     spaceId: input.spaceId,
@@ -945,6 +946,25 @@ export async function uploadEvidenceImage(config, input) {
   return {
     ...data,
     derivativeNote: derivativeNoteForStatus(data.derivativeStatus),
+  };
+}
+
+async function loadLocalImageForDirectUpload(input) {
+  const bytes = await readFile(input.filePath);
+  const fileName = input.fileName ?? path.basename(input.filePath);
+  const mimeType = normalizeMimeType(
+    input.mimeType ?? sniffMimeType(bytes) ?? mimeTypeForFilename(fileName)
+  );
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType ?? "")) {
+    throw new Error(
+      "upload_evidence_image accepts JPEG, PNG, or WebP files. Use upload_evidence_file for audio, video, or unsupported media."
+    );
+  }
+
+  return {
+    fileBase64: bytes.toString("base64"),
+    fileName,
+    mimeType,
   };
 }
 

@@ -1892,6 +1892,75 @@ describe("MovingManifest MCP API client", () => {
     );
   });
 
+  it("uploads a local image through the one-call MCP image helper", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const filePath = path.join(tempDir, "closet-bin.png");
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    await writeFile(filePath, pngBytes);
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          photoId: "photo-local",
+          uploadSessionId: "session-local",
+          derivativeStatus: "ready",
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await expect(
+        uploadEvidenceImage(
+          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          {
+            moveId: "move1",
+            filePath,
+            room: "Closet",
+            caption: "Closet bin before packing",
+            photoType: "item",
+            idempotencyKey: "local-image-1",
+          }
+        )
+      ).resolves.toMatchObject({
+        photoId: "photo-local",
+        uploadSessionId: "session-local",
+        derivativeStatus: "ready",
+        derivativeNote: expect.stringContaining("web-ready image derivatives"),
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/photos/upload"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "local-image-1",
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          fileBase64: pngBytes.toString("base64"),
+          fileName: "closet-bin.png",
+          mimeType: "image/png",
+          room: "Closet",
+          caption: "Closet bin before packing",
+          photoType: "item",
+          source: "mcp",
+          exifHandlingStatus: "pending",
+        }),
+      }
+    );
+  });
+
   it("lists, creates, updates, and archives documentation profiles through the API", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,

@@ -37,7 +37,7 @@ const apiCards = [
   },
   {
     title: "Photo evidence",
-    copy: "Upload JPEG, PNG, or WebP evidence in one API call from a URL or base64 payload, or use presigned storage for larger/custom clients. Images get web-ready derivatives server-side.",
+    copy: "Upload JPEG, PNG, or WebP evidence in one API call from a URL, data URL, or base64 payload, or let the MCP helper send a local file. Images get web-ready derivatives server-side.",
     icon: Camera,
   },
   {
