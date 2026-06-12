@@ -57,6 +57,84 @@ export const listMine = query({
   },
 });
 
+export const summaryStats = query({
+  args: {
+    householdId: v.id("households"),
+  },
+  handler: async (ctx, args) => {
+    await requireHouseholdPermission(ctx, args.householdId, "household:read");
+
+    const [
+      moves,
+      memberships,
+      invitations,
+      activeApiKeys,
+      items,
+      boxes,
+    ] = await Promise.all([
+      ctx.db
+        .query("moves")
+        .withIndex("by_household_status", (q) =>
+          q.eq("householdId", args.householdId),
+        )
+        .collect(),
+      ctx.db
+        .query("householdMemberships")
+        .withIndex("by_household", (q) =>
+          q.eq("householdId", args.householdId),
+        )
+        .collect(),
+      ctx.db
+        .query("householdInvitations")
+        .withIndex("by_household_status", (q) =>
+          q.eq("householdId", args.householdId).eq("status", "invited"),
+        )
+        .collect(),
+      ctx.db
+        .query("apiKeys")
+        .withIndex("by_household_status", (q) =>
+          q.eq("householdId", args.householdId).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("items")
+        .withIndex("by_household", (q) =>
+          q.eq("householdId", args.householdId),
+        )
+        .collect(),
+      ctx.db
+        .query("boxes")
+        .withIndex("by_household", (q) =>
+          q.eq("householdId", args.householdId),
+        )
+        .collect(),
+    ]);
+
+    const activeMoves = moves.filter((move) => move.status !== "archived");
+
+    return {
+      householdId: args.householdId,
+      moves: activeMoves
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .map((move) => ({
+          moveId: move._id,
+          title: move.title,
+          status: move.status,
+        })),
+      moveCount: activeMoves.length,
+      archivedMoveCount: moves.filter((move) => move.status === "archived")
+        .length,
+      itemCount: items.filter((item) => item.deletedAt === undefined).length,
+      boxCount: boxes.filter((box) => box.archivedAt === undefined).length,
+      activeApiKeyCount: activeApiKeys.length,
+      activeMemberCount: memberships.filter(
+        (membership) => membership.status === "active",
+      ).length,
+      pendingInvitationCount: invitations.length,
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     name: v.string(),

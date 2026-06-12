@@ -5,14 +5,12 @@ import {
   Bot,
   CheckCircle2,
   KeyRound,
-  LockKeyhole,
   ShieldAlert,
-  UserPlus,
 } from "lucide-react";
 
+import { AiStartActions } from "@/components/ai-start-actions";
 import { PublicFooter, PublicHeader } from "@/components/public-page-chrome";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Start with an AI assistant",
@@ -36,26 +34,15 @@ export default function AiStartPage() {
           <div>
             <Badge variant="secondary">AI-assisted setup</Badge>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-normal sm:text-5xl">
-              Your assistant can help after you create one key.
+              Your assistant can help after you create one connection.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               MovingManifest saves the move. Your AI assistant can help fill it
-              in. You only need to sign in, create a helper key, copy it once,
-              and paste it back into the AI chat you trust.
+              in. You only need to sign in, create a connection, copy the
+              one-time key, and paste it back into the AI chat you trust.
             </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg">
-                <Link href="/sign-up?redirect_url=/settings%23api-keys">
-                  <UserPlus aria-hidden="true" />
-                  Create account and key
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="/sign-in?redirect_url=/settings%23api-keys">
-                  <LockKeyhole aria-hidden="true" />
-                  Sign in and create key
-                </Link>
-              </Button>
+            <div className="mt-7">
+              <AiStartActions />
             </div>
           </div>
 
@@ -65,7 +52,9 @@ export default function AiStartPage() {
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                   What you will do
                 </p>
-                <p className="mt-1 text-lg font-semibold">Simple key setup</p>
+                <p className="mt-1 text-lg font-semibold">
+                  Simple connection setup
+                </p>
               </div>
               <Badge>
                 <Bot aria-hidden="true" />
@@ -101,7 +90,7 @@ export default function AiStartPage() {
           <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <KeyRound className="size-4 text-primary" aria-hidden="true" />
-              Key choices you will see
+              Connection choices you will see
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {keyOptions.map((option) => (
