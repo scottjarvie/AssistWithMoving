@@ -153,32 +153,52 @@ export function MovePeopleManager({
                 <Skeleton className="h-12 w-4/5" />
               </div>
             ) : people?.length ? (
-              <div className="rounded-md border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Reach</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {people.map((person) =>
-                      householdId && moveId ? (
-                        <MovePersonRow
-                          key={person._id}
-                          householdId={householdId}
-                          moveId={moveId}
-                          person={person}
-                          onMessage={setMessage}
-                        />
-                      ) : null,
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+              <>
+                <div
+                  role="list"
+                  aria-label="Move contact cards"
+                  className="grid gap-3 md:hidden"
+                >
+                  {people.map((person) =>
+                    householdId && moveId ? (
+                      <MovePersonCard
+                        key={person._id}
+                        householdId={householdId}
+                        moveId={moveId}
+                        person={person}
+                        onMessage={setMessage}
+                      />
+                    ) : null,
+                  )}
+                </div>
+
+                <div className="hidden rounded-md border border-border md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Contact</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Reach</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {people.map((person) =>
+                        householdId && moveId ? (
+                          <MovePersonRow
+                            key={person._id}
+                            householdId={householdId}
+                            moveId={moveId}
+                            person={person}
+                            onMessage={setMessage}
+                          />
+                        ) : null,
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : (
               <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
                 Add the first move contact once a move is selected.
@@ -251,7 +271,7 @@ export function MovePeopleManager({
   );
 }
 
-function MovePersonRow({
+function useMovePersonEditor({
   householdId,
   moveId,
   person,
@@ -315,21 +335,172 @@ function MovePersonRow({
     }
   }
 
+  return {
+    name,
+    setName,
+    role,
+    setRole,
+    email,
+    setEmail,
+    phone,
+    setPhone,
+    notes,
+    setNotes,
+    saving,
+    handleSave,
+    handleArchive,
+  };
+}
+
+function MovePersonCard({
+  householdId,
+  moveId,
+  person,
+  onMessage,
+}: {
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  person: MovePerson;
+  onMessage: (message: string) => void;
+}) {
+  const editor = useMovePersonEditor({
+    householdId,
+    moveId,
+    person,
+    onMessage,
+  });
+
+  return (
+    <div
+      role="listitem"
+      className="rounded-md border border-border bg-card p-3"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="break-words font-medium">{person.name}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {[person.email, person.phone].filter(Boolean).join(" - ") ||
+              "No contact method yet"}
+          </p>
+        </div>
+        <Badge variant="outline">{editor.role}</Badge>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        <Input
+          value={editor.name}
+          onChange={(event) => editor.setName(event.target.value)}
+          aria-label={`Contact name for ${person.name}`}
+        />
+        <select
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={editor.role}
+          aria-label={`Contact role for ${person.name}`}
+          onChange={(event) =>
+            editor.setRole(event.target.value as MovePersonRole)
+          }
+        >
+          {movePersonRoleOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="flex items-center gap-2">
+            <Mail
+              className="size-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              value={editor.email}
+              onChange={(event) => editor.setEmail(event.target.value)}
+              aria-label={`Contact email for ${person.name}`}
+              placeholder="Email"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Phone
+              className="size-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              value={editor.phone}
+              onChange={(event) => editor.setPhone(event.target.value)}
+              aria-label={`Contact phone for ${person.name}`}
+              placeholder="Phone"
+            />
+          </div>
+        </div>
+        <Textarea
+          value={editor.notes}
+          onChange={(event) => editor.setNotes(event.target.value)}
+          aria-label={`Contact notes for ${person.name}`}
+          placeholder="Notes"
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={editor.saving || !editor.name.trim()}
+          onClick={() => void editor.handleSave()}
+        >
+          <Save aria-hidden="true" />
+          Save
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={editor.saving}
+          onClick={() => void editor.handleArchive()}
+        >
+          <Archive aria-hidden="true" />
+          Archive
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MovePersonRow({
+  householdId,
+  moveId,
+  person,
+  onMessage,
+}: {
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  person: MovePerson;
+  onMessage: (message: string) => void;
+}) {
+  const editor = useMovePersonEditor({
+    householdId,
+    moveId,
+    person,
+    onMessage,
+  });
+
   return (
     <TableRow>
       <TableCell className="min-w-[180px]">
         <Input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
+          value={editor.name}
+          onChange={(event) => editor.setName(event.target.value)}
           aria-label={`Contact name for ${person.name}`}
         />
       </TableCell>
       <TableCell className="min-w-[140px]">
         <select
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          value={role}
+          value={editor.role}
           aria-label={`Contact role for ${person.name}`}
-          onChange={(event) => setRole(event.target.value as MovePersonRole)}
+          onChange={(event) =>
+            editor.setRole(event.target.value as MovePersonRole)
+          }
         >
           {movePersonRoleOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -346,8 +517,8 @@ function MovePersonRow({
               aria-hidden="true"
             />
             <Input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              value={editor.email}
+              onChange={(event) => editor.setEmail(event.target.value)}
               aria-label={`Contact email for ${person.name}`}
               placeholder="Email"
             />
@@ -358,8 +529,8 @@ function MovePersonRow({
               aria-hidden="true"
             />
             <Input
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              value={editor.phone}
+              onChange={(event) => editor.setPhone(event.target.value)}
               aria-label={`Contact phone for ${person.name}`}
               placeholder="Phone"
             />
@@ -368,8 +539,8 @@ function MovePersonRow({
       </TableCell>
       <TableCell className="min-w-[240px]">
         <Textarea
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
+          value={editor.notes}
+          onChange={(event) => editor.setNotes(event.target.value)}
           aria-label={`Contact notes for ${person.name}`}
           placeholder="Notes"
         />
@@ -381,8 +552,8 @@ function MovePersonRow({
             size="icon"
             variant="outline"
             aria-label={`Save ${person.name}`}
-            disabled={saving || !name.trim()}
-            onClick={() => void handleSave()}
+            disabled={editor.saving || !editor.name.trim()}
+            onClick={() => void editor.handleSave()}
           >
             <Save aria-hidden="true" />
           </Button>
@@ -391,8 +562,8 @@ function MovePersonRow({
             size="icon"
             variant="outline"
             aria-label={`Archive ${person.name}`}
-            disabled={saving}
-            onClick={() => void handleArchive()}
+            disabled={editor.saving}
+            onClick={() => void editor.handleArchive()}
           >
             <Archive aria-hidden="true" />
           </Button>

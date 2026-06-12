@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -67,12 +67,14 @@ describe("MovePeopleManager task tabs", () => {
       "data-state",
       "active",
     );
+    const contactCards = screen.getByRole("list", { name: "Move contact cards" });
+    expect(within(contactCards).getByText("Riley Helper")).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Contact name for Riley Helper"),
-    ).toBeInTheDocument();
+      screen.getAllByLabelText("Contact name for Riley Helper"),
+    ).toHaveLength(2);
     expect(
-      screen.getByLabelText("Contact email for Riley Helper"),
-    ).toBeInTheDocument();
+      screen.getAllByLabelText("Contact email for Riley Helper"),
+    ).toHaveLength(2);
     expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Contact notes")).not.toBeInTheDocument();
 
