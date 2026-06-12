@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
@@ -83,7 +84,9 @@ describe("SellWorkspacePage", () => {
     mockData.mutation.mockReset();
   });
 
-  it("filters the sale pipeline from the metric strip", () => {
+  it("filters the sale pipeline from the metric strip", async () => {
+    const user = userEvent.setup();
+
     mockData.queryResult = [
       {
         item: {
@@ -128,7 +131,7 @@ describe("SellWorkspacePage", () => {
     expect(screen.getByText("Oak bookcase")).toBeInTheDocument();
     expect(screen.getByText("Vintage lamp")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Needs photos 1/i }));
+    await user.click(screen.getByRole("button", { name: /Needs photos 1/i }));
 
     expect(screen.getByRole("button", { name: /Needs photos 1/i })).toHaveAttribute(
       "aria-pressed",
@@ -136,5 +139,36 @@ describe("SellWorkspacePage", () => {
     );
     expect(screen.getByText("Oak bookcase")).toBeInTheDocument();
     expect(screen.queryByText("Vintage lamp")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase low suggested price")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase listing description")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark listed" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Pricing" }));
+    expect(
+      screen.getByLabelText("Oak bookcase low suggested price")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save pricing" })).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase listing description")
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Listing copy" }));
+    expect(
+      screen.getByLabelText("Oak bookcase listing description")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase low suggested price")
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Status" }));
+    expect(screen.getByRole("button", { name: "Keep as draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark listed" })).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase listing description")
+    ).not.toBeInTheDocument();
   });
 });

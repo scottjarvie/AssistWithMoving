@@ -20,11 +20,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 type SellRows = FunctionReturnType<typeof api.saleListings.listForMove>;
 type SellRow = SellRows[number];
 type SellFilterKey = "all" | "drafts" | "needsPhotos" | "researched" | "listed";
+type SellRowTask = "overview" | "pricing" | "listing" | "status";
 
 const sellFilters: Array<{
   key: SellFilterKey;
@@ -56,6 +58,13 @@ const sellFilters: Array<{
     label: "Listed",
     description: "Listings already posted or handling buyer interest.",
   },
+];
+
+const sellRowTasks: Array<{ value: SellRowTask; label: string }> = [
+  { value: "overview", label: "Overview" },
+  { value: "pricing", label: "Pricing" },
+  { value: "listing", label: "Listing copy" },
+  { value: "status", label: "Status" },
 ];
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -323,48 +332,81 @@ function SellRowEditor({
 
   return (
     <div className="rounded-md border border-border p-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="truncate font-medium">{row.item.name}</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {[row.item.room, row.item.category, row.item.condition]
-                  .filter(Boolean)
-                  .join(" - ") || "No room/category yet"}
-              </p>
-            </div>
-            <Badge variant={row.status === "listed" ? "secondary" : "outline"}>
-              {row.status}
-            </Badge>
-          </div>
+          <h3 className="truncate font-medium">{row.item.name}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {[row.item.room, row.item.category, row.item.condition]
+              .filter(Boolean)
+              .join(" - ") || "No room/category yet"}
+          </p>
+        </div>
+        <Badge variant={row.status === "listed" ? "secondary" : "outline"}>
+          {row.status}
+        </Badge>
+      </div>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-4">
-            <MiniMetric
-              label="Official"
-              value={formatCurrency(listing?.officialPriceCents)}
-            />
-            <MiniMetric
-              label="Range"
-              value={`${formatCurrency(listing?.suggestedPriceLowCents)} - ${formatCurrency(
-                listing?.suggestedPriceHighCents,
-              )}`}
-            />
-            <MiniMetric
-              label="Photos"
-              value={`${row.photoCount}${row.needsMorePhotos ? " / needs more" : ""}`}
-              icon={Camera}
-            />
-            <MiniMetric
-              label="Research"
-              value={`${row.researchDepth} / ${row.researchSourceCount} src`}
-              icon={SearchCheck}
-              badgeVariant={researchBadgeVariant(row.researchDepth)}
-            />
-          </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        <MiniMetric
+          label="Official"
+          value={formatCurrency(listing?.officialPriceCents)}
+        />
+        <MiniMetric
+          label="Range"
+          value={`${formatCurrency(listing?.suggestedPriceLowCents)} - ${formatCurrency(
+            listing?.suggestedPriceHighCents,
+          )}`}
+        />
+        <MiniMetric
+          label="Photos"
+          value={`${row.photoCount}${row.needsMorePhotos ? " / needs more" : ""}`}
+          icon={Camera}
+        />
+        <MiniMetric
+          label="Research"
+          value={`${row.researchDepth} / ${row.researchSourceCount} src`}
+          icon={SearchCheck}
+          badgeVariant={researchBadgeVariant(row.researchDepth)}
+        />
+      </div>
+
+      <Tabs defaultValue="overview" className="mt-3 gap-3">
+        <div className="overflow-x-auto pb-1">
+          <TabsList
+            className="min-w-max"
+            aria-label={`Sale tasks for ${row.item.name}`}
+          >
+            {sellRowTasks.map((task) => (
+              <TabsTrigger key={task.value} value={task.value}>
+                {task.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
 
-        <div className="grid gap-2">
+        <TabsContent value="overview">
+          <div className="rounded-md border border-border bg-muted/25 p-3 text-sm">
+            <p className="line-clamp-3 text-muted-foreground">
+              {description ||
+                `${row.item.name}${row.item.room ? ` from ${row.item.room}` : ""}.`}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {row.needsMorePhotos ? (
+                <Badge variant="secondary">needs photos</Badge>
+              ) : (
+                <Badge variant="outline">photos ready</Badge>
+              )}
+              <Badge variant={researchBadgeVariant(row.researchDepth)}>
+                {row.researchDepth === "none" ? "unresearched" : "researched"}
+              </Badge>
+              <Badge variant={row.status === "listed" ? "secondary" : "outline"}>
+                {row.status === "listed" ? "listed" : "not listed"}
+              </Badge>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="pricing" className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-3">
             <Input
               inputMode="decimal"
@@ -388,6 +430,19 @@ function SellRowEditor({
               onChange={(event) => setOfficialPrice(event.target.value)}
             />
           </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              disabled={saving}
+              onClick={() => void saveDraft("draftReady")}
+            >
+              Save pricing
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="listing" className="space-y-3">
           <Textarea
             aria-label={`${row.item.name} listing description`}
             value={description}
@@ -395,14 +450,42 @@ function SellRowEditor({
             rows={3}
             placeholder="Marketplace description"
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex justify-end">
             <Button
               type="button"
               size="sm"
               disabled={saving}
               onClick={() => void saveDraft("draftReady")}
             >
-              Save draft
+              Save listing copy
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="status" className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <MiniMetric label="Current" value={row.status} />
+            <MiniMetric
+              label="Photos"
+              value={row.needsMorePhotos ? "needs more" : "ready"}
+              icon={Camera}
+            />
+            <MiniMetric
+              label="Research"
+              value={`${row.researchSourceCount} sources`}
+              icon={SearchCheck}
+              badgeVariant={researchBadgeVariant(row.researchDepth)}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => void saveDraft("draftReady")}
+            >
+              Keep as draft
             </Button>
             <Button
               type="button"
@@ -414,8 +497,8 @@ function SellRowEditor({
               Mark listed
             </Button>
           </div>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
