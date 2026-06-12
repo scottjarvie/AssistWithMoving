@@ -32,19 +32,12 @@ import {
   mediaKindForMimeType,
   mediaObjectPrefix,
 } from "./lib/mediaStorage";
+import {
+  serverDerivativeSpecs,
+  type PhotoDerivativeVariant,
+} from "./lib/imageDerivatives";
 
 const uploadSessionTtlMs = 15 * 60 * 1000;
-type PhotoDerivativeVariant = "thumb" | "card" | "detail" | "full";
-const serverDerivativeSpecs = [
-  { variant: "thumb", maxSide: 200, quality: 78 },
-  { variant: "card", maxSide: 600, quality: 82 },
-  { variant: "detail", maxSide: 1200, quality: 86 },
-  { variant: "full", maxSide: 2400, quality: 90 },
-] as const satisfies Array<{
-  variant: PhotoDerivativeVariant;
-  maxSide: number;
-  quality: number;
-}>;
 const photoTypes = [
   "item",
   "serialNumber",
@@ -588,8 +581,38 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         }
       }
 
+      const derivativeNote = derivativeNoteForStatus(derivativeStatus);
+      const mediaSummary = {
+        source: "uploadSession",
+        fileName: optionalString(body.fileName),
+        mimeType: session.expectedMimeType,
+        sizeBytes: session.expectedSizeBytes,
+        width: optionalNumber(body.width),
+        height: optionalNumber(body.height),
+      };
+      const agentReview = directPhotoUploadAgentReview({
+        body,
+        data: {
+          photoId,
+          uploadSessionId,
+          derivativeStatus,
+          derivativeError,
+          derivativeNote,
+          media: mediaSummary,
+        },
+      });
+
       return restOk(
-        { data: { photoId, derivativeStatus, derivativeError } },
+        {
+          data: {
+            photoId,
+            derivativeStatus,
+            derivativeError,
+            derivativeNote,
+            media: mediaSummary,
+            agentReview,
+          },
+        },
         201
       );
     } catch (error) {
@@ -789,10 +812,10 @@ async function generateAndStoreImageDerivatives({
     const { data, info } = await sharp(originalBytes, { failOn: "none" })
       .rotate()
       .resize({
-        width: spec.maxSide,
-        height: spec.maxSide,
-        fit: "inside",
-        withoutEnlargement: true,
+        width: spec.width,
+        height: spec.height,
+        fit: spec.fit,
+        withoutEnlargement: spec.fit === "inside",
       })
       .webp({ quality: spec.quality })
       .toBuffer({ resolveWithObject: true });
@@ -868,10 +891,14 @@ function derivativeProcessingError(error: unknown) {
   return "Server derivative processing failed.";
 }
 
-function derivativeNoteForStatus(status: "ready" | "failed" | undefined) {
+function derivativeNoteForStatus(
+  status: "pending" | "ready" | "failed" | undefined
+) {
   switch (status) {
     case "ready":
       return "Original evidence was uploaded and MovingManifest created web-ready image derivatives for display and AI review.";
+    case "pending":
+      return "Original evidence was uploaded and web-ready image derivatives are pending.";
     case "failed":
       return "Original evidence was uploaded, but server-side derivative processing failed. The photo record remains available for review and retry.";
     default:
@@ -887,7 +914,7 @@ function directPhotoUploadAgentReview({
   data: {
     photoId: Id<"itemPhotos">;
     uploadSessionId: Id<"photoUploadSessions">;
-    derivativeStatus?: "ready" | "failed";
+    derivativeStatus?: "pending" | "ready" | "failed";
     derivativeError?: string;
     derivativeNote: string;
     aiReview?: unknown;

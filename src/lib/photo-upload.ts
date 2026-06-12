@@ -30,10 +30,10 @@ export const maxAudioUploadBytes = 100 * 1024 * 1024;
 export const maxVideoUploadBytes = 500 * 1024 * 1024;
 
 export const photoDerivativeSpecs = [
-  { variant: "thumb", maxSide: 200, quality: 0.78 },
-  { variant: "card", maxSide: 600, quality: 0.82 },
-  { variant: "detail", maxSide: 1200, quality: 0.86 },
-  { variant: "full", maxSide: 2400, quality: 0.9 },
+  { variant: "thumb", width: 200, height: 200, fit: "cover", quality: 0.78 },
+  { variant: "card", width: 600, height: 600, fit: "inside", quality: 0.82 },
+  { variant: "detail", width: 1200, height: 1200, fit: "inside", quality: 0.86 },
+  { variant: "full", width: 2400, height: 2400, fit: "inside", quality: 0.9 },
 ] as const;
 
 export type PhotoUploadValidation = {
@@ -170,16 +170,42 @@ export function imageDimensions(file: File) {
 export function fitWithin({
   width,
   height,
-  maxSide,
+  maxWidth,
+  maxHeight,
 }: {
   width: number;
   height: number;
-  maxSide: number;
+  maxWidth: number;
+  maxHeight: number;
 }) {
-  const scale = Math.min(1, maxSide / Math.max(width, height));
+  const scale = Math.min(1, maxWidth / width, maxHeight / height);
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+export function coverDimensions({
+  width,
+  height,
+  targetWidth,
+  targetHeight,
+}: {
+  width: number;
+  height: number;
+  targetWidth: number;
+  targetHeight: number;
+}) {
+  const scale = Math.max(targetWidth / width, targetHeight / height);
+  const scaledWidth = width * scale;
+  const scaledHeight = height * scale;
+  return {
+    sourceX: Math.max(0, Math.round((scaledWidth - targetWidth) / 2 / scale)),
+    sourceY: Math.max(0, Math.round((scaledHeight - targetHeight) / 2 / scale)),
+    sourceWidth: Math.max(1, Math.round(targetWidth / scale)),
+    sourceHeight: Math.max(1, Math.round(targetHeight / scale)),
+    width: targetWidth,
+    height: targetHeight,
   };
 }
 
@@ -208,16 +234,37 @@ export async function createImageDerivatives(file: File) {
       const dimensions = fitWithin({
         width: image.naturalWidth,
         height: image.naturalHeight,
-        maxSide: spec.maxSide,
+        maxWidth: spec.width,
+        maxHeight: spec.height,
       });
       const canvas = document.createElement("canvas");
-      canvas.width = dimensions.width;
-      canvas.height = dimensions.height;
+      canvas.width = spec.fit === "cover" ? spec.width : dimensions.width;
+      canvas.height = spec.fit === "cover" ? spec.height : dimensions.height;
       const context = canvas.getContext("2d");
       if (!context) {
         throw new Error("Could not create image derivative.");
       }
-      context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
+      if (spec.fit === "cover") {
+        const cover = coverDimensions({
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+          targetWidth: spec.width,
+          targetHeight: spec.height,
+        });
+        context.drawImage(
+          image,
+          cover.sourceX,
+          cover.sourceY,
+          cover.sourceWidth,
+          cover.sourceHeight,
+          0,
+          0,
+          cover.width,
+          cover.height,
+        );
+      } else {
+        context.drawImage(image, 0, 0, dimensions.width, dimensions.height);
+      }
 
       let mimeType = "image/webp";
       let blob = await canvasToBlob(canvas, mimeType, spec.quality);
@@ -234,8 +281,8 @@ export async function createImageDerivatives(file: File) {
         blob,
         mimeType,
         sizeBytes: blob.size,
-        width: dimensions.width,
-        height: dimensions.height,
+        width: canvas.width,
+        height: canvas.height,
       });
     }
 

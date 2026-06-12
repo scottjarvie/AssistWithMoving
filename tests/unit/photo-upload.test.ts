@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  coverDimensions,
   fitWithin,
   maxAudioUploadBytes,
   maxPhotoUploadBytes,
@@ -67,13 +68,35 @@ describe("photo upload validation", () => {
   });
 
   it("fits derivative dimensions within a max side without upscaling", () => {
-    expect(fitWithin({ width: 4000, height: 2000, maxSide: 1000 })).toEqual({
+    expect(
+      fitWithin({ width: 4000, height: 2000, maxWidth: 1000, maxHeight: 1000 })
+    ).toEqual({
       width: 1000,
       height: 500,
     });
-    expect(fitWithin({ width: 640, height: 480, maxSide: 1200 })).toEqual({
+    expect(
+      fitWithin({ width: 640, height: 480, maxWidth: 1200, maxHeight: 1200 })
+    ).toEqual({
       width: 640,
       height: 480,
+    });
+  });
+
+  it("calculates centered square cover dimensions for thumbnails", () => {
+    expect(
+      coverDimensions({
+        width: 4000,
+        height: 2000,
+        targetWidth: 200,
+        targetHeight: 200,
+      })
+    ).toEqual({
+      sourceX: 1000,
+      sourceY: 0,
+      sourceWidth: 2000,
+      sourceHeight: 2000,
+      width: 200,
+      height: 200,
     });
   });
 });
