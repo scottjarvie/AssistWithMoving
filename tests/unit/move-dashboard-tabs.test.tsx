@@ -81,11 +81,17 @@ describe("MoveDashboard", () => {
     expect(screen.getByRole("tab", { name: "Create move" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Household" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "AI connection" })).toBeInTheDocument();
-    expect(screen.getByText("Summer move")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Open$/i })).toHaveAttribute(
-      "href",
-      "/app/moves/move_123"
+    const activeMove = screen.getByText("Summer move");
+    const summary = screen.getByText("Workspace summary");
+    expect(activeMove.compareDocumentPosition(summary)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
     );
+    expect(
+      screen.getByRole("link", { name: "Open workspace" })
+    ).toHaveAttribute("href", "/app/moves/move_123");
+    expect(
+      screen.getByRole("link", { name: "Open selected move" })
+    ).toHaveAttribute("href", "/app/moves/move_123");
     expect(screen.queryByLabelText("Move title")).not.toBeInTheDocument();
   });
 });

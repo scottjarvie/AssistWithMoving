@@ -22,7 +22,10 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
-import { useMoveWorkspace } from "@/components/move-workspace-context";
+import {
+  type MoveWorkspaceValue,
+  useMoveWorkspace,
+} from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,14 +39,6 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   defaultDocumentationProfilesForMoveType,
   documentationProfileOptions,
@@ -60,6 +55,7 @@ import {
 import { moveWorkspacePath } from "@/lib/move-links";
 
 const DEFAULT_MOVE_TYPE: MoveType = "local";
+type DashboardMove = MoveWorkspaceValue["activeMoves"][number];
 
 export function MoveDashboard() {
   const router = useRouter();
@@ -189,71 +185,22 @@ export function MoveDashboard() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="rounded-lg border border-border bg-card p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                Dashboard
-              </h2>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-                Create your household, start a move, then open its workspace to
-                manage inventory, boxes, photos, the load plan, move day, and
-                documentation packets.
-              </p>
-            </div>
-            <Badge>
-              <ShieldCheck aria-hidden="true" />
-              audited workspace
-            </Badge>
-          </div>
+    <div className="space-y-5 p-4 sm:p-6">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Dashboard
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+            Open the active move first. Setup, household, and AI connection work
+            stays in the task tabs.
+          </p>
         </div>
-        <ConvexAuthStatus />
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric
-          label="Moves"
-          value={activeMoves.length}
-          icon={Truck}
-          note="active records"
-        />
-        <Metric
-          label="Households"
-          value={households?.length ?? 0}
-          icon={Home}
-          note="you can access"
-        />
-        <Metric
-          label="Packet profiles"
-          value={documentationProfileOptions.length}
-          icon={FileStack}
-          note="recipient types"
-        />
-        <Card>
-          <CardHeader className="space-y-0 pb-2">
-            <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-              Workspace
-              <ArrowRight className="size-4 text-primary" aria-hidden="true" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {moveId ? (
-              <Button asChild size="sm" className="mt-1">
-                <Link href={moveWorkspacePath(moveId)}>
-                  Open selected move
-                  <ArrowRight aria-hidden="true" />
-                </Link>
-              </Button>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Create a move to unlock its workspace pages.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+        <Badge>
+          <ShieldCheck aria-hidden="true" />
+          workspace home
+        </Badge>
+      </header>
 
       <Tabs defaultValue="moves" className="gap-4">
         <MoveWorkspaceTabList
@@ -265,77 +212,105 @@ export function MoveDashboard() {
           ]}
         />
 
-        <TabsContent value="moves">
-          <Card id="active-moves">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="size-4 text-accent" aria-hidden="true" />
-                Active moves
-              </CardTitle>
-              <CardDescription>
-                Open a move to work in its inventory, boxes, photos, load plan,
-                move day, packets, and AI review pages.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loadingMoves ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-3/4" />
-                </div>
-              ) : activeMoves.length ? (
-                <div className="overflow-x-auto">
-                  <Table className="min-w-[760px]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Move</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Profiles</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Route</TableHead>
-                        <TableHead className="text-right">Workspace</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {activeMoves.map((move) => (
-                        <TableRow key={move._id}>
-                          <TableCell className="font-medium">
-                            {move.title}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{move.type}</Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {move.documentationProfileTypes?.length ?? 0}
-                          </TableCell>
-                          <TableCell>{move.status}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {[move.origin, move.destination]
-                              .filter(Boolean)
-                              .join(" -> ") || "not set"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button asChild size="sm" variant="outline">
-                              <Link href={moveWorkspacePath(move._id)}>
-                                Open
-                                <ArrowRight aria-hidden="true" />
-                              </Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                  Create the first move to unlock resources, zones, inventory,
-                  AI planning, and documentation packet setup.
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="moves" className="space-y-5">
+          <section
+            id="active-moves"
+            className="space-y-3"
+            aria-labelledby="active-moves-heading"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3
+                  id="active-moves-heading"
+                  className="flex items-center gap-2 text-lg font-semibold"
+                >
+                  <CalendarDays
+                    className="size-4 text-accent"
+                    aria-hidden="true"
+                  />
+                  Active moves
+                </h3>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                  Pick up the move workspace before setup helpers and status
+                  metrics.
+                </p>
+              </div>
+              {moveId ? (
+                <Button asChild size="sm" variant="outline">
+                  <Link href={moveWorkspacePath(moveId)}>
+                    Open selected move
+                    <ArrowRight aria-hidden="true" />
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+
+            {loadingMoves ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Skeleton className="h-36 rounded-md" />
+                <Skeleton className="h-36 rounded-md" />
+              </div>
+            ) : activeMoves.length ? (
+              <div
+                className="grid gap-3 lg:grid-cols-2"
+                role="list"
+                aria-label="Active moves"
+              >
+                {activeMoves.map((move) => (
+                  <ActiveMoveCard
+                    key={move._id}
+                    move={move}
+                    selected={move._id === moveId}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                Create the first move to unlock resources, zones, inventory, AI
+                planning, and documentation packet setup.
+              </div>
+            )}
+          </section>
+
+          <section
+            className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]"
+            aria-labelledby="dashboard-summary-heading"
+          >
+            <div className="space-y-3">
+              <div>
+                <h3
+                  id="dashboard-summary-heading"
+                  className="text-base font-semibold"
+                >
+                  Workspace summary
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Secondary context stays below the active work.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric
+                  label="Moves"
+                  value={activeMoves.length}
+                  icon={Truck}
+                  note="active records"
+                />
+                <Metric
+                  label="Households"
+                  value={households?.length ?? 0}
+                  icon={Home}
+                  note="you can access"
+                />
+                <Metric
+                  label="Packet profiles"
+                  value={documentationProfileOptions.length}
+                  icon={FileStack}
+                  note="recipient types"
+                />
+              </div>
+            </div>
+            <ConvexAuthStatus />
+          </section>
         </TabsContent>
 
         <TabsContent value="create">
@@ -715,6 +690,68 @@ export function MoveDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function ActiveMoveCard({
+  move,
+  selected,
+}: {
+  move: DashboardMove;
+  selected: boolean;
+}) {
+  const route = [move.origin, move.destination].filter(Boolean).join(" -> ");
+
+  return (
+    <Card role="listitem">
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="truncate text-base">{move.title}</CardTitle>
+            <CardDescription className="mt-1">
+              {route || "Route not set"}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {selected ? <Badge variant="secondary">selected</Badge> : null}
+            <Badge variant="outline">{move.status}</Badge>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+          <DashboardMoveField label="Type" value={move.type} />
+          <DashboardMoveField
+            label="Packets"
+            value={String(move.documentationProfileTypes?.length ?? 0)}
+          />
+          <DashboardMoveField label="System" value={move.unitSystem} />
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button asChild size="sm">
+            <Link href={moveWorkspacePath(move._id)}>
+              Open workspace
+              <ArrowRight aria-hidden="true" />
+            </Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DashboardMoveField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-border/70 px-2 py-1.5">
+      <p className="text-[0.68rem] uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate font-medium">{value}</p>
     </div>
   );
 }
