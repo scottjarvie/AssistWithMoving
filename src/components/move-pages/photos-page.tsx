@@ -1,9 +1,11 @@
 "use client";
 
 import { EvidenceDensityPanel } from "@/components/evidence-density-panel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 export function PhotosWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
@@ -14,8 +16,21 @@ export function PhotosWorkspacePage() {
         title="Photos"
         description="Photo evidence for items, boxes, and rooms — originals stay private, and claim-readiness is scored as you go."
       />
-      <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
-      <EvidenceDensityPanel householdId={householdId} moveId={moveId} />
+      <Tabs defaultValue="review" className="gap-4">
+        <MoveWorkspaceTabList
+          tabs={[
+            { value: "review", label: "Review" },
+            { value: "coverage", label: "Coverage" },
+          ]}
+        />
+
+        <TabsContent value="review">
+          <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="coverage">
+          <EvidenceDensityPanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

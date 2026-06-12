@@ -2,10 +2,12 @@
 
 import { MovePeopleManager } from "@/components/move-people-manager";
 import { MoveQuestionsPanel } from "@/components/move-questions-panel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { PackingDebtDashboard } from "@/components/packing-debt-dashboard";
 import { PlanningDefaultsPanel } from "@/components/planning-defaults-panel";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 export function MoveOverviewPage() {
   const { householdId, moveId, selectedMove } = useMoveWorkspace();
@@ -16,10 +18,29 @@ export function MoveOverviewPage() {
         title={selectedMove?.title ?? "Move overview"}
         description="What still needs a decision, who is involved, and the defaults that steer packing, packets, and AI suggestions."
       />
-      <MoveQuestionsPanel householdId={householdId} moveId={moveId} />
-      <PackingDebtDashboard householdId={householdId} moveId={moveId} />
-      <MovePeopleManager householdId={householdId} moveId={moveId} />
-      <PlanningDefaultsPanel householdId={householdId} moveId={moveId} />
+      <Tabs defaultValue="decisions" className="gap-4">
+        <MoveWorkspaceTabList
+          tabs={[
+            { value: "decisions", label: "Decisions" },
+            { value: "readiness", label: "Readiness" },
+            { value: "people", label: "People" },
+            { value: "defaults", label: "Defaults" },
+          ]}
+        />
+
+        <TabsContent value="decisions">
+          <MoveQuestionsPanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="readiness">
+          <PackingDebtDashboard householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="people">
+          <MovePeopleManager householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="defaults">
+          <PlanningDefaultsPanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

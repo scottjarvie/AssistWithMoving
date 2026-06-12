@@ -2,8 +2,10 @@
 
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
 import { IngestionQueueList } from "@/components/ingestion-queue-list";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 export function CaptureWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
@@ -14,8 +16,21 @@ export function CaptureWorkspacePage() {
         title="Capture"
         description="Walk the house with your phone: photos, voice notes, and directions go into a queue your own AI agent works through later."
       />
-      <IngestionCaptureForm householdId={householdId} moveId={moveId} />
-      <IngestionQueueList householdId={householdId} moveId={moveId} />
+      <Tabs defaultValue="capture" className="gap-4">
+        <MoveWorkspaceTabList
+          tabs={[
+            { value: "capture", label: "Capture" },
+            { value: "queue", label: "Queue" },
+          ]}
+        />
+
+        <TabsContent value="capture">
+          <IngestionCaptureForm householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="queue">
+          <IngestionQueueList householdId={householdId} moveId={moveId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

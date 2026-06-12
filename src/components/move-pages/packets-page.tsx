@@ -3,8 +3,10 @@
 import { ClaimsCenterPanel } from "@/components/claims-center-panel";
 import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { flagEnabled } from "@/lib/feature-flags";
 
 export function PacketsWorkspacePage() {
@@ -22,20 +24,33 @@ export function PacketsWorkspacePage() {
         title="Packets"
         description="Scoped documentation for each recipient — movers, employers, insurers, and your own full record — with privacy defaults applied."
       />
-      {documentationPacketsEnabled ? (
-        <DocumentationPacketBuilder
-          householdId={householdId}
-          moveId={moveId}
-          moveType={selectedMove?.type}
-          selectedProfileTypes={selectedMove?.documentationProfileTypes ?? []}
+      <Tabs defaultValue="builder" className="gap-4">
+        <MoveWorkspaceTabList
+          tabs={[
+            { value: "builder", label: "Builder" },
+            { value: "claims", label: "Claims" },
+          ]}
         />
-      ) : (
-        <FeatureUnavailable
-          title="Documentation packets disabled"
-          description="Recipient packets are currently hidden by rollout controls."
-        />
-      )}
-      <ClaimsCenterPanel householdId={householdId} moveId={moveId} />
+
+        <TabsContent value="builder">
+          {documentationPacketsEnabled ? (
+            <DocumentationPacketBuilder
+              householdId={householdId}
+              moveId={moveId}
+              moveType={selectedMove?.type}
+              selectedProfileTypes={selectedMove?.documentationProfileTypes ?? []}
+            />
+          ) : (
+            <FeatureUnavailable
+              title="Documentation packets disabled"
+              description="Recipient packets are currently hidden by rollout controls."
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="claims">
+          <ClaimsCenterPanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -7,13 +7,9 @@ import { InventoryTable } from "@/components/inventory-table";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { PlannedItemsPanel } from "@/components/planned-items-panel";
 import { RoomWalkIntake } from "@/components/room-walk-intake";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 export function InventoryWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
@@ -25,15 +21,15 @@ export function InventoryWorkspacePage() {
         description="Every item you own, where it is, and what is happening to it: keep, sell, donate, dump, store, or move."
       />
       <Tabs defaultValue="items" className="gap-4">
-        <div className="overflow-x-auto pb-1">
-          <TabsList className="min-w-max">
-            <TabsTrigger value="items">Items</TabsTrigger>
-            <TabsTrigger value="capture">Capture</TabsTrigger>
-            <TabsTrigger value="review">Review</TabsTrigger>
-            <TabsTrigger value="disposition">Disposition</TabsTrigger>
-            <TabsTrigger value="estimates">Estimates</TabsTrigger>
-          </TabsList>
-        </div>
+        <MoveWorkspaceTabList
+          tabs={[
+            { value: "items", label: "Items" },
+            { value: "capture", label: "Capture" },
+            { value: "review", label: "Review" },
+            { value: "disposition", label: "Disposition" },
+            { value: "estimates", label: "Estimates" },
+          ]}
+        />
 
         <TabsContent value="items" id="inventory">
           <InventoryTable householdId={householdId} moveId={moveId} />
