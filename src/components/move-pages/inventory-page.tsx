@@ -25,6 +25,7 @@ export function InventoryWorkspacePage() {
           tabs={[
             { value: "items", label: "Items" },
             { value: "capture", label: "Capture" },
+            { value: "planned", label: "Planned" },
             { value: "review", label: "Review" },
             { value: "disposition", label: "Disposition" },
             { value: "estimates", label: "Estimates" },
@@ -36,6 +37,8 @@ export function InventoryWorkspacePage() {
         </TabsContent>
         <TabsContent value="capture" className="space-y-4">
           <RoomWalkIntake householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="planned">
           <PlannedItemsPanel householdId={householdId} moveId={moveId} />
         </TabsContent>
         <TabsContent value="review">

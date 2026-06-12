@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
@@ -68,7 +69,9 @@ vi.mock("@/components/estimate-summary", () => ({
 import { InventoryWorkspacePage } from "@/components/move-pages/inventory-page";
 
 describe("InventoryWorkspacePage", () => {
-  it("puts the item table first and moves secondary workflows behind tabs", () => {
+  it("puts the item table first and moves secondary workflows behind tabs", async () => {
+    const user = userEvent.setup();
+
     render(<InventoryWorkspacePage />);
 
     expect(screen.getByRole("tab", { name: "Items" })).toHaveAttribute(
@@ -76,10 +79,21 @@ describe("InventoryWorkspacePage", () => {
       "active"
     );
     expect(screen.getByRole("tab", { name: "Capture" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Planned" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Review" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Disposition" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Estimates" })).toBeInTheDocument();
     expect(screen.getByText("Items table surface")).toBeInTheDocument();
+    expect(screen.queryByText("Capture room walk")).not.toBeInTheDocument();
+    expect(screen.queryByText("Planned items workspace")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Capture" }));
+    expect(screen.getByText("Capture room walk")).toBeInTheDocument();
+    expect(screen.queryByText("Planned items workspace")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Planned" }));
+    expect(screen.getByText("Planned items workspace")).toBeInTheDocument();
+    expect(screen.queryByText("Capture room walk")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Duplicate review workspace")
     ).not.toBeInTheDocument();
