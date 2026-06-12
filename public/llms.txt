@@ -44,7 +44,9 @@ Primary site: https://movingmanifest.com
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
 - For image upload, use one call by default. MCP agents should call
   `upload_evidence_image` with a local `filePath`, public `sourceUrl`,
-  `dataUrl`, or `fileBase64`. REST agents should call
+  `dataUrl`, or `fileBase64`; when the user gives several ordinary photos from
+  the same room or context, call `upload_evidence_images` with shared defaults
+  and one image entry per photo. REST agents should call
   `POST /api/v1/photos/upload` with raw JPEG/PNG/WebP bytes plus metadata query
   params, multipart form data, or JSON with exactly one of `sourceUrl`,
   `dataUrl`, or `fileBase64`. MovingManifest stores the original and creates

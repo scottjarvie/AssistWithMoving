@@ -74,6 +74,7 @@ import {
   toolErrorResult,
   createPlannedItem,
   uploadEvidenceImage,
+  uploadEvidenceImages,
   uploadEvidenceFile,
   updateDocumentationProfile,
   updateMovePerson,
@@ -1640,6 +1641,85 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     handler: (input) => uploadEvidenceImage(apiConfig, input),
+  });
+
+  registerTool(target, "upload_evidence_images", {
+    title: "Upload multiple evidence images",
+    description:
+      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one local file path, public source URL, data URL, or base64 image. Shared metadata at the top level applies to every image unless an image entry overrides it. MovingManifest stores originals and creates web-ready derivatives server-side; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+    inputSchema: {
+      moveId: z.string(),
+      images: z
+        .array(
+          z.object({
+            filePath: z
+              .string()
+              .optional()
+              .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path."),
+            sourceUrl: z
+              .string()
+              .url()
+              .optional()
+              .describe("Public HTTP(S) image URL. Do not use for private localhost or credentialed URLs."),
+            dataUrl: z
+              .string()
+              .optional()
+              .describe("Base64 image data URL such as data:image/jpeg;base64,..."),
+            fileBase64: z
+              .string()
+              .optional()
+              .describe("Raw base64 JPEG, PNG, or WebP bytes when a data URL is not convenient."),
+            fileName: z.string().optional(),
+            itemId: z.string().optional(),
+            boxId: z.string().optional(),
+            spaceId: z.string().optional(),
+            transportResourceId: z.string().optional(),
+            transportZoneId: z.string().optional(),
+            room: z.string().optional(),
+            mimeType: z.enum(allowedOriginalImageMimeTypes).optional(),
+            originalHash: z.string().optional(),
+            caption: z.string().optional(),
+            photoType: z.string().optional(),
+            privacyLevel: z.string().optional(),
+            visibilityScope: z.string().optional(),
+            source: z.string().optional(),
+            exifHandlingStatus: z.string().optional(),
+            confidence: z.string().optional(),
+            notes: z.string().optional(),
+            verificationStatus: z.string().optional(),
+            capturedAt: z.number().optional(),
+            idempotencyKey: z.string().optional(),
+          })
+        )
+        .min(1)
+        .max(50)
+        .describe("Images to upload. Use one entry per user photo."),
+      itemId: z.string().optional().describe("Default item attachment for all images."),
+      boxId: z.string().optional().describe("Default box attachment for all images."),
+      spaceId: z.string().optional().describe("Default room/space attachment for all images."),
+      transportResourceId: z.string().optional(),
+      transportZoneId: z.string().optional(),
+      room: z.string().optional().describe("Default readable room label when a spaceId is not known yet."),
+      mimeType: z.enum(allowedOriginalImageMimeTypes).optional(),
+      caption: z.string().optional().describe("Default caption for all images; prefer per-image captions when the photos differ."),
+      photoType: z.string().optional(),
+      privacyLevel: z.string().optional(),
+      visibilityScope: z.string().optional(),
+      source: z.string().optional(),
+      exifHandlingStatus: z.string().optional(),
+      confidence: z.string().optional(),
+      notes: z.string().optional().describe("Default reviewer notes or assumptions to show the user."),
+      verificationStatus: z.string().optional(),
+      capturedAt: z.number().optional(),
+      idempotencyKey: z.string().optional().describe("Optional batch prefix; each image gets a stable numbered key."),
+      dryRun: z.boolean().optional(),
+      continueOnError: z
+        .boolean()
+        .optional()
+        .describe("When true, keep uploading later images after a failed entry and return per-image errors."),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => uploadEvidenceImages(apiConfig, input),
   });
 
   registerTool(target, "finalize_photo_upload", {

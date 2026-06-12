@@ -143,7 +143,9 @@ Family helper or mover:
 
 One user photo should normally be one upload call. MCP agents should use
 `upload_evidence_image` with a local `filePath`, public `sourceUrl`, `dataUrl`,
-or `fileBase64`. REST agents should use `POST /api/v1/photos/upload` with raw
+or `fileBase64`. When the user gives several ordinary photos from the same room
+or context, use `upload_evidence_images` with shared defaults and one image
+entry per photo. REST agents should use `POST /api/v1/photos/upload` with raw
 JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or JSON
 with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`. MovingManifest
 stores the original, reads dimensions, finalizes the evidence record, and
@@ -263,6 +265,7 @@ Useful write tools:
 - `create_move_space`
 - `batch_upsert_items`
 - `upload_evidence_image`
+- `upload_evidence_images`
 - `upload_evidence_file`
 - `start_photo_upload`
 - `finalize_photo_upload`

@@ -63,7 +63,7 @@ const toolGroups = [
   "get_agent_context and get_move_questions",
   "search_inventory, create_item, batch_upsert_items, update_item",
   "list_move_spaces and create_move_space",
-  "upload_evidence_image, upload_evidence_file, start_photo_upload, finalize_photo_upload, attach_photo",
+  "upload_evidence_image, upload_evidence_images, upload_evidence_file, start_photo_upload, finalize_photo_upload, attach_photo",
   "upsert_sale_listing",
   "plan_get, plan_apply_ops, plan_propose_ops, plan_snapshot",
   "create_box, add_items_to_box, suggest_assignments, apply_assignments",

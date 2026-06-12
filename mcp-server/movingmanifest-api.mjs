@@ -1029,6 +1029,69 @@ export async function uploadEvidenceImage(config, input) {
   };
 }
 
+export async function uploadEvidenceImages(config, input) {
+  const images = Array.isArray(input.images) ? input.images : [];
+  if (images.length === 0) {
+    throw new Error("Provide at least one image.");
+  }
+
+  const defaults = { ...input };
+  delete defaults.images;
+  delete defaults.continueOnError;
+  delete defaults.idempotencyKey;
+  delete defaults.originalHash;
+  const { continueOnError, idempotencyKey } = input;
+  const results = [];
+
+  for (const [index, image] of images.entries()) {
+    const imageInput = removeUndefined({
+      ...defaults,
+      ...image,
+      moveId: input.moveId,
+      idempotencyKey:
+        image.idempotencyKey ??
+        (idempotencyKey ? `${idempotencyKey}-${index + 1}` : undefined),
+    });
+
+    try {
+      const result = await uploadEvidenceImage(config, imageInput);
+      results.push({
+        index,
+        ok: true,
+        photoId: result.photoId,
+        uploadSessionId: result.uploadSessionId,
+        derivativeStatus: result.derivativeStatus,
+        derivativeError: result.derivativeError,
+        media: result.media,
+        result,
+      });
+    } catch (error) {
+      const failure = {
+        index,
+        ok: false,
+        error: error instanceof Error ? error.message : "Image upload failed.",
+      };
+      results.push(failure);
+      if (!continueOnError) {
+        const batchError = new Error(
+          `Image upload ${index + 1} of ${images.length} failed: ${failure.error}`
+        );
+        batchError.partialResults = results;
+        throw batchError;
+      }
+    }
+  }
+
+  return {
+    imageCount: images.length,
+    uploadedCount: results.filter((result) => result.ok).length,
+    failedCount: results.filter((result) => !result.ok).length,
+    results,
+    derivativeNote:
+      "Each image was sent as one original upload. MovingManifest creates web-ready derivatives server-side for uploaded images.",
+  };
+}
+
 async function loadLocalImageForDirectUpload(input) {
   const bytes = await readFile(input.filePath);
   const fileName = input.fileName ?? path.basename(input.filePath);

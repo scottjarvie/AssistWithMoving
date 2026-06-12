@@ -1206,15 +1206,16 @@ Evidence media upload is a presigned storage flow. The current product UI is
 still photo-first, but the storage contract accepts image, audio, and video
 originals. Image derivatives remain image-only.
 
-For MCP agents, prefer `upload_evidence_image` for normal image work. The
-assistant can pass a local `filePath`, public `sourceUrl`, `dataUrl`, or
+For MCP agents, prefer `upload_evidence_image` for normal single-image work.
+The assistant can pass a local `filePath`, public `sourceUrl`, `dataUrl`, or
 `fileBase64`; MovingManifest stores the original, finalizes evidence metadata,
 creates web-ready derivatives in the background, and returns the `photoId`.
 For local `filePath`, the MCP helper reads the file and sends the original image
 bytes directly to `POST /photos/upload`; it does not require the agent to
 base64-wrap the photo, calculate dimensions, or create display files. Use
-`upload_evidence_file` for audio/video or when a client wants the explicit
-presigned upload flow.
+`upload_evidence_images` when the user gives several ordinary photos from the
+same room or context. Use `upload_evidence_file` for audio/video or when a
+client wants the explicit presigned upload flow.
 
 Quick rule for agents: one user photo should normally mean one
 `upload_evidence_image` call in MCP or one `POST /photos/upload` call in REST.
@@ -1347,6 +1348,28 @@ For MCP clients, use `upload_evidence_image` first:
   "photoType": "room",
   "privacyLevel": "normal",
   "visibilityScope": "moveCollaborators"
+}
+```
+
+For several photos, use `upload_evidence_images` with shared defaults and one
+entry per image:
+
+```json
+{
+  "moveId": "MOVE_ID",
+  "room": "Garage",
+  "photoType": "room",
+  "privacyLevel": "normal",
+  "images": [
+    {
+      "filePath": "/Users/scott/Desktop/garage-shelf.jpg",
+      "caption": "Garage shelf before packing"
+    },
+    {
+      "filePath": "/Users/scott/Desktop/garage-workbench.jpg",
+      "caption": "Garage workbench before packing"
+    }
+  ]
 }
 ```
 
@@ -1624,7 +1647,8 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
-| `upload_evidence_image` | Easiest MCP image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId`. |
+| `upload_evidence_image` | Easiest MCP single-image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId`. |
+| `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status. |
 | `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
 | `start_photo_upload` | Start an evidence media upload session and return presigned original/optional derivative upload information. |
 | `finalize_photo_upload` | Finalize a completed presigned upload and create the evidence record after server-side object verification. |

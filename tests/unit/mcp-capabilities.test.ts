@@ -188,9 +188,13 @@ describe("MovingManifest MCP capability discovery", () => {
       expect.objectContaining({
         id: "photoEvidence",
         restEndpoints: expect.arrayContaining(["POST /api/v1/photos/upload"]),
-        mcpTools: expect.arrayContaining(["upload_evidence_image"]),
+        mcpTools: expect.arrayContaining([
+          "upload_evidence_image",
+          "upload_evidence_images",
+        ]),
         agentWorkflows: expect.arrayContaining([
           expect.stringContaining("upload_evidence_image first"),
+          expect.stringContaining("upload_evidence_images"),
           expect.stringContaining("Do not ask the user for dimensions"),
         ]),
       }),
@@ -253,8 +257,11 @@ describe("MovingManifest MCP capability discovery", () => {
     ).toContain("local image file");
     expect(docs).toContain("one user photo should normally mean one");
     expect(docs).toContain("`upload_evidence_image` call");
+    expect(docs).toContain("`upload_evidence_images`");
     expect(llms).toContain("MCP agents should call");
+    expect(llms).toContain("upload_evidence_images");
     expect(fullLlms).toContain("One user photo should normally be one upload call");
+    expect(fullLlms).toContain("upload_evidence_images");
   });
 
   it("keeps capability ids unique for agent discovery", () => {

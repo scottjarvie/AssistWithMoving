@@ -63,6 +63,7 @@ import {
   startPhotoUpload,
   suggestAssignments,
   uploadEvidenceImage,
+  uploadEvidenceImages,
   uploadEvidenceFile,
   updateDocumentationProfile,
   updateItem,
@@ -1988,6 +1989,132 @@ describe("MovingManifest MCP API client", () => {
       },
       body: pngBytes,
     });
+  });
+
+  it("uploads multiple local images through the batch MCP image helper", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const firstPath = path.join(tempDir, "garage-shelf.png");
+    const secondPath = path.join(tempDir, "garage-workbench.png");
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    await writeFile(firstPath, pngBytes);
+    await writeFile(secondPath, pngBytes);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: {
+            photoId: "photo-shelf",
+            uploadSessionId: "session-shelf",
+            derivativeStatus: "ready",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: {
+            photoId: "photo-workbench",
+            uploadSessionId: "session-workbench",
+            derivativeStatus: "pending",
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await expect(
+        uploadEvidenceImages(
+          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          {
+            moveId: "move1",
+            room: "Garage",
+            photoType: "room",
+            privacyLevel: "normal",
+            idempotencyKey: "garage-photo-batch",
+            images: [
+              {
+                filePath: firstPath,
+                caption: "Garage shelf before packing",
+              },
+              {
+                filePath: secondPath,
+                caption: "Garage workbench before packing",
+                room: "Garage workbench",
+              },
+            ],
+          }
+        )
+      ).resolves.toMatchObject({
+        imageCount: 2,
+        uploadedCount: 2,
+        failedCount: 0,
+        derivativeNote: expect.stringContaining("one original upload"),
+        results: [
+          {
+            index: 0,
+            ok: true,
+            photoId: "photo-shelf",
+            uploadSessionId: "session-shelf",
+            derivativeStatus: "ready",
+          },
+          {
+            index: 1,
+            ok: true,
+            photoId: "photo-workbench",
+            uploadSessionId: "session-workbench",
+            derivativeStatus: "pending",
+          },
+        ],
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [firstUrl, firstInit] = fetchMock.mock.calls[0] as unknown as [
+      URL,
+      { headers: Record<string, string>; body: Buffer },
+    ];
+    const [secondUrl, secondInit] = fetchMock.mock.calls[1] as unknown as [
+      URL,
+      { headers: Record<string, string>; body: Buffer },
+    ];
+
+    expect(firstUrl.pathname).toBe("/api/v1/photos/upload");
+    expect(Object.fromEntries(firstUrl.searchParams)).toMatchObject({
+      moveId: "move1",
+      fileName: "garage-shelf.png",
+      mimeType: "image/png",
+      room: "Garage",
+      caption: "Garage shelf before packing",
+      photoType: "room",
+      privacyLevel: "normal",
+      source: "mcp",
+      exifHandlingStatus: "pending",
+    });
+    expect(firstInit.headers["idempotency-key"]).toBe("garage-photo-batch-1");
+    expect(firstInit.body).toEqual(pngBytes);
+
+    expect(secondUrl.pathname).toBe("/api/v1/photos/upload");
+    expect(Object.fromEntries(secondUrl.searchParams)).toMatchObject({
+      moveId: "move1",
+      fileName: "garage-workbench.png",
+      mimeType: "image/png",
+      room: "Garage workbench",
+      caption: "Garage workbench before packing",
+      photoType: "room",
+      privacyLevel: "normal",
+      source: "mcp",
+      exifHandlingStatus: "pending",
+    });
+    expect(secondInit.headers["idempotency-key"]).toBe("garage-photo-batch-2");
+    expect(secondInit.body).toEqual(pngBytes);
   });
 
   it("keeps one-call image upload dry runs free of image bytes", async () => {
