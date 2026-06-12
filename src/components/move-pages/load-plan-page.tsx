@@ -10,6 +10,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 
 const loadPlanTabHashes = {
+  "#ai-planning-suggestions": "ai",
   "#capacity-posture": "resources",
   "#load-plan": "board",
   "#transport-resources": "resources",

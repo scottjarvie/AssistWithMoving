@@ -114,6 +114,18 @@ describe("AiReviewQueue responsive review surface", () => {
         .getAllByText("User mentioned the lamp in text intake.")
         .some((node) => node.classList.contains("line-clamp-3")),
     ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("link", { name: "Edit" })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual([
+      "/app/moves/move_123/ai-review#ai-photo-intake",
+      "/app/moves/move_123/load-plan#ai-planning-suggestions",
+      "/app/moves/move_123/ai-review#ai-text-intake",
+      "/app/moves/move_123/ai-review#ai-photo-intake",
+      "/app/moves/move_123/load-plan#ai-planning-suggestions",
+      "/app/moves/move_123/ai-review#ai-text-intake",
+    ]);
 
     expect(screen.getByRole("button", { name: "All 3" })).toHaveAttribute(
       "data-variant",

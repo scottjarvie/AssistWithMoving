@@ -30,6 +30,7 @@ import {
   summarizeAiReviewQueue,
   type AiReviewEntry,
 } from "@/lib/ai-review-queue";
+import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 
 type AiReviewFilter = "all" | "attention" | "duplicates" | AiReviewEntry["kind"];
 
@@ -86,7 +87,7 @@ export function AiReviewQueue({
             suggestion.type,
           detail: suggestion.sourceLine,
           reasoning: suggestion.reasoning,
-          href: "#ai-text-intake",
+          href: moveWorkspaceAnchorPath(moveId, "#ai-text-intake"),
         })),
         ...(photoSuggestions ?? []).map((suggestion): AiReviewEntry => ({
           id: suggestion._id,
@@ -99,7 +100,7 @@ export function AiReviewQueue({
             suggestion.type,
           detail: suggestion.sourceSummary,
           reasoning: suggestion.reasoning,
-          href: "#ai-photo-intake",
+          href: moveWorkspaceAnchorPath(moveId, "#ai-photo-intake"),
           duplicateCount: suggestion.duplicatePhotoIds?.length ?? 0,
         })),
         ...(planningSuggestions ?? []).map((suggestion): AiReviewEntry => ({
@@ -118,10 +119,10 @@ export function AiReviewQueue({
                 ? `${suggestion.assignmentDraft.assignmentWarnings.length} warnings`
                 : "",
           reasoning: suggestion.reasoning,
-          href: "#ai-planning-suggestions",
+          href: moveWorkspaceAnchorPath(moveId, "#ai-planning-suggestions"),
         })),
       ]),
-    [photoSuggestions, planningSuggestions, textSuggestions]
+    [moveId, photoSuggestions, planningSuggestions, textSuggestions]
   );
   const summary = useMemo(() => summarizeAiReviewQueue(entries), [entries]);
   const filteredEntries = useMemo(

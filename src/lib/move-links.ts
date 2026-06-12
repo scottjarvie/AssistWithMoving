@@ -8,7 +8,10 @@ export function moveBoxesPath(moveId?: string | null) {
 }
 
 const workspaceAnchorSections: Record<string, string> = {
+  "#ai-photo-intake": "ai-review",
+  "#ai-planning-suggestions": "load-plan",
   "#ai-review-queue": "ai-review",
+  "#ai-text-intake": "ai-review",
   "#boxes": "boxes",
   "#capacity-posture": "load-plan",
   "#claims-center": "packets",

@@ -29,6 +29,15 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#ai-review-queue")).toBe(
       "/app/moves/move_123/ai-review#ai-review-queue"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#ai-text-intake")).toBe(
+      "/app/moves/move_123/ai-review#ai-text-intake"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#ai-photo-intake")).toBe(
+      "/app/moves/move_123/ai-review#ai-photo-intake"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#ai-planning-suggestions")).toBe(
+      "/app/moves/move_123/load-plan#ai-planning-suggestions"
+    );
     expect(moveWorkspaceAnchorPath("move/with/slash", "#load-plan")).toBe(
       "/app/moves/move%2Fwith%2Fslash/load-plan#load-plan"
     );

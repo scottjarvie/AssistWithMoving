@@ -231,6 +231,25 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Load board surface")).not.toBeInTheDocument();
   });
 
+  it("opens load plan AI suggestions when routed to the planning hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/load-plan#ai-planning-suggestions"
+    );
+
+    render(<LoadPlanWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "AI suggestions" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("AI planning surface")).toBeInTheDocument();
+    expect(screen.queryByText("Load board surface")).not.toBeInTheDocument();
+  });
+
   it("opens packets on the builder and keeps claims separate", () => {
     render(<PacketsWorkspacePage />);
 
@@ -293,5 +312,43 @@ describe("move workspace task tabs", () => {
     expect(screen.getByRole("tab", { name: "Jobs" })).toBeInTheDocument();
     expect(screen.getByText("AI review queue surface")).toBeInTheDocument();
     expect(screen.queryByText("AI text intake surface")).not.toBeInTheDocument();
+  });
+
+  it("opens AI text intake when routed to the text intake hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/ai-review#ai-text-intake"
+    );
+
+    render(<AiReviewWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Text intake" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("AI text intake surface")).toBeInTheDocument();
+    expect(screen.queryByText("AI review queue surface")).not.toBeInTheDocument();
+  });
+
+  it("opens AI photo intake when routed to the photo intake hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/ai-review#ai-photo-intake"
+    );
+
+    render(<AiReviewWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Photo intake" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("AI photo intake surface")).toBeInTheDocument();
+    expect(screen.queryByText("AI review queue surface")).not.toBeInTheDocument();
   });
 });
