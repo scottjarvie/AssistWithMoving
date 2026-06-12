@@ -76,26 +76,47 @@ describe("InventoryWorkspacePage", () => {
 
     expect(screen.getByRole("tab", { name: "Items" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
     expect(screen.getByRole("tab", { name: "Capture" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Planned" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Duplicates" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Disposition" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Disposition" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Estimates" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Browse and edit owned inventory records before branching into review work.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Items table surface")).toBeInTheDocument();
     expect(screen.queryByText("Capture room walk")).not.toBeInTheDocument();
-    expect(screen.queryByText("Planned items workspace")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Planned items workspace"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Capture" }));
+    expect(
+      screen.getByText(
+        "Walk a room, add rough notes, and build inventory without a long form.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Capture room walk")).toBeInTheDocument();
-    expect(screen.queryByText("Planned items workspace")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Planned items workspace"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Planned" }));
+    expect(
+      screen.getByText(
+        "Track future purchases separately from inventory you already own.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Planned items workspace")).toBeInTheDocument();
     expect(screen.queryByText("Capture room walk")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Duplicate review workspace")
+      screen.queryByText("Duplicate review workspace"),
     ).not.toBeInTheDocument();
   });
 });

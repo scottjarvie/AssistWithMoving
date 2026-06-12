@@ -83,6 +83,38 @@ const inventoryTaskHashes = {
   "#inventory-records": "browse",
 } as const satisfies Partial<Record<string, InventoryTaskTab>>;
 
+const inventoryTaskTabs: Array<{
+  value: InventoryTaskTab;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "browse",
+    label: "Browse",
+    description:
+      "Find, filter, sort, edit, and bulk update existing inventory records.",
+  },
+  {
+    value: "add",
+    label: "Add",
+    description:
+      "Create one item quickly when you already know the basic details.",
+  },
+  {
+    value: "bulk",
+    label: "Bulk paste",
+    description:
+      "Paste rough room notes and let the app turn them into inventory drafts.",
+  },
+];
+
+function formatInventoryTaskCount(task: InventoryTaskTab, count: number) {
+  if (task === "browse") {
+    return `${count} ${count === 1 ? "record" : "records"}`;
+  }
+  return `${count}`;
+}
+
 const visibleDefaultColumns: VisibilityState = {
   category: true,
   room: true,
@@ -317,7 +349,12 @@ function InventoryItemCard({
           />
           Select
         </label>
-        <Button type="button" size="sm" variant="outline" onClick={onOpenDetails}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onOpenDetails}
+        >
           <PanelRightOpen aria-hidden="true" />
           Details
         </Button>
@@ -819,6 +856,12 @@ export function InventoryTable({
   const activeSavedFilter = inventorySavedFilters.find(
     (filter) => filter.key === savedFilter,
   );
+  const activeInventoryTask =
+    inventoryTaskTabs.find((task) => task.value === activeTaskTab) ??
+    inventoryTaskTabs[0];
+  const inventoryTaskCounts: Partial<Record<InventoryTaskTab, number>> = {
+    browse: filteredItems.length,
+  };
   const visibleColumnCount = table
     .getAllLeafColumns()
     .filter((column) => column.getIsVisible()).length;
@@ -846,11 +889,44 @@ export function InventoryTable({
           >
             <div className="overflow-x-auto pb-1">
               <TabsList className="min-w-max" aria-label="Inventory task views">
-                <TabsTrigger value="browse">Browse</TabsTrigger>
-                <TabsTrigger value="add">Add</TabsTrigger>
-                <TabsTrigger value="bulk">Bulk paste</TabsTrigger>
+                {inventoryTaskTabs.map((task) => {
+                  const count = inventoryTaskCounts[task.value];
+                  const hasCount = count !== undefined;
+                  return (
+                    <TabsTrigger
+                      key={task.value}
+                      value={task.value}
+                      className={hasCount ? "gap-2" : undefined}
+                      aria-label={
+                        hasCount
+                          ? `${task.label}: ${formatInventoryTaskCount(
+                              task.value,
+                              count,
+                            )}`
+                          : undefined
+                      }
+                    >
+                      {task.label}
+                      {hasCount ? (
+                        <Badge
+                          variant={
+                            activeTaskTab === task.value
+                              ? "secondary"
+                              : "outline"
+                          }
+                          className="h-5 min-w-5 px-1"
+                        >
+                          {count}
+                        </Badge>
+                      ) : null}
+                    </TabsTrigger>
+                  );
+                })}
               </TabsList>
             </div>
+            <p className="text-sm text-muted-foreground">
+              {activeInventoryTask.description}
+            </p>
 
             {message ? (
               <p
@@ -891,7 +967,9 @@ export function InventoryTable({
                     <Badge variant="secondary">
                       {filteredItems.length} of {totalItemCount} records
                     </Badge>
-                    <Badge variant="outline">{visibleColumnCount} columns</Badge>
+                    <Badge variant="outline">
+                      {visibleColumnCount} columns
+                    </Badge>
                   </div>
                 </div>
 
@@ -1047,13 +1125,13 @@ export function InventoryTable({
                 <div>
                   <h3 className="text-sm font-semibold">Inventory records</h3>
                   <p className="text-xs text-muted-foreground">
-                    {visibleRows.length} on this page / {filteredItems.length} filtered
+                    {visibleRows.length} on this page / {filteredItems.length}{" "}
+                    filtered
                   </p>
                 </div>
                 {sorting.length ? (
                   <Badge variant="outline">
-                    Sorted by{" "}
-                    {columnLabels[sorting[0].id] ?? sorting[0].id}
+                    Sorted by {columnLabels[sorting[0].id] ?? sorting[0].id}
                   </Badge>
                 ) : null}
               </div>

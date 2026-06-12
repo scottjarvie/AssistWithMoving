@@ -67,7 +67,9 @@ describe("InventoryTable", () => {
       screen.getByRole("button", { name: "Sort by Room" }),
     ).toBeInTheDocument();
     const cardList = screen.getByRole("list", { name: "Inventory item cards" });
-    expect(within(cardList).getByText("Walnut media console")).toBeInTheDocument();
+    expect(
+      within(cardList).getByText("Walnut media console"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("table", { name: "Inventory records table" }),
     ).toBeInTheDocument();
@@ -90,11 +92,17 @@ describe("InventoryTable", () => {
       />,
     );
 
-    expect(screen.getByRole("tab", { name: "Browse" })).toHaveAttribute(
-      "data-state",
-      "active",
+    expect(
+      screen.getByRole("tab", { name: "Browse: 1 record" }),
+    ).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByText(
+        "Find, filter, sort, edit, and bulk update existing inventory records.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Walnut media console").length).toBeGreaterThan(
+      0,
     );
-    expect(screen.getAllByText("Walnut media console").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("New item name")).not.toBeInTheDocument();
     expect(
       screen.queryByPlaceholderText(
@@ -103,10 +111,20 @@ describe("InventoryTable", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Add" }));
+    expect(
+      screen.getByText(
+        "Create one item quickly when you already know the basic details.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("New item name")).toBeInTheDocument();
     expect(screen.queryByText("Walnut media console")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Bulk paste" }));
+    expect(
+      screen.getByText(
+        "Paste rough room notes and let the app turn them into inventory drafts.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText(
         "Garage: two bikes, red toolbox, camping tent",
@@ -193,7 +211,11 @@ describe("InventoryTable", () => {
 
     expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
     expect(screen.getAllByText("Inventory item 1").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Add inventory items or change the saved filter/search terms.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Add inventory items or change the saved filter/search terms.",
+      ),
+    ).not.toBeInTheDocument();
   });
 });
 

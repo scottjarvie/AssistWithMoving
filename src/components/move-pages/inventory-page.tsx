@@ -28,6 +28,45 @@ const inventoryTabHashes = {
   "#room-walk": "capture",
 } as const;
 
+const inventoryWorkspaceTabs = [
+  {
+    value: "items",
+    label: "Items",
+    description:
+      "Browse and edit owned inventory records before branching into review work.",
+  },
+  {
+    value: "capture",
+    label: "Capture",
+    description:
+      "Walk a room, add rough notes, and build inventory without a long form.",
+  },
+  {
+    value: "planned",
+    label: "Planned",
+    description:
+      "Track future purchases separately from inventory you already own.",
+  },
+  {
+    value: "duplicates",
+    label: "Duplicates",
+    description:
+      "Review likely duplicate records before reports and packets depend on them.",
+  },
+  {
+    value: "disposition",
+    label: "Disposition",
+    description:
+      "Work sale, donation, dump, storage, and giveaway queues after item decisions.",
+  },
+  {
+    value: "estimates",
+    label: "Estimates",
+    description:
+      "Check weight, volume, capacity, and estimate assumptions only when needed.",
+  },
+];
+
 export function InventoryWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
   const [activeTab, setActiveTab] = useHashTab("items", inventoryTabHashes);
@@ -40,14 +79,9 @@ export function InventoryWorkspacePage() {
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
-          tabs={[
-            { value: "items", label: "Items" },
-            { value: "capture", label: "Capture" },
-            { value: "planned", label: "Planned" },
-            { value: "duplicates", label: "Duplicates" },
-            { value: "disposition", label: "Disposition" },
-            { value: "estimates", label: "Estimates" },
-          ]}
+          tabs={inventoryWorkspaceTabs}
+          activeValue={activeTab}
+          ariaLabel="Inventory workspace tasks"
         />
 
         <TabsContent value="items" id="inventory">
