@@ -2,6 +2,7 @@
 
 import {
   type ComponentType,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -40,11 +41,13 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { itemDimensionsConfidenceForRead } from "@/lib/inventory-measurements";
 import {
   distancePointToSegment,
@@ -959,108 +962,158 @@ function PlanStudioSurface({
           onPlacementSourcePlaced={() => setPlacingSource(null)}
         />
         <div className="border-t border-border p-4 lg:border-l lg:border-t-0">
-          <div className="space-y-4">
-            <ProposalReviewPanel
-              proposals={pendingProposals}
-              reviewedProposals={reviewedProposals}
-              loading={proposals === undefined}
-              activeProposal={activeProposal}
-              preview={activeProposalPreview}
-              selectedOpIndexes={selectedProposalOpIndexes}
-              busy={proposalBusy}
-              onProposalChange={(proposalId) => {
-                setRequestedProposalId(proposalId);
-                setProposalOpSelection(null);
-              }}
-              onSelectedOpIndexesChange={setSelectedProposalOpIndexes}
-              onApplySelected={() => reviewActiveProposal(selectedProposalOpIndexes)}
-              onApplyAll={() =>
-                reviewActiveProposal(
-                  activeProposalPreview?.ops
-                    .filter((entry) => entry.status === "acceptable")
-                    .map((entry) => entry.index) ?? [],
-                )
-              }
-              onReject={rejectActiveProposal}
-            />
-            <AgentBatchHistoryPanel
-              batches={agentBatches ?? []}
-              loading={agentBatches === undefined}
-              revertingBatchId={revertingBatchId}
-              onRevert={revertAgentBatch}
-            />
-            <PlanInspector
-              document={document}
-              selectedEntities={selectedEntities}
-              selectedPlacements={selectedPlacements}
-              placements={document.placements}
-              items={moveItems ?? []}
-              fitReport={fitReport}
-              unitSystem={unitSystem}
-              wallNames={wallNames}
-              onApplyOps={applyPlanOps}
-              onPlacementSelect={togglePlacementSelection}
-              onDeleteSelected={deleteSelected}
-              onLinkTemplateToItem={linkTemplatePlacementToItem}
-            />
-            <UnderlayPanel
-              householdId={document.plan.householdId}
-              moveId={document.plan.moveId}
-              level={activeLevel}
-              underlayPhoto={activeUnderlayPhoto}
-              calibration={underlayCalibration}
-              moving={Boolean(activeLevel && underlayMoveLevelId === activeLevel._id)}
-              onCalibrationChange={setUnderlayCalibration}
-              onMovingChange={(moving) =>
-                setUnderlayMoveLevelId(moving && activeLevel ? activeLevel._id : null)
-              }
-              onApplyOps={applyPlanOps}
-            />
-            <TemplatePlacementPanel
-              level={activeLevel}
-              placements={document.placements}
-              items={moveItems ?? []}
-              boxes={moveBoxes ?? []}
-              plannedItems={plannedItems ?? []}
-              placingSource={placingSource}
-              onBeginPlacement={(source) => {
-                setActiveTool("select");
-                setPlacingSource(source);
-              }}
-              onCancelPlacement={() => setPlacingSource(null)}
-            />
-            <div>
-              <h3 className="text-sm font-semibold">Levels</h3>
-              <div className="mt-3 grid gap-2">
-                {document.levels.map((level) => (
-                  <Button
-                    key={level._id}
-                    variant={level._id === activeLevel?._id ? "secondary" : "outline"}
-                    className="justify-start"
-                    onClick={() => setLevelId(level._id)}
-                  >
-                    {level.name}
-                    <Badge className="ml-auto" variant="outline">
-                      {level.levelType}
-                    </Badge>
-                  </Button>
-                ))}
+          <PlanSideRailTabs
+            review={
+              <div className="space-y-4">
+                <ProposalReviewPanel
+                  proposals={pendingProposals}
+                  reviewedProposals={reviewedProposals}
+                  loading={proposals === undefined}
+                  activeProposal={activeProposal}
+                  preview={activeProposalPreview}
+                  selectedOpIndexes={selectedProposalOpIndexes}
+                  busy={proposalBusy}
+                  onProposalChange={(proposalId) => {
+                    setRequestedProposalId(proposalId);
+                    setProposalOpSelection(null);
+                  }}
+                  onSelectedOpIndexesChange={setSelectedProposalOpIndexes}
+                  onApplySelected={() =>
+                    reviewActiveProposal(selectedProposalOpIndexes)
+                  }
+                  onApplyAll={() =>
+                    reviewActiveProposal(
+                      activeProposalPreview?.ops
+                        .filter((entry) => entry.status === "acceptable")
+                        .map((entry) => entry.index) ?? [],
+                    )
+                  }
+                  onReject={rejectActiveProposal}
+                />
+                <AgentBatchHistoryPanel
+                  batches={agentBatches ?? []}
+                  loading={agentBatches === undefined}
+                  revertingBatchId={revertingBatchId}
+                  onRevert={revertAgentBatch}
+                />
               </div>
-            </div>
-            <div className="rounded-md border border-border p-3 text-xs leading-5 text-muted-foreground">
-              <div className="flex items-center gap-2 font-medium text-foreground">
-                <MousePointer2 className="size-4" aria-hidden="true" />
-                Read-only viewer
+            }
+            inspect={
+              <div className="space-y-4">
+                <PlanInspector
+                  document={document}
+                  selectedEntities={selectedEntities}
+                  selectedPlacements={selectedPlacements}
+                  placements={document.placements}
+                  items={moveItems ?? []}
+                  fitReport={fitReport}
+                  unitSystem={unitSystem}
+                  wallNames={wallNames}
+                  onApplyOps={applyPlanOps}
+                  onPlacementSelect={togglePlacementSelection}
+                  onDeleteSelected={deleteSelected}
+                  onLinkTemplateToItem={linkTemplatePlacementToItem}
+                />
+                <div>
+                  <h3 className="text-sm font-semibold">Levels</h3>
+                  <div className="mt-3 grid gap-2">
+                    {document.levels.map((level) => (
+                      <Button
+                        key={level._id}
+                        variant={
+                          level._id === activeLevel?._id ? "secondary" : "outline"
+                        }
+                        className="justify-start"
+                        onClick={() => setLevelId(level._id)}
+                      >
+                        {level.name}
+                        <Badge className="ml-auto" variant="outline">
+                          {level.levelType}
+                        </Badge>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border p-3 text-xs leading-5 text-muted-foreground">
+                  <div className="flex items-center gap-2 font-medium text-foreground">
+                    <MousePointer2 className="size-4" aria-hidden="true" />
+                    Read-only viewer
+                  </div>
+                  <p className="mt-2">
+                    Drag the canvas to pan. Use the zoom controls or mouse wheel
+                    to inspect walls, door swings, room areas, and yard zones.
+                  </p>
+                </div>
               </div>
-              <p className="mt-2">
-                Drag the canvas to pan. Use the zoom controls or mouse wheel to
-                inspect walls, door swings, room areas, and yard zones.
-              </p>
-            </div>
-          </div>
+            }
+            blueprint={
+              <UnderlayPanel
+                householdId={document.plan.householdId}
+                moveId={document.plan.moveId}
+                level={activeLevel}
+                underlayPhoto={activeUnderlayPhoto}
+                calibration={underlayCalibration}
+                moving={Boolean(
+                  activeLevel && underlayMoveLevelId === activeLevel._id,
+                )}
+                onCalibrationChange={setUnderlayCalibration}
+                onMovingChange={(moving) =>
+                  setUnderlayMoveLevelId(
+                    moving && activeLevel ? activeLevel._id : null,
+                  )
+                }
+                onApplyOps={applyPlanOps}
+              />
+            }
+            place={
+              <TemplatePlacementPanel
+                level={activeLevel}
+                placements={document.placements}
+                items={moveItems ?? []}
+                boxes={moveBoxes ?? []}
+                plannedItems={plannedItems ?? []}
+                placingSource={placingSource}
+                onBeginPlacement={(source) => {
+                  setActiveTool("select");
+                  setPlacingSource(source);
+                }}
+                onCancelPlacement={() => setPlacingSource(null)}
+              />
+            }
+          />
         </div>
       </div>
     </section>
+  );
+}
+
+export function PlanSideRailTabs({
+  review,
+  inspect,
+  blueprint,
+  place,
+}: {
+  review: ReactNode;
+  inspect: ReactNode;
+  blueprint: ReactNode;
+  place: ReactNode;
+}) {
+  return (
+    <Tabs defaultValue="inspect" className="gap-4">
+      <MoveWorkspaceTabList
+        tabs={[
+          { value: "inspect", label: "Inspect" },
+          { value: "place", label: "Place" },
+          { value: "review", label: "Review" },
+          { value: "blueprint", label: "Blueprint" },
+        ]}
+      />
+
+      <TabsContent value="inspect">{inspect}</TabsContent>
+      <TabsContent value="place">{place}</TabsContent>
+      <TabsContent value="review">{review}</TabsContent>
+      <TabsContent value="blueprint">{blueprint}</TabsContent>
+    </Tabs>
   );
 }
 
