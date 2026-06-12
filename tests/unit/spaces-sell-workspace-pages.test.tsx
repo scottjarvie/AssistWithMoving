@@ -45,6 +45,7 @@ import { SpacesWorkspacePage } from "@/components/move-pages/spaces-page";
 
 describe("SpacesWorkspacePage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/spaces");
     mockData.queryResult = [];
     mockData.mutation.mockReset();
   });
@@ -75,6 +76,39 @@ describe("SpacesWorkspacePage", () => {
     expect(screen.getByText("Kitchen")).toBeInTheDocument();
     expect(screen.getByText("Origin room: 1")).toBeInTheDocument();
     expect(screen.queryByLabelText("Space name")).not.toBeInTheDocument();
+  });
+
+  it("opens the add-space form when routed to the add-space hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/spaces#add-space"
+    );
+
+    mockData.queryResult = [
+      {
+        _id: "space_1",
+        kind: "originRoom",
+        name: "Kitchen",
+        status: "active",
+        floorLevel: "1",
+        notes: "Main prep room.",
+        photoCount: 2,
+        transportResourceId: undefined,
+        transportZoneId: undefined,
+      },
+    ];
+
+    render(<SpacesWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Add space" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByLabelText("Space name")).toBeInTheDocument();
+    expect(screen.queryByText("Kitchen")).not.toBeInTheDocument();
   });
 });
 

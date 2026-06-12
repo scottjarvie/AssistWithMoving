@@ -147,7 +147,7 @@ export function summarizePackingDebt(input: PackingDebtSummaryInput) {
         (item) => isEvidenceImportant(item) && !itemPhotoIds.has(item.itemId)
       ).length,
       severity: "critical",
-      anchor: "#photos",
+      anchor: "#add-photos",
       help: "Add photo evidence for valuable, sensitive, document, medication, or owner-carry items.",
     },
     {

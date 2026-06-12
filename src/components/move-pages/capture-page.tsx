@@ -6,9 +6,17 @@ import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
+
+const captureTabHashes = {
+  "#capture": "capture",
+  "#capture-queue": "queue",
+  "#ingestion-queue": "queue",
+} as const;
 
 export function CaptureWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
+  const [activeTab, setActiveTab] = useHashTab("capture", captureTabHashes);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -16,7 +24,7 @@ export function CaptureWorkspacePage() {
         title="Capture"
         description="Walk the house with your phone: photos, voice notes, and directions go into a queue your own AI agent works through later."
       />
-      <Tabs defaultValue="capture" className="gap-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={[
             { value: "capture", label: "Capture" },

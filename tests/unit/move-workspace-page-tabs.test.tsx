@@ -200,6 +200,25 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Ingestion queue surface")).not.toBeInTheDocument();
   });
 
+  it("opens capture queue when routed to the queue hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/capture#capture-queue"
+    );
+
+    render(<CaptureWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Queue" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Ingestion queue surface")).toBeInTheDocument();
+    expect(screen.queryByText("Capture form surface")).not.toBeInTheDocument();
+  });
+
   it("opens photos on review and keeps upload, gaps, and coverage behind tabs", () => {
     render(<PhotosWorkspacePage />);
 
@@ -214,6 +233,44 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Photo upload surface")).not.toBeInTheDocument();
     expect(screen.queryByText("Photo gaps surface")).not.toBeInTheDocument();
     expect(screen.queryByText("Evidence coverage surface")).not.toBeInTheDocument();
+  });
+
+  it("opens photo upload when routed to the add-photos hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/photos#add-photos"
+    );
+
+    render(<PhotosWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Add photos" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Photo upload surface")).toBeInTheDocument();
+    expect(screen.queryByText("Photo review surface")).not.toBeInTheDocument();
+  });
+
+  it("opens photo gaps when routed to the photo gaps hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/photos#photo-gaps"
+    );
+
+    render(<PhotosWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Gaps" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Photo gaps surface")).toBeInTheDocument();
+    expect(screen.queryByText("Photo review surface")).not.toBeInTheDocument();
   });
 
   it("opens photos coverage when routed to the evidence-density hash", async () => {

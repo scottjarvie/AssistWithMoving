@@ -13,7 +13,10 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 
 const photoTabHashes = {
+  "#add-photos": "upload",
   "#evidence-density": "coverage",
+  "#photo-gaps": "gaps",
+  "#photo-review": "review",
   "#photos": "review",
 } as const;
 

@@ -65,7 +65,10 @@ describe("disposition pipeline summary", () => {
       readyCount: 1,
       activeShareLinkCount: 1,
     });
-    expect(action(summary, "sell", "salePhotosNeeded")?.count).toBe(1);
+    expect(action(summary, "sell", "salePhotosNeeded")).toMatchObject({
+      count: 1,
+      anchor: "#add-photos",
+    });
     expect(action(summary, "sell", "readyToList")).toMatchObject({
       count: 1,
       anchor: "#sale-listing",
@@ -110,6 +113,10 @@ describe("disposition pipeline summary", () => {
     expect(action(summary, "free", "freePickupLink")).toMatchObject({
       count: 1,
       severity: "critical",
+    });
+    expect(action(summary, "free", "giveawayPhotosNeeded")).toMatchObject({
+      count: 0,
+      anchor: "#add-photos",
     });
     expect(group(summary, "free")?.readyCount).toBe(0);
   });

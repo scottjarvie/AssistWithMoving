@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -98,6 +98,7 @@ function renderMoveDayView() {
 
 describe("MoveDayView task tabs", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/move-day");
     window.localStorage.clear();
     moveDayData.mutation.mockReset();
   });
@@ -166,5 +167,24 @@ describe("MoveDayView task tabs", () => {
     expect(
       screen.getByText("Online. Status changes sync to the move record.")
     ).toBeInTheDocument();
+  });
+
+  it("opens progress when routed to the move-day progress hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/move-day#move-day-progress"
+    );
+
+    renderMoveDayView();
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Progress" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Status progress")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Move Day box lookup")).not.toBeInTheDocument();
   });
 });

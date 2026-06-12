@@ -389,7 +389,7 @@ function actionsForGroup({
         pickupProgressStatuses.has(item.status)
       ).length;
       return [
-        action("salePhotosNeeded", "To photograph for sale", photoNeeded, "warning", "#photos", "Add item photos before listing sale items."),
+        action("salePhotosNeeded", "To photograph for sale", photoNeeded, "warning", "#add-photos", "Add item photos before listing sale items."),
         action("readyToList", "Ready to list", readyToList, "info", "#sale-listing", "Items with photos and no pickup/completion status yet."),
         action("listedOrSold", "Listed / sold progress", pickupProgress, "ok", "#sale-status", "Use the sale workflow to track listing, buyer, and handoff progress."),
       ];
@@ -400,7 +400,7 @@ function actionsForGroup({
         (item) => item.hasPhoto && !completeStatuses.has(item.status)
       ).length;
       return [
-        action("giveawayPhotosNeeded", "Giveaway photos needed", photoNeeded, "warning", "#photos", "Add photos so recipients can understand what is being offered."),
+        action("giveawayPhotosNeeded", "Giveaway photos needed", photoNeeded, "warning", "#add-photos", "Add photos so recipients can understand what is being offered."),
         action("freePickupLink", "Free pickup link", items.length && activeShareLinkCount === 0 ? 1 : 0, "critical", "#documentation-packets", "Create a scoped sell/giveaway share link before public pickup coordination."),
         action("readyForPickup", "Ready for pickup", readyForPickup, "info", "#move-day", "Items with photos that can be claimed or picked up."),
       ];

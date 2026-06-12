@@ -92,6 +92,7 @@ describe("packing debt summary", () => {
     expect(metric(summary, "undecidedDisposition")).toBe(1);
     expect(metric(summary, "unboxedItems")).toBe(2);
     expect(metric(summary, "highValueWithoutPhotos")).toBe(2);
+    expect(metricAnchor(summary, "highValueWithoutPhotos")).toBe("#add-photos");
     expect(metric(summary, "boxesMissingDestination")).toBe(1);
     expect(metric(summary, "boxesUnassigned")).toBe(1);
     expect(metric(summary, "boxesNotLoaded")).toBe(1);
@@ -150,4 +151,11 @@ function metric(
   key: ReturnType<typeof summarizePackingDebt>["metrics"][number]["key"]
 ) {
   return summary.metrics.find((entry) => entry.key === key)?.count;
+}
+
+function metricAnchor(
+  summary: ReturnType<typeof summarizePackingDebt>,
+  key: ReturnType<typeof summarizePackingDebt>["metrics"][number]["key"]
+) {
+  return summary.metrics.find((entry) => entry.key === key)?.anchor;
 }

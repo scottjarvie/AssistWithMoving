@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useHashTab } from "@/components/use-hash-tab";
 
 type Spaces = FunctionReturnType<typeof api.moveSpaces.listForMove>;
 type Space = Spaces[number];
@@ -47,6 +48,11 @@ const kindOrder: SpaceKind[] = [
   "custom",
 ];
 
+const spaceTabHashes = {
+  "#add-space": "add",
+  "#spaces": "spaces",
+} as const;
+
 export function SpacesWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
   const spaces = useQuery(
@@ -59,6 +65,7 @@ export function SpacesWorkspacePage() {
   const [floorLevel, setFloorLevel] = useState("");
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useHashTab("spaces", spaceTabHashes);
 
   const grouped = useMemo(() => {
     const map = new Map<SpaceKind, Space[]>();
@@ -112,7 +119,7 @@ export function SpacesWorkspacePage() {
         description="Rooms, destination rooms, yards, storage areas, and transport zones that inventory and photos can target."
       />
 
-      <Tabs defaultValue="spaces" className="gap-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={[
             { value: "spaces", label: "Spaces" },
@@ -121,7 +128,7 @@ export function SpacesWorkspacePage() {
         />
 
         <TabsContent value="spaces">
-          <Card>
+          <Card id="spaces">
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -218,7 +225,7 @@ export function SpacesWorkspacePage() {
         </TabsContent>
 
         <TabsContent value="add">
-          <Card>
+          <Card id="add-space">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="size-4 text-primary" aria-hidden="true" />

@@ -96,6 +96,7 @@ describe("move question summary", () => {
     expect(promptCount(summary, "inventory-disposition")).toBe(1);
     expect(promptCount(summary, "first-night-items")).toBe(1);
     expect(promptCount(summary, "priority-photo-evidence")).toBe(1);
+    expect(promptAnchor(summary, "priority-photo-evidence")).toBe("#add-photos");
     expect(promptCount(summary, "claim-value-evidence")).toBe(1);
     expect(promptCount(summary, "serial-model-evidence")).toBe(1);
     expect(promptCount(summary, "photo-review")).toBe(1);
@@ -188,4 +189,11 @@ function promptCount(
   key: ReturnType<typeof summarizeMoveQuestions>["prompts"][number]["key"]
 ) {
   return summary.prompts.find((prompt) => prompt.key === key)?.count;
+}
+
+function promptAnchor(
+  summary: ReturnType<typeof summarizeMoveQuestions>,
+  key: ReturnType<typeof summarizeMoveQuestions>["prompts"][number]["key"]
+) {
+  return summary.prompts.find((prompt) => prompt.key === key)?.anchor;
 }

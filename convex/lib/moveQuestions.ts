@@ -536,7 +536,7 @@ function evidencePrompts(
           ? `${priorityWithoutPhotos.length} priority items have no item-linked photo evidence.`
           : "Priority items have item-linked photo evidence.",
       count: priorityWithoutPhotos.length,
-      anchor: "#photos",
+      anchor: "#add-photos",
       actionLabel: "Photos",
     }),
     prompt({

@@ -47,6 +47,21 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#room-walk")).toBe(
       "/app/moves/move_123/inventory#room-walk"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#capture")).toBe(
+      "/app/moves/move_123/capture#capture"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#capture-queue")).toBe(
+      "/app/moves/move_123/capture#capture-queue"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#ingestion-queue")).toBe(
+      "/app/moves/move_123/capture#ingestion-queue"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#add-space")).toBe(
+      "/app/moves/move_123/spaces#add-space"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#spaces")).toBe(
+      "/app/moves/move_123/spaces#spaces"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#planned-items")).toBe(
       "/app/moves/move_123/inventory#planned-items"
     );
@@ -71,6 +86,12 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#photos")).toBe(
       "/app/moves/move_123/photos#photos"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#add-photos")).toBe(
+      "/app/moves/move_123/photos#add-photos"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#photo-gaps")).toBe(
+      "/app/moves/move_123/photos#photo-gaps"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#ai-review-queue")).toBe(
       "/app/moves/move_123/ai-review#ai-review-queue"
     );
@@ -85,6 +106,12 @@ describe("move links", () => {
     );
     expect(moveWorkspaceAnchorPath("move/with/slash", "#load-plan")).toBe(
       "/app/moves/move%2Fwith%2Fslash/load-plan#load-plan"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#move-day-progress")).toBe(
+      "/app/moves/move_123/move-day#move-day-progress"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#move-day-exceptions")).toBe(
+      "/app/moves/move_123/move-day#move-day-exceptions"
     );
   });
 

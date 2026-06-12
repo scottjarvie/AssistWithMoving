@@ -47,6 +47,7 @@ import {
   type MoveDayCachedBox,
 } from "@/lib/move-day";
 import { cn } from "@/lib/utils";
+import { useHashTab } from "@/components/use-hash-tab";
 
 type BoxRecord = NonNullable<
   ReturnType<typeof useQuery<typeof api.boxes.listForMove>>
@@ -110,6 +111,14 @@ const statusActions: StatusAction[] = [
   },
 ];
 
+const moveDayTabHashes = {
+  "#move-day": "checklist",
+  "#move-day-checklist": "checklist",
+  "#move-day-exceptions": "exceptions",
+  "#move-day-progress": "progress",
+  "#move-day-offline": "offline",
+} as const;
+
 export function MoveDayView({
   householdId,
   moveId,
@@ -131,7 +140,10 @@ export function MoveDayView({
   const lookupInputRef = useRef<HTMLInputElement | null>(null);
   const [lookup, setLookup] = useState("");
   const [filter, setFilter] = useState<CrewFilter>("ready");
-  const [moveDayTask, setMoveDayTask] = useState<MoveDayTask>("checklist");
+  const [moveDayTask, setMoveDayTask] = useHashTab<MoveDayTask>(
+    "checklist",
+    moveDayTabHashes
+  );
   const [safeView, setSafeView] = useState(true);
   const [updatingBoxId, setUpdatingBoxId] = useState<Id<"boxes"> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -679,7 +691,7 @@ export function MoveDayView({
       <CardContent>
         <Tabs
           value={moveDayTask}
-          onValueChange={(value) => setMoveDayTask(value as MoveDayTask)}
+          onValueChange={setMoveDayTask}
           className="gap-4"
         >
           <MoveWorkspaceTabList
