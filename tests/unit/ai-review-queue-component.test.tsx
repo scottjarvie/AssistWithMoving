@@ -127,16 +127,29 @@ describe("AiReviewQueue responsive review surface", () => {
       "/app/moves/move_123/ai-review#ai-text-intake",
     ]);
 
-    expect(screen.getByRole("button", { name: "All 3" })).toHaveAttribute(
-      "data-variant",
-      "default",
-    );
-    expect(screen.getByRole("button", { name: "Photo 1" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Needs closer look 2" }),
+      screen.getByRole("button", { name: "All: 3 suggestions" }),
+    ).toHaveAttribute("data-variant", "default");
+    expect(
+      screen.getByText("Every pending suggestion, sorted by review risk."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Photo: 1 suggestion" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Needs closer look: 2 suggestions",
+      }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Photo 1" }));
+    await user.click(
+      screen.getByRole("button", { name: "Photo: 1 suggestion" }),
+    );
+    expect(
+      screen.getByText(
+        "Suggestions produced from photo evidence and image analysis.",
+      ),
+    ).toBeInTheDocument();
     expect(
       within(reviewCards).getByText("Duplicate chair photo"),
     ).toBeInTheDocument();
@@ -147,7 +160,9 @@ describe("AiReviewQueue responsive review surface", () => {
 
     await user.click(screen.getByRole("button", { name: "Select visible" }));
 
-    for (const checkbox of screen.getAllByLabelText("Use Duplicate chair photo")) {
+    for (const checkbox of screen.getAllByLabelText(
+      "Use Duplicate chair photo",
+    )) {
       expect(checkbox).toBeChecked();
     }
   });

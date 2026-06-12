@@ -32,15 +32,50 @@ import {
 } from "@/lib/ai-review-queue";
 import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 
-type AiReviewFilter = "all" | "attention" | "duplicates" | AiReviewEntry["kind"];
+type AiReviewFilter =
+  | "all"
+  | "attention"
+  | "duplicates"
+  | AiReviewEntry["kind"];
 
-const reviewFilters: Array<{ value: AiReviewFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "attention", label: "Needs closer look" },
-  { value: "duplicates", label: "Duplicates" },
-  { value: "text", label: "Text" },
-  { value: "photo", label: "Photo" },
-  { value: "planning", label: "Planning" },
+const reviewFilters: Array<{
+  value: AiReviewFilter;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "all",
+    label: "All",
+    description: "Every pending suggestion, sorted by review risk.",
+  },
+  {
+    value: "attention",
+    label: "Needs closer look",
+    description:
+      "Low-confidence or duplicate suggestions that deserve review first.",
+  },
+  {
+    value: "duplicates",
+    label: "Duplicates",
+    description:
+      "Possible duplicate records or photos to resolve before approving.",
+  },
+  {
+    value: "text",
+    label: "Text",
+    description: "Suggestions produced from typed or pasted text intake.",
+  },
+  {
+    value: "photo",
+    label: "Photo",
+    description: "Suggestions produced from photo evidence and image analysis.",
+  },
+  {
+    value: "planning",
+    label: "Planning",
+    description:
+      "Estimate and load-assignment suggestions from planning analysis.",
+  },
 ];
 
 export function AiReviewQueue({
@@ -52,15 +87,21 @@ export function AiReviewQueue({
 }) {
   const textSuggestions = useQuery(
     api.aiTextIntake.listForMove,
-    householdId && moveId ? { householdId, moveId, status: "pending", limit: 80 } : "skip"
+    householdId && moveId
+      ? { householdId, moveId, status: "pending", limit: 80 }
+      : "skip",
   );
   const photoSuggestions = useQuery(
     api.aiPhotoIntake.listForMove,
-    householdId && moveId ? { householdId, moveId, status: "pending", limit: 80 } : "skip"
+    householdId && moveId
+      ? { householdId, moveId, status: "pending", limit: 80 }
+      : "skip",
   );
   const planningSuggestions = useQuery(
     api.aiPlanningSuggestions.listForMove,
-    householdId && moveId ? { householdId, moveId, status: "pending", limit: 80 } : "skip"
+    householdId && moveId
+      ? { householdId, moveId, status: "pending", limit: 80 }
+      : "skip",
   );
   const approveText = useMutation(api.aiTextIntake.approveMany);
   const rejectText = useMutation(api.aiTextIntake.rejectMany);
@@ -76,74 +117,86 @@ export function AiReviewQueue({
   const entries = useMemo(
     () =>
       sortAiReviewEntries([
-        ...(textSuggestions ?? []).map((suggestion): AiReviewEntry => ({
-          id: suggestion._id,
-          kind: "text",
-          type: suggestion.type,
-          confidence: suggestion.confidence,
-          title:
-            suggestion.itemDraft?.name ??
-            suggestion.boxDraft?.label ??
-            suggestion.type,
-          detail: suggestion.sourceLine,
-          reasoning: suggestion.reasoning,
-          href: moveWorkspaceAnchorPath(moveId, "#ai-text-intake"),
-        })),
-        ...(photoSuggestions ?? []).map((suggestion): AiReviewEntry => ({
-          id: suggestion._id,
-          kind: "photo",
-          type: suggestion.type,
-          confidence: suggestion.confidence,
-          title:
-            suggestion.itemDraft?.name ??
-            suggestion.boxDraft?.label ??
-            suggestion.type,
-          detail: suggestion.sourceSummary,
-          reasoning: suggestion.reasoning,
-          href: moveWorkspaceAnchorPath(moveId, "#ai-photo-intake"),
-          duplicateCount: suggestion.duplicatePhotoIds?.length ?? 0,
-        })),
-        ...(planningSuggestions ?? []).map((suggestion): AiReviewEntry => ({
-          id: suggestion._id,
-          kind: "planning",
-          type: suggestion.type,
-          confidence: suggestion.confidence,
-          title:
-            suggestion.type === "estimate"
-              ? "Estimate suggestion"
-              : "Assignment suggestion",
-          detail:
-            suggestion.estimateDraft
+        ...(textSuggestions ?? []).map(
+          (suggestion): AiReviewEntry => ({
+            id: suggestion._id,
+            kind: "text",
+            type: suggestion.type,
+            confidence: suggestion.confidence,
+            title:
+              suggestion.itemDraft?.name ??
+              suggestion.boxDraft?.label ??
+              suggestion.type,
+            detail: suggestion.sourceLine,
+            reasoning: suggestion.reasoning,
+            href: moveWorkspaceAnchorPath(moveId, "#ai-text-intake"),
+          }),
+        ),
+        ...(photoSuggestions ?? []).map(
+          (suggestion): AiReviewEntry => ({
+            id: suggestion._id,
+            kind: "photo",
+            type: suggestion.type,
+            confidence: suggestion.confidence,
+            title:
+              suggestion.itemDraft?.name ??
+              suggestion.boxDraft?.label ??
+              suggestion.type,
+            detail: suggestion.sourceSummary,
+            reasoning: suggestion.reasoning,
+            href: moveWorkspaceAnchorPath(moveId, "#ai-photo-intake"),
+            duplicateCount: suggestion.duplicatePhotoIds?.length ?? 0,
+          }),
+        ),
+        ...(planningSuggestions ?? []).map(
+          (suggestion): AiReviewEntry => ({
+            id: suggestion._id,
+            kind: "planning",
+            type: suggestion.type,
+            confidence: suggestion.confidence,
+            title:
+              suggestion.type === "estimate"
+                ? "Estimate suggestion"
+                : "Assignment suggestion",
+            detail: suggestion.estimateDraft
               ? `${formatNumber(suggestion.estimateDraft.estimatedWeightLb)} lb / ${formatNumber(suggestion.estimateDraft.estimatedVolumeCuFt)} cu ft`
               : suggestion.assignmentDraft
                 ? `${suggestion.assignmentDraft.assignmentWarnings.length} warnings`
                 : "",
-          reasoning: suggestion.reasoning,
-          href: moveWorkspaceAnchorPath(moveId, "#ai-planning-suggestions"),
-        })),
+            reasoning: suggestion.reasoning,
+            href: moveWorkspaceAnchorPath(moveId, "#ai-planning-suggestions"),
+          }),
+        ),
       ]),
-    [moveId, photoSuggestions, planningSuggestions, textSuggestions]
+    [moveId, photoSuggestions, planningSuggestions, textSuggestions],
   );
   const summary = useMemo(() => summarizeAiReviewQueue(entries), [entries]);
   const filteredEntries = useMemo(
     () => entries.filter((entry) => matchesReviewFilter(entry, reviewFilter)),
-    [entries, reviewFilter]
+    [entries, reviewFilter],
+  );
+  const activeReviewFilter = reviewFilters.find(
+    (filter) => filter.value === reviewFilter,
   );
   const visibleEntries = useMemo(
     () => filteredEntries.slice(0, 80),
-    [filteredEntries]
+    [filteredEntries],
   );
   const filterCounts = useMemo(
     () =>
-      reviewFilters.reduce<Record<AiReviewFilter, number>>((acc, filter) => {
-        acc[filter.value] =
-          filter.value === "all"
-            ? entries.length
-            : entries.filter((entry) => matchesReviewFilter(entry, filter.value))
-                .length;
-        return acc;
-      }, {} as Record<AiReviewFilter, number>),
-    [entries]
+      reviewFilters.reduce<Record<AiReviewFilter, number>>(
+        (acc, filter) => {
+          acc[filter.value] =
+            filter.value === "all"
+              ? entries.length
+              : entries.filter((entry) =>
+                  matchesReviewFilter(entry, filter.value),
+                ).length;
+          return acc;
+        },
+        {} as Record<AiReviewFilter, number>,
+      ),
+    [entries],
   );
   const loading =
     textSuggestions === undefined ||
@@ -183,13 +236,13 @@ export function AiReviewQueue({
       ]);
       setSelected(new Set());
       setMessage(
-        `${selected.size} suggestions approved across ${results.filter(Boolean).length} queues.`
+        `${selected.size} suggestions approved across ${results.filter(Boolean).length} queues.`,
       );
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : "Could not approve selected AI suggestions."
+          : "Could not approve selected AI suggestions.",
       );
     } finally {
       setWorking(false);
@@ -221,7 +274,7 @@ export function AiReviewQueue({
       setMessage(
         error instanceof Error
           ? error.message
-          : "Could not reject selected AI suggestions."
+          : "Could not reject selected AI suggestions.",
       );
     } finally {
       setWorking(false);
@@ -268,21 +321,37 @@ export function AiReviewQueue({
           <QueueMetric label="Duplicates" value={summary.duplicateCandidates} />
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-          {reviewFilters.map((filter) => (
-            <Button
-              key={filter.value}
-              type="button"
-              size="sm"
-              aria-label={`${filter.label} ${filterCounts[filter.value] ?? 0}`}
-              className="h-10 shrink-0"
-              variant={reviewFilter === filter.value ? "default" : "outline"}
-              onClick={() => changeReviewFilter(filter.value)}
-            >
-              {filter.label}
-              <Badge variant="secondary">{filterCounts[filter.value] ?? 0}</Badge>
-            </Button>
-          ))}
+        <div className="space-y-2">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+            {reviewFilters.map((filter) => {
+              const active = reviewFilter === filter.value;
+              const count = filterCounts[filter.value] ?? 0;
+
+              return (
+                <Button
+                  key={filter.value}
+                  type="button"
+                  size="sm"
+                  aria-pressed={active}
+                  aria-label={`${filter.label}: ${formatSuggestionCount(count)}`}
+                  className="h-10 shrink-0 gap-2"
+                  variant={active ? "default" : "outline"}
+                  onClick={() => changeReviewFilter(filter.value)}
+                >
+                  <span>{filter.label}</span>
+                  <Badge
+                    variant={active ? "secondary" : "outline"}
+                    className="h-5 min-w-5 px-1"
+                  >
+                    {count}
+                  </Badge>
+                </Button>
+              );
+            })}
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {activeReviewFilter?.description}
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -485,9 +554,7 @@ function AiReviewEntrySummary({ entry }: { entry: AiReviewEntry }) {
         <Badge variant="outline">{entry.kind}</Badge>
         <Badge variant="outline">{entry.type}</Badge>
         {entry.confidence ? (
-          <Badge
-            variant={entry.confidence === "low" ? "secondary" : "outline"}
-          >
+          <Badge variant={entry.confidence === "low" ? "secondary" : "outline"}>
             {entry.confidence}
           </Badge>
         ) : null}
@@ -512,8 +579,14 @@ function QueueMetric({ label, value }: { label: string; value: number }) {
   );
 }
 
+function formatSuggestionCount(count: number) {
+  return `${count} ${count === 1 ? "suggestion" : "suggestions"}`;
+}
+
 function formatNumber(value: number | undefined) {
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : "0";
+  return typeof value === "number" && Number.isFinite(value)
+    ? String(value)
+    : "0";
 }
 
 function selectedTextIds(entries: AiReviewEntry[], selected: Set<string>) {
