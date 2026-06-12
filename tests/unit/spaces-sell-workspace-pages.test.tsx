@@ -131,6 +131,9 @@ describe("SellWorkspacePage", () => {
     expect(screen.getAllByRole("tab", { name: "Pricing" })).toHaveLength(1);
     expect(screen.getByText("Oak bookcase")).toBeInTheDocument();
     expect(screen.getByText("Vintage lamp")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Price Oak bookcase" })
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Needs photos 1/i }));
 
@@ -161,28 +164,55 @@ describe("SellWorkspacePage", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /All 2/i }));
+    expect(screen.getByText("Choose one item for pricing.")).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Oak bookcase low suggested price")
+      screen.queryByLabelText("Oak bookcase low suggested price")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Vintage lamp low suggested price")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Price Vintage lamp" })
     ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Price Vintage lamp" }));
+    expect(screen.getByText("Focused on Vintage lamp")).toBeInTheDocument();
     expect(
       screen.getByLabelText("Vintage lamp low suggested price")
-    ).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Save pricing" })).toHaveLength(2);
-
-    await user.click(screen.getByRole("tab", { name: "Listing copy" }));
-    expect(
-      screen.getByLabelText("Oak bookcase listing description")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Vintage lamp listing description")
     ).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Oak bookcase low suggested price")
     ).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("tab", { name: "Listing copy" }));
+    expect(
+      screen.getByLabelText("Vintage lamp listing description")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase listing description")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase low suggested price")
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show all sale items" }));
+    expect(
+      screen.getByText("Choose one item for listing copy.")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Vintage lamp listing description")
+    ).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("tab", { name: "Status" }));
-    expect(screen.getAllByRole("button", { name: "Keep as draft" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Mark listed" })).toHaveLength(2);
+    expect(screen.getByText("Choose one item for status.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Keep as draft" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark listed" })).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Update status for Oak bookcase" })
+    );
+    expect(screen.getByText("Focused on Oak bookcase")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep as draft" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark listed" })).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Oak bookcase listing description")
     ).not.toBeInTheDocument();

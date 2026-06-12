@@ -68,6 +68,18 @@ const sellRowTasks: Array<{ value: SellRowTask; label: string }> = [
   { value: "status", label: "Status" },
 ];
 
+const sellTaskActionLabels = {
+  pricing: "Price",
+  listing: "Edit copy",
+  status: "Update status",
+} satisfies Record<Exclude<SellRowTask, "overview">, string>;
+
+const sellTaskTitles = {
+  pricing: "pricing",
+  listing: "listing copy",
+  status: "status",
+} satisfies Record<Exclude<SellRowTask, "overview">, string>;
+
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -119,6 +131,9 @@ export function SellWorkspacePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<SellFilterKey>("all");
   const [activeTask, setActiveTask] = useState<SellRowTask>("overview");
+  const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(
+    null
+  );
 
   useEffect(() => {
     if (!householdId || !moveId || rows === undefined) return;
@@ -147,6 +162,41 @@ export function SellWorkspacePage() {
     () => filterSellRows(rows ?? [], activeFilter),
     [activeFilter, rows]
   );
+  const selectedRow = useMemo(
+    () =>
+      selectedItemId
+        ? activeRows.find((row) => row.item._id === selectedItemId) ?? null
+        : null,
+    [activeRows, selectedItemId]
+  );
+  const focusedTaskRows = useMemo(() => {
+    if (activeTask === "overview") return activeRows;
+    if (selectedRow) return [selectedRow];
+    return activeRows.length === 1 ? activeRows : [];
+  }, [activeRows, activeTask, selectedRow]);
+
+  function openRowTask(
+    task: Exclude<SellRowTask, "overview">,
+    itemId: Id<"items">
+  ) {
+    setSelectedItemId(itemId);
+    setActiveTask(task);
+  }
+
+  function handleTaskChange(value: string) {
+    const task = value as SellRowTask;
+    setActiveTask(task);
+    if (task === "overview") {
+      setSelectedItemId(null);
+    }
+  }
+
+  function handleFilterChange(filter: SellFilterKey) {
+    setActiveFilter(filter);
+    if (filter !== activeFilter) {
+      setSelectedItemId(null);
+    }
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -160,31 +210,31 @@ export function SellWorkspacePage() {
           label="All"
           value={counts.total}
           active={activeFilter === "all"}
-          onClick={() => setActiveFilter("all")}
+          onClick={() => handleFilterChange("all")}
         />
         <Metric
           label="Drafts"
           value={counts.drafts}
           active={activeFilter === "drafts"}
-          onClick={() => setActiveFilter("drafts")}
+          onClick={() => handleFilterChange("drafts")}
         />
         <Metric
           label="Needs photos"
           value={counts.needsPhotos}
           active={activeFilter === "needsPhotos"}
-          onClick={() => setActiveFilter("needsPhotos")}
+          onClick={() => handleFilterChange("needsPhotos")}
         />
         <Metric
           label="Researched"
           value={counts.researched}
           active={activeFilter === "researched"}
-          onClick={() => setActiveFilter("researched")}
+          onClick={() => handleFilterChange("researched")}
         />
         <Metric
           label="Listed"
           value={counts.activeListings}
           active={activeFilter === "listed"}
-          onClick={() => setActiveFilter("listed")}
+          onClick={() => handleFilterChange("listed")}
         />
       </div>
 
@@ -244,22 +294,66 @@ export function SellWorkspacePage() {
           ) : (
             <Tabs
               value={activeTask}
-              onValueChange={(value) => setActiveTask(value as SellRowTask)}
+              onValueChange={handleTaskChange}
               className="gap-3"
             >
               <MoveWorkspaceTabList tabs={sellRowTasks} />
               <TabsContent value={activeTask} className="space-y-2">
                 {activeRows.length ? (
-                  activeRows.map((row) => (
-                    <SellRowEditor
-                      key={row.item._id}
-                      householdId={householdId}
-                      moveId={moveId}
-                      row={row}
+                  activeTask === "overview" ? (
+                    activeRows.map((row) => (
+                      <SellRowEditor
+                        key={row.item._id}
+                        householdId={householdId}
+                        moveId={moveId}
+                        row={row}
+                        task={activeTask}
+                        onMessage={setMessage}
+                        onOpenTask={(task) => openRowTask(task, row.item._id)}
+                      />
+                    ))
+                  ) : focusedTaskRows.length ? (
+                    <div className="space-y-3">
+                      {selectedRow ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">
+                              Focused on {selectedRow.item.name}
+                            </p>
+                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                              {[selectedRow.item.room, selectedRow.item.category]
+                                .filter(Boolean)
+                                .join(" - ") || "No room/category yet"}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedItemId(null)}
+                          >
+                            Show all sale items
+                          </Button>
+                        </div>
+                      ) : null}
+                      {focusedTaskRows.map((row) => (
+                        <SellRowEditor
+                          key={row.item._id}
+                          householdId={householdId}
+                          moveId={moveId}
+                          row={row}
+                          task={activeTask}
+                          onMessage={setMessage}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <SellTaskChooser
+                      rows={activeRows}
                       task={activeTask}
-                      onMessage={setMessage}
+                      onOpenTask={openRowTask}
                     />
-                  ))
+                  )
                 ) : (
                   <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
                     No sale listings match this view yet.
@@ -280,12 +374,14 @@ function SellRowEditor({
   row,
   task,
   onMessage,
+  onOpenTask,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   row: SellRow;
   task: SellRowTask;
   onMessage: (message: string | null) => void;
+  onOpenTask?: (task: Exclude<SellRowTask, "overview">) => void;
 }) {
   const upsert = useMutation(api.saleListings.upsertForItem);
   const listing = row.listing;
@@ -404,6 +500,37 @@ function SellRowEditor({
                 {row.status === "listed" ? "listed" : "not listed"}
               </Badge>
             </div>
+            {onOpenTask ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label={`Price ${row.item.name}`}
+                  onClick={() => onOpenTask("pricing")}
+                >
+                  Price
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label={`Edit copy for ${row.item.name}`}
+                  onClick={() => onOpenTask("listing")}
+                >
+                  Copy
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label={`Update status for ${row.item.name}`}
+                  onClick={() => onOpenTask("status")}
+                >
+                  Status
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -505,6 +632,61 @@ function SellRowEditor({
             </div>
           </div>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SellTaskChooser({
+  rows,
+  task,
+  onOpenTask,
+}: {
+  rows: SellRow[];
+  task: Exclude<SellRowTask, "overview">;
+  onOpenTask: (task: Exclude<SellRowTask, "overview">, itemId: Id<"items">) => void;
+}) {
+  const ariaActionLabel =
+    task === "pricing"
+      ? (itemName: string) => `${sellTaskActionLabels[task]} ${itemName}`
+      : (itemName: string) => `${sellTaskActionLabels[task]} for ${itemName}`;
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-3">
+      <div>
+        <p className="text-sm font-medium">
+          Choose one item for {sellTaskTitles[task]}.
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          The selected task opens one listing at a time so pricing, copy, and
+          buyer status do not become a long stack of every sale item.
+        </p>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {rows.map((row) => (
+          <div
+            key={row.item._id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/20 p-3"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{row.item.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {[row.item.room, row.item.category, row.status]
+                  .filter(Boolean)
+                  .join(" - ") || "No room/category yet"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-label={ariaActionLabel(row.item.name)}
+              onClick={() => onOpenTask(task, row.item._id)}
+            >
+              {sellTaskActionLabels[task]}
+            </Button>
+          </div>
+        ))}
       </div>
     </div>
   );
