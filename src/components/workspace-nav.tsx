@@ -58,7 +58,7 @@ export function WorkspaceNav({
       aria-label="Primary"
       className={cn(
         mobile
-          ? "-mx-4 flex gap-1 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6"
+          ? "flex w-full max-w-full gap-1 overflow-x-auto overscroll-x-contain px-4 pb-2 sm:px-6"
           : "mt-8 space-y-1"
       )}
     >
@@ -81,6 +81,7 @@ export function WorkspaceNav({
                 : "h-9 gap-3 rounded-md px-3",
               active && "bg-sidebar-accent text-sidebar-accent-foreground"
             )}
+            aria-current={active ? "page" : undefined}
           >
             <Icon className="size-4" aria-hidden="true" />
             {item.label}

@@ -71,6 +71,7 @@ describe("WorkspaceNav", () => {
     const layoutLink = screen.getByRole("link", { name: /layout/i });
     expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/plan");
     expect(layoutLink).toHaveClass("bg-sidebar-accent");
+    expect(layoutLink).toHaveAttribute("aria-current", "page");
   });
 
   it("uses the same flag-gated Layout entry in mobile navigation", () => {
@@ -78,8 +79,13 @@ describe("WorkspaceNav", () => {
 
     render(<WorkspaceNav variant="mobile" />);
 
+    expect(screen.getByRole("navigation", { name: "Primary" })).toHaveClass(
+      "max-w-full",
+      "overflow-x-auto",
+    );
     const layoutLink = screen.getByRole("link", { name: /layout/i });
     expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/plan");
     expect(layoutLink).toHaveClass("h-10");
+    expect(layoutLink).toHaveAttribute("aria-current", "page");
   });
 });
