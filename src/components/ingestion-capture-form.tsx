@@ -1,8 +1,16 @@
 "use client";
 
-import { type ChangeEvent, useState } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import { useAction, useMutation } from "convex/react";
-import { Camera, Loader2, Plus, X } from "lucide-react";
+import {
+  Camera,
+  FileAudio,
+  FileImage,
+  FileVideo,
+  Loader2,
+  Plus,
+  X,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -51,6 +59,10 @@ export function IngestionCaptureForm({
   const [saving, setSaving] = useState(false);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canAttachMedia = Boolean(householdId && moveId && !saving);
+  const canSubmit =
+    canAttachMedia && (instructions.trim().length > 0 || attachments.length > 0);
 
   function handleFilesChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -212,32 +224,62 @@ export function IngestionCaptureForm({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">
-            Add photos, audio, or video
-          </span>
-          <span className="text-xs">
-            Tap to use the camera or pick files. Voice memos attach as audio.
-          </span>
+        <div className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                <Camera className="size-4 text-primary" aria-hidden="true" />
+                Add media for this capture
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Photos, voice notes, or short clips can travel with one set of
+                agent directions.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!canAttachMedia}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <FileImage aria-hidden="true" />
+              Choose files
+            </Button>
+          </div>
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/*,audio/*,video/*"
             multiple
             className="sr-only"
             aria-label="Capture media"
-            disabled={!moveId || saving}
+            disabled={!canAttachMedia}
             onChange={handleFilesChange}
           />
-        </label>
+        </div>
 
         {attachments.length ? (
-          <ul className="space-y-1.5" aria-label="Pending attachments">
+          <ul
+            className="grid gap-2 sm:grid-cols-2"
+            aria-label="Pending attachments"
+          >
             {attachments.map((attachment, index) => (
               <li
                 key={`${attachment.file.name}-${index}`}
-                className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
+                className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
               >
-                <span className="min-w-0 truncate">{attachment.file.name}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {attachmentIcon(attachment.kind)}
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {attachment.file.name}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {formatFileSize(attachment.file.size)}
+                    </span>
+                  </span>
+                </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <Badge variant="outline">{attachment.kind}</Badge>
                   <Button
@@ -268,29 +310,38 @@ export function IngestionCaptureForm({
           className="min-h-24 text-base"
           autoCapitalize="sentences"
           autoCorrect="on"
-          disabled={!moveId || saving}
+          disabled={!householdId || !moveId || saving}
         />
         <Input
           value={roomHint}
           onChange={(event) => setRoomHint(event.target.value)}
           placeholder="Room (optional, kept between captures)"
           aria-label="Room hint"
-          disabled={!moveId || saving}
+          disabled={!householdId || !moveId || saving}
         />
 
-        <Button
-          type="button"
-          className="w-full sm:w-auto"
-          disabled={!moveId || saving}
-          onClick={() => void handleAddToQueue()}
-        >
-          {saving ? (
-            <Loader2 className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Plus aria-hidden="true" />
-          )}
-          Add to queue
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            disabled={!canSubmit}
+            onClick={() => void handleAddToQueue()}
+          >
+            {saving ? (
+              <Loader2 className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Plus aria-hidden="true" />
+            )}
+            {attachments.length
+              ? `Add ${attachments.length} ${attachments.length === 1 ? "file" : "files"} to queue`
+              : "Add note to queue"}
+          </Button>
+          {!canSubmit && moveId ? (
+            <span className="text-xs text-muted-foreground">
+              Add a note or media first.
+            </span>
+          ) : null}
+        </div>
 
         {progressLabel ? (
           <p className="text-xs text-muted-foreground" role="status">
@@ -309,4 +360,30 @@ export function IngestionCaptureForm({
       </CardContent>
     </Card>
   );
+}
+
+function attachmentIcon(kind: PendingAttachment["kind"]) {
+  if (kind === "audio") {
+    return (
+      <FileAudio className="size-4 shrink-0 text-primary" aria-hidden="true" />
+    );
+  }
+  if (kind === "video") {
+    return (
+      <FileVideo className="size-4 shrink-0 text-primary" aria-hidden="true" />
+    );
+  }
+  return (
+    <FileImage className="size-4 shrink-0 text-primary" aria-hidden="true" />
+  );
+}
+
+function formatFileSize(value: number) {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
