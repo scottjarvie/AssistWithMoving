@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { Check, ClipboardPenLine, Sparkles, X } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +52,109 @@ type DraftEdit = {
   boxDraft?: BoxDraftEdit;
 };
 
+type PlanningDefaultKey = Doc<"items">["planningDefaultKeys"][number];
+type ItemFragility = "low" | "medium" | "high";
+
+type PendingSuggestion = {
+  _id: Id<"aiTextSuggestions">;
+  type: string;
+  confidence: string;
+  reasoning?: string;
+  sourceLine?: string;
+  itemDraft?: {
+    name: string;
+    room?: string;
+    category?: string;
+    disposition: (typeof itemDispositionOptions)[number];
+    quantity: number;
+    description?: string;
+    suggestedBoxLabel?: string;
+    fragility?: ItemFragility;
+    highValue?: boolean;
+    planningDefaultKeys?: PlanningDefaultKey[];
+  };
+  boxDraft?: {
+    code?: string;
+    label: string;
+    room?: string;
+    description?: string;
+  };
+};
+
+function suggestionLabel(suggestion: PendingSuggestion) {
+  return (
+    suggestion.itemDraft?.name ??
+    suggestion.boxDraft?.label ??
+    `${suggestion.type} suggestion`
+  );
+}
+
+function AiTextSuggestionCard({
+  suggestion,
+  selected,
+  edit,
+  onSelectedChange,
+  onEditChange,
+}: {
+  suggestion: PendingSuggestion;
+  selected: boolean;
+  edit: DraftEdit | undefined;
+  onSelectedChange: (checked: boolean) => void;
+  onEditChange: (patch: DraftEdit) => void;
+}) {
+  const label = suggestionLabel(suggestion);
+
+  return (
+    <div role="listitem" className="rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="size-3.5 accent-primary"
+            checked={selected}
+            onChange={(event) => onSelectedChange(event.target.checked)}
+            aria-label={`Use ${label}`}
+          />
+          Use suggestion
+        </label>
+        <span className="flex flex-wrap gap-1">
+          <Badge variant="outline">{suggestion.type}</Badge>
+          <Badge variant="secondary">{suggestion.confidence}</Badge>
+        </span>
+      </div>
+
+      <div className="mt-3">
+        {suggestion.itemDraft ? (
+          <ItemDraftFields
+            edit={edit?.itemDraft ?? itemEditFromSuggestion(suggestion.itemDraft)}
+            labelPrefix={label}
+            onChange={(itemDraft) => onEditChange({ itemDraft })}
+          />
+        ) : (
+          <BoxDraftFields
+            edit={edit?.boxDraft ?? boxEditFromSuggestion(suggestion.boxDraft)}
+            labelPrefix={label}
+            onChange={(boxDraft) => onEditChange({ boxDraft })}
+          />
+        )}
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs leading-5 text-muted-foreground">
+        {suggestion.reasoning ? (
+          <p className="line-clamp-3 break-words rounded-md border border-border/70 bg-muted/30 px-2 py-1.5">
+            {suggestion.reasoning}
+          </p>
+        ) : null}
+        {suggestion.sourceLine ? (
+          <p className="line-clamp-2 break-words rounded-md border border-border/70 px-2 py-1.5">
+            Source: {suggestion.sourceLine}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function AiTextIntake({
   householdId,
   moveId,
@@ -69,13 +172,17 @@ export function AiTextIntake({
   const [sourceText, setSourceText] = useState(
     "Kitchen: two boxes of dishes, fragile glass vase, coffee maker\nBox K-1: plates, mugs, utensils (Kitchen)\nDonate: old lamp, small bookshelf\nPersonal: passport folder, laptop"
   );
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<Id<"aiTextSuggestions">>>(
+    new Set(),
+  );
   const [edits, setEdits] = useState<Record<string, DraftEdit>>({});
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const pendingSuggestions = useMemo(
-    () => suggestions?.filter((suggestion) => suggestion.status === "pending") ?? [],
+  const pendingSuggestions = useMemo<PendingSuggestion[]>(
+    () =>
+      (suggestions?.filter((suggestion) => suggestion.status === "pending") ??
+        []) as PendingSuggestion[],
     [suggestions]
   );
 
@@ -89,7 +196,7 @@ export function AiTextIntake({
         moveId,
         sourceText,
       });
-      setSelectedIds(new Set(result.suggestionIds.map((id) => String(id))));
+      setSelectedIds(new Set(result.suggestionIds));
       setMessage(`${result.suggestionIds.length} reviewable suggestions created.`);
     } catch (error) {
       setMessage(
@@ -174,7 +281,7 @@ export function AiTextIntake({
     }
   }
 
-  function updateEdit(id: string, patch: DraftEdit) {
+  function updateEdit(id: Id<"aiTextSuggestions">, patch: DraftEdit) {
     setEdits((current) => ({
       ...current,
       [id]: {
@@ -256,73 +363,107 @@ export function AiTextIntake({
             <Skeleton className="h-12 w-5/6" />
           </div>
         ) : pendingSuggestions.length ? (
-          <div className="rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Use</TableHead>
-                  <TableHead>Suggestion</TableHead>
-                  <TableHead>Context</TableHead>
-                  <TableHead>Trace</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingSuggestions.map((suggestion) => (
-                  <TableRow key={suggestion._id}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="size-3.5 accent-primary"
-                        checked={selectedIds.has(suggestion._id)}
-                        onChange={(event) => {
-                          const next = new Set(selectedIds);
-                          if (event.target.checked) next.add(suggestion._id);
-                          else next.delete(suggestion._id);
-                          setSelectedIds(next);
-                        }}
-                        aria-label={`Use ${suggestion.type} suggestion`}
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-[220px]">
-                      {suggestion.itemDraft ? (
-                        <ItemDraftFields
-                          edit={
-                            edits[suggestion._id]?.itemDraft ??
-                            itemEditFromSuggestion(suggestion.itemDraft)
-                          }
-                          onChange={(itemDraft) =>
-                            updateEdit(suggestion._id, { itemDraft })
-                          }
-                        />
-                      ) : (
-                        <BoxDraftFields
-                          edit={
-                            edits[suggestion._id]?.boxDraft ??
-                            boxEditFromSuggestion(suggestion.boxDraft)
-                          }
-                          onChange={(boxDraft) =>
-                            updateEdit(suggestion._id, { boxDraft })
-                          }
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="min-w-[180px]">
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline">{suggestion.type}</Badge>
-                        <Badge variant="secondary">{suggestion.confidence}</Badge>
-                      </div>
-                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        {suggestion.reasoning}
-                      </p>
-                    </TableCell>
-                    <TableCell className="max-w-[260px] text-xs leading-5 text-muted-foreground">
-                      {suggestion.sourceLine}
-                    </TableCell>
+          <>
+            <div
+              role="list"
+              aria-label="AI text suggestion cards"
+              className="grid gap-3 md:hidden"
+            >
+              {pendingSuggestions.map((suggestion) => (
+                <AiTextSuggestionCard
+                  key={suggestion._id}
+                  suggestion={suggestion}
+                  selected={selectedIds.has(suggestion._id)}
+                  edit={edits[suggestion._id]}
+                  onSelectedChange={(checked) => {
+                    const next = new Set(selectedIds);
+                    if (checked) next.add(suggestion._id);
+                    else next.delete(suggestion._id);
+                    setSelectedIds(next);
+                  }}
+                  onEditChange={(patch) => updateEdit(suggestion._id, patch)}
+                />
+              ))}
+            </div>
+
+            <div className="hidden rounded-md border border-border md:block">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">Use</TableHead>
+                    <TableHead className="w-[42%]">Suggestion</TableHead>
+                    <TableHead className="w-[24%]">Context</TableHead>
+                    <TableHead>Trace</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {pendingSuggestions.map((suggestion) => {
+                    const label = suggestionLabel(suggestion);
+
+                    return (
+                      <TableRow key={suggestion._id}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-primary"
+                            checked={selectedIds.has(suggestion._id)}
+                            onChange={(event) => {
+                              const next = new Set(selectedIds);
+                              if (event.target.checked) next.add(suggestion._id);
+                              else next.delete(suggestion._id);
+                              setSelectedIds(next);
+                            }}
+                            aria-label={`Use ${label}`}
+                          />
+                        </TableCell>
+                        <TableCell className="min-w-0 whitespace-normal">
+                          {suggestion.itemDraft ? (
+                            <ItemDraftFields
+                              edit={
+                                edits[suggestion._id]?.itemDraft ??
+                                itemEditFromSuggestion(suggestion.itemDraft)
+                              }
+                              labelPrefix={label}
+                              onChange={(itemDraft) =>
+                                updateEdit(suggestion._id, { itemDraft })
+                              }
+                            />
+                          ) : (
+                            <BoxDraftFields
+                              edit={
+                                edits[suggestion._id]?.boxDraft ??
+                                boxEditFromSuggestion(suggestion.boxDraft)
+                              }
+                              labelPrefix={label}
+                              onChange={(boxDraft) =>
+                                updateEdit(suggestion._id, { boxDraft })
+                              }
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell className="min-w-0 whitespace-normal">
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline">{suggestion.type}</Badge>
+                            <Badge variant="secondary">
+                              {suggestion.confidence}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+                            {suggestion.reasoning}
+                          </p>
+                        </TableCell>
+                        <TableCell className="min-w-0 whitespace-normal text-xs leading-5 text-muted-foreground">
+                          <p className="line-clamp-3 break-words">
+                            {suggestion.sourceLine}
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
             No pending AI text suggestions.
@@ -337,9 +478,11 @@ export function AiTextIntake({
 
 function ItemDraftFields({
   edit,
+  labelPrefix = "Item suggestion",
   onChange,
 }: {
   edit: ItemDraftEdit | undefined;
+  labelPrefix?: string;
   onChange: (edit: ItemDraftEdit) => void;
 }) {
   if (!edit) return null;
@@ -347,17 +490,20 @@ function ItemDraftFields({
     <div className="grid gap-2">
       <Input
         value={edit.name}
+        aria-label={`${labelPrefix} item name`}
         onChange={(event) => onChange({ ...edit, name: event.target.value })}
       />
       <div className="grid gap-2 sm:grid-cols-3">
         <Input
           value={edit.room}
           placeholder="Room"
+          aria-label={`${labelPrefix} room`}
           onChange={(event) => onChange({ ...edit, room: event.target.value })}
         />
         <Input
           value={edit.category}
           placeholder="Category"
+          aria-label={`${labelPrefix} category`}
           onChange={(event) =>
             onChange({ ...edit, category: event.target.value })
           }
@@ -366,6 +512,7 @@ function ItemDraftFields({
           value={edit.quantity}
           inputMode="decimal"
           placeholder="Qty"
+          aria-label={`${labelPrefix} quantity`}
           onChange={(event) =>
             onChange({ ...edit, quantity: event.target.value })
           }
@@ -375,6 +522,7 @@ function ItemDraftFields({
         <select
           className="h-9 rounded-md border border-input bg-background px-2 text-sm"
           value={edit.disposition}
+          aria-label={`${labelPrefix} disposition`}
           onChange={(event) =>
             onChange({
               ...edit,
@@ -392,6 +540,7 @@ function ItemDraftFields({
         <Input
           value={edit.suggestedBoxLabel}
           placeholder="Box"
+          aria-label={`${labelPrefix} suggested box`}
           onChange={(event) =>
             onChange({ ...edit, suggestedBoxLabel: event.target.value })
           }
@@ -400,6 +549,7 @@ function ItemDraftFields({
       <Input
         value={edit.description}
         placeholder="Notes"
+        aria-label={`${labelPrefix} notes`}
         onChange={(event) =>
           onChange({ ...edit, description: event.target.value })
         }
@@ -410,9 +560,11 @@ function ItemDraftFields({
 
 function BoxDraftFields({
   edit,
+  labelPrefix = "Box suggestion",
   onChange,
 }: {
   edit: BoxDraftEdit | undefined;
+  labelPrefix?: string;
   onChange: (edit: BoxDraftEdit) => void;
 }) {
   if (!edit) return null;
@@ -420,23 +572,27 @@ function BoxDraftFields({
     <div className="grid gap-2">
       <Input
         value={edit.label}
+        aria-label={`${labelPrefix} box label`}
         onChange={(event) => onChange({ ...edit, label: event.target.value })}
       />
       <div className="grid gap-2 sm:grid-cols-2">
         <Input
           value={edit.code}
           placeholder="Code"
+          aria-label={`${labelPrefix} box code`}
           onChange={(event) => onChange({ ...edit, code: event.target.value })}
         />
         <Input
           value={edit.room}
           placeholder="Room"
+          aria-label={`${labelPrefix} box room`}
           onChange={(event) => onChange({ ...edit, room: event.target.value })}
         />
       </div>
       <Input
         value={edit.description}
         placeholder="Notes"
+        aria-label={`${labelPrefix} box notes`}
         onChange={(event) =>
           onChange({ ...edit, description: event.target.value })
         }
