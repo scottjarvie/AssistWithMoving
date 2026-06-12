@@ -39,10 +39,28 @@ const statusOrder = [
   "discarded",
 ] as const;
 
-const queueTaskTabs: Array<{ value: QueueTask; label: string }> = [
-  { value: "needsAction", label: "Needs action" },
-  { value: "working", label: "Working" },
-  { value: "archive", label: "Archive" },
+const queueTaskTabs: Array<{
+  value: QueueTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "needsAction",
+    label: "Needs action",
+    description:
+      "Agent questions and processed captures waiting for your review.",
+  },
+  {
+    value: "working",
+    label: "Working",
+    description:
+      "Queued or claimed captures still being processed by an agent.",
+  },
+  {
+    value: "archive",
+    label: "Archive",
+    description: "Resolved or discarded captures kept out of the active queue.",
+  },
 ];
 
 function queueTaskForStatus(status: string): QueueTask {
@@ -55,6 +73,10 @@ function queueTaskForStatus(status: string): QueueTask {
   return "working";
 }
 
+function formatQueueTaskCount(count: number) {
+  return `${count} ${count === 1 ? "entry" : "entries"}`;
+}
+
 export function IngestionQueueList({
   householdId,
   moveId,
@@ -64,7 +86,7 @@ export function IngestionQueueList({
 }) {
   const entries = useQuery(
     api.ingestionQueue.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const updateEntry = useMutation(api.ingestionQueue.updateEntry);
   const setEntryStatus = useMutation(api.ingestionQueue.setEntryStatus);
@@ -75,30 +97,33 @@ export function IngestionQueueList({
   const [busyEntryId, setBusyEntryId] =
     useState<Id<"ingestionQueueEntries"> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<QueueTask>("needsAction");
 
   const loading = Boolean(householdId && moveId) && entries === undefined;
   const sorted = [...(entries ?? [])].sort(
     (a, b) =>
       statusOrder.indexOf(a.status as (typeof statusOrder)[number]) -
         statusOrder.indexOf(b.status as (typeof statusOrder)[number]) ||
-      b.createdAt - a.createdAt
+      b.createdAt - a.createdAt,
   );
   const taskCounts = sorted.reduce<Record<QueueTask, number>>(
     (counts, entry) => {
       counts[queueTaskForStatus(entry.status)] += 1;
       return counts;
     },
-    { needsAction: 0, working: 0, archive: 0 }
+    { needsAction: 0, working: 0, archive: 0 },
   );
   const headerStatus = taskCounts.needsAction
     ? `${taskCounts.needsAction} need action`
     : taskCounts.working
       ? `${taskCounts.working} working`
       : "clear";
+  const activeQueueTask =
+    queueTaskTabs.find((task) => task.value === activeTask) ?? queueTaskTabs[0];
 
   async function changeStatus(
     entryId: Id<"ingestionQueueEntries">,
-    status: "queued" | "resolved" | "discarded"
+    status: "queued" | "resolved" | "discarded",
   ) {
     if (!householdId || !moveId) return;
     setBusyEntryId(entryId);
@@ -134,7 +159,7 @@ export function IngestionQueueList({
 
   function renderEntries(task: QueueTask) {
     const visibleEntries = sorted.filter(
-      (entry) => queueTaskForStatus(entry.status) === task
+      (entry) => queueTaskForStatus(entry.status) === task,
     );
 
     if (!visibleEntries.length) {
@@ -179,9 +204,7 @@ export function IngestionQueueList({
                     {entry.mediaPhotoIds.length} media
                   </Badge>
                   {entry.claimedByAgentLabel ? (
-                    <Badge variant="outline">
-                      {entry.claimedByAgentLabel}
-                    </Badge>
+                    <Badge variant="outline">{entry.claimedByAgentLabel}</Badge>
                   ) : null}
                 </span>
                 <span className="text-xs text-muted-foreground">
@@ -339,33 +362,54 @@ export function IngestionQueueList({
             <Skeleton className="h-16 w-4/5" />
           </div>
         ) : sorted.length ? (
-          <Tabs defaultValue="needsAction" className="gap-3">
+          <Tabs
+            value={activeTask}
+            onValueChange={(value) => setActiveTask(value as QueueTask)}
+            className="gap-3"
+          >
             <div className="overflow-x-auto pb-1">
               <TabsList className="min-w-max" aria-label="Agent queue views">
                 {queueTaskTabs.map((task) => (
-                  <TabsTrigger key={task.value} value={task.value}>
+                  <TabsTrigger
+                    key={task.value}
+                    value={task.value}
+                    className="gap-2"
+                    aria-label={`${task.label}: ${formatQueueTaskCount(taskCounts[task.value])}`}
+                  >
                     {task.label}
-                    <Badge variant="outline" className="ml-1">
+                    <Badge
+                      variant={
+                        activeTask === task.value ? "secondary" : "outline"
+                      }
+                      className="h-5 min-w-5 px-1"
+                    >
                       {taskCounts[task.value]}
                     </Badge>
                   </TabsTrigger>
                 ))}
               </TabsList>
             </div>
+            <p className="text-sm text-muted-foreground">
+              {activeQueueTask.description}
+            </p>
 
             <TabsContent value="needsAction">
               {renderEntries("needsAction")}
             </TabsContent>
-            <TabsContent value="working">{renderEntries("working")}</TabsContent>
-            <TabsContent value="archive">{renderEntries("archive")}</TabsContent>
+            <TabsContent value="working">
+              {renderEntries("working")}
+            </TabsContent>
+            <TabsContent value="archive">
+              {renderEntries("archive")}
+            </TabsContent>
           </Tabs>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm leading-6 text-muted-foreground">
             The queue is empty. Capture photos and notes on your phone as you
             walk through your home; then run your AI agent (Claude Code, Codex,
             Cowork) against the MovingManifest MCP server or REST API to turn
-            captures into inventory. Every agent proposal comes back here and
-            to AI Review for your approval.
+            captures into inventory. Every agent proposal comes back here and to
+            AI Review for your approval.
           </div>
         )}
         {message ? (

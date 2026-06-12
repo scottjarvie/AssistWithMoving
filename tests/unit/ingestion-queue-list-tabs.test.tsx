@@ -86,29 +86,55 @@ describe("IngestionQueueList task tabs", () => {
       <IngestionQueueList
         householdId={"household_123" as Id<"households">}
         moveId={"move_123" as Id<"moves">}
-      />
+      />,
     );
 
     expect(screen.getByText("2 need action")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Needs action2/i })).toHaveAttribute(
-      "data-state",
-      "active"
-    );
+    expect(
+      screen.getByRole("tab", { name: "Needs action: 2 entries" }),
+    ).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByText(
+        "Agent questions and processed captures waiting for your review.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Which room is this from?/i)).toBeInTheDocument();
     expect(screen.getByText(/Proposed two items./i)).toBeInTheDocument();
-    expect(screen.queryByText("Holiday bins need inventory.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Holiday bins need inventory."),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Resolved capture.")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /Working2/i }));
-    expect(screen.getByText("Holiday bins need inventory.")).toBeInTheDocument();
-    expect(screen.getByText("Kitchen counter walkthrough.")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Working: 2 entries" }));
+    expect(
+      screen.getByText(
+        "Queued or claimed captures still being processed by an agent.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Holiday bins need inventory."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Kitchen counter walkthrough."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Codex helper")).toBeInTheDocument();
-    expect(screen.queryByText(/Which room is this from?/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Which room is this from?/i),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /Archive2/i }));
+    await user.click(screen.getByRole("tab", { name: "Archive: 2 entries" }));
+    expect(
+      screen.getByText(
+        "Resolved or discarded captures kept out of the active queue.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Resolved capture.")).toBeInTheDocument();
-    expect(screen.getByText("Discarded duplicate capture.")).toBeInTheDocument();
-    expect(screen.queryByText("Holiday bins need inventory.")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Discarded duplicate capture."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Holiday bins need inventory."),
+    ).not.toBeInTheDocument();
   });
 });
 
