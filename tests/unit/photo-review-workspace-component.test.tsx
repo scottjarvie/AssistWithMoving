@@ -121,33 +121,53 @@ describe("PhotoReviewWorkspace", () => {
       <PhotoReviewWorkspace
         householdId={"household_123" as Id<"households">}
         moveId={"move_123" as Id<"moves">}
-      />
+      />,
     );
 
     expect(
-      screen.getByRole("button", { name: "Review Kitchen table photo" })
+      screen.getByRole("button", { name: "Review Kitchen table photo" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Review Garage shelf photo" })
+      screen.getByRole("button", { name: "Review Garage shelf photo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "All: 2 photos" }),
+    ).toHaveAttribute("data-variant", "default");
+    expect(
+      screen.getByRole("button", { name: "Review: 1 photo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sensitive: 1 photo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Every photo tied to this move."),
     ).toBeInTheDocument();
     expect(screen.getAllByText("needsReview").length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: "Selected photo" })).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Privacy level for Kitchen table photo")
+      screen.getByRole("heading", { name: "Selected photo" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Visibility scope for Kitchen table photo")
+      screen.getByLabelText("Privacy level for Kitchen table photo"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Original" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Privacy" })).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Visibility scope for Kitchen table photo"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Original" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Privacy" }),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Review Garage shelf photo" }));
+    await user.click(
+      screen.getByRole("button", { name: "Review Garage shelf photo" }),
+    );
 
     expect(
-      screen.getByLabelText("Privacy level for Garage shelf photo")
+      screen.getByLabelText("Privacy level for Garage shelf photo"),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Visibility scope for Garage shelf photo")
+      screen.getByLabelText("Visibility scope for Garage shelf photo"),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -155,8 +175,22 @@ describe("PhotoReviewWorkspace", () => {
         expect.objectContaining({
           photoId: "photo_1",
           variant: "card",
-        })
+        }),
       );
     });
+
+    await user.click(
+      screen.getByRole("button", { name: "Sensitive: 1 photo" }),
+    );
+
+    expect(
+      screen.getByText("Photos with restricted privacy settings."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Review Kitchen table photo" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Review Garage shelf photo" }),
+    ).toBeInTheDocument();
   });
 });

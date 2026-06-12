@@ -75,9 +75,7 @@ const visibilityOptions = [
   ["household", "Household"],
   ["documentationScoped", "Documentation scoped"],
   ["private", "Private"],
-] as const satisfies ReadonlyArray<
-  readonly [PhotoVisibilityScope, string]
->;
+] as const satisfies ReadonlyArray<readonly [PhotoVisibilityScope, string]>;
 
 export function PhotoReviewWorkspace({
   householdId,
@@ -86,11 +84,11 @@ export function PhotoReviewWorkspace({
   const [filter, setFilter] = useState<PhotoReviewFilterKey>("all");
   const photos = useQuery(
     api.photos.listForMove,
-    householdId && moveId ? { householdId, moveId, limit: 120 } : "skip"
+    householdId && moveId ? { householdId, moveId, limit: 120 } : "skip",
   );
   const summary = useQuery(
     api.photos.evidenceSummary,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
   const getOriginalDownloadUrl = useAction(api.photos.getOriginalDownloadUrl);
@@ -102,7 +100,34 @@ export function PhotoReviewWorkspace({
     return filterPhotosForReview(photos ?? [], filter);
   }, [filter, photos]);
   const activeFilter = photoReviewFilters.find((entry) => entry.key === filter);
-  const visiblePhotos = useMemo(() => filteredPhotos.slice(0, 24), [filteredPhotos]);
+  const filterCounts = useMemo(() => {
+    const sourcePhotos = photos ?? [];
+    return photoReviewFilters.reduce<Record<PhotoReviewFilterKey, number>>(
+      (counts, entry) => {
+        counts[entry.key] = filterPhotosForReview(
+          sourcePhotos,
+          entry.key,
+        ).length;
+        return counts;
+      },
+      {
+        all: 0,
+        review: 0,
+        unassigned: 0,
+        claimEvidence: 0,
+        serialNumber: 0,
+        condition: 0,
+        roomOrBox: 0,
+        aiPending: 0,
+        sensitive: 0,
+        derivatives: 0,
+      },
+    );
+  }, [photos]);
+  const visiblePhotos = useMemo(
+    () => filteredPhotos.slice(0, 24),
+    [filteredPhotos],
+  );
   const selectedPhoto =
     visiblePhotos.find((photo) => photo._id === selectedPhotoId) ??
     visiblePhotos[0] ??
@@ -129,7 +154,7 @@ export function PhotoReviewWorkspace({
         } catch {
           return [photo._id, null] as const;
         }
-      })
+      }),
     ).then((entries) => {
       if (cancelled) {
         return;
@@ -140,7 +165,7 @@ export function PhotoReviewWorkspace({
             acc[photoId] = url;
           }
           return acc;
-        }, {})
+        }, {}),
       );
     });
 
@@ -153,7 +178,7 @@ export function PhotoReviewWorkspace({
     photo: ReviewPhoto,
     patch:
       | { privacyLevel: PhotoPrivacyLevel }
-      | { visibilityScope: PhotoVisibilityScope }
+      | { visibilityScope: PhotoVisibilityScope },
   ) {
     if (!householdId || !moveId) {
       return;
@@ -186,7 +211,9 @@ export function PhotoReviewWorkspace({
       window.open(download.url, "_blank", "noopener,noreferrer");
       setPhotoMessage("Original download URL created and audited.");
     } catch {
-      setPhotoMessage("Original download is not available for this role or scope.");
+      setPhotoMessage(
+        "Original download is not available for this role or scope.",
+      );
     }
   }
 
@@ -213,26 +240,51 @@ export function PhotoReviewWorkspace({
         <CardContent className="space-y-4">
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <EvidenceMetric label="Photos" value={summary?.photoCount} />
-            <EvidenceMetric label="Unassigned" value={summary?.unassignedCount} />
-            <EvidenceMetric label="Needs review" value={summary?.needsReviewCount} />
+            <EvidenceMetric
+              label="Unassigned"
+              value={summary?.unassignedCount}
+            />
+            <EvidenceMetric
+              label="Needs review"
+              value={summary?.needsReviewCount}
+            />
             <EvidenceMetric
               label="High-value gaps"
               value={summary?.highValueWithoutPhotoCount}
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {photoReviewFilters.map(({ key, label }) => (
-              <Button
-                key={key}
-                type="button"
-                size="sm"
-                variant={filter === key ? "default" : "outline"}
-                onClick={() => setFilter(key)}
-              >
-                {label}
-              </Button>
-            ))}
+          <div className="space-y-2">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+              {photoReviewFilters.map(({ key, label }) => {
+                const active = filter === key;
+                const count = filterCounts[key];
+
+                return (
+                  <Button
+                    key={key}
+                    type="button"
+                    size="sm"
+                    className="h-10 shrink-0 gap-2"
+                    variant={active ? "default" : "outline"}
+                    aria-pressed={active}
+                    aria-label={`${label}: ${formatPhotoCount(count)}`}
+                    onClick={() => setFilter(key)}
+                  >
+                    <span>{label}</span>
+                    <Badge
+                      variant={active ? "secondary" : "outline"}
+                      className="h-5 min-w-5 px-1"
+                    >
+                      {count}
+                    </Badge>
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {activeFilter?.description}
+            </p>
           </div>
           {photoMessage ? (
             <p className="text-xs text-muted-foreground">{photoMessage}</p>
@@ -312,14 +364,17 @@ export function PhotoReviewWorkspace({
 
               <PhotoReviewInspector
                 photo={selectedPhoto}
-                displayUrl={selectedPhoto ? displayUrls[selectedPhoto._id] : null}
+                displayUrl={
+                  selectedPhoto ? displayUrls[selectedPhoto._id] : null
+                }
                 onDownloadOriginal={downloadOriginal}
                 onPrivacyChange={updatePhotoPrivacy}
               />
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-              No {activeFilter?.emptyLabel ?? "photos"} match this review filter.
+              No {activeFilter?.emptyLabel ?? "photos"} match this review
+              filter.
             </div>
           )}
         </CardContent>
@@ -341,7 +396,7 @@ function PhotoReviewInspector({
     photo: ReviewPhoto,
     patch:
       | { privacyLevel: PhotoPrivacyLevel }
-      | { visibilityScope: PhotoVisibilityScope }
+      | { visibilityScope: PhotoVisibilityScope },
   ) => Promise<void>;
 }) {
   if (!photo) {
@@ -365,7 +420,9 @@ function PhotoReviewInspector({
           </p>
         </div>
         <Badge
-          variant={photo.verificationStatus === "needsReview" ? "secondary" : "outline"}
+          variant={
+            photo.verificationStatus === "needsReview" ? "secondary" : "outline"
+          }
         >
           {photo.verificationStatus}
         </Badge>
@@ -477,8 +534,14 @@ function PhotoDetail({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function getPhotoLabel(photo: Pick<ReviewPhoto, "_id" | "caption" | "photoType" | "room">) {
+function getPhotoLabel(
+  photo: Pick<ReviewPhoto, "_id" | "caption" | "photoType" | "room">,
+) {
   return photo.caption ?? photo.room ?? `${photo.photoType} photo`;
+}
+
+function formatPhotoCount(count: number) {
+  return `${count} ${count === 1 ? "photo" : "photos"}`;
 }
 
 function formatBytes(value?: number) {
@@ -539,7 +602,7 @@ export function PhotoEvidenceGapsPanel({
 }: PhotoReviewWorkspaceProps) {
   const summary = useQuery(
     api.photos.evidenceSummary,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
 
   return (
@@ -569,8 +632,12 @@ export function PhotoEvidenceGapsPanel({
               >
                 <div className="font-medium">{gap.name}</div>
                 <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
-                  {gap.room ? <Badge variant="outline">{gap.room}</Badge> : null}
-                  {gap.highValue ? <Badge variant="secondary">value</Badge> : null}
+                  {gap.room ? (
+                    <Badge variant="outline">{gap.room}</Badge>
+                  ) : null}
+                  {gap.highValue ? (
+                    <Badge variant="secondary">value</Badge>
+                  ) : null}
                   {gap.requiresPersonalTransport ? (
                     <Badge variant="secondary">personal</Badge>
                   ) : null}
