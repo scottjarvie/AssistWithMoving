@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -93,6 +93,10 @@ vi.mock("convex/react", () => ({
 import { EstimateSummary } from "@/components/estimate-summary";
 
 describe("EstimateSummary task tabs", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/inventory");
+  });
+
   it("opens on overview and keeps dense estimate work behind focused tabs", async () => {
     const user = userEvent.setup();
 
@@ -133,6 +137,86 @@ describe("EstimateSummary task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Unmeasured bookcase")).toBeInTheDocument();
     expect(screen.getByText("missingWeightEstimate")).toBeInTheDocument();
+    expect(screen.queryByText("BOX-44 - Garage tools")).not.toBeInTheDocument();
+  });
+
+  it("opens capacity from the estimate capacity hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#estimate-capacity"
+    );
+
+    render(
+      <EstimateSummary
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Capacity" })).toHaveAttribute(
+        "data-state",
+        "active"
+      );
+    });
+
+    expect(screen.getByText("Resource capacity")).toBeInTheDocument();
+    expect(screen.getByText("Rental truck")).toBeInTheDocument();
+    expect(screen.queryByText("Room and disposition rollup")).not.toBeInTheDocument();
+  });
+
+  it("opens warnings from the estimate warnings hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#estimate-warnings"
+    );
+
+    render(
+      <EstimateSummary
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Warnings" })).toHaveAttribute(
+        "data-state",
+        "active"
+      );
+    });
+
+    expect(screen.getByText("Estimate warnings")).toBeInTheDocument();
+    expect(screen.getByText("BOX-44 - Garage tools")).toBeInTheDocument();
+    expect(screen.queryByText("Rental truck")).not.toBeInTheDocument();
+  });
+
+  it("opens assumptions from the estimate assumptions hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#estimate-assumptions"
+    );
+
+    render(
+      <EstimateSummary
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Assumptions" })).toHaveAttribute(
+        "data-state",
+        "active"
+      );
+    });
+
+    expect(
+      screen.getByText("Assumptions and missing estimates")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Unmeasured bookcase")).toBeInTheDocument();
     expect(screen.queryByText("BOX-44 - Garage tools")).not.toBeInTheDocument();
   });
 });

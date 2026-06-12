@@ -23,11 +23,21 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
 
 type EstimateSummaryProps = {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
 };
+
+type EstimateSummaryTask = "overview" | "capacity" | "warnings" | "assumptions";
+
+const estimateSummaryTaskHashes = {
+  "#estimate-assumptions": "assumptions",
+  "#estimate-capacity": "capacity",
+  "#estimate-summary": "overview",
+  "#estimate-warnings": "warnings",
+} as const satisfies Partial<Record<string, EstimateSummaryTask>>;
 
 function formatNumber(value: number | undefined) {
   return typeof value === "number" && Number.isFinite(value)
@@ -36,6 +46,10 @@ function formatNumber(value: number | undefined) {
 }
 
 export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
+  const [activeTask, setActiveTask] = useHashTab<EstimateSummaryTask>(
+    "overview",
+    estimateSummaryTaskHashes
+  );
   const report = useQuery(
     api.estimates.reportForMove,
     householdId && moveId ? { householdId, moveId } : "skip"
@@ -122,7 +136,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
       {report === undefined ? (
         <EstimateTabsSkeleton />
       ) : (
-        <Tabs defaultValue="overview" className="gap-4">
+        <Tabs value={activeTask} onValueChange={setActiveTask} className="gap-4">
           <MoveWorkspaceTabList
             tabs={[
               { value: "overview", label: "Overview" },
@@ -132,7 +146,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
             ]}
           />
 
-          <TabsContent value="overview">
+          <TabsContent value="overview" id="estimate-overview">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
               <Card>
                 <CardHeader>
@@ -203,7 +217,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
             </div>
           </TabsContent>
 
-          <TabsContent value="capacity">
+          <TabsContent value="capacity" id="estimate-capacity">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -287,7 +301,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
             </Card>
           </TabsContent>
 
-          <TabsContent value="warnings">
+          <TabsContent value="warnings" id="estimate-warnings">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -307,7 +321,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
             </Card>
           </TabsContent>
 
-          <TabsContent value="assumptions">
+          <TabsContent value="assumptions" id="estimate-assumptions">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">

@@ -83,6 +83,15 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#estimate-summary")).toBe(
       "/app/moves/move_123/inventory#estimate-summary"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#estimate-capacity")).toBe(
+      "/app/moves/move_123/inventory#estimate-capacity"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#estimate-warnings")).toBe(
+      "/app/moves/move_123/inventory#estimate-warnings"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#estimate-assumptions")).toBe(
+      "/app/moves/move_123/inventory#estimate-assumptions"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#sale-pipeline")).toBe(
       "/app/moves/move_123/sell#sale-pipeline"
     );

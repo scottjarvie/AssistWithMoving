@@ -490,6 +490,25 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Inventory table surface")).not.toBeInTheDocument();
   });
 
+  it("opens inventory estimates when routed to estimate subtasks", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#estimate-capacity"
+    );
+
+    render(<InventoryWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Estimates" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Estimate summary surface")).toBeInTheDocument();
+    expect(screen.queryByText("Inventory table surface")).not.toBeInTheDocument();
+  });
+
   it("opens AI review on the approval queue before intake and job details", () => {
     render(<AiReviewWorkspacePage />);
 
