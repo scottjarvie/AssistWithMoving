@@ -326,6 +326,25 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Load board surface")).not.toBeInTheDocument();
   });
 
+  it("opens load plan resources when routed to transport setup subtasks", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/load-plan#add-transport-resource"
+    );
+
+    render(<LoadPlanWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Resources" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Transport resources surface")).toBeInTheDocument();
+    expect(screen.queryByText("Load board surface")).not.toBeInTheDocument();
+  });
+
   it("opens load plan AI suggestions when routed to the planning hash", async () => {
     window.history.replaceState(
       null,

@@ -26,6 +26,7 @@ const workspaceAnchorSections: Record<string, string | null> = {
   "#add-inventory": "inventory",
   "#add-photos": "photos",
   "#add-space": "spaces",
+  "#add-transport-resource": "load-plan",
   "#box-contents": "boxes",
   "#box-details": "boxes",
   "#box-labels": "boxes",
@@ -72,6 +73,7 @@ const workspaceAnchorSections: Record<string, string | null> = {
   "#sale-status": "sell",
   "#spaces": "spaces",
   "#transport-resources": "load-plan",
+  "#transport-resource-presets": "load-plan",
 };
 
 export function moveWorkspaceAnchorPath(

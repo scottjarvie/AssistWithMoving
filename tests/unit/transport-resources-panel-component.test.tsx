@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -61,10 +61,11 @@ import { TransportResourcesPanel } from "@/components/transport-resources-panel"
 
 describe("TransportResourcesPanel", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/load-plan");
     transportData.mutation.mockReset();
   });
 
-  it("shows transport resources before opening preset setup", async () => {
+  it("opens on transport resources before setup and capacity review", async () => {
     const user = userEvent.setup();
 
     render(
@@ -81,31 +82,96 @@ describe("TransportResourcesPanel", () => {
     });
     expect(within(cards).getByText("Moving truck")).toBeInTheDocument();
     expect(screen.getByText("1 resources")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Resources" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.getByRole("tab", { name: "Add" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Capacity" })).toBeInTheDocument();
     expect(screen.queryByText("Add from preset")).not.toBeInTheDocument();
     expect(screen.queryByText("Box truck")).not.toBeInTheDocument();
-    expect(screen.getByText("Capacity posture")).toBeInTheDocument();
+    expect(screen.queryByText("Capacity posture")).not.toBeInTheDocument();
     expect(
       screen.queryByText(/Trucks and trailers get weight\/volume defaults/),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Review capacity" }));
+    await user.click(screen.getByRole("button", { name: "Add resource" }));
 
+    expect(screen.getByRole("tab", { name: "Add" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.queryByText("Moving truck")).not.toBeInTheDocument();
+
+    expect(screen.getByText("Add from preset")).toBeInTheDocument();
+    expect(screen.getByText("Box truck")).toBeInTheDocument();
+    expect(screen.queryByText("Military movers / HHG")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Transport resource cards" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the add resource workflow from the add hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/load-plan#add-transport-resource",
+    );
+
+    render(
+      <TransportResourcesPanel
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+        moveTitle="Summer move"
+        moveType="local"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Add" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
+    expect(screen.getByText("Add from preset")).toBeInTheDocument();
+    expect(screen.getByText("Box truck")).toBeInTheDocument();
+    expect(screen.queryByText("Moving truck")).not.toBeInTheDocument();
+  });
+
+  it("opens capacity posture from the capacity hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/load-plan#capacity-posture",
+    );
+
+    render(
+      <TransportResourcesPanel
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+        moveTitle="Summer move"
+        moveType="local"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Capacity" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
+    expect(screen.getByText("Capacity posture")).toBeInTheDocument();
     expect(
       screen.getByText(/Trucks and trailers get weight\/volume defaults/),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Hide capacity notes" }),
-    ).toHaveAttribute("aria-expanded", "true");
-
-    await user.click(screen.getByRole("button", { name: "Add resource" }));
-
-    const presetHeading = screen.getByText("Add from preset");
-    expect(presetHeading).toBeInTheDocument();
-    expect(screen.getByText("Box truck")).toBeInTheDocument();
-    expect(screen.queryByText("Military movers / HHG")).not.toBeInTheDocument();
+      screen.getByRole("list", { name: "Transport capacity review" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Add from preset")).not.toBeInTheDocument();
     expect(
-      cards.compareDocumentPosition(presetHeading) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.queryByRole("list", { name: "Transport resource cards" }),
+    ).not.toBeInTheDocument();
   });
 });

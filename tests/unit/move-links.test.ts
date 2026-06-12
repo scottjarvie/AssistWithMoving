@@ -125,6 +125,15 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#ai-planning-suggestions")).toBe(
       "/app/moves/move_123/load-plan#ai-planning-suggestions"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#add-transport-resource")).toBe(
+      "/app/moves/move_123/load-plan#add-transport-resource"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#transport-resource-presets")).toBe(
+      "/app/moves/move_123/load-plan#transport-resource-presets"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#capacity-posture")).toBe(
+      "/app/moves/move_123/load-plan#capacity-posture"
+    );
     expect(moveWorkspaceAnchorPath("move/with/slash", "#load-plan")).toBe(
       "/app/moves/move%2Fwith%2Fslash/load-plan#load-plan"
     );
