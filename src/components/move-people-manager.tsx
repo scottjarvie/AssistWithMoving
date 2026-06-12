@@ -2,7 +2,14 @@
 
 import { type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Archive, Mail, Phone, Save, UserRoundPlus, UsersRound } from "lucide-react";
+import {
+  Archive,
+  Mail,
+  Phone,
+  Save,
+  UserRoundPlus,
+  UsersRound,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
@@ -25,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 type MovePerson = Doc<"movePeople">;
@@ -38,6 +46,11 @@ const movePersonRoleOptions: { value: MovePersonRole; label: string }[] = [
   { value: "contact", label: "Contact" },
 ];
 
+const peopleTasks = [
+  { value: "contacts", label: "Contacts" },
+  { value: "add", label: "Add contact" },
+] as const;
+
 export function MovePeopleManager({
   householdId,
   moveId,
@@ -47,7 +60,7 @@ export function MovePeopleManager({
 }) {
   const people = useQuery(
     api.movePeople.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const createPerson = useMutation(api.movePeople.create);
 
@@ -84,7 +97,9 @@ export function MovePeopleManager({
       setNotes("");
       setMessage("Contact added.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not add contact.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not add contact.",
+      );
     } finally {
       setSaving(false);
     }
@@ -110,58 +125,6 @@ export function MovePeopleManager({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form
-          className="grid gap-2 lg:grid-cols-[minmax(160px,1fr)_150px_minmax(160px,1fr)_minmax(140px,0.8fr)_auto]"
-          onSubmit={handleCreate}
-        >
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Name or office"
-            aria-label="Contact name"
-            disabled={!moveId}
-          />
-          <select
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            value={role}
-            aria-label="Contact role"
-            disabled={!moveId}
-            onChange={(event) => setRole(event.target.value as MovePersonRole)}
-          >
-            {movePersonRoleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <Input
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="Email"
-            aria-label="Contact email"
-            disabled={!moveId}
-          />
-          <Input
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="Phone"
-            aria-label="Contact phone"
-            disabled={!moveId}
-          />
-          <Button type="submit" size="sm" disabled={!moveId || saving || !name.trim()}>
-            <UserRoundPlus aria-hidden="true" />
-            Add contact
-          </Button>
-          <Textarea
-            className="lg:col-span-4"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Notes, office hours, claim number, pickup constraints"
-            aria-label="Contact notes"
-            disabled={!moveId}
-          />
-        </form>
-
         {message ? (
           <p
             className="rounded-md border border-border p-3 text-sm text-muted-foreground"
@@ -172,43 +135,117 @@ export function MovePeopleManager({
           </p>
         ) : null}
 
-        {loading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-4/5" />
+        <Tabs defaultValue="contacts" className="gap-4">
+          <div className="overflow-x-auto pb-1">
+            <TabsList className="min-w-max" aria-label="Move contact tasks">
+              {peopleTasks.map((task) => (
+                <TabsTrigger key={task.value} value={task.value}>
+                  {task.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
           </div>
-        ) : people?.length ? (
-          <div className="rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Reach</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {people.map((person) =>
-                  householdId && moveId ? (
-                    <MovePersonRow
-                      key={person._id}
-                      householdId={householdId}
-                      moveId={moveId}
-                      person={person}
-                      onMessage={setMessage}
-                    />
-                  ) : null
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-            Add the first move contact once a move is selected.
-          </div>
-        )}
+
+          <TabsContent value="contacts">
+            {loading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-4/5" />
+              </div>
+            ) : people?.length ? (
+              <div className="rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Reach</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {people.map((person) =>
+                      householdId && moveId ? (
+                        <MovePersonRow
+                          key={person._id}
+                          householdId={householdId}
+                          moveId={moveId}
+                          person={person}
+                          onMessage={setMessage}
+                        />
+                      ) : null,
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                Add the first move contact once a move is selected.
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="add">
+            <form
+              className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 lg:grid-cols-[minmax(160px,1fr)_150px_minmax(160px,1fr)_minmax(140px,0.8fr)_auto]"
+              onSubmit={handleCreate}
+            >
+              <Input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Name or office"
+                aria-label="Contact name"
+                disabled={!moveId}
+              />
+              <select
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={role}
+                aria-label="Contact role"
+                disabled={!moveId}
+                onChange={(event) =>
+                  setRole(event.target.value as MovePersonRole)
+                }
+              >
+                {movePersonRoleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="Email"
+                aria-label="Contact email"
+                disabled={!moveId}
+              />
+              <Input
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="Phone"
+                aria-label="Contact phone"
+                disabled={!moveId}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!moveId || saving || !name.trim()}
+              >
+                <UserRoundPlus aria-hidden="true" />
+                Add contact
+              </Button>
+              <Textarea
+                className="lg:col-span-4"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Notes, office hours, claim number, pickup constraints"
+                aria-label="Contact notes"
+                disabled={!moveId}
+              />
+            </form>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
@@ -250,7 +287,9 @@ function MovePersonRow({
       });
       onMessage(`${name} saved.`);
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : `Could not save ${name}.`);
+      onMessage(
+        error instanceof Error ? error.message : `Could not save ${name}.`,
+      );
     } finally {
       setSaving(false);
     }
@@ -267,7 +306,9 @@ function MovePersonRow({
       onMessage(`${person.name} archived.`);
     } catch (error) {
       onMessage(
-        error instanceof Error ? error.message : `Could not archive ${person.name}.`
+        error instanceof Error
+          ? error.message
+          : `Could not archive ${person.name}.`,
       );
     } finally {
       setSaving(false);
@@ -300,7 +341,10 @@ function MovePersonRow({
       <TableCell className="min-w-[220px]">
         <div className="grid gap-2">
           <div className="flex items-center gap-2">
-            <Mail className="size-3.5 text-muted-foreground" aria-hidden="true" />
+            <Mail
+              className="size-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
             <Input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -309,7 +353,10 @@ function MovePersonRow({
             />
           </div>
           <div className="flex items-center gap-2">
-            <Phone className="size-3.5 text-muted-foreground" aria-hidden="true" />
+            <Phone
+              className="size-3.5 text-muted-foreground"
+              aria-hidden="true"
+            />
             <Input
               value={phone}
               onChange={(event) => setPhone(event.target.value)}

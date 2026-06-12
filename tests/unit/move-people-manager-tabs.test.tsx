@@ -1,0 +1,88 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { Doc, Id } from "../../convex/_generated/dataModel";
+
+const apiMock = vi.hoisted(() => ({
+  movePeople: {
+    listForMove: "movePeople.listForMove",
+    create: "movePeople.create",
+    update: "movePeople.update",
+    archive: "movePeople.archive",
+  },
+}));
+
+const peopleData = vi.hoisted(() => ({
+  people: [
+    {
+      _id: "person_1" as Id<"movePeople">,
+      _creationTime: 1,
+      householdId: "household_123" as Id<"households">,
+      moveId: "move_123" as Id<"moves">,
+      name: "Riley Helper",
+      role: "helper",
+      email: "riley@example.com",
+      phone: "555-0101",
+      notes: "Available Saturday morning.",
+      createdAt: 1,
+      updatedAt: 1,
+    } as unknown as Doc<"movePeople">,
+  ],
+  mutation: vi.fn(),
+}));
+
+vi.mock("../../convex/_generated/api", () => ({
+  api: apiMock,
+}));
+
+vi.mock("convex/react", () => ({
+  useMutation: () => peopleData.mutation,
+  useQuery: (query: string) =>
+    query === apiMock.movePeople.listForMove ? peopleData.people : undefined,
+}));
+
+import { MovePeopleManager } from "@/components/move-people-manager";
+
+function renderMovePeopleManager() {
+  render(
+    <MovePeopleManager
+      householdId={"household_123" as Id<"households">}
+      moveId={"move_123" as Id<"moves">}
+    />,
+  );
+}
+
+describe("MovePeopleManager task tabs", () => {
+  beforeEach(() => {
+    peopleData.mutation.mockReset();
+  });
+
+  it("opens on contact records and keeps contact creation separate", async () => {
+    const user = userEvent.setup();
+
+    renderMovePeopleManager();
+
+    expect(screen.getByRole("tab", { name: "Contacts" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(
+      screen.getByLabelText("Contact name for Riley Helper"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Contact email for Riley Helper"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Contact notes")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Add contact" }));
+
+    expect(screen.getByLabelText("Contact name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Contact role")).toBeInTheDocument();
+    expect(screen.getByLabelText("Contact notes")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Contact name for Riley Helper"),
+    ).not.toBeInTheDocument();
+  });
+});
