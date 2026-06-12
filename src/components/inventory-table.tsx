@@ -265,6 +265,135 @@ function InventoryIndicators({ item }: { item: InventoryItem }) {
   );
 }
 
+function InventoryItemCard({
+  item,
+  selected,
+  onSelectedChange,
+  onOpenDetails,
+  onPatchItem,
+}: {
+  item: InventoryItem;
+  selected: boolean;
+  onSelectedChange: (checked: boolean) => void;
+  onOpenDetails: () => void;
+  onPatchItem: (item: InventoryItem, patch: InventoryItemPatch) => void;
+}) {
+  return (
+    <div
+      role="listitem"
+      className="rounded-md border border-border bg-card p-3"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="size-3.5 accent-primary"
+            checked={selected}
+            aria-label={`Select ${item.name}`}
+            onChange={(event) => onSelectedChange(event.target.checked)}
+          />
+          Select
+        </label>
+        <Button type="button" size="sm" variant="outline" onClick={onOpenDetails}>
+          <PanelRightOpen aria-hidden="true" />
+          Details
+        </Button>
+      </div>
+
+      <div className="mt-3 min-w-0">
+        <h3 className="break-words text-base font-medium">{item.name}</h3>
+        <p className="mt-1 line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
+          {item.description ?? "No description"}
+        </p>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <InventoryCardField label="Room" value={item.room ?? "unassigned"} />
+        <InventoryCardField
+          label="Category"
+          value={item.category ?? "uncategorized"}
+        />
+        <div className="min-w-0 rounded-md border border-border/70 p-2">
+          <label className="block text-[0.68rem] uppercase text-muted-foreground">
+            Status
+            <select
+              className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              value={item.status}
+              aria-label={`Status for ${item.name}`}
+              onChange={(event) =>
+                onPatchItem(item, {
+                  status: event.target.value as InventoryItem["status"],
+                })
+              }
+            >
+              {itemStatusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="min-w-0 rounded-md border border-border/70 p-2">
+          <label className="block text-[0.68rem] uppercase text-muted-foreground">
+            Disposition
+            <select
+              className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+              value={item.disposition}
+              aria-label={`Disposition for ${item.name}`}
+              onChange={(event) =>
+                onPatchItem(item, {
+                  disposition: event.target
+                    .value as InventoryItem["disposition"],
+                })
+              }
+            >
+              {itemDispositionOptions.map((disposition) => (
+                <option key={disposition} value={disposition}>
+                  {disposition}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <InventoryIndicators item={item} />
+      </div>
+
+      <label className="mt-3 flex items-center gap-2 rounded-md border border-border/70 px-2 py-1.5 text-xs">
+        <input
+          type="checkbox"
+          className="size-3.5 accent-primary"
+          checked={item.needsReview}
+          onChange={(event) =>
+            onPatchItem(item, {
+              needsReview: event.target.checked,
+            })
+          }
+        />
+        Needs review
+      </label>
+    </div>
+  );
+}
+
+function InventoryCardField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-border/70 p-2">
+      <p className="text-[0.68rem] uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate font-medium">{value}</p>
+    </div>
+  );
+}
+
 function tableHeadClassName(columnId: string) {
   switch (columnId) {
     case "select":
@@ -654,6 +783,7 @@ export function InventoryTable({
 
   const selectedCount = table.getSelectedRowModel().rows.length;
   const loadingItems = moveId && items === undefined;
+  const visibleRows = table.getRowModel().rows;
 
   return (
     <>
@@ -829,52 +959,78 @@ export function InventoryTable({
                   <Skeleton className="h-10 w-full" />
                   <Skeleton className="h-10 w-4/5" />
                 </div>
-              ) : table.getRowModel().rows.length ? (
-                <div className="rounded-md border border-border">
-                  <Table className="min-w-[980px] table-fixed">
-                    <TableHeader>
-                      {table.getHeaderGroups().map((headerGroup) => (
-                        <TableRow key={headerGroup.id}>
-                          {headerGroup.headers.map((header) => (
-                            <TableHead
-                              key={header.id}
-                              className={tableHeadClassName(header.column.id)}
-                            >
-                              {header.isPlaceholder
-                                ? null
-                                : flexRender(
-                                    header.column.columnDef.header,
-                                    header.getContext(),
-                                  )}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableHeader>
-                    <TableBody>
-                      {table.getRowModel().rows.map((row) => (
-                        <TableRow
-                          key={row.id}
-                          data-state={
-                            row.getIsSelected() ? "selected" : undefined
-                          }
-                        >
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell
-                              key={cell.id}
-                              className={tableCellClassName(cell.column.id)}
-                            >
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+              ) : visibleRows.length ? (
+                <>
+                  <div
+                    role="list"
+                    aria-label="Inventory item cards"
+                    className="grid gap-3 md:hidden"
+                  >
+                    {visibleRows.map((row) => (
+                      <InventoryItemCard
+                        key={row.id}
+                        item={row.original}
+                        selected={row.getIsSelected()}
+                        onSelectedChange={(checked) =>
+                          row.toggleSelected(checked)
+                        }
+                        onOpenDetails={() => {
+                          setSelectedItemId(row.original._id);
+                          setDetailOpen(true);
+                        }}
+                        onPatchItem={(item, patch) =>
+                          void patchItem(item, patch)
+                        }
+                      />
+                    ))}
+                  </div>
+
+                  <div className="hidden overflow-x-auto rounded-md border border-border md:block">
+                    <Table className="min-w-[980px] table-fixed">
+                      <TableHeader>
+                        {table.getHeaderGroups().map((headerGroup) => (
+                          <TableRow key={headerGroup.id}>
+                            {headerGroup.headers.map((header) => (
+                              <TableHead
+                                key={header.id}
+                                className={tableHeadClassName(header.column.id)}
+                              >
+                                {header.isPlaceholder
+                                  ? null
+                                  : flexRender(
+                                      header.column.columnDef.header,
+                                      header.getContext(),
+                                    )}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableHeader>
+                      <TableBody>
+                        {table.getRowModel().rows.map((row) => (
+                          <TableRow
+                            key={row.id}
+                            data-state={
+                              row.getIsSelected() ? "selected" : undefined
+                            }
+                          >
+                            {row.getVisibleCells().map((cell) => (
+                              <TableCell
+                                key={cell.id}
+                                className={tableCellClassName(cell.column.id)}
+                              >
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext(),
+                                )}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               ) : (
                 <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
                   Add inventory items or change the saved filter/search terms.

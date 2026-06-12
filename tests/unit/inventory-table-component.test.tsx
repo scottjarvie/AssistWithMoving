@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -71,11 +71,13 @@ describe("InventoryTable", () => {
     expect(
       screen.getByRole("button", { name: "Sort by Room" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Walnut media console")).toBeInTheDocument();
-    expect(screen.getByText("review")).toBeInTheDocument();
-    expect(screen.getByText("value")).toBeInTheDocument();
-    expect(screen.getByText("personal")).toBeInTheDocument();
-    expect(screen.getByText("+4")).toBeInTheDocument();
+    const cardList = screen.getByRole("list", { name: "Inventory item cards" });
+    expect(within(cardList).getByText("Walnut media console")).toBeInTheDocument();
+    expect(screen.getAllByText("Walnut media console")).toHaveLength(2);
+    expect(screen.getAllByText("review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("value").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("personal").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+4").length).toBeGreaterThan(0);
     expect(screen.queryByText("photos 2")).not.toBeInTheDocument();
   });
 
@@ -93,7 +95,7 @@ describe("InventoryTable", () => {
       "data-state",
       "active",
     );
-    expect(screen.getByText("Walnut media console")).toBeInTheDocument();
+    expect(screen.getAllByText("Walnut media console").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("New item name")).not.toBeInTheDocument();
     expect(
       screen.queryByPlaceholderText(
