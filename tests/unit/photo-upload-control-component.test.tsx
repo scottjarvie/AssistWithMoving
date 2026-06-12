@@ -113,12 +113,19 @@ describe("PhotoUploadControl", () => {
       />,
     );
 
+    expect(screen.getByText("Drop photos here or choose files.")).toBeInTheDocument();
+    expect(
+      screen.getByText("JPEG, PNG, or WebP originals. Web versions are prepared during upload."),
+    ).toBeInTheDocument();
+
     await user.upload(screen.getByLabelText("Room photos"), [
       new File(["front"], "front.jpg", { type: "image/jpeg" }),
       new File(["side"], "side.jpg", { type: "image/jpeg" }),
     ]);
 
     expect(screen.getByText("2 photos selected")).toBeInTheDocument();
+    expect(screen.getByText("front.jpg · 5 B")).toBeInTheDocument();
+    expect(screen.getByText("side.jpg · 4 B")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Retry upload" }),
     ).not.toBeInTheDocument();
