@@ -16,7 +16,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+
+type QueueTask = "needsAction" | "working" | "archive";
 
 const statusLabels: Record<string, string> = {
   queued: "Queued",
@@ -35,6 +38,22 @@ const statusOrder = [
   "resolved",
   "discarded",
 ] as const;
+
+const queueTaskTabs: Array<{ value: QueueTask; label: string }> = [
+  { value: "needsAction", label: "Needs action" },
+  { value: "working", label: "Working" },
+  { value: "archive", label: "Archive" },
+];
+
+function queueTaskForStatus(status: string): QueueTask {
+  if (status === "needsInput" || status === "processed") {
+    return "needsAction";
+  }
+  if (status === "resolved" || status === "discarded") {
+    return "archive";
+  }
+  return "working";
+}
 
 export function IngestionQueueList({
   householdId,
@@ -64,9 +83,18 @@ export function IngestionQueueList({
         statusOrder.indexOf(b.status as (typeof statusOrder)[number]) ||
       b.createdAt - a.createdAt
   );
-  const openCount = (entries ?? []).filter((entry) =>
-    ["queued", "claimed", "needsInput"].includes(entry.status)
-  ).length;
+  const taskCounts = sorted.reduce<Record<QueueTask, number>>(
+    (counts, entry) => {
+      counts[queueTaskForStatus(entry.status)] += 1;
+      return counts;
+    },
+    { needsAction: 0, working: 0, archive: 0 }
+  );
+  const headerStatus = taskCounts.needsAction
+    ? `${taskCounts.needsAction} need action`
+    : taskCounts.working
+      ? `${taskCounts.working} working`
+      : "clear";
 
   async function changeStatus(
     entryId: Id<"ingestionQueueEntries">,
@@ -104,6 +132,185 @@ export function IngestionQueueList({
     }
   }
 
+  function renderEntries(task: QueueTask) {
+    const visibleEntries = sorted.filter(
+      (entry) => queueTaskForStatus(entry.status) === task
+    );
+
+    if (!visibleEntries.length) {
+      const emptyMessage =
+        task === "needsAction"
+          ? "No captures need your answer or review right now."
+          : task === "working"
+            ? "No captures are queued or currently claimed by an agent."
+            : "No resolved or discarded captures yet.";
+      return (
+        <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+          {emptyMessage}
+        </div>
+      );
+    }
+
+    return (
+      <ul className="space-y-3" aria-label={`${task} ingestion queue entries`}>
+        {visibleEntries.map((entry) => {
+          const editable =
+            entry.status === "queued" || entry.status === "needsInput";
+          const busy = busyEntryId === entry._id;
+          return (
+            <li key={entry._id} className="rounded-md border border-border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant={
+                      entry.status === "needsInput"
+                        ? "destructive"
+                        : entry.status === "processed"
+                          ? "default"
+                          : "outline"
+                    }
+                  >
+                    {statusLabels[entry.status] ?? entry.status}
+                  </Badge>
+                  {entry.roomHint ? (
+                    <Badge variant="secondary">{entry.roomHint}</Badge>
+                  ) : null}
+                  <Badge variant="outline">
+                    {entry.mediaPhotoIds.length} media
+                  </Badge>
+                  {entry.claimedByAgentLabel ? (
+                    <Badge variant="outline">
+                      {entry.claimedByAgentLabel}
+                    </Badge>
+                  ) : null}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(entry.createdAt).toLocaleString()}
+                </span>
+              </div>
+
+              {entry.agentQuestion ? (
+                <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm">
+                  Agent asks: {entry.agentQuestion}
+                </p>
+              ) : null}
+
+              {editingEntryId === entry._id ? (
+                <div className="mt-2 space-y-2">
+                  <Textarea
+                    value={editingText}
+                    onChange={(event) => setEditingText(event.target.value)}
+                    aria-label="Edit directions"
+                    className="min-h-20"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void saveInstructions(entry._id)}
+                    >
+                      Save directions
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingEntryId(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : entry.instructions ? (
+                <p className="mt-2 text-sm leading-6">{entry.instructions}</p>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  No written directions — media only.
+                </p>
+              )}
+
+              {entry.agentSummary ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Agent: {entry.agentSummary}
+                  {entry.resultItemIds?.length
+                    ? ` (${entry.resultItemIds.length} items proposed)`
+                    : ""}
+                </p>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {editable && editingEntryId !== entry._id ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setEditingEntryId(entry._id);
+                      setEditingText(entry.instructions ?? "");
+                    }}
+                  >
+                    {entry.status === "needsInput"
+                      ? "Answer & requeue"
+                      : "Edit directions"}
+                  </Button>
+                ) : null}
+                {entry.status === "processed" ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void changeStatus(entry._id, "resolved")}
+                    >
+                      <CheckCircle2 aria-hidden="true" />
+                      Mark resolved
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void changeStatus(entry._id, "queued")}
+                    >
+                      <RotateCcw aria-hidden="true" />
+                      Requeue
+                    </Button>
+                  </>
+                ) : null}
+                {entry.status === "discarded" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void changeStatus(entry._id, "queued")}
+                  >
+                    <RotateCcw aria-hidden="true" />
+                    Restore
+                  </Button>
+                ) : null}
+                {entry.status === "queued" || entry.status === "needsInput" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void changeStatus(entry._id, "discarded")}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Discard
+                  </Button>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
   return (
     <Card id="ingestion-queue">
       <CardHeader>
@@ -118,7 +325,11 @@ export function IngestionQueueList({
               an agent with an API key from Settings.
             </CardDescription>
           </div>
-          <Badge variant="secondary">{openCount} open</Badge>
+          {entries !== undefined ? (
+            <Badge variant={taskCounts.needsAction ? "secondary" : "outline"}>
+              {headerStatus}
+            </Badge>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -128,165 +339,26 @@ export function IngestionQueueList({
             <Skeleton className="h-16 w-4/5" />
           </div>
         ) : sorted.length ? (
-          <ul className="space-y-3" aria-label="Ingestion queue entries">
-            {sorted.map((entry) => {
-              const editable =
-                entry.status === "queued" || entry.status === "needsInput";
-              const busy = busyEntryId === entry._id;
-              return (
-                <li
-                  key={entry._id}
-                  className="rounded-md border border-border p-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <Badge
-                        variant={
-                          entry.status === "needsInput"
-                            ? "destructive"
-                            : entry.status === "processed"
-                              ? "default"
-                              : "outline"
-                        }
-                      >
-                        {statusLabels[entry.status] ?? entry.status}
-                      </Badge>
-                      {entry.roomHint ? (
-                        <Badge variant="secondary">{entry.roomHint}</Badge>
-                      ) : null}
-                      <Badge variant="outline">
-                        {entry.mediaPhotoIds.length} media
-                      </Badge>
-                      {entry.claimedByAgentLabel ? (
-                        <Badge variant="outline">
-                          {entry.claimedByAgentLabel}
-                        </Badge>
-                      ) : null}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(entry.createdAt).toLocaleString()}
-                    </span>
-                  </div>
+          <Tabs defaultValue="needsAction" className="gap-3">
+            <div className="overflow-x-auto pb-1">
+              <TabsList className="min-w-max" aria-label="Agent queue views">
+                {queueTaskTabs.map((task) => (
+                  <TabsTrigger key={task.value} value={task.value}>
+                    {task.label}
+                    <Badge variant="outline" className="ml-1">
+                      {taskCounts[task.value]}
+                    </Badge>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
-                  {entry.agentQuestion ? (
-                    <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm">
-                      Agent asks: {entry.agentQuestion}
-                    </p>
-                  ) : null}
-
-                  {editingEntryId === entry._id ? (
-                    <div className="mt-2 space-y-2">
-                      <Textarea
-                        value={editingText}
-                        onChange={(event) => setEditingText(event.target.value)}
-                        aria-label="Edit directions"
-                        className="min-h-20"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void saveInstructions(entry._id)}
-                        >
-                          Save directions
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setEditingEntryId(null)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : entry.instructions ? (
-                    <p className="mt-2 text-sm leading-6">{entry.instructions}</p>
-                  ) : (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      No written directions — media only.
-                    </p>
-                  )}
-
-                  {entry.agentSummary ? (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Agent: {entry.agentSummary}
-                      {entry.resultItemIds?.length
-                        ? ` (${entry.resultItemIds.length} items proposed)`
-                        : ""}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {editable && editingEntryId !== entry._id ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => {
-                          setEditingEntryId(entry._id);
-                          setEditingText(entry.instructions ?? "");
-                        }}
-                      >
-                        {entry.status === "needsInput"
-                          ? "Answer & requeue"
-                          : "Edit directions"}
-                      </Button>
-                    ) : null}
-                    {entry.status === "processed" ? (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void changeStatus(entry._id, "resolved")}
-                        >
-                          <CheckCircle2 aria-hidden="true" />
-                          Mark resolved
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() => void changeStatus(entry._id, "queued")}
-                        >
-                          <RotateCcw aria-hidden="true" />
-                          Requeue
-                        </Button>
-                      </>
-                    ) : null}
-                    {entry.status === "discarded" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => void changeStatus(entry._id, "queued")}
-                      >
-                        <RotateCcw aria-hidden="true" />
-                        Restore
-                      </Button>
-                    ) : null}
-                    {entry.status === "queued" || entry.status === "needsInput" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => void changeStatus(entry._id, "discarded")}
-                      >
-                        <Trash2 aria-hidden="true" />
-                        Discard
-                      </Button>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+            <TabsContent value="needsAction">
+              {renderEntries("needsAction")}
+            </TabsContent>
+            <TabsContent value="working">{renderEntries("working")}</TabsContent>
+            <TabsContent value="archive">{renderEntries("archive")}</TabsContent>
+          </Tabs>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm leading-6 text-muted-foreground">
             The queue is empty. Capture photos and notes on your phone as you
