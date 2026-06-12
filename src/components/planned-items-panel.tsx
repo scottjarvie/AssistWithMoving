@@ -25,12 +25,28 @@ import {
 
 type PlannedItem = FunctionReturnType<typeof api.plannedItems.listForMove>[number];
 type PlannedItemStatus = PlannedItem["status"];
+type PlannedItemFilter =
+  | "needsDecision"
+  | "all"
+  | "idea"
+  | "decided"
+  | "purchased"
+  | "dropped";
 
 const plannedItemStatuses: PlannedItemStatus[] = [
   "idea",
   "decided",
   "purchased",
   "dropped",
+];
+
+const plannedItemFilters: Array<{ value: PlannedItemFilter; label: string }> = [
+  { value: "needsDecision", label: "Needs decision" },
+  { value: "all", label: "All" },
+  { value: "idea", label: "Ideas" },
+  { value: "decided", label: "Decided" },
+  { value: "purchased", label: "Purchased" },
+  { value: "dropped", label: "Dropped" },
 ];
 
 function formatPrice(cents: number | undefined) {
@@ -64,6 +80,8 @@ export function PlannedItemsPanel({
   const [priority, setPriority] = useState("2");
   const [message, setMessage] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [plannedFilter, setPlannedFilter] =
+    useState<PlannedItemFilter>("needsDecision");
 
   const plannedItems = useQuery(
     api.plannedItems.listForMove,
@@ -77,6 +95,29 @@ export function PlannedItemsPanel({
   const activePlannedItems = useMemo(
     () => (plannedItems ?? []).filter((item) => !item.archivedAt),
     [plannedItems],
+  );
+  const filteredPlannedItems = useMemo(
+    () =>
+      activePlannedItems.filter((item) =>
+        matchesPlannedItemFilter(item, plannedFilter),
+      ),
+    [activePlannedItems, plannedFilter],
+  );
+  const filterCounts = useMemo(
+    () =>
+      plannedItemFilters.reduce<Record<PlannedItemFilter, number>>(
+        (counts, filter) => {
+          counts[filter.value] =
+            filter.value === "all"
+              ? activePlannedItems.length
+              : activePlannedItems.filter((item) =>
+                  matchesPlannedItemFilter(item, filter.value),
+                ).length;
+          return counts;
+        },
+        {} as Record<PlannedItemFilter, number>,
+      ),
+    [activePlannedItems],
   );
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -121,6 +162,7 @@ export function PlannedItemsPanel({
       setPriceDollars("");
       setUrl("");
       setPriority("2");
+      setPlannedFilter("needsDecision");
       setShowAddForm(false);
       setMessage("Planned item added.");
     } catch {
@@ -193,78 +235,118 @@ export function PlannedItemsPanel({
             <Skeleton className="h-12 w-5/6" />
           </div>
         ) : activePlannedItems.length ? (
-          <div className="grid gap-2" role="list" aria-label="Planned item cards">
-            {activePlannedItems.map((item) => (
-              <div
-                key={item._id}
-                role="listitem"
-                className="grid gap-3 rounded-md border border-border p-3 md:grid-cols-[minmax(0,1fr)_130px_auto]"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ShoppingBag
-                      className="size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <p className="truncate font-medium">{item.name}</p>
-                    <Badge variant="secondary">{item.status}</Badge>
-                    {item.convertedItemId ? (
-                      <Badge variant="outline">owned</Badge>
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {[item.category, dimensionsLabel(item), formatPrice(item.estimatedPriceCents)]
-                      .filter(Boolean)
-                      .join(" / ")}
-                  </p>
-                  {item.url ? (
-                    <a
-                      className="mt-1 block truncate text-sm text-primary underline-offset-4 hover:underline"
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {item.url}
-                    </a>
-                  ) : null}
-                </div>
-                <select
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                  value={item.status}
-                  aria-label={`Status for ${item.name}`}
-                  onChange={(event) =>
-                    void updateStatus(item, event.target.value as PlannedItemStatus)
+          <div className="space-y-3">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+              {plannedItemFilters.map((filter) => (
+                <Button
+                  key={filter.value}
+                  type="button"
+                  size="sm"
+                  className="h-10 shrink-0"
+                  variant={
+                    plannedFilter === filter.value ? "default" : "outline"
                   }
+                  aria-label={`${filter.label} ${filterCounts[filter.value] ?? 0}`}
+                  onClick={() => setPlannedFilter(filter.value)}
                 >
-                  {plannedItemStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={Boolean(item.convertedItemId)}
-                    onClick={() => void convertItem(item)}
+                  {filter.label}
+                  <Badge variant="secondary">
+                    {filterCounts[filter.value] ?? 0}
+                  </Badge>
+                </Button>
+              ))}
+            </div>
+
+            {filteredPlannedItems.length ? (
+              <div
+                className="grid gap-2"
+                role="list"
+                aria-label="Planned item cards"
+              >
+                {filteredPlannedItems.map((item) => (
+                  <div
+                    key={item._id}
+                    role="listitem"
+                    className="grid gap-3 rounded-md border border-border p-3 md:grid-cols-[minmax(0,1fr)_130px_auto]"
                   >
-                    <Check aria-hidden="true" />
-                    Own it
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void archiveItem(item)}
-                  >
-                    <Trash2 aria-hidden="true" />
-                    Archive
-                  </Button>
-                </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ShoppingBag
+                          className="size-4 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <p className="truncate font-medium">{item.name}</p>
+                        <Badge variant="secondary">{item.status}</Badge>
+                        {item.convertedItemId ? (
+                          <Badge variant="outline">owned</Badge>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {[
+                          item.category,
+                          dimensionsLabel(item),
+                          formatPrice(item.estimatedPriceCents),
+                        ]
+                          .filter(Boolean)
+                          .join(" / ")}
+                      </p>
+                      {item.url ? (
+                        <a
+                          className="mt-1 block truncate text-sm text-primary underline-offset-4 hover:underline"
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {item.url}
+                        </a>
+                      ) : null}
+                    </div>
+                    <select
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      value={item.status}
+                      aria-label={`Status for ${item.name}`}
+                      onChange={(event) =>
+                        void updateStatus(
+                          item,
+                          event.target.value as PlannedItemStatus,
+                        )
+                      }
+                    >
+                      {plannedItemStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(item.convertedItemId)}
+                        onClick={() => void convertItem(item)}
+                      >
+                        <Check aria-hidden="true" />
+                        Own it
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void archiveItem(item)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                        Archive
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                No planned items match this status filter.
+              </div>
+            )}
           </div>
         ) : (
           <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -372,4 +454,19 @@ export function PlannedItemsPanel({
       </CardContent>
     </Card>
   );
+}
+
+function matchesPlannedItemFilter(
+  item: PlannedItem,
+  filter: PlannedItemFilter,
+) {
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "needsDecision") {
+    return item.status === "idea" || item.status === "decided";
+  }
+
+  return item.status === filter;
 }

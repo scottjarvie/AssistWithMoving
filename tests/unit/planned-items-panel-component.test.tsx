@@ -32,6 +32,18 @@ describe("PlannedItemsPanel", () => {
         convertedItemId: undefined,
         archivedAt: undefined,
       },
+      {
+        _id: "planned_2",
+        name: "Laundry washer",
+        category: "Appliance",
+        dimensionsIn: undefined,
+        estimatedPriceCents: 80000,
+        url: undefined,
+        priority: 3,
+        status: "purchased",
+        convertedItemId: undefined,
+        archivedAt: undefined,
+      },
     ];
   });
 
@@ -48,9 +60,21 @@ describe("PlannedItemsPanel", () => {
     const cards = screen.getByRole("list", { name: "Planned item cards" });
     expect(cards).toBeInTheDocument();
     expect(screen.getByText("Walnut dining table")).toBeInTheDocument();
-    expect(screen.getByText("1 planned")).toBeInTheDocument();
+    expect(screen.queryByText("Laundry washer")).not.toBeInTheDocument();
+    expect(screen.getByText("2 planned")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Needs decision 1" })).toHaveAttribute(
+      "data-variant",
+      "default",
+    );
+    expect(screen.getByRole("button", { name: "Purchased 1" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Planned item name")).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Purchased 1" }));
+
+    expect(screen.getByText("Laundry washer")).toBeInTheDocument();
+    expect(screen.queryByText("Walnut dining table")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Needs decision 1" }));
     await user.click(screen.getByRole("button", { name: "Add planned" }));
 
     const nameInput = screen.getByLabelText("Planned item name");
