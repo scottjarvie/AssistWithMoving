@@ -78,6 +78,14 @@ const crewFilters: { key: CrewFilter; label: string }[] = [
   { key: "exceptions", label: "Exceptions" },
 ];
 
+const crewFilterDescriptions: Record<CrewFilter, string> = {
+  all: "All active boxes in this move.",
+  ready: "Sealed or staged boxes ready for the next crew action.",
+  staged: "Boxes staged and waiting to load.",
+  loaded: "Boxes already loaded or delivered.",
+  exceptions: "Missing, damaged, warning, or blocked boxes.",
+};
+
 const progressStatuses: BoxStatus[] = [
   "sealed",
   "staged",
@@ -88,8 +96,18 @@ const progressStatuses: BoxStatus[] = [
 ];
 
 const statusActions: StatusAction[] = [
-  { boxStatus: "sealed", itemStatus: "packed", label: "Sealed", variant: "outline" },
-  { boxStatus: "staged", itemStatus: "staged", label: "Staged", variant: "outline" },
+  {
+    boxStatus: "sealed",
+    itemStatus: "packed",
+    label: "Sealed",
+    variant: "outline",
+  },
+  {
+    boxStatus: "staged",
+    itemStatus: "staged",
+    label: "Staged",
+    variant: "outline",
+  },
   { boxStatus: "loaded", itemStatus: "loaded", label: "Loaded" },
   {
     boxStatus: "delivered",
@@ -128,11 +146,11 @@ export function MoveDayView({
 }) {
   const boxes = useQuery(
     api.boxes.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const resourcesWithZones = useQuery(
     api.transportResources.listForMoveWithZones,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const updateBox = useMutation(api.boxes.update);
   const updateItem = useMutation(api.items.update);
@@ -142,7 +160,7 @@ export function MoveDayView({
   const [filter, setFilter] = useState<CrewFilter>("ready");
   const [moveDayTask, setMoveDayTask] = useHashTab<MoveDayTask>(
     "checklist",
-    moveDayTabHashes
+    moveDayTabHashes,
   );
   const [safeView, setSafeView] = useState(true);
   const [updatingBoxId, setUpdatingBoxId] = useState<Id<"boxes"> | null>(null);
@@ -150,12 +168,12 @@ export function MoveDayView({
   const online = useSyncExternalStore(
     subscribeOnlineStatus,
     readOnlineStatus,
-    readServerOnlineStatus
+    readServerOnlineStatus,
   );
   const [lastFailedAction, setLastFailedAction] =
     useState<FailedStatusAction | null>(null);
   const [exceptionNotes, setExceptionNotes] = useState<Record<string, string>>(
-    {}
+    {},
   );
   const [activeNoteBoxId, setActiveNoteBoxId] = useState<string | null>(null);
 
@@ -187,10 +205,10 @@ export function MoveDayView({
             : undefined,
           record.box.assignedZoneId
             ? zoneNameById.get(record.box.assignedZoneId)
-            : undefined
-        )
+            : undefined,
+        ),
       ),
-    [activeBoxes, resourceNameById, zoneNameById]
+    [activeBoxes, resourceNameById, zoneNameById],
   );
   const liveDataReady = boxes !== undefined && resourcesWithZones !== undefined;
   const storedCachedPayload = useMemo(() => {
@@ -200,7 +218,7 @@ export function MoveDayView({
     try {
       return parseMoveDayCache(
         window.localStorage.getItem(moveDayCacheKey(moveId)),
-        moveId
+        moveId,
       );
     } catch {
       return null;
@@ -215,14 +233,13 @@ export function MoveDayView({
       boxes: liveChecklistBoxes,
     });
   }, [liveChecklistBoxes, liveDataReady, moveId]);
-  const usingCachedBoxes =
-    !liveDataReady && Boolean(storedCachedPayload);
+  const usingCachedBoxes = !liveDataReady && Boolean(storedCachedPayload);
   const displayedChecklistBoxes = useMemo(
     () =>
       usingCachedBoxes
-        ? storedCachedPayload?.boxes ?? []
+        ? (storedCachedPayload?.boxes ?? [])
         : liveChecklistBoxes,
-    [liveChecklistBoxes, storedCachedPayload, usingCachedBoxes]
+    [liveChecklistBoxes, storedCachedPayload, usingCachedBoxes],
   );
   const activeCrewFilter: CrewFilter =
     moveDayTask === "exceptions" ? "exceptions" : filter;
@@ -234,7 +251,7 @@ export function MoveDayView({
           record.box.status,
           record.box.assignmentWarnings ?? [],
           record.box.assignmentHardBlocks ?? [],
-          activeCrewFilter
+          activeCrewFilter,
         )
       ) {
         return false;
@@ -250,7 +267,7 @@ export function MoveDayView({
         record.box.status,
       ];
       return haystack.some((value) =>
-        value?.toLowerCase().includes(normalizedLookup)
+        value?.toLowerCase().includes(normalizedLookup),
       );
     });
   }, [activeBoxes, activeCrewFilter, lookup]);
@@ -262,7 +279,7 @@ export function MoveDayView({
           box.status,
           box.assignmentWarnings,
           box.assignmentHardBlocks,
-          activeCrewFilter
+          activeCrewFilter,
         )
       ) {
         return false;
@@ -280,10 +297,36 @@ export function MoveDayView({
         box.zoneName,
       ];
       return haystack.some((value) =>
-        value?.toLowerCase().includes(normalizedLookup)
+        value?.toLowerCase().includes(normalizedLookup),
       );
     });
   }, [activeCrewFilter, displayedChecklistBoxes, lookup]);
+  const crewFilterCounts = useMemo(() => {
+    const counts: Record<CrewFilter, number> = {
+      all: 0,
+      ready: 0,
+      staged: 0,
+      loaded: 0,
+      exceptions: 0,
+    };
+
+    for (const box of displayedChecklistBoxes) {
+      for (const option of crewFilters) {
+        if (
+          matchesCrewFilter(
+            box.status,
+            box.assignmentWarnings,
+            box.assignmentHardBlocks,
+            option.key,
+          )
+        ) {
+          counts[option.key] += 1;
+        }
+      }
+    }
+
+    return counts;
+  }, [displayedChecklistBoxes]);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<BoxStatus, number>();
@@ -320,7 +363,7 @@ export function MoveDayView({
     try {
       window.localStorage.setItem(
         moveDayCacheKey(moveId),
-        JSON.stringify(liveCachePayload)
+        JSON.stringify(liveCachePayload),
       );
     } catch {
       // Move Day must keep working even if browser storage is unavailable.
@@ -331,7 +374,7 @@ export function MoveDayView({
     record: BoxRecord,
     boxStatus: BoxStatus,
     itemStatus?: ItemStatus,
-    moveDayNote?: string
+    moveDayNote?: string,
   ) {
     if (!householdId || !moveId) {
       return;
@@ -354,7 +397,7 @@ export function MoveDayView({
         moveDayMutationFailureMessage({
           boxCode: record.box.code,
           online: false,
-        })
+        }),
       );
       return;
     }
@@ -373,15 +416,17 @@ export function MoveDayView({
       if (itemStatus) {
         await Promise.all(
           record.contents
-            .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+            .filter((entry): entry is NonNullable<typeof entry> =>
+              Boolean(entry),
+            )
             .map((entry) =>
               updateItem({
                 householdId,
                 moveId,
                 itemId: entry.item._id,
                 status: itemStatus,
-              })
-            )
+              }),
+            ),
         );
       }
       setExceptionNotes((current) => ({
@@ -395,7 +440,7 @@ export function MoveDayView({
         moveDayMutationFailureMessage({
           boxCode: record.box.code,
           online,
-        })
+        }),
       );
     } finally {
       setUpdatingBoxId(null);
@@ -405,10 +450,12 @@ export function MoveDayView({
   function retryLastAction() {
     if (!lastFailedAction) return;
     const record = activeBoxes.find(
-      (entry) => entry.box._id === lastFailedAction.boxId
+      (entry) => entry.box._id === lastFailedAction.boxId,
     );
     if (!record) {
-      setMessage("Reconnect and refresh the checklist before retrying that update.");
+      setMessage(
+        "Reconnect and refresh the checklist before retrying that update.",
+      );
       return;
     }
     const latestNote =
@@ -417,7 +464,7 @@ export function MoveDayView({
       record,
       lastFailedAction.boxStatus,
       lastFailedAction.itemStatus,
-      latestNote
+      latestNote,
     );
   }
 
@@ -468,19 +515,36 @@ export function MoveDayView({
               <p className="text-xs text-muted-foreground">{description}</p>
             ) : null}
             {showFilters ? (
-              <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-                {crewFilters.map((option) => (
-                  <Button
-                    key={option.key}
-                    type="button"
-                    size="sm"
-                    className="h-10 shrink-0"
-                    variant={filter === option.key ? "default" : "outline"}
-                    onClick={() => setFilter(option.key)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
+              <div className="space-y-2">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+                  {crewFilters.map((option) => {
+                    const active = filter === option.key;
+
+                    return (
+                      <Button
+                        key={option.key}
+                        type="button"
+                        size="sm"
+                        className="h-10 shrink-0 gap-2"
+                        variant={active ? "default" : "outline"}
+                        aria-pressed={active}
+                        aria-label={`${option.label}: ${crewFilterCounts[option.key]} boxes`}
+                        onClick={() => setFilter(option.key)}
+                      >
+                        <span>{option.label}</span>
+                        <Badge
+                          variant={active ? "secondary" : "outline"}
+                          className="h-5 min-w-5 px-1"
+                        >
+                          {crewFilterCounts[option.key]}
+                        </Badge>
+                      </Button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {crewFilterDescriptions[filter]}
+                </p>
               </div>
             ) : null}
           </div>
@@ -514,7 +578,7 @@ export function MoveDayView({
           className={cn(
             "flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3 text-sm text-muted-foreground",
             (!online || usingCachedBoxes) &&
-              "border-amber-500/50 bg-amber-500/10 text-foreground"
+              "border-amber-500/50 bg-amber-500/10 text-foreground",
           )}
         >
           <span className="flex min-w-0 items-center gap-2">
@@ -670,7 +734,10 @@ export function MoveDayView({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <ClipboardCheck className="size-4 text-primary" aria-hidden="true" />
+              <ClipboardCheck
+                className="size-4 text-primary"
+                aria-hidden="true"
+              />
               Move Day
             </CardTitle>
             <CardDescription>
@@ -679,7 +746,9 @@ export function MoveDayView({
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{progressPercent}% loaded/delivered</Badge>
+            <Badge variant="secondary">
+              {progressPercent}% loaded/delivered
+            </Badge>
             {exceptionCount ? (
               <Badge variant="destructive">{exceptionCount} exceptions</Badge>
             ) : (
@@ -732,7 +801,9 @@ export function MoveDayView({
                       the way.
                     </p>
                   </div>
-                  <Badge variant="secondary">{displayedChecklistBoxes.length} boxes</Badge>
+                  <Badge variant="secondary">
+                    {displayedChecklistBoxes.length} boxes
+                  </Badge>
                 </div>
                 <div className="mt-4">{renderMetricGrid()}</div>
               </div>
@@ -825,7 +896,7 @@ function MoveDayBoxCard({
   onSetStatus: (
     boxStatus: BoxStatus,
     itemStatus?: ItemStatus,
-    moveDayNote?: string
+    moveDayNote?: string,
   ) => void;
   onSaveNote: (moveDayNote: string) => void;
 }) {
@@ -836,13 +907,13 @@ function MoveDayBoxCard({
     (box.assignmentHardBlocks?.length ?? 0) > 0;
   const primaryAction = primaryStatusActionFor(box.status);
   const exceptionActions = statusActions.filter((action) =>
-    isExceptionStatus(action.boxStatus)
+    isExceptionStatus(action.boxStatus),
   );
   const correctionActions = statusActions.filter(
     (action) =>
       action.boxStatus !== box.status &&
       action.boxStatus !== primaryAction?.boxStatus &&
-      !isExceptionStatus(action.boxStatus)
+      !isExceptionStatus(action.boxStatus),
   );
 
   return (
@@ -851,7 +922,7 @@ function MoveDayBoxCard({
       aria-label={`Move day box ${box.code}`}
       className={cn(
         "rounded-md border border-border p-3",
-        hasException && "border-destructive/50 bg-destructive/5"
+        hasException && "border-destructive/50 bg-destructive/5",
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -863,7 +934,10 @@ function MoveDayBoxCard({
               {box.status}
             </Badge>
             {hasWarnings ? (
-              <AlertTriangle className="size-4 text-destructive" aria-hidden="true" />
+              <AlertTriangle
+                className="size-4 text-destructive"
+                aria-hidden="true"
+              />
             ) : null}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -878,7 +952,9 @@ function MoveDayBoxCard({
         <MoveDayField label="To" value={box.destinationRoom ?? "unset"} />
         <MoveDayField
           label="Load"
-          value={[resourceName, zoneName].filter(Boolean).join(" / ") || "unset"}
+          value={
+            [resourceName, zoneName].filter(Boolean).join(" / ") || "unset"
+          }
         />
       </div>
 
@@ -909,7 +985,7 @@ function MoveDayBoxCard({
                   x{entry.membership.quantity}
                 </span>
               </div>
-            ) : null
+            ) : null,
           )}
           {contents.length > 6 ? (
             <div className="px-3 py-2 text-xs text-muted-foreground">
@@ -956,7 +1032,7 @@ function MoveDayBoxCard({
               onSetStatus(
                 primaryAction.boxStatus,
                 primaryAction.itemStatus,
-                exceptionNote
+                exceptionNote,
               )
             }
           />
@@ -993,7 +1069,11 @@ function MoveDayBoxCard({
                 compact
                 disabled={updating || box.status === action.boxStatus}
                 onClick={() =>
-                  onSetStatus(action.boxStatus, action.itemStatus, exceptionNote)
+                  onSetStatus(
+                    action.boxStatus,
+                    action.itemStatus,
+                    exceptionNote,
+                  )
                 }
               />
             ))}
@@ -1015,7 +1095,7 @@ function CachedMoveDayBoxCard({ box }: { box: MoveDayCachedBox }) {
       aria-label={`Cached move day box ${box.code}`}
       className={cn(
         "rounded-md border border-dashed border-border p-3",
-        hasException && "border-destructive/50 bg-destructive/5"
+        hasException && "border-destructive/50 bg-destructive/5",
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1027,7 +1107,10 @@ function CachedMoveDayBoxCard({ box }: { box: MoveDayCachedBox }) {
               {box.status}
             </Badge>
             {hasWarnings ? (
-              <AlertTriangle className="size-4 text-destructive" aria-hidden="true" />
+              <AlertTriangle
+                className="size-4 text-destructive"
+                aria-hidden="true"
+              />
             ) : null}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -1042,7 +1125,10 @@ function CachedMoveDayBoxCard({ box }: { box: MoveDayCachedBox }) {
         <MoveDayField label="To" value={box.destinationRoom ?? "unset"} />
         <MoveDayField
           label="Load"
-          value={[box.resourceName, box.zoneName].filter(Boolean).join(" / ") || "unset"}
+          value={
+            [box.resourceName, box.zoneName].filter(Boolean).join(" / ") ||
+            "unset"
+          }
         />
       </div>
 
@@ -1118,7 +1204,7 @@ function MoveDayMetric({ label, value }: { label: string; value: number }) {
 function toMoveDayCachedBox(
   record: BoxRecord,
   resourceName?: string,
-  zoneName?: string
+  zoneName?: string,
 ): MoveDayCachedBox {
   return {
     id: record.box._id,
@@ -1185,7 +1271,7 @@ function matchesCrewFilter(
   status: string,
   assignmentWarnings: string[],
   assignmentHardBlocks: string[],
-  filter: CrewFilter
+  filter: CrewFilter,
 ) {
   switch (filter) {
     case "all":

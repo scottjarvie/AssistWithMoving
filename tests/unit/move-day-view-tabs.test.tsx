@@ -92,7 +92,7 @@ function renderMoveDayView() {
     <MoveDayView
       householdId={"household_123" as Id<"households">}
       moveId={"move_123" as Id<"moves">}
-    />
+    />,
   );
 }
 
@@ -110,31 +110,38 @@ describe("MoveDayView task tabs", () => {
 
     expect(screen.getByRole("tab", { name: "Checklist" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
     expect(screen.getByLabelText("Move Day box lookup")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ready" })).toHaveAttribute(
-      "data-variant",
-      "default"
-    );
+    expect(
+      screen.getByRole("button", { name: "Ready: 1 boxes" }),
+    ).toHaveAttribute("data-variant", "default");
+    expect(
+      screen.getByRole("button", { name: "All: 2 boxes" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Sealed or staged boxes ready for the next crew action.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("BOX-READY")).toBeInTheDocument();
     expect(screen.queryByText("BOX-DAMAGE")).not.toBeInTheDocument();
     expect(screen.queryByText("Status progress")).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Offline and crew safety")
+      screen.queryByText("Offline and crew safety"),
     ).not.toBeInTheDocument();
 
     const readyCard = screen.getByRole("listitem", {
       name: "Move day box BOX-READY",
     });
     expect(
-      within(readyCard).getByRole("button", { name: /Next\s+Staged/ })
+      within(readyCard).getByRole("button", { name: /Next\s+Staged/ }),
     ).toBeInTheDocument();
     expect(
-      within(readyCard).getByRole("button", { name: "Missing" })
+      within(readyCard).getByRole("button", { name: "Missing" }),
     ).toBeInTheDocument();
     expect(
-      within(readyCard).getByRole("button", { name: "Damaged" })
+      within(readyCard).getByRole("button", { name: "Damaged" }),
     ).toBeInTheDocument();
     const otherStatuses = within(readyCard)
       .getByText("Other statuses")
@@ -144,13 +151,20 @@ describe("MoveDayView task tabs", () => {
     await user.click(within(readyCard).getByText("Other statuses"));
     expect(otherStatuses).toHaveAttribute("open");
     expect(
-      within(readyCard).getByRole("button", { name: "Loaded" })
+      within(readyCard).getByRole("button", { name: "Loaded" }),
     ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "All: 2 boxes" }));
+    expect(
+      screen.getByText("All active boxes in this move."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("BOX-READY")).toBeInTheDocument();
+    expect(screen.getByText("BOX-DAMAGE")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Exceptions" }));
     expect(screen.getByRole("tab", { name: "Exceptions" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
     expect(screen.getByText("BOX-DAMAGE")).toBeInTheDocument();
     expect(screen.getByText("needs review")).toBeInTheDocument();
@@ -159,13 +173,15 @@ describe("MoveDayView task tabs", () => {
     await user.click(screen.getByRole("tab", { name: "Progress" }));
     expect(screen.getByText("Status progress")).toBeInTheDocument();
     expect(screen.getByText("2 boxes")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Move Day box lookup")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Move Day box lookup"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Offline" }));
     expect(screen.getByText("Offline and crew safety")).toBeInTheDocument();
     expect(screen.getByText("Cached checklist")).toBeInTheDocument();
     expect(
-      screen.getByText("Online. Status changes sync to the move record.")
+      screen.getByText("Online. Status changes sync to the move record."),
     ).toBeInTheDocument();
   });
 
@@ -173,7 +189,7 @@ describe("MoveDayView task tabs", () => {
     window.history.replaceState(
       null,
       "",
-      "/app/moves/move_123/move-day#move-day-progress"
+      "/app/moves/move_123/move-day#move-day-progress",
     );
 
     renderMoveDayView();
@@ -181,10 +197,12 @@ describe("MoveDayView task tabs", () => {
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Progress" })).toHaveAttribute(
         "data-state",
-        "active"
-      )
+        "active",
+      ),
     );
     expect(screen.getByText("Status progress")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Move Day box lookup")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Move Day box lookup"),
+    ).not.toBeInTheDocument();
   });
 });
