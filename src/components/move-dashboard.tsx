@@ -21,6 +21,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
@@ -253,124 +255,90 @@ export function MoveDashboard() {
         </Card>
       </section>
 
-      <Card className="border-primary/25 bg-primary/5">
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Bot className="size-4 text-primary" aria-hidden="true" />
-                Do you need a key for your AI assistant?
-              </CardTitle>
-              <CardDescription className="mt-2 max-w-3xl leading-6">
-                If Claude, ChatGPT, Codex, or another assistant sent you here,
-                create an AI helper key, copy it once, and paste it only into an
-                assistant you trust. A full trusted key can read and change your
-                household move data and invite collaborators.
-              </CardDescription>
-            </div>
-            <Badge variant="outline">one-time secret</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button asChild size="sm">
-            <Link href="/settings#api-keys">
-              <KeyRound aria-hidden="true" />
-              Create and copy AI key
-            </Link>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/ai">
-              AI setup guide
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="moves" className="gap-4">
+        <MoveWorkspaceTabList
+          tabs={[
+            { value: "moves", label: "Moves" },
+            { value: "create", label: "Create move" },
+            { value: "household", label: "Household" },
+            { value: "ai", label: "AI connection" },
+          ]}
+        />
 
-      <section className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <div className="space-y-4">
-          <Card>
+        <TabsContent value="moves">
+          <Card id="active-moves">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Home className="size-4 text-primary" aria-hidden="true" />
-                Household
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="size-4 text-accent" aria-hidden="true" />
+                Active moves
               </CardTitle>
               <CardDescription>
-                Every move belongs to a household permission boundary.
+                Open a move to work in its inventory, boxes, photos, load plan,
+                move day, packets, and AI review pages.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {loadingIdentity || loadingHouseholds ? (
+            <CardContent>
+              {loadingMoves ? (
                 <div className="space-y-2">
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-2/3" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-3/4" />
                 </div>
-              ) : households?.length ? (
-                <>
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={householdId ?? ""}
-                    aria-label="Selected household"
-                    onChange={(event) =>
-                      selectHousehold(event.target.value as Id<"households">)
-                    }
-                  >
-                    {households.map(({ household, role }) => (
-                      <option key={household._id} value={household._id}>
-                        {household.name} - {role}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Owner/admin/editor roles can create and update move records.
-                    Helper and mover-safe access stays restricted by policy.
-                  </p>
-                  <form
-                    className="flex flex-wrap gap-2"
-                    onSubmit={handleCreateHousehold}
-                  >
-                    <Input
-                      value={householdName}
-                      onChange={(event) => setHouseholdName(event.target.value)}
-                      placeholder="New household name"
-                      aria-label="Household name"
-                      className="min-w-0 flex-1"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={saving || !householdName.trim()}
-                    >
-                      <Plus aria-hidden="true" />
-                      Create household
-                    </Button>
-                  </form>
-                </>
+              ) : activeMoves.length ? (
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[760px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Move</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Profiles</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Route</TableHead>
+                        <TableHead className="text-right">Workspace</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activeMoves.map((move) => (
+                        <TableRow key={move._id}>
+                          <TableCell className="font-medium">
+                            {move.title}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{move.type}</Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {move.documentationProfileTypes?.length ?? 0}
+                          </TableCell>
+                          <TableCell>{move.status}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {[move.origin, move.destination]
+                              .filter(Boolean)
+                              .join(" -> ") || "not set"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={moveWorkspacePath(move._id)}>
+                                Open
+                                <ArrowRight aria-hidden="true" />
+                              </Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               ) : (
-                <form className="space-y-3" onSubmit={handleCreateHousehold}>
-                  <p className="rounded-md border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground">
-                    Start here: create your household. It is the permission
-                    boundary that moves, inventory, and packets belong to.
-                  </p>
-                  <Input
-                    value={householdName}
-                    onChange={(event) => setHouseholdName(event.target.value)}
-                    placeholder="Household name"
-                    aria-label="Household name"
-                  />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={saving || !householdName.trim()}
-                  >
-                    <Plus aria-hidden="true" />
-                    Create household
-                  </Button>
-                </form>
+                <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  Create the first move to unlock resources, zones, inventory,
+                  AI planning, and documentation packet setup.
+                </div>
               )}
             </CardContent>
           </Card>
+        </TabsContent>
 
+        <TabsContent value="create">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -624,75 +592,129 @@ export function MoveDashboard() {
               </form>
             </CardContent>
           </Card>
-        </div>
+        </TabsContent>
 
-        <Card id="active-moves">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarDays className="size-4 text-accent" aria-hidden="true" />
-              Active moves
-            </CardTitle>
-            <CardDescription>
-              Open a move to work in its inventory, boxes, photos, load plan,
-              move day, packets, and AI review pages.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingMoves ? (
-              <div className="space-y-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-3/4" />
+        <TabsContent value="household">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Home className="size-4 text-primary" aria-hidden="true" />
+                Household
+              </CardTitle>
+              <CardDescription>
+                Every move belongs to a household permission boundary.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {loadingIdentity || loadingHouseholds ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-2/3" />
+                </div>
+              ) : households?.length ? (
+                <>
+                  <select
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={householdId ?? ""}
+                    aria-label="Selected household"
+                    onChange={(event) =>
+                      selectHousehold(event.target.value as Id<"households">)
+                    }
+                  >
+                    {households.map(({ household, role }) => (
+                      <option key={household._id} value={household._id}>
+                        {household.name} - {role}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Owner/admin/editor roles can create and update move records.
+                    Helper and mover-safe access stays restricted by policy.
+                  </p>
+                  <form
+                    className="flex flex-wrap gap-2"
+                    onSubmit={handleCreateHousehold}
+                  >
+                    <Input
+                      value={householdName}
+                      onChange={(event) => setHouseholdName(event.target.value)}
+                      placeholder="New household name"
+                      aria-label="Household name"
+                      className="min-w-0 flex-1"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={saving || !householdName.trim()}
+                    >
+                      <Plus aria-hidden="true" />
+                      Create household
+                    </Button>
+                  </form>
+                </>
+              ) : (
+                <form className="space-y-3" onSubmit={handleCreateHousehold}>
+                  <p className="rounded-md border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground">
+                    Start here: create your household. It is the permission
+                    boundary that moves, inventory, and packets belong to.
+                  </p>
+                  <Input
+                    value={householdName}
+                    onChange={(event) => setHouseholdName(event.target.value)}
+                    placeholder="Household name"
+                    aria-label="Household name"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={saving || !householdName.trim()}
+                  >
+                    <Plus aria-hidden="true" />
+                    Create household
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ai">
+          <Card className="border-primary/25 bg-primary/5">
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Bot className="size-4 text-primary" aria-hidden="true" />
+                    Do you need an AI connection?
+                  </CardTitle>
+                  <CardDescription className="mt-2 max-w-3xl leading-6">
+                    If Claude, ChatGPT, Codex, or another assistant sent you
+                    here, create a connection, copy the one-time key, and paste
+                    it only into an assistant you trust. You can choose whether
+                    it can add items, set up a move, invite collaborators, or
+                    have full trusted access.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline">one-time secret</Badge>
               </div>
-            ) : activeMoves.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Move</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Profiles</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Route</TableHead>
-                    <TableHead className="text-right">Workspace</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {activeMoves.map((move) => (
-                    <TableRow key={move._id}>
-                      <TableCell className="font-medium">{move.title}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{move.type}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {move.documentationProfileTypes?.length ?? 0}
-                      </TableCell>
-                      <TableCell>{move.status}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {[move.origin, move.destination]
-                          .filter(Boolean)
-                          .join(" -> ") || "not set"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={moveWorkspacePath(move._id)}>
-                            Open
-                            <ArrowRight aria-hidden="true" />
-                          </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Create the first move to unlock resources, zones, inventory, AI
-                planning, and documentation packet setup.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/settings/ai-connections">
+                  <KeyRound aria-hidden="true" />
+                  Set up AI connection
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/ai">
+                  AI setup guide
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
