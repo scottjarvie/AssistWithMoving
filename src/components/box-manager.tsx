@@ -496,7 +496,7 @@ function BoxOverviewCard({
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   boxRecord: BoxRecord;
-  onOpenTask: (task: BoxTask) => void;
+  onOpenTask: (task: BoxCardTask, boxId: Id<"boxes">) => void;
 }) {
   const { box, contents, itemCount, weightSummary } = boxRecord;
   const visibleContents = contents
@@ -586,7 +586,8 @@ function BoxOverviewCard({
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => onOpenTask("contents")}
+          aria-label={`Contents for ${box.code}`}
+          onClick={() => onOpenTask("contents", box._id)}
         >
           Contents
         </Button>
@@ -594,7 +595,8 @@ function BoxOverviewCard({
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => onOpenTask("details")}
+          aria-label={`Details for ${box.code}`}
+          onClick={() => onOpenTask("details", box._id)}
         >
           Details
         </Button>
@@ -602,7 +604,8 @@ function BoxOverviewCard({
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => onOpenTask("load")}
+          aria-label={`Load for ${box.code}`}
+          onClick={() => onOpenTask("load", box._id)}
         >
           Load
         </Button>
@@ -650,6 +653,7 @@ export function BoxManager({
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [activeTask, setActiveTask] = useState<BoxTask>("boxes");
+  const [selectedBoxId, setSelectedBoxId] = useState<Id<"boxes"> | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BoxStatusFilter>("all");
 
@@ -689,6 +693,26 @@ export function BoxManager({
   const exceptionBoxes = visibleBoxes.filter((record) =>
     ["missing", "damaged"].includes(record.box.status)
   );
+  const selectedBoxRecord = useMemo(
+    () =>
+      selectedBoxId
+        ? visibleBoxes.find((record) => record.box._id === selectedBoxId) ?? null
+        : null,
+    [selectedBoxId, visibleBoxes]
+  );
+
+  function openBoxTask(task: BoxCardTask, boxId: Id<"boxes">) {
+    setSelectedBoxId(boxId);
+    setActiveTask(task);
+  }
+
+  function handleActiveTaskChange(value: string) {
+    const task = value as BoxTask;
+    setActiveTask(task);
+    if (!["contents", "details", "photos", "load"].includes(task)) {
+      setSelectedBoxId(null);
+    }
+  }
 
   function renderBoxTaskCards(task: BoxCardTask, emptyText: string) {
     if (boxes === undefined) {
@@ -708,22 +732,48 @@ export function BoxManager({
       );
     }
 
+    const taskBoxes = selectedBoxRecord ? [selectedBoxRecord] : visibleBoxes;
+
     return (
-      <div className="grid gap-3 2xl:grid-cols-2">
-        {visibleBoxes.map((boxRecord) =>
-          householdId && moveId ? (
-            <BoxCard
-              key={`${task}:${boxRecord.box._id}:${boxRecord.box.updatedAt}:${boxRecord.itemCount}`}
-              householdId={householdId}
-              moveId={moveId}
-              boxRecord={boxRecord}
-              items={activeItems}
-              resourcesWithZones={resourcesWithZones ?? []}
-              task={task}
-              onMessage={setMessage}
-            />
-          ) : null
-        )}
+      <div className="space-y-3">
+        {selectedBoxRecord ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                Focused on {selectedBoxRecord.box.code}
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                {selectedBoxRecord.box.label ??
+                  selectedBoxRecord.box.description ??
+                  "Unlabeled box"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setSelectedBoxId(null)}
+            >
+              Show all boxes
+            </Button>
+          </div>
+        ) : null}
+        <div className="grid gap-3 2xl:grid-cols-2">
+          {taskBoxes.map((boxRecord) =>
+            householdId && moveId ? (
+              <BoxCard
+                key={`${task}:${boxRecord.box._id}:${boxRecord.box.updatedAt}:${boxRecord.itemCount}`}
+                householdId={householdId}
+                moveId={moveId}
+                boxRecord={boxRecord}
+                items={activeItems}
+                resourcesWithZones={resourcesWithZones ?? []}
+                task={task}
+                onMessage={setMessage}
+              />
+            ) : null
+          )}
+        </div>
       </div>
     );
   }
@@ -790,7 +840,7 @@ export function BoxManager({
         ) : null}
         <Tabs
           value={activeTask}
-          onValueChange={(value) => setActiveTask(value as BoxTask)}
+          onValueChange={handleActiveTaskChange}
           className="gap-4"
         >
           <MoveWorkspaceTabList tabs={boxTaskTabs} />
@@ -872,7 +922,7 @@ export function BoxManager({
                       householdId={householdId}
                       moveId={moveId}
                       boxRecord={boxRecord}
-                      onOpenTask={setActiveTask}
+                      onOpenTask={openBoxTask}
                     />
                   ))}
                 </div>

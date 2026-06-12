@@ -66,6 +66,31 @@ const boxData = vi.hoisted(() => ({
         source: "contents",
       },
     },
+    {
+      box: {
+        _id: "box_2" as Id<"boxes">,
+        _creationTime: 2,
+        householdId: "household_123" as Id<"households">,
+        moveId: "move_123" as Id<"moves">,
+        code: "B-002",
+        label: "Bedroom linens",
+        room: "Bedroom",
+        destinationRoom: "Guest room",
+        description: "Sheets and towels",
+        status: "sealed",
+        estimatedVolumeCuFt: 3,
+        assignmentLocked: false,
+        createdByUserId: "user_123" as Id<"users">,
+        createdAt: 2,
+        updatedAt: 2,
+      } as unknown as Doc<"boxes">,
+      contents: [],
+      itemCount: 0,
+      weightSummary: {
+        label: "missing",
+        source: "missing",
+      },
+    },
   ],
   items: [
     {
@@ -132,6 +157,7 @@ describe("BoxManager", () => {
     );
     const boxList = screen.getByRole("list", { name: "Box records" });
     expect(within(boxList).getByText("B-001")).toBeInTheDocument();
+    expect(within(boxList).getByText("B-002")).toBeInTheDocument();
     expect(within(boxList).getByText("Garage tools")).toBeInTheDocument();
     expect(within(boxList).getByText("Socket set x1")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
@@ -139,18 +165,28 @@ describe("BoxManager", () => {
     expect(screen.queryByLabelText("Item to add to box")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
 
-    await user.click(within(boxList).getByRole("button", { name: "Details" }));
+    await user.click(
+      within(boxList).getByRole("button", { name: "Details for B-001" })
+    );
     expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
       "data-state",
       "active"
     );
+    expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
     expect(screen.getByLabelText("Box label")).toBeInTheDocument();
+    expect(screen.queryByText("B-002")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show all boxes" }));
+    expect(screen.queryByText("Focused on B-001")).not.toBeInTheDocument();
+    expect(screen.getByText("B-002")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Add box" }));
     expect(screen.getByRole("form", { name: "Create box" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Contents" }));
-    expect(screen.getByLabelText("Item to add to box")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Item to add to box").length).toBeGreaterThan(
+      1
+    );
     expect(screen.getAllByText("Socket set").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
@@ -159,19 +195,29 @@ describe("BoxManager", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Details" }));
-    expect(screen.getByLabelText("Box label")).toBeInTheDocument();
-    expect(screen.getByLabelText("Estimated box weight in pounds")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Box label").length).toBeGreaterThan(1);
+    expect(
+      screen.getAllByLabelText("Estimated box weight in pounds").length
+    ).toBeGreaterThan(1);
     expect(screen.queryByLabelText("Item to add to box")).not.toBeInTheDocument();
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Photos" }));
-    expect(screen.getByText("Photo upload control")).toBeInTheDocument();
-    expect(screen.getByText("Photo evidence strip")).toBeInTheDocument();
+    expect(screen.getAllByText("Photo upload control").length).toBeGreaterThan(
+      1
+    );
+    expect(screen.getAllByText("Photo evidence strip").length).toBeGreaterThan(
+      1
+    );
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Load" }));
-    expect(screen.getByLabelText("Assigned transport resource")).toBeInTheDocument();
-    expect(screen.getByLabelText("Assignment override reason")).toBeInTheDocument();
+    expect(
+      screen.getAllByLabelText("Assigned transport resource").length
+    ).toBeGreaterThan(1);
+    expect(
+      screen.getAllByLabelText("Assignment override reason").length
+    ).toBeGreaterThan(1);
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Labels" }));
