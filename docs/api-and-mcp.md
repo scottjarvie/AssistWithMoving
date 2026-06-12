@@ -1206,7 +1206,7 @@ Evidence media upload is a presigned storage flow. The current product UI is
 still photo-first, but the storage contract accepts image, audio, and video
 originals. Image derivatives remain image-only.
 
-For MCP agents, prefer the plain `upload_photo` alias, or
+For MCP agents, prefer the plain `upload_image` or `upload_photo` alias, or
 `upload_evidence_image` when the client already knows that name, for normal
 single-image work. The assistant can pass a local `filePath`, public
 `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original,
@@ -1215,13 +1215,13 @@ returns the `photoId`.
 For local `filePath`, the MCP helper reads the file and sends the original image
 bytes directly to `POST /photos/upload`; it does not require the agent to
 base64-wrap the photo, calculate dimensions, or create display files. Use
-`upload_photos` or `upload_evidence_images` when the user gives several
+`upload_images`, `upload_photos`, or `upload_evidence_images` when the user gives several
 ordinary photos from the same room or context. Use `upload_evidence_file` for
 audio/video or when a client wants the explicit presigned upload flow.
 
 Quick rule for agents: one user photo should normally mean one
-`upload_photo`/`upload_evidence_image` call in MCP or one
-`POST /photos/upload` call in REST.
+`upload_image`/`upload_photo`/`upload_evidence_image` call in MCP or one
+`POST /images/upload` or `POST /photos/upload` call in REST.
 Do not ask the user for image dimensions, thumbnail sizes, or derivative files.
 The site reads dimensions and creates `thumb`, `card`, `detail`, and `full`
 display versions after the original is stored. MCP image helpers and REST direct
@@ -1249,7 +1249,7 @@ source:
 
 ```bash
 curl -X POST \
-  "https://movingmanifest.com/api/v1/photos/upload?moveId=MOVE_ID&room=Garage&caption=Garage%20shelf%20before%20packing&photoType=room" \
+  "https://movingmanifest.com/api/v1/images/upload?moveId=MOVE_ID&room=Garage&caption=Garage%20shelf%20before%20packing&photoType=room" \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
   -H "Content-Type: image/jpeg" \
   -H "Idempotency-Key: photo-upload-001" \
@@ -1288,7 +1288,7 @@ curl -X POST https://movingmanifest.com/api/v1/photos/upload \
   }'
 ```
 
-`POST /photos/upload` accepts JPEG, PNG, or WebP images as raw image bytes,
+`POST /images/upload` and `POST /photos/upload` accept JPEG, PNG, or WebP images as raw image bytes,
 multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
 `fileBase64`. It is intentionally image-only and server-preps `thumb`, `card`,
 `detail`, and `full` derivatives after storing the original. MCP clients should
@@ -1720,6 +1720,8 @@ Available MCP tools:
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
 | `upload_photo` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload for ordinary household photos. |
 | `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos. |
+| `upload_image` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload when the user or agent says image instead of photo. |
+| `upload_images` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload when the user or agent says images instead of photos. |
 | `upload_evidence_image` | Easiest MCP single-image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
 | `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status plus `agentReview`. |
 | `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |

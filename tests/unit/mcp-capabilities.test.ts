@@ -187,7 +187,10 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
       expect.objectContaining({
         id: "photoEvidence",
-        restEndpoints: expect.arrayContaining(["POST /api/v1/photos/upload"]),
+        restEndpoints: expect.arrayContaining([
+          "POST /api/v1/photos/upload",
+          "POST /api/v1/images/upload",
+        ]),
         mcpTools: expect.arrayContaining([
           "add_item_from_photo",
           "create_item_with_images",
@@ -195,12 +198,14 @@ describe("MovingManifest MCP capability discovery", () => {
           "upload_evidence_images",
           "upload_photo",
           "upload_photos",
+          "upload_image",
+          "upload_images",
         ]),
         agentWorkflows: expect.arrayContaining([
           expect.stringContaining("add_item_from_photo"),
           expect.stringContaining("create_item_with_images"),
-          expect.stringContaining("upload_evidence_image first"),
-          expect.stringContaining("upload_evidence_images"),
+          expect.stringContaining("upload_image"),
+          expect.stringContaining("upload_images"),
           expect.stringContaining("generateAiSuggestions true"),
           expect.stringContaining("Do not ask the user for dimensions"),
         ]),
@@ -244,8 +249,14 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(openapi.paths["/photos/upload"]?.post?.operationId).toBe(
       "uploadPhotoEvidenceImage"
     );
+    expect(openapi.paths["/images/upload"]?.post?.operationId).toBe(
+      "uploadImageEvidenceImage"
+    );
     expect(
       openapi.paths["/photos/upload"]?.post?.requestBody.content
+    ).toHaveProperty("multipart/form-data");
+    expect(
+      openapi.paths["/images/upload"]?.post?.requestBody.content
     ).toHaveProperty("multipart/form-data");
     expect(
       openapi.paths["/photos/upload"]?.post?.requestBody.content
@@ -277,18 +288,25 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(docs).toContain("`upload_evidence_images`");
     expect(docs).toContain("`upload_photo`");
     expect(docs).toContain("`upload_photos`");
+    expect(docs).toContain("`upload_image`");
+    expect(docs).toContain("`upload_images`");
+    expect(docs).toContain("`POST /images/upload`");
     expect(docs).toContain("`agentReview`");
     expect(docs).toContain("`generateAiSuggestions: true`");
     expect(llms).toContain("MCP agents should call");
     expect(llms).toContain("add_item_from_photo");
     expect(llms).toContain("upload_photo");
+    expect(llms).toContain("upload_image");
     expect(llms).toContain("upload_evidence_images");
+    expect(llms).toContain("POST /api/v1/images/upload");
     expect(llms).toContain("agentReview");
     expect(llms).toContain("generateAiSuggestions: true");
     expect(fullLlms).toContain("One user photo should normally be one upload call");
     expect(fullLlms).toContain("add_item_from_photo");
     expect(fullLlms).toContain("upload_photos");
+    expect(fullLlms).toContain("upload_images");
     expect(fullLlms).toContain("upload_evidence_images");
+    expect(fullLlms).toContain("POST /images/upload");
     expect(fullLlms).toContain("agentReview");
     expect(fullLlms).toContain("aiReview.status");
   });

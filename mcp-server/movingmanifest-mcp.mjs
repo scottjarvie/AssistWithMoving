@@ -1876,6 +1876,19 @@ export function registerTools(target, apiConfig) {
     handler: (input) => uploadEvidenceImage(apiConfig, input),
   });
 
+  registerTool(target, "upload_image", {
+    title: "Upload image",
+    description:
+      "Plain-language alias for upload_evidence_image using image terminology. Use this when the user or agent says image instead of photo: pass a local filePath, public sourceUrl, dataUrl, or fileBase64, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
+    inputSchema: {
+      moveId: z.string(),
+      ...evidenceImageInputSchema.shape,
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => uploadEvidenceImage(apiConfig, input),
+  });
+
   registerTool(target, "upload_photos", {
     title: "Upload photos",
     description:
@@ -1887,6 +1900,29 @@ export function registerTools(target, apiConfig) {
         .min(1)
         .max(50)
         .describe("Images to upload. Use one entry per user photo."),
+      ...evidenceImageBatchDefaultsSchema.shape,
+      idempotencyKey: z.string().optional().describe("Optional batch prefix; each image gets a stable numbered key."),
+      dryRun: z.boolean().optional(),
+      continueOnError: z
+        .boolean()
+        .optional()
+        .describe("When true, keep uploading later images after a failed entry and return per-image errors."),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => uploadEvidenceImages(apiConfig, input),
+  });
+
+  registerTool(target, "upload_images", {
+    title: "Upload images",
+    description:
+      "Plain-language alias for upload_evidence_images using image terminology. Use this when the user provides several ordinary images from the same room or context. One image entry equals one user image; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
+    inputSchema: {
+      moveId: z.string(),
+      images: z
+        .array(evidenceImageInputSchema)
+        .min(1)
+        .max(50)
+        .describe("Images to upload. Use one entry per user image."),
       ...evidenceImageBatchDefaultsSchema.shape,
       idempotencyKey: z.string().optional().describe("Optional batch prefix; each image gets a stable numbered key."),
       dryRun: z.boolean().optional(),

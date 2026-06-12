@@ -142,17 +142,17 @@ Family helper or mover:
 ## Image Upload Guidance
 
 One user photo should normally be one upload call. MCP agents should use
-`upload_photo` (or `upload_evidence_image`) with a local `filePath`, public
+`upload_image`, `upload_photo`, or `upload_evidence_image` with a local `filePath`, public
 `sourceUrl`, `dataUrl`, or `fileBase64`. When the user gives several ordinary
-photos from the same room or context, use `upload_photos` (or
-`upload_evidence_images`) with shared defaults and one image entry per photo.
+photos from the same room or context, use `upload_images`, `upload_photos`, or
+`upload_evidence_images` with shared defaults and one image entry per photo.
 When one photo should become one new inventory item, use
 `add_item_from_photo`; it accepts the item name plus one image source, creates
 the item, defaults omitted quantity to 1, leaves missing weight, dimensions,
 disposition, and condition blank, uploads the original image attached to that
 item, and returns item/photo IDs with derivative status and `agentReview`. Use
 `create_item_with_images` when one new item has several photos. REST agents
-should use `POST /api/v1/photos/upload`
+should use `POST /api/v1/images/upload` or `POST /api/v1/photos/upload`
 with raw JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or
 JSON with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`.
 MovingManifest stores the original, reads dimensions, finalizes the evidence
@@ -251,6 +251,7 @@ Important endpoints:
 - `POST /moves/{moveId}/spaces`
 - `POST /moves/{moveId}/sale-listings`
 - `POST /photos/upload`
+- `POST /images/upload`
 - `POST /uploads/init`
 - `POST /photos/finalize`
 - `GET /moves/{moveId}/capacity-report`

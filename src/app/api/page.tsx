@@ -102,7 +102,7 @@ export default function ApiPage() {
               ["Auth", "Authorization: Bearer mmk_..."],
               ["Discovery", "GET /me, GET /moves, GET /moves/{moveId}/agent-context"],
               ["Batch intake", "POST /moves/{moveId}/items/batch-upsert"],
-              ["Image upload", "POST /photos/upload"],
+              ["Image upload", "POST /images/upload or POST /photos/upload"],
               ["Machine contract", "GET /openapi.json"],
             ].map(([label, value]) => (
               <div

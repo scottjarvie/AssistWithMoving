@@ -66,6 +66,38 @@ describe("parseRestApiBody", () => {
     });
   });
 
+  it("accepts the image upload REST alias for raw bytes", async () => {
+    const request = new Request(
+      "https://movingmanifest.test/api/v1/images/upload?moveId=move1&room=Garage",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "image/png",
+          "x-movingmanifest-file-name": "garage-image.png",
+        },
+        body: pngBytes,
+      },
+    );
+
+    await expect(
+      parseRestApiBody({
+        request,
+        method: "POST",
+        path: "images/upload",
+        query: {
+          moveId: "move1",
+          room: "Garage",
+        },
+      }),
+    ).resolves.toEqual({
+      moveId: "move1",
+      room: "Garage",
+      fileBase64: base64FromBytes(pngBytes),
+      fileName: "garage-image.png",
+      mimeType: "image/png",
+    });
+  });
+
   it("turns multipart form uploads into the same photo upload body", async () => {
     const boundary = "----movingmanifest-test-boundary";
     const multipartFileBytes = new TextEncoder().encode("image-bytes");

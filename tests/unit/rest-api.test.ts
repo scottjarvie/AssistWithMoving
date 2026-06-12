@@ -395,6 +395,12 @@ describe("REST API helpers", () => {
     expect(
       requiredScopesForRestRoute({
         method: "POST",
+        segments: ["images", "upload"],
+      })
+    ).toEqual(["photos/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
         segments: ["photos", "finalize"],
       })
     ).toEqual(["photos/write"]);

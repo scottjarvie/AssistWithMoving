@@ -114,7 +114,11 @@ export const handle = internalAction({
     if (segments[0] === "uploads" && segments[1] === "init" && args.method === "POST") {
       return (await handleUploadInit(ctx, args)) as RestResponse;
     }
-    if (segments[0] === "photos" && segments[1] === "upload" && args.method === "POST") {
+    if (
+      (segments[0] === "photos" || segments[0] === "images") &&
+      segments[1] === "upload" &&
+      args.method === "POST"
+    ) {
       return (await handlePhotoUpload(ctx, args)) as RestResponse;
     }
     if (segments[0] === "photos" && segments[1] === "finalize" && args.method === "POST") {

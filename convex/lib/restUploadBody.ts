@@ -1,4 +1,4 @@
-const directPhotoUploadPath = "photos/upload";
+const directImageUploadPaths = new Set(["photos/upload", "images/upload"]);
 const maxDirectImageUploadBytes = 25 * 1024 * 1024;
 const allowedRawImageMimeTypes = new Set([
   "image/jpeg",
@@ -74,7 +74,7 @@ export async function parseRestApiBody({
 }
 
 function isDirectPhotoUploadPath(path: string) {
-  return path.replace(/^\/+|\/+$/g, "") === directPhotoUploadPath;
+  return directImageUploadPaths.has(path.replace(/^\/+|\/+$/g, ""));
 }
 
 async function parseMultipartPhotoUpload(request: Request) {

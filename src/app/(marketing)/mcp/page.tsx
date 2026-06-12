@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 const mcpCards = [
   {
     title: "Tool-based move work",
-    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. add_item_from_photo turns one photo plus a few words into an item, while upload_photo and upload_photos send originals and let MovingManifest prep display versions.",
+    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. add_item_from_photo turns one photo plus a few words into an item, while upload_image, upload_photo, upload_images, and upload_photos send originals and let MovingManifest prep display versions.",
     icon: Bot,
   },
   {
@@ -63,7 +63,7 @@ const toolGroups = [
   "get_agent_context and get_move_questions",
   "search_inventory, create_item, add_item_from_photo, batch_upsert_items, update_item",
   "list_move_spaces and create_move_space",
-  "create_item_with_images, upload_photo, upload_photos, upload_evidence_image, upload_evidence_images, upload_evidence_file, start_photo_upload, finalize_photo_upload, attach_photo",
+  "create_item_with_images, upload_image, upload_images, upload_photo, upload_photos, upload_evidence_image, upload_evidence_images, upload_evidence_file, start_photo_upload, finalize_photo_upload, attach_photo",
   "upsert_sale_listing",
   "plan_get, plan_apply_ops, plan_propose_ops, plan_snapshot",
   "create_box, add_items_to_box, suggest_assignments, apply_assignments",

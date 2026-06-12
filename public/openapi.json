@@ -314,11 +314,105 @@
         }
       }
     },
+    "/images/upload": {
+      "post": {
+        "summary": "Upload image evidence in one call",
+        "operationId": "uploadImageEvidenceImage",
+        "description": "Plain REST alias for /photos/upload using image terminology. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
+        "parameters": [
+          {
+            "name": "moveId",
+            "in": "query",
+            "description": "Required when uploading raw image bytes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "room",
+            "in": "query",
+            "description": "Readable room label for raw image byte uploads.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "caption",
+            "in": "query",
+            "description": "Caption for raw image byte uploads.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "photoType",
+            "in": "query",
+            "description": "Photo type for raw image byte uploads.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "generateAiSuggestions",
+            "in": "query",
+            "description": "Set true for raw image byte uploads when the photo should also enter AI photo review. Requires inventory/write for queueing; upload can still succeed if review queueing fails.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoDirectUpload"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoMultipartUpload"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Photo record created and derivative processing attempted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoDirectUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/photos/upload": {
       "post": {
         "summary": "Upload image evidence in one call",
         "operationId": "uploadPhotoEvidenceImage",
-        "description": "Default REST image upload path for agents. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
+        "description": "Default REST image upload path for agents. /images/upload is an equivalent alias when image terminology is clearer. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
         "parameters": [
           {
             "name": "moveId",
@@ -750,7 +844,7 @@
       "PhotoDirectUpload": {
         "type": "object",
         "required": ["moveId"],
-        "description": "JSON shape for one-call JPEG, PNG, or WebP upload for agents. Provide exactly one of sourceUrl, dataUrl, or fileBase64. REST clients with local files can also use multipart/form-data or raw image bytes; MCP clients should use upload_evidence_image with filePath. Set generateAiSuggestions true to queue photo-intake review suggestions after upload.",
+        "description": "JSON shape for one-call JPEG, PNG, or WebP upload for agents through /images/upload or /photos/upload. Provide exactly one of sourceUrl, dataUrl, or fileBase64. REST clients with local files can also use multipart/form-data or raw image bytes; MCP clients should use upload_image, upload_photo, or upload_evidence_image with filePath. Set generateAiSuggestions true to queue photo-intake review suggestions after upload.",
         "properties": {
           "moveId": {
             "type": "string"
@@ -841,7 +935,7 @@
       "PhotoMultipartUpload": {
         "type": "object",
         "required": ["moveId", "file"],
-        "description": "Multipart one-call JPEG, PNG, or WebP upload for REST agents. Use a file, image, or photo field for the binary image and normal form fields for metadata. Include generateAiSuggestions=true to queue photo-intake review after upload.",
+        "description": "Multipart one-call JPEG, PNG, or WebP upload for REST agents through /images/upload or /photos/upload. Use a file, image, or photo field for the binary image and normal form fields for metadata. Include generateAiSuggestions=true to queue photo-intake review after upload.",
         "properties": {
           "moveId": {
             "type": "string"

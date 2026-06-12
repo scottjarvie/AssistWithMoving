@@ -211,7 +211,10 @@ export function requiredScopesForRestRoute({
   if (segments[0] === "uploads" && method === "POST") {
     return ["photos/write"];
   }
-  if (segments[0] === "photos" && method !== "GET") {
+  if (
+    (segments[0] === "photos" || segments[0] === "images") &&
+    method !== "GET"
+  ) {
     return ["photos/write"];
   }
   if (segments[0] === "plans") {

@@ -373,6 +373,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     requiredScopes: ["moves/read", "inventory/read", "inventory/write", "photos/write"],
     restEndpoints: [
       "POST /api/v1/photos/upload",
+      "POST /api/v1/images/upload",
       "POST /api/v1/uploads/init",
       "POST /api/v1/photos/finalize",
       "POST /api/v1/photos/:photoId/attach",
@@ -384,6 +385,8 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "upload_evidence_images",
       "upload_photo",
       "upload_photos",
+      "upload_image",
+      "upload_images",
       "upload_evidence_file",
       "start_photo_upload",
       "finalize_photo_upload",
@@ -392,8 +395,8 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     agentWorkflows: [
       "When the user provides one picture plus a few short words for one household item, use add_item_from_photo. It defaults quantity to 1 when omitted, leaves unknown weight/size/disposition/condition blank, uploads the original image, creates web-ready derivatives, attaches the photo, and returns item/photo IDs plus agentReview.",
       "Use create_item_with_images when the same new item has several photos or when the agent already has an images array.",
-      "For ordinary images, use upload_photo or upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
-      "When a user gives several ordinary photos from the same room or context, use upload_photos or upload_evidence_images with shared defaults and one image entry per photo.",
+      "For ordinary images, use upload_image, upload_photo, or upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
+      "When a user gives several ordinary images from the same room or context, use upload_images, upload_photos, or upload_evidence_images with shared defaults and one image entry per user image.",
       "Set generateAiSuggestions true when the uploaded image should also enter AI photo review; upload still succeeds if review queueing fails or the key only has photos/write.",
       "Do not ask the user for dimensions, thumbnail sizes, or derivative files during normal AI-assisted photo capture.",
       "Use upload_evidence_file for non-image media or when the agent needs to keep the storage PUT in the local process.",
