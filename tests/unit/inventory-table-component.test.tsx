@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import type { InventoryItem } from "@/lib/inventory-types";
@@ -48,28 +49,68 @@ vi.mock("convex/react", () => ({
 import { InventoryTable } from "@/components/inventory-table";
 
 describe("InventoryTable", () => {
-  it("keeps filters and columns above a sortable, compact item table", () => {
-    mockItems.useMutation
-      .mockReturnValueOnce(mockItems.create)
-      .mockReturnValueOnce(mockItems.update);
+  beforeEach(() => {
+    mockItems.useMutation.mockReset();
+    mockItems.useMutation.mockReturnValue(vi.fn());
+  });
 
+  it("keeps filters and columns above a sortable, compact item table", () => {
     render(
       <InventoryTable
         householdId={"household_123" as Id<"households">}
         moveId={"move_123" as Id<"moves">}
-      />
+      />,
     );
 
     expect(screen.getByText("Saved views")).toBeInTheDocument();
     expect(screen.getByLabelText("Search inventory")).toBeInTheDocument();
     expect(screen.getByText("Columns")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sort by Item" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sort by Room" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sort by Item" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sort by Room" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Walnut media console")).toBeInTheDocument();
     expect(screen.getByText("review")).toBeInTheDocument();
     expect(screen.getByText("value")).toBeInTheDocument();
     expect(screen.getByText("personal")).toBeInTheDocument();
     expect(screen.getByText("+4")).toBeInTheDocument();
     expect(screen.queryByText("photos 2")).not.toBeInTheDocument();
+  });
+
+  it("opens on browsing items and keeps add/import workflows separate", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <InventoryTable
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Browse" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.getByText("Walnut media console")).toBeInTheDocument();
+    expect(screen.queryByLabelText("New item name")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText(
+        "Garage: two bikes, red toolbox, camping tent",
+      ),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Add" }));
+    expect(screen.getByLabelText("New item name")).toBeInTheDocument();
+    expect(screen.queryByText("Walnut media console")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Bulk paste" }));
+    expect(
+      screen.getByPlaceholderText(
+        "Garage: two bikes, red toolbox, camping tent",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("New item name")).not.toBeInTheDocument();
   });
 });

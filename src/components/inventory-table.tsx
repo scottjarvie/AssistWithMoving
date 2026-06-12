@@ -52,6 +52,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   filterInventoryItemsByOwner,
   filterInventoryItems,
@@ -147,7 +148,7 @@ type IndicatorBadgeModel = {
 };
 
 function isIndicatorBadge(
-  badge: IndicatorBadgeModel | null
+  badge: IndicatorBadgeModel | null,
 ): badge is IndicatorBadgeModel {
   return badge !== null;
 }
@@ -315,17 +316,18 @@ export function InventoryTable({
   const [message, setMessage] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] =
-    useState<VisibilityState>(visibleDefaultColumns);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
+    visibleDefaultColumns,
+  );
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(
-    null
+    null,
   );
   const [detailOpen, setDetailOpen] = useState(false);
 
   const items = useQuery(
     api.items.listForMoveWithSignals,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const createItem = useMutation(api.items.create);
   const updateItem = useMutation(api.items.update);
@@ -334,9 +336,9 @@ export function InventoryTable({
     () =>
       filterInventoryItemsByOwner(
         filterInventoryItems(items ?? [], savedFilter, search),
-        ownerFilter
+        ownerFilter,
       ),
-    [items, ownerFilter, savedFilter, search]
+    [items, ownerFilter, savedFilter, search],
   );
   const ownerFilterOptions = useMemo(() => {
     const options = new Map<Id<"movePeople">, { name: string; role: string }>();
@@ -357,7 +359,7 @@ export function InventoryTable({
   }, [items]);
   const selectedItem = useMemo(
     () => items?.find((item) => item._id === selectedItemId) ?? null,
-    [items, selectedItemId]
+    [items, selectedItemId],
   );
 
   async function handleCreateItem(event: FormEvent<HTMLFormElement>) {
@@ -410,7 +412,7 @@ export function InventoryTable({
         ...patch,
       });
     },
-    [householdId, moveId, updateItem]
+    [householdId, moveId, updateItem],
   );
 
   async function handleBulkPatch(patch: InventoryItemPatch) {
@@ -460,9 +462,7 @@ export function InventoryTable({
       },
       {
         accessorKey: "name",
-        header: ({ column }) => (
-          <SortableHeader column={column} label="Item" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} label="Item" />,
         cell: ({ row }) => (
           <div className="min-w-0">
             <p className="font-medium">{row.original.name}</p>
@@ -494,9 +494,7 @@ export function InventoryTable({
       },
       {
         accessorKey: "room",
-        header: ({ column }) => (
-          <SortableHeader column={column} label="Room" />
-        ),
+        header: ({ column }) => <SortableHeader column={column} label="Room" />,
         cell: ({ row }) => row.original.room ?? "unassigned",
       },
       {
@@ -587,8 +585,7 @@ export function InventoryTable({
             aria-label={`Disposition for ${row.original.name}`}
             onChange={(event) =>
               void patchItem(row.original, {
-                disposition: event.target
-                  .value as InventoryItem["disposition"],
+                disposition: event.target.value as InventoryItem["disposition"],
               })
             }
           >
@@ -623,7 +620,7 @@ export function InventoryTable({
         ),
       },
     ],
-    [patchItem]
+    [patchItem],
   );
 
   // TanStack Table intentionally returns mutable table helpers; this is the
@@ -661,300 +658,322 @@ export function InventoryTable({
   return (
     <>
       <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle>Inventory</CardTitle>
-            <CardDescription>
-              Search, filter, edit, and bulk update item records for the
-              selected move.
-            </CardDescription>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Inventory</CardTitle>
+              <CardDescription>
+                Search, filter, edit, and bulk update item records for the
+                selected move.
+              </CardDescription>
+            </div>
+            <Badge variant="secondary">{filteredItems.length} visible</Badge>
           </div>
-          <Badge variant="secondary">{filteredItems.length} visible</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <BulkInventoryIntake
-          householdId={householdId}
-          moveId={moveId}
-          onCreated={setMessage}
-        />
-
-        <form
-          className="grid gap-2 md:grid-cols-[minmax(0,1.2fr)_160px_160px_170px_auto]"
-          onSubmit={handleCreateItem}
-        >
-          <Input
-            value={newItemName}
-            onChange={(event) => setNewItemName(event.target.value)}
-            placeholder="Item name"
-            aria-label="New item name"
-            disabled={!moveId}
-          />
-          <Input
-            value={newItemRoom}
-            onChange={(event) => setNewItemRoom(event.target.value)}
-            placeholder="Room"
-            aria-label="New item room"
-            disabled={!moveId}
-          />
-          <Input
-            value={newItemCategory}
-            onChange={(event) => setNewItemCategory(event.target.value)}
-            placeholder="Category"
-            aria-label="New item category"
-            disabled={!moveId}
-          />
-          <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-            value={newItemDisposition}
-            aria-label="New item disposition"
-            disabled={!moveId}
-            onChange={(event) =>
-              setNewItemDisposition(
-                event.target.value as typeof newItemDisposition
-              )
-            }
-          >
-            {itemDispositionOptions.map((disposition) => (
-              <option key={disposition} value={disposition}>
-                {disposition}
-              </option>
-            ))}
-          </select>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!moveId || !newItemName.trim()}
-          >
-            <PackagePlus aria-hidden="true" />
-            Add
-          </Button>
-        </form>
-
-        <div className="space-y-3">
-          <div className="rounded-md border border-border bg-muted/20 p-3">
-            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-              <ListFilter className="size-4 text-primary" aria-hidden="true" />
-              Saved views
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="browse" className="gap-4">
+            <div className="overflow-x-auto pb-1">
+              <TabsList className="min-w-max" aria-label="Inventory task views">
+                <TabsTrigger value="browse">Browse</TabsTrigger>
+                <TabsTrigger value="add">Add</TabsTrigger>
+                <TabsTrigger value="bulk">Bulk paste</TabsTrigger>
+              </TabsList>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
-              {inventorySavedFilters.map((filter) => (
-                <button
-                  key={filter.key}
-                  type="button"
-                  className={`shrink-0 rounded-md border px-3 py-2 text-left text-xs transition-colors ${
-                    savedFilter === filter.key
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background hover:bg-muted"
-                  }`}
-                  title={filter.description}
-                  aria-pressed={savedFilter === filter.key}
-                  onClick={() => setSavedFilter(filter.key)}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
-            <div className="relative min-w-0">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                className="pl-8"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search items, rooms, people, categories"
-                aria-label="Search inventory"
-              />
-            </div>
-            <select
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-              value={ownerFilter}
-              aria-label="Owner or contact filter"
-              onChange={(event) =>
-                setOwnerFilter(event.target.value as InventoryOwnerFilter)
-              }
-            >
-              <option value="all">All owners</option>
-              <option value="unassigned">Unassigned</option>
-              {ownerFilterOptions.map((owner) => (
-                <option key={owner.id} value={owner.id}>
-                  {owner.name} - {owner.role}
-                </option>
-              ))}
-            </select>
-            <details className="rounded-md border border-border bg-background px-3 py-2">
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
-                <Columns3 className="size-4 text-primary" aria-hidden="true" />
-                Columns
-              </summary>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {table
-                  .getAllLeafColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => (
-                    <label
-                      key={column.id}
-                      className="flex items-start gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
+            {message ? (
+              <p
+                className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                {message}
+              </p>
+            ) : null}
+
+            <TabsContent value="browse" className="space-y-3">
+              <div className="rounded-md border border-border bg-muted/20 p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <ListFilter
+                    className="size-4 text-primary"
+                    aria-hidden="true"
+                  />
+                  Saved views
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
+                  {inventorySavedFilters.map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      className={`shrink-0 rounded-md border px-3 py-2 text-left text-xs transition-colors ${
+                        savedFilter === filter.key
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background hover:bg-muted"
+                      }`}
+                      title={filter.description}
+                      aria-pressed={savedFilter === filter.key}
+                      onClick={() => setSavedFilter(filter.key)}
                     >
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 size-3.5 accent-primary"
-                        checked={column.getIsVisible()}
-                        onChange={column.getToggleVisibilityHandler()}
-                      />
-                      <span>
-                        <span className="block font-medium">
-                          {columnLabels[column.id] ?? column.id}
-                        </span>
-                        {columnDescriptions[column.id] ? (
-                          <span className="block text-xs leading-5 text-muted-foreground">
-                            {columnDescriptions[column.id]}
-                          </span>
-                        ) : null}
-                      </span>
-                    </label>
+                      {filter.label}
+                    </button>
                   ))}
+                </div>
               </div>
-            </details>
-          </div>
 
-          {selectedCount ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
-              <Badge>{selectedCount} selected</Badge>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void handleBulkPatch({ status: "packed" })}
-              >
-                Pack
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  void handleBulkPatch({
-                    disposition: "personalTransport",
-                    requiresPersonalTransport: true,
-                  })
-                }
-              >
-                Personal
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void handleBulkPatch({ needsReview: true })}
-              >
-                Review
-              </Button>
-            </div>
-          ) : null}
-
-          {message ? (
-            <p
-              className="rounded-md border border-border p-3 text-sm text-muted-foreground"
-              role="status"
-              aria-live="polite"
-            >
-              {message}
-            </p>
-          ) : null}
-
-          {loadingItems ? (
-            <div className="space-y-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-4/5" />
-            </div>
-          ) : table.getRowModel().rows.length ? (
-            <div className="rounded-md border border-border">
-              <Table className="min-w-[980px] table-fixed">
-                <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead
-                          key={header.id}
-                          className={tableHeadClassName(header.column.id)}
+              <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+                <div className="relative min-w-0">
+                  <Search
+                    className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    className="pl-8"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search items, rooms, people, categories"
+                    aria-label="Search inventory"
+                  />
+                </div>
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={ownerFilter}
+                  aria-label="Owner or contact filter"
+                  onChange={(event) =>
+                    setOwnerFilter(event.target.value as InventoryOwnerFilter)
+                  }
+                >
+                  <option value="all">All owners</option>
+                  <option value="unassigned">Unassigned</option>
+                  {ownerFilterOptions.map((owner) => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.name} - {owner.role}
+                    </option>
+                  ))}
+                </select>
+                <details className="rounded-md border border-border bg-background px-3 py-2">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
+                    <Columns3
+                      className="size-4 text-primary"
+                      aria-hidden="true"
+                    />
+                    Columns
+                  </summary>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {table
+                      .getAllLeafColumns()
+                      .filter((column) => column.getCanHide())
+                      .map((column) => (
+                        <label
+                          key={column.id}
+                          className="flex items-start gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
                         >
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 size-3.5 accent-primary"
+                            checked={column.getIsVisible()}
+                            onChange={column.getToggleVisibilityHandler()}
+                          />
+                          <span>
+                            <span className="block font-medium">
+                              {columnLabels[column.id] ?? column.id}
+                            </span>
+                            {columnDescriptions[column.id] ? (
+                              <span className="block text-xs leading-5 text-muted-foreground">
+                                {columnDescriptions[column.id]}
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                </details>
+              </div>
+
+              {selectedCount ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
+                  <Badge>{selectedCount} selected</Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleBulkPatch({ status: "packed" })}
+                  >
+                    Pack
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      void handleBulkPatch({
+                        disposition: "personalTransport",
+                        requiresPersonalTransport: true,
+                      })
+                    }
+                  >
+                    Personal
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleBulkPatch({ needsReview: true })}
+                  >
+                    Review
+                  </Button>
+                </div>
+              ) : null}
+
+              {loadingItems ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-4/5" />
+                </div>
+              ) : table.getRowModel().rows.length ? (
+                <div className="rounded-md border border-border">
+                  <Table className="min-w-[980px] table-fixed">
+                    <TableHeader>
+                      {table.getHeaderGroups().map((headerGroup) => (
+                        <TableRow key={headerGroup.id}>
+                          {headerGroup.headers.map((header) => (
+                            <TableHead
+                              key={header.id}
+                              className={tableHeadClassName(header.column.id)}
+                            >
+                              {header.isPlaceholder
+                                ? null
+                                : flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext(),
+                                  )}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableHeader>
+                    <TableBody>
+                      {table.getRowModel().rows.map((row) => (
+                        <TableRow
+                          key={row.id}
+                          data-state={
+                            row.getIsSelected() ? "selected" : undefined
+                          }
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell
+                              key={cell.id}
+                              className={tableCellClassName(cell.column.id)}
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
                               )}
-                        </TableHead>
+                            </TableCell>
+                          ))}
+                        </TableRow>
                       ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() ? "selected" : undefined}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell
-                          key={cell.id}
-                          className={tableCellClassName(cell.column.id)}
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-              Add inventory items or change the saved filter/search terms.
-            </div>
-          )}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  Add inventory items or change the saved filter/search terms.
+                </div>
+              )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-            <span>
-              Page {table.getState().pagination.pageIndex + 1} of{" "}
-              {Math.max(table.getPageCount(), 1)}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!table.getCanPreviousPage()}
-                onClick={() => table.previousPage()}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <span>
+                  Page {table.getState().pagination.pageIndex + 1} of{" "}
+                  {Math.max(table.getPageCount(), 1)}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!table.getCanPreviousPage()}
+                    onClick={() => table.previousPage()}
+                  >
+                    <ChevronLeft aria-hidden="true" />
+                    Prev
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!table.getCanNextPage()}
+                    onClick={() => table.nextPage()}
+                  >
+                    Next
+                    <ChevronRight aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="add">
+              <form
+                className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 md:grid-cols-[minmax(0,1.2fr)_160px_160px_170px_auto]"
+                onSubmit={handleCreateItem}
               >
-                <ChevronLeft aria-hidden="true" />
-                Prev
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!table.getCanNextPage()}
-                onClick={() => table.nextPage()}
-              >
-                Next
-                <ChevronRight aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </CardContent>
+                <Input
+                  value={newItemName}
+                  onChange={(event) => setNewItemName(event.target.value)}
+                  placeholder="Item name"
+                  aria-label="New item name"
+                  disabled={!moveId}
+                />
+                <Input
+                  value={newItemRoom}
+                  onChange={(event) => setNewItemRoom(event.target.value)}
+                  placeholder="Room"
+                  aria-label="New item room"
+                  disabled={!moveId}
+                />
+                <Input
+                  value={newItemCategory}
+                  onChange={(event) => setNewItemCategory(event.target.value)}
+                  placeholder="Category"
+                  aria-label="New item category"
+                  disabled={!moveId}
+                />
+                <select
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  value={newItemDisposition}
+                  aria-label="New item disposition"
+                  disabled={!moveId}
+                  onChange={(event) =>
+                    setNewItemDisposition(
+                      event.target.value as typeof newItemDisposition,
+                    )
+                  }
+                >
+                  {itemDispositionOptions.map((disposition) => (
+                    <option key={disposition} value={disposition}>
+                      {disposition}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={!moveId || !newItemName.trim()}
+                >
+                  <PackagePlus aria-hidden="true" />
+                  Add
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="bulk">
+              <BulkInventoryIntake
+                householdId={householdId}
+                moveId={moveId}
+                onCreated={setMessage}
+              />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
       </Card>
       <ItemDetailSheet
         key={selectedItem?._id ?? "no-item-selected"}
