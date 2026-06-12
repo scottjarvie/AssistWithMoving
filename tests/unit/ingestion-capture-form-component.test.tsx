@@ -35,36 +35,22 @@ const captureData = vi.hoisted(() => {
     reset() {
       uploadIndex = 0;
     },
-    initUpload: vi.fn(async (args: { derivatives?: unknown[] }) => {
+    initUpload: vi.fn(async (...args: Record<string, unknown>[]) => {
+      void args;
       uploadIndex += 1;
       return {
         uploadSessionId: `session_${uploadIndex}`,
         uploadUrl: `https://uploads.example.com/original-${uploadIndex}`,
         headers: { "Content-Type": "application/octet-stream" },
-        derivativeUploads: args.derivatives?.length
-          ? [
-              {
-                variant: "thumb",
-                uploadUrl: `https://uploads.example.com/thumb-${uploadIndex}`,
-                headers: { "Content-Type": "image/webp" },
-              },
-            ]
-          : [],
+        derivativeUploads: [],
       };
     }),
-    finalizeUpload: vi.fn(async () => `photo_${uploadIndex}`),
+    finalizeUpload: vi.fn(async () => ({
+      photoId: `photo_${uploadIndex}`,
+      derivativeStatus: "ready",
+    })),
     cancelUploadSession: vi.fn(),
     createEntry: vi.fn(),
-    createImageDerivatives: vi.fn(async () => [
-      {
-        variant: "thumb",
-        blob: new Blob(["thumb"], { type: "image/webp" }),
-        mimeType: "image/webp",
-        sizeBytes: 5,
-        width: 200,
-        height: 200,
-      },
-    ]),
     fileSha256Hex: vi.fn(async (file: File) => `hash-${file.name}`),
     imageDimensions: vi.fn(async () => ({ width: 1600, height: 1200 })),
     mediaKindForMimeType: vi.fn(mediaKindForMimeType),
@@ -105,7 +91,6 @@ vi.mock("convex/react", () => ({
 }));
 
 vi.mock("@/lib/photo-upload", () => ({
-  createImageDerivatives: captureData.createImageDerivatives,
   fileSha256Hex: captureData.fileSha256Hex,
   imageDimensions: captureData.imageDimensions,
   mediaKindForMimeType: captureData.mediaKindForMimeType,
@@ -191,14 +176,15 @@ describe("IngestionCaptureForm", () => {
     });
 
     expect(captureData.initUpload).toHaveBeenCalledTimes(2);
-    expect(captureData.createImageDerivatives).toHaveBeenCalledTimes(1);
-    expect(captureData.uploadFileWithProgress).toHaveBeenCalledTimes(3);
+    expect(captureData.uploadFileWithProgress).toHaveBeenCalledTimes(2);
     expect(captureData.finalizeUpload).toHaveBeenCalledTimes(2);
     expect(captureData.cancelUploadSession).not.toHaveBeenCalled();
+    expect(captureData.initUpload.mock.calls[0]?.[0]).not.toHaveProperty(
+      "derivatives",
+    );
     expect(captureData.initUpload).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        derivatives: [expect.objectContaining({ variant: "thumb" })],
         mimeType: "image/jpeg",
         room: "Garage",
       }),
@@ -206,7 +192,6 @@ describe("IngestionCaptureForm", () => {
     expect(captureData.initUpload).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        derivatives: undefined,
         mimeType: "audio/mp4",
         room: "Garage",
       }),

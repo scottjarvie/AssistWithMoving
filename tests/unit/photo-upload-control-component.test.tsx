@@ -19,33 +19,21 @@ const photoUploadData = vi.hoisted(() => {
     reset() {
       uploadIndex = 0;
     },
-    initUpload: vi.fn(async () => {
+    initUpload: vi.fn(async (...args: Record<string, unknown>[]) => {
+      void args;
       uploadIndex += 1;
       return {
         uploadSessionId: `session_${uploadIndex}`,
         uploadUrl: `https://uploads.example.com/original-${uploadIndex}`,
         headers: { "Content-Type": "image/jpeg" },
-        derivativeUploads: [
-          {
-            variant: "thumb",
-            uploadUrl: `https://uploads.example.com/thumb-${uploadIndex}`,
-            headers: { "Content-Type": "image/webp" },
-          },
-        ],
+        derivativeUploads: [],
       };
     }),
-    finalizeUpload: vi.fn(async () => `photo_${uploadIndex}`),
+    finalizeUpload: vi.fn(async () => ({
+      photoId: `photo_${uploadIndex}`,
+      derivativeStatus: "ready",
+    })),
     cancelUploadSession: vi.fn(),
-    createImageDerivatives: vi.fn(async () => [
-      {
-        variant: "thumb",
-        blob: new Blob(["thumb"], { type: "image/webp" }),
-        mimeType: "image/webp",
-        sizeBytes: 5,
-        width: 200,
-        height: 200,
-      },
-    ]),
     fileSha256Hex: vi.fn(async (file: File) => `hash-${file.name}`),
     imageDimensions: vi.fn(async () => ({ width: 1600, height: 1200 })),
     uploadFileWithProgress: vi.fn(
@@ -83,7 +71,6 @@ vi.mock("convex/react", () => ({
 }));
 
 vi.mock("@/lib/photo-upload", () => ({
-  createImageDerivatives: photoUploadData.createImageDerivatives,
   fileSha256Hex: photoUploadData.fileSha256Hex,
   imageDimensions: photoUploadData.imageDimensions,
   uploadFileWithProgress: photoUploadData.uploadFileWithProgress,
@@ -115,7 +102,7 @@ describe("PhotoUploadControl", () => {
 
     expect(screen.getByText("Drop photos here or choose files.")).toBeInTheDocument();
     expect(
-      screen.getByText("JPEG, PNG, or WebP originals. Web versions are prepared during upload."),
+      screen.getByText("JPEG, PNG, or WebP originals. Web versions are prepared by the server after upload."),
     ).toBeInTheDocument();
 
     await user.upload(screen.getByLabelText("Room photos"), [
@@ -140,14 +127,15 @@ describe("PhotoUploadControl", () => {
 
     expect(photoUploadData.initUpload).toHaveBeenCalledTimes(2);
     expect(photoUploadData.finalizeUpload).toHaveBeenCalledTimes(2);
-    expect(photoUploadData.createImageDerivatives).toHaveBeenCalledTimes(2);
-    expect(photoUploadData.uploadFileWithProgress).toHaveBeenCalledTimes(4);
+    expect(photoUploadData.uploadFileWithProgress).toHaveBeenCalledTimes(2);
     expect(onUploaded).toHaveBeenCalledTimes(2);
     expect(photoUploadData.cancelUploadSession).not.toHaveBeenCalled();
+    expect(photoUploadData.initUpload.mock.calls[0]?.[0]).not.toHaveProperty(
+      "derivatives",
+    );
     expect(photoUploadData.initUpload).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        derivatives: [expect.objectContaining({ variant: "thumb" })],
         mimeType: "image/jpeg",
         room: "Kitchen",
       }),
@@ -167,7 +155,7 @@ describe("PhotoUploadControl", () => {
     const user = userEvent.setup();
     const onUploaded = vi.fn();
     photoUploadData.finalizeUpload
-      .mockResolvedValueOnce("photo_1")
+      .mockResolvedValueOnce({ photoId: "photo_1", derivativeStatus: "ready" })
       .mockRejectedValueOnce(new Error("Unexpected service error"));
 
     render(

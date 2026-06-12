@@ -9,7 +9,6 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  createImageDerivatives,
   fileSha256Hex,
   imageDimensions,
   uploadFileWithProgress,
@@ -28,13 +27,13 @@ type UploadedPhoto = {
   photoId: Id<"itemPhotos">;
   width: number;
   height: number;
+  derivativeStatus?: "pending" | "ready" | "failed";
 };
 
 const uploadProgressWeights = {
-  prepare: 0.1,
-  original: 0.6,
-  derivatives: 0.25,
-  finalize: 0.05,
+  prepare: 0.15,
+  original: 0.7,
+  finalize: 0.15,
 };
 
 export function PhotoUploadControl({
@@ -120,6 +119,7 @@ export function PhotoUploadControl({
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
     let uploadedCount = 0;
+    let derivativeFailureCount = 0;
 
     try {
       for (const [index, selectedFile] of files.entries()) {
@@ -133,11 +133,14 @@ export function PhotoUploadControl({
           },
         });
         uploadedCount += 1;
+        if (uploadedPhoto.derivativeStatus === "failed") {
+          derivativeFailureCount += 1;
+        }
         onUploaded?.(uploadedPhoto);
       }
 
       setProgress(100);
-      setStatus(formatUploadSuccess(uploadedCount));
+      setStatus(formatUploadSuccess(uploadedCount, derivativeFailureCount));
       setFiles([]);
       setCaption("");
       clearFileInput();
@@ -167,10 +170,9 @@ export function PhotoUploadControl({
 
     try {
       onProgress(0);
-      const [{ width, height }, originalHash, derivatives] = await Promise.all([
+      const [{ width, height }, originalHash] = await Promise.all([
         imageDimensions(file),
         fileSha256Hex(file),
-        createImageDerivatives(file),
       ]);
       onProgress(uploadProgressWeights.prepare);
 
@@ -182,13 +184,6 @@ export function PhotoUploadControl({
         room,
         mimeType: file.type,
         sizeBytes: file.size,
-        derivatives: derivatives.map((derivative) => ({
-          variant: derivative.variant,
-          mimeType: derivative.mimeType,
-          sizeBytes: derivative.sizeBytes,
-          width: derivative.width,
-          height: derivative.height,
-        })),
       });
       activeUploadSessionId =
         session.uploadSessionId as Id<"photoUploadSessions">;
@@ -208,40 +203,9 @@ export function PhotoUploadControl({
         signal: abortController.signal,
       });
 
-      const derivativeUploads = session.derivativeUploads ?? [];
-      if (derivativeUploads.length > 0) {
-        for (const [derivativeIndex, derivativeUpload] of derivativeUploads.entries()) {
-          const derivative = derivatives.find(
-            (entry) => entry.variant === derivativeUpload.variant
-          );
-          if (!derivative) {
-            throw new Error("Derivative upload is missing.");
-          }
-          await uploadFileWithProgress({
-            file: derivative.blob,
-            uploadUrl: derivativeUpload.uploadUrl,
-            contentType: derivativeUpload.headers["Content-Type"],
-            onProgress: (nextProgress) => {
-              const derivativeProgress =
-                (derivativeIndex + nextProgress / 100) / derivativeUploads.length;
-              onProgress(
-                uploadProgressWeights.prepare +
-                  uploadProgressWeights.original +
-                  derivativeProgress * uploadProgressWeights.derivatives
-              );
-            },
-            signal: abortController.signal,
-          });
-        }
-      }
+      onProgress(uploadProgressWeights.prepare + uploadProgressWeights.original);
 
-      onProgress(
-        uploadProgressWeights.prepare +
-          uploadProgressWeights.original +
-          uploadProgressWeights.derivatives
-      );
-
-      const photoId = (await finalizeUpload({
+      const finalizeResult = normalizeFinalizeUploadResult(await finalizeUpload({
         householdId: householdId!,
         moveId: moveId!,
         uploadSessionId: activeUploadSessionId,
@@ -255,12 +219,17 @@ export function PhotoUploadControl({
         exifHandlingStatus: "pending",
         confidence: "manual",
         verificationStatus: "unreviewed",
-      })) as Id<"itemPhotos">;
+      }));
 
       onProgress(1);
       setUploadSessionId(null);
       uploadSessionRef.current = null;
-      return { photoId, width, height };
+      return {
+        photoId: finalizeResult.photoId,
+        width,
+        height,
+        derivativeStatus: finalizeResult.derivativeStatus,
+      };
     } catch (error) {
       if (
         householdId &&
@@ -322,8 +291,8 @@ export function PhotoUploadControl({
                 {label}
               </div>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                JPEG, PNG, or WebP originals. Web versions are prepared during
-                upload.
+                JPEG, PNG, or WebP originals. Web versions are prepared by the
+                server after upload.
               </p>
             </div>
             <Button
@@ -466,7 +435,13 @@ function formatUploadStatus(index: number, total: number, fileName: string) {
   return `Uploading ${index + 1} of ${total}: ${fileName}.`;
 }
 
-function formatUploadSuccess(count: number) {
+function formatUploadSuccess(count: number, derivativeFailureCount: number) {
+  if (derivativeFailureCount > 0) {
+    return count === 1
+      ? "Photo uploaded. Web versions need retry."
+      : `${count} photos uploaded. ${derivativeFailureCount} need web-version retry.`;
+  }
+
   return count === 1
     ? "Photo uploaded. Web versions ready."
     : `${count} photos uploaded. Web versions ready.`;
@@ -500,4 +475,26 @@ function photoUploadFailureMessage(error: unknown, uploadedCount = 0) {
   }
 
   return `${prefix}Upload failed. Retry when ready.`;
+}
+
+function normalizeFinalizeUploadResult(value: unknown): {
+  photoId: Id<"itemPhotos">;
+  derivativeStatus?: "pending" | "ready" | "failed";
+} {
+  if (typeof value === "string") {
+    return { photoId: value as Id<"itemPhotos"> };
+  }
+  if (value && typeof value === "object") {
+    const result = value as {
+      photoId?: string;
+      derivativeStatus?: "pending" | "ready" | "failed";
+    };
+    if (result.photoId) {
+      return {
+        photoId: result.photoId as Id<"itemPhotos">,
+        derivativeStatus: result.derivativeStatus,
+      };
+    }
+  }
+  throw new Error("Upload finalization did not return a photo id.");
 }

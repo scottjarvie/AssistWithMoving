@@ -26,7 +26,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  createImageDerivatives,
   fileSha256Hex,
   imageDimensions,
   mediaKindForMimeType,
@@ -89,10 +88,9 @@ export function IngestionCaptureForm({
 
     const { file, kind } = attachment;
     const isImage = kind === "image";
-    const [dimensions, originalHash, derivatives] = await Promise.all([
+    const [dimensions, originalHash] = await Promise.all([
       isImage ? imageDimensions(file) : Promise.resolve(undefined),
       fileSha256Hex(file),
-      isImage ? createImageDerivatives(file) : Promise.resolve([]),
     ]);
 
     const session = await initUpload({
@@ -101,15 +99,6 @@ export function IngestionCaptureForm({
       room: roomHint.trim() || undefined,
       mimeType: file.type,
       sizeBytes: file.size,
-      derivatives: derivatives.length
-        ? derivatives.map((derivative) => ({
-            variant: derivative.variant,
-            mimeType: derivative.mimeType,
-            sizeBytes: derivative.sizeBytes,
-            width: derivative.width,
-            height: derivative.height,
-          }))
-        : undefined,
     });
     const uploadSessionId =
       session.uploadSessionId as Id<"photoUploadSessions">;
@@ -123,23 +112,8 @@ export function IngestionCaptureForm({
         onProgress: () => {},
         signal: abortController.signal,
       });
-      for (const derivativeUpload of session.derivativeUploads) {
-        const derivative = derivatives.find(
-          (entry) => entry.variant === derivativeUpload.variant
-        );
-        if (!derivative) {
-          throw new Error("Derivative upload is missing.");
-        }
-        await uploadFileWithProgress({
-          file: derivative.blob,
-          uploadUrl: derivativeUpload.uploadUrl,
-          contentType: derivativeUpload.headers["Content-Type"],
-          onProgress: () => {},
-          signal: abortController.signal,
-        });
-      }
 
-      const photoId = await finalizeUpload({
+      const finalizeResult = normalizeFinalizeUploadResult(await finalizeUpload({
         householdId,
         moveId,
         uploadSessionId,
@@ -152,8 +126,8 @@ export function IngestionCaptureForm({
         exifHandlingStatus: "pending",
         confidence: "manual",
         verificationStatus: "unreviewed",
-      });
-      return photoId as Id<"itemPhotos">;
+      }));
+      return finalizeResult.photoId;
     } catch (error) {
       await cancelUploadSession({
         householdId,
@@ -360,6 +334,21 @@ export function IngestionCaptureForm({
       </CardContent>
     </Card>
   );
+}
+
+function normalizeFinalizeUploadResult(value: unknown): {
+  photoId: Id<"itemPhotos">;
+} {
+  if (typeof value === "string") {
+    return { photoId: value as Id<"itemPhotos"> };
+  }
+  if (value && typeof value === "object") {
+    const result = value as { photoId?: string };
+    if (result.photoId) {
+      return { photoId: result.photoId as Id<"itemPhotos"> };
+    }
+  }
+  throw new Error("Upload finalization did not return a photo id.");
 }
 
 function attachmentIcon(kind: PendingAttachment["kind"]) {

@@ -627,7 +627,15 @@ export const finalizeUpload = action({
     verificationStatus: v.optional(photoVerificationStatusValidator),
     capturedAt: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<string> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    photoId: string;
+    derivativeStatus?: "pending" | "ready" | "failed";
+    derivativeError?: string;
+    derivativeNote: string;
+  }> => {
     const config = requireB2Config();
     const session = await ctx.runQuery(internal.photos.getUploadSession, {
       householdId: args.householdId,
@@ -678,7 +686,7 @@ export const finalizeUpload = action({
       throw error;
     }
 
-    return await ctx.runMutation(internal.photos.completeUploadSession, {
+    const photoId = await ctx.runMutation(internal.photos.completeUploadSession, {
       householdId: args.householdId,
       moveId: args.moveId,
       uploadSessionId: args.uploadSessionId,
@@ -696,8 +704,96 @@ export const finalizeUpload = action({
       verificationStatus: args.verificationStatus,
       capturedAt: args.capturedAt,
     });
+
+    let derivativeStatus = imageDerivativeStatusForSession(session);
+    let derivativeError: string | undefined;
+    if (shouldGenerateServerDerivatives(session)) {
+      try {
+        const generated = await ctx.runAction(
+          internal.imageDerivatives.generateFromOriginal,
+          {
+            bucketName: session.originalBucket ?? config.bucketName,
+            moveId: args.moveId,
+            originalStorageKey: session.originalStorageKey,
+          },
+        );
+        await ctx.runMutation(internal.photos.markGeneratedDerivativesReady, {
+          householdId: args.householdId,
+          moveId: args.moveId,
+          photoId,
+          derivativeRefs: generated.derivativeRefs,
+        });
+        derivativeStatus = "ready";
+      } catch (error) {
+        derivativeStatus = "failed";
+        derivativeError = derivativeProcessingError(error);
+        await ctx.runMutation(internal.photos.markGeneratedDerivativesFailed, {
+          householdId: args.householdId,
+          moveId: args.moveId,
+          photoId,
+          derivativeError,
+        });
+      }
+    }
+
+    return {
+      photoId,
+      derivativeStatus,
+      derivativeError,
+      derivativeNote: derivativeNoteForStatus(derivativeStatus),
+    };
   },
 });
+
+function imageDerivativeStatusForSession(session: {
+  expectedMimeType: string;
+  mediaKind?: string;
+  derivativeUploads?: unknown[];
+}): "pending" | "ready" | "failed" | undefined {
+  const mediaKind =
+    session.mediaKind ?? mediaKindForMimeType(session.expectedMimeType);
+  if (mediaKind !== "image") return undefined;
+  return Array.isArray(session.derivativeUploads) &&
+    session.derivativeUploads.length > 0
+    ? "ready"
+    : "pending";
+}
+
+function shouldGenerateServerDerivatives(session: {
+  expectedMimeType: string;
+  mediaKind?: string;
+  derivativeUploads?: unknown[];
+}) {
+  const mediaKind =
+    session.mediaKind ?? mediaKindForMimeType(session.expectedMimeType);
+  return (
+    mediaKind === "image" &&
+    (!Array.isArray(session.derivativeUploads) ||
+      session.derivativeUploads.length === 0)
+  );
+}
+
+function derivativeProcessingError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return `Server derivative processing failed: ${error.message}`;
+  }
+  return "Server derivative processing failed.";
+}
+
+function derivativeNoteForStatus(
+  status: "pending" | "ready" | "failed" | undefined,
+) {
+  switch (status) {
+    case "ready":
+      return "Original evidence was uploaded and MovingManifest created web-ready image derivatives for display and AI review.";
+    case "pending":
+      return "Original evidence was uploaded and web-ready image derivatives are pending.";
+    case "failed":
+      return "Original evidence was uploaded, but server-side derivative processing failed. The photo record remains available for review and retry.";
+    default:
+      return "Original evidence was uploaded.";
+  }
+}
 
 export const getDisplayUrl = action({
   args: {
