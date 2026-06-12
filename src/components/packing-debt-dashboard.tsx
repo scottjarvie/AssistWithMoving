@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import {
@@ -40,20 +41,69 @@ const severityClasses = {
     "border-destructive/40 bg-destructive/10 text-destructive dark:text-red-300",
 };
 
-const readinessTasks = [
-  { value: "actions", label: "Actions" },
-  { value: "areas", label: "Areas" },
-  { value: "shortcuts", label: "Shortcuts" },
+type ReadinessTask = "actions" | "areas" | "shortcuts";
+
+const readinessTasks: Array<{
+  value: ReadinessTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "actions",
+    label: "Actions",
+    description:
+      "Start with the highest-impact readiness signals before move day.",
+  },
+  {
+    value: "areas",
+    label: "Areas",
+    description:
+      "Group unfinished work by the part of the move that owns the cleanup.",
+  },
+  {
+    value: "shortcuts",
+    label: "Shortcuts",
+    description:
+      "Jump to the source workspace and fix the data that creates readiness debt.",
+  },
+];
+
+const readinessShortcutLinks = [
+  { label: "Inventory", anchor: "#inventory" },
+  { label: "Load planner", anchor: "#load-plan" },
+  { label: "Photos", anchor: "#photos" },
+  { label: "AI review", anchor: "#ai-review-queue" },
 ] as const;
+
+function formatReadinessTaskCount(task: ReadinessTask, count: number) {
+  if (task === "areas") {
+    return `${count} ${count === 1 ? "group" : "groups"}`;
+  }
+  if (task === "shortcuts") {
+    return `${count} ${count === 1 ? "link" : "links"}`;
+  }
+  return `${count} ${count === 1 ? "signal" : "signals"}`;
+}
 
 export function PackingDebtDashboard({
   householdId,
   moveId,
 }: PackingDebtDashboardProps) {
+  const [activeTask, setActiveTask] = useState<ReadinessTask>("actions");
   const summary = useQuery(
     api.packingDebt.summaryForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
+  const readinessTaskCounts: Record<ReadinessTask, number> = {
+    actions:
+      summary?.topActions.reduce((total, metric) => total + metric.count, 0) ??
+      0,
+    areas: 3,
+    shortcuts: readinessShortcutLinks.length,
+  };
+  const activeReadinessTask =
+    readinessTasks.find((task) => task.value === activeTask) ??
+    readinessTasks[0];
 
   return (
     <Card id="packing-debt">
@@ -61,7 +111,10 @@ export function PackingDebtDashboard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="size-4 text-primary" aria-hidden="true" />
+              <ClipboardList
+                className="size-4 text-primary"
+                aria-hidden="true"
+              />
               Packing debt
             </CardTitle>
             <CardDescription>
@@ -100,19 +153,42 @@ export function PackingDebtDashboard({
             </div>
           </div>
         ) : (
-          <Tabs defaultValue="actions" className="gap-4">
+          <Tabs
+            value={activeTask}
+            onValueChange={(value) => setActiveTask(value as ReadinessTask)}
+            className="gap-4"
+          >
             <div className="overflow-x-auto pb-1">
               <TabsList
                 className="min-w-max"
                 aria-label="Readiness review tasks"
               >
-                {readinessTasks.map((task) => (
-                  <TabsTrigger key={task.value} value={task.value}>
-                    {task.label}
-                  </TabsTrigger>
-                ))}
+                {readinessTasks.map((task) => {
+                  const count = readinessTaskCounts[task.value];
+                  return (
+                    <TabsTrigger
+                      key={task.value}
+                      value={task.value}
+                      className="gap-2"
+                      aria-label={`${task.label}: ${formatReadinessTaskCount(task.value, count)}`}
+                    >
+                      {task.label}
+                      <Badge
+                        variant={
+                          activeTask === task.value ? "secondary" : "outline"
+                        }
+                        className="h-5 min-w-5 px-1"
+                      >
+                        {count}
+                      </Badge>
+                    </TabsTrigger>
+                  );
+                })}
               </TabsList>
             </div>
+            <p className="text-sm text-muted-foreground">
+              {activeReadinessTask.description}
+            </p>
 
             <TabsContent value="actions">
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
@@ -122,11 +198,13 @@ export function PackingDebtDashboard({
                     href={moveWorkspaceAnchorPath(moveId, metric.anchor)}
                     className={cn(
                       "rounded-md border p-3 transition-colors hover:bg-muted/70",
-                      severityClasses[metric.severity]
+                      severityClasses[metric.severity],
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-medium">{metric.label}</span>
+                      <span className="text-sm font-medium">
+                        {metric.label}
+                      </span>
                       <span className="font-mono text-2xl font-semibold leading-none">
                         {metric.count}
                       </span>
@@ -149,7 +227,7 @@ export function PackingDebtDashboard({
                       "needsReview",
                       "undecidedDisposition",
                       "unboxedItems",
-                    ].includes(metric.key)
+                    ].includes(metric.key),
                   )}
                   moveId={moveId}
                 />
@@ -161,7 +239,7 @@ export function PackingDebtDashboard({
                       "highValueWithoutPhotos",
                       "photosNeedingReview",
                       "pendingAiSuggestions",
-                    ].includes(metric.key)
+                    ].includes(metric.key),
                   )}
                   moveId={moveId}
                 />
@@ -174,7 +252,7 @@ export function PackingDebtDashboard({
                       "boxesUnassigned",
                       "boxesNotLoaded",
                       "boxWarnings",
-                    ].includes(metric.key)
+                    ].includes(metric.key),
                   )}
                   moveId={moveId}
                 />
@@ -189,26 +267,20 @@ export function PackingDebtDashboard({
                   photos, and AI review are completed.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#inventory")}>
-                      Inventory
-                    </Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#load-plan")}>
-                      Load planner
-                    </Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#photos")}>
-                      Photos
-                    </Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#ai-review-queue")}>
-                      AI review
-                    </Link>
-                  </Button>
+                  {readinessShortcutLinks.map((shortcut) => (
+                    <Button
+                      key={shortcut.anchor}
+                      asChild
+                      size="sm"
+                      variant="outline"
+                    >
+                      <Link
+                        href={moveWorkspaceAnchorPath(moveId, shortcut.anchor)}
+                      >
+                        {shortcut.label}
+                      </Link>
+                    </Button>
+                  ))}
                 </div>
               </div>
             </TabsContent>

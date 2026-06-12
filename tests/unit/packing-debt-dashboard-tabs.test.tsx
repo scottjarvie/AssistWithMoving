@@ -117,7 +117,7 @@ function renderPackingDebtDashboard() {
     <PackingDebtDashboard
       householdId={"household_123" as Id<"households">}
       moveId={"move_123" as Id<"moves">}
-    />
+    />,
   );
 }
 
@@ -127,38 +127,53 @@ describe("PackingDebtDashboard task tabs", () => {
 
     renderPackingDebtDashboard();
 
-    expect(screen.getByRole("tab", { name: "Actions" })).toHaveAttribute(
-      "data-state",
-      "active"
-    );
+    expect(
+      screen.getByRole("tab", { name: "Actions: 3 signals" }),
+    ).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByText(
+        "Start with the highest-impact readiness signals before move day.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Review inventory decisions")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Review inventory decisions/i })
+      screen.getByRole("link", { name: /Review inventory decisions/i }),
     ).toHaveAttribute("href", "/app/moves/move_123/inventory#inventory");
     expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
-    expect(screen.queryByText("Go fix readiness inputs")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Go fix readiness inputs"),
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Areas" }));
+    await user.click(screen.getByRole("tab", { name: "Areas: 3 groups" }));
+    expect(
+      screen.getByText(
+        "Group unfinished work by the part of the move that owns the cleanup.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Inventory")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Unboxed items/i })).toHaveAttribute(
-      "href",
-      "/app/moves/move_123/boxes#boxes"
-    );
+    expect(
+      screen.getByRole("link", { name: /Unboxed items/i }),
+    ).toHaveAttribute("href", "/app/moves/move_123/boxes#boxes");
     expect(screen.getByText("Evidence")).toBeInTheDocument();
     expect(screen.getByText("Load readiness")).toBeInTheDocument();
     expect(
-      screen.queryByText("Review inventory decisions")
+      screen.queryByText("Review inventory decisions"),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Shortcuts" }));
+    await user.click(screen.getByRole("tab", { name: "Shortcuts: 4 links" }));
+    expect(
+      screen.getByText(
+        "Jump to the source workspace and fix the data that creates readiness debt.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Go fix readiness inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/inventory#inventory"
+      "/app/moves/move_123/inventory#inventory",
     );
     expect(screen.getByRole("link", { name: "AI review" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/ai-review#ai-review-queue"
+      "/app/moves/move_123/ai-review#ai-review-queue",
     );
     expect(screen.queryByText("Load readiness")).not.toBeInTheDocument();
   });

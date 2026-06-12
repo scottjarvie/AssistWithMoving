@@ -59,7 +59,7 @@ function renderMoveQuestionsPanel() {
     <MoveQuestionsPanel
       householdId={"household_123" as Id<"households">}
       moveId={"move_123" as Id<"moves">}
-    />
+    />,
   );
 }
 
@@ -69,43 +69,61 @@ describe("MoveQuestionsPanel task tabs", () => {
 
     renderMoveQuestionsPanel();
 
-    expect(screen.getByRole("tab", { name: "Priority" })).toHaveAttribute(
-      "data-state",
-      "active"
-    );
-    expect(screen.getByText("High-value items need photos")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /High-value items need photos/i })
+      screen.getByRole("tab", { name: "Priority: 3 prompts" }),
+    ).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByText(
+        "Review the highest-risk missing details before they block planning or packets.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("High-value items need photos"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /High-value items need photos/i }),
     ).toHaveAttribute("href", "/app/moves/move_123/inventory#inventory");
     expect(screen.getByText("Critical")).toBeInTheDocument();
     expect(screen.queryByText("Go fix the source")).not.toBeInTheDocument();
     expect(screen.queryByText("PCS")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Areas" }));
+    await user.click(screen.getByRole("tab", { name: "Areas: 4 areas" }));
+    expect(
+      screen.getByText(
+        "See which workspace areas are creating the most open questions.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("PCS")).toBeInTheDocument();
     expect(screen.getByText("Evidence")).toBeInTheDocument();
     expect(
-      screen.queryByText("High-value items need photos")
+      screen.queryByText("High-value items need photos"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Go fix the source")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Shortcuts" }));
+    await user.click(screen.getByRole("tab", { name: "Shortcuts: 5 links" }));
+    expect(
+      screen.getByText(
+        "Jump to the source records that need cleanup, then return here to verify the count drops.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Go fix the source")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/inventory#inventory"
+      "/app/moves/move_123/inventory#inventory",
     );
     expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/load-plan#transport-resources"
+      "/app/moves/move_123/load-plan#transport-resources",
     );
     expect(screen.getByRole("link", { name: "Photos" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/photos#photos"
+      "/app/moves/move_123/photos#photos",
     );
-    expect(screen.getByText(/verified against current official guidance/i)).toBeInTheDocument();
     expect(
-      screen.queryByText("High-value items need photos")
+      screen.getByText(/verified against current official guidance/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("High-value items need photos"),
     ).not.toBeInTheDocument();
   });
 });

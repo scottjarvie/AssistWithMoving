@@ -1,8 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
-import { AlertTriangle, CircleHelp, ListChecks, ShieldQuestion } from "lucide-react";
+import {
+  AlertTriangle,
+  CircleHelp,
+  ListChecks,
+  ShieldQuestion,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -79,20 +85,71 @@ const categoryLabels: Record<MoveQuestionCategory, string> = {
   packets: "Packets",
 };
 
-const questionTasks = [
-  { value: "priority", label: "Priority" },
-  { value: "areas", label: "Areas" },
-  { value: "shortcuts", label: "Shortcuts" },
+type QuestionTask = "priority" | "areas" | "shortcuts";
+
+const questionTasks: Array<{
+  value: QuestionTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "priority",
+    label: "Priority",
+    description:
+      "Review the highest-risk missing details before they block planning or packets.",
+  },
+  {
+    value: "areas",
+    label: "Areas",
+    description:
+      "See which workspace areas are creating the most open questions.",
+  },
+  {
+    value: "shortcuts",
+    label: "Shortcuts",
+    description:
+      "Jump to the source records that need cleanup, then return here to verify the count drops.",
+  },
+];
+
+const questionShortcutLinks = [
+  { label: "Resources", anchor: "#transport-resources" },
+  { label: "Inventory", anchor: "#inventory" },
+  { label: "Photos", anchor: "#photos" },
+  { label: "Load planner", anchor: "#load-plan" },
+  { label: "Packets", anchor: "#documentation-packets" },
 ] as const;
+
+function formatQuestionTaskCount(task: QuestionTask, count: number) {
+  if (task === "areas") {
+    return `${count} ${count === 1 ? "area" : "areas"}`;
+  }
+  if (task === "shortcuts") {
+    return `${count} ${count === 1 ? "link" : "links"}`;
+  }
+  return `${count} ${count === 1 ? "prompt" : "prompts"}`;
+}
 
 export function MoveQuestionsPanel({
   householdId,
   moveId,
 }: MoveQuestionsPanelProps) {
+  const [activeTask, setActiveTask] = useState<QuestionTask>("priority");
   const summary = useQuery(
     api.moveQuestions.summaryForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   ) as MoveQuestionsSummary | undefined;
+  const openAreaCount = summary
+    ? Object.values(summary.categories).filter((count) => (count ?? 0) > 0)
+        .length
+    : 0;
+  const questionTaskCounts: Record<QuestionTask, number> = {
+    priority: summary?.counts.openPrompts ?? 0,
+    areas: openAreaCount,
+    shortcuts: questionShortcutLinks.length,
+  };
+  const activeQuestionTask =
+    questionTasks.find((task) => task.value === activeTask) ?? questionTasks[0];
 
   return (
     <Card id="move-questions">
@@ -109,7 +166,9 @@ export function MoveQuestionsPanel({
             </CardDescription>
           </div>
           {summary ? (
-            <Badge variant={summary.counts.openPrompts ? "secondary" : "outline"}>
+            <Badge
+              variant={summary.counts.openPrompts ? "secondary" : "outline"}
+            >
               {summary.counts.openPrompts
                 ? `${summary.counts.totalOpenItems} open items`
                 : "clear"}
@@ -137,16 +196,42 @@ export function MoveQuestionsPanel({
             </div>
           </div>
         ) : (
-          <Tabs defaultValue="priority" className="gap-4">
+          <Tabs
+            value={activeTask}
+            onValueChange={(value) => setActiveTask(value as QuestionTask)}
+            className="gap-4"
+          >
             <div className="overflow-x-auto pb-1">
-              <TabsList className="min-w-max" aria-label="Question review tasks">
-                {questionTasks.map((task) => (
-                  <TabsTrigger key={task.value} value={task.value}>
-                    {task.label}
-                  </TabsTrigger>
-                ))}
+              <TabsList
+                className="min-w-max"
+                aria-label="Question review tasks"
+              >
+                {questionTasks.map((task) => {
+                  const count = questionTaskCounts[task.value];
+                  return (
+                    <TabsTrigger
+                      key={task.value}
+                      value={task.value}
+                      className="gap-2"
+                      aria-label={`${task.label}: ${formatQuestionTaskCount(task.value, count)}`}
+                    >
+                      {task.label}
+                      <Badge
+                        variant={
+                          activeTask === task.value ? "secondary" : "outline"
+                        }
+                        className="h-5 min-w-5 px-1"
+                      >
+                        {count}
+                      </Badge>
+                    </TabsTrigger>
+                  );
+                })}
               </TabsList>
             </div>
+            <p className="text-sm text-muted-foreground">
+              {activeQuestionTask.description}
+            </p>
 
             <TabsContent value="priority" className="space-y-4">
               <div className="grid gap-2 sm:grid-cols-3">
@@ -187,7 +272,8 @@ export function MoveQuestionsPanel({
                   >
                     <p className="text-xs text-muted-foreground">{label}</p>
                     <p className="mt-1 font-mono text-xl font-semibold">
-                      {summary.categories[category as MoveQuestionCategory] ?? 0}
+                      {summary.categories[category as MoveQuestionCategory] ??
+                        0}
                     </p>
                   </div>
                 ))}
@@ -202,31 +288,20 @@ export function MoveQuestionsPanel({
                   return here to confirm the prompt count drops.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#transport-resources")}>
-                      Resources
-                    </Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#inventory")}>
-                      Inventory
-                    </Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#photos")}>
-                      Photos
-                    </Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#load-plan")}>
-                      Load planner
-                    </Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={moveWorkspaceAnchorPath(moveId, "#documentation-packets")}>
-                      Packets
-                    </Link>
-                  </Button>
+                  {questionShortcutLinks.map((shortcut) => (
+                    <Button
+                      key={shortcut.anchor}
+                      asChild
+                      size="sm"
+                      variant="outline"
+                    >
+                      <Link
+                        href={moveWorkspaceAnchorPath(moveId, shortcut.anchor)}
+                      >
+                        {shortcut.label}
+                      </Link>
+                    </Button>
+                  ))}
                 </div>
               </div>
 
@@ -263,7 +338,7 @@ function QuestionPromptCard({
       href={href}
       className={cn(
         "rounded-md border p-3 transition-colors hover:bg-muted/70",
-        severityClasses[prompt.severity]
+        severityClasses[prompt.severity],
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -308,7 +383,12 @@ function QuestionMetric({
   severity: MoveQuestionSeverity;
 }) {
   return (
-    <div className={cn("rounded-md border p-3", value && severityClasses[severity])}>
+    <div
+      className={cn(
+        "rounded-md border p-3",
+        value && severityClasses[severity],
+      )}
+    >
       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-normal text-muted-foreground">
         {value ? (
           <AlertTriangle className="size-3.5" aria-hidden="true" />
