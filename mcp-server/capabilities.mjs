@@ -396,6 +396,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "When the user provides one picture plus a few short words for one household item, use add_item_from_photo. It defaults quantity to 1 when omitted, leaves unknown weight/size/disposition/condition blank, uploads the original image, creates web-ready derivatives, attaches the photo, and returns item/photo IDs plus agentReview.",
       "Use create_item_with_images when the same new item has several photos or when the agent already has an images array.",
       "For ordinary images, use upload_image, upload_photo, or upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
+      "Use derivativeVariants in upload responses to confirm the storage-prepped 200x200 thumb, 600x600 card, 1200x1200 detail, and 2400x2400 full WebP display variants without exposing private storage keys.",
       "When a user gives several ordinary images from the same room or context, use upload_images, upload_photos, or upload_evidence_images with shared defaults and one image entry per user image.",
       "Set generateAiSuggestions true when the uploaded image should also enter AI photo review; upload still succeeds if review queueing fails or the key only has photos/write.",
       "Do not ask the user for dimensions, thumbnail sizes, or derivative files during normal AI-assisted photo capture.",

@@ -4,6 +4,37 @@ import path from "node:path";
 
 export { getApiCapabilities } from "./capabilities.mjs";
 
+export const movingManifestImageDerivativeVariants = [
+  {
+    variant: "thumb",
+    mimeType: "image/webp",
+    width: 200,
+    height: 200,
+    fit: "cover",
+  },
+  {
+    variant: "card",
+    mimeType: "image/webp",
+    width: 600,
+    height: 600,
+    fit: "inside",
+  },
+  {
+    variant: "detail",
+    mimeType: "image/webp",
+    width: 1200,
+    height: 1200,
+    fit: "inside",
+  },
+  {
+    variant: "full",
+    mimeType: "image/webp",
+    width: 2400,
+    height: 2400,
+    fit: "inside",
+  },
+];
+
 export function createApiConfig(env = process.env) {
   const baseUrl =
     env.MOVINGMANIFEST_API_BASE_URL ?? "https://movingmanifest.com/api/v1";
@@ -1038,6 +1069,7 @@ export async function uploadEvidenceFile(config, input) {
       },
       derivativeNote:
         "This helper uploads the original evidence file only. MovingManifest creates web-ready image derivatives during finalization when the client does not supply them.",
+      derivativeVariants: derivativeVariantsForStatus("pending", mimeType),
     };
   }
 
@@ -1061,6 +1093,11 @@ export async function uploadEvidenceFile(config, input) {
         ? "ready"
         : "pending"
       : undefined);
+  const derivativeVariants = normalizedDerivativeVariants({
+    data: finalizedData,
+    status: derivativeStatus,
+    mimeType,
+  });
 
   return {
     photoId: finalizedData.photoId,
@@ -1077,6 +1114,7 @@ export async function uploadEvidenceFile(config, input) {
     derivativeStatus,
     derivativeError: finalizedData.derivativeError,
     derivativeNote: derivativeNoteForStatus(derivativeStatus),
+    derivativeVariants,
   };
 }
 
@@ -1127,6 +1165,7 @@ export async function uploadEvidenceImage(config, input) {
   };
 
   if (input.dryRun) {
+    const derivativeVariants = derivativeVariantsForStatus("pending");
     return {
       dryRun: true,
       media: directImage
@@ -1151,8 +1190,10 @@ export async function uploadEvidenceImage(config, input) {
         : { method: "POST", path: "/photos/upload", body },
       derivativeNote:
         "MovingManifest stores the original image and creates web-ready derivatives server-side.",
+      derivativeVariants,
       agentReview: imageUploadAgentReview({
         input,
+        data: { derivativeVariants },
         media: directImage,
         derivativeNote:
           "MovingManifest stores the original image and creates web-ready derivatives server-side.",
@@ -1179,12 +1220,21 @@ export async function uploadEvidenceImage(config, input) {
       });
   const data = response.data ?? response;
   const derivativeNote = derivativeNoteForStatus(data.derivativeStatus);
+  const derivativeVariants = normalizedDerivativeVariants({
+    data,
+    status: data.derivativeStatus,
+    mimeType: data.media?.mimeType ?? input.mimeType ?? directImage?.mimeType,
+  });
   return {
     ...data,
     derivativeNote,
+    derivativeVariants,
     agentReview: imageUploadAgentReview({
       input,
-      data,
+      data: {
+        ...data,
+        derivativeVariants,
+      },
       media: data.media ?? directImage,
       derivativeNote,
     }),
@@ -1224,6 +1274,7 @@ export async function uploadEvidenceImages(config, input) {
         uploadSessionId: result.uploadSessionId,
         derivativeStatus: result.derivativeStatus,
         derivativeError: result.derivativeError,
+        derivativeVariants: result.derivativeVariants,
         media: result.media,
         agentReview: result.agentReview,
         result,
@@ -1252,6 +1303,7 @@ export async function uploadEvidenceImages(config, input) {
     results,
     derivativeNote:
       "Each image was sent as one original upload. MovingManifest creates web-ready derivatives server-side for uploaded images.",
+    derivativeVariants: derivativeVariantsForStatus("pending"),
     agentReview: imageBatchAgentReview({ input, results }),
   };
 }
@@ -1359,6 +1411,21 @@ function derivativeNoteForStatus(status) {
   }
 }
 
+function derivativeVariantsForStatus(status, mimeType = "image/jpeg") {
+  if (!status || !String(mimeType).startsWith("image/")) return undefined;
+  return movingManifestImageDerivativeVariants.map((variant) => ({
+    ...variant,
+    status,
+  }));
+}
+
+function normalizedDerivativeVariants({ data = {}, status, mimeType }) {
+  if (Array.isArray(data.derivativeVariants)) {
+    return data.derivativeVariants;
+  }
+  return derivativeVariantsForStatus(status, mimeType);
+}
+
 function imageUploadAgentReview({
   input,
   data = {},
@@ -1415,6 +1482,7 @@ function imageUploadAgentReview({
     derivativeStatus: data.derivativeStatus,
     derivativeError: data.derivativeError,
     derivativeNote,
+    derivativeVariants: data.derivativeVariants,
     aiReviewStatus,
     aiReview: data.aiReview,
     correctionPrompt:
@@ -1444,6 +1512,7 @@ function imageBatchAgentReview({ input, results }) {
     imageCount: results.length,
     uploadedCount,
     failedCount,
+    derivativeVariants: derivativeVariantsForStatus("pending"),
     correctionPrompt:
       "For a batch, summarize the shared defaults and mention only failed uploads or choices the user may want to correct.",
   });

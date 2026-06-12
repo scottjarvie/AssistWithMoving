@@ -157,18 +157,22 @@ with raw JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or
 JSON with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`.
 MovingManifest stores the original, reads dimensions, finalizes the evidence
 record, and creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
-server-side. For local `filePath`, the MCP helper sends the original image bytes
-directly instead of putting the file into a JSON/base64 payload. Do not ask users
-for dimensions, thumbnail sizes, or derivative files for ordinary photos. Set
-`generateAiSuggestions: true` when the uploaded photo should also enter AI
-review for possible item, box, or duplicate suggestions; report whether
+server-side. Direct upload responses include `derivativeVariants` for the
+200x200 square `thumb`, 600x600 `card`, 1200x1200 `detail`, and 2400x2400
+`full` WebP display versions without exposing private storage keys. For local
+`filePath`, the MCP helper sends the original image bytes directly instead of
+putting the file into a JSON/base64 payload. Do not ask users for dimensions,
+thumbnail sizes, or derivative files for ordinary photos. Set
+`generateAiSuggestions: true` when the uploaded photo should also enter AI review
+for possible item, box, or duplicate suggestions; report whether
 `aiReview.status` queued or failed.
 
-MCP image results and REST direct upload responses include `agentReview`. After
-uploading, use that summary to tell the user the caption, room/item/box
-attachment, privacy/type choice, derivative status, AI-review status, and any
-confidence or assumption you used so they can correct only what looks wrong
-without slowing down the capture flow.
+MCP image results and REST direct upload responses include `agentReview` and
+`derivativeVariants`. After uploading, use that summary to tell the user the
+caption, room/item/box attachment, privacy/type choice, derivative status,
+prepared web variants, AI-review status, and any confidence or assumption you
+used so they can correct only what looks wrong without slowing down the capture
+flow.
 
 ## Data Entry Guidance
 

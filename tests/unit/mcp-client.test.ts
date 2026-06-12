@@ -53,6 +53,7 @@ import {
   planSnapshot,
   planSummary,
   plansList,
+  movingManifestImageDerivativeVariants,
   movingManifestRequest,
   convertPlannedItem,
   removeItemFromBox,
@@ -74,6 +75,9 @@ import {
   updateTransportResource,
   updateTransportZone,
 } from "../../mcp-server/movingmanifest-api.mjs";
+
+const derivativeVariantsWithStatus = (status: "pending" | "ready" | "failed") =>
+  movingManifestImageDerivativeVariants.map((variant) => ({ ...variant, status }));
 
 describe("MovingManifest MCP API client", () => {
   afterEach(() => {
@@ -735,6 +739,7 @@ describe("MovingManifest MCP API client", () => {
               ok: true,
               photoId: "photo1",
               derivativeStatus: "ready",
+              derivativeVariants: derivativeVariantsWithStatus("ready"),
               agentReview: {
                 decisions: {
                   attachmentTarget: {
@@ -2076,6 +2081,7 @@ describe("MovingManifest MCP API client", () => {
         uploadSessionId: "session1",
         derivativeStatus: "ready",
         derivativeNote: expect.stringContaining("web-ready image derivatives"),
+        derivativeVariants: derivativeVariantsWithStatus("ready"),
         media: {
           fileName: "garage-shelf.png",
           mimeType: "image/png",
@@ -2188,6 +2194,7 @@ describe("MovingManifest MCP API client", () => {
       uploadSessionId: "session1",
       derivativeStatus: "ready",
       derivativeNote: expect.stringContaining("web-ready image derivatives"),
+      derivativeVariants: derivativeVariantsWithStatus("ready"),
       aiReview: {
         status: "queued",
         suggestionIds: ["suggestion1"],
@@ -2298,6 +2305,7 @@ describe("MovingManifest MCP API client", () => {
         uploadSessionId: "session-local",
         derivativeStatus: "ready",
         derivativeNote: expect.stringContaining("web-ready image derivatives"),
+        derivativeVariants: derivativeVariantsWithStatus("ready"),
         agentReview: {
           userFacingSummary: expect.stringContaining("for room Closet"),
           decisions: {
@@ -2425,6 +2433,7 @@ describe("MovingManifest MCP API client", () => {
         uploadedCount: 2,
         failedCount: 0,
         derivativeNote: expect.stringContaining("one original upload"),
+        derivativeVariants: derivativeVariantsWithStatus("pending"),
         agentReview: {
           userFacingSummary: "Uploaded 2 image evidence files.",
           defaultDecisions: {
@@ -2448,6 +2457,7 @@ describe("MovingManifest MCP API client", () => {
             photoId: "photo-shelf",
             uploadSessionId: "session-shelf",
             derivativeStatus: "ready",
+            derivativeVariants: derivativeVariantsWithStatus("ready"),
             agentReview: {
               decisions: {
                 caption: "Garage shelf before packing",
@@ -2461,6 +2471,7 @@ describe("MovingManifest MCP API client", () => {
             photoId: "photo-workbench",
             uploadSessionId: "session-workbench",
             derivativeStatus: "pending",
+            derivativeVariants: derivativeVariantsWithStatus("pending"),
             agentReview: {
               decisions: {
                 caption: "Garage workbench before packing",
@@ -2562,6 +2573,7 @@ describe("MovingManifest MCP API client", () => {
           },
           note: expect.stringContaining("does not upload image bytes"),
         },
+        derivativeVariants: derivativeVariantsWithStatus("pending"),
         agentReview: {
           userFacingSummary: expect.stringContaining("Prepared image upload"),
           decisions: {
@@ -2577,6 +2589,7 @@ describe("MovingManifest MCP API client", () => {
             source: "mcp",
             verificationStatus: "unreviewed",
           },
+          derivativeVariants: derivativeVariantsWithStatus("pending"),
           correctionPrompt: expect.stringContaining("correct the caption"),
         },
       });

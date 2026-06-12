@@ -55,7 +55,10 @@ Primary site: https://movingmanifest.com
   `POST /api/v1/images/upload` or `POST /api/v1/photos/upload` with raw JPEG/PNG/WebP bytes plus metadata query
   params, multipart form data, or JSON with exactly one of `sourceUrl`,
   `dataUrl`, or `fileBase64`. MovingManifest stores the original and creates
-  web-ready derivatives server-side; do not ask users for thumbnail sizes or
+  web-ready derivatives server-side; direct upload responses include
+  `derivativeVariants` for the 200x200 square `thumb`, 600x600 `card`,
+  1200x1200 `detail`, and 2400x2400 `full` WebP display versions without
+  exposing private storage keys. Do not ask users for thumbnail sizes or
   dimensions. For local `filePath`, the MCP helper sends original image bytes
   directly; do not base64-wrap local files unless you already only have base64.
   Set `generateAiSuggestions: true` when the user wants the app to place the

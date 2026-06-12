@@ -987,6 +987,36 @@
           }
         }
       },
+      "PhotoDerivativeVariant": {
+        "type": "object",
+        "description": "Private storage keys are intentionally omitted. This describes the web-ready derivative variants MovingManifest prepares for display and AI review after an original image upload.",
+        "properties": {
+          "variant": {
+            "type": "string",
+            "enum": ["thumb", "card", "detail", "full"]
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "image/webp"
+          },
+          "width": {
+            "type": "number",
+            "description": "Maximum target width in pixels."
+          },
+          "height": {
+            "type": "number",
+            "description": "Maximum target height in pixels."
+          },
+          "fit": {
+            "type": "string",
+            "enum": ["cover", "inside", "clientProvided"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "ready", "failed"]
+          }
+        }
+      },
       "PhotoDirectUploadResponse": {
         "type": "object",
         "properties": {
@@ -1009,6 +1039,13 @@
               "derivativeNote": {
                 "type": "string",
                 "description": "Human-readable summary of server-side derivative handling."
+              },
+              "derivativeVariants": {
+                "type": "array",
+                "description": "Structured thumb/card/detail/full derivative contract for the uploaded image. It confirms web display variants without exposing private storage keys.",
+                "items": {
+                  "$ref": "#/components/schemas/PhotoDerivativeVariant"
+                }
               },
               "aiReview": {
                 "type": "object",
@@ -1087,6 +1124,12 @@
                   },
                   "derivativeNote": {
                     "type": "string"
+                  },
+                  "derivativeVariants": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PhotoDerivativeVariant"
+                    }
                   },
                   "aiReviewStatus": {
                     "type": "string"

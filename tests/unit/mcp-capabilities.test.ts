@@ -282,6 +282,20 @@ describe("MovingManifest MCP capability discovery", () => {
       openapi.components.schemas.PhotoDirectUploadResponse.properties?.data
         ?.properties?.agentReview?.description
     ).toContain("assistant-facing summary");
+    expect(
+      openapi.components.schemas.PhotoDirectUploadResponse.properties?.data
+        ?.properties?.derivativeVariants?.description
+    ).toContain("thumb/card/detail/full derivative contract");
+    const derivativeVariantSchema = openapi.components.schemas
+      .PhotoDerivativeVariant.properties?.variant as OpenApiSchema & {
+      enum?: string[];
+    };
+    expect(derivativeVariantSchema.enum).toEqual([
+      "thumb",
+      "card",
+      "detail",
+      "full",
+    ]);
     expect(docs).toContain("one user photo should normally mean one");
     expect(docs).toContain("`add_item_from_photo`");
     expect(docs).toContain("`upload_evidence_image` call");
@@ -292,6 +306,8 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(docs).toContain("`upload_images`");
     expect(docs).toContain("`POST /images/upload`");
     expect(docs).toContain("`agentReview`");
+    expect(docs).toContain("`derivativeVariants`");
+    expect(docs).toContain("200x200 square");
     expect(docs).toContain("`generateAiSuggestions: true`");
     expect(llms).toContain("MCP agents should call");
     expect(llms).toContain("add_item_from_photo");
@@ -300,6 +316,7 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(llms).toContain("upload_evidence_images");
     expect(llms).toContain("POST /api/v1/images/upload");
     expect(llms).toContain("agentReview");
+    expect(llms).toContain("derivativeVariants");
     expect(llms).toContain("generateAiSuggestions: true");
     expect(fullLlms).toContain("One user photo should normally be one upload call");
     expect(fullLlms).toContain("add_item_from_photo");
@@ -308,6 +325,7 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(fullLlms).toContain("upload_evidence_images");
     expect(fullLlms).toContain("POST /images/upload");
     expect(fullLlms).toContain("agentReview");
+    expect(fullLlms).toContain("derivativeVariants");
     expect(fullLlms).toContain("aiReview.status");
   });
 

@@ -1224,11 +1224,15 @@ Quick rule for agents: one user photo should normally mean one
 `POST /images/upload` or `POST /photos/upload` call in REST.
 Do not ask the user for image dimensions, thumbnail sizes, or derivative files.
 The site reads dimensions and creates `thumb`, `card`, `detail`, and `full`
-display versions after the original is stored. MCP image helpers and REST direct
-upload responses return an `agentReview` object with the caption, attachment
-target, privacy/type choices, confidence/assumptions, derivative status, and
-AI-review status. Tell the user that short summary so they can correct the
-record without turning upload into a long interview.
+display versions after the original is stored: `thumb` is a 200x200 square
+cover thumbnail, `card` fits within 600x600, `detail` fits within 1200x1200,
+and `full` fits within 2400x2400. The web versions are WebP and never expose
+private storage keys in API responses. MCP image helpers and REST direct upload
+responses return `derivativeStatus`, `derivativeVariants`, and an `agentReview`
+object with the caption, attachment target, privacy/type choices,
+confidence/assumptions, derivative status, and AI-review status. Tell the user
+that short summary so they can correct the record without turning upload into a
+long interview.
 If the user wants the app to review the photo for possible items, boxes, or
 duplicate evidence, set `generateAiSuggestions: true`. Upload still succeeds
 when AI review queueing fails or the key only has `photos/write`; the response
@@ -1291,13 +1295,15 @@ curl -X POST https://movingmanifest.com/api/v1/photos/upload \
 `POST /images/upload` and `POST /photos/upload` accept JPEG, PNG, or WebP images as raw image bytes,
 multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
 `fileBase64`. It is intentionally image-only and server-preps `thumb`, `card`,
-`detail`, and `full` derivatives after storing the original. MCP clients should
-pass `filePath` to `upload_evidence_image` and let the local MCP server read and
-send the original file bytes. Set `generateAiSuggestions` when the same upload
-should also place the photo into AI review; that queueing step requires
-`inventory/write` in addition to `photos/write`. Use the presigned flow below
-for larger/custom upload clients, audio/video evidence, progress bars, or
-client-created derivatives.
+`detail`, and `full` WebP derivatives after storing the original. Direct upload
+responses include a `derivativeVariants` array describing those prepared web
+sizes without storage URLs or object keys. MCP clients should pass `filePath` to
+`upload_evidence_image` and let the local MCP server read and send the original
+file bytes. Set `generateAiSuggestions` when the same upload should also place
+the photo into AI review; that queueing step requires `inventory/write` in
+addition to `photos/write`. Use the presigned flow below for larger/custom
+upload clients, audio/video evidence, progress bars, or client-created
+derivatives.
 
 The lower-level REST flow is still useful for custom clients, browser clients,
 and clients that already create web-ready image derivatives. API/MCP clients can
@@ -1440,12 +1446,13 @@ defaults and one entry per image:
 ```
 
 The result includes `photoId`, `uploadSessionId`, source media details, a
-derivative status/note, and `agentReview`, a short user-facing summary of the
-caption, attachment target, privacy/type choices, confidence/assumptions,
-derivative status, and AI-review status. When `generateAiSuggestions` is true,
-it can also include `aiReview.status`, `aiJobIds`, `suggestionIds`, and queued
-suggestions. Agents should report the useful human part from `agentReview`
-instead of asking the user to fill out a long photo form.
+derivative status/note, `derivativeVariants`, and `agentReview`, a short
+user-facing summary of the caption, attachment target, privacy/type choices,
+confidence/assumptions, derivative status, and AI-review status. When
+`generateAiSuggestions` is true, it can also include `aiReview.status`,
+`aiJobIds`, `suggestionIds`, and queued suggestions. Agents should report the
+useful human part from `agentReview` instead of asking the user to fill out a
+long photo form.
 
 Use `upload_evidence_file` for non-image media or when the agent has a local
 file and should keep the storage PUT in the local process. Use
@@ -1458,8 +1465,8 @@ be changed or linked differently.
 Current derivative behavior: `upload_evidence_file` uploads and finalizes the
 original evidence file. For images, MovingManifest creates `thumb`, `card`,
 `detail`, and `full` WebP derivatives server-side and returns derivative status
-so the agent can tell the user whether display/AI-ready versions are ready or
-need review.
+plus `derivativeVariants` so the agent can tell the user whether display/AI-ready
+versions are ready or need review.
 
 ## Documentation Profiles, Exports, and Share Links
 

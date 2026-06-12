@@ -86,6 +86,14 @@ type ApiActionAuth = {
   apiKeyId: Id<"apiKeys">;
   createdByUserId: Id<"users">;
 };
+type DerivativeVariantSummary = {
+  variant: PhotoDerivativeVariant;
+  mimeType: string;
+  width: number;
+  height: number;
+  fit: "cover" | "inside" | "clientProvided";
+  status: "pending" | "ready" | "failed";
+};
 
 export const handle = internalAction({
   args: {
@@ -394,6 +402,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         height: metadata.height,
       };
       const derivativeNote = derivativeNoteForStatus(derivativeStatus);
+      const derivativeVariants = derivativeVariantsForStatus(derivativeStatus);
       const agentReview = directPhotoUploadAgentReview({
         body,
         data: {
@@ -402,6 +411,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
           derivativeStatus,
           derivativeError,
           derivativeNote,
+          derivativeVariants,
           aiReview,
           media: mediaSummary,
         },
@@ -415,6 +425,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
             derivativeStatus,
             derivativeError,
             derivativeNote,
+            derivativeVariants,
             aiReview,
             media: mediaSummary,
             agentReview,
@@ -582,6 +593,10 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
       }
 
       const derivativeNote = derivativeNoteForStatus(derivativeStatus);
+      const derivativeVariants = derivativeVariantsForSession({
+        session,
+        status: derivativeStatus,
+      });
       const mediaSummary = {
         source: "uploadSession",
         fileName: optionalString(body.fileName),
@@ -598,6 +613,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
           derivativeStatus,
           derivativeError,
           derivativeNote,
+          derivativeVariants,
           media: mediaSummary,
         },
       });
@@ -609,6 +625,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
             derivativeStatus,
             derivativeError,
             derivativeNote,
+            derivativeVariants,
             media: mediaSummary,
             agentReview,
           },
@@ -906,6 +923,48 @@ function derivativeNoteForStatus(
   }
 }
 
+function derivativeVariantsForStatus(
+  status: "pending" | "ready" | "failed" | undefined
+): DerivativeVariantSummary[] | undefined {
+  if (!status) return undefined;
+  return serverDerivativeSpecs.map((spec) => ({
+    variant: spec.variant,
+    mimeType: "image/webp",
+    width: spec.width,
+    height: spec.height,
+    fit: spec.fit,
+    status,
+  }));
+}
+
+function derivativeVariantsForSession({
+  session,
+  status,
+}: {
+  session: {
+    derivativeUploads?: Array<{
+      variant: PhotoDerivativeVariant;
+      expectedMimeType: string;
+      width: number;
+      height: number;
+    }>;
+  };
+  status: "pending" | "ready" | "failed" | undefined;
+}): DerivativeVariantSummary[] | undefined {
+  if (!status) return undefined;
+  if (session.derivativeUploads?.length) {
+    return session.derivativeUploads.map((derivative) => ({
+      variant: derivative.variant,
+      mimeType: derivative.expectedMimeType,
+      width: derivative.width,
+      height: derivative.height,
+      fit: "clientProvided" as const,
+      status,
+    }));
+  }
+  return derivativeVariantsForStatus(status);
+}
+
 function directPhotoUploadAgentReview({
   body,
   data,
@@ -917,6 +976,7 @@ function directPhotoUploadAgentReview({
     derivativeStatus?: "pending" | "ready" | "failed";
     derivativeError?: string;
     derivativeNote: string;
+    derivativeVariants?: DerivativeVariantSummary[];
     aiReview?: unknown;
     media: Record<string, unknown>;
   };
@@ -965,6 +1025,7 @@ function directPhotoUploadAgentReview({
     derivativeStatus: data.derivativeStatus,
     derivativeError: data.derivativeError,
     derivativeNote: data.derivativeNote,
+    derivativeVariants: data.derivativeVariants,
     aiReviewStatus,
     aiReview: data.aiReview,
     correctionPrompt:
