@@ -487,6 +487,141 @@ function BoxCard({
   );
 }
 
+function BoxOverviewCard({
+  householdId,
+  moveId,
+  boxRecord,
+  onOpenTask,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  boxRecord: BoxRecord;
+  onOpenTask: (task: BoxTask) => void;
+}) {
+  const { box, contents, itemCount, weightSummary } = boxRecord;
+  const visibleContents = contents
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .slice(0, 2);
+  const hiddenContentCount = Math.max(itemCount - visibleContents.length, 0);
+
+  return (
+    <div
+      role="listitem"
+      className="rounded-md border border-border bg-card p-3"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">{box.code}</p>
+            <Badge
+              variant={box.status === "damaged" ? "destructive" : "outline"}
+            >
+              {box.status}
+            </Badge>
+          </div>
+          <p className="mt-1 line-clamp-2 max-w-[42rem] text-sm text-muted-foreground">
+            {box.label ?? box.description ?? "Unlabeled box"}
+          </p>
+        </div>
+        {householdId && moveId ? (
+          <Button asChild size="sm" variant="outline">
+            <Link
+              href={buildBoxLookupPath({
+                householdId,
+                moveId,
+                boxId: box._id,
+              })}
+            >
+              <Boxes aria-hidden="true" />
+              Lookup
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+        <BoxSummaryField label="Room" value={box.room ?? "unassigned"} />
+        <BoxSummaryField
+          label="Destination"
+          value={box.destinationRoom ?? "unassigned"}
+        />
+        <BoxSummaryField label="Items" value={String(itemCount)} />
+        <BoxSummaryField label="Weight" value={formatBoxWeightValue(weightSummary)} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
+        <Badge variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}>
+          {formatBoxWeightSource(weightSummary)}
+        </Badge>
+        {box.assignedResourceId ? (
+          <Badge variant="secondary">load assigned</Badge>
+        ) : (
+          <Badge variant="outline">load unassigned</Badge>
+        )}
+        {box.assignmentLocked ? (
+          <Badge variant="secondary">locked</Badge>
+        ) : null}
+      </div>
+
+      <div className="mt-3 rounded-md border border-border/70 bg-muted/25 p-2">
+        {visibleContents.length ? (
+          <div className="flex flex-wrap gap-1.5 text-xs">
+            {visibleContents.map((entry) => (
+              <Badge key={entry.membership._id} variant="outline">
+                {entry.item.name} x{entry.membership.quantity}
+              </Badge>
+            ))}
+            {hiddenContentCount ? (
+              <Badge variant="outline">+{hiddenContentCount} more</Badge>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No contents yet.</p>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => onOpenTask("contents")}
+        >
+          Contents
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => onOpenTask("details")}
+        >
+          Details
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => onOpenTask("load")}
+        >
+          Load
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function BoxSummaryField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-border/70 px-2 py-1.5">
+      <p className="text-[0.68rem] uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-medium">{value}</p>
+    </div>
+  );
+}
+
 export function BoxManager({
   householdId,
   moveId,
@@ -553,9 +688,6 @@ export function BoxManager({
   );
   const exceptionBoxes = visibleBoxes.filter((record) =>
     ["missing", "damaged"].includes(record.box.status)
-  );
-  const assignedBoxes = visibleBoxes.filter((record) =>
-    Boolean(record.box.assignedResourceId)
   );
 
   function renderBoxTaskCards(task: BoxCardTask, emptyText: string) {
@@ -667,7 +799,7 @@ export function BoxManager({
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <BoxMetric label="Total" value={visibleBoxes.length} />
               <BoxMetric label="Empty" value={emptyBoxes.length} />
-              <BoxMetric label="Assigned" value={assignedBoxes.length} />
+              <BoxMetric label="Exceptions" value={exceptionBoxes.length} />
               <BoxMetric label="Missing weight" value={missingWeightBoxes.length} />
             </div>
 
@@ -729,65 +861,20 @@ export function BoxManager({
               </div>
             ) : visibleBoxes.length ? (
               filteredBoxes.length ? (
-                <div className="overflow-x-auto rounded-md border border-border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Code</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Room</TableHead>
-                        <TableHead>Destination</TableHead>
-                        <TableHead>Items</TableHead>
-                        <TableHead>Weight</TableHead>
-                        <TableHead>Volume</TableHead>
-                        <TableHead>Assignment</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredBoxes.map(
-                        ({ box, itemCount, weightSummary }) => (
-                          <TableRow key={box._id}>
-                            <TableCell className="min-w-[8rem] font-medium">
-                              {box.code}
-                              {box.label ? (
-                                <p className="max-w-[16rem] truncate text-xs font-normal text-muted-foreground">
-                                  {box.label}
-                                </p>
-                              ) : null}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  box.status === "damaged"
-                                    ? "destructive"
-                                    : "outline"
-                                }
-                              >
-                                {box.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{box.room ?? "unassigned"}</TableCell>
-                            <TableCell>
-                              {box.destinationRoom ?? "unassigned"}
-                            </TableCell>
-                            <TableCell>{itemCount}</TableCell>
-                            <TableCell>
-                              <div className="min-w-[8rem]">
-                                <p>{formatBoxWeightValue(weightSummary)}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatBoxWeightSource(weightSummary)}
-                                </p>
-                              </div>
-                            </TableCell>
-                            <TableCell>{box.estimatedVolumeCuFt ?? 0} cu ft</TableCell>
-                            <TableCell>
-                              {box.assignedResourceId ? "assigned" : "unassigned"}
-                            </TableCell>
-                          </TableRow>
-                        )
-                      )}
-                    </TableBody>
-                  </Table>
+                <div
+                  role="list"
+                  aria-label="Box records"
+                  className="grid gap-3 xl:grid-cols-2"
+                >
+                  {filteredBoxes.map((boxRecord) => (
+                    <BoxOverviewCard
+                      key={boxRecord.box._id}
+                      householdId={householdId}
+                      moveId={moveId}
+                      boxRecord={boxRecord}
+                      onOpenTask={setActiveTask}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">

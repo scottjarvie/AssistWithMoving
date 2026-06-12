@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -130,10 +130,21 @@ describe("BoxManager", () => {
       "data-state",
       "active"
     );
-    expect(screen.getByText("B-001")).toBeInTheDocument();
+    const boxList = screen.getByRole("list", { name: "Box records" });
+    expect(within(boxList).getByText("B-001")).toBeInTheDocument();
+    expect(within(boxList).getByText("Garage tools")).toBeInTheDocument();
+    expect(within(boxList).getByText("Socket set x1")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "Create box" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Item to add to box")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
+
+    await user.click(within(boxList).getByRole("button", { name: "Details" }));
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+      "data-state",
+      "active"
+    );
+    expect(screen.getByLabelText("Box label")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Add box" }));
     expect(screen.getByRole("form", { name: "Create box" })).toBeInTheDocument();
