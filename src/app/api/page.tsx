@@ -37,7 +37,7 @@ const apiCards = [
   },
   {
     title: "Photo evidence",
-    copy: "Upload JPEG, PNG, or WebP evidence in one API call as raw bytes, multipart form data, URL, data URL, or base64. MCP helpers can send local files, images get web-ready derivatives server-side, and uploads can queue AI review suggestions.",
+    copy: "Upload JPEG, PNG, or WebP evidence in one API call as raw bytes, multipart form data, URL, data URL, or base64. Images get web-ready derivatives server-side, uploads can queue AI review suggestions, and direct uploads return agentReview summaries for quick user correction.",
     icon: Camera,
   },
   {

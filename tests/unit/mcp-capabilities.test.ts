@@ -192,6 +192,8 @@ describe("MovingManifest MCP capability discovery", () => {
           "create_item_with_images",
           "upload_evidence_image",
           "upload_evidence_images",
+          "upload_photo",
+          "upload_photos",
         ]),
         agentWorkflows: expect.arrayContaining([
           expect.stringContaining("create_item_with_images"),
@@ -205,6 +207,10 @@ describe("MovingManifest MCP capability discovery", () => {
   });
 
   it("documents the one-call image upload path for OpenAPI and AI readers", () => {
+    type OpenApiSchema = {
+      description?: string;
+      properties?: Record<string, OpenApiSchema>;
+    };
     const openapi = JSON.parse(
       readFileSync(resolve(process.cwd(), "public/openapi.json"), "utf8")
     ) as {
@@ -220,13 +226,7 @@ describe("MovingManifest MCP capability discovery", () => {
         }
       >;
       components: {
-        schemas: Record<
-          string,
-          {
-            description?: string;
-            properties?: Record<string, { description?: string }>;
-          }
-        >;
+        schemas: Record<string, OpenApiSchema>;
       };
     };
     const docs = readFileSync(
@@ -265,16 +265,24 @@ describe("MovingManifest MCP capability discovery", () => {
       openapi.components.schemas.PhotoDirectUpload.properties
         ?.generateAiSuggestions?.description
     ).toContain("queue AI photo-intake suggestions");
+    expect(
+      openapi.components.schemas.PhotoDirectUploadResponse.properties?.data
+        ?.properties?.agentReview?.description
+    ).toContain("assistant-facing summary");
     expect(docs).toContain("one user photo should normally mean one");
     expect(docs).toContain("`upload_evidence_image` call");
     expect(docs).toContain("`upload_evidence_images`");
+    expect(docs).toContain("`upload_photo`");
+    expect(docs).toContain("`upload_photos`");
     expect(docs).toContain("`agentReview`");
     expect(docs).toContain("`generateAiSuggestions: true`");
     expect(llms).toContain("MCP agents should call");
+    expect(llms).toContain("upload_photo");
     expect(llms).toContain("upload_evidence_images");
     expect(llms).toContain("agentReview");
     expect(llms).toContain("generateAiSuggestions: true");
     expect(fullLlms).toContain("One user photo should normally be one upload call");
+    expect(fullLlms).toContain("upload_photos");
     expect(fullLlms).toContain("upload_evidence_images");
     expect(fullLlms).toContain("agentReview");
     expect(fullLlms).toContain("aiReview.status");

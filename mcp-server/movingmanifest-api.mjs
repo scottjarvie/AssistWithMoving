@@ -1311,11 +1311,12 @@ function imageUploadAgentReview({
   dryRun = false,
 }) {
   const target = evidenceTargetFromInput(input);
+  const photoType = input.photoType ?? defaultPhotoTypeForTarget(target);
   const decisions = removeUndefined({
     attachmentTarget: target,
     room: input.room,
     caption: input.caption,
-    photoType: input.photoType ?? "other",
+    photoType,
     privacyLevel: input.privacyLevel ?? "normal",
     visibilityScope: input.visibilityScope ?? "moveCollaborators",
     source: input.source ?? "mcp",
@@ -1368,15 +1369,16 @@ function imageUploadAgentReview({
 function imageBatchAgentReview({ input, results }) {
   const uploadedCount = results.filter((result) => result.ok).length;
   const failedCount = results.length - uploadedCount;
+  const target = evidenceTargetFromInput(input);
   return removeUndefined({
     userFacingSummary:
       failedCount > 0
         ? `Uploaded ${uploadedCount} of ${results.length} image evidence files; ${failedCount} failed.`
         : `Uploaded ${uploadedCount} image evidence file${uploadedCount === 1 ? "" : "s"}.`,
     defaultDecisions: removeUndefined({
-      attachmentTarget: evidenceTargetFromInput(input),
+      attachmentTarget: target,
       room: input.room,
-      photoType: input.photoType,
+      photoType: input.photoType ?? defaultPhotoTypeForTarget(target),
       privacyLevel: input.privacyLevel,
       visibilityScope: input.visibilityScope,
       confidence: input.confidence,
@@ -1445,6 +1447,20 @@ function evidenceTargetFromInput(input) {
     return { type: "room", label: `room ${input.room}`, room: input.room };
   }
   return { type: "move", label: "the move" };
+}
+
+function defaultPhotoTypeForTarget(target) {
+  switch (target.type) {
+    case "item":
+      return "item";
+    case "box":
+      return "boxContents";
+    case "space":
+    case "room":
+      return "room";
+    default:
+      return "other";
+  }
 }
 
 async function loadEvidenceMedia(input) {

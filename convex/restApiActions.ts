@@ -388,6 +388,27 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         photoId,
         optionalBoolean(body.generateAiSuggestions)
       );
+      const mediaSummary = {
+        source: media.source,
+        fileName: media.fileName,
+        mimeType: original.mimeType,
+        sizeBytes: media.bytes.byteLength,
+        width: metadata.width,
+        height: metadata.height,
+      };
+      const derivativeNote = derivativeNoteForStatus(derivativeStatus);
+      const agentReview = directPhotoUploadAgentReview({
+        body,
+        data: {
+          photoId,
+          uploadSessionId,
+          derivativeStatus,
+          derivativeError,
+          derivativeNote,
+          aiReview,
+          media: mediaSummary,
+        },
+      });
 
       return restOk(
         {
@@ -396,15 +417,10 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
             uploadSessionId,
             derivativeStatus,
             derivativeError,
+            derivativeNote,
             aiReview,
-            media: {
-              source: media.source,
-              fileName: media.fileName,
-              mimeType: original.mimeType,
-              sizeBytes: media.bytes.byteLength,
-              width: metadata.width,
-              height: metadata.height,
-            },
+            media: mediaSummary,
+            agentReview,
           },
         },
         201
@@ -846,6 +862,139 @@ function derivativeProcessingError(error: unknown) {
     return `Server derivative processing failed: ${error.message}`;
   }
   return "Server derivative processing failed.";
+}
+
+function derivativeNoteForStatus(status: "ready" | "failed" | undefined) {
+  switch (status) {
+    case "ready":
+      return "Original evidence was uploaded and MovingManifest created web-ready image derivatives for display and AI review.";
+    case "failed":
+      return "Original evidence was uploaded, but server-side derivative processing failed. The photo record remains available for review and retry.";
+    default:
+      return "Original image evidence was uploaded.";
+  }
+}
+
+function directPhotoUploadAgentReview({
+  body,
+  data,
+}: {
+  body: Record<string, unknown>;
+  data: {
+    photoId: Id<"itemPhotos">;
+    uploadSessionId: Id<"photoUploadSessions">;
+    derivativeStatus?: "ready" | "failed";
+    derivativeError?: string;
+    derivativeNote: string;
+    aiReview?: unknown;
+    media: Record<string, unknown>;
+  };
+}) {
+  const target = evidenceTargetFromUploadBody(body);
+  const photoType = optionalPhotoType(body.photoType) ?? defaultPhotoTypeForTarget(target);
+  const privacyLevel = optionalPrivacyLevel(body.privacyLevel) ?? "normal";
+  const aiReview = bodyObject(data.aiReview);
+  const aiReviewStatus = optionalString(aiReview.status);
+  const decisions = pruneUndefined({
+    attachmentTarget: target,
+    room: optionalString(body.room),
+    caption: optionalString(body.caption),
+    photoType,
+    privacyLevel,
+    visibilityScope:
+      optionalVisibilityScope(body.visibilityScope) ?? "moveCollaborators",
+    source: optionalPhotoSource(body.source) ?? "api",
+    confidence: optionalConfidence(body.confidence),
+    notes: optionalString(body.notes),
+    verificationStatus:
+      optionalVerificationStatus(body.verificationStatus) ?? "unreviewed",
+    capturedAt: optionalNumber(body.capturedAt),
+    generateAiSuggestions: optionalBoolean(body.generateAiSuggestions),
+  });
+  const summary = [
+    "Uploaded image evidence",
+    `for ${target.label}`,
+    decisions.caption
+      ? `with caption "${String(decisions.caption)}"`
+      : "without a caption",
+    `as ${photoType} evidence`,
+    `with ${privacyLevel} privacy`,
+    `and derivative status ${data.derivativeStatus ?? "unknown"}`,
+    aiReviewStatus ? `AI review ${aiReviewStatus}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return pruneUndefined({
+    userFacingSummary: `${summary}.`,
+    photoId: data.photoId,
+    uploadSessionId: data.uploadSessionId,
+    decisions,
+    media: data.media,
+    derivativeStatus: data.derivativeStatus,
+    derivativeError: data.derivativeError,
+    derivativeNote: data.derivativeNote,
+    aiReviewStatus,
+    aiReview: data.aiReview,
+    correctionPrompt:
+      "Tell the user these choices were used so they can correct only the caption, target, privacy, type, quantity, or AI suggestions that look wrong.",
+  });
+}
+
+function evidenceTargetFromUploadBody(body: Record<string, unknown>) {
+  const itemId = optionalString(body.itemId);
+  if (itemId) {
+    return { type: "item", id: itemId, label: `item ${itemId}` };
+  }
+  const boxId = optionalString(body.boxId);
+  if (boxId) {
+    return { type: "box", id: boxId, label: `box ${boxId}` };
+  }
+  const spaceId = optionalString(body.spaceId);
+  if (spaceId) {
+    return { type: "space", id: spaceId, label: `space ${spaceId}` };
+  }
+  const transportResourceId = optionalString(body.transportResourceId);
+  if (transportResourceId) {
+    return {
+      type: "transportResource",
+      id: transportResourceId,
+      label: `transport resource ${transportResourceId}`,
+    };
+  }
+  const transportZoneId = optionalString(body.transportZoneId);
+  if (transportZoneId) {
+    return {
+      type: "transportZone",
+      id: transportZoneId,
+      label: `transport zone ${transportZoneId}`,
+    };
+  }
+  const room = optionalString(body.room);
+  if (room) {
+    return { type: "room", label: `room ${room}`, room };
+  }
+  return { type: "move", label: "the move" };
+}
+
+function defaultPhotoTypeForTarget(target: { type: string }) {
+  switch (target.type) {
+    case "item":
+      return "item";
+    case "box":
+      return "boxContents";
+    case "space":
+    case "room":
+      return "room";
+    default:
+      return "other";
+  }
+}
+
+function pruneUndefined<T extends Record<string, unknown>>(value: T) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined)
+  );
 }
 
 async function loadDirectImageUploadMedia(body: Record<string, unknown>) {

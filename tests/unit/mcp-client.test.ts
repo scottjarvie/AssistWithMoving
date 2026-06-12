@@ -2416,7 +2416,7 @@ describe("MovingManifest MCP API client", () => {
               room: "Entry",
             },
             caption: "Entry table before packing",
-            photoType: "other",
+            photoType: "room",
             privacyLevel: "normal",
             visibilityScope: "moveCollaborators",
             source: "mcp",

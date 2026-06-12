@@ -399,6 +399,16 @@ const createdItemImageInputSchema = evidenceImageInputSchema.omit({
   itemId: true,
 });
 
+const evidenceImageBatchDefaultsSchema = evidenceImageInputSchema.omit({
+  filePath: true,
+  sourceUrl: true,
+  dataUrl: true,
+  fileBase64: true,
+  fileName: true,
+  originalHash: true,
+  idempotencyKey: true,
+});
+
 const evidencePhotoDefaultsSchema = z.object({
   boxId: z.string().optional(),
   spaceId: z.string().optional(),
@@ -1822,6 +1832,42 @@ export function registerTools(target, apiConfig) {
         .boolean()
         .optional()
         .describe("Default for all images: queue AI photo-intake suggestions after upload when the key also has inventory/write."),
+      idempotencyKey: z.string().optional().describe("Optional batch prefix; each image gets a stable numbered key."),
+      dryRun: z.boolean().optional(),
+      continueOnError: z
+        .boolean()
+        .optional()
+        .describe("When true, keep uploading later images after a failed entry and return per-image errors."),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => uploadEvidenceImages(apiConfig, input),
+  });
+
+  registerTool(target, "upload_photo", {
+    title: "Upload photo",
+    description:
+      "Plain-language alias for upload_evidence_image. Use this for a normal single household photo: pass a local filePath, public sourceUrl, dataUrl, or fileBase64, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
+    inputSchema: {
+      moveId: z.string(),
+      ...evidenceImageInputSchema.shape,
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => uploadEvidenceImage(apiConfig, input),
+  });
+
+  registerTool(target, "upload_photos", {
+    title: "Upload photos",
+    description:
+      "Plain-language alias for upload_evidence_images. Use this when the user provides several ordinary photos from the same room or context. One image entry equals one user photo; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
+    inputSchema: {
+      moveId: z.string(),
+      images: z
+        .array(evidenceImageInputSchema)
+        .min(1)
+        .max(50)
+        .describe("Images to upload. Use one entry per user photo."),
+      ...evidenceImageBatchDefaultsSchema.shape,
       idempotencyKey: z.string().optional().describe("Optional batch prefix; each image gets a stable numbered key."),
       dryRun: z.boolean().optional(),
       continueOnError: z

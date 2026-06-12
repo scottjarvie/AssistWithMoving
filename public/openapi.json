@@ -318,7 +318,7 @@
       "post": {
         "summary": "Upload image evidence in one call",
         "operationId": "uploadPhotoEvidenceImage",
-        "description": "Default REST image upload path for agents. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, and can optionally queue AI photo-review suggestions.",
+        "description": "Default REST image upload path for agents. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
         "parameters": [
           {
             "name": "moveId",
@@ -912,6 +912,10 @@
               "derivativeError": {
                 "type": "string"
               },
+              "derivativeNote": {
+                "type": "string",
+                "description": "Human-readable summary of server-side derivative handling."
+              },
               "aiReview": {
                 "type": "object",
                 "description": "Present only when generateAiSuggestions was requested. status is queued when suggestions were created or reused, and failed when upload succeeded but review queueing did not.",
@@ -958,6 +962,46 @@
                   },
                   "height": {
                     "type": "number"
+                  }
+                }
+              },
+              "agentReview": {
+                "type": "object",
+                "description": "Short assistant-facing summary of the upload choices to tell the user for non-aggressive correction.",
+                "properties": {
+                  "userFacingSummary": {
+                    "type": "string"
+                  },
+                  "photoId": {
+                    "type": "string"
+                  },
+                  "uploadSessionId": {
+                    "type": "string"
+                  },
+                  "decisions": {
+                    "type": "object",
+                    "description": "Caption, attachment target, privacy/type choices, confidence, notes, and AI review request used for this upload."
+                  },
+                  "media": {
+                    "type": "object"
+                  },
+                  "derivativeStatus": {
+                    "type": "string"
+                  },
+                  "derivativeError": {
+                    "type": "string"
+                  },
+                  "derivativeNote": {
+                    "type": "string"
+                  },
+                  "aiReviewStatus": {
+                    "type": "string"
+                  },
+                  "aiReview": {
+                    "type": "object"
+                  },
+                  "correctionPrompt": {
+                    "type": "string"
                   }
                 }
               }

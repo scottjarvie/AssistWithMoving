@@ -1206,26 +1206,29 @@ Evidence media upload is a presigned storage flow. The current product UI is
 still photo-first, but the storage contract accepts image, audio, and video
 originals. Image derivatives remain image-only.
 
-For MCP agents, prefer `upload_evidence_image` for normal single-image work.
-The assistant can pass a local `filePath`, public `sourceUrl`, `dataUrl`, or
-`fileBase64`; MovingManifest stores the original, finalizes evidence metadata,
-creates web-ready derivatives server-side, and returns the `photoId`.
+For MCP agents, prefer the plain `upload_photo` alias, or
+`upload_evidence_image` when the client already knows that name, for normal
+single-image work. The assistant can pass a local `filePath`, public
+`sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original,
+finalizes evidence metadata, creates web-ready derivatives server-side, and
+returns the `photoId`.
 For local `filePath`, the MCP helper reads the file and sends the original image
 bytes directly to `POST /photos/upload`; it does not require the agent to
 base64-wrap the photo, calculate dimensions, or create display files. Use
-`upload_evidence_images` when the user gives several ordinary photos from the
-same room or context. Use `upload_evidence_file` for audio/video or when a
-client wants the explicit presigned upload flow.
+`upload_photos` or `upload_evidence_images` when the user gives several
+ordinary photos from the same room or context. Use `upload_evidence_file` for
+audio/video or when a client wants the explicit presigned upload flow.
 
 Quick rule for agents: one user photo should normally mean one
-`upload_evidence_image` call in MCP or one `POST /photos/upload` call in REST.
+`upload_photo`/`upload_evidence_image` call in MCP or one
+`POST /photos/upload` call in REST.
 Do not ask the user for image dimensions, thumbnail sizes, or derivative files.
 The site reads dimensions and creates `thumb`, `card`, `detail`, and `full`
-display versions after the original is stored. MCP image helpers return an
-`agentReview` object with the caption, attachment target, privacy/type choices,
-confidence/assumptions, derivative status, and AI-review status. Tell the user
-that short summary so they can correct the record without turning upload into a
-long interview.
+display versions after the original is stored. MCP image helpers and REST direct
+upload responses return an `agentReview` object with the caption, attachment
+target, privacy/type choices, confidence/assumptions, derivative status, and
+AI-review status. Tell the user that short summary so they can correct the
+record without turning upload into a long interview.
 If the user wants the app to review the photo for possible items, boxes, or
 duplicate evidence, set `generateAiSuggestions: true`. Upload still succeeds
 when AI review queueing fails or the key only has `photos/write`; the response
@@ -1354,7 +1357,8 @@ creates the evidence record. Images require positive `width` and `height`.
 Audio can finalize without dimensions; video dimensions may be provided when a
 future UI captures them.
 
-For MCP clients, use `upload_evidence_image` first:
+For MCP clients, use `upload_photo` first. `upload_evidence_image` is the same
+single-image path under the evidence-specific name:
 
 ```json
 {
@@ -1393,8 +1397,8 @@ For a new item plus its photos, use `create_item_with_images`:
 }
 ```
 
-For several photos, use `upload_evidence_images` with shared defaults and one
-entry per image:
+For several photos, use `upload_photos` or `upload_evidence_images` with shared
+defaults and one entry per image:
 
 ```json
 {
@@ -1693,6 +1697,8 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
+| `upload_photo` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload for ordinary household photos. |
+| `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos. |
 | `upload_evidence_image` | Easiest MCP single-image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
 | `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status plus `agentReview`. |
 | `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
