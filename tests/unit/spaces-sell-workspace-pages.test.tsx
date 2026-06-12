@@ -128,6 +128,7 @@ describe("SellWorkspacePage", () => {
       "aria-pressed",
       "true"
     );
+    expect(screen.getAllByRole("tab", { name: "Pricing" })).toHaveLength(1);
     expect(screen.getByText("Oak bookcase")).toBeInTheDocument();
     expect(screen.getByText("Vintage lamp")).toBeInTheDocument();
 
@@ -151,22 +152,37 @@ describe("SellWorkspacePage", () => {
     expect(
       screen.getByLabelText("Oak bookcase low suggested price")
     ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Vintage lamp low suggested price")
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save pricing" })).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Oak bookcase listing description")
     ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /All 2/i }));
+    expect(
+      screen.getByLabelText("Oak bookcase low suggested price")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Vintage lamp low suggested price")
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Save pricing" })).toHaveLength(2);
 
     await user.click(screen.getByRole("tab", { name: "Listing copy" }));
     expect(
       screen.getByLabelText("Oak bookcase listing description")
     ).toBeInTheDocument();
     expect(
+      screen.getByLabelText("Vintage lamp listing description")
+    ).toBeInTheDocument();
+    expect(
       screen.queryByLabelText("Oak bookcase low suggested price")
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Status" }));
-    expect(screen.getByRole("button", { name: "Keep as draft" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mark listed" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Keep as draft" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Mark listed" })).toHaveLength(2);
     expect(
       screen.queryByLabelText("Oak bookcase listing description")
     ).not.toBeInTheDocument();

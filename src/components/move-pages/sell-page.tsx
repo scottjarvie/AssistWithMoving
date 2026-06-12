@@ -9,6 +9,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 type SellRows = FunctionReturnType<typeof api.saleListings.listForMove>;
@@ -117,6 +118,7 @@ export function SellWorkspacePage() {
   const ensureListings = useMutation(api.saleListings.ensureForMove);
   const [message, setMessage] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<SellFilterKey>("all");
+  const [activeTask, setActiveTask] = useState<SellRowTask>("overview");
 
   useEffect(() => {
     if (!householdId || !moveId || rows === undefined) return;
@@ -239,22 +241,32 @@ export function SellWorkspacePage() {
               No inventory is marked sell yet. Change an item disposition to
               sell and it will appear here.
             </div>
-          ) : activeRows.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              No sale listings match this view yet.
-            </div>
           ) : (
-            <div className="space-y-2">
-              {activeRows.map((row) => (
-                <SellRowEditor
-                  key={row.item._id}
-                  householdId={householdId}
-                  moveId={moveId}
-                  row={row}
-                  onMessage={setMessage}
-                />
-              ))}
-            </div>
+            <Tabs
+              value={activeTask}
+              onValueChange={(value) => setActiveTask(value as SellRowTask)}
+              className="gap-3"
+            >
+              <MoveWorkspaceTabList tabs={sellRowTasks} />
+              <TabsContent value={activeTask} className="space-y-2">
+                {activeRows.length ? (
+                  activeRows.map((row) => (
+                    <SellRowEditor
+                      key={row.item._id}
+                      householdId={householdId}
+                      moveId={moveId}
+                      row={row}
+                      task={activeTask}
+                      onMessage={setMessage}
+                    />
+                  ))
+                ) : (
+                  <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    No sale listings match this view yet.
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           )}
         </CardContent>
       </Card>
@@ -266,11 +278,13 @@ function SellRowEditor({
   householdId,
   moveId,
   row,
+  task,
   onMessage,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   row: SellRow;
+  task: SellRowTask;
   onMessage: (message: string | null) => void;
 }) {
   const upsert = useMutation(api.saleListings.upsertForItem);
@@ -370,21 +384,8 @@ function SellRowEditor({
         />
       </div>
 
-      <Tabs defaultValue="overview" className="mt-3 gap-3">
-        <div className="overflow-x-auto pb-1">
-          <TabsList
-            className="min-w-max"
-            aria-label={`Sale tasks for ${row.item.name}`}
-          >
-            {sellRowTasks.map((task) => (
-              <TabsTrigger key={task.value} value={task.value}>
-                {task.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-
-        <TabsContent value="overview">
+      <div className="mt-3">
+        {task === "overview" ? (
           <div className="rounded-md border border-border bg-muted/25 p-3 text-sm">
             <p className="line-clamp-3 text-muted-foreground">
               {description ||
@@ -404,101 +405,107 @@ function SellRowEditor({
               </Badge>
             </div>
           </div>
-        </TabsContent>
+        ) : null}
 
-        <TabsContent value="pricing" className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Input
-              inputMode="decimal"
-              aria-label={`${row.item.name} low suggested price`}
-              placeholder="Low $"
-              value={lowPrice}
-              onChange={(event) => setLowPrice(event.target.value)}
-            />
-            <Input
-              inputMode="decimal"
-              aria-label={`${row.item.name} high suggested price`}
-              placeholder="High $"
-              value={highPrice}
-              onChange={(event) => setHighPrice(event.target.value)}
-            />
-            <Input
-              inputMode="decimal"
-              aria-label={`${row.item.name} official price`}
-              placeholder="Official $"
-              value={officialPrice}
-              onChange={(event) => setOfficialPrice(event.target.value)}
-            />
+        {task === "pricing" ? (
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Input
+                inputMode="decimal"
+                aria-label={`${row.item.name} low suggested price`}
+                placeholder="Low $"
+                value={lowPrice}
+                onChange={(event) => setLowPrice(event.target.value)}
+              />
+              <Input
+                inputMode="decimal"
+                aria-label={`${row.item.name} high suggested price`}
+                placeholder="High $"
+                value={highPrice}
+                onChange={(event) => setHighPrice(event.target.value)}
+              />
+              <Input
+                inputMode="decimal"
+                aria-label={`${row.item.name} official price`}
+                placeholder="Official $"
+                value={officialPrice}
+                onChange={(event) => setOfficialPrice(event.target.value)}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                disabled={saving}
+                onClick={() => void saveDraft("draftReady")}
+              >
+                Save pricing
+              </Button>
+            </div>
           </div>
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              disabled={saving}
-              onClick={() => void saveDraft("draftReady")}
-            >
-              Save pricing
-            </Button>
-          </div>
-        </TabsContent>
+        ) : null}
 
-        <TabsContent value="listing" className="space-y-3">
-          <Textarea
-            aria-label={`${row.item.name} listing description`}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            rows={3}
-            placeholder="Marketplace description"
-          />
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              size="sm"
-              disabled={saving}
-              onClick={() => void saveDraft("draftReady")}
-            >
-              Save listing copy
-            </Button>
+        {task === "listing" ? (
+          <div className="space-y-3">
+            <Textarea
+              aria-label={`${row.item.name} listing description`}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={3}
+              placeholder="Marketplace description"
+            />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                disabled={saving}
+                onClick={() => void saveDraft("draftReady")}
+              >
+                Save listing copy
+              </Button>
+            </div>
           </div>
-        </TabsContent>
+        ) : null}
 
-        <TabsContent value="status" className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <MiniMetric label="Current" value={row.status} />
-            <MiniMetric
-              label="Photos"
-              value={row.needsMorePhotos ? "needs more" : "ready"}
-              icon={Camera}
-            />
-            <MiniMetric
-              label="Research"
-              value={`${row.researchSourceCount} sources`}
-              icon={SearchCheck}
-              badgeVariant={researchBadgeVariant(row.researchDepth)}
-            />
+        {task === "status" ? (
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <MiniMetric label="Current" value={row.status} />
+              <MiniMetric
+                label="Photos"
+                value={row.needsMorePhotos ? "needs more" : "ready"}
+                icon={Camera}
+              />
+              <MiniMetric
+                label="Research"
+                value={`${row.researchSourceCount} sources`}
+                icon={SearchCheck}
+                badgeVariant={researchBadgeVariant(row.researchDepth)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={saving}
+                onClick={() => void saveDraft("draftReady")}
+              >
+                Keep as draft
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={saving}
+                onClick={() => void saveDraft("listed")}
+              >
+                Mark listed
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={saving}
-              onClick={() => void saveDraft("draftReady")}
-            >
-              Keep as draft
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={saving}
-              onClick={() => void saveDraft("listed")}
-            >
-              Mark listed
-            </Button>
-          </div>
-        </TabsContent>
-      </Tabs>
+        ) : null}
+      </div>
     </div>
   );
 }
