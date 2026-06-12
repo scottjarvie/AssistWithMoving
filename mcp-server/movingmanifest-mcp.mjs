@@ -19,6 +19,7 @@ import {
   createDocumentationProfile,
   createExport,
   createItem,
+  createItemWithImages,
   createMove,
   createMovePerson,
   createTransportResource,
@@ -348,6 +349,69 @@ const inventoryItemWriteSchema = z.object({
   privateNotes: z.string().optional(),
   aiSummary: z.string().optional(),
   aiTags: z.array(z.string()).optional(),
+});
+
+const evidenceImageInputSchema = z.object({
+  filePath: z
+    .string()
+    .optional()
+    .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path."),
+  sourceUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe("Public HTTP(S) image URL. Do not use for private localhost or credentialed URLs."),
+  dataUrl: z
+    .string()
+    .optional()
+    .describe("Base64 image data URL such as data:image/jpeg;base64,..."),
+  fileBase64: z
+    .string()
+    .optional()
+    .describe("Raw base64 JPEG, PNG, or WebP bytes when a data URL is not convenient."),
+  fileName: z.string().optional(),
+  itemId: z.string().optional(),
+  boxId: z.string().optional(),
+  spaceId: z.string().optional(),
+  transportResourceId: z.string().optional(),
+  transportZoneId: z.string().optional(),
+  room: z.string().optional(),
+  mimeType: z.enum(allowedOriginalImageMimeTypes).optional(),
+  originalHash: z.string().optional(),
+  caption: z.string().optional(),
+  photoType: z.string().optional(),
+  privacyLevel: z.string().optional(),
+  visibilityScope: z.string().optional(),
+  source: z.string().optional(),
+  exifHandlingStatus: z.string().optional(),
+  confidence: z.string().optional(),
+  notes: z.string().optional(),
+  verificationStatus: z.string().optional(),
+  capturedAt: z.number().optional(),
+  idempotencyKey: z.string().optional(),
+});
+
+const createdItemImageInputSchema = evidenceImageInputSchema.omit({
+  itemId: true,
+});
+
+const evidencePhotoDefaultsSchema = z.object({
+  boxId: z.string().optional(),
+  spaceId: z.string().optional(),
+  transportResourceId: z.string().optional(),
+  transportZoneId: z.string().optional(),
+  room: z.string().optional(),
+  mimeType: z.enum(allowedOriginalImageMimeTypes).optional(),
+  caption: z.string().optional(),
+  photoType: z.string().optional(),
+  privacyLevel: z.string().optional(),
+  visibilityScope: z.string().optional(),
+  source: z.string().optional(),
+  exifHandlingStatus: z.string().optional(),
+  confidence: z.string().optional(),
+  notes: z.string().optional(),
+  verificationStatus: z.string().optional(),
+  capturedAt: z.number().optional(),
 });
 
 const setupTransportZoneSchema = z.object({
@@ -1045,6 +1109,33 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (input) => createItem(apiConfig, input),
+  });
+
+  registerTool(target, "create_item_with_images", {
+    title: "Create item with images",
+    description:
+      "Fast household-item intake for agents: create one inventory item, default quantity to 1 when omitted, upload one or more original images attached to that item, and let MovingManifest create web-ready derivatives server-side. Use this when the user provides a picture plus a few short words.",
+    inputSchema: {
+      moveId: z.string(),
+      name: z.string().min(1),
+      images: z
+        .array(createdItemImageInputSchema)
+        .min(1)
+        .max(50)
+        .describe("One entry per user-provided image. Each entry must provide exactly one filePath, sourceUrl, dataUrl, or fileBase64."),
+      photoDefaults: evidencePhotoDefaultsSchema
+        .optional()
+        .describe("Shared photo metadata. Item room is reused for photos when this does not provide room."),
+      continueOnImageError: z
+        .boolean()
+        .optional()
+        .describe("Defaults true so the created item is returned with per-image failures instead of losing the useful partial result."),
+      idempotencyKey: z.string().optional(),
+      dryRun: z.boolean().optional(),
+      ...inventoryItemWriteSchema.omit({ itemId: true, name: true }).shape,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => createItemWithImages(apiConfig, input),
   });
 
   registerTool(target, "batch_upsert_items", {

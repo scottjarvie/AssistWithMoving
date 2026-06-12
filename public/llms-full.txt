@@ -145,11 +145,14 @@ One user photo should normally be one upload call. MCP agents should use
 `upload_evidence_image` with a local `filePath`, public `sourceUrl`, `dataUrl`,
 or `fileBase64`. When the user gives several ordinary photos from the same room
 or context, use `upload_evidence_images` with shared defaults and one image
-entry per photo. REST agents should use `POST /api/v1/photos/upload` with raw
-JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or JSON
-with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`. MovingManifest
-stores the original, reads dimensions, finalizes the evidence record, and
-creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
+entry per photo. When the photo should become one new inventory item, use
+`create_item_with_images`; it creates the item, defaults omitted quantity to 1,
+uploads each original image attached to that item, and returns item/photo IDs
+with derivative status. REST agents should use `POST /api/v1/photos/upload`
+with raw JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or
+JSON with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`.
+MovingManifest stores the original, reads dimensions, finalizes the evidence
+record, and creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
 server-side. For local `filePath`, the MCP helper sends the original image bytes
 directly instead of putting the file into a JSON/base64 payload. Do not ask users
 for dimensions, thumbnail sizes, or derivative files for ordinary photos.
@@ -264,6 +267,7 @@ Useful write tools:
 - `setup_move`
 - `create_move_space`
 - `batch_upsert_items`
+- `create_item_with_images`
 - `upload_evidence_image`
 - `upload_evidence_images`
 - `upload_evidence_file`

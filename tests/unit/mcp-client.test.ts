@@ -18,6 +18,7 @@ import {
   createApiConfig,
   createDocumentationProfile,
   createItem,
+  createItemWithImages,
   createMove,
   createMovePerson,
   createPlannedItem,
@@ -647,6 +648,133 @@ describe("MovingManifest MCP API client", () => {
         }),
       }
     );
+  });
+
+  it("creates an item and uploads attached images through one MCP helper", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const filePath = path.join(tempDir, "red-toolbox.png");
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    await writeFile(filePath, pngBytes);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: { itemId: "item1", name: "Red toolbox", quantity: 1 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: {
+            photoId: "photo1",
+            uploadSessionId: "session1",
+            derivativeStatus: "ready",
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await expect(
+        createItemWithImages(
+          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          {
+            moveId: "move1",
+            name: "Red toolbox",
+            room: "Garage",
+            category: "Tools",
+            idempotencyKey: "toolbox-intake",
+            images: [
+              {
+                filePath,
+                caption: "Red toolbox on garage shelf",
+                confidence: "medium",
+              },
+            ],
+            photoDefaults: {
+              photoType: "item",
+              privacyLevel: "normal",
+              notes: "Quantity defaults to one because the user did not mention a count.",
+            },
+          }
+        )
+      ).resolves.toMatchObject({
+        itemId: "item1",
+        imageCount: 1,
+        uploadedCount: 1,
+        failedCount: 0,
+        photoIds: ["photo1"],
+        images: {
+          results: [
+            {
+              ok: true,
+              photoId: "photo1",
+              derivativeStatus: "ready",
+            },
+          ],
+        },
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/moves/move1/items"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "toolbox-intake-item",
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          name: "Red toolbox",
+          room: "Garage",
+          category: "Tools",
+          quantity: 1,
+        }),
+      }
+    );
+
+    const [uploadUrl, uploadInit] = fetchMock.mock.calls[1] as unknown as [
+      URL,
+      { headers: Record<string, string>; body: Buffer },
+    ];
+    expect(uploadUrl.pathname).toBe("/api/v1/photos/upload");
+    expect(Object.fromEntries(uploadUrl.searchParams)).toMatchObject({
+      moveId: "move1",
+      itemId: "item1",
+      fileName: "red-toolbox.png",
+      mimeType: "image/png",
+      room: "Garage",
+      caption: "Red toolbox on garage shelf",
+      photoType: "item",
+      privacyLevel: "normal",
+      source: "mcp",
+      exifHandlingStatus: "pending",
+      confidence: "medium",
+      notes: "Quantity defaults to one because the user did not mention a count.",
+    });
+    expect(uploadInit).toEqual({
+      method: "POST",
+      headers: {
+        authorization: "Bearer mmk_test_secret",
+        "content-type": "image/png",
+        "content-length": String(pngBytes.length),
+        "x-movingmanifest-file-name": "red-toolbox.png",
+        "idempotency-key": "toolbox-intake-image-1",
+      },
+      body: pngBytes,
+    });
   });
 
   it("sends batch item upserts to the API for backend validation", async () => {

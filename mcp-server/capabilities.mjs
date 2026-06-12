@@ -370,7 +370,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     status: "availableWithOperationalBlocker",
     purpose:
       "Upload image evidence through a one-call agent path, or use lower-level upload sessions for audio, video, progress bars, and custom clients.",
-    requiredScopes: ["moves/read", "inventory/read", "photos/write"],
+    requiredScopes: ["moves/read", "inventory/read", "inventory/write", "photos/write"],
     restEndpoints: [
       "POST /api/v1/photos/upload",
       "POST /api/v1/uploads/init",
@@ -378,6 +378,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "POST /api/v1/photos/:photoId/attach",
     ],
     mcpTools: [
+      "create_item_with_images",
       "upload_evidence_image",
       "upload_evidence_images",
       "upload_evidence_file",
@@ -386,6 +387,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "attach_photo",
     ],
     agentWorkflows: [
+      "When the user provides a picture plus a few short words for one household item, use create_item_with_images to create the item, default quantity to 1 when omitted, upload the image evidence, and return the item/photo IDs in one result.",
       "For ordinary images, use upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
       "When a user gives several ordinary photos from the same room or context, use upload_evidence_images with shared defaults and one image entry per photo.",
       "Do not ask the user for dimensions, thumbnail sizes, or derivative files during normal AI-assisted photo capture.",

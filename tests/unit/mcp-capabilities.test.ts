@@ -189,10 +189,12 @@ describe("MovingManifest MCP capability discovery", () => {
         id: "photoEvidence",
         restEndpoints: expect.arrayContaining(["POST /api/v1/photos/upload"]),
         mcpTools: expect.arrayContaining([
+          "create_item_with_images",
           "upload_evidence_image",
           "upload_evidence_images",
         ]),
         agentWorkflows: expect.arrayContaining([
+          expect.stringContaining("create_item_with_images"),
           expect.stringContaining("upload_evidence_image first"),
           expect.stringContaining("upload_evidence_images"),
           expect.stringContaining("Do not ask the user for dimensions"),

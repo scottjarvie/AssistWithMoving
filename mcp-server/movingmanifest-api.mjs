@@ -361,17 +361,102 @@ export async function searchInventory(config, input) {
 }
 
 export async function createItem(config, input) {
+  const { idempotencyKey, ...body } = input;
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { method: "POST", path: `/moves/${input.moveId}/items`, body: input },
+      request: { method: "POST", path: `/moves/${input.moveId}/items`, body },
     };
   }
   return await movingManifestRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/items`,
-    body: input,
+    body,
+    idempotencyKey,
   });
+}
+
+export async function createItemWithImages(config, input) {
+  const {
+    images,
+    idempotencyKey,
+    dryRun,
+    photoDefaults,
+    continueOnImageError,
+    ...itemInput
+  } = input;
+  const imageEntries = Array.isArray(images) ? images : [];
+  if (imageEntries.length === 0) {
+    throw new Error("Provide at least one image.");
+  }
+
+  const itemRequest = {
+    ...itemInput,
+    quantity: itemInput.quantity ?? 1,
+    dryRun,
+    idempotencyKey: idempotencyKey ? `${idempotencyKey}-item` : undefined,
+  };
+  const sharedPhotoDefaults = removeUndefined({
+    ...photoDefaults,
+    moveId: input.moveId,
+    itemId: dryRun ? "ITEM_ID_CREATED_BY_THIS_TOOL" : undefined,
+    room: photoDefaults?.room ?? itemInput.room,
+    photoType: photoDefaults?.photoType ?? "item",
+    source: photoDefaults?.source ?? "mcp",
+    exifHandlingStatus: photoDefaults?.exifHandlingStatus ?? "pending",
+    dryRun,
+    continueOnError: continueOnImageError ?? true,
+    idempotencyKey: idempotencyKey ? `${idempotencyKey}-image` : undefined,
+  });
+  const sanitizedImages = imageEntries.map((image) => {
+    const imageInput = { ...image };
+    delete imageInput.itemId;
+    return imageInput;
+  });
+
+  if (dryRun) {
+    const [itemDryRun, imageDryRun] = await Promise.all([
+      createItem(config, itemRequest),
+      uploadEvidenceImages(config, {
+        ...sharedPhotoDefaults,
+        images: sanitizedImages,
+      }),
+    ]);
+    return {
+      dryRun: true,
+      item: itemDryRun,
+      images: imageDryRun,
+      note:
+        "Dry run only. On a live run, MovingManifest creates the item first, then uploads each original image attached to that item and creates web-ready derivatives server-side.",
+    };
+  }
+
+  const itemResponse = await createItem(config, itemRequest);
+  const itemData = itemResponse.data ?? itemResponse;
+  const itemId = itemData.itemId;
+  if (!itemId) {
+    throw new Error("Item was created but the API response did not include itemId.");
+  }
+
+  const imageResult = await uploadEvidenceImages(config, {
+    ...sharedPhotoDefaults,
+    itemId,
+    images: sanitizedImages,
+  });
+
+  return {
+    itemId,
+    item: itemData,
+    imageCount: imageResult.imageCount,
+    uploadedCount: imageResult.uploadedCount,
+    failedCount: imageResult.failedCount,
+    photoIds: imageResult.results
+      .filter((result) => result.ok && result.photoId)
+      .map((result) => result.photoId),
+    images: imageResult,
+    note:
+      "Created the item, uploaded original image evidence attached to it, and let MovingManifest create web-ready derivatives server-side.",
+  };
 }
 
 export async function batchUpsertItems(config, input) {

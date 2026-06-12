@@ -1225,6 +1225,14 @@ display versions after the original is stored. Tell the user the caption,
 attachment target, and confidence/assumptions you used so they can correct the
 record without turning upload into a long interview.
 
+When the photo is meant to become a new inventory item, MCP agents should use
+`create_item_with_images` instead of manually creating the item and then
+uploading/attaching photos. That tool creates one item, defaults `quantity` to
+`1` when omitted, uploads each original image attached to the new item, and
+returns the item ID plus per-image photo IDs and derivative status. REST clients
+can do the same workflow with `POST /moves/{moveId}/items` followed by
+`POST /photos/upload` calls that include the returned `itemId`.
+
 For REST API agents, use whichever one-call shape is easiest for the image
 source:
 
@@ -1348,6 +1356,29 @@ For MCP clients, use `upload_evidence_image` first:
   "photoType": "room",
   "privacyLevel": "normal",
   "visibilityScope": "moveCollaborators"
+}
+```
+
+For a new item plus its photos, use `create_item_with_images`:
+
+```json
+{
+  "moveId": "MOVE_ID",
+  "name": "Red toolbox",
+  "room": "Garage",
+  "category": "Tools",
+  "images": [
+    {
+      "filePath": "/Users/scott/Desktop/red-toolbox.jpg",
+      "caption": "Red toolbox on garage shelf"
+    }
+  ],
+  "photoDefaults": {
+    "photoType": "item",
+    "privacyLevel": "normal",
+    "confidence": "medium",
+    "notes": "Quantity defaults to one because the user did not mention a count."
+  }
 }
 ```
 
@@ -1617,6 +1648,7 @@ Available MCP tools:
 | `plan_snapshot` | Fetch a no-underlay SVG snapshot for visual self-checks. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
+| `create_item_with_images` | Fast MCP intake for one new household item plus one or more photos: creates the item, defaults omitted quantity to 1, uploads original images attached to it, and returns item/photo IDs with derivative status. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
 | `update_item` | Update selected item fields, with `dryRun` support. |
 | `delete_item` | Soft-delete one item, with `dryRun` support. |
