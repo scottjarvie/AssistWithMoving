@@ -117,6 +117,10 @@ describe("MoveDashboard", () => {
       screen.getByText("Open the move you are working on before setup tasks."),
     ).toBeInTheDocument();
     const activeMoves = screen.getByRole("list", { name: "Active moves" });
+    const activeMoveCard = within(activeMoves)
+      .getByText("Summer move")
+      .closest("[role='listitem']");
+    expect(activeMoveCard).not.toBeNull();
     const activeMove = within(activeMoves).getByText("Summer move");
     const summary = screen.getByText("Workspace summary");
     expect(activeMove.compareDocumentPosition(summary)).toBe(
@@ -128,6 +132,26 @@ describe("MoveDashboard", () => {
     expect(
       screen.getByRole("link", { name: "Open selected move" }),
     ).toHaveAttribute("href", "/app/moves/move_123");
+    expect(
+      within(activeMoveCard as HTMLElement).getByRole("link", {
+        name: "Capture",
+      }),
+    ).toHaveAttribute("href", "/app/moves/move_123/capture");
+    expect(
+      within(activeMoveCard as HTMLElement).getByRole("link", {
+        name: "Inventory",
+      }),
+    ).toHaveAttribute("href", "/app/moves/move_123/inventory");
+    expect(
+      within(activeMoveCard as HTMLElement).getByRole("link", {
+        name: "Photos",
+      }),
+    ).toHaveAttribute("href", "/app/moves/move_123/photos");
+    expect(
+      within(activeMoveCard as HTMLElement).getByRole("link", {
+        name: "Boxes",
+      }),
+    ).toHaveAttribute("href", "/app/moves/move_123/boxes");
     expect(
       within(activeMoves).getByRole("button", { name: "Selected" }),
     ).toBeDisabled();

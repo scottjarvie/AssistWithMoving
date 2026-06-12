@@ -8,11 +8,14 @@ import {
   ArrowRight,
   Bot,
   CalendarDays,
+  Camera,
   CircleCheck,
   ClipboardList,
   FileStack,
   Home,
+  Images,
   KeyRound,
+  PackageCheck,
   Plus,
   ShieldCheck,
   Truck,
@@ -110,6 +113,29 @@ const createMoveTaskHashes = {
   "#create-move-packets": "packets",
   "#create-move-pcs": "pcs",
 } as const;
+
+const moveQuickActions = [
+  {
+    label: "Capture",
+    section: "capture",
+    icon: Camera,
+  },
+  {
+    label: "Inventory",
+    section: "inventory",
+    icon: ClipboardList,
+  },
+  {
+    label: "Photos",
+    section: "photos",
+    icon: Images,
+  },
+  {
+    label: "Boxes",
+    section: "boxes",
+    icon: PackageCheck,
+  },
+] as const;
 
 export function MoveDashboard() {
   const router = useRouter();
@@ -837,6 +863,27 @@ function ActiveMoveCard({
             value={String(move.documentationProfileTypes?.length ?? 0)}
           />
           <DashboardMoveField label="System" value={move.unitSystem} />
+        </div>
+        <div className="rounded-md border border-border/70 bg-muted/25 p-2">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">
+            Jump to task
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {moveQuickActions.map(({ label, section, icon: Icon }) => (
+              <Button
+                key={section}
+                asChild
+                size="sm"
+                variant="outline"
+                className="h-8"
+              >
+                <Link href={`${moveWorkspacePath(move._id)}/${section}`}>
+                  <Icon aria-hidden="true" />
+                  {label}
+                </Link>
+              </Button>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           {selected ? (
