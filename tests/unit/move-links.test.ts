@@ -113,6 +113,21 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#layout-blueprint")).toBe(
       "/app/moves/move_123/plan#layout-blueprint"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#packet-exports")).toBe(
+      "/app/moves/move_123/packets#packet-exports"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#packet-share-links")).toBe(
+      "/app/moves/move_123/packets#packet-share-links"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#packet-views")).toBe(
+      "/app/moves/move_123/packets#packet-views"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#claim-timeline")).toBe(
+      "/app/moves/move_123/packets#claim-timeline"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#claim-packets")).toBe(
+      "/app/moves/move_123/packets#claim-packets"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#ai-review-queue")).toBe(
       "/app/moves/move_123/ai-review#ai-review-queue"
     );

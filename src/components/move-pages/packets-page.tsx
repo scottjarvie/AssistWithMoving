@@ -11,8 +11,16 @@ import { useHashTab } from "@/components/use-hash-tab";
 import { flagEnabled } from "@/lib/feature-flags";
 
 const packetTabHashes = {
+  "#claim-items": "claims",
+  "#claim-metrics": "claims",
+  "#claim-packets": "claims",
+  "#claim-timeline": "claims",
   "#claims-center": "claims",
   "#documentation-packets": "builder",
+  "#packet-configure": "builder",
+  "#packet-exports": "builder",
+  "#packet-share-links": "builder",
+  "#packet-views": "builder",
 } as const;
 
 export function PacketsWorkspacePage() {

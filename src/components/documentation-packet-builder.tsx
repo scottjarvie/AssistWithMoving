@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
 import {
   documentationFieldOptions,
   documentationImageRuleOptions,
@@ -110,6 +111,14 @@ type ExportJobType =
   | "documentationProfile";
 type PacketBuilderTask = "configure" | "exports" | "share" | "views";
 
+const packetBuilderTaskHashes = {
+  "#documentation-packets": "configure",
+  "#packet-configure": "configure",
+  "#packet-exports": "exports",
+  "#packet-share-links": "share",
+  "#packet-views": "views",
+} as const satisfies Partial<Record<string, PacketBuilderTask>>;
+
 type ProfileDisposition =
   | "undecided"
   | "take"
@@ -195,8 +204,10 @@ export function DocumentationPacketBuilder({
   const [linkRole, setLinkRole] = useState<ShareLinkRole>("viewer");
   const [expiresInDays, setExpiresInDays] = useState("30");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [packetTask, setPacketTask] =
-    useState<PacketBuilderTask>("configure");
+  const [packetTask, setPacketTask] = useHashTab<PacketBuilderTask>(
+    "configure",
+    packetBuilderTaskHashes
+  );
   const [downloadExportJobId, setDownloadExportJobId] =
     useState<Id<"exportJobs"> | null>(null);
   const [recentExports, setRecentExports] = useState<RecentExportJob[]>([]);
@@ -648,7 +659,11 @@ export function DocumentationPacketBuilder({
                   </TabsList>
                 </div>
 
-                <TabsContent value="configure" className="space-y-4">
+                <TabsContent
+                  value="configure"
+                  id="packet-configure"
+                  className="space-y-4"
+                >
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
                     <Input
                       value={effectiveName}
@@ -794,7 +809,11 @@ export function DocumentationPacketBuilder({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="exports" className="space-y-4">
+                <TabsContent
+                  value="exports"
+                  id="packet-exports"
+                  className="space-y-4"
+                >
                   <div className="rounded-md border border-border p-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -879,7 +898,11 @@ export function DocumentationPacketBuilder({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="share" className="space-y-4">
+                <TabsContent
+                  value="share"
+                  id="packet-share-links"
+                  className="space-y-4"
+                >
                   <div className="rounded-md border border-border p-3">
                     <h3 className="flex items-center gap-2 text-sm font-medium">
                       <Link2 className="size-4 text-primary" aria-hidden="true" />
@@ -1008,7 +1031,11 @@ export function DocumentationPacketBuilder({
                   ) : null}
                 </TabsContent>
 
-                <TabsContent value="views" className="space-y-4">
+                <TabsContent
+                  value="views"
+                  id="packet-views"
+                  className="space-y-4"
+                >
                   <div className="rounded-md border border-border p-3">
                     <h3 className="text-sm font-medium">Packet views</h3>
                     <p className="mt-1 text-xs text-muted-foreground">

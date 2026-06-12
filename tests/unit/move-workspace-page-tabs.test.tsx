@@ -395,6 +395,44 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Packet builder surface")).not.toBeInTheDocument();
   });
 
+  it("opens packet builder when routed to packet builder subtasks", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/packets#packet-exports"
+    );
+
+    render(<PacketsWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Builder" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Packet builder surface")).toBeInTheDocument();
+    expect(screen.queryByText("Claims center surface")).not.toBeInTheDocument();
+  });
+
+  it("opens packet claims when routed to claim subtasks", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/packets#claim-timeline"
+    );
+
+    render(<PacketsWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Claims" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Claims center surface")).toBeInTheDocument();
+    expect(screen.queryByText("Packet builder surface")).not.toBeInTheDocument();
+  });
+
   it("opens inventory disposition when routed to the disposition hash", async () => {
     window.history.replaceState(
       null,

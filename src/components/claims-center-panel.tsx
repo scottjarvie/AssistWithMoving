@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
 import {
   buildClaimPacketPath,
   formatClaimCurrency,
@@ -45,6 +46,16 @@ const claimTasks = [
   { value: "packets", label: "Packets" },
 ] as const;
 
+type ClaimTask = (typeof claimTasks)[number]["value"];
+
+const claimTaskHashes = {
+  "#claim-items": "items",
+  "#claim-metrics": "metrics",
+  "#claim-packets": "packets",
+  "#claim-timeline": "timeline",
+  "#claims-center": "items",
+} as const satisfies Partial<Record<string, ClaimTask>>;
+
 export function ClaimsCenterPanel({
   householdId,
   moveId,
@@ -61,6 +72,10 @@ export function ClaimsCenterPanel({
     householdId && moveId
       ? buildClaimPacketPath({ householdId, moveId, mode: "owner" })
       : "#";
+  const [activeTask, setActiveTask] = useHashTab<ClaimTask>(
+    "items",
+    claimTaskHashes
+  );
 
   return (
     <Card id="claims-center">
@@ -105,7 +120,7 @@ export function ClaimsCenterPanel({
             </div>
           </div>
         ) : (
-          <Tabs defaultValue="items" className="gap-4">
+          <Tabs value={activeTask} onValueChange={setActiveTask} className="gap-4">
             <div className="overflow-x-auto pb-1">
               <TabsList className="min-w-max" aria-label="Claim review tasks">
                 {claimTasks.map((task) => (
@@ -116,11 +131,11 @@ export function ClaimsCenterPanel({
               </TabsList>
             </div>
 
-            <TabsContent value="items" className="space-y-3">
+            <TabsContent value="items" id="claim-items" className="space-y-3">
               <TopClaimItems items={summary.topItems} />
             </TabsContent>
 
-            <TabsContent value="metrics">
+            <TabsContent value="metrics" id="claim-metrics">
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                 <Metric
                   label="Claim items"
@@ -153,11 +168,19 @@ export function ClaimsCenterPanel({
               </div>
             </TabsContent>
 
-            <TabsContent value="timeline" className="space-y-3">
+            <TabsContent
+              value="timeline"
+              id="claim-timeline"
+              className="space-y-3"
+            >
               <ClaimTimeline events={summary.timeline} />
             </TabsContent>
 
-            <TabsContent value="packets" className="space-y-3">
+            <TabsContent
+              value="packets"
+              id="claim-packets"
+              className="space-y-3"
+            >
               <ClaimPacketShortcuts
                 claimPacketPath={claimPacketPath}
                 moveId={moveId}

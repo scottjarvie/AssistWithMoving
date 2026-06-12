@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -81,6 +81,10 @@ function renderClaimsCenterPanel() {
 }
 
 describe("ClaimsCenterPanel task tabs", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/packets");
+  });
+
   it("opens on claim items and separates metrics, timeline, and packet actions", async () => {
     const user = userEvent.setup();
 
@@ -122,5 +126,47 @@ describe("ClaimsCenterPanel task tabs", () => {
       "/app/moves/move_123/photos#photos"
     );
     expect(screen.queryByText("Status changed")).not.toBeInTheDocument();
+  });
+
+  it("opens the timeline task from the claim timeline hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/packets#claim-timeline",
+    );
+
+    renderClaimsCenterPanel();
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Timeline" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
+    expect(screen.getByText("Claim timeline")).toBeInTheDocument();
+    expect(screen.getByText("Status changed")).toBeInTheDocument();
+    expect(screen.queryByText("Top claim items")).not.toBeInTheDocument();
+  });
+
+  it("opens packet actions from the claim packets hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/packets#claim-packets",
+    );
+
+    renderClaimsCenterPanel();
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Packets" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
+    expect(screen.getByText("Build or audit claim packets")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Claim packet" })).toBeInTheDocument();
+    expect(screen.queryByText("Claim timeline")).not.toBeInTheDocument();
   });
 });

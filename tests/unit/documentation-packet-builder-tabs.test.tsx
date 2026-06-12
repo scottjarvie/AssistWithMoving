@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -109,6 +109,10 @@ function renderBuilder() {
 }
 
 describe("DocumentationPacketBuilder task tabs", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_1/packets");
+  });
+
   it("opens on profile configuration instead of stacking exports and shares", () => {
     renderBuilder();
 
@@ -161,5 +165,47 @@ describe("DocumentationPacketBuilder task tabs", () => {
     expect(
       screen.queryByRole("button", { name: "Create link token" })
     ).not.toBeInTheDocument();
+  });
+
+  it("opens exports from the packet exports hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_1/packets#packet-exports",
+    );
+
+    renderBuilder();
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Exports" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
+    expect(screen.getByRole("button", { name: "Inventory CSV" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Packet profile name")).not.toBeInTheDocument();
+  });
+
+  it("opens share links from the packet share hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_1/packets#packet-share-links",
+    );
+
+    renderBuilder();
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Share links" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Create link token" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Inventory CSV" })).not.toBeInTheDocument();
   });
 });
