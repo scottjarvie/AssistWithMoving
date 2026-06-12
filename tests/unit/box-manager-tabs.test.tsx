@@ -116,7 +116,7 @@ describe("BoxManager", () => {
     boxData.queryCall = 0;
   });
 
-  it("opens on box records and keeps add/edit workflows in task tabs", async () => {
+  it("opens on box records and keeps per-box work in task tabs", async () => {
     const user = userEvent.setup();
 
     render(
@@ -133,11 +133,34 @@ describe("BoxManager", () => {
     expect(screen.getByText("B-001")).toBeInTheDocument();
     expect(screen.queryByRole("form", { name: "Create box" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Item to add to box")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Add box" }));
     expect(screen.getByRole("form", { name: "Create box" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Pack contents" }));
+    await user.click(screen.getByRole("tab", { name: "Contents" }));
     expect(screen.getByLabelText("Item to add to box")).toBeInTheDocument();
+    expect(screen.getAllByText("Socket set").length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
+    expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Assigned transport resource")
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByLabelText("Box label")).toBeInTheDocument();
+    expect(screen.getByLabelText("Estimated box weight in pounds")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Item to add to box")).not.toBeInTheDocument();
+    expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Photos" }));
+    expect(screen.getByText("Photo upload control")).toBeInTheDocument();
+    expect(screen.getByText("Photo evidence strip")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Load" }));
+    expect(screen.getByLabelText("Assigned transport resource")).toBeInTheDocument();
+    expect(screen.getByLabelText("Assignment override reason")).toBeInTheDocument();
+    expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
   });
 });

@@ -61,13 +61,17 @@ type TransportResourceWithZones = {
 type BoxRecord = NonNullable<
   ReturnType<typeof useQuery<typeof api.boxes.listForMove>>
 >[number];
-type BoxTask = "boxes" | "add" | "contents" | "labels";
+type BoxCardTask = "contents" | "details" | "photos" | "load";
+type BoxTask = "boxes" | "add" | BoxCardTask | "labels";
 type BoxStatusFilter = "all" | Doc<"boxes">["status"];
 
 const boxTaskTabs: { value: BoxTask; label: string }[] = [
   { value: "boxes", label: "Boxes" },
   { value: "add", label: "Add box" },
-  { value: "contents", label: "Pack contents" },
+  { value: "contents", label: "Contents" },
+  { value: "details", label: "Details" },
+  { value: "photos", label: "Photos" },
+  { value: "load", label: "Load" },
   { value: "labels", label: "Labels" },
 ];
 
@@ -77,6 +81,7 @@ function BoxCard({
   boxRecord,
   items,
   resourcesWithZones,
+  task,
   onMessage,
 }: {
   householdId: Id<"households">;
@@ -84,6 +89,7 @@ function BoxCard({
   boxRecord: BoxRecord;
   items: InventoryItem[];
   resourcesWithZones: TransportResourceWithZones[];
+  task: BoxCardTask;
   onMessage: (message: string) => void;
 }) {
   const { box, contents, itemCount, weightSummary } = boxRecord;
@@ -236,223 +242,226 @@ function BoxCard({
               Lookup
             </Link>
           </Button>
-          <Button asChild size="sm" variant="outline">
-            <Link
-              href={buildBoxLabelSheetPath({
-                householdId,
-                moveId,
-              })}
-            >
-              <Printer aria-hidden="true" />
-              Labels
-            </Link>
-          </Button>
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        <Input
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-          placeholder="Label"
-          aria-label="Box label"
-        />
-        <Input
-          value={room}
-          onChange={(event) => setRoom(event.target.value)}
-          placeholder="Room"
-          aria-label="Box room"
-        />
-        <Input
-          value={destinationRoom}
-          onChange={(event) => setDestinationRoom(event.target.value)}
-          placeholder="Destination room"
-          aria-label="Box destination room"
-        />
-        <select
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-          value={status}
-          aria-label="Box status"
-          onChange={(event) => setStatus(event.target.value as typeof status)}
-        >
-          {boxStatusOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-        <Input
-          inputMode="decimal"
-          value={estimatedWeightLb}
-          onChange={(event) => setEstimatedWeightLb(event.target.value)}
-          placeholder="Estimated lb"
-          aria-label="Estimated box weight in pounds"
-        />
-        <Input
-          inputMode="decimal"
-          value={actualWeightLb}
-          onChange={(event) => setActualWeightLb(event.target.value)}
-          placeholder="Actual lb"
-          aria-label="Actual box weight in pounds"
-        />
-        <Input
-          inputMode="decimal"
-          value={estimatedVolumeCuFt}
-          onChange={(event) => setEstimatedVolumeCuFt(event.target.value)}
-          placeholder="Cu ft"
-          aria-label="Estimated box volume in cubic feet"
-        />
-        <select
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-          value={assignedResourceId}
-          aria-label="Assigned transport resource"
-          onChange={(event) => {
-            setAssignedResourceId(event.target.value);
-            setAssignedZoneId("");
-          }}
-        >
-          <option value="">Resource</option>
-          {resourcesWithZones.map(({ resource }) => (
-            <option key={resource._id} value={resource._id}>
-              {resource.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-          value={assignedZoneId}
-          aria-label="Assigned transport zone"
-          disabled={!assignedResourceId}
-          onChange={(event) => setAssignedZoneId(event.target.value)}
-        >
-          <option value="">Zone</option>
-          {zones.map((zone) => (
-            <option key={zone._id} value={zone._id}>
-              {zone.name}
-            </option>
-          ))}
-        </select>
-        <label className="flex h-8 items-center gap-2 rounded-md border border-input bg-background px-2 text-sm">
-          <input
-            type="checkbox"
-            checked={assignmentLocked}
-            onChange={(event) => setAssignmentLocked(event.target.checked)}
+      {task === "details" ? (
+        <div className="mt-3 space-y-2">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <Input
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+              placeholder="Label"
+              aria-label="Box label"
+            />
+            <Input
+              value={room}
+              onChange={(event) => setRoom(event.target.value)}
+              placeholder="Room"
+              aria-label="Box room"
+            />
+            <Input
+              value={destinationRoom}
+              onChange={(event) => setDestinationRoom(event.target.value)}
+              placeholder="Destination room"
+              aria-label="Box destination room"
+            />
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              value={status}
+              aria-label="Box status"
+              onChange={(event) => setStatus(event.target.value as typeof status)}
+            >
+              {boxStatusOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <Input
+              inputMode="decimal"
+              value={estimatedWeightLb}
+              onChange={(event) => setEstimatedWeightLb(event.target.value)}
+              placeholder="Estimated lb"
+              aria-label="Estimated box weight in pounds"
+            />
+            <Input
+              inputMode="decimal"
+              value={actualWeightLb}
+              onChange={(event) => setActualWeightLb(event.target.value)}
+              placeholder="Actual lb"
+              aria-label="Actual box weight in pounds"
+            />
+            <Input
+              inputMode="decimal"
+              value={estimatedVolumeCuFt}
+              onChange={(event) => setEstimatedVolumeCuFt(event.target.value)}
+              placeholder="Cu ft"
+              aria-label="Estimated box volume in cubic feet"
+            />
+          </div>
+          <Textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Description or handling notes"
+            aria-label="Box description or handling notes"
           />
-          Locked
-        </label>
-      </div>
-
-      <Input
-        className="mt-2"
-        value={assignmentOverrideReason}
-        onChange={(event) => setAssignmentOverrideReason(event.target.value)}
-        placeholder="Override reason for load warnings"
-        aria-label="Assignment override reason"
-      />
-
-      {(box.assignmentWarnings?.length ?? 0) ||
-      (box.assignmentHardBlocks?.length ?? 0) ? (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {box.assignmentWarnings?.map((warning) => (
-            <Badge key={warning} variant="outline">
-              {warning}
-            </Badge>
-          ))}
-          {box.assignmentHardBlocks?.map((block) => (
-            <Badge key={block} variant="destructive">
-              {block}
-            </Badge>
-          ))}
-          {box.assignmentLocked ? (
-            <Badge variant="secondary">locked assignment</Badge>
-          ) : null}
         </div>
       ) : null}
 
-      <Textarea
-        className="mt-2"
-        value={description}
-        onChange={(event) => setDescription(event.target.value)}
-        placeholder="Description or handling notes"
-        aria-label="Box description or handling notes"
-      />
+      {task === "load" ? (
+        <div className="mt-3 space-y-2">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              value={assignedResourceId}
+              aria-label="Assigned transport resource"
+              onChange={(event) => {
+                setAssignedResourceId(event.target.value);
+                setAssignedZoneId("");
+              }}
+            >
+              <option value="">Resource</option>
+              {resourcesWithZones.map(({ resource }) => (
+                <option key={resource._id} value={resource._id}>
+                  {resource.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              value={assignedZoneId}
+              aria-label="Assigned transport zone"
+              disabled={!assignedResourceId}
+              onChange={(event) => setAssignedZoneId(event.target.value)}
+            >
+              <option value="">Zone</option>
+              {zones.map((zone) => (
+                <option key={zone._id} value={zone._id}>
+                  {zone.name}
+                </option>
+              ))}
+            </select>
+            <label className="flex h-8 items-center gap-2 rounded-md border border-input bg-background px-2 text-sm">
+              <input
+                type="checkbox"
+                checked={assignmentLocked}
+                onChange={(event) => setAssignmentLocked(event.target.checked)}
+              />
+              Locked
+            </label>
+          </div>
+          <Input
+            value={assignmentOverrideReason}
+            onChange={(event) => setAssignmentOverrideReason(event.target.value)}
+            placeholder="Override reason for load warnings"
+            aria-label="Assignment override reason"
+          />
+          {(box.assignmentWarnings?.length ?? 0) ||
+          (box.assignmentHardBlocks?.length ?? 0) ? (
+            <div className="flex flex-wrap gap-1">
+              {box.assignmentWarnings?.map((warning) => (
+                <Badge key={warning} variant="outline">
+                  {warning}
+                </Badge>
+              ))}
+              {box.assignmentHardBlocks?.map((block) => (
+                <Badge key={block} variant="destructive">
+                  {block}
+                </Badge>
+              ))}
+              {box.assignmentLocked ? (
+                <Badge variant="secondary">locked assignment</Badge>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+              No load assignment warnings for this box.
+            </div>
+          )}
+        </div>
+      ) : null}
 
-      <div className="mt-3">
-        <PhotoUploadControl
-          householdId={householdId}
-          moveId={moveId}
-          boxId={box._id}
-          room={box.room}
-          label="Box photo"
-        />
-      </div>
-      <div className="mt-3">
-        <PhotoEvidenceStrip
-          householdId={householdId}
-          moveId={moveId}
-          boxId={box._id}
-        />
-      </div>
+      {task === "photos" ? (
+        <div className="mt-3 space-y-3">
+          <PhotoUploadControl
+            householdId={householdId}
+            moveId={moveId}
+            boxId={box._id}
+            room={box.room}
+            label="Box photo"
+          />
+          <PhotoEvidenceStrip
+            householdId={householdId}
+            moveId={moveId}
+            boxId={box._id}
+          />
+        </div>
+      ) : null}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-        <select
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-          value={selectedItemId}
-          aria-label="Item to add to box"
-          onChange={(event) => setSelectedItemId(event.target.value)}
-        >
-          <option value="">Add item</option>
-          {items.map((item) => (
-            <option key={item._id} value={item._id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-        <Button type="button" size="sm" onClick={() => void handleAddItem()}>
-          <PackagePlus aria-hidden="true" />
-          Add
-        </Button>
-      </div>
+      {task === "contents" ? (
+        <div className="mt-3 space-y-3">
+          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              value={selectedItemId}
+              aria-label="Item to add to box"
+              onChange={(event) => setSelectedItemId(event.target.value)}
+            >
+              <option value="">Add item</option>
+              {items.map((item) => (
+                <option key={item._id} value={item._id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <Button type="button" size="sm" onClick={() => void handleAddItem()}>
+              <PackagePlus aria-hidden="true" />
+              Add
+            </Button>
+          </div>
 
-      <div
-        className="mt-3 rounded-md border border-border"
-        role="list"
-        aria-label={`Contents for ${box.code}`}
-      >
-        {contents.length ? (
-          <div className="divide-y divide-border">
-            {contents.map((entry) =>
-              entry ? (
-                <div
-                  key={entry.membership._id}
-                  role="listitem"
-                  className="flex items-center justify-between gap-2 p-2 text-sm"
-                >
-                  <span>
-                    {entry.item.name}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      x{entry.membership.quantity}
-                    </span>
-                  </span>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    onClick={() => void handleRemoveItem(entry.membership._id)}
-                  >
-                    <Trash2 aria-hidden="true" />
-                    <span className="sr-only">Remove item</span>
-                  </Button>
-                </div>
-              ) : null
+          <div
+            className="rounded-md border border-border"
+            role="list"
+            aria-label={`Contents for ${box.code}`}
+          >
+            {contents.length ? (
+              <div className="divide-y divide-border">
+                {contents.map((entry) =>
+                  entry ? (
+                    <div
+                      key={entry.membership._id}
+                      role="listitem"
+                      className="flex items-center justify-between gap-2 p-2 text-sm"
+                    >
+                      <span>
+                        {entry.item.name}
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          x{entry.membership.quantity}
+                        </span>
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        onClick={() => void handleRemoveItem(entry.membership._id)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                        <span className="sr-only">Remove item</span>
+                      </Button>
+                    </div>
+                  ) : null
+                )}
+              </div>
+            ) : (
+              <div role="listitem" className="p-3 text-sm text-muted-foreground">
+                No contents yet.
+              </div>
             )}
           </div>
-        ) : (
-          <div role="listitem" className="p-3 text-sm text-muted-foreground">
-            No contents yet.
-          </div>
-        )}
-      </div>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
@@ -463,9 +472,16 @@ function BoxCard({
           <Badge variant="outline">{formatBoxWeightSource(weightSummary)}</Badge>
           <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
         </div>
-        <Button type="button" size="sm" disabled={saving} onClick={() => void handleSave()}>
-          {saving ? "Saving" : "Save box"}
-        </Button>
+        {task === "details" || task === "load" ? (
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving}
+            onClick={() => void handleSave()}
+          >
+            {saving ? "Saving" : "Save box"}
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -541,6 +557,44 @@ export function BoxManager({
   const assignedBoxes = visibleBoxes.filter((record) =>
     Boolean(record.box.assignedResourceId)
   );
+
+  function renderBoxTaskCards(task: BoxCardTask, emptyText: string) {
+    if (boxes === undefined) {
+      return (
+        <div className="space-y-2">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-5/6" />
+        </div>
+      );
+    }
+
+    if (!visibleBoxes.length) {
+      return (
+        <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+          {emptyText}
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-3 2xl:grid-cols-2">
+        {visibleBoxes.map((boxRecord) =>
+          householdId && moveId ? (
+            <BoxCard
+              key={`${task}:${boxRecord.box._id}:${boxRecord.box.updatedAt}:${boxRecord.itemCount}`}
+              householdId={householdId}
+              moveId={moveId}
+              boxRecord={boxRecord}
+              items={activeItems}
+              resourcesWithZones={resourcesWithZones ?? []}
+              task={task}
+              onMessage={setMessage}
+            />
+          ) : null
+        )}
+      </div>
+    );
+  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -789,32 +843,30 @@ export function BoxManager({
           </TabsContent>
 
           <TabsContent value="contents" className="space-y-4">
-            {boxes === undefined ? (
-              <div className="space-y-2">
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-24 w-5/6" />
-              </div>
-            ) : visibleBoxes.length ? (
-              <div className="grid gap-3 2xl:grid-cols-2">
-                {visibleBoxes.map((boxRecord) =>
-                  householdId && moveId ? (
-                    <BoxCard
-                      key={`${boxRecord.box._id}:${boxRecord.box.updatedAt}:${boxRecord.itemCount}`}
-                      householdId={householdId}
-                      moveId={moveId}
-                      boxRecord={boxRecord}
-                      items={activeItems}
-                      resourcesWithZones={resourcesWithZones ?? []}
-                      onMessage={setMessage}
-                    />
-                  ) : null
-                )}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Create boxes before adding contents, photos, weights, and load
-                assignments.
-              </div>
+            {renderBoxTaskCards(
+              "contents",
+              "Create boxes before adding packed contents."
+            )}
+          </TabsContent>
+
+          <TabsContent value="details" className="space-y-4">
+            {renderBoxTaskCards(
+              "details",
+              "Create boxes before editing labels, rooms, weights, and notes."
+            )}
+          </TabsContent>
+
+          <TabsContent value="photos" className="space-y-4">
+            {renderBoxTaskCards(
+              "photos",
+              "Create boxes before adding box photos."
+            )}
+          </TabsContent>
+
+          <TabsContent value="load" className="space-y-4">
+            {renderBoxTaskCards(
+              "load",
+              "Create boxes before assigning them to trucks, trailers, zones, or movers."
             )}
           </TabsContent>
 
