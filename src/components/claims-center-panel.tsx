@@ -6,6 +6,7 @@ import { AlertTriangle, FileText, History, ShieldAlert } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 import {
   buildClaimPacketPath,
@@ -40,10 +41,30 @@ const severityClasses: Record<ClaimSeverity, string> = {
 };
 
 const claimTasks = [
-  { value: "items", label: "Items" },
-  { value: "metrics", label: "Metrics" },
-  { value: "timeline", label: "Timeline" },
-  { value: "packets", label: "Packets" },
+  {
+    value: "items",
+    label: "Items",
+    description:
+      "Start with damaged, missing, high-value, and claim-flagged items that need evidence review.",
+  },
+  {
+    value: "metrics",
+    label: "Metrics",
+    description:
+      "Check claim totals, severity, evidence score, and documented value before exporting.",
+  },
+  {
+    value: "timeline",
+    label: "Timeline",
+    description:
+      "Review claim-relevant item history separately from the packet-building task.",
+  },
+  {
+    value: "packets",
+    label: "Packets",
+    description:
+      "Open insurer-ready packets or jump back to the source inventory and photos that feed them.",
+  },
 ] as const;
 
 type ClaimTask = (typeof claimTasks)[number]["value"];
@@ -121,15 +142,11 @@ export function ClaimsCenterPanel({
           </div>
         ) : (
           <Tabs value={activeTask} onValueChange={setActiveTask} className="gap-4">
-            <div className="overflow-x-auto pb-1">
-              <TabsList className="min-w-max" aria-label="Claim review tasks">
-                {claimTasks.map((task) => (
-                  <TabsTrigger key={task.value} value={task.value}>
-                    {task.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
+            <MoveWorkspaceTabList
+              tabs={[...claimTasks]}
+              activeValue={activeTask}
+              ariaLabel="Claim review tasks"
+            />
 
             <TabsContent value="items" id="claim-items" className="space-y-3">
               <TopClaimItems items={summary.topItems} />

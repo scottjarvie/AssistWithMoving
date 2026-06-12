@@ -94,6 +94,11 @@ describe("ClaimsCenterPanel task tabs", () => {
       "data-state",
       "active"
     );
+    expect(
+      screen.getByText(
+        "Start with damaged, missing, high-value, and claim-flagged items that need evidence review.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Top claim items")).toBeInTheDocument();
     expect(screen.getByText("Damaged antique dresser")).toBeInTheDocument();
     expect(screen.getByText("+1 more")).toBeInTheDocument();
@@ -102,16 +107,31 @@ describe("ClaimsCenterPanel task tabs", () => {
     expect(screen.queryByText("Build or audit claim packets")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Metrics" }));
+    expect(
+      screen.getByText(
+        "Check claim totals, severity, evidence score, and documented value before exporting.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Claim items")).toBeInTheDocument();
     expect(screen.getByText("Evidence score")).toBeInTheDocument();
     expect(screen.queryByText("Damaged antique dresser")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Timeline" }));
+    expect(
+      screen.getByText(
+        "Review claim-relevant item history separately from the packet-building task.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Claim timeline")).toBeInTheDocument();
     expect(screen.getByText("Status changed")).toBeInTheDocument();
     expect(screen.queryByText("Claim items")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Packets" }));
+    expect(
+      screen.getByText(
+        "Open insurer-ready packets or jump back to the source inventory and photos that feed them.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Build or audit claim packets")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Claim packet" })).toHaveAttribute(
       "href",
@@ -145,6 +165,11 @@ describe("ClaimsCenterPanel task tabs", () => {
     });
 
     expect(screen.getByText("Claim timeline")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Review claim-relevant item history separately from the packet-building task.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Status changed")).toBeInTheDocument();
     expect(screen.queryByText("Top claim items")).not.toBeInTheDocument();
   });
@@ -166,6 +191,11 @@ describe("ClaimsCenterPanel task tabs", () => {
     });
 
     expect(screen.getByText("Build or audit claim packets")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Open insurer-ready packets or jump back to the source inventory and photos that feed them.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Claim packet" })).toBeInTheDocument();
     expect(screen.queryByText("Claim timeline")).not.toBeInTheDocument();
   });
