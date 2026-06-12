@@ -95,6 +95,15 @@ describe("ApiKeyManager task tabs", () => {
     expect(screen.getByText("Create a new AI connection")).toBeInTheDocument();
     expect(screen.getByText("Full trusted helper")).toBeInTheDocument();
     expect(screen.getByText("Add items and photos")).toBeInTheDocument();
+    expect(screen.getByText("Image upload handoff")).toBeInTheDocument();
+    expect(
+      screen.getByText("add_item_from_photo, upload_image, upload_images"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /MovingManifest stores the original and creates web-ready versions server-side/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create key" })).toBeInTheDocument();
     expect(screen.queryByText("Current AI connections")).not.toBeInTheDocument();
     expect(
@@ -129,5 +138,22 @@ describe("ApiKeyManager task tabs", () => {
     expect(
       screen.queryByText("Create a new AI connection"),
     ).not.toBeInTheDocument();
+  });
+
+  it("updates the image handoff when the selected preset cannot upload photos", async () => {
+    const user = userEvent.setup();
+
+    render(<ApiKeyManager enabled />);
+
+    await user.click(
+      screen.getByRole("button", { name: /Look but do not change/ }),
+    );
+
+    expect(screen.getByText("Change preset before upload")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This key cannot upload photos; ask the user for an Add items and photos or Full trusted helper key/,
+      ),
+    ).toBeInTheDocument();
   });
 });

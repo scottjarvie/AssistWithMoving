@@ -52,7 +52,7 @@ const assistantLinks = [
 ];
 
 const starterPrompt =
-  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, walk me through creating an account and an AI helper key.";
+  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If I provide photos, upload the originals through the easiest image/photo tool and let MovingManifest create web-ready versions. If you need private access, walk me through creating an account and an AI helper key.";
 
 export default function MarketingPage() {
   return (

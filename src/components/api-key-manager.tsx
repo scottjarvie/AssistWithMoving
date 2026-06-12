@@ -6,8 +6,10 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Activity,
   Bot,
+  Camera,
   CheckCircle2,
   Copy,
+  FileImage,
   Home,
   KeyRound,
   Package,
@@ -262,6 +264,25 @@ export function ApiKeyManager({
   const lastUsedKey = activeKeys
     .filter((key) => typeof key.lastUsedAt === "number")
     .sort((left, right) => (right.lastUsedAt ?? 0) - (left.lastUsedAt ?? 0))[0];
+  const canUploadPhotos = scopes.includes("photos/write");
+  const canCreateInventory = scopes.includes("inventory/write");
+  const agentPhotoReady = canUploadPhotos && canCreateInventory;
+  const agentHandoffText = [
+    `Use this MovingManifest key for ${selectedHousehold?.name ?? "the selected household"} with ${summarizeScopes(scopes).toLowerCase()}.`,
+    agentPhotoReady
+      ? "For one household item from one photo plus a few words, prefer MCP add_item_from_photo."
+      : canUploadPhotos
+        ? "For ordinary image uploads, use MCP upload_image or upload_images, or POST /api/v1/images/upload."
+        : "This key cannot upload photos; ask the user for an Add items and photos or Full trusted helper key before uploading images.",
+    canUploadPhotos
+      ? "Send original JPEG, PNG, or WebP files only; MovingManifest stores the original and creates web-ready versions server-side."
+      : "",
+    agentPhotoReady
+      ? "If quantity is omitted, default to 1; leave unknown weight, size, disposition, and condition blank; return the agentReview assumptions for the user to correct."
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   async function handleCreateKey() {
     if (!effectiveHouseholdId) return;
@@ -345,6 +366,15 @@ export function ApiKeyManager({
       setMessage("AI connection key copied.");
     } catch {
       setMessage("Browser copy was blocked. Select and copy the key manually.");
+    }
+  }
+
+  async function handleCopyAgentHandoff() {
+    try {
+      await navigator.clipboard.writeText(agentHandoffText);
+      setMessage("Agent upload handoff copied.");
+    } catch {
+      setMessage("Browser copy was blocked. Select and copy the handoff text.");
     }
   }
 
@@ -617,6 +647,55 @@ export function ApiKeyManager({
             </div>
           </details>
         )}
+
+        <div className="rounded-md border border-border bg-muted/20 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-2 text-sm font-medium">
+                <FileImage className="size-4 text-primary" aria-hidden="true" />
+                Image upload handoff
+              </h3>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                Give this to the assistant after the key. It tells the agent to
+                send originals and let MovingManifest create web-ready image
+                versions in the background.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleCopyAgentHandoff()}
+            >
+              <Copy aria-hidden="true" />
+              Copy handoff
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <p className="rounded-md border border-border bg-background p-3 text-sm leading-6 text-muted-foreground">
+              {agentHandoffText}
+            </p>
+            <div className="grid gap-2 text-xs text-muted-foreground">
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="flex items-center gap-2 font-medium text-foreground">
+                  <Camera className="size-4 text-primary" aria-hidden="true" />
+                  Best image path
+                </p>
+                <p className="mt-2 leading-5">
+                  {agentPhotoReady
+                    ? "add_item_from_photo, upload_image, upload_images"
+                    : canUploadPhotos
+                      ? "upload_image, upload_images, /images/upload"
+                      : "Change preset before upload"}
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-background p-3">
+                <p className="font-medium text-foreground">Selected access</p>
+                <p className="mt-2 leading-5">{summarizeScopes(scopes)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="space-y-2">
@@ -897,9 +976,18 @@ export function ApiKeyManager({
             ) : null}
           </>
         ) : (
-          <p className="rounded-md border border-border p-4 text-sm text-muted-foreground">
-            Create a household before adding AI connections.
-          </p>
+          <div className="rounded-md border border-border p-4">
+            <h3 className="text-sm font-medium">
+              Create a household before adding AI connections.
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              AI keys belong to a household so MovingManifest knows which move,
+              rooms, photos, and collaborators the assistant can work with.
+            </p>
+            <Button asChild className="mt-3" variant="outline">
+              <Link href="/app/dashboard">Create household</Link>
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

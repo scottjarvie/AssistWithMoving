@@ -26,12 +26,12 @@ export const metadata: Metadata = {
 };
 
 const starterPrompt =
-  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, walk me through creating an account and an AI helper key.";
+  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If I provide photos, upload the originals through the easiest image/photo tool and let MovingManifest create web-ready versions. If you need private access, walk me through creating an account and an AI helper key.";
 
 const quickCapabilities = [
   {
     title: "Turn photos into inventory",
-    copy: "Your assistant can help name items, attach photos, and mark uncertain dimensions or weights for review.",
+    copy: "Your assistant can upload originals, create item records from a few words, and mark uncertain dimensions or weights for review.",
     icon: Camera,
   },
   {
