@@ -240,7 +240,7 @@ export default function MarketingPage() {
             <div className="grid gap-3 p-4 md:grid-cols-3">
               {[
                 ["New user", "Paste the starter prompt into a phone assistant."],
-                ["Assistant", "Read /ai and /llms.txt before asking for private access."],
+                ["Assistant", "Use /ai/start when the user is ready to create a key."],
                 ["Power user", "Use API or MCP tools with a revocable helper key."],
               ].map(([title, copy]) => (
                 <div key={title} className="rounded-md bg-muted/45 p-3">

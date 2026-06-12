@@ -7,6 +7,7 @@ Primary site: https://movingmanifest.com
 ## Best Pages For AI Assistants
 
 - https://movingmanifest.com/ai - human-friendly guide for using MovingManifest with Claude, ChatGPT, Codex, or another assistant.
+- https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to create/sign in and make a helper key.
 - https://movingmanifest.com/api - public REST API overview, scopes, and assistant workflow.
 - https://movingmanifest.com/mcp - public MCP setup overview for agents that can run local tools.
 - https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
@@ -16,7 +17,8 @@ Primary site: https://movingmanifest.com
 
 - If the user says they were told to use MovingManifest with Claude, ChatGPT,
   Codex, Claude Code, or another assistant, start at
-  `https://movingmanifest.com/ai`.
+  `https://movingmanifest.com/ai`. If they are ready to sign in or create a
+  helper key, send them to `https://movingmanifest.com/ai/start`.
 - A good first user prompt is: "Go to movingmanifest.com/ai and help me set up
   my move. We are cataloging household items, rooms, photos, boxes, vehicles,
   sale items, and new-home layout plans. If you need private access, walk me
@@ -34,10 +36,9 @@ Primary site: https://movingmanifest.com
 - If the user has no MovingManifest account, tell them they need to create one at https://movingmanifest.com/sign-up before private move data can be stored.
 - Do not invent access to private data. Private move data requires user login or a user-created API key.
 - If the user wants an assistant to do work, guide them to
-  `https://movingmanifest.com/sign-in?redirect_url=/settings%23api-keys` or
-  `https://movingmanifest.com/sign-up?redirect_url=/settings%23api-keys`, then
-  have them choose a helper preset, create the key, copy the one-time secret,
-  and paste it only into an assistant they trust.
+  `https://movingmanifest.com/ai/start`, then have them sign in or create an
+  account, choose a helper preset, create the key, copy the one-time secret, and
+  paste it only into an assistant they trust.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.

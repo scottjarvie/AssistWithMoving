@@ -28,12 +28,22 @@ export function PublicPageChrome({
   title,
   description,
   children,
+  primaryAction,
+  secondaryAction,
   visual,
 }: {
   eyebrow: string;
   title: string;
   description: string;
   children: React.ReactNode;
+  primaryAction?: {
+    href: string;
+    label: string;
+  };
+  secondaryAction?: {
+    href: string;
+    label: string;
+  };
   visual?: React.ReactNode;
 }) {
   return (
@@ -53,13 +63,18 @@ export function PublicPageChrome({
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg">
-                <Link href="/app/dashboard" prefetch={false}>
-                  Open workspace preview
+                <Link
+                  href={primaryAction?.href ?? "/app/dashboard"}
+                  prefetch={primaryAction ? undefined : false}
+                >
+                  {primaryAction?.label ?? "Open workspace preview"}
                   <ArrowRight aria-hidden="true" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/sign-up">Create account</Link>
+                <Link href={secondaryAction?.href ?? "/sign-up"}>
+                  {secondaryAction?.label ?? "Create account"}
+                </Link>
               </Button>
             </div>
           </div>

@@ -64,12 +64,10 @@ If a user says: "Go to movingmanifest.com and help me use it"
 1. Open `https://movingmanifest.com/ai`.
 2. Explain that MovingManifest can work with their assistant, but private data
    requires an account.
-3. If they do not have an account, guide them to `https://movingmanifest.com/sign-up`.
+3. If they are ready to sign in, create an account, or make a helper key, guide
+   them to `https://movingmanifest.com/ai/start`.
 4. After account creation, guide them to create or select a move.
-5. Guide them to `https://movingmanifest.com/sign-in?redirect_url=/settings%23api-keys`
-   or `https://movingmanifest.com/sign-up?redirect_url=/settings%23api-keys`,
-   then have them choose a helper preset, create the key, and copy the one-time
-   secret.
+5. Have them choose a helper preset, create the key, and copy the one-time secret.
 6. Ask the user to copy the one-time secret into the assistant or MCP client
    only if they trust that assistant with the move work.
 7. Use `GET /api/v1/me` to verify the key and scopes.
@@ -110,7 +108,8 @@ documentation profiles, exports, or move people/contact records.
 
 Phone-only user:
 
-- Use the `/ai` page and starter prompt.
+- Use the `/ai` page and starter prompt. Use `/ai/start` when the user is
+  ready for account and helper-key setup.
 - Explain account creation and key creation in ordinary language.
 - Ask for permission before using the key.
 
