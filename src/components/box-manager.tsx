@@ -17,6 +17,7 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { useHashTab } from "@/components/use-hash-tab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,6 +75,16 @@ const boxTaskTabs: { value: BoxTask; label: string }[] = [
   { value: "load", label: "Load" },
   { value: "labels", label: "Labels" },
 ];
+
+const boxTaskHashes = {
+  "#add-box": "add",
+  "#box-contents": "contents",
+  "#box-details": "details",
+  "#box-labels": "labels",
+  "#box-load": "load",
+  "#box-photos": "photos",
+  "#boxes": "boxes",
+} as const;
 
 function BoxCard({
   householdId,
@@ -652,7 +663,10 @@ export function BoxManager({
   const [destinationRoom, setDestinationRoom] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [activeTask, setActiveTask] = useState<BoxTask>("boxes");
+  const [activeTask, setActiveTask] = useHashTab<BoxTask>(
+    "boxes",
+    boxTaskHashes
+  );
   const [selectedBoxId, setSelectedBoxId] = useState<Id<"boxes"> | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<BoxStatusFilter>("all");
@@ -845,7 +859,7 @@ export function BoxManager({
         >
           <MoveWorkspaceTabList tabs={boxTaskTabs} />
 
-          <TabsContent value="boxes" className="space-y-4">
+          <TabsContent value="boxes" id="boxes" className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <BoxMetric label="Total" value={visibleBoxes.length} />
               <BoxMetric label="Empty" value={emptyBoxes.length} />
@@ -938,7 +952,7 @@ export function BoxManager({
             )}
           </TabsContent>
 
-          <TabsContent value="add" className="space-y-4">
+          <TabsContent value="add" id="add-box" className="space-y-4">
             <form
               aria-label="Create box"
               className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[120px_minmax(0,1fr)_160px_160px_auto]"
@@ -979,35 +993,35 @@ export function BoxManager({
             </form>
           </TabsContent>
 
-          <TabsContent value="contents" className="space-y-4">
+          <TabsContent value="contents" id="box-contents" className="space-y-4">
             {renderBoxTaskCards(
               "contents",
               "Create boxes before adding packed contents."
             )}
           </TabsContent>
 
-          <TabsContent value="details" className="space-y-4">
+          <TabsContent value="details" id="box-details" className="space-y-4">
             {renderBoxTaskCards(
               "details",
               "Create boxes before editing labels, rooms, weights, and notes."
             )}
           </TabsContent>
 
-          <TabsContent value="photos" className="space-y-4">
+          <TabsContent value="photos" id="box-photos" className="space-y-4">
             {renderBoxTaskCards(
               "photos",
               "Create boxes before adding box photos."
             )}
           </TabsContent>
 
-          <TabsContent value="load" className="space-y-4">
+          <TabsContent value="load" id="box-load" className="space-y-4">
             {renderBoxTaskCards(
               "load",
               "Create boxes before assigning them to trucks, trailers, zones, or movers."
             )}
           </TabsContent>
 
-          <TabsContent value="labels" className="space-y-4">
+          <TabsContent value="labels" id="box-labels" className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="secondary">{visibleBoxes.length} labels</Badge>

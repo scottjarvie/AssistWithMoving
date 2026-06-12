@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -139,6 +139,7 @@ import { BoxManager } from "@/components/box-manager";
 describe("BoxManager", () => {
   beforeEach(() => {
     boxData.queryCall = 0;
+    window.history.replaceState(null, "", "/app/moves/move_123/boxes");
   });
 
   it("opens on box records and keeps per-box work in task tabs", async () => {
@@ -226,5 +227,55 @@ describe("BoxManager", () => {
     expect(within(labelCards).getByText("Garage tools")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Code" })).toBeInTheDocument();
     expect(screen.getAllByText("Storage").length).toBeGreaterThan(0);
+  });
+
+  it("opens label workflow when routed to the box labels hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/boxes#box-labels"
+    );
+
+    render(
+      <BoxManager
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Labels" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByRole("list", { name: "Box labels" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Box records" })).not.toBeInTheDocument();
+  });
+
+  it("opens load workflow when routed to the box load hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/boxes#box-load"
+    );
+
+    render(
+      <BoxManager
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Load" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(
+      screen.getAllByLabelText("Assigned transport resource").length
+    ).toBeGreaterThan(1);
+    expect(screen.queryByRole("list", { name: "Box records" })).not.toBeInTheDocument();
   });
 });
