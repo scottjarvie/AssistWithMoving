@@ -10,6 +10,7 @@ import {
   ClipboardList,
   PackagePlus,
   Printer,
+  RotateCcw,
   Search,
   Trash2,
   Truck,
@@ -922,6 +923,8 @@ export function BoxManager({
   const exceptionBoxes = visibleBoxes.filter((record) =>
     ["missing", "damaged"].includes(record.box.status),
   );
+  const hasActiveBoxFilters =
+    search.trim().length > 0 || statusFilter !== "all";
   const selectedBoxRecord = useMemo(
     () =>
       selectedBoxId
@@ -944,7 +947,53 @@ export function BoxManager({
     }
   }
 
-  function renderBoxFilterControls({ withActions = false } = {}) {
+  function clearBoxFilters() {
+    setSearch("");
+    setStatusFilter("all");
+  }
+
+  function renderBoxActionStrip() {
+    return (
+      <div className="rounded-md border border-border bg-background p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-medium">Box actions</h3>
+            <p className="text-xs text-muted-foreground">
+              {filteredBoxes.length} shown / {visibleBoxes.length} total
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={() => setActiveTask("add")}>
+              <PackagePlus aria-hidden="true" />
+              Add box
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setActiveTask("labels")}
+            >
+              <Printer aria-hidden="true" />
+              Labels
+            </Button>
+            {hasActiveBoxFilters ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={clearBoxFilters}
+              >
+                <RotateCcw aria-hidden="true" />
+                Clear filters
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderBoxFilterControls() {
     return (
       <div className="flex flex-col gap-2 rounded-md border border-border p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px] lg:min-w-[520px]">
@@ -977,26 +1026,6 @@ export function BoxManager({
             ))}
           </select>
         </div>
-        {withActions ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setActiveTask("add")}
-            >
-              <PackagePlus aria-hidden="true" />
-              Add box
-            </Button>
-            {householdId && moveId ? (
-              <Button asChild size="sm" variant="outline">
-                <Link href={buildBoxLabelSheetPath({ householdId, moveId })}>
-                  <Printer aria-hidden="true" />
-                  Print labels
-                </Link>
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
     );
   }
@@ -1167,6 +1196,8 @@ export function BoxManager({
           <MoveWorkspaceTabList tabs={boxTaskTabs} activeValue={activeTask} />
 
           <TabsContent value="boxes" id="boxes" className="space-y-4">
+            {renderBoxActionStrip()}
+
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <BoxMetric label="Total" value={visibleBoxes.length} />
               <BoxMetric label="Empty" value={emptyBoxes.length} />
@@ -1177,7 +1208,7 @@ export function BoxManager({
               />
             </div>
 
-            {renderBoxFilterControls({ withActions: true })}
+            {renderBoxFilterControls()}
 
             {boxes === undefined ? (
               <div className="space-y-2">

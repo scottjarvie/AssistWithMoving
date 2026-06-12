@@ -161,6 +161,35 @@ describe("BoxManager", () => {
         "Scan existing boxes before opening contents, details, photos, or labels.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText("Box actions")).toBeInTheDocument();
+    expect(screen.getByText("2 shown / 2 total")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Search boxes"), "Garage");
+    expect(screen.getByText("1 shown / 2 total")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByText("2 shown / 2 total")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Add box" }));
+    expect(screen.getByRole("tab", { name: "Add box" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(
+      screen.getByRole("form", { name: "Create box" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Boxes" }));
+    await user.click(screen.getByRole("button", { name: "Labels" }));
+    expect(screen.getByRole("tab", { name: "Labels" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(
+      screen.getByRole("list", { name: "Box labels" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Boxes" }));
     const boxList = screen.getByRole("list", { name: "Box records" });
     expect(within(boxList).getByText("B-001")).toBeInTheDocument();
     expect(within(boxList).getByText("B-002")).toBeInTheDocument();
