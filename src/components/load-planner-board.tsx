@@ -16,6 +16,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +28,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   formatBoxWeightSource,
@@ -411,36 +412,18 @@ export function LoadPlannerBoard({
           }
           className="gap-4"
         >
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="min-w-max" aria-label="Load planner tasks">
-              {loadPlannerTasks.map((task) => {
-                const count = loadPlannerTaskCounts[task.value];
-                return (
-                  <TabsTrigger
-                    key={task.value}
-                    value={task.value}
-                    className="gap-2"
-                    aria-label={`${task.label}: ${formatLoadPlannerTaskCount(task.value, count)}`}
-                  >
-                    {task.label}
-                    <Badge
-                      variant={
-                        activePlannerTask === task.value
-                          ? "secondary"
-                          : "outline"
-                      }
-                      className="h-5 min-w-5 px-1"
-                    >
-                      {count}
-                    </Badge>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {activeLoadPlannerTask.description}
-          </p>
+          <MoveWorkspaceTabList
+            tabs={loadPlannerTasks.map((task) => {
+              const count = loadPlannerTaskCounts[task.value];
+              return {
+                ...task,
+                count,
+                countLabel: formatLoadPlannerTaskCount(task.value, count),
+              };
+            })}
+            activeValue={activeLoadPlannerTask.value}
+            ariaLabel="Load planner tasks"
+          />
 
           {message ? (
             <p

@@ -39,6 +39,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { BulkInventoryIntake } from "@/components/bulk-inventory-intake";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,7 +59,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 import {
   filterInventoryItemsByOwner,
@@ -887,46 +888,21 @@ export function InventoryTable({
             onValueChange={setActiveTaskTab}
             className="gap-2"
           >
-            <div className="overflow-x-auto pb-1">
-              <TabsList className="min-w-max" aria-label="Inventory task views">
-                {inventoryTaskTabs.map((task) => {
-                  const count = inventoryTaskCounts[task.value];
-                  const hasCount = count !== undefined;
-                  return (
-                    <TabsTrigger
-                      key={task.value}
-                      value={task.value}
-                      className={hasCount ? "gap-2" : undefined}
-                      aria-label={
-                        hasCount
-                          ? `${task.label}: ${formatInventoryTaskCount(
-                              task.value,
-                              count,
-                            )}`
-                          : undefined
-                      }
-                    >
-                      {task.label}
-                      {hasCount ? (
-                        <Badge
-                          variant={
-                            activeTaskTab === task.value
-                              ? "secondary"
-                              : "outline"
-                          }
-                          className="h-5 min-w-5 px-1"
-                        >
-                          {count}
-                        </Badge>
-                      ) : null}
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {activeInventoryTask.description}
-            </p>
+            <MoveWorkspaceTabList
+              tabs={inventoryTaskTabs.map((task) => {
+                const count = inventoryTaskCounts[task.value];
+                return {
+                  ...task,
+                  count,
+                  countLabel:
+                    count === undefined
+                      ? undefined
+                      : formatInventoryTaskCount(task.value, count),
+                };
+              })}
+              activeValue={activeInventoryTask.value}
+              ariaLabel="Inventory task views"
+            />
 
             {message ? (
               <p
