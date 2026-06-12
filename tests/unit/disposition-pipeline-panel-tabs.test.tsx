@@ -121,6 +121,11 @@ describe("DispositionPipelinePanel task tabs", () => {
       "active",
     );
     expect(
+      screen.getByText(
+        "Start with the open queues before publishing links, scheduling pickups, or sending items away.",
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText("Sell: To photograph for sale"),
     ).toBeInTheDocument();
     expect(
@@ -135,6 +140,11 @@ describe("DispositionPipelinePanel task tabs", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Summary" }));
+    expect(
+      screen.getByText(
+        "Review totals across sale, giveaway, donation, dump, and storage work.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Pipeline items")).toBeInTheDocument();
     expect(screen.getByText("Owner value")).toBeInTheDocument();
     expect(
@@ -142,6 +152,11 @@ describe("DispositionPipelinePanel task tabs", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Shortcuts" }));
+    expect(
+      screen.getByText(
+        "Jump to the source workspace when a disposition queue needs item, photo, box, plan, or packet cleanup.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Go fix disposition inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
@@ -154,6 +169,11 @@ describe("DispositionPipelinePanel task tabs", () => {
     expect(screen.queryByText("Pipeline items")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Sell / free" }));
+    expect(
+      screen.getByText(
+        "Inspect sale and giveaway items together because both need photos, pickup notes, and public-facing links.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Items intended for sale, listing, and buyer pickup."),
     ).toBeInTheDocument();
@@ -168,6 +188,11 @@ describe("DispositionPipelinePanel task tabs", () => {
 
     await user.click(screen.getByRole("tab", { name: "Donation" }));
     expect(
+      screen.getByText(
+        "Review donation pickup, drop-off, and delivered records without mixing them into sale work.",
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText("Donation pickup, drop-off, and delivered records."),
     ).toBeInTheDocument();
     expect(
@@ -177,11 +202,21 @@ describe("DispositionPipelinePanel task tabs", () => {
     await user.click(screen.getByRole("tab", { name: "Dump" }));
     expect(
       screen.getByText(
+        "Check disposal items that need a dump run, special handling, or cleanup before move day.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
         "Disposal items that need a dump or special-disposal run.",
       ),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Storage" }));
+    expect(
+      screen.getByText(
+        "Review storage-bound inventory separately from items leaving through sale, donation, or disposal.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Items leaving the living space for storage inventory."),
     ).toBeInTheDocument();
@@ -205,6 +240,11 @@ describe("DispositionPipelinePanel task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Review storage-bound inventory separately from items leaving through sale, donation, or disposal.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Items leaving the living space for storage inventory."),
     ).toBeInTheDocument();

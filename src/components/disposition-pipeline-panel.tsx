@@ -63,13 +63,48 @@ const groupIcons: Record<PipelineGroup["key"], typeof Tags> = {
 };
 
 const dispositionTabs = [
-  { value: "actions", label: "Actions" },
-  { value: "summary", label: "Summary" },
-  { value: "shortcuts", label: "Shortcuts" },
-  { value: "sellFree", label: "Sell / free" },
-  { value: "donate", label: "Donation" },
-  { value: "dump", label: "Dump" },
-  { value: "storage", label: "Storage" },
+  {
+    value: "actions",
+    label: "Actions",
+    description:
+      "Start with the open queues before publishing links, scheduling pickups, or sending items away.",
+  },
+  {
+    value: "summary",
+    label: "Summary",
+    description:
+      "Review totals across sale, giveaway, donation, dump, and storage work.",
+  },
+  {
+    value: "shortcuts",
+    label: "Shortcuts",
+    description:
+      "Jump to the source workspace when a disposition queue needs item, photo, box, plan, or packet cleanup.",
+  },
+  {
+    value: "sellFree",
+    label: "Sell / free",
+    description:
+      "Inspect sale and giveaway items together because both need photos, pickup notes, and public-facing links.",
+  },
+  {
+    value: "donate",
+    label: "Donation",
+    description:
+      "Review donation pickup, drop-off, and delivered records without mixing them into sale work.",
+  },
+  {
+    value: "dump",
+    label: "Dump",
+    description:
+      "Check disposal items that need a dump run, special handling, or cleanup before move day.",
+  },
+  {
+    value: "storage",
+    label: "Storage",
+    description:
+      "Review storage-bound inventory separately from items leaving through sale, donation, or disposal.",
+  },
 ] as const;
 
 type DispositionTab = (typeof dispositionTabs)[number]["value"];
@@ -143,7 +178,11 @@ export function DispositionPipelinePanel({
             onValueChange={setActiveTab}
             className="gap-4"
           >
-            <MoveWorkspaceTabList tabs={[...dispositionTabs]} />
+            <MoveWorkspaceTabList
+              tabs={[...dispositionTabs]}
+              activeValue={activeTab}
+              ariaLabel="Disposition pipeline tasks"
+            />
 
             <TabsContent
               value="actions"
