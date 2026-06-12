@@ -144,14 +144,29 @@ Family helper or mover:
 One user photo should normally be one upload call. MCP agents should use
 `upload_image`, `upload_photo`, or `upload_evidence_image` with a local `filePath`, public
 `sourceUrl`, `dataUrl`, or `fileBase64`. When the user gives several ordinary
-photos from the same room or context, use `upload_images`, `upload_photos`, or
-`upload_evidence_images` with shared defaults and one image entry per photo.
+photos from the same room/context or for one existing item, use `upload_images`,
+`upload_photos`, or `upload_evidence_images` with shared defaults and one image
+entry per photo.
 When one photo should become one new inventory item, use
 `add_item_from_photo`; it accepts the item name plus one image source, creates
-the item, defaults omitted quantity to 1, leaves missing weight, dimensions,
+the item, sets quantity only when the user says it or the photo clearly shows a
+count, defaults omitted quantity to 1, leaves missing weight, dimensions,
 disposition, and condition blank, uploads the original image attached to that
 item, and returns item/photo IDs with derivative status and `agentReview`. Use
-`create_item_with_images` when one new item has several photos. REST agents
+`create_item_with_images` when one new item has several photos.
+
+For the common "attach these new photos to the item we already added" workflow,
+do not create another inventory item. Resolve the existing item first with
+`get_agent_context` or `get_move_summary`; if the user gave a clear item name
+and only one match is plausible, use that `itemId`. Then call `upload_photos` or
+`upload_evidence_images` with shared defaults such as `moveId`, `itemId`, room,
+`photoType: "item"`, normal privacy, and one `images[]` entry per local
+`filePath`. Set `continueOnError: true` for batches so one bad image does not
+block the others. Afterward, report a short confirmation: item name, uploaded
+count, failed count, photo IDs, and whether derivatives are ready. Only ask the
+user to correct target, caption, privacy, or quantity if the result looks wrong.
+
+REST agents
 should use `POST /api/v1/images/upload` or `POST /api/v1/photos/upload`
 with raw JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or
 JSON with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`.
@@ -268,6 +283,34 @@ Use `/openapi.json` for machine-readable endpoint details.
 
 The MovingManifest MCP server currently runs locally and wraps the REST API.
 It is useful for assistants that support local MCP servers.
+
+Codex setup when the user has local shell access and this repo/server is
+available:
+
+```bash
+codex mcp add movingmanifest \
+  --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 \
+  --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
+  -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs
+```
+
+Equivalent Codex `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.movingmanifest]
+command = "node"
+args = ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"]
+
+[mcp_servers.movingmanifest.env]
+MOVINGMANIFEST_API_BASE_URL = "https://movingmanifest.com/api/v1"
+MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
+```
+
+After configuring MCP for Codex, restart Codex or start a fresh session. The
+agent should confirm `movingmanifest` appears in `/mcp` or `codex mcp list`,
+then call `get_api_context` before accessing private data. If the current
+Codex session cannot see newly added MCP tools, tell the user a fresh Codex
+session is needed rather than assuming the key or API is broken.
 
 Suggested first MCP tools:
 

@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 const mcpCards = [
   {
     title: "Tool-based move work",
-    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. add_item_from_photo turns one photo plus a few words into an item, while upload_image, upload_photo, upload_images, and upload_photos send originals and let MovingManifest prep display versions.",
+    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. add_item_from_photo turns one photo plus a few words into an item, while upload_photo/upload_image send a single original and upload_photos attaches several new photos to an existing item after the agent resolves the itemId.",
     icon: Bot,
   },
   {
@@ -70,6 +70,32 @@ const toolGroups = [
   "create_export, list_exports, download_export",
 ];
 
+const codexCliCommand = `codex mcp add movingmanifest \\
+  --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 \\
+  --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \\
+  -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs`;
+
+const codexTomlConfig = `[mcp_servers.movingmanifest]
+command = "node"
+args = ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"]
+
+[mcp_servers.movingmanifest.env]
+MOVINGMANIFEST_API_BASE_URL = "https://movingmanifest.com/api/v1"
+MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"`;
+
+const desktopJsonConfig = `{
+  "mcpServers": {
+    "movingmanifest": {
+      "command": "node",
+      "args": ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"],
+      "env": {
+        "MOVINGMANIFEST_API_BASE_URL": "https://movingmanifest.com/api/v1",
+        "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
+      }
+    }
+  }
+}`;
+
 export default function McpPage() {
   return (
     <PublicPageChrome
@@ -99,20 +125,30 @@ export default function McpPage() {
             </p>
           </div>
           <div className="rounded-md border border-border bg-card p-4">
+            <p className="mb-3 text-sm font-medium">
+              Codex CLI/App setup
+            </p>
             <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
-{`{
-  \"mcpServers\": {
-    \"movingmanifest\": {
-      \"command\": \"node\",
-      \"args\": [\"/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs\"],
-      \"env\": {
-        \"MOVINGMANIFEST_API_BASE_URL\": \"https://movingmanifest.com/api/v1\",
-        \"MOVINGMANIFEST_API_KEY\": \"mmk_replace_with_a_scoped_api_key\"
-      }
-    }
-  }
-}`}
+              {codexCliCommand}
             </pre>
+            <p className="mt-4 text-sm font-medium">
+              Or edit Codex config.toml
+            </p>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
+              {codexTomlConfig}
+            </pre>
+            <details className="mt-4 rounded-md border border-border p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                JSON config used by Claude Desktop and similar MCP clients
+              </summary>
+              <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
+                {desktopJsonConfig}
+              </pre>
+            </details>
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">
+              Restart Codex after adding the server. In a new Codex thread,
+              check MCP tools for movingmanifest, then call get_api_context.
+            </p>
           </div>
         </div>
       </PublicBand>

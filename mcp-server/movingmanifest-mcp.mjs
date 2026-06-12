@@ -1133,7 +1133,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "create_item_with_images", {
     title: "Create item with images",
     description:
-      "Fast household-item intake for agents: create one inventory item, default quantity to 1 when omitted, upload one or more original images attached to that item, and let MovingManifest create web-ready derivatives server-side. Use this when the user provides a picture plus a few short words.",
+      "Fast household-item intake for agents: create one inventory item, set quantity only when the user says it or the photo clearly shows a count, default omitted quantity to 1, upload one or more original images attached to that item, and let MovingManifest create web-ready derivatives server-side. Use this when the user provides a picture plus a few short words.",
     inputSchema: {
       moveId: z.string(),
       name: z.string().min(1),
@@ -1160,7 +1160,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "add_item_from_photo", {
     title: "Add item from photo",
     description:
-      "Plain-language fastest path for one household item from one user photo plus a few words. Provide one local filePath, public sourceUrl, dataUrl, or fileBase64 with the item name and any obvious fields. Quantity defaults to 1 when omitted; missing weight, dimensions, disposition, and condition do not block creation; MovingManifest stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
+      "Plain-language fastest path for one household item from one user photo plus a few words. Provide one local filePath, public sourceUrl, dataUrl, or fileBase64 with the item name and any obvious fields. Set quantity only when the user says it or the photo clearly shows a count; omitted quantity defaults to 1. Missing weight, dimensions, disposition, and condition do not block creation; MovingManifest stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
     inputSchema: {
       moveId: z.string(),
       name: z.string().min(1),
@@ -1892,7 +1892,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "upload_photos", {
     title: "Upload photos",
     description:
-      "Plain-language alias for upload_evidence_images. Use this when the user provides several ordinary photos from the same room or context. One image entry equals one user photo; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
+      "Plain-language alias for upload_evidence_images. Use this when the user provides several ordinary photos from the same room/context or wants new photos attached to an existing itemId. One image entry equals one user photo; shared itemId, room, privacy/type, and review defaults can live at the top level; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       images: z
@@ -1915,7 +1915,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "upload_images", {
     title: "Upload images",
     description:
-      "Plain-language alias for upload_evidence_images using image terminology. Use this when the user provides several ordinary images from the same room or context. One image entry equals one user image; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
+      "Plain-language alias for upload_evidence_images using image terminology. Use this when the user provides several ordinary images from the same room/context or wants new images attached to an existing itemId. One image entry equals one user image; shared itemId, room, privacy/type, and review defaults can live at the top level; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       images: z

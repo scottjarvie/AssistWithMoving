@@ -184,6 +184,18 @@ describe("MovingManifest MCP capability discovery", () => {
   });
 
   it("advertises one-call image upload as the default agent path", () => {
+    const registrations = collectToolRegistrations();
+    const addItemFromPhotoOptions = registrations.get("add_item_from_photo")
+      ?.options as { description?: string } | undefined;
+    const uploadPhotosOptions = registrations.get("upload_photos")?.options as
+      | { description?: string }
+      | undefined;
+
+    expect(addItemFromPhotoOptions?.description).toContain(
+      "photo clearly shows a count",
+    );
+    expect(uploadPhotosOptions?.description).toContain("existing itemId");
+
     expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
       expect.objectContaining({
         id: "photoEvidence",
@@ -206,6 +218,8 @@ describe("MovingManifest MCP capability discovery", () => {
           expect.stringContaining("create_item_with_images"),
           expect.stringContaining("upload_image"),
           expect.stringContaining("upload_images"),
+          expect.stringContaining("existing item"),
+          expect.stringContaining("photo clearly shows a count"),
           expect.stringContaining("generateAiSuggestions true"),
           expect.stringContaining("Do not ask the user for dimensions"),
         ]),
@@ -305,6 +319,8 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(docs).toContain("`upload_image`");
     expect(docs).toContain("`upload_images`");
     expect(docs).toContain("`POST /images/upload`");
+    expect(docs).toContain("clearly shows several identical units");
+    expect(docs).toContain("Resolve the target item");
     expect(docs).toContain("`agentReview`");
     expect(docs).toContain("`derivativeVariants`");
     expect(docs).toContain("200x200 square");
@@ -314,6 +330,8 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(llms).toContain("upload_photo");
     expect(llms).toContain("upload_image");
     expect(llms).toContain("upload_evidence_images");
+    expect(llms).toContain("photo clearly shows a count");
+    expect(llms).toContain("existing `itemId`");
     expect(llms).toContain("POST /api/v1/images/upload");
     expect(llms).toContain("agentReview");
     expect(llms).toContain("derivativeVariants");
@@ -323,6 +341,8 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(fullLlms).toContain("upload_photos");
     expect(fullLlms).toContain("upload_images");
     expect(fullLlms).toContain("upload_evidence_images");
+    expect(fullLlms).toContain("one existing item");
+    expect(fullLlms).toContain("sets quantity only when the user says it");
     expect(fullLlms).toContain("POST /images/upload");
     expect(fullLlms).toContain("agentReview");
     expect(fullLlms).toContain("derivativeVariants");

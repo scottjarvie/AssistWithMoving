@@ -1248,6 +1248,32 @@ agent already has an `images` array. REST clients can do the same workflow with
 `POST /moves/{moveId}/items` followed by `POST /photos/upload` calls that
 include the returned `itemId`.
 
+Quantity should stay lightweight: if the user states a count or the photo
+clearly shows several identical units that should be one inventory record, set
+`quantity` from that evidence and mention it in the `agentReview` summary. If
+the count is not obvious, omit quantity and let the item default to `1` instead
+of asking a blocking follow-up question.
+
+For photos that belong to an item that already exists, use the shorter attach
+workflow instead of creating another item:
+
+1. Resolve the target item with `get_agent_context` or `get_move_summary`.
+   If the user's item name has one obvious match, use that `itemId`. If two
+   matches are plausible, ask the user before uploading.
+2. Call `upload_photos` or `upload_evidence_images` with shared defaults:
+   `moveId`, `itemId`, room, `photoType: "item"`, `privacyLevel: "normal"`,
+   `visibilityScope: "moveCollaborators"`, and `continueOnError: true`.
+3. Put exactly one user image in each `images[]` entry, using local `filePath`
+   when the client has local attachments.
+4. Confirm only what matters to the user: the item name, uploaded/failed counts,
+   photo IDs, and whether derivatives are ready.
+
+This is the fastest Codex and Claude Code path for requests like "attach these
+three photos to the wheelbarrow we already added." Codex agents may need to
+start a fresh session after configuring MCP before the MovingManifest tools are
+visible. Claude Desktop and Claude Code use the same MCP tool sequence once the
+server appears in their MCP tool list.
+
 For REST API agents, use whichever one-call shape is easiest for the image
 source:
 
@@ -1440,6 +1466,31 @@ defaults and one entry per image:
     {
       "filePath": "/Users/scott/Desktop/garage-workbench.jpg",
       "caption": "Garage workbench before packing"
+    }
+  ]
+}
+```
+
+For several photos of an existing item, include the resolved `itemId` at the
+top level so every image attaches to that item:
+
+```json
+{
+  "moveId": "MOVE_ID",
+  "itemId": "ITEM_ID",
+  "room": "Outside yard",
+  "photoType": "item",
+  "privacyLevel": "normal",
+  "visibilityScope": "moveCollaborators",
+  "continueOnError": true,
+  "images": [
+    {
+      "filePath": "/Users/scott/Desktop/wheelbarrow-top.jpg",
+      "caption": "Top view of orange True Temper wheelbarrow"
+    },
+    {
+      "filePath": "/Users/scott/Desktop/wheelbarrow-side.jpg",
+      "caption": "Side view showing True Temper logo"
     }
   ]
 }
@@ -1652,6 +1703,31 @@ Optional env:
 ```bash
 MOVINGMANIFEST_API_BASE_URL="https://movingmanifest.com/api/v1"
 ```
+
+Codex CLI/App setup:
+
+```bash
+codex mcp add movingmanifest \
+  --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 \
+  --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
+  -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs
+```
+
+Equivalent Codex `config.toml`:
+
+```toml
+[mcp_servers.movingmanifest]
+command = "node"
+args = ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"]
+
+[mcp_servers.movingmanifest.env]
+MOVINGMANIFEST_API_BASE_URL = "https://movingmanifest.com/api/v1"
+MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
+```
+
+After adding the server, restart Codex or start a fresh Codex session, use
+`/mcp` or `codex mcp list` to confirm `movingmanifest` is enabled, then call
+`get_api_context` before reading or writing private move data.
 
 Desktop agent config example:
 

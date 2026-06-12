@@ -40,18 +40,29 @@ Primary site: https://movingmanifest.com
   account, choose a helper preset, create the key, copy the one-time secret, and
   paste it only into an assistant they trust.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
+- For Codex users with local shell access, configure MCP with:
+  `codex mcp add movingmanifest --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs`.
+  Restart Codex or start a fresh session, verify `movingmanifest` appears in
+  `/mcp` or `codex mcp list`, then call `get_api_context`.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
 - For image upload, use one call by default. MCP agents should call
   `upload_image`, `upload_photo`, or `upload_evidence_image` with a local `filePath`, public
   `sourceUrl`, `dataUrl`, or `fileBase64`; when the user gives several ordinary
-  photos from the same room or context, call `upload_images`, `upload_photos`, or
-  `upload_evidence_images` with shared defaults and one image entry per photo.
+  photos from the same room/context or for one existing item, call
+  `upload_images`, `upload_photos`, or `upload_evidence_images` with shared
+  defaults and one image entry per photo.
   When one photo should become one new inventory item, call
-  `add_item_from_photo` so the item is created, quantity defaults to 1 if
-  omitted, missing weight/size/disposition/condition do not block capture, the
+  `add_item_from_photo` so the item is created. Set quantity only when the user
+  says it or the photo clearly shows a count; otherwise omit quantity so it
+  defaults to 1. Missing weight/size/disposition/condition do not block capture, the
   photo attaches to that item, and web derivatives are created server-side. Use
-  `create_item_with_images` when one new item has several photos. REST agents should call
+  `create_item_with_images` when one new item has several photos. When photos
+  should attach to an item that already exists, first resolve the item with
+  `get_agent_context` or `get_move_summary`, then call `upload_photos` with the
+  existing `itemId`, shared room/type/privacy defaults, and one image entry per
+  file. Report only uploaded/failed counts, photo IDs, derivative status, and
+  any target/caption correction the user may want to make. REST agents should call
   `POST /api/v1/images/upload` or `POST /api/v1/photos/upload` with raw JPEG/PNG/WebP bytes plus metadata query
   params, multipart form data, or JSON with exactly one of `sourceUrl`,
   `dataUrl`, or `fileBase64`. MovingManifest stores the original and creates
