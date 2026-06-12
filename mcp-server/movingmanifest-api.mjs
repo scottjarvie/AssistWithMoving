@@ -886,6 +886,68 @@ export async function uploadEvidenceFile(config, input) {
   };
 }
 
+export async function uploadEvidenceImage(config, input) {
+  if (input.filePath) {
+    return await uploadEvidenceFile(config, input);
+  }
+
+  const sourceCount = [
+    input.sourceUrl,
+    input.dataUrl,
+    input.fileBase64,
+  ].filter(Boolean).length;
+  if (sourceCount !== 1) {
+    throw new Error("Provide exactly one of filePath, sourceUrl, dataUrl, or fileBase64.");
+  }
+
+  const body = {
+    moveId: input.moveId,
+    sourceUrl: input.sourceUrl,
+    dataUrl: input.dataUrl,
+    fileBase64: input.fileBase64,
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    itemId: input.itemId,
+    boxId: input.boxId,
+    spaceId: input.spaceId,
+    transportResourceId: input.transportResourceId,
+    transportZoneId: input.transportZoneId,
+    room: input.room,
+    originalHash: input.originalHash,
+    caption: input.caption,
+    photoType: input.photoType,
+    privacyLevel: input.privacyLevel,
+    visibilityScope: input.visibilityScope,
+    source: input.source ?? "mcp",
+    exifHandlingStatus: input.exifHandlingStatus ?? "pending",
+    confidence: input.confidence,
+    notes: input.notes,
+    verificationStatus: input.verificationStatus,
+    capturedAt: input.capturedAt,
+  };
+
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: { method: "POST", path: "/photos/upload", body },
+      derivativeNote:
+        "MovingManifest stores the original image and creates web-ready derivatives server-side.",
+    };
+  }
+
+  const response = await movingManifestRequest(config, {
+    method: "POST",
+    path: "/photos/upload",
+    body,
+    idempotencyKey: input.idempotencyKey,
+  });
+  const data = response.data ?? response;
+  return {
+    ...data,
+    derivativeNote: derivativeNoteForStatus(data.derivativeStatus),
+  };
+}
+
 export async function finalizePhotoUpload(config, input) {
   if (input.dryRun) {
     return {

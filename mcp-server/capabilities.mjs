@@ -372,17 +372,20 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "Start upload sessions and attach image, audio, or video evidence metadata for condition, serial, receipt, mover, PCS, and claims evidence.",
     requiredScopes: ["moves/read", "inventory/read", "photos/write"],
     restEndpoints: [
+      "POST /api/v1/photos/upload",
       "POST /api/v1/uploads/init",
       "POST /api/v1/photos/finalize",
       "POST /api/v1/photos/:photoId/attach",
     ],
     mcpTools: [
+      "upload_evidence_image",
       "upload_evidence_file",
       "start_photo_upload",
       "finalize_photo_upload",
       "attach_photo",
     ],
     agentWorkflows: [
+      "Use upload_evidence_image first when the agent has a local image path, public image URL, data URL, or base64 image; MovingManifest stores the original, finalizes the evidence record, and creates web-ready derivatives.",
       "Use upload_evidence_file when the agent has a local path or source URL; it starts the session, uploads the original, finalizes metadata, triggers server-side image derivatives, and returns the photoId.",
       "Use the lower-level start/finalize tools only when the client needs to manage presigned uploads, upload audio/video, or supply its own image derivatives.",
       "Attach reviewed evidence media to items, boxes, rooms, and documentation profiles.",

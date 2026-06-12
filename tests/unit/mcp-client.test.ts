@@ -62,6 +62,7 @@ import {
   setupMove,
   startPhotoUpload,
   suggestAssignments,
+  uploadEvidenceImage,
   uploadEvidenceFile,
   updateDocumentationProfile,
   updateItem,
@@ -1822,6 +1823,73 @@ describe("MovingManifest MCP API client", () => {
       exifHandlingStatus: "pending",
       uploadSessionId: "session1",
     });
+  });
+
+  it("uploads an image through the one-call MCP image helper", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        data: {
+          photoId: "photo1",
+          uploadSessionId: "session1",
+          derivativeStatus: "ready",
+          media: {
+            source: "sourceUrl",
+            fileName: "garage-shelf.jpg",
+            mimeType: "image/jpeg",
+            sizeBytes: 123456,
+            width: 1600,
+            height: 1200,
+          },
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      uploadEvidenceImage(
+        { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+        {
+          moveId: "move1",
+          sourceUrl: "https://images.test/garage-shelf.jpg",
+          room: "Garage",
+          caption: "Garage shelf before packing",
+          photoType: "room",
+          privacyLevel: "normal",
+          visibilityScope: "moveCollaborators",
+          idempotencyKey: "upload-image-1",
+        }
+      )
+    ).resolves.toMatchObject({
+      photoId: "photo1",
+      uploadSessionId: "session1",
+      derivativeStatus: "ready",
+      derivativeNote: expect.stringContaining("web-ready image derivatives"),
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/photos/upload"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "upload-image-1",
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          sourceUrl: "https://images.test/garage-shelf.jpg",
+          room: "Garage",
+          caption: "Garage shelf before packing",
+          photoType: "room",
+          privacyLevel: "normal",
+          visibilityScope: "moveCollaborators",
+          source: "mcp",
+          exifHandlingStatus: "pending",
+        }),
+      }
+    );
   });
 
   it("lists, creates, updates, and archives documentation profiles through the API", async () => {

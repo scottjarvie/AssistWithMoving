@@ -73,6 +73,7 @@ import {
   textResult,
   toolErrorResult,
   createPlannedItem,
+  uploadEvidenceImage,
   uploadEvidenceFile,
   updateDocumentationProfile,
   updateMovePerson,
@@ -98,6 +99,8 @@ const allowedOriginalMediaMimeTypes = [
   "video/quicktime",
   "video/webm",
 ];
+
+const allowedOriginalImageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
 const allowedDerivativeImageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
@@ -1585,6 +1588,42 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     handler: (input) => uploadEvidenceFile(apiConfig, input),
+  });
+
+  registerTool(target, "upload_evidence_image", {
+    title: "Upload evidence image",
+    description:
+      "Easiest image-only MCP path: provide a local file path, public source URL, data URL, or base64 image. The tool stores the original image, finalizes evidence metadata, and lets MovingManifest create web-ready display/AI derivatives server-side.",
+    inputSchema: {
+      moveId: z.string(),
+      filePath: z.string().optional(),
+      sourceUrl: z.string().url().optional(),
+      dataUrl: z.string().optional(),
+      fileBase64: z.string().optional(),
+      fileName: z.string().optional(),
+      itemId: z.string().optional(),
+      boxId: z.string().optional(),
+      spaceId: z.string().optional(),
+      transportResourceId: z.string().optional(),
+      transportZoneId: z.string().optional(),
+      room: z.string().optional(),
+      mimeType: z.enum(allowedOriginalImageMimeTypes).optional(),
+      originalHash: z.string().optional(),
+      caption: z.string().optional(),
+      photoType: z.string().optional(),
+      privacyLevel: z.string().optional(),
+      visibilityScope: z.string().optional(),
+      source: z.string().optional(),
+      exifHandlingStatus: z.string().optional(),
+      confidence: z.string().optional(),
+      notes: z.string().optional(),
+      verificationStatus: z.string().optional(),
+      capturedAt: z.number().optional(),
+      idempotencyKey: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => uploadEvidenceImage(apiConfig, input),
   });
 
   registerTool(target, "finalize_photo_upload", {

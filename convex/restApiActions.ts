@@ -1,5 +1,6 @@
 "use node";
 
+import { createHash } from "node:crypto";
 import {
   GetObjectCommand,
   HeadObjectCommand,
@@ -27,6 +28,7 @@ import {
   assertImageDerivativeUploadFileShape,
   assertOriginalUploadFileShape,
   fileExtensionForMediaMimeType,
+  maxImageUploadBytes,
   mediaKindForMimeType,
   mediaObjectPrefix,
 } from "./lib/mediaStorage";
@@ -112,6 +114,9 @@ export const handle = internalAction({
     if (segments[0] === "uploads" && segments[1] === "init" && args.method === "POST") {
       return (await handleUploadInit(ctx, args)) as RestResponse;
     }
+    if (segments[0] === "photos" && segments[1] === "upload" && args.method === "POST") {
+      return (await handlePhotoUpload(ctx, args)) as RestResponse;
+    }
     if (segments[0] === "photos" && segments[1] === "finalize" && args.method === "POST") {
       return (await handlePhotoFinalize(ctx, args)) as RestResponse;
     }
@@ -166,6 +171,13 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
           moveId,
           itemId: optionalId<"items">(body.itemId),
           boxId: optionalId<"boxes">(body.boxId),
+          spaceId: optionalId<"moveSpaces">(body.spaceId),
+          transportResourceId: optionalId<"transportResources">(
+            body.transportResourceId
+          ),
+          transportZoneId: optionalId<"transportZones">(
+            body.transportZoneId
+          ),
           room: optionalString(body.room),
           originalStorageKey: objectKey,
           originalBucket: config.bucketName,
@@ -238,6 +250,175 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
       });
     }
   }, Date.now() + uploadSessionTtlMs);
+}
+
+async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
+  if (!hasBearer(args.authorization)) return unknownAuthError();
+  const body = bodyObject(args.body);
+  const moveId = requiredId<"moves">(body.moveId, "moveId is required.");
+  const authResult = await authenticateAction(ctx, args, moveId);
+  if (!authResult.ok || !authResult.auth) {
+    return authResult.response ?? unknownAuthError();
+  }
+  const auth = {
+    ...(authResult.auth as ApiActionAuth),
+    moveId: (authResult.auth as ApiActionAuth).moveId ?? moveId,
+  };
+
+  return await withActionRateLimit(ctx, args, auth, async () => {
+    let uploadSessionId: Id<"photoUploadSessions"> | undefined;
+    try {
+      const media = await loadDirectImageUploadMedia(body);
+      const original = assertOriginalUploadFileShape({
+        mimeType: media.mimeType,
+        sizeBytes: media.bytes.byteLength,
+      });
+      if (original.mediaKind !== "image") {
+        throw new Error(
+          "Direct photo upload accepts JPEG, PNG, or WebP images. Use /uploads/init for audio or video."
+        );
+      }
+
+      const metadata = await sharp(media.bytes, { failOn: "none" }).metadata();
+      if (!metadata.width || !metadata.height) {
+        throw new Error("Could not read image dimensions.");
+      }
+
+      const config = requireB2Config();
+      const objectKey = uploadObjectKey({
+        moveId,
+        mimeType: original.mimeType,
+      });
+      const expiresAt = Date.now() + uploadSessionTtlMs;
+      const apiActor = {
+        apiKeyId: String(auth.apiKeyId),
+        createdByUserId: auth.createdByUserId,
+      };
+
+      uploadSessionId = await ctx.runMutation(
+        internal.photos.createUploadSession,
+        {
+          householdId: auth.householdId,
+          moveId,
+          itemId: optionalId<"items">(body.itemId),
+          boxId: optionalId<"boxes">(body.boxId),
+          spaceId: optionalId<"moveSpaces">(body.spaceId),
+          transportResourceId: optionalId<"transportResources">(
+            body.transportResourceId
+          ),
+          transportZoneId: optionalId<"transportZones">(
+            body.transportZoneId
+          ),
+          room: optionalString(body.room),
+          originalStorageKey: objectKey,
+          originalBucket: config.bucketName,
+          mediaKind: original.mediaKind,
+          expectedMimeType: original.mimeType,
+          expectedSizeBytes: original.sizeBytes,
+          derivativeUploads: [],
+          expiresAt,
+          apiActor,
+        }
+      );
+
+      await b2Client().send(
+        new PutObjectCommand({
+          Bucket: config.bucketName,
+          Key: objectKey,
+          Body: media.bytes,
+          ContentType: original.mimeType,
+          ContentLength: media.bytes.byteLength,
+        })
+      );
+
+      const photoId = await ctx.runMutation(internal.photos.completeUploadSession, {
+        householdId: auth.householdId,
+        moveId,
+        uploadSessionId,
+        width: metadata.width,
+        height: metadata.height,
+        originalHash:
+          optionalString(body.originalHash) ??
+          createHash("sha256").update(media.bytes).digest("hex"),
+        caption: optionalString(body.caption),
+        photoType: optionalPhotoType(body.photoType),
+        privacyLevel: optionalPrivacyLevel(body.privacyLevel),
+        visibilityScope: optionalVisibilityScope(body.visibilityScope),
+        source: optionalPhotoSource(body.source) ?? "api",
+        exifHandlingStatus: optionalExifHandlingStatus(body.exifHandlingStatus),
+        confidence: optionalConfidence(body.confidence),
+        notes: optionalString(body.notes),
+        verificationStatus: optionalVerificationStatus(body.verificationStatus),
+        capturedAt: optionalNumber(body.capturedAt),
+        apiActor,
+      });
+
+      let derivativeStatus: "ready" | "failed" | undefined;
+      let derivativeError: string | undefined;
+      try {
+        const generated = await generateAndStoreImageDerivatives({
+          bucketName: config.bucketName,
+          moveId,
+          originalStorageKey: objectKey,
+        });
+        await ctx.runMutation(internal.photos.markGeneratedDerivativesReady, {
+          householdId: auth.householdId,
+          moveId,
+          photoId,
+          derivativeRefs: generated.derivativeRefs,
+          apiActor,
+        });
+        derivativeStatus = "ready";
+      } catch (error) {
+        derivativeStatus = "failed";
+        derivativeError = derivativeProcessingError(error);
+        await ctx.runMutation(internal.photos.markGeneratedDerivativesFailed, {
+          householdId: auth.householdId,
+          moveId,
+          photoId,
+          derivativeError,
+          apiActor,
+        });
+      }
+
+      return restOk(
+        {
+          data: {
+            photoId,
+            uploadSessionId,
+            derivativeStatus,
+            derivativeError,
+            media: {
+              source: media.source,
+              fileName: media.fileName,
+              mimeType: original.mimeType,
+              sizeBytes: media.bytes.byteLength,
+              width: metadata.width,
+              height: metadata.height,
+            },
+          },
+        },
+        201
+      );
+    } catch (error) {
+      if (uploadSessionId) {
+        await ctx.runMutation(internal.photos.markUploadSessionFailed, {
+          householdId: auth.householdId,
+          moveId,
+          uploadSessionId,
+          apiActor: {
+            apiKeyId: String(auth.apiKeyId),
+            createdByUserId: auth.createdByUserId,
+          },
+        });
+      }
+      return restError({
+        status: errorStatus(error),
+        code: "photo_upload_failed",
+        message: error instanceof Error ? error.message : "Photo upload failed.",
+      });
+    }
+  });
 }
 
 async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
@@ -618,6 +799,231 @@ function derivativeProcessingError(error: unknown) {
     return `Server derivative processing failed: ${error.message}`;
   }
   return "Server derivative processing failed.";
+}
+
+async function loadDirectImageUploadMedia(body: Record<string, unknown>) {
+  const sourceUrl = optionalString(body.sourceUrl);
+  const dataUrl = optionalString(body.dataUrl);
+  const fileBase64 = optionalString(body.fileBase64);
+  const sourceCount = [sourceUrl, dataUrl, fileBase64].filter(Boolean).length;
+  if (sourceCount !== 1) {
+    throw new Error("Provide exactly one of sourceUrl, dataUrl, or fileBase64.");
+  }
+
+  if (sourceUrl) {
+    return await loadRemoteImageUploadMedia({
+      sourceUrl,
+      fileName: optionalString(body.fileName),
+      mimeType: optionalString(body.mimeType),
+    });
+  }
+
+  if (dataUrl) {
+    const parsed = parseImageDataUrl(dataUrl);
+    return finalizeLoadedImageUploadMedia({
+      bytes: parsed.bytes,
+      source: "dataUrl",
+      fileName: optionalString(body.fileName),
+      mimeType:
+        optionalString(body.mimeType) ??
+        parsed.mimeType ??
+        sniffImageMimeType(parsed.bytes),
+    });
+  }
+
+  const bytes = decodeBase64Image(fileBase64 ?? "");
+  return finalizeLoadedImageUploadMedia({
+    bytes,
+    source: "fileBase64",
+    fileName: optionalString(body.fileName),
+    mimeType:
+      optionalString(body.mimeType) ??
+      sniffImageMimeType(bytes) ??
+      mimeTypeForFilename(optionalString(body.fileName)),
+  });
+}
+
+async function loadRemoteImageUploadMedia({
+  sourceUrl,
+  fileName,
+  mimeType,
+}: {
+  sourceUrl: string;
+  fileName?: string;
+  mimeType?: string;
+}) {
+  const url = parseRemoteImageUrl(sourceUrl);
+  const response = await fetch(url, {
+    redirect: "error",
+    headers: { accept: "image/jpeg,image/png,image/webp" },
+  });
+  if (!response.ok) {
+    throw new Error(`Could not download sourceUrl: HTTP ${response.status}.`);
+  }
+
+  const contentLength = Number(response.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > maxImageUploadBytes) {
+    throw new Error("Images must be under 25 MB.");
+  }
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return finalizeLoadedImageUploadMedia({
+    bytes,
+    source: "sourceUrl",
+    fileName: fileName ?? filenameFromUrl(url),
+    mimeType:
+      mimeType ??
+      normalizeHeaderMimeType(response.headers.get("content-type")) ??
+      sniffImageMimeType(bytes) ??
+      mimeTypeForFilename(fileName ?? url.pathname),
+  });
+}
+
+function finalizeLoadedImageUploadMedia({
+  bytes,
+  source,
+  fileName,
+  mimeType,
+}: {
+  bytes: Buffer;
+  source: "sourceUrl" | "dataUrl" | "fileBase64";
+  fileName?: string;
+  mimeType?: string;
+}) {
+  if (bytes.byteLength <= 0) {
+    throw new Error("Image upload data was empty.");
+  }
+  if (bytes.byteLength > maxImageUploadBytes) {
+    throw new Error("Images must be under 25 MB.");
+  }
+  if (!mimeType) {
+    throw new Error(
+      "Could not determine MIME type. Pass mimeType for base64 uploads."
+    );
+  }
+
+  return {
+    bytes,
+    source,
+    fileName,
+    mimeType,
+  };
+}
+
+function parseRemoteImageUrl(sourceUrl: string) {
+  let url: URL;
+  try {
+    url = new URL(sourceUrl);
+  } catch {
+    throw new Error("sourceUrl must be a valid HTTP or HTTPS URL.");
+  }
+
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("sourceUrl must be an HTTP or HTTPS URL.");
+  }
+  if (url.username || url.password) {
+    throw new Error("sourceUrl must not include credentials.");
+  }
+  if (isBlockedRemoteHostname(url.hostname)) {
+    throw new Error("sourceUrl must point to a public image URL.");
+  }
+
+  return url;
+}
+
+function isBlockedRemoteHostname(hostname: string) {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".local")
+  ) {
+    return true;
+  }
+
+  if (normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
+    return true;
+  }
+
+  const ipv4 = normalized.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!ipv4) return false;
+  const octets = ipv4.slice(1).map(Number);
+  if (octets.some((octet) => octet < 0 || octet > 255)) return true;
+  const [first, second] = octets;
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+function parseImageDataUrl(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;,]+)?(?:;[^,]*)?;base64,([\s\S]+)$/i);
+  if (!match) {
+    throw new Error("dataUrl must be a base64 image data URL.");
+  }
+  return {
+    mimeType: normalizeHeaderMimeType(match[1]),
+    bytes: decodeBase64Image(match[2]),
+  };
+}
+
+function decodeBase64Image(value: string) {
+  const normalized = value.replace(/\s/g, "");
+  if (!normalized || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+    throw new Error("fileBase64 must contain base64 image data.");
+  }
+  return Buffer.from(normalized, "base64");
+}
+
+function normalizeHeaderMimeType(value: string | null | undefined) {
+  return value?.trim().toLowerCase().split(";")[0] || undefined;
+}
+
+function filenameFromUrl(url: URL) {
+  const name = url.pathname.split("/").filter(Boolean).pop();
+  return name || undefined;
+}
+
+function mimeTypeForFilename(filename: string | undefined) {
+  const extension = filename?.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    default:
+      return undefined;
+  }
+}
+
+function sniffImageMimeType(bytes: Buffer) {
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes.toString("ascii", 0, 4) === "RIFF" &&
+    bytes.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  return undefined;
 }
 
 function uploadObjectKey({

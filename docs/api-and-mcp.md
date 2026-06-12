@@ -1206,10 +1206,36 @@ Evidence media upload is a presigned storage flow. The current product UI is
 still photo-first, but the storage contract accepts image, audio, and video
 originals. Image derivatives remain image-only.
 
-For MCP agents, prefer `upload_evidence_file` when the assistant has a local
-file path or a source URL. The tool reads the file, infers MIME type and image
-dimensions when it can, starts the upload session, PUTs the original file to
-storage, finalizes the evidence record, and returns the `photoId`.
+For MCP agents, prefer `upload_evidence_image` for normal image work. The
+assistant can pass a local `filePath`, public `sourceUrl`, `dataUrl`, or
+`fileBase64`; MovingManifest stores the original, finalizes evidence metadata,
+creates web-ready derivatives in the background, and returns the `photoId`.
+Use `upload_evidence_file` for audio/video or when a client wants the explicit
+presigned upload flow.
+
+For REST API agents that already have an image URL or base64 image payload, use
+the one-call image endpoint:
+
+```bash
+curl -X POST https://movingmanifest.com/api/v1/photos/upload \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: photo-upload-001" \
+  -d '{
+    "moveId": "MOVE_ID",
+    "sourceUrl": "https://example.com/garage-shelf.jpg",
+    "room": "Garage",
+    "caption": "Garage shelf before packing",
+    "photoType": "room",
+    "privacyLevel": "normal"
+  }'
+```
+
+`POST /photos/upload` accepts JPEG, PNG, or WebP images from exactly one of
+`sourceUrl`, `dataUrl`, or `fileBase64`. It is intentionally image-only and
+server-preps `thumb`, `card`, `detail`, and `full` derivatives after storing
+the original. Use the presigned flow below for larger/custom upload clients,
+audio/video evidence, progress bars, or client-created derivatives.
 
 The lower-level REST flow is still useful for custom clients, browser clients,
 and clients that already create web-ready image derivatives. API/MCP clients can
@@ -1271,7 +1297,7 @@ creates the evidence record. Images require positive `width` and `height`.
 Audio can finalize without dimensions; video dimensions may be provided when a
 future UI captures them.
 
-For MCP clients, use `upload_evidence_file` first:
+For MCP clients, use `upload_evidence_image` first:
 
 ```json
 {
@@ -1285,11 +1311,13 @@ For MCP clients, use `upload_evidence_file` first:
 }
 ```
 
-Use `start_photo_upload`, a direct PUT to the returned presigned URL, and
+Use `upload_evidence_file` for non-image media or when the agent has a local
+file and should keep the storage PUT in the local process. Use
+`start_photo_upload`, a direct PUT to the returned presigned URL, and
 `finalize_photo_upload` only when the client needs to manage the presigned flow
-itself, upload audio/video, or supply client-created image derivatives. Use
-`attach_photo` afterward only when evidence metadata needs to be changed or
-linked differently.
+itself, upload audio/video, show upload progress, or supply client-created image
+derivatives. Use `attach_photo` afterward only when evidence metadata needs to
+be changed or linked differently.
 
 Current derivative behavior: `upload_evidence_file` uploads and finalizes the
 original evidence file. For images, MovingManifest creates `thumb`, `card`,
@@ -1552,6 +1580,7 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
+| `upload_evidence_image` | Easiest MCP image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId`. |
 | `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
 | `start_photo_upload` | Start an evidence media upload session and return presigned original/optional derivative upload information. |
 | `finalize_photo_upload` | Finalize a completed presigned upload and create the evidence record after server-side object verification. |

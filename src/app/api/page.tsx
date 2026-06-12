@@ -37,7 +37,7 @@ const apiCards = [
   },
   {
     title: "Photo evidence",
-    copy: "Start upload sessions, PUT originals to storage, then finalize item, room, box, receipt, serial, and condition photos. Image uploads get web-ready derivatives server-side.",
+    copy: "Upload JPEG, PNG, or WebP evidence in one API call from a URL or base64 payload, or use presigned storage for larger/custom clients. Images get web-ready derivatives server-side.",
     icon: Camera,
   },
   {
@@ -102,6 +102,7 @@ export default function ApiPage() {
               ["Auth", "Authorization: Bearer mmk_..."],
               ["Discovery", "GET /me, GET /moves, GET /moves/{moveId}/agent-context"],
               ["Batch intake", "POST /moves/{moveId}/items/batch-upsert"],
+              ["Image upload", "POST /photos/upload"],
               ["Machine contract", "GET /openapi.json"],
             ].map(([label, value]) => (
               <div
