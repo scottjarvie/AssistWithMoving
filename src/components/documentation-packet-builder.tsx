@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   documentationFieldOptions,
   documentationImageRuleOptions,
@@ -107,6 +108,7 @@ type ExportJobType =
   | "boxes"
   | "assignments"
   | "documentationProfile";
+type PacketBuilderTask = "configure" | "exports" | "share" | "views";
 
 type ProfileDisposition =
   | "undecided"
@@ -193,6 +195,8 @@ export function DocumentationPacketBuilder({
   const [linkRole, setLinkRole] = useState<ShareLinkRole>("viewer");
   const [expiresInDays, setExpiresInDays] = useState("30");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [packetTask, setPacketTask] =
+    useState<PacketBuilderTask>("configure");
   const [downloadExportJobId, setDownloadExportJobId] =
     useState<Id<"exportJobs"> | null>(null);
   const [recentExports, setRecentExports] = useState<RecentExportJob[]>([]);
@@ -616,6 +620,7 @@ export function DocumentationPacketBuilder({
                   onClick={() => {
                     setSelectedProfileId(profile._id);
                     loadProfileDraft(profile);
+                    setPacketTask("configure");
                   }}
                 >
                   <span className="block font-medium">{profile.name}</span>
@@ -627,490 +632,537 @@ export function DocumentationPacketBuilder({
             </div>
 
             {selectedProfile && preview ? (
-              <div className="space-y-4">
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-                  <Input
-                    value={effectiveName}
-                    onChange={(event) => {
-                      ensureDraftLoaded(selectedProfile);
-                      setDraftName(event.target.value);
-                    }}
-                    aria-label="Packet profile name"
-                  />
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    value={effectiveImageRule}
-                    aria-label="Documentation image rule"
-                    onChange={(event) => {
-                      ensureDraftLoaded(selectedProfile);
-                      setDraftImageRule(
-                        event.target.value as DocumentationImageRule
-                      );
-                    }}
-                  >
-                    {documentationImageRuleOptions.map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+              <Tabs
+                value={packetTask}
+                onValueChange={(value) =>
+                  setPacketTask(value as PacketBuilderTask)
+                }
+                className="gap-4"
+              >
+                <div className="overflow-x-auto pb-1">
+                  <TabsList className="min-w-max">
+                    <TabsTrigger value="configure">Configure</TabsTrigger>
+                    <TabsTrigger value="exports">Exports</TabsTrigger>
+                    <TabsTrigger value="share">Share links</TabsTrigger>
+                    <TabsTrigger value="views">Packet views</TabsTrigger>
+                  </TabsList>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <OptionGroup
-                    title="Fields"
-                    options={documentationFieldOptions}
-                    selected={effectiveFields}
-                    onToggle={(value) => {
-                      ensureDraftLoaded(selectedProfile);
-                      setDraftFields((current) =>
-                        toggleValue(
-                          draftProfileId === selectedProfile._id
-                            ? current
-                            : selectedProfile.includedFields,
-                          value
-                        )
-                      );
-                    }}
-                  />
-                  <OptionGroup
-                    title="Link actions"
-                    options={shareLinkActionOptions}
-                    selected={effectiveActions}
-                    onToggle={(value) => {
-                      ensureDraftLoaded(selectedProfile);
-                      setDraftActions((current) =>
-                        toggleValue(
-                          draftProfileId === selectedProfile._id
-                            ? current
-                            : selectedProfile.allowedActions,
-                          value
-                        )
-                      );
-                    }}
-                  />
-                </div>
-
-                <div className="rounded-md border border-border p-3">
-                  <h3 className="text-sm font-medium">Filters</h3>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <TabsContent value="configure" className="space-y-4">
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
                     <Input
-                      value={effectiveRoomFilter}
+                      value={effectiveName}
                       onChange={(event) => {
                         ensureDraftLoaded(selectedProfile);
-                        setDraftRoomFilter(event.target.value);
+                        setDraftName(event.target.value);
                       }}
-                      aria-label="Room filter"
-                      placeholder="Room"
+                      aria-label="Packet profile name"
                     />
-                    <Input
-                      value={effectiveDestinationFilter}
-                      onChange={(event) => {
-                        ensureDraftLoaded(selectedProfile);
-                        setDraftDestinationFilter(event.target.value);
-                      }}
-                      aria-label="Destination room filter"
-                      placeholder="Destination room"
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-md border border-border p-3">
-                  <h3 className="text-sm font-medium">Preview</h3>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {preview.includedFieldLabels.map((field) => (
-                      <Badge key={field} variant="secondary">
-                        {field}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <PreviewList
-                      title="Hidden sensitive fields"
-                      values={preview.hiddenSensitiveFields}
-                    />
-                    <PreviewList
-                      title="Filters"
-                      values={
-                        preview.filterSummary.length
-                          ? preview.filterSummary
-                          : ["No extra filters"]
-                      }
-                    />
-                    <PreviewList
-                      title="Allowed actions"
-                      values={preview.actionLabels}
-                    />
-                    <PreviewList
-                      title="Warnings"
-                      values={
-                        preview.warnings.length
-                          ? preview.warnings
-                          : ["No packet warnings"]
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-md border border-border p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-medium">Server exports</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Create permission-checked CSV and print artifacts with
-                        export history.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <ExportButton
-                        label="Inventory CSV"
-                        busy={busy === "export-inventory"}
-                        onClick={() => void handleCreateCsvExport("inventory")}
-                      />
-                      <ExportButton
-                        label="Boxes CSV"
-                        busy={busy === "export-boxes"}
-                        onClick={() => void handleCreateCsvExport("boxes")}
-                      />
-                      <ExportButton
-                        label="Assignments CSV"
-                        busy={busy === "export-assignments"}
-                        onClick={() => void handleCreateCsvExport("assignments")}
-                      />
-                      <ExportButton
-                        label="Profile CSV"
-                        busy={busy === "export-documentationProfile"}
-                        disabled={!selectedProfile}
-                        onClick={() =>
-                          void handleCreateCsvExport("documentationProfile")
-                        }
-                      />
-                      <ExportButton
-                        label="Plan print pack"
-                        busy={busy === "export-floorPlan"}
-                        onClick={() => void handleCreateFloorPlanPrintExport()}
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {exportJobs === undefined && !recentExports.length ? (
-                      <Skeleton className="h-8 w-full" />
-                    ) : displayedExportJobs.length ? (
-                      displayedExportJobs.map((job) => (
-                        <div
-                          key={job.exportJobId}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs"
-                        >
-                          <span>
-                            {job.filename ?? `${job.type}.${job.format}`} -
-                            {" "}
-                            {job.status}
-                            {typeof job.rowCount === "number"
-                              ? ` - ${job.rowCount} ${job.type === "floorPlan" ? "rooms" : "rows"}`
-                              : ""}
-                          </span>
-                          {job.status === "completed" ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                setDownloadExportJobId(job.exportJobId)
-                              }
-                            >
-                              <Download aria-hidden="true" />
-                              Download
-                            </Button>
-                          ) : null}
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        No server exports yet.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {selectedProfile.type === "pcsMove" && householdId && moveId ? (
-                    <>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildPcsPacketPath({
-                            householdId,
-                            moveId,
-                          })}
-                        >
-                          PCS packet
-                        </Link>
-                      </Button>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildPcsPacketPath({
-                            householdId,
-                            moveId,
-                            mode: "owner",
-                          })}
-                        >
-                          PCS owner
-                        </Link>
-                      </Button>
-                    </>
-                  ) : null}
-                  {(selectedProfile.type === "movingCompany" ||
-                    selectedProfile.type === "loadCrew") &&
-                  householdId &&
-                  moveId ? (
-                    <>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildMoverPacketPath({
-                            householdId,
-                            moveId,
-                            mode:
-                              selectedProfile.type === "loadCrew"
-                                ? "loadCrew"
-                                : "movingCompany",
-                          })}
-                        >
-                          Mover packet
-                        </Link>
-                      </Button>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildMoverPacketPath({
-                            householdId,
-                            moveId,
-                            mode: "owner",
-                          })}
-                        >
-                          Mover owner
-                        </Link>
-                      </Button>
-                    </>
-                  ) : null}
-                  {selectedProfile.type === "employerRelocation" &&
-                  householdId &&
-                  moveId ? (
-                    <>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildEmployerPacketPath({
-                            householdId,
-                            moveId,
-                          })}
-                        >
-                          Employer packet
-                        </Link>
-                      </Button>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildEmployerPacketPath({
-                            householdId,
-                            moveId,
-                            mode: "owner",
-                          })}
-                        >
-                          Employer owner
-                        </Link>
-                      </Button>
-                    </>
-                  ) : null}
-                  {selectedProfile.type === "insuranceClaim" &&
-                  householdId &&
-                  moveId ? (
-                    <>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildClaimPacketPath({
-                            householdId,
-                            moveId,
-                          })}
-                        >
-                          Claim packet
-                        </Link>
-                      </Button>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildClaimPacketPath({
-                            householdId,
-                            moveId,
-                            mode: "owner",
-                          })}
-                        >
-                          Claim owner
-                        </Link>
-                      </Button>
-                    </>
-                  ) : null}
-                  {(selectedProfile.type === "donationPickup" ||
-                    selectedProfile.type === "sellOrGiveaway" ||
-                    selectedProfile.type === "storageInventory") &&
-                  householdId &&
-                  moveId ? (
-                    <>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildSubManifestPath({
-                            householdId,
-                            moveId,
-                            kind: subManifestKindForProfileType(
-                              selectedProfile.type
-                            ),
-                          })}
-                        >
-                          Sub-manifest
-                        </Link>
-                      </Button>
-                      <Button asChild type="button" variant="outline">
-                        <Link
-                          href={buildSubManifestPath({
-                            householdId,
-                            moveId,
-                            kind: subManifestKindForProfileType(
-                              selectedProfile.type
-                            ),
-                            mode: "owner",
-                          })}
-                        >
-                          Sub-manifest owner
-                        </Link>
-                      </Button>
-                    </>
-                  ) : null}
-                  <Button
-                    type="button"
-                    disabled={busy === "save" || !effectiveFields.length}
-                    onClick={() => void handleSaveProfile()}
-                  >
-                    Save profile
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={busy === `archive-${selectedProfile._id}`}
-                    onClick={() => void handleArchiveProfile(selectedProfile._id)}
-                  >
-                    Archive
-                  </Button>
-                </div>
-
-                <div className="rounded-md border border-border p-3">
-                  <h3 className="flex items-center gap-2 text-sm font-medium">
-                    <Link2 className="size-4 text-primary" aria-hidden="true" />
-                    Scoped share link
-                  </h3>
-                  <div className="mt-3 grid gap-3 md:grid-cols-[160px_160px_minmax(0,1fr)_minmax(0,1fr)]">
                     <select
                       className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                      value={linkRole}
-                      aria-label="Share link role"
-                      onChange={(event) =>
-                        setLinkRole(event.target.value as ShareLinkRole)
-                      }
+                      value={effectiveImageRule}
+                      aria-label="Documentation image rule"
+                      onChange={(event) => {
+                        ensureDraftLoaded(selectedProfile);
+                        setDraftImageRule(
+                          event.target.value as DocumentationImageRule
+                        );
+                      }}
                     >
-                      {shareLinkRoleOptions.map(([value, label]) => (
+                      {documentationImageRuleOptions.map(([value, label]) => (
                         <option key={value} value={value}>
                           {label}
                         </option>
                       ))}
                     </select>
-                    <Input
-                      value={expiresInDays}
-                      onChange={(event) => setExpiresInDays(event.target.value)}
-                      inputMode="numeric"
-                      aria-label="Share link expiration in days"
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <OptionGroup
+                      title="Fields"
+                      options={documentationFieldOptions}
+                      selected={effectiveFields}
+                      onToggle={(value) => {
+                        ensureDraftLoaded(selectedProfile);
+                        setDraftFields((current) =>
+                          toggleValue(
+                            draftProfileId === selectedProfile._id
+                              ? current
+                              : selectedProfile.includedFields,
+                            value
+                          )
+                        );
+                      }}
                     />
+                    <OptionGroup
+                      title="Link actions"
+                      options={shareLinkActionOptions}
+                      selected={effectiveActions}
+                      onToggle={(value) => {
+                        ensureDraftLoaded(selectedProfile);
+                        setDraftActions((current) =>
+                          toggleValue(
+                            draftProfileId === selectedProfile._id
+                              ? current
+                              : selectedProfile.allowedActions,
+                            value
+                          )
+                        );
+                      }}
+                    />
+                  </div>
+
+                  <div className="rounded-md border border-border p-3">
+                    <h3 className="text-sm font-medium">Filters</h3>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <Input
+                        value={effectiveRoomFilter}
+                        onChange={(event) => {
+                          ensureDraftLoaded(selectedProfile);
+                          setDraftRoomFilter(event.target.value);
+                        }}
+                        aria-label="Room filter"
+                        placeholder="Room"
+                      />
+                      <Input
+                        value={effectiveDestinationFilter}
+                        onChange={(event) => {
+                          ensureDraftLoaded(selectedProfile);
+                          setDraftDestinationFilter(event.target.value);
+                        }}
+                        aria-label="Destination room filter"
+                        placeholder="Destination room"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-border p-3">
+                    <h3 className="text-sm font-medium">Preview</h3>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {preview.includedFieldLabels.map((field) => (
+                        <Badge key={field} variant="secondary">
+                          {field}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <PreviewList
+                        title="Hidden sensitive fields"
+                        values={preview.hiddenSensitiveFields}
+                      />
+                      <PreviewList
+                        title="Filters"
+                        values={
+                          preview.filterSummary.length
+                            ? preview.filterSummary
+                            : ["No extra filters"]
+                        }
+                      />
+                      <PreviewList
+                        title="Allowed actions"
+                        values={preview.actionLabels}
+                      />
+                      <PreviewList
+                        title="Warnings"
+                        values={
+                          preview.warnings.length
+                            ? preview.warnings
+                            : ["No packet warnings"]
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
-                      disabled={busy === "link" || !effectiveActions.length}
-                      onClick={() => void handleCreateShareLink()}
+                      disabled={busy === "save" || !effectiveFields.length}
+                      onClick={() => void handleSaveProfile()}
                     >
-                      Create link token
+                      Save profile
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={busy === "plan-link"}
-                      onClick={() => void handleCreatePlanShareLink()}
+                      disabled={busy === `archive-${selectedProfile._id}`}
+                      onClick={() =>
+                        void handleArchiveProfile(selectedProfile._id)
+                      }
                     >
-                      Create plan link
+                      Archive
                     </Button>
                   </div>
-                  {createdToken ? (
-                    <div className="mt-3 grid gap-2 rounded-md bg-muted p-3 text-xs">
-                      <p className="break-all font-mono">{createdToken}</p>
-                      {createdSharePath ? (
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="break-all font-mono text-muted-foreground">
-                            {createdSharePath}
-                          </span>
-                          <Button asChild size="sm" variant="outline">
-                            <Link href={createdSharePath}>Open share link</Link>
-                          </Button>
-                        </div>
-                      ) : null}
+                </TabsContent>
+
+                <TabsContent value="exports" className="space-y-4">
+                  <div className="rounded-md border border-border p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-medium">Server exports</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Create permission-checked CSV and print artifacts
+                          without carrying export history on the edit screen.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <ExportButton
+                          label="Inventory CSV"
+                          busy={busy === "export-inventory"}
+                          onClick={() => void handleCreateCsvExport("inventory")}
+                        />
+                        <ExportButton
+                          label="Boxes CSV"
+                          busy={busy === "export-boxes"}
+                          onClick={() => void handleCreateCsvExport("boxes")}
+                        />
+                        <ExportButton
+                          label="Assignments CSV"
+                          busy={busy === "export-assignments"}
+                          onClick={() =>
+                            void handleCreateCsvExport("assignments")
+                          }
+                        />
+                        <ExportButton
+                          label="Profile CSV"
+                          busy={busy === "export-documentationProfile"}
+                          disabled={!selectedProfile}
+                          onClick={() =>
+                            void handleCreateCsvExport("documentationProfile")
+                          }
+                        />
+                        <ExportButton
+                          label="Plan print pack"
+                          busy={busy === "export-floorPlan"}
+                          onClick={() => void handleCreateFloorPlanPrintExport()}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {exportJobs === undefined && !recentExports.length ? (
+                        <Skeleton className="h-8 w-full" />
+                      ) : displayedExportJobs.length ? (
+                        displayedExportJobs.map((job) => (
+                          <div
+                            key={job.exportJobId}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-xs"
+                          >
+                            <span>
+                              {job.filename ?? `${job.type}.${job.format}`} -{" "}
+                              {job.status}
+                              {typeof job.rowCount === "number"
+                                ? ` - ${job.rowCount} ${
+                                    job.type === "floorPlan" ? "rooms" : "rows"
+                                  }`
+                                : ""}
+                            </span>
+                            {job.status === "completed" ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setDownloadExportJobId(job.exportJobId)
+                                }
+                              >
+                                <Download aria-hidden="true" />
+                                Download
+                              </Button>
+                            ) : null}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          No server exports yet.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="share" className="space-y-4">
+                  <div className="rounded-md border border-border p-3">
+                    <h3 className="flex items-center gap-2 text-sm font-medium">
+                      <Link2 className="size-4 text-primary" aria-hidden="true" />
+                      Scoped share link
+                    </h3>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[160px_160px_minmax(0,1fr)_minmax(0,1fr)]">
+                      <select
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                        value={linkRole}
+                        aria-label="Share link role"
+                        onChange={(event) =>
+                          setLinkRole(event.target.value as ShareLinkRole)
+                        }
+                      >
+                        {shareLinkRoleOptions.map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        value={expiresInDays}
+                        onChange={(event) =>
+                          setExpiresInDays(event.target.value)
+                        }
+                        inputMode="numeric"
+                        aria-label="Share link expiration in days"
+                      />
+                      <Button
+                        type="button"
+                        disabled={busy === "link" || !effectiveActions.length}
+                        onClick={() => void handleCreateShareLink()}
+                      >
+                        Create link token
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy === "plan-link"}
+                        onClick={() => void handleCreatePlanShareLink()}
+                      >
+                        Create plan link
+                      </Button>
+                    </div>
+                    {createdToken ? (
+                      <div className="mt-3 grid gap-2 rounded-md bg-muted p-3 text-xs">
+                        <p className="break-all font-mono">{createdToken}</p>
+                        {createdSharePath ? (
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="break-all font-mono text-muted-foreground">
+                              {createdSharePath}
+                            </span>
+                            <Button asChild size="sm" variant="outline">
+                              <Link href={createdSharePath}>Open share link</Link>
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {activeLinks.length ? (
+                    <div className="rounded-md border border-border p-3">
+                      <h3 className="text-sm font-medium">Active links</h3>
+                      <div className="mt-3 space-y-2">
+                        {activeLinks.map((link) => (
+                          <div
+                            key={link._id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-2 text-sm"
+                          >
+                            <span>
+                              {link.label ?? "Share link"} - {link.role} -{" "}
+                              {link.tokenPreview}
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={busy === `revoke-${link._id}`}
+                              onClick={() =>
+                                void handleRevokeShareLink(link._id)
+                              }
+                            >
+                              Revoke
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : null}
-                </div>
 
-                {activeLinks.length ? (
-                  <div className="rounded-md border border-border p-3">
-                    <h3 className="text-sm font-medium">Active links</h3>
-                    <div className="mt-3 space-y-2">
-                      {activeLinks.map((link) => (
-                        <div
-                          key={link._id}
-                          className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-2 text-sm"
-                        >
-                          <span>
-                            {link.label ?? "Share link"} - {link.role} -{" "}
-                            {link.tokenPreview}
-                          </span>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={busy === `revoke-${link._id}`}
-                            onClick={() => void handleRevokeShareLink(link._id)}
+                  {recentComments.length ? (
+                    <div className="rounded-md border border-border p-3">
+                      <h3 className="text-sm font-medium">
+                        Recipient comments
+                      </h3>
+                      <div className="mt-3 space-y-2">
+                        {recentComments.map((comment) => (
+                          <div
+                            key={comment._id}
+                            className="rounded-md bg-muted/40 p-2 text-sm"
                           >
-                            Revoke
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {recentComments.length ? (
-                  <div className="rounded-md border border-border p-3">
-                    <h3 className="text-sm font-medium">Recipient comments</h3>
-                    <div className="mt-3 space-y-2">
-                      {recentComments.map((comment) => (
-                        <div
-                          key={comment._id}
-                          className="rounded-md bg-muted/40 p-2 text-sm"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                            <span>
-                              {comment.authorLabel ?? "Recipient"} -{" "}
-                              {comment.profileName ??
-                                comment.shareLabel ??
-                                "Scoped packet"}{" "}
-                              - {comment.role} - {comment.tokenPreview}
-                            </span>
-                            <time dateTime={new Date(comment.createdAt).toISOString()}>
-                              {new Date(comment.createdAt).toLocaleString()}
-                            </time>
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                              <span>
+                                {comment.authorLabel ?? "Recipient"} -{" "}
+                                {comment.profileName ??
+                                  comment.shareLabel ??
+                                  "Scoped packet"}{" "}
+                                - {comment.role} - {comment.tokenPreview}
+                              </span>
+                              <time
+                                dateTime={new Date(
+                                  comment.createdAt
+                                ).toISOString()}
+                              >
+                                {new Date(comment.createdAt).toLocaleString()}
+                              </time>
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap">
+                              {comment.body}
+                            </p>
                           </div>
-                          <p className="mt-1 whitespace-pre-wrap">{comment.body}</p>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </TabsContent>
+
+                <TabsContent value="views" className="space-y-4">
+                  <div className="rounded-md border border-border p-3">
+                    <h3 className="text-sm font-medium">Packet views</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Open the recipient or owner-facing packet pages for this
+                      selected profile.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedProfile.type === "pcsMove" &&
+                      householdId &&
+                      moveId ? (
+                        <>
+                          <Button asChild type="button" variant="outline">
+                            <Link href={buildPcsPacketPath({ householdId, moveId })}>
+                              PCS packet
+                            </Link>
+                          </Button>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildPcsPacketPath({
+                                householdId,
+                                moveId,
+                                mode: "owner",
+                              })}
+                            >
+                              PCS owner
+                            </Link>
+                          </Button>
+                        </>
+                      ) : null}
+                      {(selectedProfile.type === "movingCompany" ||
+                        selectedProfile.type === "loadCrew") &&
+                      householdId &&
+                      moveId ? (
+                        <>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildMoverPacketPath({
+                                householdId,
+                                moveId,
+                                mode:
+                                  selectedProfile.type === "loadCrew"
+                                    ? "loadCrew"
+                                    : "movingCompany",
+                              })}
+                            >
+                              Mover packet
+                            </Link>
+                          </Button>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildMoverPacketPath({
+                                householdId,
+                                moveId,
+                                mode: "owner",
+                              })}
+                            >
+                              Mover owner
+                            </Link>
+                          </Button>
+                        </>
+                      ) : null}
+                      {selectedProfile.type === "employerRelocation" &&
+                      householdId &&
+                      moveId ? (
+                        <>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildEmployerPacketPath({
+                                householdId,
+                                moveId,
+                              })}
+                            >
+                              Employer packet
+                            </Link>
+                          </Button>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildEmployerPacketPath({
+                                householdId,
+                                moveId,
+                                mode: "owner",
+                              })}
+                            >
+                              Employer owner
+                            </Link>
+                          </Button>
+                        </>
+                      ) : null}
+                      {selectedProfile.type === "insuranceClaim" &&
+                      householdId &&
+                      moveId ? (
+                        <>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildClaimPacketPath({
+                                householdId,
+                                moveId,
+                              })}
+                            >
+                              Claim packet
+                            </Link>
+                          </Button>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildClaimPacketPath({
+                                householdId,
+                                moveId,
+                                mode: "owner",
+                              })}
+                            >
+                              Claim owner
+                            </Link>
+                          </Button>
+                        </>
+                      ) : null}
+                      {(selectedProfile.type === "donationPickup" ||
+                        selectedProfile.type === "sellOrGiveaway" ||
+                        selectedProfile.type === "storageInventory") &&
+                      householdId &&
+                      moveId ? (
+                        <>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildSubManifestPath({
+                                householdId,
+                                moveId,
+                                kind: subManifestKindForProfileType(
+                                  selectedProfile.type
+                                ),
+                              })}
+                            >
+                              Sub-manifest
+                            </Link>
+                          </Button>
+                          <Button asChild type="button" variant="outline">
+                            <Link
+                              href={buildSubManifestPath({
+                                householdId,
+                                moveId,
+                                kind: subManifestKindForProfileType(
+                                  selectedProfile.type
+                                ),
+                                mode: "owner",
+                              })}
+                            >
+                              Sub-manifest owner
+                            </Link>
+                          </Button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
-                ) : null}
-              </div>
+                </TabsContent>
+              </Tabs>
             ) : null}
           </div>
         ) : (

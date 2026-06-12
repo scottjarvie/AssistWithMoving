@@ -614,6 +614,7 @@ test.describe("authenticated product flow", () => {
       "Moving company",
       { timeout: 30_000 }
     );
+    await documentationPackets.getByRole("tab", { name: "Exports" }).click();
     await expect(
       documentationPackets.getByRole("button", { name: "Inventory CSV" })
     ).toBeEnabled({ timeout: 30_000 });
@@ -626,6 +627,7 @@ test.describe("authenticated product flow", () => {
       )
     ).toBeVisible({ timeout: 30_000 });
 
+    await documentationPackets.getByRole("tab", { name: "Share links" }).click();
     await expect(
       documentationPackets.getByRole("button", { name: "Create link token" })
     ).toBeEnabled({ timeout: 30_000 });
