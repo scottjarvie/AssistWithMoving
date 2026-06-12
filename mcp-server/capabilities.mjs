@@ -390,6 +390,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "When the user provides a picture plus a few short words for one household item, use create_item_with_images to create the item, default quantity to 1 when omitted, upload the image evidence, and return the item/photo IDs in one result.",
       "For ordinary images, use upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
       "When a user gives several ordinary photos from the same room or context, use upload_evidence_images with shared defaults and one image entry per photo.",
+      "Set generateAiSuggestions true when the uploaded image should also enter AI photo review; upload still succeeds if review queueing fails or the key only has photos/write.",
       "Do not ask the user for dimensions, thumbnail sizes, or derivative files during normal AI-assisted photo capture.",
       "Use upload_evidence_file for non-image media or when the agent needs to keep the storage PUT in the local process.",
       "Use lower-level start/finalize tools only when the client needs presigned-upload control, audio/video upload, progress bars, or client-created image derivatives.",

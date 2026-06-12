@@ -1224,6 +1224,10 @@ The site reads dimensions and creates `thumb`, `card`, `detail`, and `full`
 display versions after the original is stored. Tell the user the caption,
 attachment target, and confidence/assumptions you used so they can correct the
 record without turning upload into a long interview.
+If the user wants the app to review the photo for possible items, boxes, or
+duplicate evidence, set `generateAiSuggestions: true`. Upload still succeeds
+when AI review queueing fails or the key only has `photos/write`; the response
+will include `aiReview.status` and any queueing error.
 
 When the photo is meant to become a new inventory item, MCP agents should use
 `create_item_with_images` instead of manually creating the item and then
@@ -1272,7 +1276,8 @@ curl -X POST https://movingmanifest.com/api/v1/photos/upload \
     "room": "Garage",
     "caption": "Garage shelf before packing",
     "photoType": "room",
-    "privacyLevel": "normal"
+    "privacyLevel": "normal",
+    "generateAiSuggestions": true
   }'
 ```
 
@@ -1281,9 +1286,11 @@ multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
 `fileBase64`. It is intentionally image-only and server-preps `thumb`, `card`,
 `detail`, and `full` derivatives after storing the original. MCP clients should
 pass `filePath` to `upload_evidence_image` and let the local MCP server read and
-send the original file bytes. Use the presigned flow below for larger/custom
-upload clients, audio/video evidence, progress bars, or client-created
-derivatives.
+send the original file bytes. Set `generateAiSuggestions` when the same upload
+should also place the photo into AI review; that queueing step requires
+`inventory/write` in addition to `photos/write`. Use the presigned flow below
+for larger/custom upload clients, audio/video evidence, progress bars, or
+client-created derivatives.
 
 The lower-level REST flow is still useful for custom clients, browser clients,
 and clients that already create web-ready image derivatives. API/MCP clients can
@@ -1355,7 +1362,8 @@ For MCP clients, use `upload_evidence_image` first:
   "caption": "Garage shelf before packing",
   "photoType": "room",
   "privacyLevel": "normal",
-  "visibilityScope": "moveCollaborators"
+  "visibilityScope": "moveCollaborators",
+  "generateAiSuggestions": true
 }
 ```
 
@@ -1377,7 +1385,8 @@ For a new item plus its photos, use `create_item_with_images`:
     "photoType": "item",
     "privacyLevel": "normal",
     "confidence": "medium",
-    "notes": "Quantity defaults to one because the user did not mention a count."
+    "notes": "Quantity defaults to one because the user did not mention a count.",
+    "generateAiSuggestions": true
   }
 }
 ```
@@ -1405,9 +1414,11 @@ entry per image:
 ```
 
 The result includes `photoId`, `uploadSessionId`, source media details, and a
-derivative status/note. Agents should report the useful human part: where the
-image was attached, what caption/type/privacy they chose, and whether display
-derivatives are ready or still need review.
+derivative status/note. When `generateAiSuggestions` is true, it can also
+include `aiReview.status`, `aiJobIds`, `suggestionIds`, and queued suggestions.
+Agents should report the useful human part: where the image was attached, what
+caption/type/privacy they chose, whether display derivatives are ready, and
+whether photo review suggestions were queued.
 
 Use `upload_evidence_file` for non-image media or when the agent has a local
 file and should keep the storage PUT in the local process. Use

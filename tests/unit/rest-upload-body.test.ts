@@ -30,7 +30,7 @@ describe("parseRestApiBody", () => {
 
   it("turns raw image bytes into the one-call photo upload body", async () => {
     const request = new Request(
-      "https://movingmanifest.test/api/v1/photos/upload?moveId=move1&room=Garage&caption=Shelf&capturedAt=12345",
+      "https://movingmanifest.test/api/v1/photos/upload?moveId=move1&room=Garage&caption=Shelf&capturedAt=12345&generateAiSuggestions=true",
       {
         method: "POST",
         headers: {
@@ -51,6 +51,7 @@ describe("parseRestApiBody", () => {
           room: "Garage",
           caption: "Shelf",
           capturedAt: "12345",
+          generateAiSuggestions: "true",
         },
       }),
     ).resolves.toEqual({
@@ -58,6 +59,7 @@ describe("parseRestApiBody", () => {
       room: "Garage",
       caption: "Shelf",
       capturedAt: 12345,
+      generateAiSuggestions: true,
       fileBase64: base64FromBytes(pngBytes),
       fileName: "garage-shelf.png",
       mimeType: "image/png",
@@ -84,6 +86,10 @@ describe("parseRestApiBody", () => {
       'Content-Disposition: form-data; name="photoType"',
       "",
       "room",
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="generateAiSuggestions"',
+      "",
+      "true",
       `--${boundary}`,
       'Content-Disposition: form-data; name="file"; filename="pantry.png"',
       "Content-Type: image/png",
@@ -115,6 +121,7 @@ describe("parseRestApiBody", () => {
       room: "Kitchen",
       caption: "Pantry shelf",
       photoType: "room",
+      generateAiSuggestions: true,
       fileBase64: base64FromBytes(multipartFileBytes),
       fileName: "pantry.png",
       mimeType: "image/png",

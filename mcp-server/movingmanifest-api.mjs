@@ -1057,6 +1057,7 @@ export async function uploadEvidenceImage(config, input) {
     notes: input.notes,
     verificationStatus: input.verificationStatus,
     capturedAt: input.capturedAt,
+    generateAiSuggestions: input.generateAiSuggestions,
   };
   const body = {
     ...metadata,

@@ -381,6 +381,14 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         });
       }
 
+      const aiReview = await maybeGeneratePhotoAiSuggestionsAfterUpload(
+        ctx,
+        args,
+        moveId,
+        photoId,
+        optionalBoolean(body.generateAiSuggestions)
+      );
+
       return restOk(
         {
           data: {
@@ -388,6 +396,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
             uploadSessionId,
             derivativeStatus,
             derivativeError,
+            aiReview,
             media: {
               source: media.source,
               fileName: media.fileName,
@@ -419,6 +428,44 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
       });
     }
   });
+}
+
+async function maybeGeneratePhotoAiSuggestionsAfterUpload(
+  ctx: ActionCtx,
+  args: RestRequestInput,
+  moveId: Id<"moves">,
+  photoId: Id<"itemPhotos">,
+  requested: boolean | undefined
+) {
+  if (!requested) return undefined;
+
+  const response = await ctx.runMutation(internal.restApi.handle, {
+    method: "POST",
+    path: `/moves/${moveId}/ai-photo-suggestions/generate`,
+    query: {},
+    authorization: args.authorization,
+    idempotencyKey: args.idempotencyKey
+      ? `${args.idempotencyKey}:ai-photo-suggestions`
+      : undefined,
+    body: { photoId },
+  });
+  const body = bodyObject(response.body);
+  if (response.status >= 200 && response.status < 300) {
+    const data = bodyObject(body.data);
+    return {
+      status: "queued" as const,
+      ...data,
+    };
+  }
+  const error = bodyObject(body.error);
+  const message = optionalString(error.message);
+
+  return {
+    status: "failed" as const,
+    error:
+      message ??
+      "Photo uploaded, but AI review suggestions were not queued.",
+  };
 }
 
 async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
@@ -1102,6 +1149,20 @@ function requiredNumber(value: unknown, message: string) {
 
 function optionalNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+  }
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  return undefined;
 }
 
 function requiredId<TableName extends TableNames>(value: unknown, message: string) {

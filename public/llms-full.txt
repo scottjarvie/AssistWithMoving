@@ -155,7 +155,10 @@ MovingManifest stores the original, reads dimensions, finalizes the evidence
 record, and creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
 server-side. For local `filePath`, the MCP helper sends the original image bytes
 directly instead of putting the file into a JSON/base64 payload. Do not ask users
-for dimensions, thumbnail sizes, or derivative files for ordinary photos.
+for dimensions, thumbnail sizes, or derivative files for ordinary photos. Set
+`generateAiSuggestions: true` when the uploaded photo should also enter AI
+review for possible item, box, or duplicate suggestions; report whether
+`aiReview.status` queued or failed.
 
 After uploading, tell the user the caption, room/item/box attachment, privacy
 choice, and any confidence or assumption you used so they can correct it without

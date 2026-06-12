@@ -56,6 +56,9 @@ Primary site: https://movingmanifest.com
   web-ready derivatives server-side; do not ask users for thumbnail sizes or
   dimensions. For local `filePath`, the MCP helper sends original image bytes
   directly; do not base64-wrap local files unless you already only have base64.
+  Set `generateAiSuggestions: true` when the user wants the app to place the
+  uploaded photo into AI review automatically; upload still succeeds if review
+  queueing fails or the key only has `photos/write`.
 - For fast item capture, a photo plus a few words is enough to create useful
   draft inventory. Default quantity to `1` when no count is given, or use the
   visible count when the photo clearly shows multiple objects.

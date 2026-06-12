@@ -318,7 +318,7 @@
       "post": {
         "summary": "Upload image evidence in one call",
         "operationId": "uploadPhotoEvidenceImage",
-        "description": "Default REST image upload path for agents. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives server-side.",
+        "description": "Default REST image upload path for agents. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, and can optionally queue AI photo-review suggestions.",
         "parameters": [
           {
             "name": "moveId",
@@ -350,6 +350,14 @@
             "description": "Photo type for raw image byte uploads.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "generateAiSuggestions",
+            "in": "query",
+            "description": "Set true for raw image byte uploads when the photo should also enter AI photo review. Requires inventory/write for queueing; upload can still succeed if review queueing fails.",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -742,7 +750,7 @@
       "PhotoDirectUpload": {
         "type": "object",
         "required": ["moveId"],
-        "description": "JSON shape for one-call JPEG, PNG, or WebP upload for agents. Provide exactly one of sourceUrl, dataUrl, or fileBase64. REST clients with local files can also use multipart/form-data or raw image bytes; MCP clients should use upload_evidence_image with filePath.",
+        "description": "JSON shape for one-call JPEG, PNG, or WebP upload for agents. Provide exactly one of sourceUrl, dataUrl, or fileBase64. REST clients with local files can also use multipart/form-data or raw image bytes; MCP clients should use upload_evidence_image with filePath. Set generateAiSuggestions true to queue photo-intake review suggestions after upload.",
         "properties": {
           "moveId": {
             "type": "string"
@@ -812,6 +820,10 @@
           },
           "capturedAt": {
             "type": "number"
+          },
+          "generateAiSuggestions": {
+            "type": "boolean",
+            "description": "When true, queue AI photo-intake suggestions after upload. The queueing step requires inventory/write in addition to photos/write; upload can still succeed if review queueing fails."
           }
         },
         "oneOf": [
@@ -829,7 +841,7 @@
       "PhotoMultipartUpload": {
         "type": "object",
         "required": ["moveId", "file"],
-        "description": "Multipart one-call JPEG, PNG, or WebP upload for REST agents. Use a file, image, or photo field for the binary image and normal form fields for metadata.",
+        "description": "Multipart one-call JPEG, PNG, or WebP upload for REST agents. Use a file, image, or photo field for the binary image and normal form fields for metadata. Include generateAiSuggestions=true to queue photo-intake review after upload.",
         "properties": {
           "moveId": {
             "type": "string"
@@ -874,6 +886,10 @@
           },
           "capturedAt": {
             "type": "number"
+          },
+          "generateAiSuggestions": {
+            "type": "boolean",
+            "description": "When true, queue AI photo-intake suggestions after upload."
           }
         }
       },
@@ -895,6 +911,31 @@
               },
               "derivativeError": {
                 "type": "string"
+              },
+              "aiReview": {
+                "type": "object",
+                "description": "Present only when generateAiSuggestions was requested. status is queued when suggestions were created or reused, and failed when upload succeeded but review queueing did not.",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["queued", "failed"]
+                  },
+                  "aiJobIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "suggestionIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                }
               },
               "media": {
                 "type": "object",

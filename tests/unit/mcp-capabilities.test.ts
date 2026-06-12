@@ -197,6 +197,7 @@ describe("MovingManifest MCP capability discovery", () => {
           expect.stringContaining("create_item_with_images"),
           expect.stringContaining("upload_evidence_image first"),
           expect.stringContaining("upload_evidence_images"),
+          expect.stringContaining("generateAiSuggestions true"),
           expect.stringContaining("Do not ask the user for dimensions"),
         ]),
       }),
@@ -250,6 +251,9 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(openapi.components.schemas.PhotoDirectUpload.description).toContain(
       "Provide exactly one of sourceUrl, dataUrl, or fileBase64"
     );
+    expect(openapi.components.schemas.PhotoDirectUpload.description).toContain(
+      "generateAiSuggestions true"
+    );
     expect(openapi.components.schemas.PhotoMultipartUpload.description).toContain(
       "Multipart one-call"
     );
@@ -257,13 +261,20 @@ describe("MovingManifest MCP capability discovery", () => {
       openapi.components.schemas.PhotoDirectUpload.properties?.fileBase64
         ?.description
     ).toContain("local image file");
+    expect(
+      openapi.components.schemas.PhotoDirectUpload.properties
+        ?.generateAiSuggestions?.description
+    ).toContain("queue AI photo-intake suggestions");
     expect(docs).toContain("one user photo should normally mean one");
     expect(docs).toContain("`upload_evidence_image` call");
     expect(docs).toContain("`upload_evidence_images`");
+    expect(docs).toContain("`generateAiSuggestions: true`");
     expect(llms).toContain("MCP agents should call");
     expect(llms).toContain("upload_evidence_images");
+    expect(llms).toContain("generateAiSuggestions: true");
     expect(fullLlms).toContain("One user photo should normally be one upload call");
     expect(fullLlms).toContain("upload_evidence_images");
+    expect(fullLlms).toContain("aiReview.status");
   });
 
   it("keeps capability ids unique for agent discovery", () => {

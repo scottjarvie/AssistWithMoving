@@ -27,8 +27,10 @@ const uploadMetadataFields = new Set([
   "fileName",
   "mimeType",
   "originalHash",
+  "generateAiSuggestions",
 ]);
 const numericUploadMetadataFields = new Set(["capturedAt"]);
+const booleanUploadMetadataFields = new Set(["generateAiSuggestions"]);
 
 export class RestApiBodyParseError extends Error {
   readonly status = 400;
@@ -136,7 +138,7 @@ function uploadFileFromFormData(form: FormData) {
 }
 
 function metadataFromFormData(form: FormData) {
-  const metadata: Record<string, string | number> = {};
+  const metadata: Record<string, string | number | boolean> = {};
   for (const [key, value] of form.entries()) {
     if (!uploadMetadataFields.has(key) || typeof value !== "string") {
       continue;
@@ -147,7 +149,7 @@ function metadataFromFormData(form: FormData) {
 }
 
 function metadataFromQuery(query: Record<string, string>) {
-  const metadata: Record<string, string | number> = {};
+  const metadata: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(query)) {
     if (!uploadMetadataFields.has(key)) {
       continue;
@@ -158,7 +160,7 @@ function metadataFromQuery(query: Record<string, string>) {
 }
 
 function applyMetadataValue(
-  metadata: Record<string, string | number>,
+  metadata: Record<string, string | number | boolean>,
   key: string,
   value: string,
 ) {
@@ -168,6 +170,15 @@ function applyMetadataValue(
     const numberValue = Number(trimmed);
     if (Number.isFinite(numberValue)) {
       metadata[key] = numberValue;
+    }
+    return;
+  }
+  if (booleanUploadMetadataFields.has(key)) {
+    const normalized = trimmed.toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+      metadata[key] = true;
+    } else if (["0", "false", "no", "off"].includes(normalized)) {
+      metadata[key] = false;
     }
     return;
   }

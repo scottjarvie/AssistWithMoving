@@ -388,6 +388,10 @@ const evidenceImageInputSchema = z.object({
   notes: z.string().optional(),
   verificationStatus: z.string().optional(),
   capturedAt: z.number().optional(),
+  generateAiSuggestions: z
+    .boolean()
+    .optional()
+    .describe("When true, ask MovingManifest to queue AI photo-intake suggestions after upload. Requires inventory/write in addition to photos/write."),
   idempotencyKey: z.string().optional(),
 });
 
@@ -412,6 +416,10 @@ const evidencePhotoDefaultsSchema = z.object({
   notes: z.string().optional(),
   verificationStatus: z.string().optional(),
   capturedAt: z.number().optional(),
+  generateAiSuggestions: z
+    .boolean()
+    .optional()
+    .describe("When true, queue AI photo-intake suggestions for uploaded item photos when the key also has inventory/write."),
 });
 
 const setupTransportZoneSchema = z.object({
@@ -1727,6 +1735,10 @@ export function registerTools(target, apiConfig) {
       notes: z.string().optional().describe("Optional reviewer notes or assumptions to show the user."),
       verificationStatus: z.string().optional(),
       capturedAt: z.number().optional(),
+      generateAiSuggestions: z
+        .boolean()
+        .optional()
+        .describe("When true, queue AI photo-intake suggestions after upload. Requires inventory/write in addition to photos/write; upload still returns the photo result if review queueing fails."),
       idempotencyKey: z.string().optional(),
       dryRun: z.boolean().optional(),
     },
@@ -1779,6 +1791,10 @@ export function registerTools(target, apiConfig) {
             notes: z.string().optional(),
             verificationStatus: z.string().optional(),
             capturedAt: z.number().optional(),
+            generateAiSuggestions: z
+              .boolean()
+              .optional()
+              .describe("Per-image override to queue AI photo-intake suggestions after this upload."),
             idempotencyKey: z.string().optional(),
           })
         )
@@ -1802,6 +1818,10 @@ export function registerTools(target, apiConfig) {
       notes: z.string().optional().describe("Default reviewer notes or assumptions to show the user."),
       verificationStatus: z.string().optional(),
       capturedAt: z.number().optional(),
+      generateAiSuggestions: z
+        .boolean()
+        .optional()
+        .describe("Default for all images: queue AI photo-intake suggestions after upload when the key also has inventory/write."),
       idempotencyKey: z.string().optional().describe("Optional batch prefix; each image gets a stable numbered key."),
       dryRun: z.boolean().optional(),
       continueOnError: z

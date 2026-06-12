@@ -1963,6 +1963,10 @@ describe("MovingManifest MCP API client", () => {
           photoId: "photo1",
           uploadSessionId: "session1",
           derivativeStatus: "ready",
+          aiReview: {
+            status: "queued",
+            suggestionIds: ["suggestion1"],
+          },
           media: {
             source: "sourceUrl",
             fileName: "garage-shelf.jpg",
@@ -1987,6 +1991,7 @@ describe("MovingManifest MCP API client", () => {
           photoType: "room",
           privacyLevel: "normal",
           visibilityScope: "moveCollaborators",
+          generateAiSuggestions: true,
           idempotencyKey: "upload-image-1",
         }
       )
@@ -1995,6 +2000,10 @@ describe("MovingManifest MCP API client", () => {
       uploadSessionId: "session1",
       derivativeStatus: "ready",
       derivativeNote: expect.stringContaining("web-ready image derivatives"),
+      aiReview: {
+        status: "queued",
+        suggestionIds: ["suggestion1"],
+      },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -2022,6 +2031,7 @@ describe("MovingManifest MCP API client", () => {
       visibilityScope: "moveCollaborators",
       source: "mcp",
       exifHandlingStatus: "pending",
+      generateAiSuggestions: true,
     });
   });
 
@@ -2072,6 +2082,7 @@ describe("MovingManifest MCP API client", () => {
             room: "Closet",
             caption: "Closet bin before packing",
             photoType: "item",
+            generateAiSuggestions: true,
             idempotencyKey: "local-image-1",
           }
         )
@@ -2105,6 +2116,7 @@ describe("MovingManifest MCP API client", () => {
       photoType: "item",
       source: "mcp",
       exifHandlingStatus: "pending",
+      generateAiSuggestions: "true",
     });
     expect(init).toEqual({
       method: "POST",
