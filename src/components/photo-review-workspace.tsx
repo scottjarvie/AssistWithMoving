@@ -40,11 +40,25 @@ type DisplayUrlState = Record<string, string>;
 
 type PhotoPrivacyLevel = Doc<"itemPhotos">["privacyLevel"];
 type PhotoVisibilityScope = Doc<"itemPhotos">["visibilityScope"];
-type ReviewPhoto = {
-  _id: Id<"itemPhotos">;
-  privacyLevel: PhotoPrivacyLevel;
-  visibilityScope: PhotoVisibilityScope;
-};
+type ReviewPhoto = Pick<
+  Doc<"itemPhotos">,
+  | "_id"
+  | "aiProcessed"
+  | "caption"
+  | "confidence"
+  | "derivativeStatus"
+  | "height"
+  | "mimeType"
+  | "photoType"
+  | "privacyLevel"
+  | "room"
+  | "source"
+  | "sizeBytes"
+  | "updatedAt"
+  | "verificationStatus"
+  | "visibilityScope"
+  | "width"
+>;
 
 const privacyOptions = [
   ["normal", "Normal"],
@@ -82,13 +96,17 @@ export function PhotoReviewWorkspace({
   const getOriginalDownloadUrl = useAction(api.photos.getOriginalDownloadUrl);
   const updateEvidence = useMutation(api.photos.updateEvidence);
   const [photoMessage, setPhotoMessage] = useState<string | null>(null);
-  const [privacyPhotoId, setPrivacyPhotoId] =
+  const [selectedPhotoId, setSelectedPhotoId] =
     useState<Id<"itemPhotos"> | null>(null);
   const filteredPhotos = useMemo(() => {
     return filterPhotosForReview(photos ?? [], filter);
   }, [filter, photos]);
   const activeFilter = photoReviewFilters.find((entry) => entry.key === filter);
   const visiblePhotos = useMemo(() => filteredPhotos.slice(0, 24), [filteredPhotos]);
+  const selectedPhoto =
+    visiblePhotos.find((photo) => photo._id === selectedPhotoId) ??
+    visiblePhotos[0] ??
+    null;
   const photoKey = visiblePhotos.map((photo) => photo._id).join("|");
   const [displayUrls, setDisplayUrls] = useState<DisplayUrlState>({});
 
@@ -227,119 +245,77 @@ export function PhotoReviewWorkspace({
               ))}
             </div>
           ) : filteredPhotos.length ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-              {visiblePhotos.map((photo) => {
-                const url = displayUrls[photo._id];
-                const privacyOpen = privacyPhotoId === photo._id;
-                const photoLabel = photo.caption ?? photo._id;
-                return (
-                  <div
-                    key={photo._id}
-                    className="overflow-hidden rounded-md border border-border bg-card"
-                  >
-                    <div className="aspect-square bg-muted">
-                      {url ? (
-                        // Vercel Image Optimization is intentionally bypassed;
-                        // photo delivery URLs are short-lived and provider-owned.
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={url}
-                          alt={photo.caption ?? `${photo.photoType} photo`}
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex size-full items-center justify-center text-muted-foreground">
-                          <ImageOff className="size-5" aria-hidden="true" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-2 p-2 text-xs">
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline">{photo.photoType}</Badge>
-                        <Badge
-                          variant={
-                            photo.verificationStatus === "needsReview"
-                              ? "secondary"
-                              : "outline"
-                          }
-                        >
-                          {photo.verificationStatus}
-                        </Badge>
-                      </div>
-                      <p className="truncate text-muted-foreground">
-                        {photo.caption ?? photo.room ?? "No caption"}
-                      </p>
-                      <Button
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
+                  {visiblePhotos.map((photo) => {
+                    const url = displayUrls[photo._id];
+                    const photoLabel = getPhotoLabel(photo);
+                    const selected = selectedPhoto?._id === photo._id;
+
+                    return (
+                      <button
+                        key={photo._id}
                         type="button"
-                        size="sm"
-                        variant={privacyOpen ? "secondary" : "outline"}
-                        className="w-full"
-                        aria-expanded={privacyOpen}
-                        aria-controls={`photo-privacy-${photo._id}`}
-                        onClick={() =>
-                          setPrivacyPhotoId((current) =>
-                            current === photo._id ? null : photo._id
-                          )
-                        }
+                        aria-pressed={selected}
+                        aria-label={`Review ${photoLabel}`}
+                        className={`overflow-hidden rounded-md border bg-card text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                          selected
+                            ? "border-primary shadow-sm"
+                            : "border-border hover:bg-muted/40"
+                        }`}
+                        onClick={() => setSelectedPhotoId(photo._id)}
                       >
-                        <ShieldCheck aria-hidden="true" />
-                        Privacy
-                      </Button>
-                      {privacyOpen ? (
-                        <div
-                          id={`photo-privacy-${photo._id}`}
-                          className="grid gap-1 rounded-md border border-border p-2"
-                        >
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2"
-                            value={photo.privacyLevel}
-                            aria-label={`Privacy level for ${photoLabel}`}
-                            onChange={(event) =>
-                              void updatePhotoPrivacy(photo, {
-                                privacyLevel: event.target
-                                  .value as PhotoPrivacyLevel,
-                              })
-                            }
-                          >
-                            {privacyOptions.map(([value, label]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            className="h-8 rounded-md border border-input bg-background px-2"
-                            value={photo.visibilityScope}
-                            aria-label={`Visibility scope for ${photoLabel}`}
-                            onChange={(event) =>
-                              void updatePhotoPrivacy(photo, {
-                                visibilityScope: event.target
-                                  .value as PhotoVisibilityScope,
-                              })
-                            }
-                          >
-                            {visibilityOptions.map(([value, label]) => (
-                              <option key={value} value={value}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="w-full"
-                            onClick={() => void downloadOriginal(photo)}
-                          >
-                            <Download aria-hidden="true" />
-                            Original
-                          </Button>
+                        <div className="aspect-square bg-muted">
+                          {url ? (
+                            // Vercel Image Optimization is intentionally bypassed;
+                            // photo delivery URLs are short-lived and provider-owned.
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={url}
+                              alt={photo.caption ?? `${photo.photoType} photo`}
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex size-full items-center justify-center text-muted-foreground">
+                              <ImageOff className="size-5" aria-hidden="true" />
+                            </div>
+                          )}
                         </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
+                        <div className="space-y-2 p-2 text-xs">
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline">{photo.photoType}</Badge>
+                            <Badge
+                              variant={
+                                photo.verificationStatus === "needsReview"
+                                  ? "secondary"
+                                  : "outline"
+                              }
+                            >
+                              {photo.verificationStatus}
+                            </Badge>
+                          </div>
+                          <p className="truncate text-muted-foreground">
+                            {photoLabel}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {filteredPhotos.length > visiblePhotos.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing 24 of {filteredPhotos.length} matching photos.
+                  </p>
+                ) : null}
+              </div>
+
+              <PhotoReviewInspector
+                photo={selectedPhoto}
+                displayUrl={selectedPhoto ? displayUrls[selectedPhoto._id] : null}
+                onDownloadOriginal={downloadOriginal}
+                onPrivacyChange={updatePhotoPrivacy}
+              />
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
@@ -350,6 +326,175 @@ export function PhotoReviewWorkspace({
       </Card>
     </section>
   );
+}
+
+function PhotoReviewInspector({
+  photo,
+  displayUrl,
+  onDownloadOriginal,
+  onPrivacyChange,
+}: {
+  photo: ReviewPhoto | null;
+  displayUrl?: string | null;
+  onDownloadOriginal: (photo: ReviewPhoto) => Promise<void>;
+  onPrivacyChange: (
+    photo: ReviewPhoto,
+    patch:
+      | { privacyLevel: PhotoPrivacyLevel }
+      | { visibilityScope: PhotoVisibilityScope }
+  ) => Promise<void>;
+}) {
+  if (!photo) {
+    return (
+      <aside className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+        Select a photo to review privacy, visibility, and original download
+        access.
+      </aside>
+    );
+  }
+
+  const photoLabel = getPhotoLabel(photo);
+
+  return (
+    <aside className="rounded-md border border-border p-3 xl:sticky xl:top-4 xl:self-start">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-medium">Selected photo</h3>
+          <p className="mt-1 max-w-[28rem] truncate text-xs text-muted-foreground">
+            {photoLabel}
+          </p>
+        </div>
+        <Badge
+          variant={photo.verificationStatus === "needsReview" ? "secondary" : "outline"}
+        >
+          {photo.verificationStatus}
+        </Badge>
+      </div>
+
+      <div className="mt-3 aspect-video overflow-hidden rounded-md bg-muted">
+        {displayUrl ? (
+          // Vercel Image Optimization is intentionally bypassed;
+          // photo delivery URLs are short-lived and provider-owned.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={displayUrl}
+            alt={photo.caption ?? `${photo.photoType} photo`}
+            className="size-full object-cover"
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground">
+            <ImageOff className="size-5" aria-hidden="true" />
+          </div>
+        )}
+      </div>
+
+      <dl className="mt-3 grid gap-2 text-xs">
+        <PhotoDetail label="Type" value={photo.photoType} />
+        <PhotoDetail label="Room" value={photo.room ?? "Unassigned"} />
+        <PhotoDetail label="Source" value={photo.source} />
+        <PhotoDetail
+          label="Processing"
+          value={photo.aiProcessed ? "AI processed" : "Awaiting AI review"}
+        />
+        <PhotoDetail
+          label="Dimensions"
+          value={
+            photo.width && photo.height
+              ? `${photo.width} x ${photo.height}`
+              : "Unknown"
+          }
+        />
+        <PhotoDetail label="Size" value={formatBytes(photo.sizeBytes)} />
+        <PhotoDetail label="Confidence" value={photo.confidence} />
+        <PhotoDetail
+          label="Web versions"
+          value={photo.derivativeStatus ?? "queued"}
+        />
+      </dl>
+
+      <div className="mt-3 grid gap-2">
+        <label className="grid gap-1 text-xs font-medium">
+          Privacy
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 font-normal"
+            value={photo.privacyLevel}
+            aria-label={`Privacy level for ${photoLabel}`}
+            onChange={(event) =>
+              void onPrivacyChange(photo, {
+                privacyLevel: event.target.value as PhotoPrivacyLevel,
+              })
+            }
+          >
+            {privacyOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium">
+          Visibility
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 font-normal"
+            value={photo.visibilityScope}
+            aria-label={`Visibility scope for ${photoLabel}`}
+            onChange={(event) =>
+              void onPrivacyChange(photo, {
+                visibilityScope: event.target.value as PhotoVisibilityScope,
+              })
+            }
+          >
+            {visibilityOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full"
+          onClick={() => void onDownloadOriginal(photo)}
+        >
+          <Download aria-hidden="true" />
+          Original
+        </Button>
+      </div>
+    </aside>
+  );
+}
+
+function PhotoDetail({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-md bg-muted/40 px-2 py-1.5">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="max-w-[12rem] truncate text-right font-medium">
+        {value || "Unknown"}
+      </dd>
+    </div>
+  );
+}
+
+function getPhotoLabel(photo: Pick<ReviewPhoto, "_id" | "caption" | "photoType" | "room">) {
+  return photo.caption ?? photo.room ?? `${photo.photoType} photo`;
+}
+
+function formatBytes(value?: number) {
+  if (!value || value <= 0) {
+    return "Unknown";
+  }
+
+  if (value < 1024) {
+    return `${value} B`;
+  }
+
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function PhotoRoomSweepPanel({

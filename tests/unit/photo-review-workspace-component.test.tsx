@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 
@@ -49,14 +49,55 @@ vi.mock("convex/react", () => ({
           visibilityScope: "moveCollaborators",
           verificationStatus: "needsReview",
           aiProcessed: false,
+          confidence: "medium",
+          derivativeStatus: "ready",
+          mimeType: "image/jpeg",
+          sizeBytes: 2048,
+          source: "web",
+          width: 1600,
+          height: 1200,
+          uploadedByUserId: "user_1" as Id<"users">,
+          documentationProfileTypes: [],
+          originalStorageKey: "photo_1.jpg",
+          originalBucket: "photos",
+          derivativeRefs: {},
+          exifHandlingStatus: "stripped",
           createdAt: 1,
           updatedAt: 1,
+        } as unknown as Doc<"itemPhotos">,
+        {
+          _id: "photo_2" as Id<"itemPhotos">,
+          _creationTime: 2,
+          householdId: "household_123" as Id<"households">,
+          moveId: "move_123" as Id<"moves">,
+          photoType: "room",
+          caption: "Garage shelf photo",
+          room: "Garage",
+          privacyLevel: "claimOnly",
+          visibilityScope: "documentationScoped",
+          verificationStatus: "verified",
+          aiProcessed: true,
+          confidence: "high",
+          derivativeStatus: "ready",
+          mimeType: "image/jpeg",
+          sizeBytes: 1048576,
+          source: "api",
+          width: 2400,
+          height: 1800,
+          uploadedByUserId: "user_1" as Id<"users">,
+          documentationProfileTypes: [],
+          originalStorageKey: "photo_2.jpg",
+          originalBucket: "photos",
+          derivativeRefs: {},
+          exifHandlingStatus: "stripped",
+          createdAt: 2,
+          updatedAt: 2,
         } as unknown as Doc<"itemPhotos">,
       ];
     }
     if (query === apiMock.photos.evidenceSummary) {
       return {
-        photoCount: 1,
+        photoCount: 2,
         unassignedCount: 0,
         needsReviewCount: 1,
         highValueWithoutPhotoCount: 0,
@@ -69,7 +110,11 @@ vi.mock("convex/react", () => ({
 import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
 
 describe("PhotoReviewWorkspace", () => {
-  it("keeps photo review cards scan-first until privacy controls are opened", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps photo cards scan-first and moves review controls into one selected panel", async () => {
     const user = userEvent.setup();
 
     render(
@@ -79,15 +124,14 @@ describe("PhotoReviewWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("Kitchen table photo")).toBeInTheDocument();
-    expect(screen.getByText("needsReview")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Privacy level for Kitchen table photo")
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Original" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Privacy" }));
-
+      screen.getByRole("button", { name: "Review Kitchen table photo" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Review Garage shelf photo" })
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("needsReview").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Selected photo" })).toBeInTheDocument();
     expect(
       screen.getByLabelText("Privacy level for Kitchen table photo")
     ).toBeInTheDocument();
@@ -95,6 +139,16 @@ describe("PhotoReviewWorkspace", () => {
       screen.getByLabelText("Visibility scope for Kitchen table photo")
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Original" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Privacy" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Review Garage shelf photo" }));
+
+    expect(
+      screen.getByLabelText("Privacy level for Garage shelf photo")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Visibility scope for Garage shelf photo")
+    ).toBeInTheDocument();
 
     await waitFor(() => {
       expect(photoData.getDisplayUrl).toHaveBeenCalledWith(
