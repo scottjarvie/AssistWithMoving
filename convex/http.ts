@@ -23,6 +23,7 @@ const allowedDirectImageMimeTypes = new Set([
   "image/png",
   "image/webp",
 ]);
+const maxDirectImageUploadBytes = 25 * 1024 * 1024;
 const directImageFileFieldNames = new Set(["file", "image", "photo"]);
 const directImageMetadataFields = new Set([
   "moveId",
@@ -141,6 +142,18 @@ const directImageUploadHttpAction = httpAction(async (ctx, request) => {
   const query = Object.fromEntries(url.searchParams.entries());
   const authorization = request.headers.get("authorization") ?? undefined;
   const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
+
+  if (!hasBearer(authorization)) {
+    return Response.json(
+      {
+        error: {
+          code: "unauthorized",
+          message: "Use a Bearer API key.",
+        },
+      },
+      { status: 401 },
+    );
+  }
 
   let parsed: ParsedDirectImageUpload;
   try {
@@ -563,6 +576,9 @@ function finalizeDirectImageUploadBody({
   if (bytes.byteLength <= 0) {
     throw new Error("Image upload body was empty.");
   }
+  if (bytes.byteLength > maxDirectImageUploadBytes) {
+    throw new Error("Images must be under 25 MB.");
+  }
   if (!mimeType || !allowedDirectImageMimeTypes.has(mimeType)) {
     throw new Error("Direct image upload accepts JPEG, PNG, or WebP images.");
   }
@@ -860,6 +876,10 @@ function stringRecord(value: Record<string, unknown>) {
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
+}
+
+function hasBearer(authorization: string | undefined) {
+  return /^Bearer\s+.+$/i.test(authorization ?? "");
 }
 
 function bytesToArrayBuffer(bytes: Uint8Array) {
