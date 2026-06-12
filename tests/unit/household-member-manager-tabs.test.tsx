@@ -75,6 +75,11 @@ describe("HouseholdMemberManager task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Review current household access before changing roles or disabling a collaborator.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Scott Jarvie")).toHaveLength(2);
     expect(screen.getAllByText("Packing helper")).toHaveLength(2);
     expect(
@@ -107,6 +112,11 @@ describe("HouseholdMemberManager task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Invite one collaborator by email and choose the least access needed for their job.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByLabelText("Add collaborator email for Jarvie household"),
     ).toBeInTheDocument();

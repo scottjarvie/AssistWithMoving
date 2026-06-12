@@ -15,6 +15,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 type MovePerson = Doc<"movePeople">;
@@ -49,9 +50,21 @@ const movePersonRoleOptions: { value: MovePersonRole; label: string }[] = [
 ];
 
 const peopleTasks = [
-  { value: "contacts", label: "Contacts" },
-  { value: "add", label: "Add contact" },
+  {
+    value: "contacts",
+    label: "Contacts",
+    description:
+      "Review the people, offices, movers, helpers, and claim contacts already tied to this move.",
+  },
+  {
+    value: "add",
+    label: "Add contact",
+    description:
+      "Add one new move contact without mixing the form into the active contact list.",
+  },
 ] as const;
+
+type PeopleTask = (typeof peopleTasks)[number]["value"];
 
 export function MovePeopleManager({
   householdId,
@@ -75,6 +88,8 @@ export function MovePeopleManager({
   const [message, setMessage] = useState<string | null>(null);
   const [editingPersonId, setEditingPersonId] =
     useState<Id<"movePeople"> | null>(null);
+  const [activePeopleTask, setActivePeopleTask] =
+    useState<PeopleTask>("contacts");
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,16 +154,16 @@ export function MovePeopleManager({
           </p>
         ) : null}
 
-        <Tabs defaultValue="contacts" className="gap-4">
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="min-w-max" aria-label="Move contact tasks">
-              {peopleTasks.map((task) => (
-                <TabsTrigger key={task.value} value={task.value}>
-                  {task.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+        <Tabs
+          value={activePeopleTask}
+          onValueChange={(value) => setActivePeopleTask(value as PeopleTask)}
+          className="gap-4"
+        >
+          <MoveWorkspaceTabList
+            tabs={[...peopleTasks]}
+            activeValue={activePeopleTask}
+            ariaLabel="Move contact tasks"
+          />
 
           <TabsContent value="contacts">
             {loading ? (

@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,12 +17,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 const planningDefaultTabs = [
-  { value: "defaults", label: "Defaults" },
-  { value: "privacy", label: "Privacy" },
+  {
+    value: "defaults",
+    label: "Defaults",
+    description:
+      "Review the move tags that guide packing, transport, evidence, packets, and AI suggestions.",
+  },
+  {
+    value: "privacy",
+    label: "Privacy",
+    description:
+      "Check which defaults keep values, serials, notes, and sensitive photos out of helper-safe views.",
+  },
 ] as const;
+
+type PlanningDefaultTab = (typeof planningDefaultTabs)[number]["value"];
 
 export function PlanningDefaultsPanel({
   householdId,
@@ -40,6 +53,8 @@ export function PlanningDefaultsPanel({
 
   const [ensuringDefaults, setEnsuringDefaults] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [activePlanningDefaultTab, setActivePlanningDefaultTab] =
+    useState<PlanningDefaultTab>("defaults");
 
   const loadingPlanningDefaults = moveId && planningDefaults === undefined;
 
@@ -90,17 +105,18 @@ export function PlanningDefaultsPanel({
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="defaults" className="gap-4">
-          <TabsList
-            className="w-full justify-start overflow-x-auto sm:w-fit"
-            aria-label="Planning defaults tasks"
-          >
-            {planningDefaultTabs.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <Tabs
+          value={activePlanningDefaultTab}
+          onValueChange={(value) =>
+            setActivePlanningDefaultTab(value as PlanningDefaultTab)
+          }
+          className="gap-4"
+        >
+          <MoveWorkspaceTabList
+            tabs={[...planningDefaultTabs]}
+            activeValue={activePlanningDefaultTab}
+            ariaLabel="Planning defaults tasks"
+          />
 
           <TabsContent value="defaults">
             {loadingPlanningDefaults ? (

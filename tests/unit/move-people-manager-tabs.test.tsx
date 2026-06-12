@@ -67,6 +67,11 @@ describe("MovePeopleManager task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Review the people, offices, movers, helpers, and claim contacts already tied to this move.",
+      ),
+    ).toBeInTheDocument();
     const contactCards = screen.getByRole("list", {
       name: "Move contact cards",
     });
@@ -94,6 +99,11 @@ describe("MovePeopleManager task tabs", () => {
 
     await user.click(screen.getByRole("tab", { name: "Add contact" }));
 
+    expect(
+      screen.getByText(
+        "Add one new move contact without mixing the form into the active contact list.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Contact name")).toBeInTheDocument();
     expect(screen.getByLabelText("Contact role")).toBeInTheDocument();
     expect(screen.getByLabelText("Contact notes")).toBeInTheDocument();

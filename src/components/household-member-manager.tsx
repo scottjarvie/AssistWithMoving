@@ -6,6 +6,7 @@ import { Pencil, ShieldCheck, UserPlus, UsersRound, X } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -63,9 +64,21 @@ const roleLabels = {
 } satisfies Record<ManageableRole, string>;
 
 const memberAccessTasks = [
-  { value: "members", label: "Members" },
-  { value: "invite", label: "Invite" },
+  {
+    value: "members",
+    label: "Members",
+    description:
+      "Review current household access before changing roles or disabling a collaborator.",
+  },
+  {
+    value: "invite",
+    label: "Invite",
+    description:
+      "Invite one collaborator by email and choose the least access needed for their job.",
+  },
 ] as const;
+
+type MemberAccessTask = (typeof memberAccessTasks)[number]["value"];
 
 export function HouseholdMemberManager({
   households,
@@ -137,6 +150,8 @@ function HouseholdMemberPanel({
   const [managingMemberId, setManagingMemberId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeMemberAccessTask, setActiveMemberAccessTask] =
+    useState<MemberAccessTask>("members");
   const memberRows = members as HouseholdMemberRow[] | undefined;
 
   async function handleAddMember(event: FormEvent<HTMLFormElement>) {
@@ -254,19 +269,18 @@ function HouseholdMemberPanel({
               </p>
             ) : null}
 
-            <Tabs defaultValue="members" className="gap-4">
-              <div className="overflow-x-auto pb-1">
-                <TabsList
-                  className="min-w-max"
-                  aria-label={`${householdName} access tasks`}
-                >
-                  {memberAccessTasks.map((task) => (
-                    <TabsTrigger key={task.value} value={task.value}>
-                      {task.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
+            <Tabs
+              value={activeMemberAccessTask}
+              onValueChange={(value) =>
+                setActiveMemberAccessTask(value as MemberAccessTask)
+              }
+              className="gap-4"
+            >
+              <MoveWorkspaceTabList
+                tabs={[...memberAccessTasks]}
+                activeValue={activeMemberAccessTask}
+                ariaLabel={`${householdName} access tasks`}
+              />
 
               <TabsContent value="members">
                 {members === undefined ? (

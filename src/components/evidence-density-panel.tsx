@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { AlertTriangle, ImagePlus, ListChecks, ShieldCheck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
@@ -35,16 +37,40 @@ const priorityClasses: Record<EvidencePriority, string> = {
 };
 
 const coverageTasks = [
-  { value: "gaps", label: "Gaps" },
-  { value: "scores", label: "Scores" },
-  { value: "patterns", label: "Patterns" },
-  { value: "shortcuts", label: "Shortcuts" },
+  {
+    value: "gaps",
+    label: "Gaps",
+    description:
+      "Start with the highest-risk items missing photos, values, receipts, serials, or box links.",
+  },
+  {
+    value: "scores",
+    label: "Scores",
+    description:
+      "Check evidence coverage totals before deciding whether claim packets are strong enough.",
+  },
+  {
+    value: "patterns",
+    label: "Patterns",
+    description:
+      "Find repeated evidence gaps so one review pass can improve many inventory records.",
+  },
+  {
+    value: "shortcuts",
+    label: "Shortcuts",
+    description:
+      "Jump to the source workspace for the missing inventory, photo, box, or packet inputs.",
+  },
 ] as const;
+
+type CoverageTask = (typeof coverageTasks)[number]["value"];
 
 export function EvidenceDensityPanel({
   householdId,
   moveId,
 }: EvidenceDensityPanelProps) {
+  const [activeCoverageTask, setActiveCoverageTask] =
+    useState<CoverageTask>("gaps");
   const summary = useQuery(
     api.evidenceDensity.summaryForMove,
     householdId && moveId ? { householdId, moveId } : "skip"
@@ -93,19 +119,18 @@ export function EvidenceDensityPanel({
             </div>
           </div>
         ) : (
-          <Tabs defaultValue="gaps" className="gap-4">
-            <div className="overflow-x-auto pb-1">
-              <TabsList
-                className="min-w-max"
-                aria-label="Evidence coverage tasks"
-              >
-                {coverageTasks.map((task) => (
-                  <TabsTrigger key={task.value} value={task.value}>
-                    {task.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
+          <Tabs
+            value={activeCoverageTask}
+            onValueChange={(value) =>
+              setActiveCoverageTask(value as CoverageTask)
+            }
+            className="gap-4"
+          >
+            <MoveWorkspaceTabList
+              tabs={[...coverageTasks]}
+              activeValue={activeCoverageTask}
+              ariaLabel="Evidence coverage tasks"
+            />
 
             <TabsContent value="gaps" className="space-y-3">
               <TopEvidenceGaps items={summary.topGaps} />

@@ -75,6 +75,11 @@ describe("EvidenceDensityPanel task tabs", () => {
       "data-state",
       "active"
     );
+    expect(
+      screen.getByText(
+        "Start with the highest-risk items missing photos, values, receipts, serials, or box links.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Top evidence gaps")).toBeInTheDocument();
     expect(screen.getByText("Vintage camera kit")).toBeInTheDocument();
     expect(screen.getByText("High")).toBeInTheDocument();
@@ -83,16 +88,31 @@ describe("EvidenceDensityPanel task tabs", () => {
     expect(screen.queryByText("Go fix coverage inputs")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Scores" }));
+    expect(
+      screen.getByText(
+        "Check evidence coverage totals before deciding whether claim packets are strong enough.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Average score")).toBeInTheDocument();
     expect(screen.getByText("Priority average")).toBeInTheDocument();
     expect(screen.queryByText("Vintage camera kit")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Patterns" }));
+    expect(
+      screen.getByText(
+        "Find repeated evidence gaps so one review pass can improve many inventory records.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Most common gaps")).toBeInTheDocument();
     expect(screen.getByText("Value documented")).toBeInTheDocument();
     expect(screen.queryByText("Vintage camera kit")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Shortcuts" }));
+    expect(
+      screen.getByText(
+        "Jump to the source workspace for the missing inventory, photo, box, or packet inputs.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Go fix coverage inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",

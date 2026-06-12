@@ -66,6 +66,11 @@ describe("PlanningDefaultsPanel task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Review the move tags that guide packing, transport, evidence, packets, and AI suggestions.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("First night")).toBeInTheDocument();
     expect(screen.getByText("Keep these easy to reach.")).toBeInTheDocument();
     expect(screen.queryByText("Privacy posture")).not.toBeInTheDocument();
@@ -82,6 +87,11 @@ describe("PlanningDefaultsPanel task tabs", () => {
       "data-state",
       "active",
     );
+    expect(
+      screen.getByText(
+        "Check which defaults keep values, serials, notes, and sensitive photos out of helper-safe views.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Privacy posture")).toBeInTheDocument();
     expect(
       screen.getByText(/Values, serials, private notes, and sensitive photos/),
