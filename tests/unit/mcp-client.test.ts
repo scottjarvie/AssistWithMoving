@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import {
   addItemsToBox,
@@ -59,6 +62,7 @@ import {
   setupMove,
   startPhotoUpload,
   suggestAssignments,
+  uploadEvidenceFile,
   updateDocumentationProfile,
   updateItem,
   updateMovePerson,
@@ -1698,6 +1702,123 @@ describe("MovingManifest MCP API client", () => {
         }),
       }
     );
+  });
+
+  it("uploads a local evidence file through the convenience MCP helper", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const filePath = path.join(tempDir, "garage-shelf.png");
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    await writeFile(filePath, pngBytes);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: {
+            uploadSessionId: "session1",
+            uploadUrl: "https://b2.test/original",
+            headers: { "Content-Type": "image/png" },
+            derivativeUploads: [],
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers(),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({ data: { photoId: "photo1" } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await expect(
+        uploadEvidenceFile(
+          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          {
+            moveId: "move1",
+            filePath,
+            room: "Garage",
+            caption: "Garage shelf before packing",
+            photoType: "room",
+            privacyLevel: "normal",
+            visibilityScope: "moveCollaborators",
+          }
+        )
+      ).resolves.toMatchObject({
+        photoId: "photo1",
+        uploadSessionId: "session1",
+        derivativeStatus: "pending",
+        media: {
+          fileName: "garage-shelf.png",
+          mimeType: "image/png",
+          sizeBytes: pngBytes.length,
+          width: 2,
+          height: 3,
+        },
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/uploads/init"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          room: "Garage",
+          mimeType: "image/png",
+          sizeBytes: pngBytes.length,
+        }),
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "https://b2.test/original", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": String(pngBytes.length),
+      },
+      body: pngBytes,
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      new URL("https://example.com/api/v1/photos/finalize"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        }),
+      })
+    );
+    const finalizeBody = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(finalizeBody).toMatchObject({
+      moveId: "move1",
+      width: 2,
+      height: 3,
+      originalHash: expect.any(String),
+      caption: "Garage shelf before packing",
+      photoType: "room",
+      privacyLevel: "normal",
+      visibilityScope: "moveCollaborators",
+      source: "mcp",
+      exifHandlingStatus: "pending",
+      uploadSessionId: "session1",
+    });
   });
 
   it("lists, creates, updates, and archives documentation profiles through the API", async () => {

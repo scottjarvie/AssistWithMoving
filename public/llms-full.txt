@@ -244,6 +244,7 @@ Useful write tools:
 - `setup_move`
 - `create_move_space`
 - `batch_upsert_items`
+- `upload_evidence_file`
 - `start_photo_upload`
 - `finalize_photo_upload`
 - `upsert_sale_listing`

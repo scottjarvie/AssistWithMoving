@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 export { getApiCapabilities } from "./capabilities.mjs";
 
@@ -772,6 +774,113 @@ export async function startPhotoUpload(config, input) {
   });
 }
 
+export async function uploadEvidenceFile(config, input) {
+  const media = await loadEvidenceMedia(input);
+  const mimeType = normalizeMimeType(input.mimeType ?? media.mimeType);
+  if (!mimeType) {
+    throw new Error(
+      "Could not determine MIME type. Pass mimeType for files without a known image, audio, or video extension."
+    );
+  }
+
+  const dimensions = imageDimensionsFromBuffer(media.bytes, mimeType);
+  const width = input.width ?? dimensions?.width;
+  const height = input.height ?? dimensions?.height;
+  if (mimeType.startsWith("image/") && (!width || !height)) {
+    throw new Error(
+      "Image uploads require width and height. Pass width and height if they cannot be read from the file."
+    );
+  }
+
+  const originalHash =
+    input.originalHash ?? createHash("sha256").update(media.bytes).digest("hex");
+  const sessionBody = {
+    moveId: input.moveId,
+    itemId: input.itemId,
+    boxId: input.boxId,
+    spaceId: input.spaceId,
+    transportResourceId: input.transportResourceId,
+    transportZoneId: input.transportZoneId,
+    room: input.room,
+    mimeType,
+    sizeBytes: media.bytes.byteLength,
+  };
+  const finalizeBody = {
+    moveId: input.moveId,
+    width,
+    height,
+    originalHash,
+    caption: input.caption,
+    photoType: input.photoType,
+    privacyLevel: input.privacyLevel,
+    visibilityScope: input.visibilityScope,
+    source: input.source ?? "mcp",
+    exifHandlingStatus: input.exifHandlingStatus ?? "pending",
+    confidence: input.confidence,
+    notes: input.notes,
+    verificationStatus: input.verificationStatus,
+    capturedAt: input.capturedAt,
+  };
+
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      media: {
+        source: media.source,
+        fileName: media.fileName,
+        mimeType,
+        sizeBytes: media.bytes.byteLength,
+        width,
+        height,
+        originalHash,
+      },
+      request: {
+        start: { method: "POST", path: "/uploads/init", body: sessionBody },
+        upload: {
+          method: "PUT",
+          note: "Dry run does not request a presigned URL or upload bytes.",
+        },
+        finalize: { method: "POST", path: "/photos/finalize", body: finalizeBody },
+      },
+      derivativeNote:
+        "This helper uploads the original evidence file only. MovingManifest stores the original immediately; image derivatives may remain pending unless another client supplies them or server-side derivative processing is added.",
+    };
+  }
+
+  const session = await startPhotoUpload(config, sessionBody);
+  const data = session.data ?? session;
+  await putEvidenceBytes({
+    uploadUrl: data.uploadUrl,
+    contentType: data.headers?.["Content-Type"] ?? mimeType,
+    bytes: media.bytes,
+  });
+
+  const finalizeResponse = await finalizePhotoUpload(config, {
+    ...finalizeBody,
+    uploadSessionId: data.uploadSessionId,
+  });
+
+  return {
+    photoId: finalizeResponse.data?.photoId ?? finalizeResponse.photoId,
+    uploadSessionId: data.uploadSessionId,
+    media: {
+      source: media.source,
+      fileName: media.fileName,
+      mimeType,
+      sizeBytes: media.bytes.byteLength,
+      width,
+      height,
+      originalHash,
+    },
+    derivativeStatus:
+      data.derivativeUploads && data.derivativeUploads.length > 0
+        ? "client-supplied"
+        : "pending",
+    derivativeNote:
+      "Original evidence was uploaded and finalized. This MCP helper does not generate image derivatives; display/AI derivatives may remain pending until a derivative processor or derivative-capable client supplies them.",
+  };
+}
+
 export async function finalizePhotoUpload(config, input) {
   if (input.dryRun) {
     return {
@@ -798,6 +907,217 @@ export async function attachPhoto(config, input) {
     path: `/photos/${input.photoId}/attach`,
     body: input,
   });
+}
+
+async function loadEvidenceMedia(input) {
+  if (Boolean(input.filePath) === Boolean(input.sourceUrl)) {
+    throw new Error("Provide exactly one of filePath or sourceUrl.");
+  }
+
+  if (input.filePath) {
+    const bytes = await readFile(input.filePath);
+    return {
+      bytes,
+      source: "filePath",
+      fileName: input.fileName ?? path.basename(input.filePath),
+      mimeType:
+        input.mimeType ??
+        sniffMimeType(bytes) ??
+        mimeTypeForFilename(input.fileName ?? input.filePath),
+    };
+  }
+
+  const response = await fetch(input.sourceUrl);
+  if (!response.ok) {
+    throw new Error(`Could not download sourceUrl: HTTP ${response.status}.`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const bytes = Buffer.from(arrayBuffer);
+  const url = new URL(input.sourceUrl);
+  return {
+    bytes,
+    source: "sourceUrl",
+    fileName: input.fileName ?? (path.basename(url.pathname) || "evidence"),
+    mimeType:
+      input.mimeType ??
+      normalizeMimeType(response.headers.get("content-type") ?? "") ??
+      sniffMimeType(bytes) ??
+      mimeTypeForFilename(url.pathname),
+  };
+}
+
+async function putEvidenceBytes({ uploadUrl, contentType, bytes }) {
+  const response = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType,
+      "Content-Length": String(bytes.byteLength),
+    },
+    body: bytes,
+  });
+  if (!response.ok) {
+    throw new Error(`Storage upload failed with HTTP ${response.status}.`);
+  }
+}
+
+function normalizeMimeType(mimeType) {
+  return mimeType.trim().toLowerCase().split(";")[0] || undefined;
+}
+
+function mimeTypeForFilename(filename) {
+  switch (path.extname(filename).toLowerCase()) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".png":
+      return "image/png";
+    case ".webp":
+      return "image/webp";
+    case ".mp3":
+      return "audio/mpeg";
+    case ".m4a":
+      return "audio/mp4";
+    case ".aac":
+      return "audio/aac";
+    case ".wav":
+      return "audio/wav";
+    case ".weba":
+      return "audio/webm";
+    case ".ogg":
+      return "audio/ogg";
+    case ".mp4":
+      return "video/mp4";
+    case ".mov":
+      return "video/quicktime";
+    case ".webm":
+      return "video/webm";
+    default:
+      return undefined;
+  }
+}
+
+function sniffMimeType(bytes) {
+  if (bytes.length >= 12) {
+    if (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47
+    ) {
+      return "image/png";
+    }
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+      return "image/jpeg";
+    }
+    if (
+      bytes.toString("ascii", 0, 4) === "RIFF" &&
+      bytes.toString("ascii", 8, 12) === "WEBP"
+    ) {
+      return "image/webp";
+    }
+    if (bytes.toString("ascii", 4, 8) === "ftyp") {
+      return bytes.toString("ascii", 8, 12) === "qt  "
+        ? "video/quicktime"
+        : "video/mp4";
+    }
+  }
+  if (bytes.length >= 3 && bytes.toString("ascii", 0, 3) === "ID3") {
+    return "audio/mpeg";
+  }
+  if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF") {
+    const riffType = bytes.toString("ascii", 8, 12);
+    if (riffType === "WAVE") return "audio/wav";
+  }
+  return undefined;
+}
+
+function imageDimensionsFromBuffer(bytes, mimeType) {
+  switch (mimeType) {
+    case "image/png":
+      return pngDimensions(bytes);
+    case "image/jpeg":
+      return jpegDimensions(bytes);
+    case "image/webp":
+      return webpDimensions(bytes);
+    default:
+      return undefined;
+  }
+}
+
+function pngDimensions(bytes) {
+  if (
+    bytes.length < 24 ||
+    bytes[0] !== 0x89 ||
+    bytes[1] !== 0x50 ||
+    bytes[2] !== 0x4e ||
+    bytes[3] !== 0x47
+  ) {
+    return undefined;
+  }
+  return {
+    width: bytes.readUInt32BE(16),
+    height: bytes.readUInt32BE(20),
+  };
+}
+
+function jpegDimensions(bytes) {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    return undefined;
+  }
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    const segmentLength = bytes.readUInt16BE(offset + 2);
+    if (segmentLength < 2) return undefined;
+    const isStartOfFrame =
+      (marker >= 0xc0 && marker <= 0xc3) ||
+      (marker >= 0xc5 && marker <= 0xc7) ||
+      (marker >= 0xc9 && marker <= 0xcb) ||
+      (marker >= 0xcd && marker <= 0xcf);
+    if (isStartOfFrame) {
+      return {
+        height: bytes.readUInt16BE(offset + 5),
+        width: bytes.readUInt16BE(offset + 7),
+      };
+    }
+    offset += 2 + segmentLength;
+  }
+  return undefined;
+}
+
+function webpDimensions(bytes) {
+  if (
+    bytes.length < 30 ||
+    bytes.toString("ascii", 0, 4) !== "RIFF" ||
+    bytes.toString("ascii", 8, 12) !== "WEBP"
+  ) {
+    return undefined;
+  }
+  const chunkType = bytes.toString("ascii", 12, 16);
+  if (chunkType === "VP8X" && bytes.length >= 30) {
+    return {
+      width: 1 + bytes.readUIntLE(24, 3),
+      height: 1 + bytes.readUIntLE(27, 3),
+    };
+  }
+  if (chunkType === "VP8 " && bytes.length >= 30) {
+    return {
+      width: bytes.readUInt16LE(26) & 0x3fff,
+      height: bytes.readUInt16LE(28) & 0x3fff,
+    };
+  }
+  if (chunkType === "VP8L" && bytes.length >= 25) {
+    const bits = bytes.readUInt32LE(21);
+    return {
+      width: (bits & 0x3fff) + 1,
+      height: ((bits >> 14) & 0x3fff) + 1,
+    };
+  }
+  return undefined;
 }
 
 export async function listTransportResources(config, input) {

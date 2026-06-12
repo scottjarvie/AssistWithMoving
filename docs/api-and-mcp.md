@@ -1206,6 +1206,15 @@ Evidence media upload is a two-step flow. The current product UI is still
 photo-first, but the storage contract accepts image, audio, and video originals.
 Image derivatives remain image-only.
 
+For MCP agents, prefer `upload_evidence_file` when the assistant has a local
+file path or a source URL. The tool reads the file, infers MIME type and image
+dimensions when it can, starts the upload session, PUTs the original file to
+storage, finalizes the evidence record, and returns the `photoId`.
+
+The lower-level REST flow is still useful for custom clients, browser clients,
+and clients that already create web-ready image derivatives. REST clients do
+this:
+
 1. Start an upload session and receive a presigned Backblaze URL.
 2. PUT the file to the returned `uploadUrl`.
 3. Finalize the evidence metadata.
@@ -1261,10 +1270,29 @@ creates the evidence record. Images require positive `width` and `height`.
 Audio can finalize without dimensions; video dimensions may be provided when a
 future UI captures them.
 
-For MCP clients, use `start_photo_upload`, upload the file to the returned
-presigned URL and any returned derivative upload URLs, then call
-`finalize_photo_upload`. Use `attach_photo` afterward only when evidence
-metadata needs to be changed or linked differently.
+For MCP clients, use `upload_evidence_file` first:
+
+```json
+{
+  "moveId": "MOVE_ID",
+  "filePath": "/Users/scott/Desktop/garage-shelf.jpg",
+  "room": "Garage",
+  "caption": "Garage shelf before packing",
+  "photoType": "room",
+  "privacyLevel": "normal",
+  "visibilityScope": "moveCollaborators"
+}
+```
+
+Use `start_photo_upload`, a direct PUT to the returned presigned URL, and
+`finalize_photo_upload` only when the client needs to manage the presigned flow
+itself or upload client-created image derivatives. Use `attach_photo` afterward
+only when evidence metadata needs to be changed or linked differently.
+
+Current derivative behavior: `upload_evidence_file` uploads and finalizes the
+original evidence file. It does not generate web-prepped derivatives itself, so
+image `derivativeStatus` can remain `pending` until a derivative-capable client
+or server-side derivative processor supplies display variants.
 
 ## Documentation Profiles, Exports, and Share Links
 
@@ -1521,6 +1549,7 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
+| `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, and returns the `photoId`. |
 | `start_photo_upload` | Start an evidence media upload session and return presigned original/derivative upload information. |
 | `finalize_photo_upload` | Finalize a completed presigned upload and create the evidence record after server-side object verification. |
 | `attach_photo` | Attach/update photo evidence metadata after upload finalization, with `dryRun` support. |

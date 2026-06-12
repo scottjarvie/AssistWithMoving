@@ -376,9 +376,15 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "POST /api/v1/photos/finalize",
       "POST /api/v1/photos/:photoId/attach",
     ],
-    mcpTools: ["start_photo_upload", "finalize_photo_upload", "attach_photo"],
+    mcpTools: [
+      "upload_evidence_file",
+      "start_photo_upload",
+      "finalize_photo_upload",
+      "attach_photo",
+    ],
     agentWorkflows: [
-      "Start an evidence media session, upload the file to the presigned URL, and finalize the evidence record.",
+      "Use upload_evidence_file when the agent has a local path or source URL; it starts the session, uploads the original, finalizes metadata, and returns the photoId.",
+      "Use the lower-level start/finalize tools only when the client needs to manage presigned uploads or client-supplied derivatives itself.",
       "Attach reviewed evidence media to items, boxes, rooms, and documentation profiles.",
       "Keep original file delivery separate from recipient-safe packet thumbnails.",
     ],

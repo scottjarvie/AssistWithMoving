@@ -73,6 +73,7 @@ import {
   textResult,
   toolErrorResult,
   createPlannedItem,
+  uploadEvidenceFile,
   updateDocumentationProfile,
   updateMovePerson,
   updateTransportResource,
@@ -1549,6 +1550,41 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     handler: (input) => startPhotoUpload(apiConfig, input),
+  });
+
+  registerTool(target, "upload_evidence_file", {
+    title: "Upload evidence file",
+    description:
+      "Easy MCP upload path: provide a local file path or source URL and this tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. It does not generate image derivatives.",
+    inputSchema: {
+      moveId: z.string(),
+      filePath: z.string().optional(),
+      sourceUrl: z.string().url().optional(),
+      fileName: z.string().optional(),
+      itemId: z.string().optional(),
+      boxId: z.string().optional(),
+      spaceId: z.string().optional(),
+      transportResourceId: z.string().optional(),
+      transportZoneId: z.string().optional(),
+      room: z.string().optional(),
+      mimeType: z.enum(allowedOriginalMediaMimeTypes).optional(),
+      width: z.number().int().positive().optional(),
+      height: z.number().int().positive().optional(),
+      originalHash: z.string().optional(),
+      caption: z.string().optional(),
+      photoType: z.string().optional(),
+      privacyLevel: z.string().optional(),
+      visibilityScope: z.string().optional(),
+      source: z.string().optional(),
+      exifHandlingStatus: z.string().optional(),
+      confidence: z.string().optional(),
+      notes: z.string().optional(),
+      verificationStatus: z.string().optional(),
+      capturedAt: z.number().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => uploadEvidenceFile(apiConfig, input),
   });
 
   registerTool(target, "finalize_photo_upload", {
