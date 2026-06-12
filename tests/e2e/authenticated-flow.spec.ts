@@ -406,8 +406,12 @@ test.describe("authenticated product flow", () => {
     await expect(
       dispositionPipelines.getByText("Disposition pipelines")
     ).toBeVisible({ timeout: 30_000 });
-    await expect(dispositionPipelines).toContainText("Free / giveaway");
+    await expect(
+      dispositionPipelines.getByRole("tab", { name: "Overview" })
+    ).toBeVisible();
     await expect(dispositionPipelines).toContainText("Free pickup link");
+    await dispositionPipelines.getByRole("tab", { name: "Sell / free" }).click();
+    await expect(dispositionPipelines).toContainText("Free / giveaway");
     await expect(dispositionPipelines).toContainText(freeItemName);
 
     const duplicateReview = page

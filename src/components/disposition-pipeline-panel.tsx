@@ -13,6 +13,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   buildSubManifestPath,
   formatSubManifestCurrency,
@@ -57,6 +59,14 @@ const groupIcons: Record<PipelineGroup["key"], typeof Tags> = {
   storage: Archive,
 };
 
+const dispositionTabs = [
+  { value: "overview", label: "Overview" },
+  { value: "sellFree", label: "Sell / free" },
+  { value: "donate", label: "Donation" },
+  { value: "dump", label: "Dump" },
+  { value: "storage", label: "Storage" },
+] as const;
+
 export function DispositionPipelinePanel({
   householdId,
   moveId,
@@ -65,6 +75,7 @@ export function DispositionPipelinePanel({
     api.dispositionPipelines.summaryForMove,
     householdId && moveId ? { householdId, moveId } : "skip"
   );
+  const groupByKey = new Map(summary?.groups.map((group) => [group.key, group]));
 
   return (
     <Card id="disposition-pipelines">
@@ -98,87 +109,154 @@ export function DispositionPipelinePanel({
             dispositions in Inventory to start these workflows.
           </div>
         ) : (
-          <>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-              <Metric label="Pipeline items" value={summary.counts.itemCount} />
-              <Metric label="Quantity" value={summary.counts.quantity} />
-              <Metric label="Ready now" value={summary.counts.readyCount} />
-              <Metric
-                label="Share links"
-                value={summary.counts.activeShareLinkCount}
-              />
-              <Metric
-                label="Owner value"
-                value={formatSubManifestCurrency(summary.counts.totalValueCents)}
-              />
-            </div>
+          <Tabs defaultValue="overview" className="gap-4">
+            <MoveWorkspaceTabList tabs={[...dispositionTabs]} />
 
-            {summary.topActions.length ? (
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {summary.topActions.map((action) => (
-                  <Link
-                    key={`${action.groupKey}-${action.key}`}
-                    href={action.anchor}
-                    className={cn(
-                      "rounded-md border p-3 transition-colors hover:bg-muted/70",
-                      actionClasses[action.severity]
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-medium">
-                        {action.groupLabel}: {action.label}
-                      </span>
-                      <span className="font-mono text-2xl font-semibold leading-none">
-                        {action.count}
-                      </span>
-                    </div>
-                    <p className="mt-2 line-clamp-2 text-xs opacity-80">
-                      {action.help}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
-                <div className="font-medium text-foreground">
-                  No disposition actions are currently open.
-                </div>
-                <p className="mt-1 text-muted-foreground">
-                  Pipeline items are photographed, boxed, assigned, shared, or
-                  completed for their current dispositions.
-                </p>
-              </div>
-            )}
-
-            <div className="grid gap-3 xl:grid-cols-2">
-              {summary.groups.map((group) => (
-                <PipelineCard
-                  key={group.key}
-                  group={group}
-                  householdId={householdId}
-                  moveId={moveId}
+            <TabsContent value="overview" className="space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <Metric label="Pipeline items" value={summary.counts.itemCount} />
+                <Metric label="Quantity" value={summary.counts.quantity} />
+                <Metric label="Ready now" value={summary.counts.readyCount} />
+                <Metric
+                  label="Share links"
+                  value={summary.counts.activeShareLinkCount}
                 />
-              ))}
-            </div>
+                <Metric
+                  label="Owner value"
+                  value={formatSubManifestCurrency(summary.counts.totalValueCents)}
+                />
+              </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="sm" variant="outline">
-                <Link href="#inventory">Inventory</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#photos">Photos</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#load-plan">Load planner</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#documentation-packets">Packet links</Link>
-              </Button>
-            </div>
-          </>
+              {summary.topActions.length ? (
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {summary.topActions.map((action) => (
+                    <Link
+                      key={`${action.groupKey}-${action.key}`}
+                      href={action.anchor}
+                      className={cn(
+                        "rounded-md border p-3 transition-colors hover:bg-muted/70",
+                        actionClasses[action.severity]
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-medium">
+                          {action.groupLabel}: {action.label}
+                        </span>
+                        <span className="font-mono text-2xl font-semibold leading-none">
+                          {action.count}
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs opacity-80">
+                        {action.help}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
+                  <div className="font-medium text-foreground">
+                    No disposition actions are currently open.
+                  </div>
+                  <p className="mt-1 text-muted-foreground">
+                    Pipeline items are photographed, boxed, assigned, shared, or
+                    completed for their current dispositions.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link href="#inventory">Inventory</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="#photos">Photos</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="#load-plan">Load planner</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="#documentation-packets">Packet links</Link>
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="sellFree">
+              <PipelineTabContent
+                groups={[groupByKey.get("sell"), groupByKey.get("free")]}
+                householdId={householdId}
+                moveId={moveId}
+                emptyLabel="No sell or giveaway items yet."
+              />
+            </TabsContent>
+
+            <TabsContent value="donate">
+              <PipelineTabContent
+                groups={[groupByKey.get("donate")]}
+                householdId={householdId}
+                moveId={moveId}
+                emptyLabel="No donation items yet."
+              />
+            </TabsContent>
+
+            <TabsContent value="dump">
+              <PipelineTabContent
+                groups={[groupByKey.get("dump")]}
+                householdId={householdId}
+                moveId={moveId}
+                emptyLabel="No dump-run items yet."
+              />
+            </TabsContent>
+
+            <TabsContent value="storage">
+              <PipelineTabContent
+                groups={[groupByKey.get("storage")]}
+                householdId={householdId}
+                moveId={moveId}
+                emptyLabel="No storage inventory items yet."
+              />
+            </TabsContent>
+          </Tabs>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function PipelineTabContent({
+  groups,
+  householdId,
+  moveId,
+  emptyLabel,
+}: {
+  groups: Array<PipelineGroup | undefined>;
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  emptyLabel: string;
+}) {
+  const visibleGroups = groups.filter(
+    (group): group is PipelineGroup => Boolean(group)
+  );
+  const activeGroups = visibleGroups.filter((group) => group.itemCount > 0);
+
+  if (!activeGroups.length) {
+    return (
+      <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+        {emptyLabel}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-2">
+      {activeGroups.map((group) => (
+        <PipelineCard
+          key={group.key}
+          group={group}
+          householdId={householdId}
+          moveId={moveId}
+        />
+      ))}
+    </div>
   );
 }
 
