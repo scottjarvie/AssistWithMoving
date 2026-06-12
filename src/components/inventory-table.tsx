@@ -28,10 +28,12 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Columns3,
   ListFilter,
   PackagePlus,
   PanelRightOpen,
+  RotateCcw,
   Search,
 } from "lucide-react";
 
@@ -866,6 +868,14 @@ export function InventoryTable({
   const visibleColumnCount = table
     .getAllLeafColumns()
     .filter((column) => column.getIsVisible()).length;
+  const hasActiveBrowseFilters =
+    search.trim().length > 0 || ownerFilter !== "all" || savedFilter !== "all";
+
+  function clearBrowseFilters() {
+    setSearch("");
+    setOwnerFilter("all");
+    setSavedFilter("all");
+  }
 
   return (
     <>
@@ -919,6 +929,48 @@ export function InventoryTable({
               id="inventory-records"
               className="space-y-2"
             >
+              <div className="rounded-md border border-border bg-background p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-medium">Inventory actions</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredItems.length} shown / {totalItemCount} total
+                      {selectedCount ? ` / ${selectedCount} selected` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setActiveTaskTab("add")}
+                    >
+                      <PackagePlus aria-hidden="true" />
+                      Add item
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveTaskTab("bulk")}
+                    >
+                      <ClipboardList aria-hidden="true" />
+                      Bulk paste
+                    </Button>
+                    {hasActiveBrowseFilters ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={clearBrowseFilters}
+                      >
+                        <RotateCcw aria-hidden="true" />
+                        Clear filters
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
               <section
                 aria-labelledby="inventory-filter-heading"
                 className="rounded-md border border-border bg-muted/20 p-3"

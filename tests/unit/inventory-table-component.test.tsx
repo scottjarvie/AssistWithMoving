@@ -53,6 +53,14 @@ describe("InventoryTable", () => {
       />,
     );
 
+    expect(screen.getByText("Inventory actions")).toBeInTheDocument();
+    expect(screen.getByText("1 shown / 1 total")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add item" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Bulk paste" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Find and filter")).toBeInTheDocument();
     expect(screen.getAllByText("All items").length).toBeGreaterThan(1);
     expect(screen.getByText("1 of 1 records")).toBeInTheDocument();
@@ -80,6 +88,38 @@ describe("InventoryTable", () => {
     expect(screen.getAllByText("+4").length).toBeGreaterThan(0);
     expect(screen.getAllByText("+5").length).toBeGreaterThan(0);
     expect(screen.queryByText("photos 2")).not.toBeInTheDocument();
+  });
+
+  it("uses browse action shortcuts to switch into intake workflows", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <InventoryTable
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add item" }));
+
+    expect(screen.getByRole("tab", { name: "Add" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.getByLabelText("New item name")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Browse: 1 record" }));
+    await user.click(screen.getByRole("button", { name: "Bulk paste" }));
+
+    expect(screen.getByRole("tab", { name: "Bulk paste" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(
+      screen.getByPlaceholderText(
+        "Garage: two bikes, red toolbox, camping tent",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("opens on browsing items and keeps add/import workflows separate", async () => {
