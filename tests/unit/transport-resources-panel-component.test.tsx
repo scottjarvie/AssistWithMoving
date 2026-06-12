@@ -83,6 +83,19 @@ describe("TransportResourcesPanel", () => {
     expect(screen.getByText("1 resources")).toBeInTheDocument();
     expect(screen.queryByText("Add from preset")).not.toBeInTheDocument();
     expect(screen.queryByText("Box truck")).not.toBeInTheDocument();
+    expect(screen.getByText("Capacity posture")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Trucks and trailers get weight\/volume defaults/),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Review capacity" }));
+
+    expect(
+      screen.getByText(/Trucks and trailers get weight\/volume defaults/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Hide capacity notes" }),
+    ).toHaveAttribute("aria-expanded", "true");
 
     await user.click(screen.getByRole("button", { name: "Add resource" }));
 
