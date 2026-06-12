@@ -23,6 +23,18 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#inventory")).toBe(
       "/app/moves/move_123/inventory#inventory"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#room-walk")).toBe(
+      "/app/moves/move_123/inventory#room-walk"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#planned-items")).toBe(
+      "/app/moves/move_123/inventory#planned-items"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#inventory-duplicate-review")).toBe(
+      "/app/moves/move_123/inventory#inventory-duplicate-review"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#estimate-summary")).toBe(
+      "/app/moves/move_123/inventory#estimate-summary"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#photos")).toBe(
       "/app/moves/move_123/photos#photos"
     );

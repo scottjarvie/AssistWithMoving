@@ -237,9 +237,15 @@ function indicatorBadges(item: InventoryItem): IndicatorBadgeModel[] {
   return badges.filter(isIndicatorBadge);
 }
 
-function InventoryIndicators({ item }: { item: InventoryItem }) {
+function InventoryIndicators({
+  item,
+  visibleLimit = 2,
+}: {
+  item: InventoryItem;
+  visibleLimit?: number;
+}) {
   const badges = indicatorBadges(item);
-  const visibleBadges = badges.slice(0, 3);
+  const visibleBadges = badges.slice(0, visibleLimit);
   const hiddenCount = Math.max(badges.length - visibleBadges.length, 0);
 
   if (!badges.length) {
@@ -365,7 +371,7 @@ function InventoryItemCard({
       </div>
 
       <div className="mt-3">
-        <InventoryIndicators item={item} />
+        <InventoryIndicators item={item} visibleLimit={3} />
       </div>
 
       <label className="mt-3 flex items-center gap-2 rounded-md border border-border/70 px-2 py-1.5 text-xs">
@@ -794,15 +800,22 @@ export function InventoryTable({
   const selectedCount = table.getSelectedRowModel().rows.length;
   const loadingItems = moveId && items === undefined;
   const visibleRows = table.getRowModel().rows;
+  const totalItemCount = items?.length ?? filteredItems.length;
+  const activeSavedFilter = inventorySavedFilters.find(
+    (filter) => filter.key === savedFilter,
+  );
+  const visibleColumnCount = table
+    .getAllLeafColumns()
+    .filter((column) => column.getIsVisible()).length;
 
   return (
     <>
-      <Card>
-        <CardHeader>
+      <Card size="sm">
+        <CardHeader className="gap-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Inventory</CardTitle>
-              <CardDescription>
+              <CardTitle>Browse inventory</CardTitle>
+              <CardDescription className="hidden sm:block">
                 Search, filter, edit, and bulk update item records for the
                 selected move.
               </CardDescription>
@@ -811,7 +824,7 @@ export function InventoryTable({
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="browse" className="gap-4">
+          <Tabs defaultValue="browse" className="gap-2">
             <div className="overflow-x-auto pb-1">
               <TabsList className="min-w-max" aria-label="Inventory task views">
                 <TabsTrigger value="browse">Browse</TabsTrigger>
@@ -830,16 +843,129 @@ export function InventoryTable({
               </p>
             ) : null}
 
-            <TabsContent value="browse" className="space-y-3">
-              <div className="rounded-md border border-border bg-muted/20 p-3">
-                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                  <ListFilter
-                    className="size-4 text-primary"
-                    aria-hidden="true"
-                  />
-                  Saved views
+            <TabsContent value="browse" className="space-y-2">
+              <section
+                aria-labelledby="inventory-filter-heading"
+                className="rounded-md border border-border bg-muted/20 p-3"
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3
+                      id="inventory-filter-heading"
+                      className="flex items-center gap-2 text-sm font-medium"
+                    >
+                      <ListFilter
+                        className="size-4 text-primary"
+                        aria-hidden="true"
+                      />
+                      Find and filter
+                    </h3>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline">
+                      {activeSavedFilter?.label ?? "All inventory"}
+                    </Badge>
+                    <Badge variant="secondary">
+                      {filteredItems.length} of {totalItemCount} records
+                    </Badge>
+                    <Badge variant="outline">{visibleColumnCount} columns</Badge>
+                  </div>
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
+
+                <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+                  <div className="relative min-w-0">
+                    <Search
+                      className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <Input
+                      className="pl-8"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search items, rooms, people, categories"
+                      aria-label="Search inventory"
+                    />
+                  </div>
+                  <select
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    value={ownerFilter}
+                    aria-label="Owner or contact filter"
+                    onChange={(event) =>
+                      setOwnerFilter(event.target.value as InventoryOwnerFilter)
+                    }
+                  >
+                    <option value="all">All owners</option>
+                    <option value="unassigned">Unassigned</option>
+                    {ownerFilterOptions.map((owner) => (
+                      <option key={owner.id} value={owner.id}>
+                        {owner.name} - {owner.role}
+                      </option>
+                    ))}
+                  </select>
+                  <details className="rounded-md border border-border bg-background px-3 py-2">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
+                      <Columns3
+                        className="size-4 text-primary"
+                        aria-hidden="true"
+                      />
+                      Columns
+                    </summary>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {table
+                        .getAllLeafColumns()
+                        .filter((column) => column.getCanHide())
+                        .map((column) => (
+                          <label
+                            key={column.id}
+                            className="flex items-start gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 size-3.5 accent-primary"
+                              checked={column.getIsVisible()}
+                              onChange={column.getToggleVisibilityHandler()}
+                            />
+                            <span>
+                              <span className="block font-medium">
+                                {columnLabels[column.id] ?? column.id}
+                              </span>
+                              {columnDescriptions[column.id] ? (
+                                <span className="block text-xs leading-5 text-muted-foreground">
+                                  {columnDescriptions[column.id]}
+                                </span>
+                              ) : null}
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                  </details>
+                </div>
+
+                <details className="mt-2 rounded-md border border-border bg-background px-3 py-2 md:hidden">
+                  <summary className="cursor-pointer list-none text-sm font-medium">
+                    Saved views
+                  </summary>
+                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                    {inventorySavedFilters.map((filter) => (
+                      <button
+                        key={filter.key}
+                        type="button"
+                        className={`shrink-0 rounded-md border px-3 py-2 text-left text-xs transition-colors ${
+                          savedFilter === filter.key
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background hover:bg-muted"
+                        }`}
+                        title={filter.description}
+                        aria-pressed={savedFilter === filter.key}
+                        onClick={() => setSavedFilter(filter.key)}
+                      >
+                        {filter.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+
+                <div className="mt-3 hidden gap-2 md:flex md:flex-wrap">
                   {inventorySavedFilters.map((filter) => (
                     <button
                       key={filter.key}
@@ -857,76 +983,7 @@ export function InventoryTable({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
-                <div className="relative min-w-0">
-                  <Search
-                    className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    className="pl-8"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search items, rooms, people, categories"
-                    aria-label="Search inventory"
-                  />
-                </div>
-                <select
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                  value={ownerFilter}
-                  aria-label="Owner or contact filter"
-                  onChange={(event) =>
-                    setOwnerFilter(event.target.value as InventoryOwnerFilter)
-                  }
-                >
-                  <option value="all">All owners</option>
-                  <option value="unassigned">Unassigned</option>
-                  {ownerFilterOptions.map((owner) => (
-                    <option key={owner.id} value={owner.id}>
-                      {owner.name} - {owner.role}
-                    </option>
-                  ))}
-                </select>
-                <details className="rounded-md border border-border bg-background px-3 py-2">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
-                    <Columns3
-                      className="size-4 text-primary"
-                      aria-hidden="true"
-                    />
-                    Columns
-                  </summary>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {table
-                      .getAllLeafColumns()
-                      .filter((column) => column.getCanHide())
-                      .map((column) => (
-                        <label
-                          key={column.id}
-                          className="flex items-start gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 size-3.5 accent-primary"
-                            checked={column.getIsVisible()}
-                            onChange={column.getToggleVisibilityHandler()}
-                          />
-                          <span>
-                            <span className="block font-medium">
-                              {columnLabels[column.id] ?? column.id}
-                            </span>
-                            {columnDescriptions[column.id] ? (
-                              <span className="block text-xs leading-5 text-muted-foreground">
-                                {columnDescriptions[column.id]}
-                              </span>
-                            ) : null}
-                          </span>
-                        </label>
-                      ))}
-                  </div>
-                </details>
-              </div>
+              </section>
 
               {selectedCount ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
@@ -963,6 +1020,21 @@ export function InventoryTable({
                 </div>
               ) : null}
 
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold">Inventory records</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {visibleRows.length} on this page / {filteredItems.length} filtered
+                  </p>
+                </div>
+                {sorting.length ? (
+                  <Badge variant="outline">
+                    Sorted by{" "}
+                    {columnLabels[sorting[0].id] ?? sorting[0].id}
+                  </Badge>
+                ) : null}
+              </div>
+
               {loadingItems ? (
                 <div className="space-y-2">
                   <Skeleton className="h-10 w-full" />
@@ -996,7 +1068,10 @@ export function InventoryTable({
                   </div>
 
                   <div className="hidden overflow-x-auto rounded-md border border-border md:block">
-                    <Table className="min-w-[980px] table-fixed">
+                    <Table
+                      aria-label="Inventory records table"
+                      className="min-w-[980px] table-fixed"
+                    >
                       <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
                           <TableRow key={headerGroup.id}>

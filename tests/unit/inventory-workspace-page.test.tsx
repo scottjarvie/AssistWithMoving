@@ -80,7 +80,7 @@ describe("InventoryWorkspacePage", () => {
     );
     expect(screen.getByRole("tab", { name: "Capture" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Planned" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Review" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Duplicates" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Disposition" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Estimates" })).toBeInTheDocument();
     expect(screen.getByText("Items table surface")).toBeInTheDocument();

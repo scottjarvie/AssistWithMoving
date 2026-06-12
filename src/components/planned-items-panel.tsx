@@ -199,7 +199,7 @@ export function PlannedItemsPanel({
   }
 
   return (
-    <Card>
+    <Card id="planned-items">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

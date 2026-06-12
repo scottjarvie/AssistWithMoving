@@ -300,6 +300,44 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Inventory table surface")).not.toBeInTheDocument();
   });
 
+  it("opens inventory duplicate review when routed to the duplicate hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#inventory-duplicate-review"
+    );
+
+    render(<InventoryWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Duplicates" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Duplicate review surface")).toBeInTheDocument();
+    expect(screen.queryByText("Inventory table surface")).not.toBeInTheDocument();
+  });
+
+  it("opens inventory estimates when routed to the estimate hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#estimate-summary"
+    );
+
+    render(<InventoryWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Estimates" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Estimate summary surface")).toBeInTheDocument();
+    expect(screen.queryByText("Inventory table surface")).not.toBeInTheDocument();
+  });
+
   it("opens AI review on the approval queue before intake and job details", () => {
     render(<AiReviewWorkspacePage />);
 

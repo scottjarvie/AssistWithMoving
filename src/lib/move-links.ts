@@ -18,10 +18,14 @@ const workspaceAnchorSections: Record<string, string> = {
   "#disposition-pipelines": "inventory",
   "#documentation-packets": "packets",
   "#evidence-density": "photos",
+  "#estimate-summary": "inventory",
   "#inventory": "inventory",
+  "#inventory-duplicate-review": "inventory",
   "#load-plan": "load-plan",
   "#move-day": "move-day",
   "#photos": "photos",
+  "#planned-items": "inventory",
+  "#room-walk": "inventory",
   "#transport-resources": "load-plan",
 };
 

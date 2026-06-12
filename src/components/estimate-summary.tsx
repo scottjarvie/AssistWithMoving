@@ -60,7 +60,7 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
       .slice(0, 6) ?? [];
 
   return (
-    <section className="space-y-4">
+    <section id="estimate-summary" className="space-y-4">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">

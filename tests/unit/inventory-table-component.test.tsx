@@ -44,7 +44,7 @@ describe("InventoryTable", () => {
     mockItems.useMutation.mockReturnValue(vi.fn());
   });
 
-  it("keeps filters and columns above a sortable, compact item table", () => {
+  it("keeps find controls above explicit, compact inventory records", () => {
     render(
       <InventoryTable
         householdId={"household_123" as Id<"households">}
@@ -52,9 +52,13 @@ describe("InventoryTable", () => {
       />,
     );
 
-    expect(screen.getByText("Saved views")).toBeInTheDocument();
+    expect(screen.getByText("Find and filter")).toBeInTheDocument();
+    expect(screen.getAllByText("All items").length).toBeGreaterThan(1);
+    expect(screen.getByText("1 of 1 records")).toBeInTheDocument();
     expect(screen.getByLabelText("Search inventory")).toBeInTheDocument();
     expect(screen.getByText("Columns")).toBeInTheDocument();
+    expect(screen.getByText("Inventory records")).toBeInTheDocument();
+    expect(screen.getByText("1 on this page / 1 filtered")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Sort by Item" }),
     ).toBeInTheDocument();
@@ -63,11 +67,15 @@ describe("InventoryTable", () => {
     ).toBeInTheDocument();
     const cardList = screen.getByRole("list", { name: "Inventory item cards" });
     expect(within(cardList).getByText("Walnut media console")).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", { name: "Inventory records table" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Walnut media console")).toHaveLength(2);
     expect(screen.getAllByText("review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("value").length).toBeGreaterThan(0);
     expect(screen.getAllByText("personal").length).toBeGreaterThan(0);
     expect(screen.getAllByText("+4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+5").length).toBeGreaterThan(0);
     expect(screen.queryByText("photos 2")).not.toBeInTheDocument();
   });
 

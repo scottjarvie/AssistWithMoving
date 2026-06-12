@@ -14,7 +14,11 @@ import { useHashTab } from "@/components/use-hash-tab";
 
 const inventoryTabHashes = {
   "#disposition-pipelines": "disposition",
+  "#estimate-summary": "estimates",
   "#inventory": "items",
+  "#inventory-duplicate-review": "duplicates",
+  "#planned-items": "planned",
+  "#room-walk": "capture",
 } as const;
 
 export function InventoryWorkspacePage() {
@@ -25,7 +29,7 @@ export function InventoryWorkspacePage() {
     <div className="space-y-6 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Inventory"
-        description="Every item you own, where it is, and what is happening to it: keep, sell, donate, dump, store, or move."
+        description="Browse item records, capture by room, and review disposition or estimate work."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
@@ -33,7 +37,7 @@ export function InventoryWorkspacePage() {
             { value: "items", label: "Items" },
             { value: "capture", label: "Capture" },
             { value: "planned", label: "Planned" },
-            { value: "review", label: "Review" },
+            { value: "duplicates", label: "Duplicates" },
             { value: "disposition", label: "Disposition" },
             { value: "estimates", label: "Estimates" },
           ]}
@@ -48,7 +52,7 @@ export function InventoryWorkspacePage() {
         <TabsContent value="planned">
           <PlannedItemsPanel householdId={householdId} moveId={moveId} />
         </TabsContent>
-        <TabsContent value="review">
+        <TabsContent value="duplicates">
           <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
         </TabsContent>
         <TabsContent value="disposition">
