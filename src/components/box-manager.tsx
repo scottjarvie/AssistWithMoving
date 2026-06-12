@@ -5,11 +5,14 @@ import { type FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Boxes,
+  Camera,
+  ClipboardPenLine,
   ClipboardList,
   PackagePlus,
   Printer,
   Search,
   Trash2,
+  Truck,
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -39,10 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  buildBoxLabelSheetPath,
-  buildBoxLookupPath,
-} from "@/lib/box-labels";
+import { buildBoxLabelSheetPath, buildBoxLookupPath } from "@/lib/box-labels";
 import {
   formatBoxWeightSource,
   formatBoxWeightValue,
@@ -86,6 +86,49 @@ const boxTaskHashes = {
   "#boxes": "boxes",
 } as const;
 
+const boxCardTaskMeta: Record<
+  BoxCardTask,
+  { title: string; description: string; cta: string }
+> = {
+  contents: {
+    title: "Pick a box for contents",
+    description:
+      "Choose one box, then add or remove the packed items inside it.",
+    cta: "Open contents",
+  },
+  details: {
+    title: "Pick a box for details",
+    description:
+      "Choose one box, then edit its label, rooms, weight, volume, and notes.",
+    cta: "Edit details",
+  },
+  photos: {
+    title: "Pick a box for photos",
+    description:
+      "Choose one box, then upload evidence photos and review what is attached.",
+    cta: "Add photos",
+  },
+  load: {
+    title: "Pick a box for load assignment",
+    description:
+      "Choose one box, then assign it to a truck, trailer, zone, mover, or storage flow.",
+    cta: "Assign load",
+  },
+};
+
+function boxTaskIcon(task: BoxCardTask) {
+  switch (task) {
+    case "contents":
+      return <PackagePlus aria-hidden="true" />;
+    case "details":
+      return <ClipboardPenLine aria-hidden="true" />;
+    case "photos":
+      return <Camera aria-hidden="true" />;
+    case "load":
+      return <Truck aria-hidden="true" />;
+  }
+}
+
 function BoxCard({
   householdId,
   moveId,
@@ -111,28 +154,30 @@ function BoxCard({
   const [label, setLabel] = useState(box.label ?? "");
   const [room, setRoom] = useState(box.room ?? "");
   const [destinationRoom, setDestinationRoom] = useState(
-    box.destinationRoom ?? ""
+    box.destinationRoom ?? "",
   );
   const [description, setDescription] = useState(box.description ?? "");
   const [status, setStatus] = useState(box.status);
   const [estimatedWeightLb, setEstimatedWeightLb] = useState(
-    formatOptionalNumber(box.estimatedWeightLb)
+    formatOptionalNumber(box.estimatedWeightLb),
   );
   const [actualWeightLb, setActualWeightLb] = useState(
-    formatOptionalNumber(box.actualWeightLb)
+    formatOptionalNumber(box.actualWeightLb),
   );
   const [estimatedVolumeCuFt, setEstimatedVolumeCuFt] = useState(
-    formatOptionalNumber(box.estimatedVolumeCuFt)
+    formatOptionalNumber(box.estimatedVolumeCuFt),
   );
   const [assignedResourceId, setAssignedResourceId] = useState(
-    box.assignedResourceId ?? ""
+    box.assignedResourceId ?? "",
   );
-  const [assignedZoneId, setAssignedZoneId] = useState(box.assignedZoneId ?? "");
+  const [assignedZoneId, setAssignedZoneId] = useState(
+    box.assignedZoneId ?? "",
+  );
   const [assignmentLocked, setAssignmentLocked] = useState(
-    box.assignmentLocked ?? false
+    box.assignmentLocked ?? false,
   );
   const [assignmentOverrideReason, setAssignmentOverrideReason] = useState(
-    box.assignmentOverrideReason ?? ""
+    box.assignmentOverrideReason ?? "",
   );
   const [selectedItemId, setSelectedItemId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -140,9 +185,9 @@ function BoxCard({
   const zones = useMemo(
     () =>
       resourcesWithZones.find(
-        ({ resource }) => resource._id === assignedResourceId
+        ({ resource }) => resource._id === assignedResourceId,
       )?.zones ?? [],
-    [assignedResourceId, resourcesWithZones]
+    [assignedResourceId, resourcesWithZones],
   );
 
   async function handleSave() {
@@ -168,7 +213,10 @@ function BoxCard({
           ? { estimatedVolumeCuFt: estimatedVolume }
           : {}),
         ...(assignedResourceId
-          ? { assignedResourceId: assignedResourceId as Id<"transportResources"> }
+          ? {
+              assignedResourceId:
+                assignedResourceId as Id<"transportResources">,
+            }
           : { clearAssignedResource: true }),
         ...(assignedZoneId
           ? { assignedZoneId: assignedZoneId as Id<"transportZones"> }
@@ -179,7 +227,7 @@ function BoxCard({
       onMessage(`${box.code} saved.`);
     } catch (error) {
       onMessage(
-        error instanceof Error ? error.message : `Could not save ${box.code}.`
+        error instanceof Error ? error.message : `Could not save ${box.code}.`,
       );
     } finally {
       setSaving(false);
@@ -204,7 +252,7 @@ function BoxCard({
       onMessage(
         error instanceof Error
           ? error.message
-          : `Could not add that item to ${box.code}.`
+          : `Could not add that item to ${box.code}.`,
       );
     }
   }
@@ -221,7 +269,7 @@ function BoxCard({
       onMessage(
         error instanceof Error
           ? error.message
-          : `Could not remove that item from ${box.code}.`
+          : `Could not remove that item from ${box.code}.`,
       );
     }
   }
@@ -232,7 +280,9 @@ function BoxCard({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium">{box.code}</p>
-            <Badge variant={box.status === "damaged" ? "destructive" : "outline"}>
+            <Badge
+              variant={box.status === "damaged" ? "destructive" : "outline"}
+            >
               {box.status}
             </Badge>
           </div>
@@ -281,7 +331,9 @@ function BoxCard({
               className="h-8 rounded-md border border-input bg-background px-2 text-sm"
               value={status}
               aria-label="Box status"
-              onChange={(event) => setStatus(event.target.value as typeof status)}
+              onChange={(event) =>
+                setStatus(event.target.value as typeof status)
+              }
             >
               {boxStatusOptions.map((option) => (
                 <option key={option} value={option}>
@@ -364,7 +416,9 @@ function BoxCard({
           </div>
           <Input
             value={assignmentOverrideReason}
-            onChange={(event) => setAssignmentOverrideReason(event.target.value)}
+            onChange={(event) =>
+              setAssignmentOverrideReason(event.target.value)
+            }
             placeholder="Override reason for load warnings"
             aria-label="Assignment override reason"
           />
@@ -426,7 +480,11 @@ function BoxCard({
                 </option>
               ))}
             </select>
-            <Button type="button" size="sm" onClick={() => void handleAddItem()}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void handleAddItem()}
+            >
               <PackagePlus aria-hidden="true" />
               Add
             </Button>
@@ -456,17 +514,22 @@ function BoxCard({
                         type="button"
                         size="icon-xs"
                         variant="ghost"
-                        onClick={() => void handleRemoveItem(entry.membership._id)}
+                        onClick={() =>
+                          void handleRemoveItem(entry.membership._id)
+                        }
                       >
                         <Trash2 aria-hidden="true" />
                         <span className="sr-only">Remove item</span>
                       </Button>
                     </div>
-                  ) : null
+                  ) : null,
                 )}
               </div>
             ) : (
-              <div role="listitem" className="p-3 text-sm text-muted-foreground">
+              <div
+                role="listitem"
+                className="p-3 text-sm text-muted-foreground"
+              >
                 No contents yet.
               </div>
             )}
@@ -477,10 +540,16 @@ function BoxCard({
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
           <Badge variant="secondary">{itemCount} items</Badge>
-          <Badge variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}>
+          <Badge
+            variant={
+              isMissingBoxWeight(weightSummary) ? "secondary" : "outline"
+            }
+          >
             {formatBoxWeightValue(weightSummary)}
           </Badge>
-          <Badge variant="outline">{formatBoxWeightSource(weightSummary)}</Badge>
+          <Badge variant="outline">
+            {formatBoxWeightSource(weightSummary)}
+          </Badge>
           <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
         </div>
         {task === "details" || task === "load" ? (
@@ -557,12 +626,17 @@ function BoxOverviewCard({
           value={box.destinationRoom ?? "unassigned"}
         />
         <BoxSummaryField label="Items" value={String(itemCount)} />
-        <BoxSummaryField label="Weight" value={formatBoxWeightValue(weightSummary)} />
+        <BoxSummaryField
+          label="Weight"
+          value={formatBoxWeightValue(weightSummary)}
+        />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
-        <Badge variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}>
+        <Badge
+          variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}
+        >
           {formatBoxWeightSource(weightSummary)}
         </Badge>
         {box.assignedResourceId ? (
@@ -600,6 +674,7 @@ function BoxOverviewCard({
           aria-label={`Contents for ${box.code}`}
           onClick={() => onOpenTask("contents", box._id)}
         >
+          <PackagePlus aria-hidden="true" />
           Contents
         </Button>
         <Button
@@ -609,7 +684,18 @@ function BoxOverviewCard({
           aria-label={`Details for ${box.code}`}
           onClick={() => onOpenTask("details", box._id)}
         >
+          <ClipboardPenLine aria-hidden="true" />
           Details
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={`Photos for ${box.code}`}
+          onClick={() => onOpenTask("photos", box._id)}
+        >
+          <Camera aria-hidden="true" />
+          Photos
         </Button>
         <Button
           type="button"
@@ -618,9 +704,105 @@ function BoxOverviewCard({
           aria-label={`Load for ${box.code}`}
           onClick={() => onOpenTask("load", box._id)}
         >
+          <Truck aria-hidden="true" />
           Load
         </Button>
       </div>
+    </div>
+  );
+}
+
+function BoxTaskPickerCard({
+  boxRecord,
+  task,
+  onSelect,
+}: {
+  boxRecord: BoxRecord;
+  task: BoxCardTask;
+  onSelect: (task: BoxCardTask, boxId: Id<"boxes">) => void;
+}) {
+  const { box, contents, itemCount, weightSummary } = boxRecord;
+  const visibleContents = contents
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .slice(0, 3);
+  const hiddenContentCount = Math.max(itemCount - visibleContents.length, 0);
+  const meta = boxCardTaskMeta[task];
+
+  return (
+    <div
+      role="listitem"
+      className="rounded-md border border-border bg-card p-3"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">{box.code}</p>
+            <Badge
+              variant={box.status === "damaged" ? "destructive" : "outline"}
+            >
+              {box.status}
+            </Badge>
+          </div>
+          <p className="mt-1 line-clamp-2 max-w-[42rem] break-words text-sm text-muted-foreground">
+            {box.label ?? box.description ?? "Unlabeled box"}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => onSelect(task, box._id)}
+          aria-label={`${meta.cta} for ${box.code}`}
+        >
+          {boxTaskIcon(task)}
+          {meta.cta}
+        </Button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+        <BoxSummaryField label="Room" value={box.room ?? "unassigned"} />
+        <BoxSummaryField
+          label="Destination"
+          value={box.destinationRoom ?? "unassigned"}
+        />
+        <BoxSummaryField label="Items" value={String(itemCount)} />
+        <BoxSummaryField
+          label="Weight"
+          value={formatBoxWeightValue(weightSummary)}
+        />
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
+        <Badge
+          variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}
+        >
+          {formatBoxWeightSource(weightSummary)}
+        </Badge>
+        {box.assignedResourceId ? (
+          <Badge variant="secondary">load assigned</Badge>
+        ) : (
+          <Badge variant="outline">load unassigned</Badge>
+        )}
+      </div>
+
+      {task === "contents" || task === "photos" ? (
+        <div className="mt-3 rounded-md border border-border/70 bg-muted/25 p-2">
+          {visibleContents.length ? (
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              {visibleContents.map((entry) => (
+                <Badge key={entry.membership._id} variant="outline">
+                  {entry.item.name} x{entry.membership.quantity}
+                </Badge>
+              ))}
+              {hiddenContentCount ? (
+                <Badge variant="outline">+{hiddenContentCount} more</Badge>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">No contents yet.</p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -645,15 +827,15 @@ export function BoxManager({
 }) {
   const boxes = useQuery(
     api.boxes.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const items = useQuery(
     api.items.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const resourcesWithZones = useQuery(
     api.transportResources.listForMoveWithZones,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
   const createBox = useMutation(api.boxes.create);
 
@@ -665,7 +847,7 @@ export function BoxManager({
   const [creating, setCreating] = useState(false);
   const [activeTask, setActiveTask] = useHashTab<BoxTask>(
     "boxes",
-    boxTaskHashes
+    boxTaskHashes,
   );
   const [selectedBoxId, setSelectedBoxId] = useState<Id<"boxes"> | null>(null);
   const [search, setSearch] = useState("");
@@ -674,7 +856,7 @@ export function BoxManager({
   const visibleBoxes = useMemo(() => boxes ?? [], [boxes]);
   const activeItems = useMemo(
     () => (items ?? []).filter((item) => item.status !== "archived"),
-    [items]
+    [items],
   );
   const filteredBoxes = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -696,23 +878,24 @@ export function BoxManager({
           .filter((value): value is string => typeof value === "string"),
       ];
       return haystack.some((value) =>
-        value?.toLowerCase().includes(normalizedSearch)
+        value?.toLowerCase().includes(normalizedSearch),
       );
     });
   }, [search, statusFilter, visibleBoxes]);
   const emptyBoxes = visibleBoxes.filter((record) => record.itemCount === 0);
   const missingWeightBoxes = visibleBoxes.filter((record) =>
-    isMissingBoxWeight(record.weightSummary)
+    isMissingBoxWeight(record.weightSummary),
   );
   const exceptionBoxes = visibleBoxes.filter((record) =>
-    ["missing", "damaged"].includes(record.box.status)
+    ["missing", "damaged"].includes(record.box.status),
   );
   const selectedBoxRecord = useMemo(
     () =>
       selectedBoxId
-        ? visibleBoxes.find((record) => record.box._id === selectedBoxId) ?? null
+        ? (visibleBoxes.find((record) => record.box._id === selectedBoxId) ??
+          null)
         : null,
-    [selectedBoxId, visibleBoxes]
+    [selectedBoxId, visibleBoxes],
   );
 
   function openBoxTask(task: BoxCardTask, boxId: Id<"boxes">) {
@@ -726,6 +909,63 @@ export function BoxManager({
     if (!["contents", "details", "photos", "load"].includes(task)) {
       setSelectedBoxId(null);
     }
+  }
+
+  function renderBoxFilterControls({ withActions = false } = {}) {
+    return (
+      <div className="flex flex-col gap-2 rounded-md border border-border p-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px] lg:min-w-[520px]">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              className="pl-8"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search codes, rooms, labels, or contents"
+              aria-label="Search boxes"
+            />
+          </div>
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={statusFilter}
+            aria-label="Box status filter"
+            onChange={(event) =>
+              setStatusFilter(event.target.value as BoxStatusFilter)
+            }
+          >
+            <option value="all">All statuses</option>
+            {boxStatusOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+        {withActions ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setActiveTask("add")}
+            >
+              <PackagePlus aria-hidden="true" />
+              Add box
+            </Button>
+            {householdId && moveId ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={buildBoxLabelSheetPath({ householdId, moveId })}>
+                  <Printer aria-hidden="true" />
+                  Print labels
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   function renderBoxTaskCards(task: BoxCardTask, emptyText: string) {
@@ -746,47 +986,80 @@ export function BoxManager({
       );
     }
 
-    const taskBoxes = selectedBoxRecord ? [selectedBoxRecord] : visibleBoxes;
+    if (!selectedBoxRecord) {
+      const meta = boxCardTaskMeta[task];
+
+      return (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-muted/20 p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{meta.title}</p>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                {meta.description}
+              </p>
+            </div>
+            <Badge variant="secondary">{filteredBoxes.length} matches</Badge>
+          </div>
+          {renderBoxFilterControls()}
+          {filteredBoxes.length ? (
+            <div
+              role="list"
+              aria-label={meta.title}
+              className="grid gap-3 2xl:grid-cols-2"
+            >
+              {filteredBoxes.map((boxRecord) => (
+                <BoxTaskPickerCard
+                  key={`${task}:picker:${boxRecord.box._id}`}
+                  boxRecord={boxRecord}
+                  task={task}
+                  onSelect={openBoxTask}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+              No boxes match the current search or status filter.
+            </div>
+          )}
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-3">
-        {selectedBoxRecord ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                Focused on {selectedBoxRecord.box.code}
-              </p>
-              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                {selectedBoxRecord.box.label ??
-                  selectedBoxRecord.box.description ??
-                  "Unlabeled box"}
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setSelectedBoxId(null)}
-            >
-              Show all boxes
-            </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">
+              Focused on {selectedBoxRecord.box.code}
+            </p>
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              {selectedBoxRecord.box.label ??
+                selectedBoxRecord.box.description ??
+                "Unlabeled box"}
+            </p>
           </div>
-        ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setSelectedBoxId(null)}
+          >
+            Change box
+          </Button>
+        </div>
         <div className="grid gap-3 2xl:grid-cols-2">
-          {taskBoxes.map((boxRecord) =>
-            householdId && moveId ? (
-              <BoxCard
-                key={`${task}:${boxRecord.box._id}:${boxRecord.box.updatedAt}:${boxRecord.itemCount}`}
-                householdId={householdId}
-                moveId={moveId}
-                boxRecord={boxRecord}
-                items={activeItems}
-                resourcesWithZones={resourcesWithZones ?? []}
-                task={task}
-                onMessage={setMessage}
-              />
-            ) : null
-          )}
+          {householdId && moveId ? (
+            <BoxCard
+              key={`${task}:${selectedBoxRecord.box._id}:${selectedBoxRecord.box.updatedAt}:${selectedBoxRecord.itemCount}`}
+              householdId={householdId}
+              moveId={moveId}
+              boxRecord={selectedBoxRecord}
+              items={activeItems}
+              resourcesWithZones={resourcesWithZones ?? []}
+              task={task}
+              onMessage={setMessage}
+            />
+          ) : null}
         </div>
       </div>
     );
@@ -829,7 +1102,8 @@ export function BoxManager({
           <div>
             <CardTitle>Box manager</CardTitle>
             <CardDescription>
-              Create box codes, track contents, and keep room/load status current.
+              Create box codes, track contents, and keep room/load status
+              current.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -864,59 +1138,13 @@ export function BoxManager({
               <BoxMetric label="Total" value={visibleBoxes.length} />
               <BoxMetric label="Empty" value={emptyBoxes.length} />
               <BoxMetric label="Exceptions" value={exceptionBoxes.length} />
-              <BoxMetric label="Missing weight" value={missingWeightBoxes.length} />
+              <BoxMetric
+                label="Missing weight"
+                value={missingWeightBoxes.length}
+              />
             </div>
 
-            <div className="flex flex-col gap-2 rounded-md border border-border p-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px] lg:min-w-[520px]">
-                <div className="relative">
-                  <Search
-                    className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    className="pl-8"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search codes, rooms, labels, or contents"
-                    aria-label="Search boxes"
-                  />
-                </div>
-                <select
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                  value={statusFilter}
-                  aria-label="Box status filter"
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as BoxStatusFilter)
-                  }
-                >
-                  <option value="all">All statuses</option>
-                  {boxStatusOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setActiveTask("add")}
-                >
-                  <PackagePlus aria-hidden="true" />
-                  Add box
-                </Button>
-                {householdId && moveId ? (
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={buildBoxLabelSheetPath({ householdId, moveId })}>
-                      <Printer aria-hidden="true" />
-                      Print labels
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
-            </div>
+            {renderBoxFilterControls({ withActions: true })}
 
             {boxes === undefined ? (
               <div className="space-y-2">
@@ -947,7 +1175,8 @@ export function BoxManager({
               )
             ) : (
               <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Create the first box or container to start grouping packed items.
+                Create the first box or container to start grouping packed
+                items.
               </div>
             )}
           </TabsContent>
@@ -996,28 +1225,28 @@ export function BoxManager({
           <TabsContent value="contents" id="box-contents" className="space-y-4">
             {renderBoxTaskCards(
               "contents",
-              "Create boxes before adding packed contents."
+              "Create boxes before adding packed contents.",
             )}
           </TabsContent>
 
           <TabsContent value="details" id="box-details" className="space-y-4">
             {renderBoxTaskCards(
               "details",
-              "Create boxes before editing labels, rooms, weights, and notes."
+              "Create boxes before editing labels, rooms, weights, and notes.",
             )}
           </TabsContent>
 
           <TabsContent value="photos" id="box-photos" className="space-y-4">
             {renderBoxTaskCards(
               "photos",
-              "Create boxes before adding box photos."
+              "Create boxes before adding box photos.",
             )}
           </TabsContent>
 
           <TabsContent value="load" id="box-load" className="space-y-4">
             {renderBoxTaskCards(
               "load",
-              "Create boxes before assigning them to trucks, trailers, zones, or movers."
+              "Create boxes before assigning them to trucks, trailers, zones, or movers.",
             )}
           </TabsContent>
 
@@ -1025,7 +1254,9 @@ export function BoxManager({
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-3">
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="secondary">{visibleBoxes.length} labels</Badge>
-                <Badge variant={exceptionBoxes.length ? "destructive" : "outline"}>
+                <Badge
+                  variant={exceptionBoxes.length ? "destructive" : "outline"}
+                >
                   {exceptionBoxes.length} exceptions
                 </Badge>
               </div>

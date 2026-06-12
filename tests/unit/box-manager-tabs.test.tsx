@@ -149,12 +149,12 @@ describe("BoxManager", () => {
       <BoxManager
         householdId={"household_123" as Id<"households">}
         moveId={"move_123" as Id<"moves">}
-      />
+      />,
     );
 
     expect(screen.getByRole("tab", { name: "Boxes" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
     const boxList = screen.getByRole("list", { name: "Box records" });
     expect(within(boxList).getByText("B-001")).toBeInTheDocument();
@@ -162,70 +162,98 @@ describe("BoxManager", () => {
     expect(within(boxList).getByText("Garage tools")).toBeInTheDocument();
     expect(within(boxList).getByText("Socket set x1")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.queryByRole("form", { name: "Create box" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Item to add to box")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: "Create box" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Item to add to box"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
 
     await user.click(
-      within(boxList).getByRole("button", { name: "Details for B-001" })
+      within(boxList).getByRole("button", { name: "Details for B-001" }),
     );
     expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
       "data-state",
-      "active"
+      "active",
     );
     expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
     expect(screen.getByLabelText("Box label")).toBeInTheDocument();
     expect(screen.queryByText("B-002")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Show all boxes" }));
+    await user.click(screen.getByRole("button", { name: "Change box" }));
     expect(screen.queryByText("Focused on B-001")).not.toBeInTheDocument();
+    expect(screen.getByText("Pick a box for details")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Edit details for B-002" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("B-002")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Add box" }));
-    expect(screen.getByRole("form", { name: "Create box" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("form", { name: "Create box" }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Contents" }));
-    expect(screen.getAllByLabelText("Item to add to box").length).toBeGreaterThan(
-      1
-    );
-    expect(screen.getAllByText("Socket set").length).toBeGreaterThan(0);
+    expect(screen.getByText("Pick a box for contents")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open contents for B-001" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Item to add to box"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Assigned transport resource")
+      screen.queryByLabelText("Assigned transport resource"),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Open contents for B-001" }),
+    );
+    expect(screen.getAllByText("Socket set").length).toBeGreaterThan(0);
+    expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
+    expect(screen.getByLabelText("Item to add to box")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
+    expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Assigned transport resource"),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Details" }));
-    expect(screen.getAllByLabelText("Box label").length).toBeGreaterThan(1);
+    expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
+    expect(screen.getByLabelText("Box label")).toBeInTheDocument();
     expect(
-      screen.getAllByLabelText("Estimated box weight in pounds").length
-    ).toBeGreaterThan(1);
-    expect(screen.queryByLabelText("Item to add to box")).not.toBeInTheDocument();
+      screen.getByLabelText("Estimated box weight in pounds"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Item to add to box"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Photos" }));
-    expect(screen.getAllByText("Photo upload control").length).toBeGreaterThan(
-      1
-    );
-    expect(screen.getAllByText("Photo evidence strip").length).toBeGreaterThan(
-      1
-    );
+    expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
+    expect(screen.getByText("Photo upload control")).toBeInTheDocument();
+    expect(screen.getByText("Photo evidence strip")).toBeInTheDocument();
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Load" }));
+    expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
     expect(
-      screen.getAllByLabelText("Assigned transport resource").length
-    ).toBeGreaterThan(1);
+      screen.getByLabelText("Assigned transport resource"),
+    ).toBeInTheDocument();
     expect(
-      screen.getAllByLabelText("Assignment override reason").length
-    ).toBeGreaterThan(1);
+      screen.getByLabelText("Assignment override reason"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Labels" }));
     const labelCards = screen.getByRole("list", { name: "Box labels" });
     expect(within(labelCards).getByText("B-001")).toBeInTheDocument();
     expect(within(labelCards).getByText("Garage tools")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Code" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Code" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Storage").length).toBeGreaterThan(0);
   });
 
@@ -233,49 +261,67 @@ describe("BoxManager", () => {
     window.history.replaceState(
       null,
       "",
-      "/app/moves/move_123/boxes#box-labels"
+      "/app/moves/move_123/boxes#box-labels",
     );
 
     render(
       <BoxManager
         householdId={"household_123" as Id<"households">}
         moveId={"move_123" as Id<"moves">}
-      />
+      />,
     );
 
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Labels" })).toHaveAttribute(
         "data-state",
-        "active"
-      )
+        "active",
+      ),
     );
-    expect(screen.getByRole("list", { name: "Box labels" })).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "Box records" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: "Box labels" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Box records" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens load workflow when routed to the box load hash", async () => {
-    window.history.replaceState(
-      null,
-      "",
-      "/app/moves/move_123/boxes#box-load"
-    );
+    const user = userEvent.setup();
+
+    window.history.replaceState(null, "", "/app/moves/move_123/boxes#box-load");
 
     render(
       <BoxManager
         householdId={"household_123" as Id<"households">}
         moveId={"move_123" as Id<"moves">}
-      />
+      />,
     );
 
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Load" })).toHaveAttribute(
         "data-state",
-        "active"
-      )
+        "active",
+      ),
     );
     expect(
-      screen.getAllByLabelText("Assigned transport resource").length
-    ).toBeGreaterThan(1);
-    expect(screen.queryByRole("list", { name: "Box records" })).not.toBeInTheDocument();
+      screen.getByText("Pick a box for load assignment"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Assign load for B-001" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Assigned transport resource"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Box records" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Assign load for B-001" }),
+    );
+    expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Assigned transport resource"),
+    ).toBeInTheDocument();
   });
 });
