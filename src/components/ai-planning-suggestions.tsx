@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { BrainCircuit, Check, RefreshCw, X } from "lucide-react";
 
@@ -42,6 +42,9 @@ type SuggestionEdit = {
   estimateDraft?: EstimateEdit;
   assignmentDraft?: AssignmentEdit;
 };
+type PlanningSuggestion = NonNullable<
+  ReturnType<typeof useQuery<typeof api.aiPlanningSuggestions.listForMove>>
+>[number];
 
 export function AiPlanningSuggestions({
   householdId,
@@ -176,6 +179,40 @@ export function AiPlanningSuggestions({
     }));
   }
 
+  function toggleSelected(id: string, checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function renderSuggestionEdit(suggestion: PlanningSuggestion) {
+    return suggestion.estimateDraft ? (
+      <EstimateEditFields
+        edit={
+          edits[suggestion._id]?.estimateDraft ??
+          estimateEditFromSuggestion(suggestion.estimateDraft)
+        }
+        onChange={(estimateDraft) =>
+          updateEdit(suggestion._id, { estimateDraft })
+        }
+      />
+    ) : suggestion.assignmentDraft ? (
+      <AssignmentEditFields
+        edit={
+          edits[suggestion._id]?.assignmentDraft ??
+          assignmentEditFromSuggestion(suggestion.assignmentDraft.overrideReason)
+        }
+        warnings={suggestion.assignmentDraft.assignmentWarnings.length}
+        onChange={(assignmentDraft) =>
+          updateEdit(suggestion._id, { assignmentDraft })
+        }
+      />
+    ) : null;
+  }
+
   return (
     <Card id="ai-planning-suggestions">
       <CardHeader>
@@ -240,103 +277,63 @@ export function AiPlanningSuggestions({
             <Skeleton className="h-12 w-4/5" />
           </div>
         ) : pendingSuggestions.length ? (
-          <div className="rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Use</TableHead>
-                  <TableHead>Suggestion</TableHead>
-                  <TableHead>Edit</TableHead>
-                  <TableHead>Reasoning</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingSuggestions.map((suggestion) => (
-                  <TableRow key={suggestion._id}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="size-3.5 accent-primary"
-                        checked={selectedIds.has(suggestion._id)}
-                        onChange={(event) => {
-                          const next = new Set(selectedIds);
-                          if (event.target.checked) next.add(suggestion._id);
-                          else next.delete(suggestion._id);
-                          setSelectedIds(next);
-                        }}
-                        aria-label={`Use ${suggestion.type} suggestion`}
-                      />
-                    </TableCell>
-                    <TableCell className="min-w-[180px]">
-                      <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline">{suggestion.type}</Badge>
-                        <Badge variant="secondary">{suggestion.confidence}</Badge>
-                      </div>
-                      <div className="mt-2 text-xs text-muted-foreground">
-                        {suggestion.estimateDraft ? (
-                          <>
-                            {formatNumber(
-                              suggestion.estimateDraft.estimatedWeightLb
-                            )}{" "}
-                            lb /{" "}
-                            {formatNumber(
-                              suggestion.estimateDraft.estimatedVolumeCuFt
-                            )}{" "}
-                            cu ft
-                          </>
-                        ) : suggestion.assignmentDraft ? (
-                          <>
-                            Target resource{" "}
-                            {String(suggestion.assignmentDraft.assignedResourceId).slice(
-                              -6
-                            )}
-                          </>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="min-w-[260px]">
-                      {suggestion.estimateDraft ? (
-                        <EstimateEditFields
-                          edit={
-                            edits[suggestion._id]?.estimateDraft ??
-                            estimateEditFromSuggestion(suggestion.estimateDraft)
-                          }
-                          onChange={(estimateDraft) =>
-                            updateEdit(suggestion._id, { estimateDraft })
-                          }
-                        />
-                      ) : suggestion.assignmentDraft ? (
-                        <AssignmentEditFields
-                          edit={
-                            edits[suggestion._id]?.assignmentDraft ??
-                            assignmentEditFromSuggestion(
-                              suggestion.assignmentDraft.overrideReason
-                            )
-                          }
-                          warnings={
-                            suggestion.assignmentDraft.assignmentWarnings.length
-                          }
-                          onChange={(assignmentDraft) =>
-                            updateEdit(suggestion._id, { assignmentDraft })
-                          }
-                        />
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="max-w-[340px] text-xs leading-5 text-muted-foreground">
-                      <p>{suggestion.reasoning}</p>
-                      {suggestion.assumptions.length ? (
-                        <ul className="mt-2 list-disc space-y-1 pl-4">
-                          {suggestion.assumptions.map((assumption) => (
-                            <li key={assumption}>{assumption}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </TableCell>
+          <>
+            <div
+              role="list"
+              aria-label="AI planning suggestion cards"
+              className="grid gap-3 md:hidden"
+            >
+              {pendingSuggestions.map((suggestion) => (
+                <PlanningSuggestionCard
+                  key={suggestion._id}
+                  suggestion={suggestion}
+                  selected={selectedIds.has(suggestion._id)}
+                  onSelectedChange={(checked) =>
+                    toggleSelected(suggestion._id, checked)
+                  }
+                >
+                  {renderSuggestionEdit(suggestion)}
+                </PlanningSuggestionCard>
+              ))}
+            </div>
+
+            <div className="hidden rounded-md border border-border md:block">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Use</TableHead>
+                    <TableHead className="w-[22%]">Suggestion</TableHead>
+                    <TableHead className="w-[38%]">Edit</TableHead>
+                    <TableHead>Reasoning</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {pendingSuggestions.map((suggestion) => (
+                    <TableRow key={suggestion._id}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          className="size-3.5 accent-primary"
+                          checked={selectedIds.has(suggestion._id)}
+                          onChange={(event) =>
+                            toggleSelected(suggestion._id, event.target.checked)
+                          }
+                          aria-label={`Use ${suggestion.type} suggestion`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <PlanningSuggestionSummary suggestion={suggestion} />
+                      </TableCell>
+                      <TableCell>{renderSuggestionEdit(suggestion)}</TableCell>
+                      <TableCell>
+                        <PlanningSuggestionReasoning suggestion={suggestion} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
             No pending planning suggestions.
@@ -344,6 +341,92 @@ export function AiPlanningSuggestions({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function PlanningSuggestionCard({
+  suggestion,
+  selected,
+  onSelectedChange,
+  children,
+}: {
+  suggestion: PlanningSuggestion;
+  selected: boolean;
+  onSelectedChange: (checked: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="listitem"
+      className="rounded-md border border-border bg-card p-3"
+    >
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          className="size-3.5 accent-primary"
+          checked={selected}
+          onChange={(event) => onSelectedChange(event.target.checked)}
+          aria-label={`Use ${suggestion.type} suggestion`}
+        />
+        Use suggestion
+      </label>
+      <div className="mt-3">
+        <PlanningSuggestionSummary suggestion={suggestion} />
+      </div>
+      <div className="mt-3">{children}</div>
+      <div className="mt-3">
+        <PlanningSuggestionReasoning suggestion={suggestion} />
+      </div>
+    </div>
+  );
+}
+
+function PlanningSuggestionSummary({
+  suggestion,
+}: {
+  suggestion: PlanningSuggestion;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap gap-1">
+        <Badge variant="outline">{suggestion.type}</Badge>
+        <Badge variant="secondary">{suggestion.confidence}</Badge>
+      </div>
+      <div className="mt-2 break-words text-xs text-muted-foreground">
+        {suggestion.estimateDraft ? (
+          <>
+            {formatNumber(suggestion.estimateDraft.estimatedWeightLb)} lb /{" "}
+            {formatNumber(suggestion.estimateDraft.estimatedVolumeCuFt)} cu ft
+          </>
+        ) : suggestion.assignmentDraft ? (
+          <>
+            Target resource{" "}
+            {String(suggestion.assignmentDraft.assignedResourceId).slice(-6)}
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PlanningSuggestionReasoning({
+  suggestion,
+}: {
+  suggestion: PlanningSuggestion;
+}) {
+  return (
+    <div className="text-xs leading-5 text-muted-foreground">
+      <p className="line-clamp-4 break-words">{suggestion.reasoning}</p>
+      {suggestion.assumptions.length ? (
+        <ul className="mt-2 list-disc space-y-1 pl-4">
+          {suggestion.assumptions.map((assumption) => (
+            <li key={assumption} className="break-words">
+              {assumption}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
