@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -102,15 +102,38 @@ vi.mock("@/components/ai-photo-intake", () => ({
 vi.mock("@/components/ai-job-monitor", () => ({
   AiJobMonitor: () => <div>AI job monitor surface</div>,
 }));
+vi.mock("@/components/inventory-table", () => ({
+  InventoryTable: () => <div>Inventory table surface</div>,
+}));
+vi.mock("@/components/room-walk-intake", () => ({
+  RoomWalkIntake: () => <div>Inventory capture surface</div>,
+}));
+vi.mock("@/components/planned-items-panel", () => ({
+  PlannedItemsPanel: () => <div>Planned inventory surface</div>,
+}));
+vi.mock("@/components/inventory-duplicate-review", () => ({
+  InventoryDuplicateReview: () => <div>Duplicate review surface</div>,
+}));
+vi.mock("@/components/disposition-pipeline-panel", () => ({
+  DispositionPipelinePanel: () => <div>Disposition pipeline surface</div>,
+}));
+vi.mock("@/components/estimate-summary", () => ({
+  EstimateSummary: () => <div>Estimate summary surface</div>,
+}));
 
 import { AiReviewWorkspacePage } from "@/components/move-pages/ai-review-page";
 import { CaptureWorkspacePage } from "@/components/move-pages/capture-page";
+import { InventoryWorkspacePage } from "@/components/move-pages/inventory-page";
 import { LoadPlanWorkspacePage } from "@/components/move-pages/load-plan-page";
 import { MoveOverviewPage } from "@/components/move-pages/overview-page";
 import { PacketsWorkspacePage } from "@/components/move-pages/packets-page";
 import { PhotosWorkspacePage } from "@/components/move-pages/photos-page";
 
 describe("move workspace task tabs", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123");
+  });
+
   it("opens overview on decisions instead of stacking readiness, people, and defaults", () => {
     render(<MoveOverviewPage />);
 
@@ -155,6 +178,25 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Evidence coverage surface")).not.toBeInTheDocument();
   });
 
+  it("opens photos coverage when routed to the evidence-density hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/photos#evidence-density"
+    );
+
+    render(<PhotosWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Coverage" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Evidence coverage surface")).toBeInTheDocument();
+    expect(screen.queryByText("Photo review surface")).not.toBeInTheDocument();
+  });
+
   it("opens load plan on the board instead of stacking resources and AI suggestions", () => {
     render(<LoadPlanWorkspacePage />);
 
@@ -170,6 +212,25 @@ describe("move workspace task tabs", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens load plan resources when routed to the transport hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/load-plan#transport-resources"
+    );
+
+    render(<LoadPlanWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Resources" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Transport resources surface")).toBeInTheDocument();
+    expect(screen.queryByText("Load board surface")).not.toBeInTheDocument();
+  });
+
   it("opens packets on the builder and keeps claims separate", () => {
     render(<PacketsWorkspacePage />);
 
@@ -180,6 +241,44 @@ describe("move workspace task tabs", () => {
     expect(screen.getByRole("tab", { name: "Claims" })).toBeInTheDocument();
     expect(screen.getByText("Packet builder surface")).toBeInTheDocument();
     expect(screen.queryByText("Claims center surface")).not.toBeInTheDocument();
+  });
+
+  it("opens packet claims when routed to the claims-center hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/packets#claims-center"
+    );
+
+    render(<PacketsWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Claims" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Claims center surface")).toBeInTheDocument();
+    expect(screen.queryByText("Packet builder surface")).not.toBeInTheDocument();
+  });
+
+  it("opens inventory disposition when routed to the disposition hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#disposition-pipelines"
+    );
+
+    render(<InventoryWorkspacePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Disposition" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Disposition pipeline surface")).toBeInTheDocument();
+    expect(screen.queryByText("Inventory table surface")).not.toBeInTheDocument();
   });
 
   it("opens AI review on the approval queue before intake and job details", () => {

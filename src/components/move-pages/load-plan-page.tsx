@@ -7,9 +7,17 @@ import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { TransportResourcesPanel } from "@/components/transport-resources-panel";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
+
+const loadPlanTabHashes = {
+  "#capacity-posture": "resources",
+  "#load-plan": "board",
+  "#transport-resources": "resources",
+} as const;
 
 export function LoadPlanWorkspacePage() {
   const { householdId, moveId, selectedMove } = useMoveWorkspace();
+  const [activeTab, setActiveTab] = useHashTab("board", loadPlanTabHashes);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -17,7 +25,7 @@ export function LoadPlanWorkspacePage() {
         title="Load Plan"
         description="Trucks, trailers, movers, and helpers — what goes in each one, zone by zone, with capacity rollups."
       />
-      <Tabs defaultValue="board" className="gap-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={[
             { value: "board", label: "Board" },

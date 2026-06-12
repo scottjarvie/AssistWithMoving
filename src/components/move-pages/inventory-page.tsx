@@ -10,9 +10,16 @@ import { RoomWalkIntake } from "@/components/room-walk-intake";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
+
+const inventoryTabHashes = {
+  "#disposition-pipelines": "disposition",
+  "#inventory": "items",
+} as const;
 
 export function InventoryWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
+  const [activeTab, setActiveTab] = useHashTab("items", inventoryTabHashes);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -20,7 +27,7 @@ export function InventoryWorkspacePage() {
         title="Inventory"
         description="Every item you own, where it is, and what is happening to it: keep, sell, donate, dump, store, or move."
       />
-      <Tabs defaultValue="items" className="gap-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={[
             { value: "items", label: "Items" },

@@ -10,9 +10,16 @@ import {
 } from "@/components/photo-review-workspace";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
+
+const photoTabHashes = {
+  "#evidence-density": "coverage",
+  "#photos": "review",
+} as const;
 
 export function PhotosWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
+  const [activeTab, setActiveTab] = useHashTab("review", photoTabHashes);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -20,7 +27,7 @@ export function PhotosWorkspacePage() {
         title="Photos"
         description="Photo evidence for items, boxes, and rooms — originals stay private, and claim-readiness is scored as you go."
       />
-      <Tabs defaultValue="review" className="gap-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={[
             { value: "review", label: "Review" },

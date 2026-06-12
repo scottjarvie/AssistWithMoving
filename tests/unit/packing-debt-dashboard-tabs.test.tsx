@@ -134,7 +134,7 @@ describe("PackingDebtDashboard task tabs", () => {
     expect(screen.getByText("Review inventory decisions")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Review inventory decisions/i })
-    ).toHaveAttribute("href", "/app/moves/move_123/inventory");
+    ).toHaveAttribute("href", "/app/moves/move_123/inventory#inventory");
     expect(screen.queryByText("Inventory")).not.toBeInTheDocument();
     expect(screen.queryByText("Go fix readiness inputs")).not.toBeInTheDocument();
 
@@ -142,7 +142,7 @@ describe("PackingDebtDashboard task tabs", () => {
     expect(screen.getByText("Inventory")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Unboxed items/i })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/boxes"
+      "/app/moves/move_123/boxes#boxes"
     );
     expect(screen.getByText("Evidence")).toBeInTheDocument();
     expect(screen.getByText("Load readiness")).toBeInTheDocument();
@@ -154,11 +154,11 @@ describe("PackingDebtDashboard task tabs", () => {
     expect(screen.getByText("Go fix readiness inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/inventory"
+      "/app/moves/move_123/inventory#inventory"
     );
     expect(screen.getByRole("link", { name: "AI review" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/ai-review"
+      "/app/moves/move_123/ai-review#ai-review-queue"
     );
     expect(screen.queryByText("Load readiness")).not.toBeInTheDocument();
   });

@@ -35,5 +35,5 @@ export function moveWorkspaceAnchorPath(
     return anchor;
   }
 
-  return moveWorkspacePath(moveId, section);
+  return `${moveWorkspacePath(moveId, section)}${anchor}`;
 }

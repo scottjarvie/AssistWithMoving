@@ -7,7 +7,13 @@ import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
 import { flagEnabled } from "@/lib/feature-flags";
+
+const packetTabHashes = {
+  "#claims-center": "claims",
+  "#documentation-packets": "builder",
+} as const;
 
 export function PacketsWorkspacePage() {
   const { householdId, moveId, selectedMove, featureFlags } =
@@ -17,6 +23,7 @@ export function PacketsWorkspacePage() {
     "documentationPackets",
     true
   );
+  const [activeTab, setActiveTab] = useHashTab("builder", packetTabHashes);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -24,7 +31,7 @@ export function PacketsWorkspacePage() {
         title="Packets"
         description="Scoped documentation for each recipient — movers, employers, insurers, and your own full record — with privacy defaults applied."
       />
-      <Tabs defaultValue="builder" className="gap-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={[
             { value: "builder", label: "Builder" },
