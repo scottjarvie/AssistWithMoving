@@ -976,46 +976,71 @@ export function BoxManager({
             </div>
 
             {visibleBoxes.length ? (
-              <div className="overflow-x-auto rounded-md border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Code</TableHead>
-                      <TableHead>Label</TableHead>
-                      <TableHead>Room</TableHead>
-                      <TableHead>Destination</TableHead>
-                      <TableHead>Lookup</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {visibleBoxes.map(({ box }) => (
-                      <TableRow key={box._id}>
-                        <TableCell className="font-medium">{box.code}</TableCell>
-                        <TableCell>{box.label ?? "unlabeled"}</TableCell>
-                        <TableCell>{box.room ?? "unassigned"}</TableCell>
-                        <TableCell>
-                          {box.destinationRoom ?? "unassigned"}
-                        </TableCell>
-                        <TableCell>
-                          {householdId && moveId ? (
-                            <Button asChild size="sm" variant="outline">
-                              <Link
-                                href={buildBoxLookupPath({
-                                  householdId,
-                                  moveId,
-                                  boxId: box._id,
-                                })}
-                              >
-                                Lookup
-                              </Link>
-                            </Button>
-                          ) : null}
-                        </TableCell>
+              <>
+                <div
+                  role="list"
+                  aria-label="Box labels"
+                  className="grid gap-3 md:hidden"
+                >
+                  {visibleBoxes.map(({ box }) => (
+                    <BoxLabelCard
+                      key={box._id}
+                      box={box}
+                      householdId={householdId}
+                      moveId={moveId}
+                    />
+                  ))}
+                </div>
+
+                <div className="hidden rounded-md border border-border md:block">
+                  <Table className="table-fixed">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-28">Code</TableHead>
+                        <TableHead>Label</TableHead>
+                        <TableHead className="w-36">Room</TableHead>
+                        <TableHead className="w-36">Destination</TableHead>
+                        <TableHead className="w-28">Lookup</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {visibleBoxes.map(({ box }) => (
+                        <TableRow key={box._id}>
+                          <TableCell className="font-medium">
+                            {box.code}
+                          </TableCell>
+                          <TableCell>
+                            <span className="line-clamp-2 break-words">
+                              {box.label ?? "unlabeled"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="truncate">
+                            {box.room ?? "unassigned"}
+                          </TableCell>
+                          <TableCell className="truncate">
+                            {box.destinationRoom ?? "unassigned"}
+                          </TableCell>
+                          <TableCell>
+                            {householdId && moveId ? (
+                              <Button asChild size="sm" variant="outline">
+                                <Link
+                                  href={buildBoxLookupPath({
+                                    householdId,
+                                    moveId,
+                                    boxId: box._id,
+                                  })}
+                                >
+                                  Lookup
+                                </Link>
+                              </Button>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : (
               <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
                 Create boxes before printing labels.
@@ -1035,6 +1060,52 @@ function BoxMetric({ label, value }: { label: string; value: number }) {
         {label}
       </p>
       <p className="mt-1 text-2xl font-semibold tracking-normal">{value}</p>
+    </div>
+  );
+}
+
+function BoxLabelCard({
+  box,
+  householdId,
+  moveId,
+}: {
+  box: Doc<"boxes">;
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+}) {
+  return (
+    <div
+      role="listitem"
+      className="rounded-md border border-border bg-card p-3"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="break-words font-medium">{box.code}</p>
+          <p className="mt-1 line-clamp-2 break-words text-sm text-muted-foreground">
+            {box.label ?? "unlabeled"}
+          </p>
+        </div>
+        {householdId && moveId ? (
+          <Button asChild size="sm" variant="outline">
+            <Link
+              href={buildBoxLookupPath({
+                householdId,
+                moveId,
+                boxId: box._id,
+              })}
+            >
+              Lookup
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <BoxSummaryField label="Room" value={box.room ?? "unassigned"} />
+        <BoxSummaryField
+          label="Destination"
+          value={box.destinationRoom ?? "unassigned"}
+        />
+      </div>
     </div>
   );
 }

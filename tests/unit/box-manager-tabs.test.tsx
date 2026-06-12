@@ -173,5 +173,12 @@ describe("BoxManager", () => {
     expect(screen.getByLabelText("Assigned transport resource")).toBeInTheDocument();
     expect(screen.getByLabelText("Assignment override reason")).toBeInTheDocument();
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Labels" }));
+    const labelCards = screen.getByRole("list", { name: "Box labels" });
+    expect(within(labelCards).getByText("B-001")).toBeInTheDocument();
+    expect(within(labelCards).getByText("Garage tools")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Code" })).toBeInTheDocument();
+    expect(screen.getAllByText("Storage").length).toBeGreaterThan(0);
   });
 });
