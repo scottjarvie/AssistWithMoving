@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,7 @@ import { InventoryTable } from "@/components/inventory-table";
 
 describe("InventoryTable", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/inventory");
     mockItems.rows = [
       inventoryItem("item_1", "Walnut media console", {
         description:
@@ -106,6 +107,60 @@ describe("InventoryTable", () => {
     expect(screen.queryByText("Walnut media console")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Bulk paste" }));
+    expect(
+      screen.getByPlaceholderText(
+        "Garage: two bikes, red toolbox, camping tent",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("New item name")).not.toBeInTheDocument();
+  });
+
+  it("opens the add workflow from the add-inventory hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#add-inventory",
+    );
+
+    render(
+      <InventoryTable
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Add" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
+    expect(screen.getByLabelText("New item name")).toBeInTheDocument();
+    expect(screen.queryByText("Walnut media console")).not.toBeInTheDocument();
+  });
+
+  it("opens the bulk paste workflow from the bulk-inventory hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#bulk-inventory",
+    );
+
+    render(
+      <InventoryTable
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Bulk paste" })).toHaveAttribute(
+        "data-state",
+        "active",
+      );
+    });
+
     expect(
       screen.getByPlaceholderText(
         "Garage: two bikes, red toolbox, camping tent",

@@ -13,10 +13,14 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 
 const inventoryTabHashes = {
+  "#add-inventory": "items",
+  "#bulk-inventory": "items",
+  "#bulk-paste": "items",
   "#disposition-pipelines": "disposition",
   "#estimate-summary": "estimates",
   "#inventory": "items",
   "#inventory-duplicate-review": "duplicates",
+  "#inventory-records": "items",
   "#planned-items": "planned",
   "#room-walk": "capture",
 } as const;

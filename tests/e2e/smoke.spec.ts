@@ -9,7 +9,9 @@ test("home page presents the MovingManifest product", async ({ page }) => {
       name: "The manifest for everything that moves.",
     })
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: /Open workspace preview/i })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Use with your AI assistant" }),
+  ).toHaveAttribute("href", "/ai");
 });
 
 test("public product and legal pages are available", async ({ page }) => {

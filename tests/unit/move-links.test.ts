@@ -35,6 +35,18 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#inventory")).toBe(
       "/app/moves/move_123/inventory#inventory"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#add-inventory")).toBe(
+      "/app/moves/move_123/inventory#add-inventory"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#bulk-inventory")).toBe(
+      "/app/moves/move_123/inventory#bulk-inventory"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#bulk-paste")).toBe(
+      "/app/moves/move_123/inventory#bulk-paste"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#inventory-records")).toBe(
+      "/app/moves/move_123/inventory#inventory-records"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#add-box")).toBe(
       "/app/moves/move_123/boxes#add-box"
     );

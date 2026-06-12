@@ -59,6 +59,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
 import {
   filterInventoryItemsByOwner,
   filterInventoryItems,
@@ -71,6 +72,16 @@ import {
   itemStatusOptions,
 } from "@/lib/inventory-options";
 import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
+
+type InventoryTaskTab = "browse" | "add" | "bulk";
+
+const inventoryTaskHashes = {
+  "#add-inventory": "add",
+  "#bulk-inventory": "bulk",
+  "#bulk-paste": "bulk",
+  "#inventory": "browse",
+  "#inventory-records": "browse",
+} as const satisfies Partial<Record<string, InventoryTaskTab>>;
 
 const visibleDefaultColumns: VisibilityState = {
   category: true,
@@ -465,6 +476,10 @@ export function InventoryTable({
     null,
   );
   const [detailOpen, setDetailOpen] = useState(false);
+  const [activeTaskTab, setActiveTaskTab] = useHashTab<InventoryTaskTab>(
+    "browse",
+    inventoryTaskHashes,
+  );
 
   const items = useQuery(
     api.items.listForMoveWithSignals,
@@ -824,7 +839,11 @@ export function InventoryTable({
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="browse" className="gap-2">
+          <Tabs
+            value={activeTaskTab}
+            onValueChange={setActiveTaskTab}
+            className="gap-2"
+          >
             <div className="overflow-x-auto pb-1">
               <TabsList className="min-w-max" aria-label="Inventory task views">
                 <TabsTrigger value="browse">Browse</TabsTrigger>
@@ -843,7 +862,11 @@ export function InventoryTable({
               </p>
             ) : null}
 
-            <TabsContent value="browse" className="space-y-2">
+            <TabsContent
+              value="browse"
+              id="inventory-records"
+              className="space-y-2"
+            >
               <section
                 aria-labelledby="inventory-filter-heading"
                 className="rounded-md border border-border bg-muted/20 p-3"
@@ -1152,7 +1175,7 @@ export function InventoryTable({
               </div>
             </TabsContent>
 
-            <TabsContent value="add">
+            <TabsContent value="add" id="add-inventory">
               <form
                 className="grid gap-2 rounded-md border border-border bg-muted/20 p-3 md:grid-cols-[minmax(0,1.2fr)_160px_160px_170px_auto]"
                 onSubmit={handleCreateItem}
@@ -1206,7 +1229,7 @@ export function InventoryTable({
               </form>
             </TabsContent>
 
-            <TabsContent value="bulk">
+            <TabsContent value="bulk" id="bulk-inventory">
               <BulkInventoryIntake
                 householdId={householdId}
                 moveId={moveId}
