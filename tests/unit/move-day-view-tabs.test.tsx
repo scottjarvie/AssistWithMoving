@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -122,6 +122,29 @@ describe("MoveDayView task tabs", () => {
     expect(
       screen.queryByText("Offline and crew safety")
     ).not.toBeInTheDocument();
+
+    const readyCard = screen.getByRole("listitem", {
+      name: "Move day box BOX-READY",
+    });
+    expect(
+      within(readyCard).getByRole("button", { name: /Next\s+Staged/ })
+    ).toBeInTheDocument();
+    expect(
+      within(readyCard).getByRole("button", { name: "Missing" })
+    ).toBeInTheDocument();
+    expect(
+      within(readyCard).getByRole("button", { name: "Damaged" })
+    ).toBeInTheDocument();
+    const otherStatuses = within(readyCard)
+      .getByText("Other statuses")
+      .closest("details");
+    expect(otherStatuses).not.toHaveAttribute("open");
+
+    await user.click(within(readyCard).getByText("Other statuses"));
+    expect(otherStatuses).toHaveAttribute("open");
+    expect(
+      within(readyCard).getByRole("button", { name: "Loaded" })
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Exceptions" }));
     expect(screen.getByRole("tab", { name: "Exceptions" })).toHaveAttribute(

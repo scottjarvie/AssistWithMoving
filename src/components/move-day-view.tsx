@@ -55,6 +55,12 @@ type BoxStatus = Doc<"boxes">["status"];
 type ItemStatus = Doc<"items">["status"];
 type CrewFilter = "all" | "ready" | "staged" | "loaded" | "exceptions";
 type MoveDayTask = "checklist" | "exceptions" | "progress" | "offline";
+type StatusAction = {
+  boxStatus: BoxStatus;
+  itemStatus?: ItemStatus;
+  label: string;
+  variant?: "default" | "outline" | "destructive";
+};
 type FailedStatusAction = {
   boxId: Id<"boxes">;
   boxCode: string;
@@ -80,12 +86,7 @@ const progressStatuses: BoxStatus[] = [
   "damaged",
 ];
 
-const statusActions: {
-  boxStatus: BoxStatus;
-  itemStatus?: ItemStatus;
-  label: string;
-  variant?: "default" | "outline" | "destructive";
-}[] = [
+const statusActions: StatusAction[] = [
   { boxStatus: "sealed", itemStatus: "packed", label: "Sealed", variant: "outline" },
   { boxStatus: "staged", itemStatus: "staged", label: "Staged", variant: "outline" },
   { boxStatus: "loaded", itemStatus: "loaded", label: "Loaded" },
@@ -566,7 +567,11 @@ export function MoveDayView({
 
     if (usingCachedBoxes && filteredCachedBoxes.length) {
       return (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div
+          role="list"
+          aria-label="Cached move day boxes"
+          className="grid gap-3 xl:grid-cols-2"
+        >
           {filteredCachedBoxes.slice(0, 80).map((box) => (
             <CachedMoveDayBoxCard key={box.id} box={box} />
           ))}
@@ -582,7 +587,11 @@ export function MoveDayView({
 
     if (!usingCachedBoxes && filteredBoxes.length) {
       return (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div
+          role="list"
+          aria-label="Move day boxes"
+          className="grid gap-3 xl:grid-cols-2"
+        >
           {filteredBoxes.slice(0, 80).map((record) => (
             <MoveDayBoxCard
               key={record.box._id}
@@ -813,9 +822,21 @@ function MoveDayBoxCard({
   const hasWarnings =
     (box.assignmentWarnings?.length ?? 0) > 0 ||
     (box.assignmentHardBlocks?.length ?? 0) > 0;
+  const primaryAction = primaryStatusActionFor(box.status);
+  const exceptionActions = statusActions.filter((action) =>
+    isExceptionStatus(action.boxStatus)
+  );
+  const correctionActions = statusActions.filter(
+    (action) =>
+      action.boxStatus !== box.status &&
+      action.boxStatus !== primaryAction?.boxStatus &&
+      !isExceptionStatus(action.boxStatus)
+  );
 
   return (
     <div
+      role="listitem"
+      aria-label={`Move day box ${box.code}`}
       className={cn(
         "rounded-md border border-border p-3",
         hasException && "border-destructive/50 bg-destructive/5"
@@ -913,37 +934,60 @@ function MoveDayBoxCard({
         </div>
       ) : null}
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {statusActions.map((action) => (
-          <Button
-            key={action.boxStatus}
-            type="button"
-            size="sm"
-            className="h-11 justify-start"
-            variant={action.variant ?? "default"}
-            disabled={updating || box.status === action.boxStatus}
-            onClick={() => {
-              if (isExceptionStatus(action.boxStatus)) {
-                onOpenNote();
-              }
+      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(13rem,0.6fr)]">
+        {primaryAction ? (
+          <MoveDayStatusButton
+            action={primaryAction}
+            disabled={updating || box.status === primaryAction.boxStatus}
+            labelPrefix="Next"
+            onClick={() =>
               onSetStatus(
-                action.boxStatus,
-                action.itemStatus,
+                primaryAction.boxStatus,
+                primaryAction.itemStatus,
                 exceptionNote
-              );
-            }}
-          >
-            {action.boxStatus === "loaded" ? (
-              <Truck aria-hidden="true" />
-            ) : action.boxStatus === "delivered" ? (
-              <CheckCircle2 aria-hidden="true" />
-            ) : (
-              <ScanLine aria-hidden="true" />
-            )}
-            {action.label}
-          </Button>
-        ))}
+              )
+            }
+          />
+        ) : (
+          <div className="flex h-11 items-center rounded-md border border-border px-3 text-sm text-muted-foreground">
+            No next status
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          {exceptionActions.map((action) => (
+            <MoveDayStatusButton
+              key={action.boxStatus}
+              action={action}
+              disabled={updating || box.status === action.boxStatus}
+              onClick={() => {
+                onOpenNote();
+                onSetStatus(action.boxStatus, action.itemStatus, exceptionNote);
+              }}
+            />
+          ))}
+        </div>
       </div>
+
+      {correctionActions.length ? (
+        <details className="mt-2 rounded-md border border-border px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">
+            Other statuses
+          </summary>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {correctionActions.map((action) => (
+              <MoveDayStatusButton
+                key={action.boxStatus}
+                action={action}
+                compact
+                disabled={updating || box.status === action.boxStatus}
+                onClick={() =>
+                  onSetStatus(action.boxStatus, action.itemStatus, exceptionNote)
+                }
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -955,6 +999,8 @@ function CachedMoveDayBoxCard({ box }: { box: MoveDayCachedBox }) {
 
   return (
     <div
+      role="listitem"
+      aria-label={`Cached move day box ${box.code}`}
       className={cn(
         "rounded-md border border-dashed border-border p-3",
         hasException && "border-destructive/50 bg-destructive/5"
@@ -998,6 +1044,44 @@ function CachedMoveDayBoxCard({ box }: { box: MoveDayCachedBox }) {
         Cached checklist only. Reconnect before changing status.
       </div>
     </div>
+  );
+}
+
+function MoveDayStatusButton({
+  action,
+  compact = false,
+  disabled,
+  labelPrefix,
+  onClick,
+}: {
+  action: StatusAction;
+  compact?: boolean;
+  disabled: boolean;
+  labelPrefix?: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      aria-label={labelPrefix ? `${labelPrefix} ${action.label}` : action.label}
+      className={cn("h-11 justify-start", compact && "h-9")}
+      variant={action.variant ?? "default"}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {statusActionIcon(action.boxStatus)}
+      {labelPrefix ? (
+        <span className="grid min-w-0 text-left leading-tight">
+          <span className="text-[0.65rem] font-normal uppercase text-current/70">
+            {labelPrefix}
+          </span>
+          <span className="truncate">{action.label}</span>
+        </span>
+      ) : (
+        action.label
+      )}
+    </Button>
   );
 }
 
@@ -1047,6 +1131,38 @@ function isBoxStatus(status: string): status is BoxStatus {
 
 function isExceptionStatus(status: BoxStatus) {
   return status === "missing" || status === "damaged";
+}
+
+function primaryStatusActionFor(status: BoxStatus) {
+  switch (status) {
+    case "open":
+    case "packing":
+      return statusActions.find((action) => action.boxStatus === "sealed");
+    case "sealed":
+      return statusActions.find((action) => action.boxStatus === "staged");
+    case "staged":
+      return statusActions.find((action) => action.boxStatus === "loaded");
+    case "loaded":
+      return statusActions.find((action) => action.boxStatus === "delivered");
+    default:
+      return undefined;
+  }
+}
+
+function statusActionIcon(status: BoxStatus) {
+  if (status === "loaded") {
+    return <Truck aria-hidden="true" />;
+  }
+
+  if (status === "delivered") {
+    return <CheckCircle2 aria-hidden="true" />;
+  }
+
+  if (isExceptionStatus(status)) {
+    return <AlertTriangle aria-hidden="true" />;
+  }
+
+  return <ScanLine aria-hidden="true" />;
 }
 
 function statusLabel(status: BoxStatus) {
