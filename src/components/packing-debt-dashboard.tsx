@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
 type PackingDebtDashboardProps = {
@@ -118,7 +119,7 @@ export function PackingDebtDashboard({
                 {summary.topActions.map((metric) => (
                   <Link
                     key={metric.key}
-                    href={metric.anchor}
+                    href={moveWorkspaceAnchorPath(moveId, metric.anchor)}
                     className={cn(
                       "rounded-md border p-3 transition-colors hover:bg-muted/70",
                       severityClasses[metric.severity]
@@ -150,6 +151,7 @@ export function PackingDebtDashboard({
                       "unboxedItems",
                     ].includes(metric.key)
                   )}
+                  moveId={moveId}
                 />
                 <SignalGroup
                   title="Evidence"
@@ -161,6 +163,7 @@ export function PackingDebtDashboard({
                       "pendingAiSuggestions",
                     ].includes(metric.key)
                   )}
+                  moveId={moveId}
                 />
                 <SignalGroup
                   title="Load readiness"
@@ -173,6 +176,7 @@ export function PackingDebtDashboard({
                       "boxWarnings",
                     ].includes(metric.key)
                   )}
+                  moveId={moveId}
                 />
               </div>
             </TabsContent>
@@ -186,16 +190,24 @@ export function PackingDebtDashboard({
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#inventory">Inventory</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#inventory")}>
+                      Inventory
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#load-plan">Load planner</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#load-plan")}>
+                      Load planner
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#photos">Photos</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#photos")}>
+                      Photos
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#ai-review-queue">AI review</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#ai-review-queue")}>
+                      AI review
+                    </Link>
                   </Button>
                 </div>
               </div>
@@ -224,6 +236,7 @@ function SignalGroup({
   title,
   icon: Icon,
   metrics,
+  moveId,
 }: {
   title: string;
   icon: typeof AlertTriangle;
@@ -234,6 +247,7 @@ function SignalGroup({
     severity: keyof typeof severityClasses;
     anchor: string;
   }>;
+  moveId: Id<"moves"> | null;
 }) {
   return (
     <div className="rounded-md border border-border p-3">
@@ -245,7 +259,7 @@ function SignalGroup({
         {metrics.map((metric) => (
           <Link
             key={metric.key}
-            href={metric.anchor}
+            href={moveWorkspaceAnchorPath(moveId, metric.anchor)}
             className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted"
           >
             <span className="min-w-0 truncate text-muted-foreground">

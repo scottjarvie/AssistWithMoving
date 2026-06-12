@@ -96,7 +96,15 @@ describe("EvidenceDensityPanel task tabs", () => {
     expect(screen.getByText("Go fix coverage inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "#inventory"
+      "/app/moves/move_123/inventory"
+    );
+    expect(screen.getByRole("link", { name: "Boxes" })).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/boxes"
+    );
+    expect(screen.getByRole("link", { name: "Packets" })).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/packets"
     );
     expect(screen.queryByText("Vintage camera kit")).not.toBeInTheDocument();
   });

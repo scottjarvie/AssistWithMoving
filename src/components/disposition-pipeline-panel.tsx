@@ -29,6 +29,7 @@ import {
   buildSubManifestPath,
   formatSubManifestCurrency,
 } from "@/lib/sub-manifest";
+import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
 type DispositionPipelinePanelProps = {
@@ -120,7 +121,7 @@ export function DispositionPipelinePanel({
                   {summary.topActions.map((action) => (
                     <Link
                       key={`${action.groupKey}-${action.key}`}
-                      href={action.anchor}
+                      href={moveWorkspaceAnchorPath(moveId, action.anchor)}
                       className={cn(
                         "rounded-md border p-3 transition-colors hover:bg-muted/70",
                         actionClasses[action.severity]
@@ -178,16 +179,24 @@ export function DispositionPipelinePanel({
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#inventory">Inventory</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#inventory")}>
+                      Inventory
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#photos">Photos</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#photos")}>
+                      Photos
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#load-plan">Load planner</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#load-plan")}>
+                      Load planner
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#documentation-packets">Packet links</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#documentation-packets")}>
+                      Packet links
+                    </Link>
                   </Button>
                 </div>
               </div>
@@ -321,7 +330,7 @@ function PipelineCard({
         {group.actions.map((action) => (
           <Link
             key={action.key}
-            href={action.anchor}
+            href={moveWorkspaceAnchorPath(moveId, action.anchor)}
             className="flex items-center justify-between gap-3 rounded-md bg-muted/35 px-3 py-2 text-sm hover:bg-muted"
           >
             <span className="min-w-0 truncate text-muted-foreground">

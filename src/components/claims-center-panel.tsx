@@ -21,6 +21,7 @@ import {
   buildClaimPacketPath,
   formatClaimCurrency,
 } from "@/lib/claim-packet";
+import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
 type ClaimsCenterPanelProps = {
@@ -159,6 +160,7 @@ export function ClaimsCenterPanel({
             <TabsContent value="packets" className="space-y-3">
               <ClaimPacketShortcuts
                 claimPacketPath={claimPacketPath}
+                moveId={moveId}
                 ownerPacketPath={ownerPacketPath}
               />
             </TabsContent>
@@ -289,9 +291,11 @@ function ClaimTimeline({
 
 function ClaimPacketShortcuts({
   claimPacketPath,
+  moveId,
   ownerPacketPath,
 }: {
   claimPacketPath: string;
+  moveId: Id<"moves"> | null;
   ownerPacketPath: string;
 }) {
   return (
@@ -309,10 +313,12 @@ function ClaimPacketShortcuts({
           <Link href={ownerPacketPath}>Owner audit packet</Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href="#inventory">Inventory</Link>
+          <Link href={moveWorkspaceAnchorPath(moveId, "#inventory")}>
+            Inventory
+          </Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href="#photos">Photos</Link>
+          <Link href={moveWorkspaceAnchorPath(moveId, "#photos")}>Photos</Link>
         </Button>
       </div>
     </div>

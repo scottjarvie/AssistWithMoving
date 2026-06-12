@@ -74,6 +74,9 @@ describe("MoveQuestionsPanel task tabs", () => {
       "active"
     );
     expect(screen.getByText("High-value items need photos")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /High-value items need photos/i })
+    ).toHaveAttribute("href", "/app/moves/move_123/inventory");
     expect(screen.getByText("Critical")).toBeInTheDocument();
     expect(screen.queryByText("Go fix the source")).not.toBeInTheDocument();
     expect(screen.queryByText("PCS")).not.toBeInTheDocument();
@@ -90,7 +93,15 @@ describe("MoveQuestionsPanel task tabs", () => {
     expect(screen.getByText("Go fix the source")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "#inventory"
+      "/app/moves/move_123/inventory"
+    );
+    expect(screen.getByRole("link", { name: "Resources" })).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/load-plan"
+    );
+    expect(screen.getByRole("link", { name: "Photos" })).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/photos"
     );
     expect(screen.getByText(/verified against current official guidance/i)).toBeInTheDocument();
     expect(

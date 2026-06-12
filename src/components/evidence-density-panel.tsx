@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
 type EvidenceDensityPanelProps = {
@@ -150,7 +151,7 @@ export function EvidenceDensityPanel({
             </TabsContent>
 
             <TabsContent value="shortcuts" className="space-y-3">
-              <CoverageShortcuts />
+              <CoverageShortcuts moveId={moveId} />
             </TabsContent>
           </Tabs>
         )}
@@ -263,7 +264,7 @@ function CommonEvidenceGaps({
   );
 }
 
-function CoverageShortcuts() {
+function CoverageShortcuts({ moveId }: { moveId: Id<"moves"> | null }) {
   return (
     <div className="rounded-md border border-border p-3">
       <p className="text-sm font-medium">Go fix coverage inputs</p>
@@ -273,16 +274,20 @@ function CoverageShortcuts() {
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button asChild size="sm" variant="outline">
-          <Link href="#inventory">Inventory</Link>
+          <Link href={moveWorkspaceAnchorPath(moveId, "#inventory")}>
+            Inventory
+          </Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href="#photos">Photos</Link>
+          <Link href={moveWorkspaceAnchorPath(moveId, "#photos")}>Photos</Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href="#boxes">Boxes</Link>
+          <Link href={moveWorkspaceAnchorPath(moveId, "#boxes")}>Boxes</Link>
         </Button>
         <Button asChild size="sm" variant="outline">
-          <Link href="#documentation-packets">Packets</Link>
+          <Link href={moveWorkspaceAnchorPath(moveId, "#documentation-packets")}>
+            Packets
+          </Link>
         </Button>
       </div>
     </div>

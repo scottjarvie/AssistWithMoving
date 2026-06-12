@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
 type MoveQuestionsPanelProps = {
@@ -168,7 +169,11 @@ export function MoveQuestionsPanel({
 
               <div className="grid gap-3 lg:grid-cols-2">
                 {summary.topPrompts.map((prompt) => (
-                  <QuestionPromptCard key={prompt.key} prompt={prompt} />
+                  <QuestionPromptCard
+                    key={prompt.key}
+                    prompt={prompt}
+                    href={moveWorkspaceAnchorPath(moveId, prompt.anchor)}
+                  />
                 ))}
               </div>
             </TabsContent>
@@ -198,19 +203,29 @@ export function MoveQuestionsPanel({
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#transport-resources">Resources</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#transport-resources")}>
+                      Resources
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#inventory">Inventory</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#inventory")}>
+                      Inventory
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#photos">Photos</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#photos")}>
+                      Photos
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#load-plan">Load planner</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#load-plan")}>
+                      Load planner
+                    </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="#documentation-packets">Packets</Link>
+                    <Link href={moveWorkspaceAnchorPath(moveId, "#documentation-packets")}>
+                      Packets
+                    </Link>
                   </Button>
                 </div>
               </div>
@@ -236,10 +251,16 @@ export function MoveQuestionsPanel({
   );
 }
 
-function QuestionPromptCard({ prompt }: { prompt: MoveQuestionPrompt }) {
+function QuestionPromptCard({
+  prompt,
+  href,
+}: {
+  prompt: MoveQuestionPrompt;
+  href: string;
+}) {
   return (
     <Link
-      href={prompt.anchor}
+      href={href}
       className={cn(
         "rounded-md border p-3 transition-colors hover:bg-muted/70",
         severityClasses[prompt.severity]

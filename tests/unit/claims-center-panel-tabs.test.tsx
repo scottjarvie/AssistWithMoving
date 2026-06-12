@@ -113,6 +113,14 @@ describe("ClaimsCenterPanel task tabs", () => {
       "href",
       "/app/claim-packet?householdId=household_123&moveId=move_123&mode=submission"
     );
+    expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/inventory"
+    );
+    expect(screen.getByRole("link", { name: "Photos" })).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/photos"
+    );
     expect(screen.queryByText("Status changed")).not.toBeInTheDocument();
   });
 });
