@@ -1693,7 +1693,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "upload_evidence_image", {
     title: "Upload evidence image in one call",
     description:
-      "Default image upload path for agents: provide exactly one local file path, public source URL, data URL, or base64 image. The tool sends the original image to MovingManifest, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Default image upload path for agents: provide exactly one local file path, public source URL, data URL, or base64 image. The tool sends the original image to MovingManifest, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId plus agentReview so the assistant can tell the user what caption, target, privacy/type, and assumptions were used. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       filePath: z
@@ -1749,7 +1749,7 @@ export function registerTools(target, apiConfig) {
   registerTool(target, "upload_evidence_images", {
     title: "Upload multiple evidence images",
     description:
-      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one local file path, public source URL, data URL, or base64 image. Shared metadata at the top level applies to every image unless an image entry overrides it. MovingManifest stores originals and creates web-ready derivatives server-side; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one local file path, public source URL, data URL, or base64 image. Shared metadata at the top level applies to every image unless an image entry overrides it. MovingManifest stores originals and creates web-ready derivatives server-side, then returns per-image status plus agentReview summaries; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       images: z

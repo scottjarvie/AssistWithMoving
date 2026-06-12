@@ -710,12 +710,45 @@ describe("MovingManifest MCP API client", () => {
         uploadedCount: 1,
         failedCount: 0,
         photoIds: ["photo1"],
+        agentReview: {
+          userFacingSummary:
+            'Created "Red toolbox" with quantity 1 and uploaded 1 image attached to the item.',
+          item: {
+            itemId: "item1",
+            name: "Red toolbox",
+            room: "Garage",
+            category: "Tools",
+            quantity: 1,
+            quantityDefaulted: true,
+          },
+          photoIds: ["photo1"],
+          failedImageCount: 0,
+          correctionPrompt: expect.stringContaining("correct only the parts"),
+        },
         images: {
+          agentReview: {
+            userFacingSummary: "Uploaded 1 image evidence file.",
+          },
           results: [
             {
               ok: true,
               photoId: "photo1",
               derivativeStatus: "ready",
+              agentReview: {
+                decisions: {
+                  attachmentTarget: {
+                    type: "item",
+                    id: "item1",
+                    label: "item item1",
+                  },
+                  caption: "Red toolbox on garage shelf",
+                  photoType: "item",
+                  privacyLevel: "normal",
+                  visibilityScope: "moveCollaborators",
+                  confidence: "medium",
+                  verificationStatus: "unreviewed",
+                },
+              },
             },
           ],
         },
@@ -2004,6 +2037,25 @@ describe("MovingManifest MCP API client", () => {
         status: "queued",
         suggestionIds: ["suggestion1"],
       },
+      agentReview: {
+        userFacingSummary: expect.stringContaining("for room Garage"),
+        decisions: {
+          attachmentTarget: {
+            type: "room",
+            label: "room Garage",
+            room: "Garage",
+          },
+          caption: "Garage shelf before packing",
+          photoType: "room",
+          privacyLevel: "normal",
+          visibilityScope: "moveCollaborators",
+          source: "mcp",
+          verificationStatus: "unreviewed",
+          generateAiSuggestions: true,
+        },
+        aiReviewStatus: "queued",
+        correctionPrompt: expect.stringContaining("correct the caption"),
+      },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -2091,6 +2143,29 @@ describe("MovingManifest MCP API client", () => {
         uploadSessionId: "session-local",
         derivativeStatus: "ready",
         derivativeNote: expect.stringContaining("web-ready image derivatives"),
+        agentReview: {
+          userFacingSummary: expect.stringContaining("for room Closet"),
+          decisions: {
+            attachmentTarget: {
+              type: "room",
+              label: "room Closet",
+              room: "Closet",
+            },
+            caption: "Closet bin before packing",
+            photoType: "item",
+            privacyLevel: "normal",
+            visibilityScope: "moveCollaborators",
+            source: "mcp",
+            verificationStatus: "unreviewed",
+            generateAiSuggestions: true,
+          },
+          media: {
+            source: "filePath",
+            fileName: "closet-bin.png",
+            mimeType: "image/png",
+            sizeBytes: pngBytes.length,
+          },
+        },
       });
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -2195,6 +2270,22 @@ describe("MovingManifest MCP API client", () => {
         uploadedCount: 2,
         failedCount: 0,
         derivativeNote: expect.stringContaining("one original upload"),
+        agentReview: {
+          userFacingSummary: "Uploaded 2 image evidence files.",
+          defaultDecisions: {
+            attachmentTarget: {
+              type: "room",
+              label: "room Garage",
+              room: "Garage",
+            },
+            room: "Garage",
+            photoType: "room",
+            privacyLevel: "normal",
+          },
+          imageCount: 2,
+          uploadedCount: 2,
+          failedCount: 0,
+        },
         results: [
           {
             index: 0,
@@ -2202,6 +2293,12 @@ describe("MovingManifest MCP API client", () => {
             photoId: "photo-shelf",
             uploadSessionId: "session-shelf",
             derivativeStatus: "ready",
+            agentReview: {
+              decisions: {
+                caption: "Garage shelf before packing",
+                room: "Garage",
+              },
+            },
           },
           {
             index: 1,
@@ -2209,6 +2306,12 @@ describe("MovingManifest MCP API client", () => {
             photoId: "photo-workbench",
             uploadSessionId: "session-workbench",
             derivativeStatus: "pending",
+            agentReview: {
+              decisions: {
+                caption: "Garage workbench before packing",
+                room: "Garage workbench",
+              },
+            },
           },
         ],
       });
@@ -2303,6 +2406,23 @@ describe("MovingManifest MCP API client", () => {
             "X-MovingManifest-File-Name": "entry-table.png",
           },
           note: expect.stringContaining("does not upload image bytes"),
+        },
+        agentReview: {
+          userFacingSummary: expect.stringContaining("Prepared image upload"),
+          decisions: {
+            attachmentTarget: {
+              type: "room",
+              label: "room Entry",
+              room: "Entry",
+            },
+            caption: "Entry table before packing",
+            photoType: "other",
+            privacyLevel: "normal",
+            visibilityScope: "moveCollaborators",
+            source: "mcp",
+            verificationStatus: "unreviewed",
+          },
+          correctionPrompt: expect.stringContaining("correct the caption"),
         },
       });
       expect(JSON.stringify(result)).not.toContain(pngBytes.toString("base64"));

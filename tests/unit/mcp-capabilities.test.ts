@@ -268,12 +268,15 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(docs).toContain("one user photo should normally mean one");
     expect(docs).toContain("`upload_evidence_image` call");
     expect(docs).toContain("`upload_evidence_images`");
+    expect(docs).toContain("`agentReview`");
     expect(docs).toContain("`generateAiSuggestions: true`");
     expect(llms).toContain("MCP agents should call");
     expect(llms).toContain("upload_evidence_images");
+    expect(llms).toContain("agentReview");
     expect(llms).toContain("generateAiSuggestions: true");
     expect(fullLlms).toContain("One user photo should normally be one upload call");
     expect(fullLlms).toContain("upload_evidence_images");
+    expect(fullLlms).toContain("agentReview");
     expect(fullLlms).toContain("aiReview.status");
   });
 

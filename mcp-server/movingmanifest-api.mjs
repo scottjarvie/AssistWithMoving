@@ -456,6 +456,12 @@ export async function createItemWithImages(config, input) {
     images: imageResult,
     note:
       "Created the item, uploaded original image evidence attached to it, and let MovingManifest create web-ready derivatives server-side.",
+    agentReview: createItemWithImagesAgentReview({
+      input,
+      itemId,
+      item: itemData,
+      imageResult,
+    }),
   };
 }
 
@@ -1089,6 +1095,13 @@ export async function uploadEvidenceImage(config, input) {
         : { method: "POST", path: "/photos/upload", body },
       derivativeNote:
         "MovingManifest stores the original image and creates web-ready derivatives server-side.",
+      agentReview: imageUploadAgentReview({
+        input,
+        media: directImage,
+        derivativeNote:
+          "MovingManifest stores the original image and creates web-ready derivatives server-side.",
+        dryRun: true,
+      }),
     };
   }
 
@@ -1109,9 +1122,16 @@ export async function uploadEvidenceImage(config, input) {
         idempotencyKey: input.idempotencyKey,
       });
   const data = response.data ?? response;
+  const derivativeNote = derivativeNoteForStatus(data.derivativeStatus);
   return {
     ...data,
-    derivativeNote: derivativeNoteForStatus(data.derivativeStatus),
+    derivativeNote,
+    agentReview: imageUploadAgentReview({
+      input,
+      data,
+      media: data.media ?? directImage,
+      derivativeNote,
+    }),
   };
 }
 
@@ -1149,6 +1169,7 @@ export async function uploadEvidenceImages(config, input) {
         derivativeStatus: result.derivativeStatus,
         derivativeError: result.derivativeError,
         media: result.media,
+        agentReview: result.agentReview,
         result,
       });
     } catch (error) {
@@ -1175,6 +1196,7 @@ export async function uploadEvidenceImages(config, input) {
     results,
     derivativeNote:
       "Each image was sent as one original upload. MovingManifest creates web-ready derivatives server-side for uploaded images.",
+    agentReview: imageBatchAgentReview({ input, results }),
   };
 }
 
@@ -1279,6 +1301,150 @@ function derivativeNoteForStatus(status) {
     default:
       return "Original media evidence was uploaded. Audio and video uploads do not use image derivatives.";
   }
+}
+
+function imageUploadAgentReview({
+  input,
+  data = {},
+  media,
+  derivativeNote,
+  dryRun = false,
+}) {
+  const target = evidenceTargetFromInput(input);
+  const decisions = removeUndefined({
+    attachmentTarget: target,
+    room: input.room,
+    caption: input.caption,
+    photoType: input.photoType ?? "other",
+    privacyLevel: input.privacyLevel ?? "normal",
+    visibilityScope: input.visibilityScope ?? "moveCollaborators",
+    source: input.source ?? "mcp",
+    confidence: input.confidence,
+    notes: input.notes,
+    verificationStatus: input.verificationStatus ?? "unreviewed",
+    capturedAt: input.capturedAt,
+    generateAiSuggestions: input.generateAiSuggestions,
+  });
+  const mediaSummary = removeUndefined({
+    source: media?.source ?? data.media?.source,
+    fileName: media?.fileName ?? data.media?.fileName,
+    mimeType: media?.mimeType ?? data.media?.mimeType,
+    sizeBytes:
+      media?.sizeBytes ?? media?.bytes?.byteLength ?? data.media?.sizeBytes,
+    width: data.media?.width,
+    height: data.media?.height,
+  });
+  const aiReviewStatus = data.aiReview?.status;
+  const summary = [
+    dryRun ? "Prepared image upload" : "Uploaded image evidence",
+    `for ${target.label}`,
+    input.caption ? `with caption "${input.caption}"` : "without a caption",
+    `as ${decisions.photoType} evidence`,
+    `with ${decisions.privacyLevel} privacy`,
+    dryRun
+      ? "without sending bytes"
+      : `and derivative status ${data.derivativeStatus ?? "unknown"}`,
+    aiReviewStatus ? `AI review ${aiReviewStatus}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return removeUndefined({
+    userFacingSummary: `${summary}.`,
+    photoId: data.photoId,
+    uploadSessionId: data.uploadSessionId,
+    decisions,
+    media: mediaSummary,
+    derivativeStatus: data.derivativeStatus,
+    derivativeError: data.derivativeError,
+    derivativeNote,
+    aiReviewStatus,
+    aiReview: data.aiReview,
+    correctionPrompt:
+      "Tell the user these choices were used so they can correct the caption, target, privacy, quantity, or AI suggestions only if something looks wrong.",
+  });
+}
+
+function imageBatchAgentReview({ input, results }) {
+  const uploadedCount = results.filter((result) => result.ok).length;
+  const failedCount = results.length - uploadedCount;
+  return removeUndefined({
+    userFacingSummary:
+      failedCount > 0
+        ? `Uploaded ${uploadedCount} of ${results.length} image evidence files; ${failedCount} failed.`
+        : `Uploaded ${uploadedCount} image evidence file${uploadedCount === 1 ? "" : "s"}.`,
+    defaultDecisions: removeUndefined({
+      attachmentTarget: evidenceTargetFromInput(input),
+      room: input.room,
+      photoType: input.photoType,
+      privacyLevel: input.privacyLevel,
+      visibilityScope: input.visibilityScope,
+      confidence: input.confidence,
+      notes: input.notes,
+      generateAiSuggestions: input.generateAiSuggestions,
+    }),
+    imageCount: results.length,
+    uploadedCount,
+    failedCount,
+    correctionPrompt:
+      "For a batch, summarize the shared defaults and mention only failed uploads or choices the user may want to correct.",
+  });
+}
+
+function createItemWithImagesAgentReview({ input, itemId, item, imageResult }) {
+  const quantity = input.quantity ?? 1;
+  return removeUndefined({
+    userFacingSummary: `Created "${input.name}" with quantity ${quantity} and uploaded ${imageResult.uploadedCount} image${imageResult.uploadedCount === 1 ? "" : "s"} attached to the item.`,
+    item: removeUndefined({
+      itemId,
+      name: input.name,
+      room: input.room,
+      category: input.category,
+      quantity,
+      quantityDefaulted: input.quantity === undefined,
+      disposition: input.disposition,
+      condition: input.condition,
+      fragility: input.fragility,
+    }),
+    photoIds: imageResult.results
+      .filter((result) => result.ok && result.photoId)
+      .map((result) => result.photoId),
+    failedImageCount: imageResult.failedCount,
+    photoDefaults: input.photoDefaults,
+    correctionPrompt:
+      "Tell the user the item quantity, caption/photo assumptions, and any failed uploads so they can correct only the parts that look wrong.",
+    createdItem: item,
+  });
+}
+
+function evidenceTargetFromInput(input) {
+  if (input.itemId) {
+    return { type: "item", id: input.itemId, label: `item ${input.itemId}` };
+  }
+  if (input.boxId) {
+    return { type: "box", id: input.boxId, label: `box ${input.boxId}` };
+  }
+  if (input.spaceId) {
+    return { type: "space", id: input.spaceId, label: `space ${input.spaceId}` };
+  }
+  if (input.transportResourceId) {
+    return {
+      type: "transportResource",
+      id: input.transportResourceId,
+      label: `transport resource ${input.transportResourceId}`,
+    };
+  }
+  if (input.transportZoneId) {
+    return {
+      type: "transportZone",
+      id: input.transportZoneId,
+      label: `transport zone ${input.transportZoneId}`,
+    };
+  }
+  if (input.room) {
+    return { type: "room", label: `room ${input.room}`, room: input.room };
+  }
+  return { type: "move", label: "the move" };
 }
 
 async function loadEvidenceMedia(input) {

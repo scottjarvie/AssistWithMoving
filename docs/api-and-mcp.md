@@ -1209,7 +1209,7 @@ originals. Image derivatives remain image-only.
 For MCP agents, prefer `upload_evidence_image` for normal single-image work.
 The assistant can pass a local `filePath`, public `sourceUrl`, `dataUrl`, or
 `fileBase64`; MovingManifest stores the original, finalizes evidence metadata,
-creates web-ready derivatives in the background, and returns the `photoId`.
+creates web-ready derivatives server-side, and returns the `photoId`.
 For local `filePath`, the MCP helper reads the file and sends the original image
 bytes directly to `POST /photos/upload`; it does not require the agent to
 base64-wrap the photo, calculate dimensions, or create display files. Use
@@ -1221,9 +1221,11 @@ Quick rule for agents: one user photo should normally mean one
 `upload_evidence_image` call in MCP or one `POST /photos/upload` call in REST.
 Do not ask the user for image dimensions, thumbnail sizes, or derivative files.
 The site reads dimensions and creates `thumb`, `card`, `detail`, and `full`
-display versions after the original is stored. Tell the user the caption,
-attachment target, and confidence/assumptions you used so they can correct the
-record without turning upload into a long interview.
+display versions after the original is stored. MCP image helpers return an
+`agentReview` object with the caption, attachment target, privacy/type choices,
+confidence/assumptions, derivative status, and AI-review status. Tell the user
+that short summary so they can correct the record without turning upload into a
+long interview.
 If the user wants the app to review the photo for possible items, boxes, or
 duplicate evidence, set `generateAiSuggestions: true`. Upload still succeeds
 when AI review queueing fails or the key only has `photos/write`; the response
@@ -1413,12 +1415,13 @@ entry per image:
 }
 ```
 
-The result includes `photoId`, `uploadSessionId`, source media details, and a
-derivative status/note. When `generateAiSuggestions` is true, it can also
-include `aiReview.status`, `aiJobIds`, `suggestionIds`, and queued suggestions.
-Agents should report the useful human part: where the image was attached, what
-caption/type/privacy they chose, whether display derivatives are ready, and
-whether photo review suggestions were queued.
+The result includes `photoId`, `uploadSessionId`, source media details, a
+derivative status/note, and `agentReview`, a short user-facing summary of the
+caption, attachment target, privacy/type choices, confidence/assumptions,
+derivative status, and AI-review status. When `generateAiSuggestions` is true,
+it can also include `aiReview.status`, `aiJobIds`, `suggestionIds`, and queued
+suggestions. Agents should report the useful human part from `agentReview`
+instead of asking the user to fill out a long photo form.
 
 Use `upload_evidence_file` for non-image media or when the agent has a local
 file and should keep the storage PUT in the local process. Use
@@ -1690,8 +1693,8 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
-| `upload_evidence_image` | Easiest MCP single-image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId`. |
-| `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status. |
+| `upload_evidence_image` | Easiest MCP single-image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
+| `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status plus `agentReview`. |
 | `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
 | `start_photo_upload` | Start an evidence media upload session and return presigned original/optional derivative upload information. |
 | `finalize_photo_upload` | Finalize a completed presigned upload and create the evidence record after server-side object verification. |

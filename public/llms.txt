@@ -58,7 +58,10 @@ Primary site: https://movingmanifest.com
   directly; do not base64-wrap local files unless you already only have base64.
   Set `generateAiSuggestions: true` when the user wants the app to place the
   uploaded photo into AI review automatically; upload still succeeds if review
-  queueing fails or the key only has `photos/write`.
+  queueing fails or the key only has `photos/write`. MCP image results include
+  `agentReview`; use it to tell the user the caption, attachment target,
+  privacy/type choices, assumptions, derivative status, and AI-review status so
+  they can correct only what looks wrong.
 - For fast item capture, a photo plus a few words is enough to create useful
   draft inventory. Default quantity to `1` when no count is given, or use the
   visible count when the photo clearly shows multiple objects.

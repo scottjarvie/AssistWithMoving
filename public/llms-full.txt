@@ -160,9 +160,10 @@ for dimensions, thumbnail sizes, or derivative files for ordinary photos. Set
 review for possible item, box, or duplicate suggestions; report whether
 `aiReview.status` queued or failed.
 
-After uploading, tell the user the caption, room/item/box attachment, privacy
-choice, and any confidence or assumption you used so they can correct it without
-slowing down the capture flow.
+MCP image results include `agentReview`. After uploading, use that summary to
+tell the user the caption, room/item/box attachment, privacy/type choice,
+derivative status, AI-review status, and any confidence or assumption you used
+so they can correct only what looks wrong without slowing down the capture flow.
 
 ## Data Entry Guidance
 
