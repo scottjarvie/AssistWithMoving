@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Download, FileText, Link2, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  Download,
+  FileText,
+  Link2,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -92,7 +98,12 @@ type ShareLinkComment = {
 
 type ExportJobSummary = {
   exportJobId: Id<"exportJobs">;
-  type: "inventory" | "boxes" | "assignments" | "documentationProfile" | "floorPlan";
+  type:
+    | "inventory"
+    | "boxes"
+    | "assignments"
+    | "documentationProfile"
+    | "floorPlan";
   format: "pdf" | "csv" | "print";
   status: "queued" | "processing" | "completed" | "failed" | "expired";
   filename?: string;
@@ -118,6 +129,35 @@ const packetBuilderTaskHashes = {
   "#packet-share-links": "share",
   "#packet-views": "views",
 } as const satisfies Partial<Record<string, PacketBuilderTask>>;
+
+const packetBuilderTasks: Array<{
+  value: PacketBuilderTask;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "configure",
+    label: "Configure",
+    description:
+      "Edit the selected recipient profile, fields, filters, and actions.",
+  },
+  {
+    value: "exports",
+    label: "Exports",
+    description: "Create and download CSV or print artifacts for the move.",
+  },
+  {
+    value: "share",
+    label: "Share links",
+    description: "Create, revoke, and review recipient share-link activity.",
+  },
+  {
+    value: "views",
+    label: "Packet views",
+    description:
+      "Open owner or recipient-facing packet pages for this profile.",
+  },
+];
 
 type ProfileDisposition =
   | "undecided"
@@ -166,19 +206,19 @@ export function DocumentationPacketBuilder({
 }) {
   // The PCS profile type is only offered on Military PCS template moves.
   const profileTypeOptions = documentationProfileOptions.filter(
-    ([value]) => value !== "pcsMove" || moveType === "pcs"
+    ([value]) => value !== "pcsMove" || moveType === "pcs",
   );
   const profiles = useQuery(
     api.documentationProfiles.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   ) as DocumentationProfile[] | undefined;
   const links = useQuery(
     api.shareLinks.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip"
+    householdId && moveId ? { householdId, moveId } : "skip",
   ) as ShareLink[] | undefined;
   const comments = useQuery(
     api.shareLinks.listCommentsForMove,
-    householdId && moveId ? { householdId, moveId, limit: 8 } : "skip"
+    householdId && moveId ? { householdId, moveId, limit: 8 } : "skip",
   ) as ShareLinkComment[] | undefined;
   const createProfile = useMutation(api.documentationProfiles.create);
   const updateProfile = useMutation(api.documentationProfiles.update);
@@ -186,7 +226,9 @@ export function DocumentationPacketBuilder({
   const createShareLink = useAction(api.shareLinks.create);
   const revokeShareLink = useMutation(api.shareLinks.revoke);
   const createCsvExport = useMutation(api.exports.createCsv);
-  const createFloorPlanPrintExport = useMutation(api.exports.createFloorPlanPrint);
+  const createFloorPlanPrintExport = useMutation(
+    api.exports.createFloorPlanPrint,
+  );
 
   const [profileType, setProfileType] =
     useState<DocumentationProfileType>("movingCompany");
@@ -206,7 +248,7 @@ export function DocumentationPacketBuilder({
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [packetTask, setPacketTask] = useHashTab<PacketBuilderTask>(
     "configure",
-    packetBuilderTaskHashes
+    packetBuilderTaskHashes,
   );
   const [downloadExportJobId, setDownloadExportJobId] =
     useState<Id<"exportJobs"> | null>(null);
@@ -216,24 +258,24 @@ export function DocumentationPacketBuilder({
   const [busy, setBusy] = useState<string | null>(null);
   const exportJobs = useQuery(
     api.exports.listForMove,
-    householdId && moveId ? { householdId, moveId, limit: 8 } : "skip"
+    householdId && moveId ? { householdId, moveId, limit: 8 } : "skip",
   ) as ExportJobSummary[] | undefined;
   const exportArtifact = useQuery(
     api.exports.getArtifact,
     householdId && moveId && downloadExportJobId
       ? { householdId, moveId, exportJobId: downloadExportJobId }
-      : "skip"
+      : "skip",
   );
 
   const activeProfiles = useMemo(
     () => profiles?.filter((profile) => profile.status !== "archived") ?? [],
-    [profiles]
+    [profiles],
   );
   const selectedProfile =
     activeProfiles.find((profile) => profile._id === selectedProfileId) ??
     activeProfiles[0];
   const draftLoaded = Boolean(
-    selectedProfile && draftProfileId === selectedProfile._id
+    selectedProfile && draftProfileId === selectedProfile._id,
   );
   const effectiveName = draftLoaded ? draftName : (selectedProfile?.name ?? "");
   const effectiveFields = draftLoaded
@@ -254,7 +296,7 @@ export function DocumentationPacketBuilder({
   const activeLinks = links?.filter((link) => link.status === "active") ?? [];
   const recentComments = comments ?? [];
   const missingMoveProfiles = selectedProfileTypes.filter(
-    (type) => !activeProfiles.some((profile) => profile.type === type)
+    (type) => !activeProfiles.some((profile) => profile.type === type),
   );
   const displayedExportJobs = useMemo(() => {
     const jobs = new Map<string, ExportJobSummary>();
@@ -269,6 +311,18 @@ export function DocumentationPacketBuilder({
       .sort((first, second) => second.createdAt - first.createdAt)
       .slice(0, 8);
   }, [exportJobs, moveId, recentExports]);
+  const packetTaskCounts: Record<PacketBuilderTask, number> = {
+    configure: activeProfiles.length,
+    exports: displayedExportJobs.length,
+    share: activeLinks.length + recentComments.length,
+    views:
+      selectedProfile && householdId && moveId
+        ? packetViewCountForProfile(selectedProfile.type)
+        : 0,
+  };
+  const activePacketTask = packetBuilderTasks.find(
+    (task) => task.value === packetTask,
+  );
   const preview = selectedProfile
     ? summarizeDocumentationProfile({
         ...selectedProfile,
@@ -325,7 +379,9 @@ export function DocumentationPacketBuilder({
       setSelectedProfileId(documentationProfileId);
       setMessage("Packet profile created.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not create profile.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not create profile.",
+      );
     } finally {
       setBusy(null);
     }
@@ -341,7 +397,9 @@ export function DocumentationPacketBuilder({
       }
       setMessage("Move packet profiles created.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not create profiles.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not create profiles.",
+      );
     } finally {
       setBusy(null);
     }
@@ -370,7 +428,9 @@ export function DocumentationPacketBuilder({
       });
       setMessage("Packet profile saved.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save profile.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not save profile.",
+      );
     } finally {
       setBusy(null);
     }
@@ -388,7 +448,9 @@ export function DocumentationPacketBuilder({
       });
       setMessage("Packet profile archived.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not archive profile.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not archive profile.",
+      );
     } finally {
       setBusy(null);
     }
@@ -417,7 +479,9 @@ export function DocumentationPacketBuilder({
       setCreatedToken(result.token);
       setMessage("Share link token created.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not create link.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not create link.",
+      );
     } finally {
       setBusy(null);
     }
@@ -446,7 +510,7 @@ export function DocumentationPacketBuilder({
       setMessage("Plan share link token created.");
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Could not create plan link."
+        error instanceof Error ? error.message : "Could not create plan link.",
       );
     } finally {
       setBusy(null);
@@ -482,7 +546,9 @@ export function DocumentationPacketBuilder({
       setDownloadExportJobId(result.exportJobId as Id<"exportJobs">);
       setMessage(`CSV export created with ${result.rowCount} rows.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not create export.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not create export.",
+      );
     } finally {
       setBusy(null);
     }
@@ -512,11 +578,13 @@ export function DocumentationPacketBuilder({
       ]);
       setDownloadExportJobId(result.exportJobId as Id<"exportJobs">);
       setMessage(
-        `Plan print pack created with ${result.levelCount} levels and ${result.roomCount} rooms.`
+        `Plan print pack created with ${result.levelCount} levels and ${result.roomCount} rooms.`,
       );
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Could not create plan export."
+        error instanceof Error
+          ? error.message
+          : "Could not create plan export.",
       );
     } finally {
       setBusy(null);
@@ -531,13 +599,17 @@ export function DocumentationPacketBuilder({
       await revokeShareLink({ householdId, moveId, shareLinkId });
       setMessage("Share link revoked.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not revoke link.");
+      setMessage(
+        error instanceof Error ? error.message : "Could not revoke link.",
+      );
     } finally {
       setBusy(null);
     }
   }
 
-  const createdSharePath = createdToken ? buildPublicSharePath(createdToken) : null;
+  const createdSharePath = createdToken
+    ? buildPublicSharePath(createdToken)
+    : null;
 
   return (
     <Card id="documentation-packets">
@@ -557,7 +629,9 @@ export function DocumentationPacketBuilder({
             type="button"
             size="sm"
             variant="outline"
-            disabled={!moveId || !missingMoveProfiles.length || busy === "ensure"}
+            disabled={
+              !moveId || !missingMoveProfiles.length || busy === "ensure"
+            }
             onClick={() => void handleEnsureMoveProfiles()}
           >
             {busy === "ensure" ? (
@@ -652,12 +726,35 @@ export function DocumentationPacketBuilder({
               >
                 <div className="overflow-x-auto pb-1">
                   <TabsList className="min-w-max">
-                    <TabsTrigger value="configure">Configure</TabsTrigger>
-                    <TabsTrigger value="exports">Exports</TabsTrigger>
-                    <TabsTrigger value="share">Share links</TabsTrigger>
-                    <TabsTrigger value="views">Packet views</TabsTrigger>
+                    {packetBuilderTasks.map((task) => {
+                      const active = packetTask === task.value;
+                      const count = packetTaskCounts[task.value];
+
+                      return (
+                        <TabsTrigger
+                          key={task.value}
+                          value={task.value}
+                          aria-label={`${task.label}: ${formatPacketTaskCount(
+                            task.value,
+                            count,
+                          )}`}
+                          className="gap-2"
+                        >
+                          <span>{task.label}</span>
+                          <Badge
+                            variant={active ? "secondary" : "outline"}
+                            className="h-5 min-w-5 px-1"
+                          >
+                            {count}
+                          </Badge>
+                        </TabsTrigger>
+                      );
+                    })}
                   </TabsList>
                 </div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {activePacketTask?.description}
+                </p>
 
                 <TabsContent
                   value="configure"
@@ -680,7 +777,7 @@ export function DocumentationPacketBuilder({
                       onChange={(event) => {
                         ensureDraftLoaded(selectedProfile);
                         setDraftImageRule(
-                          event.target.value as DocumentationImageRule
+                          event.target.value as DocumentationImageRule,
                         );
                       }}
                     >
@@ -704,8 +801,8 @@ export function DocumentationPacketBuilder({
                             draftProfileId === selectedProfile._id
                               ? current
                               : selectedProfile.includedFields,
-                            value
-                          )
+                            value,
+                          ),
                         );
                       }}
                     />
@@ -720,8 +817,8 @@ export function DocumentationPacketBuilder({
                             draftProfileId === selectedProfile._id
                               ? current
                               : selectedProfile.allowedActions,
-                            value
-                          )
+                            value,
+                          ),
                         );
                       }}
                     />
@@ -827,7 +924,9 @@ export function DocumentationPacketBuilder({
                         <ExportButton
                           label="Inventory CSV"
                           busy={busy === "export-inventory"}
-                          onClick={() => void handleCreateCsvExport("inventory")}
+                          onClick={() =>
+                            void handleCreateCsvExport("inventory")
+                          }
                         />
                         <ExportButton
                           label="Boxes CSV"
@@ -852,7 +951,9 @@ export function DocumentationPacketBuilder({
                         <ExportButton
                           label="Plan print pack"
                           busy={busy === "export-floorPlan"}
-                          onClick={() => void handleCreateFloorPlanPrintExport()}
+                          onClick={() =>
+                            void handleCreateFloorPlanPrintExport()
+                          }
                         />
                       </div>
                     </div>
@@ -905,7 +1006,10 @@ export function DocumentationPacketBuilder({
                 >
                   <div className="rounded-md border border-border p-3">
                     <h3 className="flex items-center gap-2 text-sm font-medium">
-                      <Link2 className="size-4 text-primary" aria-hidden="true" />
+                      <Link2
+                        className="size-4 text-primary"
+                        aria-hidden="true"
+                      />
                       Scoped share link
                     </h3>
                     <div className="mt-3 grid gap-3 md:grid-cols-[160px_160px_minmax(0,1fr)_minmax(0,1fr)]">
@@ -956,7 +1060,9 @@ export function DocumentationPacketBuilder({
                               {createdSharePath}
                             </span>
                             <Button asChild size="sm" variant="outline">
-                              <Link href={createdSharePath}>Open share link</Link>
+                              <Link href={createdSharePath}>
+                                Open share link
+                              </Link>
                             </Button>
                           </div>
                         ) : null}
@@ -1015,7 +1121,7 @@ export function DocumentationPacketBuilder({
                               </span>
                               <time
                                 dateTime={new Date(
-                                  comment.createdAt
+                                  comment.createdAt,
                                 ).toISOString()}
                               >
                                 {new Date(comment.createdAt).toLocaleString()}
@@ -1048,7 +1154,9 @@ export function DocumentationPacketBuilder({
                       moveId ? (
                         <>
                           <Button asChild type="button" variant="outline">
-                            <Link href={buildPcsPacketPath({ householdId, moveId })}>
+                            <Link
+                              href={buildPcsPacketPath({ householdId, moveId })}
+                            >
                               PCS packet
                             </Link>
                           </Button>
@@ -1163,7 +1271,7 @@ export function DocumentationPacketBuilder({
                                 householdId,
                                 moveId,
                                 kind: subManifestKindForProfileType(
-                                  selectedProfile.type
+                                  selectedProfile.type,
                                 ),
                               })}
                             >
@@ -1176,7 +1284,7 @@ export function DocumentationPacketBuilder({
                                 householdId,
                                 moveId,
                                 kind: subManifestKindForProfileType(
-                                  selectedProfile.type
+                                  selectedProfile.type,
                                 ),
                                 mode: "owner",
                               })}
@@ -1209,6 +1317,35 @@ function Stat({ label, value }: { label: string; value: number }) {
       <p className="mt-1 font-mono text-2xl font-semibold">{value}</p>
     </div>
   );
+}
+
+function formatPacketTaskCount(task: PacketBuilderTask, count: number) {
+  switch (task) {
+    case "configure":
+      return `${count} ${count === 1 ? "profile" : "profiles"}`;
+    case "exports":
+      return `${count} ${count === 1 ? "export" : "exports"}`;
+    case "share":
+      return `${count} ${count === 1 ? "share record" : "share records"}`;
+    case "views":
+      return `${count} ${count === 1 ? "view" : "views"}`;
+  }
+}
+
+function packetViewCountForProfile(type: DocumentationProfileType) {
+  switch (type) {
+    case "pcsMove":
+    case "movingCompany":
+    case "loadCrew":
+    case "employerRelocation":
+    case "insuranceClaim":
+    case "donationPickup":
+    case "sellOrGiveaway":
+    case "storageInventory":
+      return 2;
+    default:
+      return 0;
+  }
 }
 
 function OptionGroup<TValue extends string>({

@@ -104,7 +104,7 @@ function renderBuilder() {
       moveId={"move_1" as Id<"moves">}
       moveType="local"
       selectedProfileTypes={["movingCompany"]}
-    />
+    />,
   );
 }
 
@@ -116,21 +116,31 @@ describe("DocumentationPacketBuilder task tabs", () => {
   it("opens on profile configuration instead of stacking exports and shares", () => {
     renderBuilder();
 
-    expect(screen.getByRole("tab", { name: "Configure" })).toHaveAttribute(
-      "data-state",
-      "active"
-    );
-    expect(screen.getByRole("tab", { name: "Exports" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Share links" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Packet views" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Configure: 1 profile" }),
+    ).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByRole("tab", { name: "Exports: 1 export" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Share links: 2 share records" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Packet views: 2 views" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Edit the selected recipient profile, fields, filters, and actions.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Packet profile name")).toHaveValue(
-      "Moving company"
+      "Moving company",
     );
     expect(
-      screen.queryByRole("button", { name: "Inventory CSV" })
+      screen.queryByRole("button", { name: "Inventory CSV" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Create link token" })
+      screen.queryByRole("button", { name: "Create link token" }),
     ).not.toBeInTheDocument();
   });
 
@@ -138,32 +148,59 @@ describe("DocumentationPacketBuilder task tabs", () => {
     const user = userEvent.setup();
     renderBuilder();
 
-    await user.click(screen.getByRole("tab", { name: "Exports" }));
+    await user.click(screen.getByRole("tab", { name: "Exports: 1 export" }));
     expect(
-      screen.getByRole("button", { name: "Inventory CSV" })
-    ).toBeInTheDocument();
-    expect(screen.getByText(/movingmanifest-inventory\.csv/)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Packet profile name")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "Share links" }));
-    expect(
-      screen.getByRole("button", { name: "Create link token" })
+      screen.getByText(
+        "Create and download CSV or print artifacts for the move.",
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Active links" })
+      screen.getByRole("button", { name: "Inventory CSV" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Recipient comments" })
+      screen.getByText(/movingmanifest-inventory\.csv/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Mover packet" })
+      screen.queryByLabelText("Packet profile name"),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Packet views" }));
-    expect(screen.getByRole("link", { name: "Mover packet" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Mover owner" })).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("tab", { name: "Share links: 2 share records" }),
+    );
     expect(
-      screen.queryByRole("button", { name: "Create link token" })
+      screen.getByText(
+        "Create, revoke, and review recipient share-link activity.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create link token" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Active links" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Recipient comments" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Mover packet" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("tab", { name: "Packet views: 2 views" }),
+    );
+    expect(
+      screen.getByText(
+        "Open owner or recipient-facing packet pages for this profile.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Mover packet" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Mover owner" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create link token" }),
     ).not.toBeInTheDocument();
   });
 
@@ -177,14 +214,17 @@ describe("DocumentationPacketBuilder task tabs", () => {
     renderBuilder();
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Exports" })).toHaveAttribute(
-        "data-state",
-        "active",
-      );
+      expect(
+        screen.getByRole("tab", { name: "Exports: 1 export" }),
+      ).toHaveAttribute("data-state", "active");
     });
 
-    expect(screen.getByRole("button", { name: "Inventory CSV" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Packet profile name")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Inventory CSV" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Packet profile name"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens share links from the packet share hash", async () => {
@@ -197,15 +237,16 @@ describe("DocumentationPacketBuilder task tabs", () => {
     renderBuilder();
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Share links" })).toHaveAttribute(
-        "data-state",
-        "active",
-      );
+      expect(
+        screen.getByRole("tab", { name: "Share links: 2 share records" }),
+      ).toHaveAttribute("data-state", "active");
     });
 
     expect(
       screen.getByRole("button", { name: "Create link token" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Inventory CSV" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Inventory CSV" }),
+    ).not.toBeInTheDocument();
   });
 });
