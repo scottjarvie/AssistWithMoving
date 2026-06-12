@@ -7,7 +7,7 @@ export function moveBoxesPath(moveId?: string | null) {
   return moveId ? moveWorkspacePath(moveId, "boxes") : "/app/dashboard";
 }
 
-const workspaceAnchorSections: Record<string, string> = {
+const workspaceAnchorSections: Record<string, string | null> = {
   "#ai-photo-intake": "ai-review",
   "#ai-planning-suggestions": "load-plan",
   "#ai-review-queue": "ai-review",
@@ -23,7 +23,11 @@ const workspaceAnchorSections: Record<string, string> = {
   "#inventory-duplicate-review": "inventory",
   "#load-plan": "load-plan",
   "#move-day": "move-day",
+  "#move-contacts": null,
+  "#move-questions": null,
+  "#packing-debt": null,
   "#photos": "photos",
+  "#planning-defaults": null,
   "#planned-items": "inventory",
   "#room-walk": "inventory",
   "#transport-resources": "load-plan",
@@ -38,9 +42,9 @@ export function moveWorkspaceAnchorPath(
   }
 
   const section = workspaceAnchorSections[anchor];
-  if (!moveId || !section) {
+  if (!moveId || !(anchor in workspaceAnchorSections)) {
     return anchor;
   }
 
-  return `${moveWorkspacePath(moveId, section)}${anchor}`;
+  return `${moveWorkspacePath(moveId, section ?? undefined)}${anchor}`;
 }

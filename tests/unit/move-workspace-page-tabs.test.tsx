@@ -150,6 +150,44 @@ describe("move workspace task tabs", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens overview readiness when routed to the packing-debt hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123#packing-debt"
+    );
+
+    render(<MoveOverviewPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Readiness" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Readiness dashboard surface")).toBeInTheDocument();
+    expect(screen.queryByText("Decision questions surface")).not.toBeInTheDocument();
+  });
+
+  it("opens overview defaults when routed to the planning defaults hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123#planning-defaults"
+    );
+
+    render(<MoveOverviewPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Defaults" })).toHaveAttribute(
+        "data-state",
+        "active"
+      )
+    );
+    expect(screen.getByText("Planning defaults surface")).toBeInTheDocument();
+    expect(screen.queryByText("Decision questions surface")).not.toBeInTheDocument();
+  });
+
   it("opens capture on the intake form and keeps the queue behind its tab", () => {
     render(<CaptureWorkspacePage />);
 

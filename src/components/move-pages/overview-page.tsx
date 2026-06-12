@@ -8,9 +8,18 @@ import { PackingDebtDashboard } from "@/components/packing-debt-dashboard";
 import { PlanningDefaultsPanel } from "@/components/planning-defaults-panel";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useHashTab } from "@/components/use-hash-tab";
+
+const overviewTabHashes = {
+  "#move-questions": "decisions",
+  "#packing-debt": "readiness",
+  "#move-contacts": "people",
+  "#planning-defaults": "defaults",
+} as const;
 
 export function MoveOverviewPage() {
   const { householdId, moveId, selectedMove } = useMoveWorkspace();
+  const [activeTab, setActiveTab] = useHashTab("decisions", overviewTabHashes);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -18,7 +27,7 @@ export function MoveOverviewPage() {
         title={selectedMove?.title ?? "Move overview"}
         description="What still needs a decision, who is involved, and the defaults that steer packing, packets, and AI suggestions."
       />
-      <Tabs defaultValue="decisions" className="gap-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={[
             { value: "decisions", label: "Decisions" },

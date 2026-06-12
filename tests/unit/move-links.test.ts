@@ -20,6 +20,18 @@ describe("move links", () => {
   });
 
   it("resolves old workspace anchors to split move pages", () => {
+    expect(moveWorkspaceAnchorPath("move_123", "#move-questions")).toBe(
+      "/app/moves/move_123#move-questions"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#packing-debt")).toBe(
+      "/app/moves/move_123#packing-debt"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#move-contacts")).toBe(
+      "/app/moves/move_123#move-contacts"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#planning-defaults")).toBe(
+      "/app/moves/move_123#planning-defaults"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#inventory")).toBe(
       "/app/moves/move_123/inventory#inventory"
     );
