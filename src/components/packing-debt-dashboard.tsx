@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 type PackingDebtDashboardProps = {
@@ -37,6 +38,12 @@ const severityClasses = {
   critical:
     "border-destructive/40 bg-destructive/10 text-destructive dark:text-red-300",
 };
+
+const readinessTasks = [
+  { value: "actions", label: "Actions" },
+  { value: "areas", label: "Areas" },
+  { value: "shortcuts", label: "Shortcuts" },
+] as const;
 
 export function PackingDebtDashboard({
   householdId,
@@ -92,82 +99,108 @@ export function PackingDebtDashboard({
             </div>
           </div>
         ) : (
-          <>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-              {summary.topActions.map((metric) => (
-                <Link
-                  key={metric.key}
-                  href={metric.anchor}
-                  className={cn(
-                    "rounded-md border p-3 transition-colors hover:bg-muted/70",
-                    severityClasses[metric.severity]
+          <Tabs defaultValue="actions" className="gap-4">
+            <div className="overflow-x-auto pb-1">
+              <TabsList
+                className="min-w-max"
+                aria-label="Readiness review tasks"
+              >
+                {readinessTasks.map((task) => (
+                  <TabsTrigger key={task.value} value={task.value}>
+                    {task.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+
+            <TabsContent value="actions">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                {summary.topActions.map((metric) => (
+                  <Link
+                    key={metric.key}
+                    href={metric.anchor}
+                    className={cn(
+                      "rounded-md border p-3 transition-colors hover:bg-muted/70",
+                      severityClasses[metric.severity]
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-medium">{metric.label}</span>
+                      <span className="font-mono text-2xl font-semibold leading-none">
+                        {metric.count}
+                      </span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs opacity-80">
+                      {metric.help}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="areas">
+              <div className="grid gap-2 lg:grid-cols-3">
+                <SignalGroup
+                  title="Inventory"
+                  icon={PackageOpen}
+                  metrics={summary.metrics.filter((metric) =>
+                    [
+                      "needsReview",
+                      "undecidedDisposition",
+                      "unboxedItems",
+                    ].includes(metric.key)
                   )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-sm font-medium">{metric.label}</span>
-                    <span className="font-mono text-2xl font-semibold leading-none">
-                      {metric.count}
-                    </span>
-                  </div>
-                  <p className="mt-2 line-clamp-2 text-xs opacity-80">
-                    {metric.help}
-                  </p>
-                </Link>
-              ))}
-            </div>
+                />
+                <SignalGroup
+                  title="Evidence"
+                  icon={ImagePlus}
+                  metrics={summary.metrics.filter((metric) =>
+                    [
+                      "highValueWithoutPhotos",
+                      "photosNeedingReview",
+                      "pendingAiSuggestions",
+                    ].includes(metric.key)
+                  )}
+                />
+                <SignalGroup
+                  title="Load readiness"
+                  icon={AlertTriangle}
+                  metrics={summary.metrics.filter((metric) =>
+                    [
+                      "boxesMissingDestination",
+                      "boxesUnassigned",
+                      "boxesNotLoaded",
+                      "boxWarnings",
+                    ].includes(metric.key)
+                  )}
+                />
+              </div>
+            </TabsContent>
 
-            <div className="grid gap-2 lg:grid-cols-3">
-              <SignalGroup
-                title="Inventory"
-                icon={PackageOpen}
-                metrics={summary.metrics.filter((metric) =>
-                  [
-                    "needsReview",
-                    "undecidedDisposition",
-                    "unboxedItems",
-                  ].includes(metric.key)
-                )}
-              />
-              <SignalGroup
-                title="Evidence"
-                icon={ImagePlus}
-                metrics={summary.metrics.filter((metric) =>
-                  [
-                    "highValueWithoutPhotos",
-                    "photosNeedingReview",
-                    "pendingAiSuggestions",
-                  ].includes(metric.key)
-                )}
-              />
-              <SignalGroup
-                title="Load readiness"
-                icon={AlertTriangle}
-                metrics={summary.metrics.filter((metric) =>
-                  [
-                    "boxesMissingDestination",
-                    "boxesUnassigned",
-                    "boxesNotLoaded",
-                    "boxWarnings",
-                  ].includes(metric.key)
-                )}
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="sm" variant="outline">
-                <Link href="#inventory">Inventory</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#load-plan">Load planner</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#photos">Photos</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#ai-review-queue">AI review</Link>
-              </Button>
-            </div>
-          </>
+            <TabsContent value="shortcuts">
+              <div className="rounded-md border border-border p-3">
+                <p className="text-sm font-medium">Go fix readiness inputs</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Packing debt drops when inventory decisions, load assignments,
+                  photos, and AI review are completed.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#inventory">Inventory</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#load-plan">Load planner</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#photos">Photos</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#ai-review-queue">AI review</Link>
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         )}
       </CardContent>
     </Card>
