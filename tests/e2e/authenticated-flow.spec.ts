@@ -529,6 +529,7 @@ test.describe("authenticated product flow", () => {
       timeout: 30_000,
     });
     await loadPlanner.getByLabel(`Select ${boxCode}`).check();
+    await loadPlanner.getByRole("tab", { name: "Assign" }).click();
     await loadPlanner
       .getByLabel("Bulk assignment resource")
       .selectOption({ label: "Military movers / HHG" });
@@ -541,6 +542,7 @@ test.describe("authenticated product flow", () => {
     await expect(
       loadPlanner.getByText("1 box assignment updated.")
     ).toBeVisible({ timeout: 30_000 });
+    await loadPlanner.getByRole("tab", { name: "Board" }).click();
     await loadPlanner
       .getByRole("button", { name: `Lock assignment for ${boxCode}` })
       .click();
@@ -548,6 +550,7 @@ test.describe("authenticated product flow", () => {
       loadPlanner.getByText(`${boxCode} assignment locked.`)
     ).toBeVisible({ timeout: 30_000 });
     await loadPlanner.getByLabel(`Select ${boxCode}`).check();
+    await loadPlanner.getByRole("tab", { name: "Assign" }).click();
     await expect(
       loadPlanner.getByText("1 selected in the current view, 1 locked will be skipped")
     ).toBeVisible();

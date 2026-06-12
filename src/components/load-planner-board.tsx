@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   formatBoxWeightSource,
@@ -65,6 +66,12 @@ const plannerFilters: { key: PlannerFilter; label: string }[] = [
   { key: "firstNight", label: "First night" },
   { key: "notPacked", label: "Not packed" },
 ];
+
+const loadPlannerTasks = [
+  { value: "board", label: "Board" },
+  { value: "assign", label: "Assign" },
+  { value: "unboxed", label: "Unboxed" },
+] as const;
 
 export function LoadPlannerBoard({
   householdId,
@@ -352,258 +359,384 @@ export function LoadPlannerBoard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="space-y-3">
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  className="pl-8"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search box codes, rooms, labels, or contents"
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={selectVisibleBoxes}
-                disabled={!filteredBoxes.length}
-              >
-                <CheckSquare aria-hidden="true" />
-                Select visible
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {plannerFilters.map((option) => (
-                <Button
-                  key={option.key}
-                  type="button"
-                  size="sm"
-                  variant={filter === option.key ? "default" : "outline"}
-                  onClick={() => setFilter(option.key)}
-                >
-                  {option.label}
-                </Button>
+        <Tabs defaultValue="board" className="gap-4">
+          <div className="overflow-x-auto pb-1">
+            <TabsList className="min-w-max" aria-label="Load planner tasks">
+              {loadPlannerTasks.map((task) => (
+                <TabsTrigger key={task.value} value={task.value}>
+                  {task.label}
+                </TabsTrigger>
               ))}
-            </div>
+            </TabsList>
           </div>
 
-          <div className="rounded-md border border-border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-medium">Bulk assignment</p>
-                <p className="text-xs text-muted-foreground">
-                  {visibleSelectedCount} selected in the current view
-                  {selectedBulkSplit.skippedLockedBoxIds.length &&
-                  !includeLockedInBulk
-                    ? `, ${selectedBulkSplit.skippedLockedBoxIds.length} locked will be skipped`
-                    : ""}
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={!selectedBoxIds.length || assigning}
-                onClick={() => setSelectedBoxIds([])}
-              >
-                Clear
-              </Button>
-            </div>
-            <div className="mt-3 grid gap-2">
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                value={targetResourceId}
-                aria-label="Bulk assignment resource"
-                onChange={(event) => {
-                  setTargetResourceId(event.target.value);
-                  setTargetZoneId("");
-                }}
-              >
-                <option value="">Choose resource</option>
-                {resourcesWithZones?.map(({ resource }) => (
-                  <option key={resource._id} value={resource._id}>
-                    {resource.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                value={targetZoneId}
-                aria-label="Bulk assignment zone"
-                disabled={!targetResourceId}
-                onChange={(event) => setTargetZoneId(event.target.value)}
-              >
-                <option value="">Any zone</option>
-                {selectedTargetZones.map((zone) => (
-                  <option key={zone._id} value={zone._id}>
-                    {zone.name}
-                  </option>
-                ))}
-              </select>
-              <Textarea
-                value={overrideReason}
-                onChange={(event) => setOverrideReason(event.target.value)}
-                placeholder="Override reason when warnings are expected"
-                aria-label="Assignment override reason"
-              />
-              <label className="flex min-h-9 items-center gap-2 rounded-md border border-input bg-background px-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-3.5 accent-primary"
-                  checked={includeLockedInBulk}
-                  onChange={(event) =>
-                    setIncludeLockedInBulk(event.target.checked)
-                  }
-                />
-                Include locked boxes deliberately
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={
-                    !selectedBulkSplit.assignableBoxIds.length ||
-                    !targetResourceId ||
-                    assigning
-                  }
-                  onClick={() =>
-                    void assignBoxes(
-                      selectedBoxIds,
-                      targetResourceId as Id<"transportResources">,
-                      targetZoneId
-                        ? (targetZoneId as Id<"transportZones">)
-                        : undefined,
-                      { includeLocked: includeLockedInBulk }
-                    )
-                  }
-                >
-                  Assign
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!selectedBulkSplit.assignableBoxIds.length || assigning}
-                  onClick={() =>
-                    void assignBoxes(selectedBoxIds, null, undefined, {
-                      includeLocked: includeLockedInBulk,
-                    })
-                  }
-                >
-                  Unassign
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+          {message ? (
+            <p
+              className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              {message}
+            </p>
+          ) : null}
 
-        {message ? (
-          <p
-            className="rounded-md border border-border p-3 text-sm text-muted-foreground"
-            role="status"
-            aria-live="polite"
-          >
-            {message}
-          </p>
-        ) : null}
-
-        {loading ? (
-          <div className="grid gap-3 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-64 rounded-md" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-3 xl:grid-cols-[320px_repeat(2,minmax(0,1fr))] 2xl:grid-cols-[320px_repeat(3,minmax(0,1fr))]">
-            <AssignmentPanel
-              title="Unassigned"
-              subtitle="Needs a resource before load day"
-              boxes={filteredBoxes.filter(
-                (record) => !record.box.assignedResourceId
-              )}
-              selectedBoxIds={selectedBoxIds}
-              reportByBoxId={reportByBoxId}
-              onToggleBox={toggleBox}
-              onToggleLock={toggleAssignmentLock}
-              lockSavingBoxIds={lockSavingBoxIds}
-              onDropBox={(boxId) => void assignBoxes([boxId], null)}
+          <TabsContent value="board" className="space-y-4">
+            <BoardControls
+              search={search}
+              filter={filter}
+              filteredBoxCount={filteredBoxes.length}
+              onSearchChange={setSearch}
+              onFilterChange={setFilter}
+              onSelectVisible={selectVisibleBoxes}
             />
-            {resourcesWithZones?.map(({ resource, zones }) => (
-              <ResourcePanel
-                key={resource._id}
-                resource={resource}
-                zones={zones}
-                boxes={filteredBoxes.filter(
-                  (record) => record.box.assignedResourceId === resource._id
-                )}
-                selectedBoxIds={selectedBoxIds}
-                reportByBoxId={reportByBoxId}
-                resourceReport={reportByResourceId.get(resource._id)}
-                onToggleBox={toggleBox}
-                onToggleLock={toggleAssignmentLock}
-                lockSavingBoxIds={lockSavingBoxIds}
-                onAssign={(boxIds, zoneId) =>
-                  void assignBoxes(boxIds, resource._id, zoneId)
-                }
-              />
-            ))}
-          </div>
-        )}
+            {loading ? (
+              <div className="grid gap-3 xl:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-64 rounded-md" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-3 xl:grid-cols-[320px_repeat(2,minmax(0,1fr))] 2xl:grid-cols-[320px_repeat(3,minmax(0,1fr))]">
+                <AssignmentPanel
+                  title="Unassigned"
+                  subtitle="Needs a resource before load day"
+                  boxes={filteredBoxes.filter(
+                    (record) => !record.box.assignedResourceId
+                  )}
+                  selectedBoxIds={selectedBoxIds}
+                  reportByBoxId={reportByBoxId}
+                  onToggleBox={toggleBox}
+                  onToggleLock={toggleAssignmentLock}
+                  lockSavingBoxIds={lockSavingBoxIds}
+                  onDropBox={(boxId) => void assignBoxes([boxId], null)}
+                />
+                {resourcesWithZones?.map(({ resource, zones }) => (
+                  <ResourcePanel
+                    key={resource._id}
+                    resource={resource}
+                    zones={zones}
+                    boxes={filteredBoxes.filter(
+                      (record) => record.box.assignedResourceId === resource._id
+                    )}
+                    selectedBoxIds={selectedBoxIds}
+                    reportByBoxId={reportByBoxId}
+                    resourceReport={reportByResourceId.get(resource._id)}
+                    onToggleBox={toggleBox}
+                    onToggleLock={toggleAssignmentLock}
+                    lockSavingBoxIds={lockSavingBoxIds}
+                    onAssign={(boxIds, zoneId) =>
+                      void assignBoxes(boxIds, resource._id, zoneId)
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
-        <div className="rounded-md border border-border p-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">Unboxed item queue</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                These items still need a box or container before the load plan
-                can assign them cleanly.
-              </p>
-            </div>
-            <PackageOpen className="size-4 text-primary" aria-hidden="true" />
-          </div>
-          {unboxedItems.length ? (
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {unboxedItems.map((item) => (
-                <div
-                  key={item._id}
-                  className="rounded-md border border-border px-3 py-2 text-sm"
-                >
-                  <div className="font-medium">{item.name}</div>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    <Badge variant="outline">{item.room ?? "room unset"}</Badge>
-                    <Badge variant="outline">{item.status}</Badge>
-                    {item.highValue ? (
-                      <Badge variant="secondary">high value</Badge>
-                    ) : null}
-                    {item.requiresPersonalTransport ? (
-                      <Badge variant="secondary">personal</Badge>
-                    ) : null}
-                    {item.planningDefaultKeys.includes("firstNight") ? (
-                      <Badge variant="secondary">first night</Badge>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-              {allUnboxedItems.length > unboxedItems.length ? (
-                <div className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                  {allUnboxedItems.length - unboxedItems.length} more unboxed
-                  items hidden by the queue limit.
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="mt-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              No active unboxed items in the current move.
-            </div>
-          )}
-        </div>
+          <TabsContent value="assign" className="space-y-4">
+            <BulkAssignmentPanel
+              assigning={assigning}
+              includeLockedInBulk={includeLockedInBulk}
+              overrideReason={overrideReason}
+              resourcesWithZones={resourcesWithZones ?? []}
+              selectedBoxIds={selectedBoxIds}
+              selectedBulkSplit={selectedBulkSplit}
+              selectedTargetZones={selectedTargetZones}
+              targetResourceId={targetResourceId}
+              targetZoneId={targetZoneId}
+              visibleSelectedCount={visibleSelectedCount}
+              onAssign={() =>
+                void assignBoxes(
+                  selectedBoxIds,
+                  targetResourceId as Id<"transportResources">,
+                  targetZoneId
+                    ? (targetZoneId as Id<"transportZones">)
+                    : undefined,
+                  { includeLocked: includeLockedInBulk }
+                )
+              }
+              onClearSelection={() => setSelectedBoxIds([])}
+              onIncludeLockedChange={setIncludeLockedInBulk}
+              onOverrideReasonChange={setOverrideReason}
+              onResourceChange={(resourceId) => {
+                setTargetResourceId(resourceId);
+                setTargetZoneId("");
+              }}
+              onUnassign={() =>
+                void assignBoxes(selectedBoxIds, null, undefined, {
+                  includeLocked: includeLockedInBulk,
+                })
+              }
+              onZoneChange={setTargetZoneId}
+            />
+          </TabsContent>
+
+          <TabsContent value="unboxed">
+            <UnboxedItemsPanel
+              allUnboxedItemCount={allUnboxedItems.length}
+              unboxedItems={unboxedItems}
+            />
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
+  );
+}
+
+function BoardControls({
+  search,
+  filter,
+  filteredBoxCount,
+  onSearchChange,
+  onFilterChange,
+  onSelectVisible,
+}: {
+  search: string;
+  filter: PlannerFilter;
+  filteredBoxCount: number;
+  onSearchChange: (value: string) => void;
+  onFilterChange: (value: PlannerFilter) => void;
+  onSelectVisible: () => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-md border border-border p-3">
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            className="pl-8"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search box codes, rooms, labels, or contents"
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onSelectVisible}
+          disabled={!filteredBoxCount}
+        >
+          <CheckSquare aria-hidden="true" />
+          Select visible
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {plannerFilters.map((option) => (
+          <Button
+            key={option.key}
+            type="button"
+            size="sm"
+            variant={filter === option.key ? "default" : "outline"}
+            onClick={() => onFilterChange(option.key)}
+          >
+            {option.label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BulkAssignmentPanel({
+  assigning,
+  includeLockedInBulk,
+  overrideReason,
+  resourcesWithZones,
+  selectedBoxIds,
+  selectedBulkSplit,
+  selectedTargetZones,
+  targetResourceId,
+  targetZoneId,
+  visibleSelectedCount,
+  onAssign,
+  onClearSelection,
+  onIncludeLockedChange,
+  onOverrideReasonChange,
+  onResourceChange,
+  onUnassign,
+  onZoneChange,
+}: {
+  assigning: boolean;
+  includeLockedInBulk: boolean;
+  overrideReason: string;
+  resourcesWithZones: NonNullable<
+    ReturnType<typeof useQuery<typeof api.transportResources.listForMoveWithZones>>
+  >;
+  selectedBoxIds: Id<"boxes">[];
+  selectedBulkSplit: ReturnType<typeof splitBulkAssignmentSelection>;
+  selectedTargetZones: Doc<"transportZones">[];
+  targetResourceId: string;
+  targetZoneId: string;
+  visibleSelectedCount: number;
+  onAssign: () => void;
+  onClearSelection: () => void;
+  onIncludeLockedChange: (value: boolean) => void;
+  onOverrideReasonChange: (value: string) => void;
+  onResourceChange: (value: string) => void;
+  onUnassign: () => void;
+  onZoneChange: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Bulk assignment</p>
+          <p className="text-xs text-muted-foreground">
+            {visibleSelectedCount} selected in the current view
+            {selectedBulkSplit.skippedLockedBoxIds.length &&
+            !includeLockedInBulk
+              ? `, ${selectedBulkSplit.skippedLockedBoxIds.length} locked will be skipped`
+              : ""}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={!selectedBoxIds.length || assigning}
+          onClick={onClearSelection}
+        >
+          Clear
+        </Button>
+      </div>
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)]">
+        <div className="grid gap-2">
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={targetResourceId}
+            aria-label="Bulk assignment resource"
+            onChange={(event) => onResourceChange(event.target.value)}
+          >
+            <option value="">Choose resource</option>
+            {resourcesWithZones.map(({ resource }) => (
+              <option key={resource._id} value={resource._id}>
+                {resource.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            value={targetZoneId}
+            aria-label="Bulk assignment zone"
+            disabled={!targetResourceId}
+            onChange={(event) => onZoneChange(event.target.value)}
+          >
+            <option value="">Any zone</option>
+            {selectedTargetZones.map((zone) => (
+              <option key={zone._id} value={zone._id}>
+                {zone.name}
+              </option>
+            ))}
+          </select>
+          <Textarea
+            value={overrideReason}
+            onChange={(event) => onOverrideReasonChange(event.target.value)}
+            placeholder="Override reason when warnings are expected"
+            aria-label="Assignment override reason"
+          />
+          <label className="flex min-h-9 items-center gap-2 rounded-md border border-input bg-background px-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-primary"
+              checked={includeLockedInBulk}
+              onChange={(event) => onIncludeLockedChange(event.target.checked)}
+            />
+            Include locked boxes deliberately
+          </label>
+        </div>
+        <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Assignment workflow</p>
+          <p className="mt-1">
+            Select boxes on the Board tab, then assign or clear them here.
+            Locked boxes are skipped unless deliberately included.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={
+                !selectedBulkSplit.assignableBoxIds.length ||
+                !targetResourceId ||
+                assigning
+              }
+              onClick={onAssign}
+            >
+              Assign
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!selectedBulkSplit.assignableBoxIds.length || assigning}
+              onClick={onUnassign}
+            >
+              Unassign
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnboxedItemsPanel({
+  allUnboxedItemCount,
+  unboxedItems,
+}: {
+  allUnboxedItemCount: number;
+  unboxedItems: Doc<"items">[];
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">Unboxed item queue</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            These items still need a box or container before the load plan can
+            assign them cleanly.
+          </p>
+        </div>
+        <PackageOpen className="size-4 text-primary" aria-hidden="true" />
+      </div>
+      {unboxedItems.length ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {unboxedItems.map((item) => (
+            <div
+              key={item._id}
+              className="rounded-md border border-border px-3 py-2 text-sm"
+            >
+              <div className="font-medium">{item.name}</div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                <Badge variant="outline">{item.room ?? "room unset"}</Badge>
+                <Badge variant="outline">{item.status}</Badge>
+                {item.highValue ? (
+                  <Badge variant="secondary">high value</Badge>
+                ) : null}
+                {item.requiresPersonalTransport ? (
+                  <Badge variant="secondary">personal</Badge>
+                ) : null}
+                {item.planningDefaultKeys.includes("firstNight") ? (
+                  <Badge variant="secondary">first night</Badge>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          {allUnboxedItemCount > unboxedItems.length ? (
+            <div className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+              {allUnboxedItemCount - unboxedItems.length} more unboxed items
+              hidden by the queue limit.
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+          No active unboxed items in the current move.
+        </div>
+      )}
+    </div>
   );
 }
 
