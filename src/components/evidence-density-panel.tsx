@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 type EvidenceDensityPanelProps = {
@@ -31,6 +32,13 @@ const priorityClasses: Record<EvidencePriority, string> = {
   standard:
     "border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-300",
 };
+
+const coverageTasks = [
+  { value: "gaps", label: "Gaps" },
+  { value: "scores", label: "Scores" },
+  { value: "patterns", label: "Patterns" },
+  { value: "shortcuts", label: "Shortcuts" },
+] as const;
 
 export function EvidenceDensityPanel({
   householdId,
@@ -84,152 +92,200 @@ export function EvidenceDensityPanel({
             </div>
           </div>
         ) : (
-          <>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <Metric
-                label="Average score"
-                value={formatScore(summary.summary.averageScore)}
-                note={`${summary.summary.completeItemCount} complete items`}
-              />
-              <Metric
-                label="Priority average"
-                value={
-                  summary.summary.priorityItemCount
-                    ? formatScore(summary.summary.priorityAverageScore)
-                    : "N/A"
-                }
-                note={
-                  summary.summary.priorityItemCount
-                    ? `${summary.summary.priorityItemCount} priority items`
-                    : "no priority items"
-                }
-              />
-              <Metric
-                label="Thin priority"
-                value={summary.summary.thinPriorityItemCount.toString()}
-                note="under 67% coverage"
-                alert={summary.summary.thinPriorityItemCount > 0}
-              />
-              <Metric
-                label="Zero evidence"
-                value={summary.summary.zeroEvidenceItemCount.toString()}
-                note="no satisfied factors"
-                alert={summary.summary.zeroEvidenceItemCount > 0}
-              />
+          <Tabs defaultValue="gaps" className="gap-4">
+            <div className="overflow-x-auto pb-1">
+              <TabsList
+                className="min-w-max"
+                aria-label="Evidence coverage tasks"
+              >
+                {coverageTasks.map((task) => (
+                  <TabsTrigger key={task.value} value={task.value}>
+                    {task.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="rounded-md border border-border p-3">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-                  <AlertTriangle
-                    className="size-4 text-primary"
-                    aria-hidden="true"
-                  />
-                  Top evidence gaps
-                </div>
-                {summary.topGaps.length ? (
-                  <div className="space-y-2">
-                    {summary.topGaps.map((item) => (
-                      <div
-                        key={item.itemId}
-                        className="rounded-md border border-border bg-muted/20 p-3"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
-                              {item.name}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {item.room || item.category
-                                ? [item.room, item.category]
-                                    .filter(Boolean)
-                                    .join(" - ")
-                                : "No room or category"}
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <PriorityBadge priority={item.priority} />
-                            <Badge variant="outline">
-                              {formatScore(item.score)}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {item.gaps.slice(0, 4).map((gap) => (
-                            <Badge key={gap} variant="secondary">
-                              {gap}
-                            </Badge>
-                          ))}
-                          {item.gaps.length > 4 ? (
-                            <Badge variant="outline">
-                              +{item.gaps.length - 4} more
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
-                    <div className="font-medium text-foreground">
-                      Every scored item has complete evidence coverage.
-                    </div>
-                    <p className="mt-1 text-muted-foreground">
-                      Keep adding receipts and serial photos as new high-value
-                      items appear.
-                    </p>
-                  </div>
-                )}
+            <TabsContent value="gaps" className="space-y-3">
+              <TopEvidenceGaps items={summary.topGaps} />
+            </TabsContent>
+
+            <TabsContent value="scores">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <Metric
+                  label="Average score"
+                  value={formatScore(summary.summary.averageScore)}
+                  note={`${summary.summary.completeItemCount} complete items`}
+                />
+                <Metric
+                  label="Priority average"
+                  value={
+                    summary.summary.priorityItemCount
+                      ? formatScore(summary.summary.priorityAverageScore)
+                      : "N/A"
+                  }
+                  note={
+                    summary.summary.priorityItemCount
+                      ? `${summary.summary.priorityItemCount} priority items`
+                      : "no priority items"
+                  }
+                />
+                <Metric
+                  label="Thin priority"
+                  value={summary.summary.thinPriorityItemCount.toString()}
+                  note="under 67% coverage"
+                  alert={summary.summary.thinPriorityItemCount > 0}
+                />
+                <Metric
+                  label="Zero evidence"
+                  value={summary.summary.zeroEvidenceItemCount.toString()}
+                  note="no satisfied factors"
+                  alert={summary.summary.zeroEvidenceItemCount > 0}
+                />
               </div>
+            </TabsContent>
 
-              <div className="rounded-md border border-border p-3">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-                  <ListChecks
-                    className="size-4 text-primary"
-                    aria-hidden="true"
-                  />
-                  Most common gaps
-                </div>
-                {summary.gapCounts.length ? (
-                  <div className="space-y-2">
-                    {summary.gapCounts.slice(0, 6).map((gap) => (
-                      <div
-                        key={gap.label}
-                        className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm"
-                      >
-                        <span className="min-w-0 truncate text-muted-foreground">
-                          {gap.label}
-                        </span>
-                        <Badge variant="outline">{gap.count}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No repeated gaps detected.
-                  </p>
-                )}
-              </div>
-            </div>
+            <TabsContent value="patterns" className="space-y-3">
+              <CommonEvidenceGaps gaps={summary.gapCounts} />
+            </TabsContent>
 
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="sm" variant="outline">
-                <Link href="#inventory">Inventory</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#photos">Photos</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#boxes">Boxes</Link>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href="#documentation-packets">Packets</Link>
-              </Button>
-            </div>
-          </>
+            <TabsContent value="shortcuts" className="space-y-3">
+              <CoverageShortcuts />
+            </TabsContent>
+          </Tabs>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function TopEvidenceGaps({
+  items,
+}: {
+  items: Array<{
+    itemId: string;
+    name: string;
+    room?: string;
+    category?: string;
+    priority: EvidencePriority;
+    score: number;
+    gaps: string[];
+  }>;
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+        <AlertTriangle className="size-4 text-primary" aria-hidden="true" />
+        Top evidence gaps
+      </div>
+      {items.length ? (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div
+              key={item.itemId}
+              className="rounded-md border border-border bg-muted/20 p-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">
+                    {item.name}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {item.room || item.category
+                      ? [item.room, item.category].filter(Boolean).join(" - ")
+                      : "No room or category"}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <PriorityBadge priority={item.priority} />
+                  <Badge variant="outline">{formatScore(item.score)}</Badge>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {item.gaps.slice(0, 4).map((gap) => (
+                  <Badge key={gap} variant="secondary">
+                    {gap}
+                  </Badge>
+                ))}
+                {item.gaps.length > 4 ? (
+                  <Badge variant="outline">+{item.gaps.length - 4} more</Badge>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
+          <div className="font-medium text-foreground">
+            Every scored item has complete evidence coverage.
+          </div>
+          <p className="mt-1 text-muted-foreground">
+            Keep adding receipts and serial photos as new high-value items
+            appear.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommonEvidenceGaps({
+  gaps,
+}: {
+  gaps: Array<{ label: string; count: number }>;
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+        <ListChecks className="size-4 text-primary" aria-hidden="true" />
+        Most common gaps
+      </div>
+      {gaps.length ? (
+        <div className="space-y-2">
+          {gaps.slice(0, 6).map((gap) => (
+            <div
+              key={gap.label}
+              className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm"
+            >
+              <span className="min-w-0 truncate text-muted-foreground">
+                {gap.label}
+              </span>
+              <Badge variant="outline">{gap.count}</Badge>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No repeated gaps detected.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CoverageShortcuts() {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <p className="text-sm font-medium">Go fix coverage inputs</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        Evidence scores come from inventory details, photo review, box
+        assignments, and packet readiness.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button asChild size="sm" variant="outline">
+          <Link href="#inventory">Inventory</Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link href="#photos">Photos</Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link href="#boxes">Boxes</Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link href="#documentation-packets">Packets</Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 
