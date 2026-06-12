@@ -553,13 +553,6 @@ test.describe("authenticated product flow", () => {
 
     // Photos page: evidence tooling renders.
     await page.goto(movePath("photos"));
-    const roomSweep = page
-      .getByRole("heading", { name: "Room sweep", exact: true })
-      .locator("xpath=ancestor::*[@data-slot='card'][1]");
-    await expect(roomSweep.getByLabel("Room or area")).toBeEnabled({
-      timeout: 30_000,
-    });
-    await expect(roomSweep.getByLabel("Room photo")).toBeEnabled();
     const photoEvidence = page
       .getByRole("heading", { name: "Photo evidence", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
@@ -572,6 +565,15 @@ test.describe("authenticated product flow", () => {
     await expect(
       photoEvidence.getByRole("button", { name: "Quality issues" })
     ).toBeVisible();
+    await page.getByRole("tab", { name: "Add photos" }).click();
+    const roomSweep = page
+      .getByRole("heading", { name: "Room sweep", exact: true })
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await expect(roomSweep.getByLabel("Room or area")).toBeEnabled({
+      timeout: 30_000,
+    });
+    await expect(roomSweep.getByLabel("Room photo")).toBeEnabled();
+    await page.getByRole("tab", { name: "Coverage" }).click();
     const evidenceDensity = page.locator("#evidence-density");
     await expect(evidenceDensity.getByText("Evidence density")).toBeVisible({
       timeout: 30_000,

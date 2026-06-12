@@ -65,7 +65,9 @@ vi.mock("@/components/ingestion-queue-list", () => ({
   IngestionQueueList: () => <div>Ingestion queue surface</div>,
 }));
 vi.mock("@/components/photo-review-workspace", () => ({
+  PhotoEvidenceGapsPanel: () => <div>Photo gaps surface</div>,
   PhotoReviewWorkspace: () => <div>Photo review surface</div>,
+  PhotoRoomSweepPanel: () => <div>Photo upload surface</div>,
 }));
 vi.mock("@/components/evidence-density-panel", () => ({
   EvidenceDensityPanel: () => <div>Evidence coverage surface</div>,
@@ -137,15 +139,19 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Ingestion queue surface")).not.toBeInTheDocument();
   });
 
-  it("opens photos on review and keeps coverage behind its tab", () => {
+  it("opens photos on review and keeps upload, gaps, and coverage behind tabs", () => {
     render(<PhotosWorkspacePage />);
 
     expect(screen.getByRole("tab", { name: "Review" })).toHaveAttribute(
       "data-state",
       "active"
     );
+    expect(screen.getByRole("tab", { name: "Add photos" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Gaps" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Coverage" })).toBeInTheDocument();
     expect(screen.getByText("Photo review surface")).toBeInTheDocument();
+    expect(screen.queryByText("Photo upload surface")).not.toBeInTheDocument();
+    expect(screen.queryByText("Photo gaps surface")).not.toBeInTheDocument();
     expect(screen.queryByText("Evidence coverage surface")).not.toBeInTheDocument();
   });
 

@@ -70,7 +70,6 @@ export function PhotoReviewWorkspace({
   moveId,
 }: PhotoReviewWorkspaceProps) {
   const [filter, setFilter] = useState<PhotoReviewFilterKey>("all");
-  const [room, setRoom] = useState("");
   const photos = useQuery(
     api.photos.listForMove,
     householdId && moveId ? { householdId, moveId, limit: 120 } : "skip"
@@ -172,7 +171,7 @@ export function PhotoReviewWorkspace({
   }
 
   return (
-    <section id="photos" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <section id="photos">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -324,79 +323,98 @@ export function PhotoReviewWorkspace({
           )}
         </CardContent>
       </Card>
-
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Camera className="size-4 text-primary" aria-hidden="true" />
-              Room sweep
-            </CardTitle>
-            <CardDescription>
-              Add room-level photos before individual items are identified.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              value={room}
-              onChange={(event) => setRoom(event.target.value)}
-              placeholder="Room or area"
-              aria-label="Room or area"
-              disabled={!householdId || !moveId}
-            />
-            <PhotoUploadControl
-              householdId={householdId}
-              moveId={moveId}
-              room={room || undefined}
-              label="Room photo"
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="size-4 text-primary" aria-hidden="true" />
-              Evidence gaps
-            </CardTitle>
-            <CardDescription>
-              High-value, sensitive, irreplaceable, or personal-transport items
-              without photos.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {summary === undefined ? (
-              <div className="space-y-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-5/6" />
-              </div>
-            ) : summary.evidenceGaps.length ? (
-              <div className="space-y-2">
-                {summary.evidenceGaps.map((gap) => (
-                  <div
-                    key={gap.itemId}
-                    className="rounded-md border border-border px-3 py-2 text-sm"
-                  >
-                    <div className="font-medium">{gap.name}</div>
-                    <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
-                      {gap.room ? <Badge variant="outline">{gap.room}</Badge> : null}
-                      {gap.highValue ? <Badge variant="secondary">value</Badge> : null}
-                      {gap.requiresPersonalTransport ? (
-                        <Badge variant="secondary">personal</Badge>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No high-priority photo gaps found.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </section>
+  );
+}
+
+export function PhotoRoomSweepPanel({
+  householdId,
+  moveId,
+}: PhotoReviewWorkspaceProps) {
+  const [room, setRoom] = useState("");
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Camera className="size-4 text-primary" aria-hidden="true" />
+          Room sweep
+        </CardTitle>
+        <CardDescription>
+          Add room-level photos before individual items are identified.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Input
+          value={room}
+          onChange={(event) => setRoom(event.target.value)}
+          placeholder="Room or area"
+          aria-label="Room or area"
+          disabled={!householdId || !moveId}
+        />
+        <PhotoUploadControl
+          householdId={householdId}
+          moveId={moveId}
+          room={room || undefined}
+          label="Room photo"
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function PhotoEvidenceGapsPanel({
+  householdId,
+  moveId,
+}: PhotoReviewWorkspaceProps) {
+  const summary = useQuery(
+    api.photos.evidenceSummary,
+    householdId && moveId ? { householdId, moveId } : "skip"
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <AlertTriangle className="size-4 text-primary" aria-hidden="true" />
+          Evidence gaps
+        </CardTitle>
+        <CardDescription>
+          High-value, sensitive, irreplaceable, or personal-transport items
+          without photos.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {summary === undefined ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-5/6" />
+          </div>
+        ) : summary.evidenceGaps.length ? (
+          <div className="space-y-2">
+            {summary.evidenceGaps.map((gap) => (
+              <div
+                key={gap.itemId}
+                className="rounded-md border border-border px-3 py-2 text-sm"
+              >
+                <div className="font-medium">{gap.name}</div>
+                <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
+                  {gap.room ? <Badge variant="outline">{gap.room}</Badge> : null}
+                  {gap.highValue ? <Badge variant="secondary">value</Badge> : null}
+                  {gap.requiresPersonalTransport ? (
+                    <Badge variant="secondary">personal</Badge>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+            No high-priority photo gaps found.
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

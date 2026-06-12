@@ -3,7 +3,11 @@
 import { EvidenceDensityPanel } from "@/components/evidence-density-panel";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
-import { PhotoReviewWorkspace } from "@/components/photo-review-workspace";
+import {
+  PhotoEvidenceGapsPanel,
+  PhotoReviewWorkspace,
+  PhotoRoomSweepPanel,
+} from "@/components/photo-review-workspace";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 
@@ -20,12 +24,20 @@ export function PhotosWorkspacePage() {
         <MoveWorkspaceTabList
           tabs={[
             { value: "review", label: "Review" },
+            { value: "upload", label: "Add photos" },
+            { value: "gaps", label: "Gaps" },
             { value: "coverage", label: "Coverage" },
           ]}
         />
 
         <TabsContent value="review">
           <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="upload">
+          <PhotoRoomSweepPanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="gaps">
+          <PhotoEvidenceGapsPanel householdId={householdId} moveId={moveId} />
         </TabsContent>
         <TabsContent value="coverage">
           <EvidenceDensityPanel householdId={householdId} moveId={moveId} />
