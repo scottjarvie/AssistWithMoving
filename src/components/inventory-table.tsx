@@ -1,6 +1,12 @@
 "use client";
 
-import { type FormEvent, useCallback, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   type Column,
   type ColumnDef,
@@ -780,6 +786,10 @@ export function InventoryTable({
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
+
+  useEffect(() => {
+    table.setPageIndex(0);
+  }, [ownerFilter, savedFilter, search, table]);
 
   const selectedCount = table.getSelectedRowModel().rows.length;
   const loadingItems = moveId && items === undefined;
