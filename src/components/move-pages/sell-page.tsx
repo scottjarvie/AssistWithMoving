@@ -24,6 +24,39 @@ import { Textarea } from "@/components/ui/textarea";
 
 type SellRows = FunctionReturnType<typeof api.saleListings.listForMove>;
 type SellRow = SellRows[number];
+type SellFilterKey = "all" | "drafts" | "needsPhotos" | "researched" | "listed";
+
+const sellFilters: Array<{
+  key: SellFilterKey;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: "all",
+    label: "All",
+    description: "Every inventory item marked sell.",
+  },
+  {
+    key: "drafts",
+    label: "Drafts",
+    description: "Items still being prepared, priced, or drafted.",
+  },
+  {
+    key: "needsPhotos",
+    label: "Needs photos",
+    description: "Listings that need more photo evidence before posting.",
+  },
+  {
+    key: "researched",
+    label: "Researched",
+    description: "Items with at least one pricing source.",
+  },
+  {
+    key: "listed",
+    label: "Listed",
+    description: "Listings already posted or handling buyer interest.",
+  },
+];
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -46,6 +79,26 @@ function researchBadgeVariant(depth: SellRow["researchDepth"]) {
   return "destructive";
 }
 
+function filterSellRows(rows: SellRow[], filter: SellFilterKey) {
+  switch (filter) {
+    case "drafts":
+      return rows.filter((row) =>
+        ["needsPrep", "researchingPrice", "draftReady"].includes(row.status)
+      );
+    case "needsPhotos":
+      return rows.filter((row) => row.needsMorePhotos);
+    case "researched":
+      return rows.filter((row) => row.researchSourceCount > 0);
+    case "listed":
+      return rows.filter((row) =>
+        ["listed", "interestReceived", "offerPending"].includes(row.status)
+      );
+    case "all":
+    default:
+      return rows;
+  }
+}
+
 export function SellWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
   const rows = useQuery(
@@ -54,6 +107,7 @@ export function SellWorkspacePage() {
   );
   const ensureListings = useMutation(api.saleListings.ensureForMove);
   const [message, setMessage] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<SellFilterKey>("all");
 
   useEffect(() => {
     if (!householdId || !moveId || rows === undefined) return;
@@ -68,11 +122,20 @@ export function SellWorkspacePage() {
     const all = rows ?? [];
     return {
       total: all.length,
-      listed: all.filter((row) => row.status === "listed").length,
       needsPhotos: all.filter((row) => row.needsMorePhotos).length,
       researched: all.filter((row) => row.researchSourceCount > 0).length,
+      drafts: all.filter((row) =>
+        ["needsPrep", "researchingPrice", "draftReady"].includes(row.status)
+      ).length,
+      activeListings: all.filter((row) =>
+        ["listed", "interestReceived", "offerPending"].includes(row.status)
+      ).length,
     };
   }, [rows]);
+  const activeRows = useMemo(
+    () => filterSellRows(rows ?? [], activeFilter),
+    [activeFilter, rows]
+  );
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -81,11 +144,37 @@ export function SellWorkspacePage() {
         description="Marketplace prep for inventory marked sell: photos, price research, listing draft, status, and buyer follow-up."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Sell items" value={counts.total} />
-        <Metric label="Listed" value={counts.listed} />
-        <Metric label="Needs photos" value={counts.needsPhotos} />
-        <Metric label="Researched" value={counts.researched} />
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <Metric
+          label="All"
+          value={counts.total}
+          active={activeFilter === "all"}
+          onClick={() => setActiveFilter("all")}
+        />
+        <Metric
+          label="Drafts"
+          value={counts.drafts}
+          active={activeFilter === "drafts"}
+          onClick={() => setActiveFilter("drafts")}
+        />
+        <Metric
+          label="Needs photos"
+          value={counts.needsPhotos}
+          active={activeFilter === "needsPhotos"}
+          onClick={() => setActiveFilter("needsPhotos")}
+        />
+        <Metric
+          label="Researched"
+          value={counts.researched}
+          active={activeFilter === "researched"}
+          onClick={() => setActiveFilter("researched")}
+        />
+        <Metric
+          label="Listed"
+          value={counts.activeListings}
+          active={activeFilter === "listed"}
+          onClick={() => setActiveFilter("listed")}
+        />
       </div>
 
       <Card>
@@ -97,8 +186,9 @@ export function SellWorkspacePage() {
                 Sale pipeline
               </CardTitle>
               <CardDescription>
-                Facebook Marketplace is the default draft format; other platforms
-                can use the same listing fields later.
+                {sellFilters.find((filter) => filter.key === activeFilter)
+                  ?.description ??
+                  "Facebook Marketplace is the default draft format."}
               </CardDescription>
             </div>
             {householdId && moveId ? (
@@ -140,9 +230,13 @@ export function SellWorkspacePage() {
               No inventory is marked sell yet. Change an item disposition to
               sell and it will appear here.
             </div>
+          ) : activeRows.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+              No sale listings match this view yet.
+            </div>
           ) : (
             <div className="space-y-2">
-              {rows.map((row) => (
+              {activeRows.map((row) => (
                 <SellRowEditor
                   key={row.item._id}
                   householdId={householdId}
@@ -271,7 +365,7 @@ function SellRowEditor({
         </div>
 
         <div className="grid gap-2">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <Input
               inputMode="decimal"
               aria-label={`${row.item.name} low suggested price`}
@@ -326,14 +420,39 @@ function SellRowEditor({
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="rounded-md border border-border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <button
+      type="button"
+      className={`rounded-md border p-3 text-left transition-colors ${
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-background hover:bg-muted"
+      }`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      <p
+        className={`text-xs ${
+          active ? "text-primary-foreground/80" : "text-muted-foreground"
+        }`}
+      >
+        {label}
+      </p>
       <p className="mt-1 text-2xl font-semibold tracking-normal">
         {value.toLocaleString()}
       </p>
-    </div>
+    </button>
   );
 }
 
