@@ -1591,32 +1591,48 @@ export function registerTools(target, apiConfig) {
   });
 
   registerTool(target, "upload_evidence_image", {
-    title: "Upload evidence image",
+    title: "Upload evidence image in one call",
     description:
-      "Easiest image-only MCP path: provide a local file path, public source URL, data URL, or base64 image. The tool stores the original image, finalizes evidence metadata, and lets MovingManifest create web-ready display/AI derivatives server-side.",
+      "Default image upload path for agents: provide exactly one local file path, public source URL, data URL, or base64 image. The tool sends the original image to MovingManifest, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
-      filePath: z.string().optional(),
-      sourceUrl: z.string().url().optional(),
-      dataUrl: z.string().optional(),
-      fileBase64: z.string().optional(),
-      fileName: z.string().optional(),
-      itemId: z.string().optional(),
-      boxId: z.string().optional(),
-      spaceId: z.string().optional(),
+      filePath: z
+        .string()
+        .optional()
+        .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path."),
+      sourceUrl: z
+        .string()
+        .url()
+        .optional()
+        .describe("Public HTTP(S) image URL. Do not use for private localhost or credentialed URLs."),
+      dataUrl: z
+        .string()
+        .optional()
+        .describe("Base64 image data URL such as data:image/jpeg;base64,..."),
+      fileBase64: z
+        .string()
+        .optional()
+        .describe("Raw base64 JPEG, PNG, or WebP bytes when a data URL is not convenient."),
+      fileName: z.string().optional().describe("Optional display/source filename."),
+      itemId: z.string().optional().describe("Attach the uploaded image to an inventory item."),
+      boxId: z.string().optional().describe("Attach the uploaded image to a box."),
+      spaceId: z.string().optional().describe("Attach the uploaded image to a room or move space."),
       transportResourceId: z.string().optional(),
       transportZoneId: z.string().optional(),
-      room: z.string().optional(),
-      mimeType: z.enum(allowedOriginalImageMimeTypes).optional(),
+      room: z.string().optional().describe("Readable room label when a spaceId is not known yet."),
+      mimeType: z
+        .enum(allowedOriginalImageMimeTypes)
+        .optional()
+        .describe("Optional override when the image type cannot be inferred."),
       originalHash: z.string().optional(),
-      caption: z.string().optional(),
-      photoType: z.string().optional(),
-      privacyLevel: z.string().optional(),
-      visibilityScope: z.string().optional(),
+      caption: z.string().optional().describe("Short human-readable description to show users."),
+      photoType: z.string().optional().describe("Use item, room, condition, damage, receipt, boxContents, boxLabel, serialNumber, blueprint, or other when known."),
+      privacyLevel: z.string().optional().describe("Leave blank for normal evidence unless the user says it is private, sensitive, mover-visible, claim-only, or report-visible."),
+      visibilityScope: z.string().optional().describe("Leave blank for the app default, or pass moveCollaborators, household, documentationScoped, or private."),
       source: z.string().optional(),
       exifHandlingStatus: z.string().optional(),
-      confidence: z.string().optional(),
-      notes: z.string().optional(),
+      confidence: z.string().optional().describe("Optional agent confidence about the caption/context, not a required photo-quality score."),
+      notes: z.string().optional().describe("Optional reviewer notes or assumptions to show the user."),
       verificationStatus: z.string().optional(),
       capturedAt: z.number().optional(),
       idempotencyKey: z.string().optional(),

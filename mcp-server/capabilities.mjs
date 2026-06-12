@@ -369,7 +369,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     title: "Evidence media intake",
     status: "availableWithOperationalBlocker",
     purpose:
-      "Start upload sessions and attach image, audio, or video evidence metadata for condition, serial, receipt, mover, PCS, and claims evidence.",
+      "Upload image evidence through a one-call agent path, or use lower-level upload sessions for audio, video, progress bars, and custom clients.",
     requiredScopes: ["moves/read", "inventory/read", "photos/write"],
     restEndpoints: [
       "POST /api/v1/photos/upload",
@@ -385,9 +385,10 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "attach_photo",
     ],
     agentWorkflows: [
-      "Use upload_evidence_image first when the agent has a local image path, public image URL, data URL, or base64 image; MovingManifest stores the original, finalizes the evidence record, and creates web-ready derivatives.",
-      "Use upload_evidence_file when the agent has a local path or source URL; it starts the session, uploads the original, finalizes metadata, triggers server-side image derivatives, and returns the photoId.",
-      "Use the lower-level start/finalize tools only when the client needs to manage presigned uploads, upload audio/video, or supply its own image derivatives.",
+      "For ordinary images, use upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
+      "Do not ask the user for dimensions, thumbnail sizes, or derivative files during normal AI-assisted photo capture.",
+      "Use upload_evidence_file for non-image media or when the agent needs to keep the storage PUT in the local process.",
+      "Use lower-level start/finalize tools only when the client needs presigned-upload control, audio/video upload, progress bars, or client-created image derivatives.",
       "Attach reviewed evidence media to items, boxes, rooms, and documentation profiles.",
       "Keep original file delivery separate from recipient-safe packet thumbnails.",
     ],

@@ -314,6 +314,35 @@
         }
       }
     },
+    "/photos/upload": {
+      "post": {
+        "summary": "Upload image evidence in one call",
+        "operationId": "uploadPhotoEvidenceImage",
+        "description": "Default REST image upload path for agents. Send exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives server-side.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoDirectUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Photo record created and derivative processing attempted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoDirectUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/uploads/init": {
       "post": {
         "summary": "Start photo upload",
@@ -650,6 +679,140 @@
           },
           "needsMorePhotos": {
             "type": "boolean"
+          }
+        }
+      },
+      "PhotoDirectUpload": {
+        "type": "object",
+        "required": ["moveId"],
+        "description": "One-call JPEG, PNG, or WebP upload for agents. Provide exactly one of sourceUrl, dataUrl, or fileBase64. Local MCP clients should use upload_evidence_image with filePath so the MCP server sends fileBase64 for them.",
+        "properties": {
+          "moveId": {
+            "type": "string"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public HTTP(S) JPEG, PNG, or WebP URL. Localhost, private-network, and credentialed URLs are rejected."
+          },
+          "dataUrl": {
+            "type": "string",
+            "description": "Base64 image data URL such as data:image/jpeg;base64,..."
+          },
+          "fileBase64": {
+            "type": "string",
+            "description": "Raw base64 JPEG, PNG, or WebP bytes. Use this for REST clients that read a local image file."
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": ["image/jpeg", "image/png", "image/webp"]
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "boxId": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "transportResourceId": {
+            "type": "string"
+          },
+          "transportZoneId": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "photoType": {
+            "type": "string"
+          },
+          "privacyLevel": {
+            "type": "string"
+          },
+          "visibilityScope": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "default": "api"
+          },
+          "confidence": {
+            "$ref": "#/components/schemas/Confidence"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "verificationStatus": {
+            "type": "string"
+          },
+          "capturedAt": {
+            "type": "number"
+          }
+        },
+        "oneOf": [
+          {
+            "required": ["sourceUrl"]
+          },
+          {
+            "required": ["dataUrl"]
+          },
+          {
+            "required": ["fileBase64"]
+          }
+        ]
+      },
+      "PhotoDirectUploadResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "photoId": {
+                "type": "string"
+              },
+              "uploadSessionId": {
+                "type": "string"
+              },
+              "derivativeStatus": {
+                "type": "string",
+                "enum": ["ready", "failed"]
+              },
+              "derivativeError": {
+                "type": "string"
+              },
+              "media": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": ["sourceUrl", "dataUrl", "fileBase64"]
+                  },
+                  "fileName": {
+                    "type": "string"
+                  },
+                  "mimeType": {
+                    "type": "string"
+                  },
+                  "sizeBytes": {
+                    "type": "number"
+                  },
+                  "width": {
+                    "type": "number"
+                  },
+                  "height": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
           }
         }
       },

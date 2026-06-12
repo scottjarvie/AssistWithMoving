@@ -26,6 +26,7 @@ type CapabilityPayload = {
   capabilities: Array<{
     id: string;
     status: string;
+    agentWorkflows?: string[];
     operationalBlockers?: string[];
   }>;
   knownLaunchBlockers: Array<{
@@ -180,6 +181,61 @@ describe("MovingManifest MCP capability discovery", () => {
         mcpTools: expect.arrayContaining(["setup_move"]),
       }),
     );
+  });
+
+  it("advertises one-call image upload as the default agent path", () => {
+    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+      expect.objectContaining({
+        id: "photoEvidence",
+        restEndpoints: expect.arrayContaining(["POST /api/v1/photos/upload"]),
+        mcpTools: expect.arrayContaining(["upload_evidence_image"]),
+        agentWorkflows: expect.arrayContaining([
+          expect.stringContaining("upload_evidence_image first"),
+          expect.stringContaining("Do not ask the user for dimensions"),
+        ]),
+      }),
+    );
+  });
+
+  it("documents the one-call image upload path for OpenAPI and AI readers", () => {
+    const openapi = JSON.parse(
+      readFileSync(resolve(process.cwd(), "public/openapi.json"), "utf8")
+    ) as {
+      paths: Record<string, { post?: { operationId?: string } }>;
+      components: {
+        schemas: Record<
+          string,
+          {
+            description?: string;
+            properties?: Record<string, { description?: string }>;
+          }
+        >;
+      };
+    };
+    const docs = readFileSync(
+      resolve(process.cwd(), "docs/api-and-mcp.md"),
+      "utf8"
+    );
+    const llms = readFileSync(resolve(process.cwd(), "public/llms.txt"), "utf8");
+    const fullLlms = readFileSync(
+      resolve(process.cwd(), "public/llms-full.txt"),
+      "utf8"
+    );
+
+    expect(openapi.paths["/photos/upload"]?.post?.operationId).toBe(
+      "uploadPhotoEvidenceImage"
+    );
+    expect(openapi.components.schemas.PhotoDirectUpload.description).toContain(
+      "Provide exactly one of sourceUrl, dataUrl, or fileBase64"
+    );
+    expect(
+      openapi.components.schemas.PhotoDirectUpload.properties?.fileBase64
+        ?.description
+    ).toContain("local image file");
+    expect(docs).toContain("one user photo should normally mean one");
+    expect(docs).toContain("`upload_evidence_image` call");
+    expect(llms).toContain("MCP agents should call");
+    expect(fullLlms).toContain("One user photo should normally be one upload call");
   });
 
   it("keeps capability ids unique for agent discovery", () => {

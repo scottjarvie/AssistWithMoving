@@ -139,6 +139,21 @@ Family helper or mover:
   moved personally?
 - Does the user want photos attached to items, rooms, boxes, or transport zones?
 
+## Image Upload Guidance
+
+One user photo should normally be one upload call. MCP agents should use
+`upload_evidence_image` with a local `filePath`, public `sourceUrl`, `dataUrl`,
+or `fileBase64`. REST agents should use `POST /api/v1/photos/upload` with
+exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`; REST clients with local
+files can read the file and send base64. MovingManifest stores the original,
+reads dimensions, finalizes the evidence record, and creates web-ready
+`thumb`, `card`, `detail`, and `full` derivatives server-side. Do not ask users
+for dimensions, thumbnail sizes, or derivative files for ordinary photos.
+
+After uploading, tell the user the caption, room/item/box attachment, privacy
+choice, and any confidence or assumption you used so they can correct it without
+slowing down the capture flow.
+
 ## Data Entry Guidance
 
 Fast item capture:
@@ -219,6 +234,7 @@ Important endpoints:
 - `GET /moves/{moveId}/spaces`
 - `POST /moves/{moveId}/spaces`
 - `POST /moves/{moveId}/sale-listings`
+- `POST /photos/upload`
 - `POST /uploads/init`
 - `POST /photos/finalize`
 - `GET /moves/{moveId}/capacity-report`
@@ -244,6 +260,7 @@ Useful write tools:
 - `setup_move`
 - `create_move_space`
 - `batch_upsert_items`
+- `upload_evidence_image`
 - `upload_evidence_file`
 - `start_photo_upload`
 - `finalize_photo_upload`

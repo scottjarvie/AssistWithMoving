@@ -42,6 +42,12 @@ Primary site: https://movingmanifest.com
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
+- For image upload, use one call by default. MCP agents should call
+  `upload_evidence_image` with a local `filePath`, public `sourceUrl`,
+  `dataUrl`, or `fileBase64`. REST agents should call
+  `POST /api/v1/photos/upload` with exactly one of `sourceUrl`, `dataUrl`, or
+  `fileBase64`. MovingManifest stores the original and creates web-ready
+  derivatives server-side; do not ask users for thumbnail sizes or dimensions.
 - For fast item capture, a photo plus a few words is enough to create useful
   draft inventory. Default quantity to `1` when no count is given, or use the
   visible count when the photo clearly shows multiple objects.

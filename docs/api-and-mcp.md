@@ -1213,6 +1213,14 @@ creates web-ready derivatives in the background, and returns the `photoId`.
 Use `upload_evidence_file` for audio/video or when a client wants the explicit
 presigned upload flow.
 
+Quick rule for agents: one user photo should normally mean one
+`upload_evidence_image` call in MCP or one `POST /photos/upload` call in REST.
+Do not ask the user for image dimensions, thumbnail sizes, or derivative files.
+The site reads dimensions and creates `thumb`, `card`, `detail`, and `full`
+display versions after the original is stored. Tell the user the caption,
+attachment target, and confidence/assumptions you used so they can correct the
+record without turning upload into a long interview.
+
 For REST API agents that already have an image URL or base64 image payload, use
 the one-call image endpoint:
 
@@ -1234,8 +1242,11 @@ curl -X POST https://movingmanifest.com/api/v1/photos/upload \
 `POST /photos/upload` accepts JPEG, PNG, or WebP images from exactly one of
 `sourceUrl`, `dataUrl`, or `fileBase64`. It is intentionally image-only and
 server-preps `thumb`, `card`, `detail`, and `full` derivatives after storing
-the original. Use the presigned flow below for larger/custom upload clients,
-audio/video evidence, progress bars, or client-created derivatives.
+the original. REST clients with a local file should read the file and send
+`fileBase64`; MCP clients should pass `filePath` to `upload_evidence_image` and
+let the local MCP server read the file. Use the presigned flow below for
+larger/custom upload clients, audio/video evidence, progress bars, or
+client-created derivatives.
 
 The lower-level REST flow is still useful for custom clients, browser clients,
 and clients that already create web-ready image derivatives. API/MCP clients can
@@ -1310,6 +1321,11 @@ For MCP clients, use `upload_evidence_image` first:
   "visibilityScope": "moveCollaborators"
 }
 ```
+
+The result includes `photoId`, `uploadSessionId`, source media details, and a
+derivative status/note. Agents should report the useful human part: where the
+image was attached, what caption/type/privacy they chose, and whether display
+derivatives are ready or still need review.
 
 Use `upload_evidence_file` for non-image media or when the agent has a local
 file and should keep the storage PUT in the local process. Use
