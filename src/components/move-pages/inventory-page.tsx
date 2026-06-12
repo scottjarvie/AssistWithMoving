@@ -8,6 +8,12 @@ import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { PlannedItemsPanel } from "@/components/planned-items-panel";
 import { RoomWalkIntake } from "@/components/room-walk-intake";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 export function InventoryWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
@@ -18,14 +24,34 @@ export function InventoryWorkspacePage() {
         title="Inventory"
         description="Every item you own, where it is, and what is happening to it: keep, sell, donate, dump, store, or move."
       />
-      <RoomWalkIntake householdId={householdId} moveId={moveId} />
-      <PlannedItemsPanel householdId={householdId} moveId={moveId} />
-      <section id="inventory">
-        <InventoryTable householdId={householdId} moveId={moveId} />
-      </section>
-      <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
-      <DispositionPipelinePanel householdId={householdId} moveId={moveId} />
-      <EstimateSummary householdId={householdId} moveId={moveId} />
+      <Tabs defaultValue="items" className="gap-4">
+        <div className="overflow-x-auto pb-1">
+          <TabsList className="min-w-max">
+            <TabsTrigger value="items">Items</TabsTrigger>
+            <TabsTrigger value="capture">Capture</TabsTrigger>
+            <TabsTrigger value="review">Review</TabsTrigger>
+            <TabsTrigger value="disposition">Disposition</TabsTrigger>
+            <TabsTrigger value="estimates">Estimates</TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="items" id="inventory">
+          <InventoryTable householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="capture" className="space-y-4">
+          <RoomWalkIntake householdId={householdId} moveId={moveId} />
+          <PlannedItemsPanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="review">
+          <InventoryDuplicateReview householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="disposition">
+          <DispositionPipelinePanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
+        <TabsContent value="estimates">
+          <EstimateSummary householdId={householdId} moveId={moveId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

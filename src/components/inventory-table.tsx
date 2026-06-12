@@ -2,6 +2,7 @@
 
 import { type FormEvent, useCallback, useMemo, useState } from "react";
 import {
+  type Column,
   type ColumnDef,
   type ColumnFiltersState,
   flexRender,
@@ -16,6 +17,9 @@ import {
 } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   Columns3,
@@ -64,29 +68,233 @@ import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 const visibleDefaultColumns: VisibilityState = {
   category: true,
   room: true,
-  ownerContact: true,
+  ownerContact: false,
   condition: false,
-  confidence: true,
+  confidence: false,
   indicators: true,
   status: true,
   disposition: true,
   review: true,
 };
 
+const columnLabels: Record<string, string> = {
+  category: "Category",
+  room: "Room",
+  ownerContact: "Owner / contact",
+  condition: "Condition",
+  confidence: "Confidence",
+  indicators: "Indicators",
+  status: "Status",
+  disposition: "Disposition",
+  review: "Review",
+};
+
+const columnDescriptions: Record<string, string> = {
+  ownerContact: "Person responsible for the item.",
+  confidence: "Weight and volume estimate confidence.",
+  indicators: "Compact flags for evidence, boxes, load, value, and review.",
+  review: "Marks records that need another look.",
+};
+
+function SortableHeader<TData, TValue>({
+  column,
+  label,
+}: {
+  column: Column<TData, TValue>;
+  label: string;
+}) {
+  const sorted = column.getIsSorted();
+  const Icon =
+    sorted === "asc" ? ArrowUp : sorted === "desc" ? ArrowDown : ArrowUpDown;
+
+  if (!column.getCanSort()) {
+    return <span>{label}</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      className="inline-flex h-8 items-center gap-1 rounded-md px-1 text-left hover:bg-muted"
+      onClick={column.getToggleSortingHandler()}
+      aria-label={`Sort by ${label}`}
+    >
+      <span>{label}</span>
+      <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+    </button>
+  );
+}
+
 function SignalBadge({
   label,
-  active,
   title,
+  tone = "outline",
 }: {
   label: string;
-  active: boolean;
   title: string;
+  tone?: "outline" | "secondary" | "destructive";
 }) {
   return (
-    <Badge variant={active ? "secondary" : "outline"} title={title}>
+    <Badge variant={tone} title={title} className="max-w-full">
       {label}
     </Badge>
   );
+}
+
+type IndicatorBadgeModel = {
+  label: string;
+  title: string;
+  tone: "outline" | "secondary" | "destructive";
+};
+
+function isIndicatorBadge(
+  badge: IndicatorBadgeModel | null
+): badge is IndicatorBadgeModel {
+  return badge !== null;
+}
+
+function indicatorBadges(item: InventoryItem): IndicatorBadgeModel[] {
+  const signals = item.signals;
+  const photoCount = signals?.photoCount ?? 0;
+  const evidencePhotoCount = signals?.evidencePhotoCount ?? 0;
+  const boxCount = signals?.boxCount ?? 0;
+  const assignmentCount = signals?.assignmentCount ?? 0;
+  const boxContext = signals?.boxCodes.length
+    ? `Boxes: ${signals.boxCodes.join(", ")}`
+    : "No boxes contain this item yet.";
+  const loadContext = [
+    ...(signals?.assignedResourceNames ?? []),
+    ...(signals?.assignedZoneNames ?? []),
+  ].join(", ");
+
+  const badges: Array<IndicatorBadgeModel | null> = [
+    item.needsReview
+      ? {
+          label: "review",
+          title: "This item needs a human review.",
+          tone: "secondary" as const,
+        }
+      : null,
+    item.highValue
+      ? {
+          label: "value",
+          title: "Marked high value.",
+          tone: "secondary" as const,
+        }
+      : null,
+    item.requiresPersonalTransport
+      ? {
+          label: "personal",
+          title: "Should travel personally or outside the mover flow.",
+          tone: "secondary" as const,
+        }
+      : null,
+    photoCount > 0
+      ? {
+          label: `photos ${photoCount}`,
+          title: `${photoCount} active photos are attached to this item.`,
+          tone: "outline" as const,
+        }
+      : null,
+    evidencePhotoCount > 0
+      ? {
+          label: `evidence ${evidencePhotoCount}`,
+          title: `${evidencePhotoCount} claim, condition, serial, receipt, or handoff evidence photos are attached.`,
+          tone: "outline" as const,
+        }
+      : null,
+    boxCount > 0
+      ? {
+          label: `boxes ${boxCount}`,
+          title: boxContext,
+          tone: "outline" as const,
+        }
+      : null,
+    assignmentCount > 0
+      ? {
+          label: `load ${assignmentCount}`,
+          title: loadContext
+            ? `Assigned through: ${loadContext}`
+            : "Containing box is assigned to transport.",
+          tone: "outline" as const,
+        }
+      : null,
+    item.highValue && evidencePhotoCount === 0
+      ? {
+          label: "needs evidence",
+          title: "High-value item without claim or condition evidence photos.",
+          tone: "outline" as const,
+        }
+      : null,
+  ];
+
+  return badges.filter(isIndicatorBadge);
+}
+
+function InventoryIndicators({ item }: { item: InventoryItem }) {
+  const badges = indicatorBadges(item);
+  const visibleBadges = badges.slice(0, 3);
+  const hiddenCount = Math.max(badges.length - visibleBadges.length, 0);
+
+  if (!badges.length) {
+    return <span className="text-xs text-muted-foreground">No flags</span>;
+  }
+
+  return (
+    <div className="flex max-w-[18rem] flex-wrap gap-1">
+      {visibleBadges.map((badge) => (
+        <SignalBadge
+          key={badge.label}
+          label={badge.label}
+          title={badge.title}
+          tone={badge.tone}
+        />
+      ))}
+      {hiddenCount ? (
+        <Badge
+          variant="outline"
+          title={badges
+            .slice(visibleBadges.length)
+            .map((badge) => badge.label)
+            .join(", ")}
+        >
+          +{hiddenCount}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function tableHeadClassName(columnId: string) {
+  switch (columnId) {
+    case "select":
+      return "w-10";
+    case "name":
+      return "min-w-[18rem] w-[32%]";
+    case "details":
+      return "w-24";
+    case "indicators":
+      return "min-w-[14rem] w-[16rem]";
+    case "status":
+    case "disposition":
+      return "w-36";
+    case "review":
+      return "w-32";
+    default:
+      return "min-w-28";
+  }
+}
+
+function tableCellClassName(columnId: string) {
+  switch (columnId) {
+    case "name":
+      return "max-w-[32rem] whitespace-normal";
+    case "indicators":
+      return "max-w-[18rem] whitespace-normal";
+    case "ownerContact":
+      return "max-w-[14rem] whitespace-normal";
+    default:
+      return "";
+  }
 }
 
 export function InventoryTable({
@@ -252,11 +460,13 @@ export function InventoryTable({
       },
       {
         accessorKey: "name",
-        header: "Item",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Item" />
+        ),
         cell: ({ row }) => (
-          <div>
+          <div className="min-w-0">
             <p className="font-medium">{row.original.name}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-1 line-clamp-2 max-w-[30rem] whitespace-normal break-words text-xs leading-5 text-muted-foreground">
               {row.original.description ?? "No description"}
             </p>
           </div>
@@ -284,17 +494,24 @@ export function InventoryTable({
       },
       {
         accessorKey: "room",
-        header: "Room",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Room" />
+        ),
         cell: ({ row }) => row.original.room ?? "unassigned",
       },
       {
         accessorKey: "category",
-        header: "Category",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Category" />
+        ),
         cell: ({ row }) => row.original.category ?? "uncategorized",
       },
       {
         id: "ownerContact",
-        header: "Owner / contact",
+        accessorFn: (row) => row.ownerContact?.name ?? "",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Owner" />
+        ),
         cell: ({ row }) => {
           const owner = row.original.ownerContact;
 
@@ -312,12 +529,15 @@ export function InventoryTable({
       },
       {
         accessorKey: "condition",
-        header: "Condition",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Condition" />
+        ),
         cell: ({ row }) => row.original.condition,
       },
       {
         id: "confidence",
         header: "Confidence",
+        enableSorting: false,
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-1">
             <Badge variant="outline">W {row.original.weightConfidence}</Badge>
@@ -328,63 +548,14 @@ export function InventoryTable({
       {
         id: "indicators",
         header: "Indicators",
-        cell: ({ row }) => {
-          const signals = row.original.signals;
-          const photoCount = signals?.photoCount ?? 0;
-          const evidencePhotoCount = signals?.evidencePhotoCount ?? 0;
-          const boxCount = signals?.boxCount ?? 0;
-          const assignmentCount = signals?.assignmentCount ?? 0;
-          const boxContext = signals?.boxCodes.length
-            ? `Boxes: ${signals.boxCodes.join(", ")}`
-            : "No boxes contain this item yet.";
-          const loadContext = [
-            ...(signals?.assignedResourceNames ?? []),
-            ...(signals?.assignedZoneNames ?? []),
-          ].join(", ");
-
-          return (
-            <div className="flex flex-wrap gap-1">
-              <Badge variant={row.original.highValue ? "secondary" : "outline"}>
-                value
-              </Badge>
-              <Badge
-                variant={
-                  row.original.requiresPersonalTransport ? "secondary" : "outline"
-                }
-              >
-                personal
-              </Badge>
-              <SignalBadge
-                label={`photos ${photoCount}`}
-                active={photoCount > 0}
-                title={`${photoCount} active photos are attached to this item.`}
-              />
-              <SignalBadge
-                label={`evidence ${evidencePhotoCount}`}
-                active={evidencePhotoCount > 0}
-                title={`${evidencePhotoCount} claim, condition, serial, receipt, or handoff evidence photos are attached.`}
-              />
-              <SignalBadge
-                label={`boxes ${boxCount}`}
-                active={boxCount > 0}
-                title={boxContext}
-              />
-              <SignalBadge
-                label={`load ${assignmentCount}`}
-                active={assignmentCount > 0}
-                title={
-                  loadContext
-                    ? `Assigned through: ${loadContext}`
-                    : "No containing box is assigned to a transport resource yet."
-                }
-              />
-            </div>
-          );
-        },
+        enableSorting: false,
+        cell: ({ row }) => <InventoryIndicators item={row.original} />,
       },
       {
         accessorKey: "status",
-        header: "Status",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Status" />
+        ),
         cell: ({ row }) => (
           <select
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
@@ -406,7 +577,9 @@ export function InventoryTable({
       },
       {
         accessorKey: "disposition",
-        header: "Disposition",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Disposition" />
+        ),
         cell: ({ row }) => (
           <select
             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
@@ -429,7 +602,10 @@ export function InventoryTable({
       },
       {
         accessorKey: "needsReview",
-        header: "Review",
+        id: "review",
+        header: ({ column }) => (
+          <SortableHeader column={column} label="Review" />
+        ),
         cell: ({ row }) => (
           <label className="flex items-center gap-2 text-xs">
             <input
@@ -556,224 +732,226 @@ export function InventoryTable({
           </Button>
         </form>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-64 flex-1">
-                <Search
-                  className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <Input
-                  className="pl-8"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search items, rooms, people, categories"
-                  aria-label="Search inventory"
-                />
-              </div>
-              <select
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                value={ownerFilter}
-                aria-label="Owner or contact filter"
-                onChange={(event) =>
-                  setOwnerFilter(event.target.value as InventoryOwnerFilter)
-                }
-              >
-                <option value="all">All owners</option>
-                <option value="unassigned">Unassigned</option>
-                {ownerFilterOptions.map((owner) => (
-                  <option key={owner.id} value={owner.id}>
-                    {owner.name} - {owner.role}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                value={savedFilter}
-                aria-label="Saved inventory filter"
-                onChange={(event) =>
-                  setSavedFilter(event.target.value as InventoryFilterKey)
-                }
-              >
-                {inventorySavedFilters.map((filter) => (
-                  <option key={filter.key} value={filter.key}>
-                    {filter.label}
-                  </option>
-                ))}
-              </select>
+        <div className="space-y-3">
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <ListFilter className="size-4 text-primary" aria-hidden="true" />
+              Saved views
             </div>
-
-            {selectedCount ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
-                <Badge>{selectedCount} selected</Badge>
-                <Button
+            <div className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0">
+              {inventorySavedFilters.map((filter) => (
+                <button
+                  key={filter.key}
                   type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleBulkPatch({ status: "packed" })}
+                  className={`shrink-0 rounded-md border px-3 py-2 text-left text-xs transition-colors ${
+                    savedFilter === filter.key
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-muted"
+                  }`}
+                  title={filter.description}
+                  aria-pressed={savedFilter === filter.key}
+                  onClick={() => setSavedFilter(filter.key)}
                 >
-                  Pack
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    void handleBulkPatch({
-                      disposition: "personalTransport",
-                      requiresPersonalTransport: true,
-                    })
-                  }
-                >
-                  Personal
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleBulkPatch({ needsReview: true })}
-                >
-                  Review
-                </Button>
-              </div>
-            ) : null}
-
-            {loadingItems ? (
-              <div className="space-y-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-4/5" />
-              </div>
-            ) : table.getRowModel().rows.length ? (
-              <div className="rounded-md border border-border">
-                <Table>
-                  <TableHeader>
-                    {table.getHeaderGroups().map((headerGroup) => (
-                      <TableRow key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <TableHead key={header.id}>
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext()
-                                )}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableHeader>
-                  <TableBody>
-                    {table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        data-state={row.getIsSelected() ? "selected" : undefined}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Add inventory items or change the saved filter/search terms.
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-              <span>
-                Page {table.getState().pagination.pageIndex + 1} of{" "}
-                {Math.max(table.getPageCount(), 1)}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!table.getCanPreviousPage()}
-                  onClick={() => table.previousPage()}
-                >
-                  <ChevronLeft aria-hidden="true" />
-                  Prev
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!table.getCanNextPage()}
-                  onClick={() => table.nextPage()}
-                >
-                  Next
-                  <ChevronRight aria-hidden="true" />
-                </Button>
-              </div>
+                  {filter.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="rounded-md border border-border p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                <ListFilter className="size-4 text-primary" aria-hidden="true" />
-                Saved filters
-              </div>
-              <div className="space-y-1.5">
-                {inventorySavedFilters.map((filter) => (
-                  <button
-                    key={filter.key}
-                    type="button"
-                    className="block w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                    onClick={() => setSavedFilter(filter.key)}
-                  >
-                    <span className="block font-medium">{filter.label}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {filter.description}
-                    </span>
-                  </button>
-                ))}
-              </div>
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+            <div className="relative min-w-0">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                className="pl-8"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search items, rooms, people, categories"
+                aria-label="Search inventory"
+              />
             </div>
-
-            <div className="rounded-md border border-border p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <select
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={ownerFilter}
+              aria-label="Owner or contact filter"
+              onChange={(event) =>
+                setOwnerFilter(event.target.value as InventoryOwnerFilter)
+              }
+            >
+              <option value="all">All owners</option>
+              <option value="unassigned">Unassigned</option>
+              {ownerFilterOptions.map((owner) => (
+                <option key={owner.id} value={owner.id}>
+                  {owner.name} - {owner.role}
+                </option>
+              ))}
+            </select>
+            <details className="rounded-md border border-border bg-background px-3 py-2">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
                 <Columns3 className="size-4 text-primary" aria-hidden="true" />
                 Columns
-              </div>
-              <div className="grid gap-1.5 text-sm">
+              </summary>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {table
                   .getAllLeafColumns()
                   .filter((column) => column.getCanHide())
                   .map((column) => (
-                    <label key={column.id} className="flex items-center gap-2">
+                    <label
+                      key={column.id}
+                      className="flex items-start gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
+                    >
                       <input
                         type="checkbox"
-                        className="size-3.5 accent-primary"
+                        className="mt-0.5 size-3.5 accent-primary"
                         checked={column.getIsVisible()}
                         onChange={column.getToggleVisibilityHandler()}
                       />
-                      {column.id}
+                      <span>
+                        <span className="block font-medium">
+                          {columnLabels[column.id] ?? column.id}
+                        </span>
+                        {columnDescriptions[column.id] ? (
+                          <span className="block text-xs leading-5 text-muted-foreground">
+                            {columnDescriptions[column.id]}
+                          </span>
+                        ) : null}
+                      </span>
                     </label>
                   ))}
               </div>
-            </div>
+            </details>
+          </div>
 
-            {message ? (
-              <p
-                className="rounded-md border border-border p-3 text-sm text-muted-foreground"
-                role="status"
-                aria-live="polite"
+          {selectedCount ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
+              <Badge>{selectedCount} selected</Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void handleBulkPatch({ status: "packed" })}
               >
-                {message}
-              </p>
-            ) : null}
+                Pack
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  void handleBulkPatch({
+                    disposition: "personalTransport",
+                    requiresPersonalTransport: true,
+                  })
+                }
+              >
+                Personal
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void handleBulkPatch({ needsReview: true })}
+              >
+                Review
+              </Button>
+            </div>
+          ) : null}
+
+          {message ? (
+            <p
+              className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              {message}
+            </p>
+          ) : null}
+
+          {loadingItems ? (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-4/5" />
+            </div>
+          ) : table.getRowModel().rows.length ? (
+            <div className="rounded-md border border-border">
+              <Table className="min-w-[980px] table-fixed">
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead
+                          key={header.id}
+                          className={tableHeadClassName(header.column.id)}
+                        >
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() ? "selected" : undefined}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          className={tableCellClassName(cell.column.id)}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+              Add inventory items or change the saved filter/search terms.
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+            <span>
+              Page {table.getState().pagination.pageIndex + 1} of{" "}
+              {Math.max(table.getPageCount(), 1)}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!table.getCanPreviousPage()}
+                onClick={() => table.previousPage()}
+              >
+                <ChevronLeft aria-hidden="true" />
+                Prev
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!table.getCanNextPage()}
+                onClick={() => table.nextPage()}
+              >
+                Next
+                <ChevronRight aria-hidden="true" />
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>
