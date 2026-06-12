@@ -60,7 +60,9 @@ const groupIcons: Record<PipelineGroup["key"], typeof Tags> = {
 };
 
 const dispositionTabs = [
-  { value: "overview", label: "Overview" },
+  { value: "actions", label: "Actions" },
+  { value: "summary", label: "Summary" },
+  { value: "shortcuts", label: "Shortcuts" },
   { value: "sellFree", label: "Sell / free" },
   { value: "donate", label: "Donation" },
   { value: "dump", label: "Dump" },
@@ -109,24 +111,10 @@ export function DispositionPipelinePanel({
             dispositions in Inventory to start these workflows.
           </div>
         ) : (
-          <Tabs defaultValue="overview" className="gap-4">
+          <Tabs defaultValue="actions" className="gap-4">
             <MoveWorkspaceTabList tabs={[...dispositionTabs]} />
 
-            <TabsContent value="overview" className="space-y-4">
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                <Metric label="Pipeline items" value={summary.counts.itemCount} />
-                <Metric label="Quantity" value={summary.counts.quantity} />
-                <Metric label="Ready now" value={summary.counts.readyCount} />
-                <Metric
-                  label="Share links"
-                  value={summary.counts.activeShareLinkCount}
-                />
-                <Metric
-                  label="Owner value"
-                  value={formatSubManifestCurrency(summary.counts.totalValueCents)}
-                />
-              </div>
-
+            <TabsContent value="actions" className="space-y-4">
               {summary.topActions.length ? (
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   {summary.topActions.map((action) => (
@@ -163,20 +151,45 @@ export function DispositionPipelinePanel({
                   </p>
                 </div>
               )}
+            </TabsContent>
 
-              <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link href="#inventory">Inventory</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="#photos">Photos</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="#load-plan">Load planner</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="#documentation-packets">Packet links</Link>
-                </Button>
+            <TabsContent value="summary" className="space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <Metric label="Pipeline items" value={summary.counts.itemCount} />
+                <Metric label="Quantity" value={summary.counts.quantity} />
+                <Metric label="Ready now" value={summary.counts.readyCount} />
+                <Metric
+                  label="Share links"
+                  value={summary.counts.activeShareLinkCount}
+                />
+                <Metric
+                  label="Owner value"
+                  value={formatSubManifestCurrency(summary.counts.totalValueCents)}
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="shortcuts" className="space-y-4">
+              <div className="rounded-md border border-border p-3">
+                <p className="text-sm font-medium">Go fix disposition inputs</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Disposition queues come from item records, photo evidence,
+                  box assignments, load planning, and packet links.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#inventory">Inventory</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#photos">Photos</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#load-plan">Load planner</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="#documentation-packets">Packet links</Link>
+                  </Button>
+                </div>
               </div>
             </TabsContent>
 

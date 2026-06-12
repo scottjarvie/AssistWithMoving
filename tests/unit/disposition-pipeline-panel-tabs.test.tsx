@@ -82,7 +82,7 @@ describe("DispositionPipelinePanel task tabs", () => {
     ];
   });
 
-  it("opens on overview and keeps disposition categories behind task tabs", async () => {
+  it("opens on action queues and separates summary, shortcuts, and disposition categories", async () => {
     const user = userEvent.setup();
 
     render(
@@ -92,15 +92,29 @@ describe("DispositionPipelinePanel task tabs", () => {
       />
     );
 
-    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Actions" })).toHaveAttribute(
       "data-state",
       "active"
     );
-    expect(screen.getByText("Pipeline items")).toBeInTheDocument();
     expect(screen.getByText("Sell: To photograph for sale")).toBeInTheDocument();
+    expect(screen.queryByText("Pipeline items")).not.toBeInTheDocument();
+    expect(screen.queryByText("Go fix disposition inputs")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Items intended for sale, listing, and buyer pickup.")
     ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Summary" }));
+    expect(screen.getByText("Pipeline items")).toBeInTheDocument();
+    expect(screen.getByText("Owner value")).toBeInTheDocument();
+    expect(screen.queryByText("Sell: To photograph for sale")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Shortcuts" }));
+    expect(screen.getByText("Go fix disposition inputs")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
+      "href",
+      "#inventory"
+    );
+    expect(screen.queryByText("Pipeline items")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Sell / free" }));
     expect(
