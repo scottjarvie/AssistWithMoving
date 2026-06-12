@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   apiKeyRestrictionLabel,
@@ -167,6 +168,13 @@ const helperPresets: HelperPreset[] = [
     scopes: memberManagerScopes,
   },
 ];
+
+const aiConnectionTasks = [
+  { value: "create", label: "Create key" },
+  { value: "connections", label: "Connections" },
+  { value: "overview", label: "Overview" },
+  { value: "advanced", label: "Advanced" },
+] as const;
 
 function sameScopes(left: ApiKeyScope[], right: ApiKeyScope[]) {
   return (
@@ -415,6 +423,355 @@ export function ApiKeyManager({
     );
   }
 
+  function renderOverview() {
+    return (
+      <section aria-label="AI connection overview" className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatusTile
+            icon={Home}
+            label="Households"
+            value={formatStat(households?.length)}
+            note={
+              selectedHousehold
+                ? `Viewing ${selectedHousehold.name}`
+                : "Choose one below"
+            }
+          />
+          <StatusTile
+            icon={Truck}
+            label="Moves"
+            value={formatStat(stats?.moveCount ?? activeMoves.length)}
+            note={
+              stats?.archivedMoveCount
+                ? `${stats.archivedMoveCount} archived`
+                : "Active move workspaces"
+            }
+          />
+          <StatusTile
+            icon={Package}
+            label="Items"
+            value={formatStat(stats?.itemCount)}
+            note={
+              stats
+                ? `${formatStat(stats.boxCount)} boxes tracked`
+                : "Inventory count"
+            }
+          />
+          <StatusTile
+            icon={Activity}
+            label="AI connections"
+            value={formatStat(stats?.activeApiKeyCount ?? activeKeys.length)}
+            note={
+              lastUsedKey
+                ? `Last used ${formatApiKeyDate(lastUsedKey.lastUsedAt)}`
+                : "No recent usage yet"
+            }
+          />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,320px)]">
+          <div className="rounded-md border border-border p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck
+                className="mt-0.5 size-5 text-primary"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium">
+                  Simple setup for an AI assistant
+                </h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Pick a job, choose the household or move, create the key,
+                  then copy the one-time secret into Claude, ChatGPT, Codex, or
+                  another assistant you trust.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-md border border-border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  People
+                </p>
+                <p className="mt-1 text-sm">
+                  {formatStat(stats?.activeMemberCount)} active
+                  {stats?.pendingInvitationCount
+                    ? `, ${stats.pendingInvitationCount} invited`
+                    : ""}
+                </p>
+              </div>
+              <Users className="size-5 text-primary" aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  function renderCreateConnection() {
+    return (
+      <section aria-label="Create an AI connection" className="space-y-4">
+        {!setupMode ? (
+          <div>
+            <h3 className="text-base font-semibold">
+              Create a new AI connection
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Most people only need the recommended option. Use Advanced if you
+              already know exactly which API scopes you want.
+            </p>
+          </div>
+        ) : null}
+
+        {setupMode ? (
+          <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <CheckCircle2
+                    className="size-4 text-primary"
+                    aria-hidden="true"
+                  />
+                  Recommended: full trusted helper
+                </p>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  This is the normal choice when your assistant is helping set
+                  up a move, add inventory, upload photos, export packets, or
+                  invite household collaborators.
+                </p>
+              </div>
+              <Badge variant="secondary">{summarizeScopes(scopes)}</Badge>
+            </div>
+          </div>
+        ) : null}
+
+        {!setupMode ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {helperPresets.map((preset) => {
+              const selected = preset.id === selectedPresetId;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => applyPreset(preset)}
+                  className={`min-h-[156px] rounded-md border p-4 text-left transition hover:border-primary/60 hover:bg-primary/5 ${
+                    selected
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-background"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-medium">{preset.title}</span>
+                    {selected ? (
+                      <CheckCircle2
+                        className="size-4 shrink-0 text-primary"
+                        aria-hidden="true"
+                      />
+                    ) : preset.recommended ? (
+                      <Badge variant="secondary">default</Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 text-sm leading-5 text-muted-foreground">
+                    {preset.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <details className="rounded-md border border-border p-4">
+            <summary className="cursor-pointer text-sm font-medium">
+              Change what the assistant can do
+            </summary>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {helperPresets.map((preset) => {
+                const selected = preset.id === selectedPresetId;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => applyPreset(preset)}
+                    className={`rounded-md border p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 ${
+                      selected
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-background"
+                    }`}
+                  >
+                    <span className="flex items-center justify-between gap-2 text-sm font-medium">
+                      {preset.title}
+                      {selected ? (
+                        <CheckCircle2
+                          className="size-4 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      {preset.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </details>
+        )}
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="space-y-2">
+            <label htmlFor="api-key-household" className="text-sm font-medium">
+              Household
+            </label>
+            <select
+              id="api-key-household"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={effectiveHouseholdId ?? ""}
+              onChange={(event) => {
+                setSelectedHouseholdId(event.target.value as Id<"households">);
+                setSelectedMoveRestrictionId("all");
+              }}
+            >
+              {households?.map((entry) => (
+                <option key={entry.household._id} value={entry.household._id}>
+                  {entry.household.name} ({entry.role})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="api-key-move" className="text-sm font-medium">
+              Where can it work?
+            </label>
+            <select
+              id="api-key-move"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={moveRestrictionId}
+              onChange={(event) =>
+                setSelectedMoveRestrictionId(
+                  event.target.value as Id<"moves"> | "all",
+                )
+              }
+              disabled={!effectiveHouseholdId || stats === undefined}
+            >
+              <option value="all">All moves in this household</option>
+              {activeMoves.map((move) => (
+                <option key={move.moveId} value={move.moveId}>
+                  {move.title}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {moveRestrictionId === "all"
+                ? "Good for trusted setup work across the household."
+                : apiKeyRestrictionLabel(
+                    moveRestrictionId,
+                    moveTitleById.get(moveRestrictionId),
+                  )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/25 bg-primary/5 p-4">
+          <Button
+            type="button"
+            disabled={!effectiveHouseholdId || busy === "create" || !scopes.length}
+            onClick={() => void handleCreateKey()}
+          >
+            {busy === "create" ? (
+              <RefreshCw className="animate-spin" aria-hidden="true" />
+            ) : (
+              <KeyRound aria-hidden="true" />
+            )}
+            Create key
+          </Button>
+          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+            This creates one secret. Only paste it into an assistant or tool you
+            trust, because it can do the job you selected above.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  function renderAdvancedApiSettings() {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-semibold">
+              <Settings2 className="size-4 text-primary" aria-hidden="true" />
+              Advanced API settings
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Technical controls for naming, expiration, and exact MCP/API
+              scopes.
+            </p>
+          </div>
+          <Badge variant="outline">{summarizeScopes(scopes)}</Badge>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px]">
+          <div className="space-y-2">
+            <label htmlFor="api-key-name" className="text-sm font-medium">
+              Key name
+            </label>
+            <Input
+              id="api-key-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Key name"
+            />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="api-key-expiration" className="text-sm font-medium">
+              Expires in days
+            </label>
+            <Input
+              id="api-key-expiration"
+              value={expiresInDays}
+              onChange={(event) => setExpiresInDays(event.target.value)}
+              inputMode="numeric"
+              placeholder="90"
+            />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm font-medium">Exact permissions</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            These are the technical scopes used by API and MCP clients.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {apiKeyScopeOptions.map(([scope, label]) => (
+              <label key={scope} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={scopes.includes(scope)}
+                  onChange={() => toggleScope(scope)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link href="/ai">AI guide</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/api">API docs</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/mcp">MCP docs</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Card id="api-keys">
       <CardHeader>
@@ -437,7 +794,11 @@ export function ApiKeyManager({
       </CardHeader>
       <CardContent className="space-y-6">
         {!enabled || households === undefined ? (
-          <div className={setupMode ? "space-y-3" : "grid gap-3 sm:grid-cols-2 xl:grid-cols-4"}>
+          <div
+            className={
+              setupMode ? "space-y-3" : "grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+            }
+          >
             <Skeleton className={setupMode ? "h-16 w-full" : "h-24 w-full"} />
             <Skeleton className={setupMode ? "h-28 w-full" : "h-24 w-full"} />
             {!setupMode ? (
@@ -449,422 +810,96 @@ export function ApiKeyManager({
           </div>
         ) : households.length ? (
           <>
-            {!setupMode ? (
-            <section aria-label="AI connection overview" className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <StatusTile
-                  icon={Home}
-                  label="Households"
-                  value={formatStat(households.length)}
-                  note={
-                    selectedHousehold
-                      ? `Viewing ${selectedHousehold.name}`
-                      : "Choose one below"
-                  }
-                />
-                <StatusTile
-                  icon={Truck}
-                  label="Moves"
-                  value={formatStat(stats?.moveCount ?? activeMoves.length)}
-                  note={
-                    stats?.archivedMoveCount
-                      ? `${stats.archivedMoveCount} archived`
-                      : "Active move workspaces"
-                  }
-                />
-                <StatusTile
-                  icon={Package}
-                  label="Items"
-                  value={formatStat(stats?.itemCount)}
-                  note={
-                    stats
-                      ? `${formatStat(stats.boxCount)} boxes tracked`
-                      : "Inventory count"
-                  }
-                />
-                <StatusTile
-                  icon={Activity}
-                  label="AI connections"
-                  value={formatStat(stats?.activeApiKeyCount ?? activeKeys.length)}
-                  note={
-                    lastUsedKey
-                      ? `Last used ${formatApiKeyDate(lastUsedKey.lastUsedAt)}`
-                      : "No recent usage yet"
-                  }
-                />
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,320px)]">
-                <div className="rounded-md border border-border p-4">
-                  <div className="flex items-start gap-3">
-                    <ShieldCheck
-                      className="mt-0.5 size-5 text-primary"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-medium">
-                        Simple setup for an AI assistant
-                      </h3>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                        Pick a job, choose the household or move, create the
-                        key, then copy the one-time secret into Claude, ChatGPT,
-                        Codex, or another assistant you trust.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-md border border-border p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        People
-                      </p>
-                      <p className="mt-1 text-sm">
-                        {formatStat(stats?.activeMemberCount)} active
-                        {stats?.pendingInvitationCount
-                          ? `, ${stats.pendingInvitationCount} invited`
-                          : ""}
-                      </p>
-                    </div>
-                    <Users className="size-5 text-primary" aria-hidden="true" />
-                  </div>
-                </div>
-              </div>
-            </section>
-            ) : null}
-
-            <section aria-label="Create an AI connection" className="space-y-4">
-              {!setupMode ? (
-              <div>
-                <h3 className="text-base font-semibold">
-                  Create a new AI connection
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Most people only need the recommended option. Open advanced
-                  settings below if you already know exactly which API scopes
-                  you want.
-                </p>
-              </div>
-              ) : null}
-
-              {setupMode ? (
-                <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="flex items-center gap-2 text-sm font-medium">
-                        <CheckCircle2
-                          className="size-4 text-primary"
-                          aria-hidden="true"
-                        />
-                        Recommended: full trusted helper
-                      </p>
-                      <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                        This is the normal choice when your assistant is helping
-                        set up a move, add inventory, upload photos, export
-                        packets, or invite household collaborators.
-                      </p>
-                    </div>
-                    <Badge variant="secondary">{summarizeScopes(scopes)}</Badge>
-                  </div>
-                </div>
-              ) : null}
-
-              {!setupMode ? (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                {helperPresets.map((preset) => {
-                  const selected = preset.id === selectedPresetId;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => applyPreset(preset)}
-                      className={`min-h-[156px] rounded-md border p-4 text-left transition hover:border-primary/60 hover:bg-primary/5 ${
-                        selected
-                          ? "border-primary bg-primary/10"
-                          : "border-border bg-background"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm font-medium">
-                          {preset.title}
-                        </span>
-                        {selected ? (
-                          <CheckCircle2
-                            className="size-4 shrink-0 text-primary"
-                            aria-hidden="true"
-                          />
-                        ) : preset.recommended ? (
-                          <Badge variant="secondary">default</Badge>
-                        ) : null}
-                      </div>
-                      <p className="mt-3 text-sm leading-5 text-muted-foreground">
-                        {preset.description}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-              ) : (
+            {setupMode ? (
+              <>
+                {renderCreateConnection()}
                 <details className="rounded-md border border-border p-4">
                   <summary className="cursor-pointer text-sm font-medium">
-                    Change what the assistant can do
+                    Advanced API settings
                   </summary>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {helperPresets.map((preset) => {
-                      const selected = preset.id === selectedPresetId;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => applyPreset(preset)}
-                          className={`rounded-md border p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 ${
-                            selected
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-background"
-                          }`}
-                        >
-                          <span className="flex items-center justify-between gap-2 text-sm font-medium">
-                            {preset.title}
-                            {selected ? (
-                              <CheckCircle2
-                                className="size-4 shrink-0 text-primary"
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                          </span>
-                          <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                            {preset.description}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <div className="mt-4">{renderAdvancedApiSettings()}</div>
                 </details>
-              )}
-
-              <div className="grid gap-3 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="api-key-household"
-                    className="text-sm font-medium"
+                <details className="rounded-md border border-border p-4">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Manage existing AI connections
+                  </summary>
+                  <div className="mt-4">{renderConnections()}</div>
+                </details>
+              </>
+            ) : (
+              <Tabs defaultValue="create" className="gap-4">
+                <div className="overflow-x-auto pb-1">
+                  <TabsList
+                    className="min-w-max"
+                    aria-label="AI connection tasks"
                   >
-                    Household
-                  </label>
-                  <select
-                    id="api-key-household"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={effectiveHouseholdId ?? ""}
-                    onChange={(event) => {
-                      setSelectedHouseholdId(
-                        event.target.value as Id<"households">,
-                      );
-                      setSelectedMoveRestrictionId("all");
-                    }}
-                  >
-                    {households.map((entry) => (
-                      <option
-                        key={entry.household._id}
-                        value={entry.household._id}
-                      >
-                        {entry.household.name} ({entry.role})
-                      </option>
+                    {aiConnectionTasks.map((task) => (
+                      <TabsTrigger key={task.value} value={task.value}>
+                        {task.label}
+                      </TabsTrigger>
                     ))}
-                  </select>
+                  </TabsList>
                 </div>
 
-                <div className="space-y-2">
-                  <label
-                    htmlFor="api-key-move"
-                    className="text-sm font-medium"
-                  >
-                    Where can it work?
-                  </label>
-                  <select
-                    id="api-key-move"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={moveRestrictionId}
-                    onChange={(event) =>
-                      setSelectedMoveRestrictionId(
-                        event.target.value as Id<"moves"> | "all",
-                      )
-                    }
-                    disabled={!effectiveHouseholdId || stats === undefined}
-                  >
-                    <option value="all">All moves in this household</option>
-                    {activeMoves.map((move) => (
-                      <option key={move.moveId} value={move.moveId}>
-                        {move.title}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-muted-foreground">
-                    {moveRestrictionId === "all"
-                      ? "Good for trusted setup work across the household."
-                      : apiKeyRestrictionLabel(
-                          moveRestrictionId,
-                          moveTitleById.get(moveRestrictionId),
-                        )}
-                  </p>
-                </div>
-              </div>
+                <TabsContent value="create">
+                  {renderCreateConnection()}
+                </TabsContent>
+                <TabsContent value="connections">
+                  <section aria-label="Manage existing AI connections">
+                    {renderConnections()}
+                  </section>
+                </TabsContent>
+                <TabsContent value="overview">{renderOverview()}</TabsContent>
+                <TabsContent value="advanced">
+                  {renderAdvancedApiSettings()}
+                </TabsContent>
+              </Tabs>
+            )}
 
-              <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/25 bg-primary/5 p-4">
-                <Button
-                  type="button"
-                  disabled={
-                    !effectiveHouseholdId || busy === "create" || !scopes.length
-                  }
-                  onClick={() => void handleCreateKey()}
-                >
-                  {busy === "create" ? (
-                    <RefreshCw className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <KeyRound aria-hidden="true" />
-                  )}
-                  Create key
-                </Button>
-                <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                  This creates one secret. Only paste it into an assistant or
-                  tool you trust, because it can do the job you selected above.
-                </p>
+            {oneTimeSecret ? (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium">One-time secret</h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      Copy this now with the green button. MovingManifest stores
+                      only a secure hash, so this exact secret will not be shown
+                      again.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:border-emerald-700 focus-visible:ring-emerald-600/30"
+                    onClick={() => void handleCopySecret()}
+                  >
+                    <Copy aria-hidden="true" />
+                    Copy key
+                  </Button>
+                </div>
+                <Textarea
+                  className="mt-3 font-mono text-xs"
+                  readOnly
+                  value={oneTimeSecret}
+                  aria-label="One-time API key secret"
+                />
               </div>
-            </section>
+            ) : null}
+
+            {message ? (
+              <p
+                className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                {message}
+              </p>
+            ) : null}
           </>
         ) : (
           <p className="rounded-md border border-border p-4 text-sm text-muted-foreground">
             Create a household before adding AI connections.
           </p>
-        )}
-
-        {oneTimeSecret ? (
-          <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-medium">One-time secret</h3>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Copy this now with the green button. MovingManifest stores
-                  only a secure hash, so this exact secret will not be shown
-                  again.
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:border-emerald-700 focus-visible:ring-emerald-600/30"
-                onClick={() => void handleCopySecret()}
-              >
-                <Copy aria-hidden="true" />
-                Copy key
-              </Button>
-            </div>
-            <Textarea
-              className="mt-3 font-mono text-xs"
-              readOnly
-              value={oneTimeSecret}
-              aria-label="One-time API key secret"
-            />
-          </div>
-        ) : null}
-
-        {message ? (
-          <p className="rounded-md border border-border p-3 text-sm text-muted-foreground">
-            {message}
-          </p>
-        ) : null}
-
-        {households?.length ? (
-          <details className="group rounded-md border border-border p-4">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium">
-              <span className="flex items-center gap-2">
-                <Settings2 className="size-4 text-primary" aria-hidden="true" />
-                Advanced API settings
-              </span>
-              <span className="text-xs text-muted-foreground group-open:hidden">
-                {summarizeScopes(scopes)}
-              </span>
-            </summary>
-            <div className="mt-4 space-y-4">
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px]">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="api-key-name"
-                    className="text-sm font-medium"
-                  >
-                    Key name
-                  </label>
-                  <Input
-                    id="api-key-name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Key name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor="api-key-expiration"
-                    className="text-sm font-medium"
-                  >
-                    Expires in days
-                  </label>
-                  <Input
-                    id="api-key-expiration"
-                    value={expiresInDays}
-                    onChange={(event) => setExpiresInDays(event.target.value)}
-                    inputMode="numeric"
-                    placeholder="90"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium">Exact permissions</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  These are the technical scopes used by API and MCP clients.
-                </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {apiKeyScopeOptions.map(([scope, label]) => (
-                    <label
-                      key={scope}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={scopes.includes(scope)}
-                        onChange={() => toggleScope(scope)}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/ai">AI guide</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/api">API docs</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/mcp">MCP docs</Link>
-                </Button>
-              </div>
-            </div>
-          </details>
-        ) : null}
-
-        {setupMode ? (
-          <details className="rounded-md border border-border p-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              Manage existing AI connections
-            </summary>
-            <div className="mt-4">{renderConnections()}</div>
-          </details>
-        ) : (
-          <section aria-label="Manage existing AI connections">
-            {renderConnections()}
-          </section>
         )}
       </CardContent>
     </Card>
