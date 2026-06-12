@@ -44,6 +44,7 @@ import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
+import { useHashTab } from "@/components/use-hash-tab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -217,6 +218,7 @@ type FeatureKind =
   | "fence"
   | "custom";
 type ZoneKind = "driveway" | "shed" | "garden" | "fence" | "patio" | "custom";
+type PlanSideRailTask = "inspect" | "place" | "review" | "blueprint";
 
 const indoorFeatureKinds = [
   "stairs",
@@ -255,6 +257,14 @@ const zoneKinds = [
   "fence",
   "custom",
 ] as const satisfies readonly ZoneKind[];
+
+const planSideRailTaskHashes = {
+  "#layout-blueprint": "blueprint",
+  "#layout-inspect": "inspect",
+  "#layout-place": "place",
+  "#layout-review": "review",
+  "#layout-studio": "inspect",
+} as const;
 type EditDraft =
   | {
       entity: PlanEntity;
@@ -1098,8 +1108,13 @@ export function PlanSideRailTabs({
   blueprint: ReactNode;
   place: ReactNode;
 }) {
+  const [activeTask, setActiveTask] = useHashTab<PlanSideRailTask>(
+    "inspect",
+    planSideRailTaskHashes
+  );
+
   return (
-    <Tabs defaultValue="inspect" className="gap-4">
+    <Tabs value={activeTask} onValueChange={setActiveTask} className="gap-4">
       <MoveWorkspaceTabList
         tabs={[
           { value: "inspect", label: "Inspect" },
@@ -1109,10 +1124,18 @@ export function PlanSideRailTabs({
         ]}
       />
 
-      <TabsContent value="inspect">{inspect}</TabsContent>
-      <TabsContent value="place">{place}</TabsContent>
-      <TabsContent value="review">{review}</TabsContent>
-      <TabsContent value="blueprint">{blueprint}</TabsContent>
+      <TabsContent value="inspect" id="layout-inspect">
+        {inspect}
+      </TabsContent>
+      <TabsContent value="place" id="layout-place">
+        {place}
+      </TabsContent>
+      <TabsContent value="review" id="layout-review">
+        {review}
+      </TabsContent>
+      <TabsContent value="blueprint" id="layout-blueprint">
+        {blueprint}
+      </TabsContent>
     </Tabs>
   );
 }

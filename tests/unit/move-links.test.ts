@@ -92,6 +92,15 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#photo-gaps")).toBe(
       "/app/moves/move_123/photos#photo-gaps"
     );
+    expect(moveWorkspaceAnchorPath("move_123", "#layout-studio")).toBe(
+      "/app/moves/move_123/plan#layout-studio"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#layout-review")).toBe(
+      "/app/moves/move_123/plan#layout-review"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#layout-blueprint")).toBe(
+      "/app/moves/move_123/plan#layout-blueprint"
+    );
     expect(moveWorkspaceAnchorPath("move_123", "#ai-review-queue")).toBe(
       "/app/moves/move_123/ai-review#ai-review-queue"
     );

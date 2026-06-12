@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PlanSideRailTabs,
@@ -8,6 +8,10 @@ import {
 } from "@/components/layout-studio/plan-workspace-page";
 
 describe("PlanSideRailTabs", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/moves/move_123/plan");
+  });
+
   it("keeps Layout Studio side work separated by task", async () => {
     const user = userEvent.setup();
 
@@ -44,6 +48,32 @@ describe("PlanSideRailTabs", () => {
     expect(
       screen.queryByText("Agent proposal review panel"),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens blueprint work when routed to the layout blueprint hash", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/plan#layout-blueprint",
+    );
+
+    render(
+      <PlanSideRailTabs
+        inspect={<div>Inspector and levels panel</div>}
+        place={<div>Placement tray panel</div>}
+        review={<div>Agent proposal review panel</div>}
+        blueprint={<div>Blueprint underlay panel</div>}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Blueprint" })).toHaveAttribute(
+        "data-state",
+        "active",
+      ),
+    );
+    expect(screen.getByText("Blueprint underlay panel")).toBeInTheDocument();
+    expect(screen.queryByText("Inspector and levels panel")).not.toBeInTheDocument();
   });
 });
 
