@@ -33,7 +33,11 @@ Primary site: https://movingmanifest.com
   are mover/helper/contact records; household members control login access.
 - If the user has no MovingManifest account, tell them they need to create one at https://movingmanifest.com/sign-up before private move data can be stored.
 - Do not invent access to private data. Private move data requires user login or a user-created API key.
-- If the user wants an assistant to do work, guide them to Settings after sign-in and create an AI helper key.
+- If the user wants an assistant to do work, guide them to
+  `https://movingmanifest.com/sign-in?redirect_url=/settings%23api-keys` or
+  `https://movingmanifest.com/sign-up?redirect_url=/settings%23api-keys`, then
+  have them choose a helper preset, create the key, copy the one-time secret,
+  and paste it only into an assistant they trust.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.

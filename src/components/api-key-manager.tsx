@@ -55,7 +55,7 @@ type MoveSummary = {
   status: string;
 };
 
-const aiHelperScopes: ApiKeyScope[] = [
+const fullTrustedAccessScopes: ApiKeyScope[] = [
   "moves/read",
   "moves/write",
   "inventory/read",
@@ -70,11 +70,17 @@ const aiHelperScopes: ApiKeyScope[] = [
 
 const readOnlyScopes: ApiKeyScope[] = ["moves/read", "inventory/read", "exports/read"];
 
-const photoIntakeScopes: ApiKeyScope[] = [
+const addItemsOnlyScopes: ApiKeyScope[] = [
   "moves/read",
   "inventory/read",
   "inventory/write",
   "photos/write",
+];
+
+const setupMoveAndMembersScopes: ApiKeyScope[] = [
+  "moves/read",
+  "moves/write",
+  "members/manage",
 ];
 
 const memberManagerScopes: ApiKeyScope[] = ["moves/read", "members/manage"];
@@ -101,12 +107,12 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
   const revokeKey = useMutation(api.apiKeys.revoke);
   const rotateKey = useMutation(api.apiKeys.rotate);
 
-  const [name, setName] = useState("AI helper key");
+  const [name, setName] = useState("Full trusted AI helper key");
   const [expiresInDays, setExpiresInDays] = useState("90");
   const [selectedMoveRestrictionId, setSelectedMoveRestrictionId] = useState<
     Id<"moves"> | "all"
   >("all");
-  const [scopes, setScopes] = useState<ApiKeyScope[]>(aiHelperScopes);
+  const [scopes, setScopes] = useState<ApiKeyScope[]>(fullTrustedAccessScopes);
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -211,7 +217,7 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
   }
 
   return (
-    <Card>
+    <Card id="api-keys">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <KeyRound className="size-4 text-primary" aria-hidden="true" />
@@ -231,11 +237,10 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
                 Recommended for AI assistants
               </h3>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Use the default key when you want an assistant to help create a
-                move, add inventory, upload photos, prepare sale listings, plan
-                loads, export packets, or invite household collaborators.
-                Restrict it to one move when possible, and revoke it after the
-                helper session if it was temporary.
+                Pick what you want your assistant to do, create the key, then
+                copy the one-time secret. Full trusted access can read and
+                change household move data, create inventory, upload photos,
+                export packets, and invite collaborators.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -331,10 +336,9 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
             <div>
               <h3 className="text-sm font-medium">What this helper can do</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                The default allows most assistant workflows. Use a preset or
-                uncheck individual permissions for narrower access. Member
-                management is included in the broad helper preset so spouse or
-                family invites are not a separate setup chore.
+                Choose a preset, then uncheck individual permissions if needed.
+                Use the narrowest key that still supports what the assistant is
+                helping with.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -342,15 +346,45 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => applyPreset("AI helper key", aiHelperScopes)}
+                onClick={() =>
+                  applyPreset("Add items and photos key", addItemsOnlyScopes)
+                }
               >
-                AI helper
+                Add items only
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => applyPreset("Read-only assistant key", readOnlyScopes)}
+                onClick={() =>
+                  applyPreset(
+                    "Set up move and members key",
+                    setupMoveAndMembersScopes,
+                  )
+                }
+              >
+                Set up move
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  applyPreset(
+                    "Full trusted AI helper key",
+                    fullTrustedAccessScopes,
+                  )
+                }
+              >
+                Full trusted access
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  applyPreset("Read-only assistant key", readOnlyScopes)
+                }
               >
                 Read only
               </Button>
@@ -358,15 +392,9 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => applyPreset("Photo intake assistant key", photoIntakeScopes)}
-              >
-                Photo intake
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => applyPreset("Member manager key", memberManagerScopes)}
+                onClick={() =>
+                  applyPreset("Member manager key", memberManagerScopes)
+                }
               >
                 Members
               </Button>
@@ -409,7 +437,8 @@ export function ApiKeyManager({ enabled = true }: { enabled?: boolean }) {
                 <p className="mt-1 text-xs text-muted-foreground">
                   This raw key is not stored and will not be shown again. Copy
                   it into the trusted assistant, MCP client, or password manager
-                  that will do the move work.
+                  that will do the move work. Anyone with the key gets the
+                  selected access until you revoke or rotate it.
                 </p>
               </div>
               <Button type="button" size="sm" variant="outline" onClick={() => void handleCopySecret()}>

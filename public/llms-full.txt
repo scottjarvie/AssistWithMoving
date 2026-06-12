@@ -66,7 +66,10 @@ If a user says: "Go to movingmanifest.com and help me use it"
    requires an account.
 3. If they do not have an account, guide them to `https://movingmanifest.com/sign-up`.
 4. After account creation, guide them to create or select a move.
-5. Guide them to Settings and create an AI helper key.
+5. Guide them to `https://movingmanifest.com/sign-in?redirect_url=/settings%23api-keys`
+   or `https://movingmanifest.com/sign-up?redirect_url=/settings%23api-keys`,
+   then have them choose a helper preset, create the key, and copy the one-time
+   secret.
 6. Ask the user to copy the one-time secret into the assistant or MCP client
    only if they trust that assistant with the move work.
 7. Use `GET /api/v1/me` to verify the key and scopes.

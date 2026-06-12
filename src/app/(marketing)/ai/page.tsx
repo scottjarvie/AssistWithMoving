@@ -62,7 +62,7 @@ const setupSteps = [
   "Ask your assistant to open movingmanifest.com/ai and read /llms.txt.",
   "Create a MovingManifest account if you do not have one yet.",
   "Create or select a move, such as House in Nashua NH to house in Tucson AZ.",
-  "Open Settings and create an AI helper key with the recommended scopes.",
+  "Open Settings > API and MCP keys, choose a preset, create the key, and copy the one-time secret.",
   "Give the key only to the assistant or MCP client you trust for this move.",
   "Have the assistant call /api/v1/me, then /api/v1/moves, then /api/v1/moves/{moveId}/agent-context before writing data.",
 ];
@@ -131,6 +131,19 @@ export default function AiAssistantPage() {
             <blockquote className="mt-3 border-l-2 border-primary pl-3 text-sm leading-6">
               {starterPrompt}
             </blockquote>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button asChild size="sm">
+                <Link href="/sign-up?redirect_url=/settings%23api-keys">
+                  Create account for AI setup
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/sign-in?redirect_url=/settings%23api-keys">
+                  Sign in for AI key
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </PublicBand>

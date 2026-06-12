@@ -6,10 +6,12 @@ import { FormEvent, useState } from "react";
 import { useMutation } from "convex/react";
 import {
   ArrowRight,
+  Bot,
   CalendarDays,
   ClipboardList,
   FileStack,
   Home,
+  KeyRound,
   Plus,
   ShieldCheck,
   Truck,
@@ -250,6 +252,40 @@ export function MoveDashboard() {
           </CardContent>
         </Card>
       </section>
+
+      <Card className="border-primary/25 bg-primary/5">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Bot className="size-4 text-primary" aria-hidden="true" />
+                Do you need a key for your AI assistant?
+              </CardTitle>
+              <CardDescription className="mt-2 max-w-3xl leading-6">
+                If Claude, ChatGPT, Codex, or another assistant sent you here,
+                create an AI helper key, copy it once, and paste it only into an
+                assistant you trust. A full trusted key can read and change your
+                household move data and invite collaborators.
+              </CardDescription>
+            </div>
+            <Badge variant="outline">one-time secret</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button asChild size="sm">
+            <Link href="/settings#api-keys">
+              <KeyRound aria-hidden="true" />
+              Create and copy AI key
+            </Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/ai">
+              AI setup guide
+              <ArrowRight aria-hidden="true" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <section className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
         <div className="space-y-4">
