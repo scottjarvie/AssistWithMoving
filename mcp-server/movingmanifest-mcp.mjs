@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 
 import {
+  addItemFromPhoto,
   addItemsToBox,
   applyAssignments,
   batchUpsertItems,
@@ -1154,6 +1155,25 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     handler: (input) => createItemWithImages(apiConfig, input),
+  });
+
+  registerTool(target, "add_item_from_photo", {
+    title: "Add item from photo",
+    description:
+      "Plain-language fastest path for one household item from one user photo plus a few words. Provide one local filePath, public sourceUrl, dataUrl, or fileBase64 with the item name and any obvious fields. Quantity defaults to 1 when omitted; missing weight, dimensions, disposition, and condition do not block creation; MovingManifest stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
+    inputSchema: {
+      moveId: z.string(),
+      name: z.string().min(1),
+      ...inventoryItemWriteSchema.omit({ itemId: true, name: true }).shape,
+      ...createdItemImageInputSchema.shape,
+      continueOnImageError: z
+        .boolean()
+        .optional()
+        .describe("Defaults true so the item can still be created if the single image upload fails."),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => addItemFromPhoto(apiConfig, input),
   });
 
   registerTool(target, "batch_upsert_items", {

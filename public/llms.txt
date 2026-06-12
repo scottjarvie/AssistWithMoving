@@ -47,10 +47,11 @@ Primary site: https://movingmanifest.com
   `sourceUrl`, `dataUrl`, or `fileBase64`; when the user gives several ordinary
   photos from the same room or context, call `upload_photos` (or
   `upload_evidence_images`) with shared defaults and one image entry per photo.
-  When the photo should become one new inventory item, call
-  `create_item_with_images` so the item is created, quantity defaults to 1 if
-  omitted, photos attach to that item, and web derivatives are created
-  server-side. REST agents should call
+  When one photo should become one new inventory item, call
+  `add_item_from_photo` so the item is created, quantity defaults to 1 if
+  omitted, missing weight/size/disposition/condition do not block capture, the
+  photo attaches to that item, and web derivatives are created server-side. Use
+  `create_item_with_images` when one new item has several photos. REST agents should call
   `POST /api/v1/photos/upload` with raw JPEG/PNG/WebP bytes plus metadata query
   params, multipart form data, or JSON with exactly one of `sourceUrl`,
   `dataUrl`, or `fileBase64`. MovingManifest stores the original and creates

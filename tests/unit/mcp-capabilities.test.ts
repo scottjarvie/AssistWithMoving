@@ -189,6 +189,7 @@ describe("MovingManifest MCP capability discovery", () => {
         id: "photoEvidence",
         restEndpoints: expect.arrayContaining(["POST /api/v1/photos/upload"]),
         mcpTools: expect.arrayContaining([
+          "add_item_from_photo",
           "create_item_with_images",
           "upload_evidence_image",
           "upload_evidence_images",
@@ -196,6 +197,7 @@ describe("MovingManifest MCP capability discovery", () => {
           "upload_photos",
         ]),
         agentWorkflows: expect.arrayContaining([
+          expect.stringContaining("add_item_from_photo"),
           expect.stringContaining("create_item_with_images"),
           expect.stringContaining("upload_evidence_image first"),
           expect.stringContaining("upload_evidence_images"),
@@ -270,6 +272,7 @@ describe("MovingManifest MCP capability discovery", () => {
         ?.properties?.agentReview?.description
     ).toContain("assistant-facing summary");
     expect(docs).toContain("one user photo should normally mean one");
+    expect(docs).toContain("`add_item_from_photo`");
     expect(docs).toContain("`upload_evidence_image` call");
     expect(docs).toContain("`upload_evidence_images`");
     expect(docs).toContain("`upload_photo`");
@@ -277,11 +280,13 @@ describe("MovingManifest MCP capability discovery", () => {
     expect(docs).toContain("`agentReview`");
     expect(docs).toContain("`generateAiSuggestions: true`");
     expect(llms).toContain("MCP agents should call");
+    expect(llms).toContain("add_item_from_photo");
     expect(llms).toContain("upload_photo");
     expect(llms).toContain("upload_evidence_images");
     expect(llms).toContain("agentReview");
     expect(llms).toContain("generateAiSuggestions: true");
     expect(fullLlms).toContain("One user photo should normally be one upload call");
+    expect(fullLlms).toContain("add_item_from_photo");
     expect(fullLlms).toContain("upload_photos");
     expect(fullLlms).toContain("upload_evidence_images");
     expect(fullLlms).toContain("agentReview");

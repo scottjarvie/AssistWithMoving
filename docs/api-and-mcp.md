@@ -1234,13 +1234,15 @@ duplicate evidence, set `generateAiSuggestions: true`. Upload still succeeds
 when AI review queueing fails or the key only has `photos/write`; the response
 will include `aiReview.status` and any queueing error.
 
-When the photo is meant to become a new inventory item, MCP agents should use
-`create_item_with_images` instead of manually creating the item and then
-uploading/attaching photos. That tool creates one item, defaults `quantity` to
-`1` when omitted, uploads each original image attached to the new item, and
-returns the item ID plus per-image photo IDs and derivative status. REST clients
-can do the same workflow with `POST /moves/{moveId}/items` followed by
-`POST /photos/upload` calls that include the returned `itemId`.
+When the photo is meant to become one new inventory item, MCP agents should use
+`add_item_from_photo`. It accepts the item name plus one image source at the top
+level, defaults `quantity` to `1` when omitted, leaves missing weight,
+dimensions, disposition, and condition blank, attaches the uploaded photo to the
+created item, and returns item/photo IDs plus `agentReview`. Use
+`create_item_with_images` when the same new item has several photos or the
+agent already has an `images` array. REST clients can do the same workflow with
+`POST /moves/{moveId}/items` followed by `POST /photos/upload` calls that
+include the returned `itemId`.
 
 For REST API agents, use whichever one-call shape is easiest for the image
 source:
@@ -1373,7 +1375,25 @@ single-image path under the evidence-specific name:
 }
 ```
 
-For a new item plus its photos, use `create_item_with_images`:
+For one new item from one photo, use `add_item_from_photo`:
+
+```json
+{
+  "moveId": "MOVE_ID",
+  "name": "Red toolbox",
+  "room": "Garage",
+  "category": "Tools",
+  "filePath": "/Users/scott/Desktop/red-toolbox.jpg",
+  "caption": "Red toolbox on garage shelf",
+  "photoType": "item",
+  "privacyLevel": "normal",
+  "confidence": "medium",
+  "notes": "Quantity defaults to one because the user did not mention a count.",
+  "generateAiSuggestions": true
+}
+```
+
+For a new item plus several photos, use `create_item_with_images`:
 
 ```json
 {
@@ -1666,6 +1686,7 @@ Available MCP tools:
 | `plan_snapshot` | Fetch a no-underlay SVG snapshot for visual self-checks. |
 | `search_inventory` | Search item data with optional filters. |
 | `create_item` | Create an item, with `dryRun` support. |
+| `add_item_from_photo` | Plain-language fastest MCP intake for one household item from one photo plus a few words: defaults omitted quantity to 1, leaves missing weight/size/disposition/condition blank, stores the original image, creates derivatives server-side, attaches the photo, and returns item/photo IDs plus `agentReview`. |
 | `create_item_with_images` | Fast MCP intake for one new household item plus one or more photos: creates the item, defaults omitted quantity to 1, uploads original images attached to it, and returns item/photo IDs with derivative status. |
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
 | `update_item` | Update selected item fields, with `dryRun` support. |

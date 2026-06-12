@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  addItemFromPhoto,
   addItemsToBox,
   addHouseholdMember,
   approveAiPhotoSuggestions,
@@ -805,6 +806,160 @@ describe("MovingManifest MCP API client", () => {
         "content-length": String(pngBytes.length),
         "x-movingmanifest-file-name": "red-toolbox.png",
         "idempotency-key": "toolbox-intake-image-1",
+      },
+      body: pngBytes,
+    });
+  });
+
+  it("adds a household item from one photo through the plain MCP helper", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const filePath = path.join(tempDir, "desk-lamp.png");
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    await writeFile(filePath, pngBytes);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: { itemId: "item-lamp", name: "Desk lamp", quantity: 1 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: {
+            photoId: "photo-lamp",
+            uploadSessionId: "session-lamp",
+            derivativeStatus: "ready",
+            media: {
+              source: "filePath",
+              fileName: "desk-lamp.png",
+              mimeType: "image/png",
+              sizeBytes: pngBytes.length,
+              width: 2,
+              height: 3,
+            },
+          },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await expect(
+        addItemFromPhoto(
+          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          {
+            moveId: "move1",
+            name: "Desk lamp",
+            room: "Office",
+            category: "Lighting",
+            filePath,
+            confidence: "medium",
+            generateAiSuggestions: true,
+            idempotencyKey: "desk-lamp-photo",
+          }
+        )
+      ).resolves.toMatchObject({
+        itemId: "item-lamp",
+        imageCount: 1,
+        uploadedCount: 1,
+        photoIds: ["photo-lamp"],
+        agentReview: {
+          item: {
+            itemId: "item-lamp",
+            name: "Desk lamp",
+            room: "Office",
+            category: "Lighting",
+            quantity: 1,
+            quantityDefaulted: true,
+          },
+          correctionPrompt: expect.stringContaining("correct only the parts"),
+        },
+        images: {
+          results: [
+            {
+              ok: true,
+              photoId: "photo-lamp",
+              agentReview: {
+                decisions: {
+                  attachmentTarget: {
+                    type: "item",
+                    id: "item-lamp",
+                    label: "item item-lamp",
+                  },
+                  caption: "Desk lamp",
+                  photoType: "item",
+                  privacyLevel: "normal",
+                  visibilityScope: "moveCollaborators",
+                  confidence: "medium",
+                  generateAiSuggestions: true,
+                },
+              },
+            },
+          ],
+        },
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL("https://example.com/api/v1/moves/move1/items"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "desk-lamp-photo-item",
+        },
+        body: JSON.stringify({
+          moveId: "move1",
+          name: "Desk lamp",
+          room: "Office",
+          category: "Lighting",
+          quantity: 1,
+        }),
+      }
+    );
+
+    const [uploadUrl, uploadInit] = fetchMock.mock.calls[1] as unknown as [
+      URL,
+      { headers: Record<string, string>; body: Buffer },
+    ];
+    const uploadQuery = Object.fromEntries(uploadUrl.searchParams);
+    expect(uploadUrl.pathname).toBe("/api/v1/photos/upload");
+    expect(uploadQuery).toMatchObject({
+      moveId: "move1",
+      itemId: "item-lamp",
+      fileName: "desk-lamp.png",
+      mimeType: "image/png",
+      room: "Office",
+      caption: "Desk lamp",
+      photoType: "item",
+      source: "mcp",
+      exifHandlingStatus: "pending",
+      confidence: "medium",
+      generateAiSuggestions: "true",
+    });
+    expect(uploadQuery).not.toHaveProperty("estimatedWeightLb");
+    expect(uploadQuery).not.toHaveProperty("dimensionsIn");
+    expect(uploadQuery).not.toHaveProperty("disposition");
+    expect(uploadQuery).not.toHaveProperty("condition");
+    expect(uploadInit).toEqual({
+      method: "POST",
+      headers: {
+        authorization: "Bearer mmk_test_secret",
+        "content-type": "image/png",
+        "content-length": String(pngBytes.length),
+        "x-movingmanifest-file-name": "desk-lamp.png",
+        "idempotency-key": "desk-lamp-photo-image-1",
       },
       body: pngBytes,
     });

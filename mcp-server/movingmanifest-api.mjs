@@ -465,6 +465,62 @@ export async function createItemWithImages(config, input) {
   };
 }
 
+export async function addItemFromPhoto(config, input) {
+  const {
+    filePath,
+    sourceUrl,
+    dataUrl,
+    fileBase64,
+    fileName,
+    mimeType,
+    originalHash,
+    caption,
+    photoType,
+    privacyLevel,
+    visibilityScope,
+    source,
+    exifHandlingStatus,
+    confidence,
+    notes,
+    verificationStatus,
+    capturedAt,
+    generateAiSuggestions,
+    idempotencyKey,
+    dryRun,
+    continueOnImageError,
+    ...itemInput
+  } = input;
+
+  return await createItemWithImages(config, {
+    ...itemInput,
+    idempotencyKey,
+    dryRun,
+    continueOnImageError,
+    images: [
+      removeUndefined({
+        filePath,
+        sourceUrl,
+        dataUrl,
+        fileBase64,
+        fileName,
+        mimeType,
+        originalHash,
+        caption: caption ?? itemInput.name,
+        photoType,
+        privacyLevel,
+        visibilityScope,
+        source,
+        exifHandlingStatus,
+        confidence,
+        notes,
+        verificationStatus,
+        capturedAt,
+        generateAiSuggestions,
+      }),
+    ],
+  });
+}
+
 export async function batchUpsertItems(config, input) {
   return await movingManifestRequest(config, {
     method: "POST",
