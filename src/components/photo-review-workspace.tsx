@@ -82,6 +82,8 @@ export function PhotoReviewWorkspace({
   const getOriginalDownloadUrl = useAction(api.photos.getOriginalDownloadUrl);
   const updateEvidence = useMutation(api.photos.updateEvidence);
   const [photoMessage, setPhotoMessage] = useState<string | null>(null);
+  const [privacyPhotoId, setPrivacyPhotoId] =
+    useState<Id<"itemPhotos"> | null>(null);
   const filteredPhotos = useMemo(() => {
     return filterPhotosForReview(photos ?? [], filter);
   }, [filter, photos]);
@@ -228,6 +230,8 @@ export function PhotoReviewWorkspace({
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
               {visiblePhotos.map((photo) => {
                 const url = displayUrls[photo._id];
+                const privacyOpen = privacyPhotoId === photo._id;
+                const photoLabel = photo.caption ?? photo._id;
                 return (
                   <div
                     key={photo._id}
@@ -265,52 +269,73 @@ export function PhotoReviewWorkspace({
                       <p className="truncate text-muted-foreground">
                         {photo.caption ?? photo.room ?? "No caption"}
                       </p>
-                      <div className="grid gap-1">
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2"
-                          value={photo.privacyLevel}
-                          aria-label={`Privacy level for ${photo.caption ?? photo._id}`}
-                          onChange={(event) =>
-                            void updatePhotoPrivacy(photo, {
-                              privacyLevel: event.target
-                                .value as PhotoPrivacyLevel,
-                            })
-                          }
-                        >
-                          {privacyOptions.map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="h-8 rounded-md border border-input bg-background px-2"
-                          value={photo.visibilityScope}
-                          aria-label={`Visibility scope for ${photo.caption ?? photo._id}`}
-                          onChange={(event) =>
-                            void updatePhotoPrivacy(photo, {
-                              visibilityScope: event.target
-                                .value as PhotoVisibilityScope,
-                            })
-                          }
-                        >
-                          {visibilityOptions.map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
                       <Button
                         type="button"
                         size="sm"
-                        variant="outline"
+                        variant={privacyOpen ? "secondary" : "outline"}
                         className="w-full"
-                        onClick={() => void downloadOriginal(photo)}
+                        aria-expanded={privacyOpen}
+                        aria-controls={`photo-privacy-${photo._id}`}
+                        onClick={() =>
+                          setPrivacyPhotoId((current) =>
+                            current === photo._id ? null : photo._id
+                          )
+                        }
                       >
-                        <Download aria-hidden="true" />
-                        Original
+                        <ShieldCheck aria-hidden="true" />
+                        Privacy
                       </Button>
+                      {privacyOpen ? (
+                        <div
+                          id={`photo-privacy-${photo._id}`}
+                          className="grid gap-1 rounded-md border border-border p-2"
+                        >
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2"
+                            value={photo.privacyLevel}
+                            aria-label={`Privacy level for ${photoLabel}`}
+                            onChange={(event) =>
+                              void updatePhotoPrivacy(photo, {
+                                privacyLevel: event.target
+                                  .value as PhotoPrivacyLevel,
+                              })
+                            }
+                          >
+                            {privacyOptions.map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="h-8 rounded-md border border-input bg-background px-2"
+                            value={photo.visibilityScope}
+                            aria-label={`Visibility scope for ${photoLabel}`}
+                            onChange={(event) =>
+                              void updatePhotoPrivacy(photo, {
+                                visibilityScope: event.target
+                                  .value as PhotoVisibilityScope,
+                              })
+                            }
+                          >
+                            {visibilityOptions.map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => void downloadOriginal(photo)}
+                          >
+                            <Download aria-hidden="true" />
+                            Original
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );
