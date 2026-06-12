@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { BadgeDollarSign, Camera, RefreshCw, SearchCheck } from "lucide-react";
+import {
+  BadgeDollarSign,
+  Camera,
+  RefreshCw,
+  Search,
+  SearchCheck,
+} from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -121,6 +127,26 @@ function filterSellRows(rows: SellRow[], filter: SellFilterKey) {
   }
 }
 
+function searchSellRows(rows: SellRow[], search: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return rows;
+
+  return rows.filter((row) =>
+    [
+      row.item.name,
+      row.item.room,
+      row.item.category,
+      row.item.condition,
+      row.item.description,
+      row.listing?.listingTitle,
+      row.listing?.listingDescription,
+      row.status,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => value.toLowerCase().includes(normalizedSearch)),
+  );
+}
+
 export function SellWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
   const rows = useQuery(
@@ -131,6 +157,7 @@ export function SellWorkspacePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<SellFilterKey>("all");
   const [activeTask, setActiveTask] = useState<SellRowTask>("overview");
+  const [search, setSearch] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(
     null
   );
@@ -158,10 +185,10 @@ export function SellWorkspacePage() {
       ).length,
     };
   }, [rows]);
-  const activeRows = useMemo(
-    () => filterSellRows(rows ?? [], activeFilter),
-    [activeFilter, rows]
-  );
+  const activeRows = useMemo(() => {
+    const filteredRows = filterSellRows(rows ?? [], activeFilter);
+    return searchSellRows(filteredRows, search);
+  }, [activeFilter, rows, search]);
   const selectedRow = useMemo(
     () =>
       selectedItemId
@@ -297,6 +324,42 @@ export function SellWorkspacePage() {
               onValueChange={handleTaskChange}
               className="gap-3"
             >
+              <div className="flex flex-col gap-2 rounded-md border border-border p-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="relative min-w-0 flex-1">
+                  <Search
+                    className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    className="pl-8"
+                    value={search}
+                    onChange={(event) => {
+                      setSearch(event.target.value);
+                      setSelectedItemId(null);
+                    }}
+                    placeholder="Search sale items, rooms, categories, status, or draft copy"
+                    aria-label="Search sale listings"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">
+                    {activeRows.length} shown
+                  </Badge>
+                  {search.trim() ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSearch("");
+                        setSelectedItemId(null);
+                      }}
+                    >
+                      Clear search
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
               <MoveWorkspaceTabList tabs={sellRowTasks} />
               <TabsContent value={activeTask} className="space-y-2">
                 {activeRows.length ? (
@@ -356,7 +419,7 @@ export function SellWorkspacePage() {
                   )
                 ) : (
                   <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-                    No sale listings match this view yet.
+                    No sale listings match this view or search yet.
                   </div>
                 )}
               </TabsContent>

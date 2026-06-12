@@ -217,4 +217,73 @@ describe("SellWorkspacePage", () => {
       screen.queryByLabelText("Oak bookcase listing description")
     ).not.toBeInTheDocument();
   });
+
+  it("searches sale listings before opening a focused task", async () => {
+    const user = userEvent.setup();
+
+    mockData.queryResult = [
+      {
+        item: {
+          _id: "item_1",
+          name: "Oak bookcase",
+          room: "Den",
+          category: "Furniture",
+          condition: "good",
+          description: "Tall shelf with adjustable pegs.",
+        },
+        listing: {
+          status: "draftReady",
+          listingDescription: "Bookcase for office or den.",
+        },
+        status: "draftReady",
+        photoCount: 1,
+        needsMorePhotos: true,
+        researchDepth: "none",
+        researchSourceCount: 0,
+      },
+      {
+        item: {
+          _id: "item_2",
+          name: "Vintage lamp",
+          room: "Living room",
+          category: "Decor",
+          condition: "excellent",
+          description: "Brass lamp with shade.",
+        },
+        listing: {
+          status: "listed",
+          listingDescription: "Brass table light for marketplace.",
+        },
+        status: "listed",
+        photoCount: 4,
+        needsMorePhotos: false,
+        researchDepth: "standard",
+        researchSourceCount: 3,
+      },
+    ];
+
+    render(<SellWorkspacePage />);
+
+    await user.type(screen.getByLabelText("Search sale listings"), "living");
+
+    expect(screen.getByText("1 shown")).toBeInTheDocument();
+    expect(screen.getByText("Vintage lamp")).toBeInTheDocument();
+    expect(screen.queryByText("Oak bookcase")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Pricing" }));
+
+    expect(
+      screen.getByLabelText("Vintage lamp low suggested price")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Oak bookcase low suggested price")
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(screen.getByText("2 shown")).toBeInTheDocument();
+    expect(screen.getByText("Choose one item for pricing.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Price Oak bookcase" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Price Vintage lamp" })).toBeInTheDocument();
+  });
 });
