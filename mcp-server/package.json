@@ -1,0 +1,37 @@
+{
+  "name": "movingmanifest-mcp",
+  "version": "0.2.0",
+  "description": "MCP server for MovingManifest — lets AI agents manage moves, inventory, boxes, and photos through the MovingManifest API.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "movingmanifest-mcp": "./movingmanifest-mcp.mjs"
+  },
+  "main": "./movingmanifest-mcp.mjs",
+  "exports": {
+    ".": "./movingmanifest-mcp.mjs",
+    "./api": "./movingmanifest-api.mjs",
+    "./capabilities": "./capabilities.mjs"
+  },
+  "files": [
+    "movingmanifest-mcp.mjs",
+    "movingmanifest-api.mjs",
+    "capabilities.mjs",
+    "example-desktop-config.json"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "moving",
+    "inventory",
+    "movingmanifest"
+  ],
+  "homepage": "https://movingmanifest.com/mcp",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,6 +1,6 @@
 # MovingManifest API and MCP Guide
 
-This guide covers the shipped `v1` REST API and the local MCP server package.
+This guide covers the shipped `v1` REST API and the MCP server (remote endpoint + local npm package).
 The API is designed for controlled automation: API keys carry explicit scopes,
 may be restricted to one move, and all write paths are auditable.
 
@@ -1683,8 +1683,17 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 
 ## MCP Server
 
-The local MCP server wraps the REST API. It does not connect directly to Convex
-or Clerk.
+The MCP tools are available over two transports that share one tool registry
+(`mcp-server/movingmanifest-mcp.mjs`), so they cannot drift:
+
+- **Remote (Streamable HTTP)** at `https://movingmanifest.com/api/mcp` — for
+  hosted assistants such as claude.ai custom connectors and Claude Cowork.
+  Served by `src/app/api/mcp/route.ts` in the Next.js app.
+- **Local (stdio)** via the published `movingmanifest-mcp` npm package — for
+  Claude Desktop, Claude Code, Codex, and other clients that run local
+  processes.
+
+Both wrap the REST API. Neither connects directly to Convex or Clerk.
 
 Agents should usually call `get_api_capabilities` first. It returns a
 code-backed capability matrix with supported workflows, required scopes,
@@ -1692,13 +1701,31 @@ REST endpoints, MCP tool names, and known launch blockers. This keeps agents
 from guessing from a long tool list and makes operational gaps explicit without
 treating verified storage/upload support as unavailable.
 
-Run locally:
+### Remote MCP
 
-```bash
-MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" npm run mcp
+```
+Endpoint: https://movingmanifest.com/api/mcp
+Auth:     Authorization: Bearer mmk_replace_with_a_scoped_api_key
 ```
 
-Optional env:
+`x-api-key` headers and a `?key=mmk_...` query parameter are accepted as
+fallbacks for clients that cannot set custom headers; prefer the bearer header
+because URLs can end up in logs. Requests without a key get a 401 with a
+pointer to `https://movingmanifest.com/settings/ai-connections`.
+
+In claude.ai or Claude Cowork: Settings → Connectors → Add custom connector →
+paste the endpoint URL and supply the API key as the bearer token.
+
+### Local MCP
+
+Run from the published package (no repo clone needed):
+
+```bash
+MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" npx -y movingmanifest-mcp
+```
+
+From this repo during development: `npm run mcp` with the same env. Optional
+env override (defaults to production):
 
 ```bash
 MOVINGMANIFEST_API_BASE_URL="https://movingmanifest.com/api/v1"
@@ -1708,20 +1735,18 @@ Codex CLI/App setup:
 
 ```bash
 codex mcp add movingmanifest \
-  --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 \
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
-  -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs
+  -- npx -y movingmanifest-mcp
 ```
 
 Equivalent Codex `config.toml`:
 
 ```toml
 [mcp_servers.movingmanifest]
-command = "node"
-args = ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"]
+command = "npx"
+args = ["-y", "movingmanifest-mcp"]
 
 [mcp_servers.movingmanifest.env]
-MOVINGMANIFEST_API_BASE_URL = "https://movingmanifest.com/api/v1"
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
 ```
 
@@ -1729,22 +1754,25 @@ After adding the server, restart Codex or start a fresh Codex session, use
 `/mcp` or `codex mcp list` to confirm `movingmanifest` is enabled, then call
 `get_api_context` before reading or writing private move data.
 
-Desktop agent config example:
+Desktop agent config example (Claude Desktop and similar):
 
 ```json
 {
   "mcpServers": {
     "movingmanifest": {
-      "command": "node",
-      "args": ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"],
+      "command": "npx",
+      "args": ["-y", "movingmanifest-mcp"],
       "env": {
-        "MOVINGMANIFEST_API_BASE_URL": "https://movingmanifest.com/api/v1",
         "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
       }
     }
   }
 }
 ```
+
+Publishing the package (maintainers): bump the version in
+`mcp-server/package.json` and the `McpServer` constructor in
+`mcp-server/movingmanifest-mcp.mjs`, then `cd mcp-server && npm publish`.
 
 Available MCP tools:
 

@@ -825,7 +825,7 @@ const documentationFiltersSchema = z.object({
 export function createMovingManifestMcpServer(apiConfig) {
   const target = new McpServer({
     name: "movingmanifest",
-    version: "0.1.0",
+    version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
   });
   registerTools(target, apiConfig);

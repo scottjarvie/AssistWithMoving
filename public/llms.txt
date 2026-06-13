@@ -9,7 +9,8 @@ Primary site: https://movingmanifest.com
 - https://movingmanifest.com/ai - human-friendly guide for using MovingManifest with Claude, ChatGPT, Codex, or another assistant.
 - https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to create/sign in and make a helper key.
 - https://movingmanifest.com/api - public REST API overview, scopes, and assistant workflow.
-- https://movingmanifest.com/mcp - public MCP setup overview for agents that can run local tools.
+- https://movingmanifest.com/mcp - public MCP setup overview (remote endpoint for hosted assistants, npx server for local agents).
+- https://movingmanifest.com/api/mcp - remote MCP endpoint (Streamable HTTP). Authenticate with `Authorization: Bearer mmk_...`.
 - https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
 - https://movingmanifest.com/llms-full.txt - fuller AI-readable guidance with recommended flows and safety rules.
 
@@ -40,10 +41,15 @@ Primary site: https://movingmanifest.com
   account, choose a helper preset, create the key, copy the one-time secret, and
   paste it only into an assistant they trust.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
+- Hosted MCP clients (claude.ai custom connectors, Claude Cowork) should use the
+  remote endpoint `https://movingmanifest.com/api/mcp` with the API key as the
+  bearer token. No local install is needed.
 - For Codex users with local shell access, configure MCP with:
-  `codex mcp add movingmanifest --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs`.
+  `codex mcp add movingmanifest --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- npx -y movingmanifest-mcp`.
   Restart Codex or start a fresh session, verify `movingmanifest` appears in
-  `/mcp` or `codex mcp list`, then call `get_api_context`.
+  `/mcp` or `codex mcp list`, then call `get_api_context`. Claude Desktop and
+  similar clients use the same `npx -y movingmanifest-mcp` command in their
+  JSON MCP config.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
 - For image upload, use one call by default. MCP agents should call

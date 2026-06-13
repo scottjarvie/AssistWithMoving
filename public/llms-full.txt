@@ -281,30 +281,41 @@ Use `/openapi.json` for machine-readable endpoint details.
 
 ## MCP
 
-The MovingManifest MCP server currently runs locally and wraps the REST API.
-It is useful for assistants that support local MCP servers.
+MovingManifest offers the same MCP tools two ways: a remote endpoint for
+hosted assistants and a local npx server for desktop/CLI agents.
 
-Codex setup when the user has local shell access and this repo/server is
-available:
+Remote MCP (claude.ai custom connectors, Claude Cowork, any Streamable HTTP
+client — no install needed):
+
+```
+Endpoint: https://movingmanifest.com/api/mcp
+Auth:     Authorization: Bearer mmk_replace_with_a_scoped_api_key
+```
+
+Clients that cannot set custom headers may append `?key=mmk_...` to the
+endpoint URL, but header auth is recommended because URLs can be logged.
+
+Local MCP via npx — Codex setup when the user has local shell access:
 
 ```bash
 codex mcp add movingmanifest \
-  --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 \
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
-  -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs
+  -- npx -y movingmanifest-mcp
 ```
 
 Equivalent Codex `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.movingmanifest]
-command = "node"
-args = ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"]
+command = "npx"
+args = ["-y", "movingmanifest-mcp"]
 
 [mcp_servers.movingmanifest.env]
-MOVINGMANIFEST_API_BASE_URL = "https://movingmanifest.com/api/v1"
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
 ```
+
+Claude Desktop and similar JSON-config MCP clients use the same command:
+`"command": "npx", "args": ["-y", "movingmanifest-mcp"]` with the key in env.
 
 After configuring MCP for Codex, restart Codex or start a fresh session. The
 agent should confirm `movingmanifest` appears in `/mcp` or `codex mcp list`,

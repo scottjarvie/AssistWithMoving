@@ -30,8 +30,8 @@ const mcpCards = [
     icon: Bot,
   },
   {
-    title: "Local first",
-    copy: "The current MCP server runs locally and wraps the REST API. It uses a user-created API key in the local client environment.",
+    title: "Hosted or local",
+    copy: "Hosted assistants (claude.ai, Claude Cowork) connect to the remote endpoint at https://movingmanifest.com/api/mcp with an API key. Desktop agents can instead run the local server via npx movingmanifest-mcp. Both expose the same tools.",
     icon: Laptop,
   },
   {
@@ -70,26 +70,28 @@ const toolGroups = [
   "create_export, list_exports, download_export",
 ];
 
+const remoteEndpointUrl = "https://movingmanifest.com/api/mcp";
+
+const remoteCurlExample = `POST https://movingmanifest.com/api/mcp
+Authorization: Bearer mmk_replace_with_a_scoped_api_key`;
+
 const codexCliCommand = `codex mcp add movingmanifest \\
-  --env MOVINGMANIFEST_API_BASE_URL=https://movingmanifest.com/api/v1 \\
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \\
-  -- node /absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs`;
+  -- npx -y movingmanifest-mcp`;
 
 const codexTomlConfig = `[mcp_servers.movingmanifest]
-command = "node"
-args = ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"]
+command = "npx"
+args = ["-y", "movingmanifest-mcp"]
 
 [mcp_servers.movingmanifest.env]
-MOVINGMANIFEST_API_BASE_URL = "https://movingmanifest.com/api/v1"
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"`;
 
 const desktopJsonConfig = `{
   "mcpServers": {
     "movingmanifest": {
-      "command": "node",
-      "args": ["/absolute/path/to/MovingManifest/mcp-server/movingmanifest-mcp.mjs"],
+      "command": "npx",
+      "args": ["-y", "movingmanifest-mcp"],
       "env": {
-        "MOVINGMANIFEST_API_BASE_URL": "https://movingmanifest.com/api/v1",
         "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
       }
     }
@@ -111,15 +113,50 @@ export default function McpPage() {
       <PublicBand>
         <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr]">
           <div>
+            <Badge variant="secondary">Remote server</Badge>
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal">
+              Hosted assistants connect by URL.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              claude.ai, Claude Cowork, and other hosted MCP clients cannot run
+              a local process. Add MovingManifest as a custom connector using
+              the remote endpoint and a scoped API key — no install required.
+            </p>
+          </div>
+          <div className="rounded-md border border-border bg-card p-4">
+            <p className="mb-3 text-sm font-medium">Remote MCP endpoint</p>
+            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
+              {remoteEndpointUrl}
+            </pre>
+            <p className="mt-4 text-sm font-medium">
+              Authentication (Streamable HTTP)
+            </p>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
+              {remoteCurlExample}
+            </pre>
+            <p className="mt-4 text-xs leading-5 text-muted-foreground">
+              In claude.ai or Claude Cowork: Settings → Connectors → Add custom
+              connector, paste the endpoint URL, and supply the API key as the
+              bearer token. Clients that cannot set headers may append
+              ?key=mmk_... to the URL, but header auth is recommended. Create
+              and revoke keys at Settings → AI Connections in MovingManifest.
+            </p>
+          </div>
+        </div>
+      </PublicBand>
+
+      <PublicBand>
+        <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr]">
+          <div>
             <Badge variant="secondary">Local server</Badge>
             <h2 className="mt-4 text-2xl font-semibold tracking-normal">
               What an assistant should know.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The current MCP option is for desktop or agent environments that
-              can run a local Node process. Phone-only assistants can still use
-              this page and the REST API docs to guide the user through account
-              and key setup. Household collaborators can be invited by email
+              Desktop and CLI agents (Claude Desktop, Claude Code, Codex) can
+              run the server locally with npx — no repo clone needed. The local
+              and remote servers expose identical tools, so configs are
+              interchangeable. Household collaborators can be invited by email
               before they create an account, then access activates when they
               sign in with that email.
             </p>
@@ -199,7 +236,7 @@ function McpVisual() {
       <div className="mt-4 space-y-3">
         {[
           ["1", "User creates a MovingManifest account and key."],
-          ["2", "Assistant configures local MCP with the key."],
+          ["2", "Assistant connects via the hosted MCP URL or a local npx server."],
           ["3", "Assistant calls structured tools, including pending household invites."],
           ["4", "User can revoke the key when finished."],
         ].map(([step, copy]) => (
