@@ -33,8 +33,8 @@ const baseWorkspaceNavItems: WorkspaceNavItem[] = [
 ];
 
 const layoutStudioNavItem: WorkspaceNavItem = {
-  section: "plan",
-  label: "Layout",
+  section: "floorplans",
+  label: "Floorplans",
   iconKey: "layout",
 };
 

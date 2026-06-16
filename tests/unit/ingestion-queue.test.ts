@@ -6,6 +6,7 @@ import {
   ingestionClaimIsExpired,
   ingestionEntryIsEditable,
   ingestionQueueStatuses,
+  ingestionScopeHints,
 } from "../../convex/lib/ingestionQueue";
 
 describe("ingestion queue lifecycle", () => {
@@ -53,5 +54,9 @@ describe("ingestion queue lifecycle", () => {
     expect(ingestionClaimIsExpired(fresh, now)).toBe(false);
     expect(ingestionClaimIsExpired(stale, now)).toBe(true);
     expect(ingestionClaimIsExpired(unclaimed, now)).toBe(false);
+  });
+
+  it("includes floor-plan intake as a scoped queue lane", () => {
+    expect(ingestionScopeHints).toContain("floorPlan");
   });
 });

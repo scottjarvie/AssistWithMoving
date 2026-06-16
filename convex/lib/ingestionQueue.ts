@@ -29,6 +29,7 @@ export const ingestionScopeHints = [
   "singleItem",
   "multipleItems",
   "scene",
+  "floorPlan",
 ] as const;
 
 export type IngestionScopeHint = (typeof ingestionScopeHints)[number];
@@ -37,6 +38,7 @@ export const ingestionScopeHintValidator = v.union(
   v.literal("singleItem"),
   v.literal("multipleItems"),
   v.literal("scene"),
+  v.literal("floorPlan"),
 );
 
 // How long an agent's claim lasts before the entry is considered abandoned

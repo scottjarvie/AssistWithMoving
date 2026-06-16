@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -78,6 +79,28 @@ async function validateMediaIds(
   }
 }
 
+async function validateTargetPlanId(
+  ctx: QueryCtx | MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    targetPlanId?: Id<"floorPlans">;
+  },
+) {
+  if (!args.targetPlanId) {
+    return;
+  }
+  const plan = await ctx.db.get(args.targetPlanId);
+  if (
+    !plan ||
+    plan.householdId !== args.householdId ||
+    plan.moveId !== args.moveId ||
+    plan.archivedAt
+  ) {
+    throw new Error("Target floor plan does not belong to this move.");
+  }
+}
+
 function effectiveStatus(
   entry: Doc<"ingestionQueueEntries">,
   now: number,
@@ -106,6 +129,7 @@ export const createEntry = mutation({
     roomHint: v.optional(v.string()),
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
+    targetPlanId: v.optional(v.id("floorPlans")),
     mediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
   },
   handler: async (ctx, args) => {
@@ -124,6 +148,7 @@ export const createEntry = mutation({
       );
     }
     await validateMediaIds(ctx, { ...args, mediaPhotoIds });
+    await validateTargetPlanId(ctx, args);
 
     const now = Date.now();
     const entryId = await ctx.db.insert("ingestionQueueEntries", {
@@ -134,6 +159,7 @@ export const createEntry = mutation({
       roomHint: args.roomHint?.trim() || undefined,
       dispositionHint: args.dispositionHint?.trim() || undefined,
       scopeHint: args.scopeHint,
+      targetPlanId: args.targetPlanId,
       mediaPhotoIds,
       sortOrder: now,
       createdByUserId: actor.userId,
@@ -166,6 +192,7 @@ export const updateEntry = mutation({
     roomHint: v.optional(v.string()),
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
+    targetPlanId: v.optional(v.id("floorPlans")),
     mediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
     sortOrder: v.optional(v.number()),
   },
@@ -191,6 +218,7 @@ export const updateEntry = mutation({
         mediaPhotoIds: args.mediaPhotoIds,
       });
     }
+    await validateTargetPlanId(ctx, args);
 
     await ctx.db.patch(args.entryId, {
       ...(args.instructions !== undefined
@@ -203,6 +231,9 @@ export const updateEntry = mutation({
         ? { dispositionHint: args.dispositionHint.trim() || undefined }
         : {}),
       ...(args.scopeHint !== undefined ? { scopeHint: args.scopeHint } : {}),
+      ...(args.targetPlanId !== undefined
+        ? { targetPlanId: args.targetPlanId }
+        : {}),
       ...(args.mediaPhotoIds !== undefined
         ? { mediaPhotoIds: args.mediaPhotoIds }
         : {}),
@@ -459,5 +490,37 @@ export const submitResult = mutation({
       objectId: args.entryId,
       metadata: { resultItemCount: args.resultItemIds?.length ?? 0 },
     });
+  },
+});
+
+export const getApiEvidenceForDelivery = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    entryId: v.id("ingestionQueueEntries"),
+    photoId: v.id("itemPhotos"),
+  },
+  handler: async (ctx, args) => {
+    const entry = await ctx.db.get(args.entryId);
+    if (
+      !entry ||
+      entry.householdId !== args.householdId ||
+      entry.moveId !== args.moveId
+    ) {
+      return null;
+    }
+    if (!entry.mediaPhotoIds.includes(args.photoId)) {
+      return null;
+    }
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      return null;
+    }
+    return { entry, photo };
   },
 });

@@ -6,7 +6,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import type { EffectiveFeatureFlag } from "@/lib/feature-flags";
 
 const mockState = vi.hoisted(() => ({
-  pathname: "/app/moves/move_123/plan",
+  pathname: "/app/moves/move_123/floorplans",
   featureFlags: undefined as EffectiveFeatureFlag[] | undefined,
 }));
 
@@ -53,28 +53,28 @@ function layoutStudioFlag(enabled: boolean): EffectiveFeatureFlag {
 
 describe("WorkspaceNav", () => {
   beforeEach(() => {
-    mockState.pathname = "/app/moves/move_123/plan";
+    mockState.pathname = "/app/moves/move_123/floorplans";
     mockState.featureFlags = undefined;
   });
 
-  it("omits the Layout entry when the layoutStudio flag is unavailable", () => {
+  it("omits the Floorplans entry when the layoutStudio flag is unavailable", () => {
     render(<WorkspaceNav />);
 
-    expect(screen.queryByRole("link", { name: /layout/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /floorplans/i })).not.toBeInTheDocument();
   });
 
-  it("renders an active sidebar Layout entry when the flag is enabled", () => {
+  it("renders an active sidebar Floorplans entry when the flag is enabled", () => {
     mockState.featureFlags = [layoutStudioFlag(true)];
 
     render(<WorkspaceNav />);
 
-    const layoutLink = screen.getByRole("link", { name: /layout/i });
-    expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/plan");
+    const layoutLink = screen.getByRole("link", { name: /floorplans/i });
+    expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/floorplans");
     expect(layoutLink).toHaveClass("bg-sidebar-accent");
     expect(layoutLink).toHaveAttribute("aria-current", "page");
   });
 
-  it("uses the same flag-gated Layout entry in mobile navigation", () => {
+  it("uses the same flag-gated Floorplans entry in mobile navigation", () => {
     mockState.featureFlags = [layoutStudioFlag(true)];
 
     render(<WorkspaceNav variant="mobile" />);
@@ -83,8 +83,8 @@ describe("WorkspaceNav", () => {
       "max-w-full",
       "overflow-x-auto",
     );
-    const layoutLink = screen.getByRole("link", { name: /layout/i });
-    expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/plan");
+    const layoutLink = screen.getByRole("link", { name: /floorplans/i });
+    expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/floorplans");
     expect(layoutLink).toHaveClass("h-10");
     expect(layoutLink).toHaveAttribute("aria-current", "page");
   });

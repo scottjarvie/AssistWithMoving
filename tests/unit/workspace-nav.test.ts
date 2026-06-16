@@ -23,14 +23,14 @@ describe("workspace nav links", () => {
     expect(workspaceNavHref("/app/moves/move_123/inventory", "boxes")).toBe(
       "/app/moves/move_123/boxes"
     );
-    expect(workspaceNavHref("/app/moves/move_123/photos", "plan")).toBe(
-      "/app/moves/move_123/plan"
+    expect(workspaceNavHref("/app/moves/move_123/photos", "floorplans")).toBe(
+      "/app/moves/move_123/floorplans"
     );
   });
 
-  it("hides Layout Studio navigation when the flag is off or unresolved", () => {
+  it("hides Floorplans navigation when the flag is off or unresolved", () => {
     expect(workspaceNavItems(undefined).map((item) => item.label)).not.toContain(
-      "Layout"
+      "Floorplans"
     );
     expect(
       workspaceNavItems([
@@ -43,10 +43,10 @@ describe("workspace nav links", () => {
           source: "default",
         },
       ]).map((item) => item.label)
-    ).not.toContain("Layout");
+    ).not.toContain("Floorplans");
   });
 
-  it("shows Layout Studio navigation near planning tools when the flag is on", () => {
+  it("shows Floorplans navigation near planning tools when the flag is on", () => {
     const labels = workspaceNavItems([
       {
         key: "layoutStudio",
@@ -58,8 +58,8 @@ describe("workspace nav links", () => {
       },
     ]).map((item) => item.label);
 
-    expect(labels).toContain("Layout");
-    expect(labels.indexOf("Layout")).toBeGreaterThan(labels.indexOf("Photos"));
-    expect(labels.indexOf("Layout")).toBeLessThan(labels.indexOf("Load Plan"));
+    expect(labels).toContain("Floorplans");
+    expect(labels.indexOf("Floorplans")).toBeGreaterThan(labels.indexOf("Photos"));
+    expect(labels.indexOf("Floorplans")).toBeLessThan(labels.indexOf("Load Plan"));
   });
 });

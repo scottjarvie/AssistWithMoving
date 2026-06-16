@@ -40,6 +40,15 @@ vi.mock("convex/react", () => ({
             instructions: "Turn this shelf photo into items.",
             agentSummary: "Proposed two items.",
             resultItemIds: ["item_1" as Id<"items">, "item_2" as Id<"items">],
+            resultRefs: [
+              {
+                type: "planProposal",
+                id: "proposal_123456",
+                label: "Plan proposal",
+              },
+            ],
+            scopeHint: "floorPlan",
+            targetPlanId: "plan_123456" as Id<"floorPlans">,
             mediaPhotoIds: ["photo_2" as Id<"itemPhotos">],
             createdAt: 5,
           }),
@@ -100,6 +109,9 @@ describe("IngestionQueueList task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Which room is this from?/i)).toBeInTheDocument();
     expect(screen.getByText(/Proposed two items./i)).toBeInTheDocument();
+    expect(screen.getByText("Floorplans")).toBeInTheDocument();
+    expect(screen.getByText("plan 123456")).toBeInTheDocument();
+    expect(screen.getByText("Plan proposal")).toBeInTheDocument();
     expect(
       screen.queryByText("Holiday bins need inventory."),
     ).not.toBeInTheDocument();

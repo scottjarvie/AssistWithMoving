@@ -93,6 +93,8 @@ const photoWriteArgs = {
   source: v.optional(photoSourceValidator),
   exifHandlingStatus: v.optional(exifHandlingStatusValidator),
   confidence: v.optional(estimateConfidenceValidator),
+  agentLabel: v.optional(v.string()),
+  aiConfidenceScore: v.optional(v.number()),
   notes: v.optional(v.string()),
   verificationStatus: v.optional(photoVerificationStatusValidator),
   aiProcessed: v.optional(v.boolean()),
@@ -616,6 +618,7 @@ export const finalizeUpload = action({
     width: v.optional(v.number()),
     height: v.optional(v.number()),
     originalHash: v.optional(v.string()),
+    fileName: v.optional(v.string()),
     caption: v.optional(v.string()),
     photoType: v.optional(photoTypeValidator),
     privacyLevel: v.optional(photoPrivacyLevelValidator),
@@ -623,6 +626,8 @@ export const finalizeUpload = action({
     source: v.optional(photoSourceValidator),
     exifHandlingStatus: v.optional(exifHandlingStatusValidator),
     confidence: v.optional(estimateConfidenceValidator),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     notes: v.optional(v.string()),
     verificationStatus: v.optional(photoVerificationStatusValidator),
     capturedAt: v.optional(v.number()),
@@ -693,6 +698,7 @@ export const finalizeUpload = action({
       width: args.width,
       height: args.height,
       originalHash: args.originalHash,
+      fileName: args.fileName,
       caption: args.caption,
       photoType: args.photoType,
       privacyLevel: args.privacyLevel,
@@ -1187,6 +1193,8 @@ export const createUploadSession = internalMutation({
         }),
       ),
     ),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     expiresAt: v.number(),
     apiActor: v.optional(apiPhotoActorValidator),
   },
@@ -1237,6 +1245,8 @@ export const createUploadSession = internalMutation({
       expectedMimeType: original.mimeType,
       expectedSizeBytes: original.sizeBytes,
       derivativeUploads,
+      agentLabel: normalizeOptionalText(args.agentLabel),
+      aiConfidenceScore: args.aiConfidenceScore,
       status: "authorized",
       expiresAt: args.expiresAt,
       createdByUserId: userId,
@@ -1304,6 +1314,27 @@ export const getPhotoForDelivery = internalQuery({
       photo,
       visibility: policy.visibility,
     };
+  },
+});
+
+export const getApiPhotoForDelivery = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+  },
+  handler: async (ctx, args) => {
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      return null;
+    }
+
+    return photo;
   },
 });
 
@@ -1395,9 +1426,12 @@ export const completeUploadSession = internalMutation({
     source: v.optional(photoSourceValidator),
     exifHandlingStatus: v.optional(exifHandlingStatusValidator),
     confidence: v.optional(estimateConfidenceValidator),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     notes: v.optional(v.string()),
     verificationStatus: v.optional(photoVerificationStatusValidator),
     capturedAt: v.optional(v.number()),
+    fileName: v.optional(v.string()),
     apiActor: v.optional(apiPhotoActorValidator),
   },
   handler: async (ctx, args) => {
@@ -1479,6 +1513,7 @@ export const completeUploadSession = internalMutation({
       mediaKind,
       width: args.width,
       height: args.height,
+      fileName: normalizeOptionalText(args.fileName),
       mimeType: session.expectedMimeType,
       sizeBytes: session.expectedSizeBytes,
       caption: normalizeOptionalText(args.caption),
@@ -1488,6 +1523,8 @@ export const completeUploadSession = internalMutation({
       source: args.source ?? "manualUpload",
       exifHandlingStatus: args.exifHandlingStatus ?? "pending",
       confidence: args.confidence ?? "none",
+      agentLabel: normalizeOptionalText(args.agentLabel ?? session.agentLabel),
+      aiConfidenceScore: args.aiConfidenceScore ?? session.aiConfidenceScore,
       notes: normalizeOptionalText(args.notes),
       verificationStatus: args.verificationStatus ?? "unreviewed",
       aiProcessed: false,

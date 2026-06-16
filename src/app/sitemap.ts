@@ -11,6 +11,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ["/features", 0.8],
     ["/ai", 0.9],
     ["/ai/start", 0.8],
+    ["/ai/kit", 0.7],
+    ["/floorplans", 0.7],
     ["/api", 0.7],
     ["/mcp", 0.7],
     ["/pcs-moving", 0.8],

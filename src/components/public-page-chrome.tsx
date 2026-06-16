@@ -10,6 +10,7 @@ import { product } from "@/lib/product";
 const publicNav = [
   { href: "/features", label: "Features" },
   { href: "/ai", label: "AI assistants" },
+  { href: "/floorplans", label: "Floorplans" },
   { href: "/api", label: "API" },
   { href: "/mcp", label: "MCP" },
   { href: "/pcs-moving", label: "PCS moving" },

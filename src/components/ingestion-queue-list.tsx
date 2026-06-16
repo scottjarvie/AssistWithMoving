@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Bot, CheckCircle2, RotateCcw, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Bot, CheckCircle2, FileText, Map, RotateCcw, Trash2 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -75,6 +76,10 @@ function queueTaskForStatus(status: string): QueueTask {
 
 function formatQueueTaskCount(count: number) {
   return `${count} ${count === 1 ? "entry" : "entries"}`;
+}
+
+function shortIdLabel(label: string, id: string) {
+  return `${label} ${id.slice(-6)}`;
 }
 
 export function IngestionQueueList({
@@ -197,12 +202,26 @@ export function IngestionQueueList({
                   >
                     {statusLabels[entry.status] ?? entry.status}
                   </Badge>
+                  {entry.scopeHint === "floorPlan" ? (
+                    <Badge variant="secondary" className="gap-1">
+                      <Map className="size-3" aria-hidden="true" />
+                      Floorplans
+                    </Badge>
+                  ) : null}
                   {entry.roomHint ? (
                     <Badge variant="secondary">{entry.roomHint}</Badge>
                   ) : null}
                   <Badge variant="outline">
                     {entry.mediaPhotoIds.length} media
                   </Badge>
+                  {entry.targetPlanId && moveId ? (
+                    <Badge variant="outline" className="gap-1" asChild>
+                      <Link href={`/app/moves/${moveId}/floorplans`}>
+                        <Map className="size-3" aria-hidden="true" />
+                        {shortIdLabel("plan", entry.targetPlanId)}
+                      </Link>
+                    </Badge>
+                  ) : null}
                   {entry.claimedByAgentLabel ? (
                     <Badge variant="outline">{entry.claimedByAgentLabel}</Badge>
                   ) : null}
@@ -260,6 +279,20 @@ export function IngestionQueueList({
                     ? ` (${entry.resultItemIds.length} items proposed)`
                     : ""}
                 </p>
+              ) : null}
+              {entry.resultRefs?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {entry.resultRefs.map((ref, index) => (
+                    <Badge
+                      key={`${ref.type}-${ref.id}-${index}`}
+                      variant={ref.type === "planProposal" ? "secondary" : "outline"}
+                      className="gap-1"
+                    >
+                      <FileText className="size-3" aria-hidden="true" />
+                      {ref.label ?? shortIdLabel(ref.type, ref.id)}
+                    </Badge>
+                  ))}
+                </div>
               ) : null}
 
               <div className="mt-3 flex flex-wrap gap-2">

@@ -41,6 +41,11 @@ export const membershipStatus = v.union(
   v.literal("disabled")
 );
 
+export const memberApiAccessStatus = v.union(
+  v.literal("enabled"),
+  v.literal("disabled")
+);
+
 export const householdInvitationStatus = v.union(
   v.literal("invited"),
   v.literal("accepted"),
@@ -185,6 +190,198 @@ export const planProposalStatus = v.union(
   v.literal("partiallyApplied"),
   v.literal("rejected")
 );
+
+export const floorplanEvidenceSourceType = v.union(
+  v.literal("image"),
+  v.literal("textNote"),
+  v.literal("userEdit"),
+  v.literal("agentExtraction"),
+  v.literal("calculation")
+);
+
+export const floorplanEvidenceRecordType = v.union(
+  v.literal("measurement"),
+  v.literal("knownFact"),
+  v.literal("assumption"),
+  v.literal("conflict"),
+  v.literal("note")
+);
+
+export const floorplanEvidenceStatus = v.union(
+  v.literal("active"),
+  v.literal("superseded")
+);
+
+export const floorplanObservationStatus = v.union(
+  v.literal("active"),
+  v.literal("needsReview"),
+  v.literal("superseded"),
+  v.literal("rejected")
+);
+
+export const floorplanObservationType = v.union(
+  v.literal("label"),
+  v.literal("ocrText"),
+  v.literal("measurementText"),
+  v.literal("roomName"),
+  v.literal("wallSegment"),
+  v.literal("opening"),
+  v.literal("door"),
+  v.literal("doorway"),
+  v.literal("doorlessPassage"),
+  v.literal("window"),
+  v.literal("fixture"),
+  v.literal("closet"),
+  v.literal("hall"),
+  v.literal("exteriorStructure"),
+  v.literal("patio"),
+  v.literal("carport"),
+  v.literal("shed"),
+  v.literal("lotFeature"),
+  v.literal("orientationClue"),
+  v.literal("areaTarget"),
+  v.literal("unknownMark"),
+  v.literal("sourceNote")
+);
+
+export const floorplanRelationshipType = v.union(
+  v.literal("adjacentTo"),
+  v.literal("connectedTo"),
+  v.literal("contains"),
+  v.literal("partOf"),
+  v.literal("leftOf"),
+  v.literal("rightOf"),
+  v.literal("above"),
+  v.literal("below"),
+  v.literal("sameAs"),
+  v.literal("conflictsWith"),
+  v.literal("openingIn"),
+  v.literal("countsTowardArea"),
+  v.literal("excludedFromArea"),
+  v.literal("accessesThrough"),
+  v.literal("doorlessPassageBetween"),
+  v.literal("wallSharedWith")
+);
+
+export const floorplanSubjectKind = v.union(
+  v.literal("room"),
+  v.literal("hall"),
+  v.literal("closet"),
+  v.literal("bathroom"),
+  v.literal("kitchen"),
+  v.literal("fixture"),
+  v.literal("opening"),
+  v.literal("wall"),
+  v.literal("structure"),
+  v.literal("zone"),
+  v.literal("lot"),
+  v.literal("unknown")
+);
+
+export const floorplanMeasurementKind = v.union(
+  v.literal("known"),
+  v.literal("assumption"),
+  v.literal("derived"),
+  v.literal("range")
+);
+
+export const floorplanMeasurementType = v.union(
+  v.literal("width"),
+  v.literal("depth"),
+  v.literal("clearWidth"),
+  v.literal("clearDepth"),
+  v.literal("height"),
+  v.literal("area"),
+  v.literal("grossArea"),
+  v.literal("conditionedArea"),
+  v.literal("excludedArea"),
+  v.literal("lotArea"),
+  v.literal("footprintArea"),
+  v.literal("perimeter"),
+  v.literal("exteriorWidth"),
+  v.literal("exteriorDepth"),
+  v.literal("areaVariance"),
+  v.literal("span"),
+  v.literal("wallThickness"),
+  v.literal("openingWidth"),
+  v.literal("fixtureOffset"),
+  v.literal("clearance"),
+  v.literal("unknown")
+);
+
+export const floorplanMeasurementSubjectType = v.union(
+  v.literal("plan"),
+  v.literal("level"),
+  v.literal("room"),
+  v.literal("structure"),
+  v.literal("areaGroup"),
+  v.literal("lot"),
+  v.literal("zone"),
+  v.literal("shell"),
+  v.literal("opening"),
+  v.literal("fixture"),
+  v.literal("path")
+);
+
+export const floorplanMeasurementUnit = v.union(
+  v.literal("in"),
+  v.literal("ft"),
+  v.literal("sqft"),
+  v.literal("acre"),
+  v.literal("percent"),
+  v.literal("count")
+);
+
+export const floorplanAreaRole = v.union(
+  v.literal("conditioned"),
+  v.literal("unconditioned"),
+  v.literal("excluded"),
+  v.literal("outdoor"),
+  v.literal("unknown")
+);
+
+export const floorplanConstraintStrength = v.union(
+  v.literal("hard"),
+  v.literal("strong"),
+  v.literal("soft"),
+  v.literal("displayOnly")
+);
+
+export const floorplanCalculationKind = v.union(
+  v.literal("area"),
+  v.literal("variance"),
+  v.literal("coverage"),
+  v.literal("confidence"),
+  v.literal("missingArea")
+);
+
+export const floorplanSolveStatus = v.union(
+  v.literal("valid"),
+  v.literal("incomplete"),
+  v.literal("conflict"),
+  v.literal("archived")
+);
+
+const floorplanImageRegion = v.object({
+  xPct: v.number(),
+  yPct: v.number(),
+  widthPct: v.number(),
+  heightPct: v.number(),
+});
+
+const floorplanProvenanceEntry = v.object({
+  sourceType: floorplanEvidenceSourceType,
+  sourceId: v.optional(v.string()),
+  sourcePhotoId: v.optional(v.id("itemPhotos")),
+  sourceLabel: v.string(),
+  imageNumber: v.optional(v.number()),
+  imageRegion: v.optional(floorplanImageRegion),
+  notes: v.optional(v.string()),
+  recordedAt: v.number(),
+  recordedByUserId: v.optional(v.id("users")),
+  recordedByApiKeyId: v.optional(v.id("apiKeys")),
+  recordedByLabel: v.optional(v.string()),
+});
 
 export const pcsBranch = v.union(
   v.literal("army"),
@@ -786,6 +983,12 @@ export default defineSchema({
     role: householdRole,
     status: membershipStatus,
     invitedEmail: v.optional(v.string()),
+    apiAccessStatus: v.optional(memberApiAccessStatus),
+    apiAccessUpdatedAt: v.optional(v.number()),
+    apiAccessUpdatedByUserId: v.optional(v.id("users")),
+    acceptedInvitationId: v.optional(v.id("householdInvitations")),
+    acceptedInvitationAt: v.optional(v.number()),
+    onboardingDismissedAt: v.optional(v.number()),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -794,6 +997,7 @@ export default defineSchema({
     .index("by_household_user", ["householdId", "userId"])
     .index("by_user_status", ["userId", "status"])
     .index("by_household_status_role", ["householdId", "status", "role"])
+    .index("by_household_api_access", ["householdId", "apiAccessStatus"])
     .index("by_invited_email", ["invitedEmail"]),
 
   householdInvitations: defineTable({
@@ -1270,6 +1474,182 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_household_status", ["householdId", "status"]),
 
+  floorplanEvidenceRecords: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.optional(v.id("floorPlans")),
+    evidenceType: floorplanEvidenceRecordType,
+    status: floorplanEvidenceStatus,
+    title: v.string(),
+    summary: v.optional(v.string()),
+    confidence: estimateConfidence,
+    sourceType: floorplanEvidenceSourceType,
+    areaRole: v.optional(floorplanAreaRole),
+    constraintStrength: v.optional(floorplanConstraintStrength),
+    sourcePhotoId: v.optional(v.id("itemPhotos")),
+    sourceLabel: v.optional(v.string()),
+    sourceRegion: v.optional(floorplanImageRegion),
+    facts: v.optional(v.array(v.string())),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    agentLabel: v.optional(v.string()),
+    supersededById: v.optional(v.id("floorplanEvidenceRecords")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_plan_status", ["planId", "status"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_household", ["householdId"]),
+
+  floorplanObservations: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.optional(v.id("floorPlans")),
+    evidenceId: v.optional(v.id("floorplanEvidenceRecords")),
+    sourcePhotoId: v.optional(v.id("itemPhotos")),
+    sourceLabel: v.optional(v.string()),
+    sourceRegion: v.optional(floorplanImageRegion),
+    imageNumber: v.optional(v.number()),
+    observationType: floorplanObservationType,
+    status: floorplanObservationStatus,
+    title: v.string(),
+    subjectKey: v.optional(v.string()),
+    subjectLabel: v.optional(v.string()),
+    subjectKind: v.optional(floorplanSubjectKind),
+    rawText: v.optional(v.string()),
+    normalized: v.optional(v.any()),
+    confidence: estimateConfidence,
+    provenance: v.array(floorplanProvenanceEntry),
+    relatedMeasurementIds: v.optional(v.array(v.id("floorplanMeasurements"))),
+    relatedObservationIds: v.optional(v.array(v.id("floorplanObservations"))),
+    supersededById: v.optional(v.id("floorplanObservations")),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    agentLabel: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_plan_status", ["planId", "status"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_plan_subject", ["planId", "subjectKey"])
+    .index("by_household", ["householdId"]),
+
+  floorplanRelationships: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.optional(v.id("floorPlans")),
+    evidenceId: v.optional(v.id("floorplanEvidenceRecords")),
+    relationshipType: floorplanRelationshipType,
+    status: floorplanObservationStatus,
+    fromSubjectKey: v.string(),
+    fromSubjectLabel: v.string(),
+    toSubjectKey: v.string(),
+    toSubjectLabel: v.string(),
+    confidence: estimateConfidence,
+    sourceObservationIds: v.optional(v.array(v.id("floorplanObservations"))),
+    sourceMeasurementIds: v.optional(v.array(v.id("floorplanMeasurements"))),
+    evidenceIds: v.optional(v.array(v.id("floorplanEvidenceRecords"))),
+    notes: v.optional(v.string()),
+    provenance: v.array(floorplanProvenanceEntry),
+    supersededById: v.optional(v.id("floorplanRelationships")),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    agentLabel: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_plan_status", ["planId", "status"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_plan_from", ["planId", "fromSubjectKey"])
+    .index("by_plan_to", ["planId", "toSubjectKey"])
+    .index("by_household", ["householdId"]),
+
+  floorplanMeasurements: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.optional(v.id("floorPlans")),
+    evidenceId: v.optional(v.id("floorplanEvidenceRecords")),
+    subjectType: floorplanMeasurementSubjectType,
+    subjectKey: v.string(),
+    subjectLabel: v.string(),
+    measurementType: floorplanMeasurementType,
+    kind: floorplanMeasurementKind,
+    status: floorplanEvidenceStatus,
+    valueIn: v.optional(v.number()),
+    minIn: v.optional(v.number()),
+    maxIn: v.optional(v.number()),
+    unit: v.optional(floorplanMeasurementUnit),
+    value: v.optional(v.number()),
+    minValue: v.optional(v.number()),
+    maxValue: v.optional(v.number()),
+    displayValue: v.string(),
+    confidence: estimateConfidence,
+    areaRole: v.optional(floorplanAreaRole),
+    constraintStrength: v.optional(floorplanConstraintStrength),
+    provenance: v.array(floorplanProvenanceEntry),
+    sourceObservationIds: v.optional(v.array(v.id("floorplanObservations"))),
+    derivedFromMeasurementIds: v.optional(v.array(v.id("floorplanMeasurements"))),
+    supersededById: v.optional(v.id("floorplanMeasurements")),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    agentLabel: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_plan_subject", ["planId", "subjectKey"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_household", ["householdId"]),
+
+  floorplanCalculationRecords: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.optional(v.id("floorPlans")),
+    solveRunId: v.optional(v.id("floorplanSolveRuns")),
+    status: floorplanEvidenceStatus,
+    calculationKind: floorplanCalculationKind,
+    formulaName: v.string(),
+    label: v.string(),
+    subjectKey: v.string(),
+    subjectLabel: v.string(),
+    outputMeasurementType: floorplanMeasurementType,
+    unit: floorplanMeasurementUnit,
+    value: v.number(),
+    displayValue: v.string(),
+    confidence: estimateConfidence,
+    inputMeasurementIds: v.array(v.id("floorplanMeasurements")),
+    outputMeasurementId: v.optional(v.id("floorplanMeasurements")),
+    diagnostics: v.optional(v.array(v.any())),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    agentLabel: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_plan_status", ["planId", "status"])
+    .index("by_move_status", ["moveId", "status"])
+    .index("by_household", ["householdId"]),
+
+  floorplanSolveRuns: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    planId: v.id("floorPlans"),
+    status: floorplanSolveStatus,
+    solverVersion: v.string(),
+    diagnostics: v.array(v.any()),
+    geometry: v.any(),
+    proposedOps: v.optional(v.array(planOpValidator)),
+    sourceMeasurementIds: v.array(v.id("floorplanMeasurements")),
+    sourceObservationIds: v.optional(v.array(v.id("floorplanObservations"))),
+    sourceRelationshipIds: v.optional(v.array(v.id("floorplanRelationships"))),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    agentLabel: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_plan_created", ["planId", "createdAt"])
+    .index("by_move", ["moveId"])
+    .index("by_household", ["householdId"]),
+
   boxes: defineTable({
     householdId: v.id("households"),
     moveId: v.id("moves"),
@@ -1277,9 +1657,12 @@ export default defineSchema({
     label: v.optional(v.string()),
     room: v.optional(v.string()),
     destinationRoom: v.optional(v.string()),
+    destinationSpaceId: v.optional(v.id("moveSpaces")),
     description: v.optional(v.string()),
     moveDayNote: v.optional(v.string()),
     status: boxStatus,
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     dimensionsIn: v.optional(dimensionsIn),
     estimatedWeightLb: v.optional(v.number()),
     actualWeightLb: v.optional(v.number()),
@@ -1300,6 +1683,7 @@ export default defineSchema({
     .index("by_move_code", ["moveId", "code"])
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_destination_space", ["destinationSpaceId"])
     .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_household", ["householdId"]),
 
@@ -1340,6 +1724,7 @@ export default defineSchema({
     mediaKind: v.optional(mediaKind),
     width: v.optional(v.number()),
     height: v.optional(v.number()),
+    fileName: v.optional(v.string()),
     mimeType: v.string(),
     sizeBytes: v.number(),
     caption: v.optional(v.string()),
@@ -1349,6 +1734,8 @@ export default defineSchema({
     source: photoSource,
     exifHandlingStatus,
     confidence: estimateConfidence,
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     notes: v.optional(v.string()),
     verificationStatus: photoVerificationStatus,
     aiProcessed: v.boolean(),
@@ -1407,6 +1794,8 @@ export default defineSchema({
       v.literal("cancelled"),
       v.literal("failed")
     ),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     expiresAt: v.number(),
     createdByUserId: v.id("users"),
     completedPhotoId: v.optional(v.id("itemPhotos")),
@@ -1434,6 +1823,7 @@ export default defineSchema({
     // Free string so user-defined dispositions keep working later.
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
+    targetPlanId: v.optional(v.id("floorPlans")),
     mediaPhotoIds: v.array(v.id("itemPhotos")),
     sortOrder: v.number(),
     claimedByUserId: v.optional(v.id("users")),
@@ -1444,6 +1834,16 @@ export default defineSchema({
     agentSummary: v.optional(v.string()),
     agentQuestion: v.optional(v.string()),
     resultItemIds: v.optional(v.array(v.id("items"))),
+    resultSuggestionIds: v.optional(v.array(v.id("aiTextSuggestions"))),
+    resultRefs: v.optional(
+      v.array(
+        v.object({
+          type: v.string(),
+          id: v.string(),
+          label: v.optional(v.string()),
+        })
+      )
+    ),
     processedAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
     createdByUserId: v.id("users"),
@@ -1525,6 +1925,14 @@ export default defineSchema({
         disposition: itemDisposition,
         quantity: v.number(),
         description: v.optional(v.string()),
+        dimensionsIn: v.optional(dimensionsIn),
+        dimensionsConfidence: v.optional(estimateConfidence),
+        estimatedWeightLb: v.optional(v.number()),
+        estimatedWeightLowLb: v.optional(v.number()),
+        estimatedWeightHighLb: v.optional(v.number()),
+        weightConfidence: v.optional(estimateConfidence),
+        estimatedVolumeCuFt: v.optional(v.number()),
+        volumeConfidence: v.optional(estimateConfidence),
         suggestedBoxLabel: v.optional(v.string()),
         fragility: v.optional(itemFragility),
         highValue: v.optional(v.boolean()),
@@ -1572,6 +1980,14 @@ export default defineSchema({
         disposition: itemDisposition,
         quantity: v.number(),
         description: v.optional(v.string()),
+        dimensionsIn: v.optional(dimensionsIn),
+        dimensionsConfidence: v.optional(estimateConfidence),
+        estimatedWeightLb: v.optional(v.number()),
+        estimatedWeightLowLb: v.optional(v.number()),
+        estimatedWeightHighLb: v.optional(v.number()),
+        weightConfidence: v.optional(estimateConfidence),
+        estimatedVolumeCuFt: v.optional(v.number()),
+        volumeConfidence: v.optional(estimateConfidence),
         suggestedBoxLabel: v.optional(v.string()),
         fragility: v.optional(itemFragility),
         highValue: v.optional(v.boolean()),
@@ -1710,6 +2126,8 @@ export default defineSchema({
     privateNotes: v.optional(v.string()),
     aiSummary: v.optional(v.string()),
     aiTags: v.array(v.string()),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     createdVia: itemCreatedVia,
     reviewedAt: v.optional(v.number()),
     createdByUserId: v.id("users"),
@@ -1725,6 +2143,7 @@ export default defineSchema({
     .index("by_destination_space", ["destinationSpaceId"])
     .index("by_move_category", ["moveId", "category"])
     .index("by_move_needs_review", ["moveId", "needsReview"])
+    .index("by_move_agent_label", ["moveId", "agentLabel"])
     .index("by_move_high_value", ["moveId", "highValue"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
