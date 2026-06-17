@@ -2,13 +2,39 @@ import {
   buildFloorplanSubjects,
   validateFloorplanEvidenceGraph,
 } from "@/lib/floorplans/evidence-engine";
+import {
+  bestMeasurementValue,
+  dimensionFromConstraint,
+  measurementsForSubject,
+  rectangularSizeFromArea,
+} from "@/lib/floorplans/solver-measurements";
+export { measurementsForSubject } from "@/lib/floorplans/solver-measurements";
+import {
+  connectedRoomIds,
+  detectRoomOverlaps,
+  pairKey,
+  rangesOverlap,
+} from "@/lib/floorplans/solver-validation";
+export { detectRoomOverlaps } from "@/lib/floorplans/solver-validation";
+export type { FloorplanOverlap } from "@/lib/floorplans/solver-validation";
+import {
+  rankedSolveGaps,
+  scoreDataQuality,
+} from "@/lib/floorplans/solver-quality";
+import {
+  defaultGapIn,
+  defaultRoomDepthIn,
+  defaultRoomWidthIn,
+  defaultWallThicknessIn,
+  overlapToleranceIn,
+  placementStepIn,
+  solverVersion,
+} from "@/lib/floorplans/solver-constants";
 import type {
   FloorplanAreaRole,
   FloorplanCanonicalSubject,
   FloorplanConnection,
   FloorplanConfidence,
-  FloorplanDataQualityScore,
-  FloorplanGapPriority,
   FloorplanMeasurement,
   FloorplanObservation,
   FloorplanPropertyZoneKind,
@@ -32,14 +58,6 @@ import {
   defaultAreaRoleForSpace,
   squareFeetFromInches,
 } from "@/lib/floorplans/calculations";
-
-const solverVersion = "floorplans-evidence-graph-v2";
-const defaultRoomWidthIn = 120;
-const defaultRoomDepthIn = 120;
-const defaultGapIn = 0;
-const overlapToleranceIn = 0.5;
-const defaultWallThicknessIn = 4.5;
-const placementStepIn = 12;
 
 export type FloorplanRoomConstraint = {
   id: string;
@@ -97,14 +115,6 @@ export type FloorplanPuzzleInput = {
   measurements?: FloorplanMeasurement[];
   observations?: FloorplanObservation[];
   relationships?: FloorplanRelationship[];
-};
-
-export type FloorplanOverlap = {
-  firstRoomId: string;
-  secondRoomId: string;
-  areaSqIn: number;
-  widthIn: number;
-  depthIn: number;
 };
 
 type CompiledFloorplanGraph = {
@@ -470,16 +480,6 @@ function canonicalizeRelationships(
   });
 }
 
-export function measurementsForSubject(
-  measurements: FloorplanMeasurement[],
-  subjectKey: string,
-) {
-  return measurements.filter(
-    (measurement) =>
-      measurement.status === "active" && measurement.subjectKey === subjectKey,
-  );
-}
-
 export function roomConstraintFromMeasurements({
   id,
   label,
@@ -524,38 +524,6 @@ export function roomConstraintFromMeasurements({
     ],
     relativeTo,
   };
-}
-
-export function detectRoomOverlaps(
-  rooms: FloorplanSolvedRoom[],
-  toleranceIn = overlapToleranceIn,
-): FloorplanOverlap[] {
-  const overlaps: FloorplanOverlap[] = [];
-  for (let firstIndex = 0; firstIndex < rooms.length; firstIndex += 1) {
-    for (let secondIndex = firstIndex + 1; secondIndex < rooms.length; secondIndex += 1) {
-      const first = rooms[firstIndex];
-      const second = rooms[secondIndex];
-      if (overlapAllowed(first, second)) {
-        continue;
-      }
-      const widthIn =
-        Math.min(first.xIn + first.widthIn, second.xIn + second.widthIn) -
-        Math.max(first.xIn, second.xIn);
-      const depthIn =
-        Math.min(first.yIn + first.depthIn, second.yIn + second.depthIn) -
-        Math.max(first.yIn, second.yIn);
-      if (widthIn > toleranceIn && depthIn > toleranceIn) {
-        overlaps.push({
-          firstRoomId: first.id,
-          secondRoomId: second.id,
-          widthIn,
-          depthIn,
-          areaSqIn: widthIn * depthIn,
-        });
-      }
-    }
-  }
-  return overlaps;
 }
 
 export function floorplanSolveToPlanOps(
@@ -1396,217 +1364,6 @@ function validateSolvedAccess({
   return diagnostics;
 }
 
-function scoreDataQuality({
-  rooms,
-  zones,
-  openings,
-  fixtures,
-  unresolvedGeometry,
-  diagnostics,
-  measurements,
-  relationships,
-  areaSummary,
-}: {
-  rooms: FloorplanSolvedRoom[];
-  zones: FloorplanSolvedZone[];
-  openings: FloorplanSolvedOpening[];
-  fixtures: FloorplanSolvedFixture[];
-  unresolvedGeometry: FloorplanUnresolvedGeometry[];
-  diagnostics: FloorplanSolveDiagnostic[];
-  measurements: FloorplanMeasurement[];
-  relationships: FloorplanRelationship[];
-  areaSummary: FloorplanSolveResult["areaSummary"];
-}): FloorplanDataQualityScore {
-  const roomDimensionSlots = Math.max(rooms.length * 2, 1);
-  const measuredDimensions = rooms.reduce((count, room) => {
-    const subjectMeasurements = measurementsForSubject(measurements, room.id);
-    return (
-      count +
-      (hasMeasurement(subjectMeasurements, "width") ? 1 : 0) +
-      (hasMeasurement(subjectMeasurements, "depth") ? 1 : 0)
-    );
-  }, 0);
-  const dimensions = clampScore((measuredDimensions / roomDimensionSlots) * 100);
-  const topology = clampScore(
-    (relationships.filter((relationship) =>
-      ["connectedTo", "accessesThrough", "doorlessPassageBetween"].includes(
-        relationship.relationshipType,
-      ),
-    ).length /
-      Math.max(rooms.length - 1, 1)) *
-      90,
-  );
-  const area =
-    areaSummary.status === "withinTarget"
-      ? 100
-      : areaSummary.status === "noTarget"
-        ? 58
-        : clampScore(100 - Math.abs(areaSummary.variancePercent ?? 35) * 2.2);
-  const openingTotal =
-    openings.length + unresolvedGeometry.filter((entry) => entry.kind === "opening").length;
-  const openingsScore = openingTotal
-    ? clampScore((openings.length / openingTotal) * 100)
-    : 62;
-  const hasPropertyEvidence =
-    zones.length > 0 ||
-    measurements.some((measurement) =>
-      ["lotArea", "excludedArea", "footprintArea"].includes(measurement.measurementType),
-    );
-  const property = hasPropertyEvidence
-    ? clampScore((zones.length ? 64 : 32) + (areaSummary.lotSqFt ? 28 : 0))
-    : 100;
-  const conflictPenalty = diagnostics.filter((entry) => entry.severity === "conflict").length * 18;
-  const unresolvedPenalty = Math.min(22, unresolvedGeometry.length * 4);
-  const overall = clampScore(
-    dimensions * 0.28 +
-      topology * 0.2 +
-      area * 0.2 +
-      openingsScore * 0.16 +
-      property * 0.16 -
-      conflictPenalty -
-      unresolvedPenalty,
-  );
-
-  return {
-    overall,
-    dimensions,
-    topology,
-    area,
-    openings: openingsScore,
-    property,
-    summary: qualitySummary(overall, rooms.length, fixtures.length, unresolvedGeometry.length),
-    drivers: [
-      {
-        id: "dimensions",
-        label: "Room dimensions",
-        score: dimensions,
-        note: `${measuredDimensions} of ${roomDimensionSlots} principal room dimensions are supported by active evidence.`,
-      },
-      {
-        id: "topology",
-        label: "Topology and access",
-        score: topology,
-        note: `${relationships.length} active relationships are available for room adjacency, access, openings, and exclusions.`,
-      },
-      {
-        id: "area",
-        label: "Area reconciliation",
-        score: area,
-        note:
-          areaSummary.status === "noTarget"
-            ? "No official or suspected conditioned square footage has been recorded."
-            : `Solved area status is ${areaSummary.status}.`,
-      },
-      {
-        id: "openings",
-        label: "Openings and fixtures",
-        score: openingsScore,
-        note: `${openings.length} openings and ${fixtures.length} fixtures are placed; ${unresolvedGeometry.length} geometry marks remain unresolved.`,
-      },
-      {
-        id: "property",
-        label: "Property scope",
-        score: property,
-        note: hasPropertyEvidence
-          ? `${zones.length} property or excluded-area zones are represented.`
-          : "No property evidence was supplied, so the solver is treating this as house-only.",
-      },
-    ],
-  };
-}
-
-function rankedSolveGaps({
-  rooms,
-  unresolvedGeometry,
-  measurements,
-  relationships,
-  areaGaps,
-  dataQuality,
-}: {
-  rooms: FloorplanSolvedRoom[];
-  unresolvedGeometry: FloorplanUnresolvedGeometry[];
-  measurements: FloorplanMeasurement[];
-  relationships: FloorplanRelationship[];
-  areaGaps: FloorplanGapPriority[];
-  dataQuality: FloorplanDataQualityScore;
-}) {
-  const gaps: FloorplanGapPriority[] = [...areaGaps];
-  const dimensionGaps = rooms
-    .map((room) => {
-      const roomMeasurements = measurementsForSubject(measurements, room.id);
-      const missing: string[] = [];
-      if (!hasMeasurement(roomMeasurements, "width")) missing.push("width");
-      if (!hasMeasurement(roomMeasurements, "depth")) missing.push("depth");
-      return { room, missing };
-    })
-    .filter((entry) => entry.missing.length > 0)
-    .sort((left, right) => right.room.areaSqFt - left.room.areaSqFt);
-
-  for (const entry of dimensionGaps.slice(0, 4)) {
-    gaps.push({
-      id: `cad-dimensions-${entry.room.id}`,
-      question: `Confirm ${entry.missing.join(" and ")} for ${entry.room.label}.`,
-      category: "scale-largest-unknown",
-      impactScore: Math.min(98, 70 + Math.round(entry.room.areaSqFt / 18)),
-      whyItHelps:
-        "This is one of the largest weakly scaled spaces in the generated layout, so one measurement improves several downstream wall and area calculations.",
-      answerFormat: "Width and depth in feet/inches, or a photo with both labels visible.",
-    });
-  }
-
-  if (!measurements.some((measurement) => measurement.measurementType === "wallThickness")) {
-    gaps.push({
-      id: "cad-wall-thickness",
-      question: "Confirm exterior or interior wall thickness if available.",
-      category: "mover-path",
-      impactScore: 74,
-      whyItHelps:
-        "Wall thickness changes clear usable space, door placement, and whether adjacent rooms fit inside the exterior shell.",
-      answerFormat: "One number, for example 4.5 in interior walls or 6 in exterior walls.",
-    });
-  }
-
-  if (dataQuality.topology < 70) {
-    gaps.push({
-      id: "cad-directional-topology",
-      question: "For each connected room, confirm whether it is left, right, above, or below the room it touches.",
-      category: "resolve-conflicts",
-      impactScore: 90,
-      whyItHelps:
-        "Directional relationships let the CAD solver preserve the sketch layout instead of using a generic non-overlapping placement.",
-      answerFormat:
-        "Examples: Kitchen is right of Front living room; Hall runs left-to-right from Kitchen; Room 2 is below the Hall.",
-    });
-  }
-
-  if (unresolvedGeometry.some((entry) => entry.kind === "opening")) {
-    gaps.push({
-      id: "cad-attach-openings",
-      question: "Attach unresolved doors, doorways, windows, and passages to a wall or pair of rooms.",
-      category: "mover-path",
-      impactScore: 86,
-      whyItHelps:
-        "Openings define how movers and furniture travel through the home; floating openings cannot become CAD geometry.",
-      answerFormat:
-        "For each mark: source image number, opening label, host wall/room, and whether it is a door, doorway, window, or doorless passage.",
-    });
-  }
-
-  if (!relationships.some((relationship) => relationship.relationshipType === "countsTowardArea")) {
-    gaps.push({
-      id: "cad-area-inclusion-rules",
-      question: "Confirm which structures count toward official square footage and which are excluded.",
-      category: "resolve-conflicts",
-      impactScore: 72,
-      whyItHelps:
-        "Area inclusion rules prevent patios, carports, sheds, and detached buildings from distorting the house square-footage check.",
-      answerFormat: "List included/excluded structures, for example: carport excluded, patio excluded.",
-    });
-  }
-
-  return uniqueById(gaps).sort((left, right) => right.impactScore - left.impactScore);
-}
-
 function unresolvedSpaceGeometry(
   constraints: FloorplanRoomConstraint[],
   rooms: FloorplanSolvedRoom[],
@@ -1723,57 +1480,6 @@ function alignedOrigin(
     return anchorStart + anchorSize - ownSize;
   }
   return anchorStart;
-}
-
-function dimensionFromConstraint(
-  value: number | undefined,
-  range: [number, number] | undefined,
-  fallback: number,
-) {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return { value, known: true };
-  }
-  if (range) {
-    const [min, max] = range;
-    if (
-      Number.isFinite(min) &&
-      Number.isFinite(max) &&
-      min > 0 &&
-      max >= min
-    ) {
-      return { value: (min + max) / 2, known: true };
-    }
-  }
-  return { value: value ?? fallback, known: false };
-}
-
-function bestMeasurementValue(
-  measurements: FloorplanMeasurement[],
-  measurementType:
-    | "width"
-    | "depth"
-    | "clearWidth"
-    | "clearDepth"
-    | "wallThickness",
-) {
-  const candidates = measurements.filter(
-    (measurement) => measurement.measurementType === measurementType,
-  );
-  const known = candidates.find((measurement) => measurement.kind === "known");
-  const derived = candidates.find((measurement) => measurement.kind === "derived");
-  const range = candidates.find((measurement) => measurement.kind === "range");
-  const assumption = candidates.find(
-    (measurement) => measurement.kind === "assumption",
-  );
-  const selected = known ?? derived ?? range ?? assumption;
-  return {
-    valueIn: selected?.valueIn,
-    rangeIn:
-      selected?.minIn !== undefined && selected.maxIn !== undefined
-        ? ([selected.minIn, selected.maxIn] as [number, number])
-        : undefined,
-    measurementIds: selected ? [selected.id] : [],
-  };
 }
 
 function directionalRelativeTo(
@@ -2143,17 +1849,6 @@ function zoneConstraintFromSubject({
     sourceObservationIds: observations.map((observation) => observation.id),
     sourceRelationshipIds: relationships.map((relationship) => relationship.id),
     note: observations.map((observation) => observation.notes).filter(Boolean).join(" "),
-  };
-}
-
-function rectangularSizeFromArea(measurement: FloorplanMeasurement | undefined) {
-  const valueSqFt = measurement?.value ?? midpoint(measurement?.minValue, measurement?.maxValue);
-  if (!valueSqFt || valueSqFt <= 0) return undefined;
-  const widthFt = Math.sqrt(valueSqFt);
-  const depthFt = valueSqFt / widthFt;
-  return {
-    widthIn: widthFt * 12,
-    depthIn: depthFt * 12,
   };
 }
 
@@ -2587,18 +2282,6 @@ function fixtureLabel(kind: FloorplanSolvedFixture["kind"]) {
   return labels[kind];
 }
 
-function overlapAllowed(
-  first: FloorplanSolvedRoom,
-  second: FloorplanSolvedRoom,
-) {
-  return (
-    first.containedIn === second.id ||
-    second.containedIn === first.id ||
-    first.partialOutside ||
-    second.partialOutside
-  );
-}
-
 function normalizeOrigins(rooms: FloorplanSolvedRoom[]) {
   if (!rooms.length) return rooms;
   const minXIn = Math.min(...rooms.map((room) => room.xIn));
@@ -2676,22 +2359,6 @@ function rectanglePoints(rect: Rect) {
   ];
 }
 
-function hasMeasurement(
-  measurements: FloorplanMeasurement[],
-  measurementType: FloorplanMeasurement["measurementType"],
-) {
-  return measurements.some(
-    (measurement) =>
-      measurement.measurementType === measurementType &&
-      ["known", "derived", "range"].includes(measurement.kind),
-  );
-}
-
-function midpoint(min: number | undefined, max: number | undefined) {
-  if (typeof min === "number" && typeof max === "number") return (min + max) / 2;
-  return undefined;
-}
-
 function average(values: number[]) {
   const finite = values.filter((value) => Number.isFinite(value));
   if (!finite.length) return defaultWallThicknessIn;
@@ -2715,40 +2382,6 @@ function weakestConfidence(values: FloorplanConfidence[]) {
   );
 }
 
-function rangesOverlap(
-  firstStart: number,
-  firstEnd: number,
-  secondStart: number,
-  secondEnd: number,
-  tolerance = overlapToleranceIn,
-) {
-  return Math.min(firstEnd, secondEnd) - Math.max(firstStart, secondStart) > tolerance;
-}
-
-function pairKey(firstId: string, secondId: string) {
-  return [firstId, secondId].sort().join("::");
-}
-
-function connectedRoomIds(startRoomId: string, realizedPairs: Set<string>) {
-  const connected = new Set<string>([startRoomId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const pair of realizedPairs) {
-      const [firstId, secondId] = pair.split("::");
-      if (connected.has(firstId) && !connected.has(secondId)) {
-        connected.add(secondId);
-        changed = true;
-      }
-      if (connected.has(secondId) && !connected.has(firstId)) {
-        connected.add(firstId);
-        changed = true;
-      }
-    }
-  }
-  return connected;
-}
-
 function segmentLength(segment: {
   orientation: FloorplanWallOrientation;
   x1In: number;
@@ -2767,26 +2400,6 @@ function nearly(first: number, second: number, tolerance = overlapToleranceIn) {
 
 function roundKey(value: number) {
   return Math.round(value * 10) / 10;
-}
-
-function clampScore(value: number) {
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function qualitySummary(
-  overall: number,
-  roomCount: number,
-  fixtureCount: number,
-  unresolvedCount: number,
-) {
-  if (!roomCount) return "No room geometry could be generated from the evidence graph yet.";
-  if (overall >= 82) {
-    return `Strong draft: ${roomCount} spaces, ${fixtureCount} fixtures, and ${unresolvedCount} unresolved marks.`;
-  }
-  if (overall >= 58) {
-    return `Usable review draft: ${roomCount} spaces generated, but the data still has important holes.`;
-  }
-  return `Low-confidence attempt: ${roomCount} spaces generated so the user can see what is known and what needs better evidence.`;
 }
 
 function roomColor(confidence: FloorplanConfidence) {
