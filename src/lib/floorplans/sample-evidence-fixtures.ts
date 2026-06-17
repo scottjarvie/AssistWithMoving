@@ -459,3 +459,20 @@ export const imageProvenance = {
     recordedAtLabel: "current user correction",
   },
 };
+
+export function floorplanResourceCountByStatus(
+  resources: FloorplanResource[] = floorplanResources,
+) {
+  return resources.reduce(
+    (counts, resource) => {
+      counts[resource.status] += 1;
+      return counts;
+    },
+    {
+      pending: 0,
+      processed: 0,
+      queued: 0,
+      sample: 0,
+    } satisfies Record<FloorplanResource["status"], number>,
+  );
+}
