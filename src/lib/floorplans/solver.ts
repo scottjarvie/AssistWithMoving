@@ -10,6 +10,14 @@ import {
 } from "@/lib/floorplans/solver-measurements";
 export { measurementsForSubject } from "@/lib/floorplans/solver-measurements";
 import {
+  floorplanBounds,
+  formatInches,
+  normalizeOrigins,
+  rectanglePoints,
+  type FloorplanRect,
+} from "@/lib/floorplans/solver-geometry";
+export { formatInches } from "@/lib/floorplans/solver-geometry";
+import {
   connectedRoomIds,
   detectRoomOverlaps,
   pairKey,
@@ -132,13 +140,7 @@ type SolvedRoomWithFlags = {
   usedAssumedWall: boolean;
 };
 
-type Rect = {
-  id: string;
-  xIn: number;
-  yIn: number;
-  widthIn: number;
-  depthIn: number;
-};
+type Rect = FloorplanRect;
 
 type RoomWallSide = "north" | "south" | "east" | "west";
 
@@ -615,21 +617,6 @@ export function floorplanSolveToPlanOps(
       },
     }));
   return [...roomOps, ...zoneOps, ...wallOps, ...openingOps, ...fixtureOps];
-}
-
-export function formatInches(valueIn: number) {
-  const sign = valueIn < 0 ? "-" : "";
-  const absolute = Math.abs(valueIn);
-  const feet = Math.floor(absolute / 12);
-  const rawInches = absolute - feet * 12;
-  const roundedInches = Math.round(rawInches);
-  const inches =
-    Math.abs(rawInches - roundedInches) < 0.01
-      ? String(roundedInches)
-      : rawInches.toFixed(1).replace(/\.0$/, "");
-  if (!feet) return `${sign}${inches} in`;
-  if (Number(inches) === 0) return `${sign}${feet} ft`;
-  return `${sign}${feet} ft ${inches} in`;
 }
 
 function placeRooms(
@@ -2282,42 +2269,6 @@ function fixtureLabel(kind: FloorplanSolvedFixture["kind"]) {
   return labels[kind];
 }
 
-function normalizeOrigins(rooms: FloorplanSolvedRoom[]) {
-  if (!rooms.length) return rooms;
-  const minXIn = Math.min(...rooms.map((room) => room.xIn));
-  const minYIn = Math.min(...rooms.map((room) => room.yIn));
-  return rooms.map((room) => ({
-    ...room,
-    xIn: room.xIn - minXIn,
-    yIn: room.yIn - minYIn,
-  }));
-}
-
-function floorplanBounds(rooms: Rect[]): FloorplanSolveResult["bounds"] {
-  if (!rooms.length) {
-    return {
-      minXIn: 0,
-      minYIn: 0,
-      maxXIn: 0,
-      maxYIn: 0,
-      widthIn: 0,
-      depthIn: 0,
-    };
-  }
-  const minXIn = Math.min(...rooms.map((room) => room.xIn));
-  const minYIn = Math.min(...rooms.map((room) => room.yIn));
-  const maxXIn = Math.max(...rooms.map((room) => room.xIn + room.widthIn));
-  const maxYIn = Math.max(...rooms.map((room) => room.yIn + room.depthIn));
-  return {
-    minXIn,
-    minYIn,
-    maxXIn,
-    maxYIn,
-    widthIn: maxXIn - minXIn,
-    depthIn: maxYIn - minYIn,
-  };
-}
-
 function dedupeWalls(walls: FloorplanSolvedWall[]) {
   const byKey = new Map<string, FloorplanSolvedWall>();
   for (const wall of walls) {
@@ -2348,15 +2299,6 @@ function dedupeWalls(walls: FloorplanSolvedWall[]) {
     });
   }
   return [...byKey.values()];
-}
-
-function rectanglePoints(rect: Rect) {
-  return [
-    { x: rect.xIn, y: rect.yIn },
-    { x: rect.xIn + rect.widthIn, y: rect.yIn },
-    { x: rect.xIn + rect.widthIn, y: rect.yIn + rect.depthIn },
-    { x: rect.xIn, y: rect.yIn + rect.depthIn },
-  ];
 }
 
 function average(values: number[]) {
