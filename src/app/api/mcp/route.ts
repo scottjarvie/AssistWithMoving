@@ -10,6 +10,7 @@
 // mcp-server/movingmanifest-mcp.mjs so the two transports cannot drift.
 import { createMcpHandler } from "mcp-handler";
 
+import { mcpBearerChallenge } from "@/lib/mcp-oauth";
 import { registerTools } from "../../../../mcp-server/movingmanifest-mcp.mjs";
 
 export const runtime = "nodejs";
@@ -44,7 +45,7 @@ function restApiBaseUrl(): string {
   return "https://movingmanifest.com/api/v1";
 }
 
-function unauthorized(message: string): Response {
+function unauthorized(request: Request, message: string): Response {
   return Response.json(
     {
       error: {
@@ -55,7 +56,7 @@ function unauthorized(message: string): Response {
     {
       status: 401,
       headers: {
-        "WWW-Authenticate": 'Bearer realm="MovingManifest MCP"',
+        "WWW-Authenticate": mcpBearerChallenge(request),
       },
     }
   );
@@ -65,7 +66,8 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   const apiKey = apiKeyFromRequest(request);
   if (!apiKey) {
     return unauthorized(
-      "Provide a MovingManifest API key via 'Authorization: Bearer mmk_...'. Create one at https://movingmanifest.com/settings/ai-connections."
+      request,
+      "Connect with OAuth or provide a MovingManifest API key via 'Authorization: Bearer mmk_...'."
     );
   }
 
