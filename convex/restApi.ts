@@ -646,6 +646,9 @@ async function routeRequest(
   if (nested === "items") {
     return await routeItems(ctx, args, auth, moveId, nestedId);
   }
+  if (nested === "movable-units") {
+    return await routeMovableUnits(ctx, args, auth, moveId, nestedId);
+  }
   if (nested === "planned-items") {
     return await routePlannedItems(ctx, args, auth, moveId, nestedId, segments[4]);
   }
@@ -3004,6 +3007,675 @@ async function routeBatchUpsertItems(
     },
     failed > 0 ? 207 : 200
   );
+}
+
+
+type RestMovableUnitBoxRow = {
+  unit: Record<string, unknown>;
+  unitIndex: number;
+  unitCountIndex?: number;
+  unitCount?: number;
+};
+
+export async function routeMovableUnits(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  action?: string
+) {
+  if (
+    args.method !== "POST" ||
+    action !== "batch-upsert" ||
+    parseRestPath(args.path).length !== 4
+  ) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Movable units route not found.",
+    });
+  }
+
+  const body = bodyObject(args.body);
+  const units = Array.isArray(body.units) ? body.units : [];
+  const dryRun = Boolean(body.dryRun);
+  const idempotencyKey =
+    optionalString(body.idempotencyKey) ?? optionalString(args.idempotencyKey);
+  if (!units.length) {
+    return restError({
+      status: 400,
+      code: "invalid_batch",
+      message: "units must include at least one row.",
+    });
+  }
+  if (units.length > maxBatchUpsertItems) {
+    return restError({
+      status: 400,
+      code: "batch_too_large",
+      message: `Movable unit batches are limited to ${maxBatchUpsertItems} input rows.`,
+    });
+  }
+
+  const boxRows: RestMovableUnitBoxRow[] = [];
+  const looseItemUnits: Array<{
+    unit: Record<string, unknown>;
+    unitIndex: number;
+  }> = [];
+  const missingStableLooseRows: number[] = [];
+  const autoCodedBoxRows = new Set<number>();
+
+  for (const [unitIndex, row] of units.entries()) {
+    const unit = bodyObject(row);
+    if (unit.kind === "box") {
+      let expanded: RestMovableUnitBoxRow[];
+      try {
+        expanded = expandRestMovableUnitBoxRows(unit, unitIndex);
+      } catch (error) {
+        return restError({
+          status: 400,
+          code: "validation_error",
+          message: error instanceof Error ? error.message : "Invalid box row.",
+        });
+      }
+      boxRows.push(...expanded);
+      if (
+        expanded.some(
+          ({ unit: boxUnit }) =>
+            !optionalString(boxUnit.boxId) && !normalizeOptionalBoxCode(boxUnit.code)
+        )
+      ) {
+        autoCodedBoxRows.add(unitIndex);
+      }
+      continue;
+    }
+
+    if (unit.kind === "looseItem") {
+      looseItemUnits.push({ unit, unitIndex });
+      if (!optionalString(unit.itemId) && !hasRestStableExternalItemKey(unit)) {
+        missingStableLooseRows.push(unitIndex);
+      }
+      continue;
+    }
+
+    return restError({
+      status: 400,
+      code: "validation_error",
+      message: `units.${unitIndex}.kind must be "box" or "looseItem".`,
+    });
+  }
+
+  if (boxRows.length + looseItemUnits.length > maxBatchUpsertItems) {
+    return restError({
+      status: 400,
+      code: "batch_too_large",
+      message: `Movable unit batches are limited to ${maxBatchUpsertItems} expanded rows.`,
+    });
+  }
+  if (missingStableLooseRows.length) {
+    return restError({
+      status: 400,
+      code: "stable_key_required",
+      message: `looseItem rows require itemId for existing units or externalSource plus externalId for new units. Missing stable key on row index${missingStableLooseRows.length === 1 ? "" : "es"} ${missingStableLooseRows.join(", ")}.`,
+    });
+  }
+
+  const autoCodedBoxWarning =
+    autoCodedBoxRows.size && !idempotencyKey
+      ? `Box rows without boxId or code will receive server-generated box codes. Pass a stable idempotencyKey before live writes for row index${autoCodedBoxRows.size === 1 ? "" : "es"} ${[...autoCodedBoxRows].join(", ")} so retries do not create duplicate auto-coded boxes.`
+      : undefined;
+
+  if (!dryRun && autoCodedBoxWarning) {
+    return restError({
+      status: 400,
+      code: "idempotency_required",
+      message: `${autoCodedBoxWarning} Use explicit box codes or existing boxId rows if you do not want to rely on a batch idempotency key.`,
+    });
+  }
+
+  const itemRows = looseItemUnits.map(({ unit }) => movableUnitLooseItemBody(unit));
+
+  if (dryRun) {
+    return restOk({
+      data: {
+        dryRun: true,
+        summary: {
+          totalUnits: boxRows.length + looseItemUnits.length,
+          boxes: boxRows.length,
+          looseItems: looseItemUnits.length,
+        },
+        requests: [
+          ...boxRows.map(({ unit, unitIndex, unitCountIndex, unitCount }) => {
+            const boxBody = movableUnitBoxBody(unit);
+            const boxId = optionalString(unit.boxId);
+            return removeUndefined({
+              method: boxId ? "PATCH" : "POST",
+              path: boxId
+                ? `/moves/${moveId}/boxes/${boxId}`
+                : `/moves/${moveId}/boxes`,
+              body: boxBody,
+              unitIndex,
+              unitCountIndex,
+              unitCount,
+            });
+          }),
+          ...(itemRows.length
+            ? [
+                {
+                  method: "POST",
+                  path: `/moves/${moveId}/items/batch-upsert`,
+                  body: { dryRun: true, items: itemRows },
+                  unitIndexes: looseItemUnits.map(({ unitIndex }) => unitIndex),
+                },
+              ]
+            : []),
+        ],
+        warnings: autoCodedBoxWarning ? [autoCodedBoxWarning] : undefined,
+        note: `Dry run only. Box rows with boxId update that box; rows with code update an exact existing code on live run or create a box if none exists. New loose item rows become active, reviewable movable units. Pass itemId to patch an existing loose movable unit without defaulting omitted status, quantity, needsReview, reviewFlags, or aiTags.${autoCodedBoxWarning ? " Live writes with auto-coded box rows require a stable idempotencyKey." : ""}`,
+      },
+    });
+  }
+
+  const boxResults = [];
+  for (const [index, boxRow] of boxRows.entries()) {
+    try {
+      boxResults.push(
+        removeUndefined({
+          ...boxRow,
+          ...(await upsertRestMovableUnitBox(ctx, auth, moveId, boxRow.unit, {
+            rowIndex: index,
+          })),
+        })
+      );
+    } catch (error) {
+      boxResults.push(
+        removeUndefined({
+          unitIndex: boxRow.unitIndex,
+          unitCountIndex: boxRow.unitCountIndex,
+          unitCount: boxRow.unitCount,
+          ok: false,
+          action: optionalString(boxRow.unit.boxId) ? "update" : "upsert",
+          boxId: optionalString(boxRow.unit.boxId),
+          code: normalizeOptionalBoxCode(boxRow.unit.code),
+          error: error instanceof Error ? error.message : "Box row failed.",
+        })
+      );
+    }
+  }
+
+  const itemResponse = itemRows.length
+    ? await routeBatchUpsertItems(
+        ctx,
+        {
+          ...args,
+          method: "POST",
+          path: `/moves/${moveId}/items/batch-upsert`,
+          body: { dryRun: false, items: itemRows },
+        },
+        auth,
+        moveId
+      )
+    : null;
+  const itemError = restResponseErrorMessage(
+    itemResponse,
+    "Loose movable-unit item batch failed."
+  );
+  const itemBody = bodyObject(itemResponse?.body);
+  const itemData = bodyObject(itemBody.data);
+  const itemResultRows = Array.isArray(itemData.results)
+    ? itemData.results.map(bodyObject)
+    : [];
+  const looseItemResults = itemError
+    ? looseItemUnits.map(({ unit, unitIndex }, itemIndex) =>
+        removeUndefined({
+          unitIndex,
+          itemIndex,
+          ok: false,
+          action: optionalString(unit.itemId) ? "update" : "create",
+          itemId: optionalString(unit.itemId),
+          name: optionalString(unit.name),
+          externalSource: optionalString(unit.externalSource),
+          externalId: optionalString(unit.externalId),
+          error: itemError,
+        })
+      )
+    : looseItemUnits.map(({ unit, unitIndex }, itemIndex) => {
+        const result = itemResultRows.find((row) => row.index === itemIndex);
+        return removeUndefined({
+          unitIndex,
+          itemIndex,
+          ok: result?.ok,
+          action: result?.action,
+          itemId: result?.itemId ?? unit.itemId,
+          name: result?.name ?? unit.name,
+          externalSource: result?.externalSource ?? unit.externalSource,
+          externalId: result?.externalId ?? unit.externalId,
+          error: result?.error,
+        });
+      });
+
+  const failed =
+    boxResults.filter((row) => row.ok === false).length +
+    looseItemResults.filter((row) => row.ok === false).length;
+
+  return restOk(
+    {
+      data: {
+        dryRun: false,
+        summary: {
+          totalUnits: boxRows.length + looseItemUnits.length,
+          boxes: boxRows.length,
+          looseItems: looseItemUnits.length,
+        },
+        boxes: boxResults,
+        items: itemData,
+        itemBatchError: itemError ?? undefined,
+        looseItems: looseItemResults,
+        nextStep:
+          "Open the Load planner Movable units tab, or call get_move_summary/get_agent_context, to review missing weights, dimensions, volume, and load assignments.",
+      },
+    },
+    failed > 0 ? 207 : 200
+  );
+}
+
+function expandRestMovableUnitBoxRows(
+  unit: Record<string, unknown>,
+  unitIndex: number
+): RestMovableUnitBoxRow[] {
+  const count = parseRestMovableUnitBoxCount(unit.count);
+  if (count > 1 && (optionalString(unit.boxId) || normalizeOptionalBoxCode(unit.code))) {
+    throw new Error(
+      `Box row index ${unitIndex} has count ${count} with an existing boxId/code. Expand coded ranges into explicit box code rows, or omit count when patching an existing box.`
+    );
+  }
+  if (count === 1) {
+    const singleUnit = { ...unit };
+    delete singleUnit.count;
+    return [{ unit: singleUnit, unitIndex }];
+  }
+
+  const baseLabel = normalizeCountedRestBoxLabel(unit.label ?? unit.name);
+  return Array.from({ length: count }, (_, index) => {
+    const expandedUnit: Record<string, unknown> = {
+      ...unit,
+      label: `${baseLabel} ${index + 1}`,
+    };
+    delete expandedUnit.count;
+    return {
+      unit: expandedUnit,
+      unitIndex,
+      unitCountIndex: index,
+      unitCount: count,
+    };
+  });
+}
+
+function parseRestMovableUnitBoxCount(count: unknown) {
+  if (count === undefined || count === null || count === "") return 1;
+  const parsed = Number(count);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+    throw new Error("Box count must be an integer from 1 to 100.");
+  }
+  return parsed;
+}
+
+function normalizeCountedRestBoxLabel(label: unknown) {
+  const cleaned = typeof label === "string" ? label.trim() : "";
+  const base = cleaned || "Box";
+  return (
+    base
+      .replace(/\bboxes\b/i, "box")
+      .replace(/\s+#?\d+$/i, "")
+      .trim() || "Box"
+  );
+}
+
+function movableUnitBoxBody(unit: Record<string, unknown>) {
+  const body = { ...unit };
+  delete body.kind;
+  delete body.boxId;
+  delete body.count;
+  if (body.label === undefined && body.name !== undefined) {
+    body.label = body.name;
+  }
+  delete body.name;
+  addRestDerivedEstimatedVolume(body);
+  return body;
+}
+
+function movableUnitLooseItemBody(unit: Record<string, unknown>) {
+  const item = { ...unit };
+  delete item.kind;
+  addRestDerivedEstimatedVolume(item);
+  const isExistingItemPatch = Boolean(optionalString(item.itemId));
+  const requiresPersonalTransport =
+    item.requiresPersonalTransport === true || item.disposition === "personalTransport";
+  const shouldSendMovableUnitTags = !isExistingItemPatch || Array.isArray(item.aiTags);
+  return {
+    ...item,
+    ...(isExistingItemPatch ? {} : { status: item.status ?? "active" }),
+    ...(isExistingItemPatch ? {} : { quantity: item.quantity ?? 1 }),
+    ...(isExistingItemPatch ? {} : { needsReview: item.needsReview ?? true }),
+    ...(isExistingItemPatch || item.disposition !== undefined
+      ? {}
+      : { disposition: requiresPersonalTransport ? "personalTransport" : "mover" }),
+    ...(requiresPersonalTransport && item.requiresPersonalTransport === undefined
+      ? { requiresPersonalTransport: true }
+      : {}),
+    ...(item.estimatedWeightLb !== undefined && item.weightConfidence === undefined
+      ? { weightConfidence: "low" }
+      : {}),
+    ...(item.dimensionsIn !== undefined && item.dimensionsConfidence === undefined
+      ? { dimensionsConfidence: "low" }
+      : {}),
+    ...(item.estimatedVolumeCuFt !== undefined && item.volumeConfidence === undefined
+      ? { volumeConfidence: "low" }
+      : {}),
+    ...(shouldSendMovableUnitTags
+      ? {
+          aiTags: uniqueRestStrings([
+            ...(Array.isArray(item.aiTags) ? item.aiTags : []),
+            "movable-unit",
+            "loose-item",
+            ...(requiresPersonalTransport ? ["personal-transport"] : []),
+          ]),
+        }
+      : {}),
+    ...(isExistingItemPatch && item.reviewFlags === undefined
+      ? {}
+      : {
+          reviewFlags: uniqueRestStrings([
+            ...(Array.isArray(item.reviewFlags) ? item.reviewFlags : []),
+            ...(isExistingItemPatch ? [] : ["movableUnitReview"]),
+          ]),
+        }),
+  };
+}
+
+async function upsertRestMovableUnitBox(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  unit: Record<string, unknown>,
+  { rowIndex }: { rowIndex: number }
+) {
+  const input = movableUnitBoxBody(unit);
+  const requestedBoxId = optionalString(unit.boxId);
+  const requestedCode = normalizeOptionalBoxCode(unit.code);
+  const existing = requestedBoxId
+    ? await requireApiBox(ctx, auth.householdId, moveId, requestedBoxId)
+    : requestedCode
+      ? await findApiBoxByCode(ctx, auth.householdId, moveId, requestedCode)
+      : null;
+
+  if (existing) {
+    const patch = boxPatch(input);
+    if (patch.code !== undefined) {
+      await assertUniqueApiBoxCode(ctx, {
+        householdId: auth.householdId,
+        moveId,
+        code: patch.code,
+        currentBoxId: existing._id,
+      });
+    }
+    await applyRestBoxAssignmentValidation(ctx, auth, moveId, existing, patch);
+    await ctx.db.patch(existing._id, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "box.api_movable_unit_updated",
+      "boxes",
+      existing._id,
+      { rowIndex, changedKeys: Object.keys(patch) }
+    );
+    return {
+      ok: true,
+      action: "update",
+      boxId: existing._id,
+      code: patch.code ?? existing.code,
+      changedKeys: Object.keys(patch),
+      matchedBy: requestedBoxId ? "boxId" : "code",
+    };
+  }
+
+  const now = Date.now();
+  const fields = restMovableUnitBoxCreateFields({
+    auth,
+    moveId,
+    body: input,
+    now,
+    fallbackCode: `API-${now}-${rowIndex + 1}`,
+  });
+  await assertUniqueApiBoxCode(ctx, {
+    householdId: auth.householdId,
+    moveId,
+    code: fields.code,
+  });
+  await assertRestBoxAssignmentRefs(ctx, auth.householdId, moveId, {
+    assignedResourceId: fields.assignedResourceId,
+    assignedZoneId: fields.assignedZoneId,
+  });
+  const boxId = await ctx.db.insert("boxes", fields);
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "box.api_movable_unit_created",
+    "boxes",
+    boxId,
+    { rowIndex, code: fields.code }
+  );
+  return {
+    ok: true,
+    action: "create",
+    boxId,
+    code: fields.code,
+  };
+}
+
+function restMovableUnitBoxCreateFields({
+  auth,
+  moveId,
+  body,
+  now,
+  fallbackCode,
+}: {
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+  moveId: Id<"moves">;
+  body: Record<string, unknown>;
+  now: number;
+  fallbackCode: string;
+}): Omit<Doc<"boxes">, "_id" | "_creationTime"> {
+  return removeUndefined({
+    householdId: auth.householdId,
+    moveId,
+    code: normalizeOptionalBoxCode(body.code) ?? normalizeBoxCode(fallbackCode),
+    label: normalizeOptionalText(asString(body.label)),
+    room: normalizeOptionalText(asString(body.room)),
+    destinationRoom: normalizeOptionalText(asString(body.destinationRoom)),
+    description: normalizeOptionalText(asString(body.description)),
+    status: parseBoxStatus(body.status) ?? "open",
+    dimensionsIn: parseDimensionsIn(body.dimensionsIn) as Doc<"boxes">["dimensionsIn"],
+    estimatedWeightLb: optionalNumber(body.estimatedWeightLb),
+    actualWeightLb: optionalNumber(body.actualWeightLb),
+    estimatedVolumeCuFt: optionalNumber(body.estimatedVolumeCuFt),
+    assignedResourceId: optionalString(body.assignedResourceId) as
+      | Id<"transportResources">
+      | undefined,
+    assignedZoneId: optionalString(body.assignedZoneId) as
+      | Id<"transportZones">
+      | undefined,
+    assignmentLocked: Boolean(body.assignmentLocked),
+    assignmentOverrideReason: normalizeOptionalText(asString(body.assignmentOverrideReason)),
+    assignmentWarnings: [],
+    assignmentHardBlocks: [],
+    assignmentValidatedAt: now,
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  }) as Omit<Doc<"boxes">, "_id" | "_creationTime">;
+}
+
+async function findApiBoxByCode(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  code: string
+) {
+  const boxes = await ctx.db
+    .query("boxes")
+    .withIndex("by_move_code", (q) => q.eq("moveId", moveId).eq("code", code))
+    .collect();
+  return (
+    boxes.find((box) => box.householdId === householdId && !box.archivedAt) ??
+    null
+  );
+}
+
+function addRestDerivedEstimatedVolume(body: Record<string, unknown>) {
+  if (body.estimatedVolumeCuFt !== undefined && body.estimatedVolumeCuFt !== null) {
+    return body;
+  }
+  const dimensions = bodyObject(body.dimensionsIn);
+  const length = optionalNumber(dimensions.lengthIn);
+  const width = optionalNumber(dimensions.widthIn);
+  const height = optionalNumber(dimensions.heightIn);
+  if (!length || !width || !height) {
+    return body;
+  }
+  body.estimatedVolumeCuFt = roundEstimate((length * width * height) / 1728);
+  return body;
+}
+
+function hasRestStableExternalItemKey(unit: Record<string, unknown>) {
+  return Boolean(optionalString(unit.externalSource) && optionalString(unit.externalId));
+}
+
+function uniqueRestStrings(values: unknown[]) {
+  return [
+    ...new Set(
+      values.filter(
+        (value): value is string => typeof value === "string" && Boolean(value.trim())
+      )
+    ),
+  ];
+}
+
+function normalizeOptionalBoxCode(code: unknown) {
+  const value = optionalString(code);
+  return value ? normalizeBoxCode(value) : undefined;
+}
+
+async function assertUniqueApiBoxCode(
+  ctx: MutationCtx,
+  {
+    householdId,
+    moveId,
+    code,
+    currentBoxId,
+  }: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    code: unknown;
+    currentBoxId?: Id<"boxes">;
+  }
+) {
+  const normalizedCode = normalizeOptionalBoxCode(code);
+  if (!normalizedCode) {
+    return;
+  }
+
+  const matches = await ctx.db
+    .query("boxes")
+    .withIndex("by_move_code", (q) =>
+      q.eq("moveId", moveId).eq("code", normalizedCode)
+    )
+    .collect();
+  const conflict = matches.find(
+    (box) =>
+      box.householdId === householdId &&
+      !box.archivedAt &&
+      box._id !== currentBoxId
+  );
+  if (!conflict) {
+    return;
+  }
+
+  throw new Error(
+    `Box code "${normalizedCode}" already exists for this move. Update the existing box instead of creating a duplicate.`
+  );
+}
+
+async function assertRestBoxAssignmentRefs(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  refs: {
+    assignedResourceId?: Id<"transportResources">;
+    assignedZoneId?: Id<"transportZones">;
+  }
+) {
+  if (!refs.assignedResourceId && !refs.assignedZoneId) {
+    return;
+  }
+  if (!refs.assignedResourceId) {
+    throw new Error("assignedResourceId is required when assignedZoneId is provided.");
+  }
+  const resource = await requireApiTransportResource(
+    ctx,
+    householdId,
+    moveId,
+    refs.assignedResourceId
+  );
+  const zone = refs.assignedZoneId
+    ? await requireApiTransportZone(ctx, householdId, moveId, refs.assignedZoneId)
+    : null;
+  if (zone && zone.resourceId !== resource._id) {
+    throw new Error("Zone does not belong to the assigned resource.");
+  }
+}
+
+async function applyRestBoxAssignmentValidation(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  existing: Doc<"boxes">,
+  patch: Partial<Doc<"boxes">>
+) {
+  const assignedResourceId = patch.assignedResourceId ?? existing.assignedResourceId;
+  const assignedZoneId = patch.assignedZoneId ?? existing.assignedZoneId;
+  if (!assignedResourceId && !assignedZoneId) {
+    return;
+  }
+  await assertRestBoxAssignmentRefs(ctx, auth.householdId, moveId, {
+    assignedResourceId,
+    assignedZoneId,
+  });
+  if (!assignedResourceId) {
+    return;
+  }
+  const nextBox = { ...existing, ...patch } as Doc<"boxes">;
+  const validation = await validateApiBoxAssignment(ctx, {
+    householdId: auth.householdId,
+    moveId,
+    box: nextBox,
+    assignedResourceId,
+    assignedZoneId,
+    overrideReason: patch.assignmentOverrideReason ?? existing.assignmentOverrideReason,
+  });
+  patch.assignmentWarnings = validation.softWarnings;
+  patch.assignmentHardBlocks = validation.hardBlocks;
+  patch.assignmentValidatedAt = Date.now();
+}
+
+function restResponseErrorMessage(response: RestResponse | null, fallback: string) {
+  if (!response || response.status < 400) {
+    return null;
+  }
+  const body = bodyObject(response.body);
+  const error = bodyObject(body.error);
+  return optionalString(error.message) ?? fallback;
 }
 
 async function routeBoxes(
@@ -8058,6 +8730,9 @@ function boxPatch(body: unknown): Partial<Doc<"boxes">> {
     patch.description = normalizeOptionalText(asString(input.description));
   }
   if (input.status !== undefined) patch.status = parseBoxStatus(input.status);
+  if (input.dimensionsIn !== undefined) {
+    patch.dimensionsIn = parseDimensionsIn(input.dimensionsIn) as Doc<"boxes">["dimensionsIn"];
+  }
   if (input.estimatedWeightLb !== undefined) {
     patch.estimatedWeightLb = optionalNumber(input.estimatedWeightLb);
   }
@@ -8066,6 +8741,24 @@ function boxPatch(body: unknown): Partial<Doc<"boxes">> {
   }
   if (input.estimatedVolumeCuFt !== undefined) {
     patch.estimatedVolumeCuFt = optionalNumber(input.estimatedVolumeCuFt);
+  }
+  if (input.assignedResourceId !== undefined) {
+    patch.assignedResourceId = optionalString(input.assignedResourceId) as
+      | Id<"transportResources">
+      | undefined;
+  }
+  if (input.assignedZoneId !== undefined) {
+    patch.assignedZoneId = optionalString(input.assignedZoneId) as
+      | Id<"transportZones">
+      | undefined;
+  }
+  if (input.assignmentLocked !== undefined) {
+    patch.assignmentLocked = Boolean(input.assignmentLocked);
+  }
+  if (input.assignmentOverrideReason !== undefined) {
+    patch.assignmentOverrideReason = normalizeOptionalText(
+      asString(input.assignmentOverrideReason)
+    );
   }
   return patch;
 }

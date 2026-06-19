@@ -1710,6 +1710,13 @@ export default defineSchema({
     hazardousFlag: v.boolean(),
     highValue: v.boolean(),
     requiresPersonalTransport: v.boolean(),
+    assignedResourceId: v.optional(v.id("transportResources")),
+    assignedZoneId: v.optional(v.id("transportZones")),
+    assignmentLocked: v.optional(v.boolean()),
+    assignmentOverrideReason: v.optional(v.string()),
+    assignmentWarnings: v.optional(v.array(v.string())),
+    assignmentHardBlocks: v.optional(v.array(v.string())),
+    assignmentValidatedAt: v.optional(v.number()),
     planningDefaultKeys: v.array(planningDefaultKey),
     needsReview: v.boolean(),
     reviewFlags: v.array(v.string()),
@@ -1733,6 +1740,7 @@ export default defineSchema({
     .index("by_move_category", ["moveId", "category"])
     .index("by_move_needs_review", ["moveId", "needsReview"])
     .index("by_move_high_value", ["moveId", "highValue"])
+    .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_household", ["householdId"]),
