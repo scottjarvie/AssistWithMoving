@@ -17,6 +17,8 @@ const publicNav = [
   { href: "/privacy", label: "Privacy" },
 ] as const;
 
+const footerNav = [...publicNav, { href: "/updates", label: "Updates" }] as const;
+
 export type PublicFeatureCard = {
   title: string;
   copy: string;
@@ -118,7 +120,7 @@ export function PublicFooter() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
         <p>{product.name} organizes move records, evidence, and documentation packets.</p>
         <div className="flex flex-wrap gap-4">
-          {publicNav.map((item) => (
+          {footerNav.map((item) => (
             <Link key={item.href} href={item.href} className="hover:text-foreground">
               {item.label}
             </Link>
