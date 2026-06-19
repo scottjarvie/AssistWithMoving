@@ -14,6 +14,25 @@ export const appVersion = packageJson.version;
 
 export const releaseEntries: ReleaseEntry[] = [
   {
+    version: "0.2.0",
+    releasedAt: "2026-06-19T21:02:00.000Z",
+    title: "MCP OAuth discovery preservation",
+    summary:
+      "MovingManifest's production MCP connection contract is now preserved and proven so AI helpers can discover the protected resource metadata while the actual MCP endpoint still requires authorization.",
+    created: [
+      "Added production proof coverage for the public OAuth protected-resource discovery document at /.well-known/oauth-protected-resource/api/mcp.",
+      "Captured the expected protected MCP behavior so unauthenticated requests to /api/mcp continue to receive an authorization challenge instead of exposing move data.",
+    ],
+    fixed: [
+      "Prevented the MCP OAuth discovery contract from regressing during deployment cleanup and release verification.",
+      "Kept public discovery metadata available without loosening access to private move, inventory, box, photo, API-key, or household data.",
+    ],
+    upgraded: [
+      "Bumped the visible application version to v0.2.0 for the production MCP/OAuth preservation release.",
+      "Improved the release trail for agent-facing integrations by tying the public discovery URL, protected MCP endpoint, and production proof into one user-visible update.",
+    ],
+  },
+  {
     version: "0.1.0",
     releasedAt: "2026-06-19T13:05:05.000Z",
     title: "Initial release-log baseline",

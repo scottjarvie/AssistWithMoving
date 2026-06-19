@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appVersion,
   formatReleaseTimestamp,
+  latestRelease,
   releaseEntries,
 } from "@/lib/release-notes";
 
 describe("release notes", () => {
+  it("keeps the visible app version aligned to the latest release entry", () => {
+    expect(appVersion).toBe("0.2.0");
+    expect(latestRelease.version).toBe("0.2.0");
+    expect(releaseEntries[0].version).toBe("0.2.0");
+  });
+
   it("uses canonical releasedAt timestamps for every entry", () => {
     expect(releaseEntries.length).toBeGreaterThan(0);
 
@@ -19,6 +27,9 @@ describe("release notes", () => {
   });
 
   it("renders release date, time, and timezone for visible updates entries", () => {
+    expect(formatReleaseTimestamp("2026-06-19T21:02:00.000Z")).toBe(
+      "June 19, 2026, 5:02 PM EDT",
+    );
     expect(formatReleaseTimestamp("2026-06-19T13:05:05.000Z")).toBe(
       "June 19, 2026, 9:05 AM EDT",
     );
