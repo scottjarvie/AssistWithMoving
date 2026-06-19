@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
@@ -87,5 +87,40 @@ describe("WorkspaceNav", () => {
     expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/plan");
     expect(layoutLink).toHaveClass("h-10");
     expect(layoutLink).toHaveAttribute("aria-current", "page");
+  });
+
+  it("routes locked dashboard section links to create-move setup", () => {
+    mockState.pathname = "/app/dashboard";
+
+    render(<WorkspaceNav />);
+
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute(
+      "href",
+      "/app/dashboard"
+    );
+    expect(screen.getByRole("link", { name: "Capture" })).toHaveAttribute(
+      "href",
+      "/app/dashboard#create-move"
+    );
+    expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
+      "href",
+      "/app/dashboard#create-move"
+    );
+  });
+
+  it("dispatches dashboard setup hash changes when already on the dashboard", () => {
+    mockState.pathname = "/app/dashboard";
+    window.history.replaceState(null, "", "/app/dashboard");
+    const hashChangeListener = vi.fn();
+    window.addEventListener("hashchange", hashChangeListener);
+
+    render(<WorkspaceNav />);
+    fireEvent.click(screen.getByRole("link", { name: "Capture" }));
+
+    expect(window.location.pathname).toBe("/app/dashboard");
+    expect(window.location.hash).toBe("#create-move");
+    expect(hashChangeListener).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener("hashchange", hashChangeListener);
   });
 });
