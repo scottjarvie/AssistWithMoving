@@ -41,6 +41,11 @@ export const membershipStatus = v.union(
   v.literal("disabled")
 );
 
+export const memberApiAccessStatus = v.union(
+  v.literal("enabled"),
+  v.literal("disabled")
+);
+
 export const householdInvitationStatus = v.union(
   v.literal("invited"),
   v.literal("accepted"),
@@ -786,6 +791,7 @@ export default defineSchema({
     role: householdRole,
     status: membershipStatus,
     invitedEmail: v.optional(v.string()),
+    apiAccessStatus: v.optional(memberApiAccessStatus),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
