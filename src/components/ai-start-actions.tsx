@@ -8,7 +8,17 @@ import { LockKeyhole, RefreshCw, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 export function AiStartActions() {
+  if (!clerkPublishableKey) {
+    return <AiStartLinks />;
+  }
+
+  return <ClerkAwareAiStartActions />;
+}
+
+function ClerkAwareAiStartActions() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useAuth();
 
@@ -38,6 +48,12 @@ export function AiStartActions() {
     );
   }
 
+  return (
+    <AiStartLinks />
+  );
+}
+
+function AiStartLinks() {
   return (
     <div className="flex flex-col gap-3 sm:flex-row">
       <Button asChild size="lg">
