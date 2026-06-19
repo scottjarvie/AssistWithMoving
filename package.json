@@ -27,6 +27,7 @@
     "doctor:mcp-discovery": "node scripts/mcp-readonly-discovery-proof.mjs",
     "doctor:all": "npm run doctor:launch && npm run doctor:vercel-env && npm run doctor:vercel-preview-env && npm run doctor:release && npm run doctor:convex-env && npm run doctor:convex-dev-env && npm run doctor:storage && npm run doctor:webhooks",
     "doctor:next": "node scripts/launch-next-steps.mjs",
+    "mcp:doctor": "node scripts/mcp-oauth-discovery-proof.mjs --endpoint https://movingmanifest.com/api/mcp",
     "mcp": "node ./mcp-server/movingmanifest-mcp.mjs",
     "seed": "node scripts/seed.mjs"
   },
