@@ -1,5 +1,6 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -53,6 +54,27 @@ export function WorkspaceNav({
   const mobile = variant === "mobile";
   const navItems = workspaceNavItems(workspace?.featureFlags);
 
+  function handleDashboardSetupClick(
+    event: MouseEvent<HTMLAnchorElement>,
+    href: string
+  ) {
+    if (pathname !== "/app/dashboard" || href !== "/app/dashboard#create-move") {
+      return;
+    }
+
+    event.preventDefault();
+    const oldURL = window.location.href;
+    window.history.pushState(null, "", href);
+    const hashChangeEvent =
+      typeof HashChangeEvent === "function"
+        ? new HashChangeEvent("hashchange", {
+            oldURL,
+            newURL: window.location.href,
+          })
+        : new Event("hashchange");
+    window.dispatchEvent(hashChangeEvent);
+  }
+
   return (
     <nav
       aria-label="Primary"
@@ -82,6 +104,7 @@ export function WorkspaceNav({
               active && "bg-sidebar-accent text-sidebar-accent-foreground"
             )}
             aria-current={active ? "page" : undefined}
+            onClick={(event) => handleDashboardSetupClick(event, href)}
           >
             <Icon className="size-4" aria-hidden="true" />
             {item.label}

@@ -7,10 +7,14 @@ import {
 import { workspaceNavItems } from "../../src/lib/workspace-nav-items";
 
 describe("workspace nav links", () => {
-  it("uses dashboard links outside a specific move workspace", () => {
+  it("routes section links to move setup outside a specific move workspace", () => {
     expect(workspaceBasePathFromPathname("/app/dashboard")).toBe("/app/dashboard");
-    // No move selected means there is no section page to open yet.
-    expect(workspaceNavHref("/settings", "inventory")).toBe("/app/dashboard");
+    expect(workspaceNavHref("/settings")).toBe("/app/dashboard");
+    // No move selected means there is no section page to open yet, so route
+    // people to the task that unlocks move-specific pages.
+    expect(workspaceNavHref("/settings", "inventory")).toBe(
+      "/app/dashboard#create-move"
+    );
   });
 
   it("links sections as real pages inside a move workspace", () => {
