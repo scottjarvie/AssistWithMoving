@@ -47,6 +47,8 @@ export function PhotoUploadControl({
   privacyLevel = "normal",
   visibilityScope = "moveCollaborators",
   multiple = false,
+  uploadDisabled = false,
+  uploadDisabledMessage,
   onUploaded,
 }: PhotoUploadTarget & {
   label?: string;
@@ -54,6 +56,8 @@ export function PhotoUploadControl({
   privacyLevel?: "normal" | "private";
   visibilityScope?: "moveCollaborators" | "private";
   multiple?: boolean;
+  uploadDisabled?: boolean;
+  uploadDisabledMessage?: string;
   onUploaded?: (photo: UploadedPhoto) => void;
 }) {
   const initUpload = useAction(api.photos.initUpload);
@@ -267,7 +271,9 @@ export function PhotoUploadControl({
     Boolean(status) &&
     /cancelled|failed|rejected|not configured/i.test(status ?? "");
 
-  const canSelectFiles = Boolean(householdId && moveId && !uploading);
+  const canSelectFiles = Boolean(
+    householdId && moveId && !uploading && !uploadDisabled,
+  );
   const visibleFiles = files.slice(0, 3);
   const hiddenFileCount = Math.max(files.length - visibleFiles.length, 0);
 
@@ -318,7 +324,11 @@ export function PhotoUploadControl({
             onChange={handleFileChange}
           />
 
-          {selectedCount > 0 ? (
+          {uploadDisabled && uploadDisabledMessage ? (
+            <div className="mt-3 rounded-md border border-border/70 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+              {uploadDisabledMessage}
+            </div>
+          ) : selectedCount > 0 ? (
             <div className="mt-3 space-y-2">
               <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <FileImage className="size-3.5" aria-hidden="true" />
@@ -360,7 +370,7 @@ export function PhotoUploadControl({
             <Button
               type="button"
               size="sm"
-              disabled={files.length === 0 || uploading}
+              disabled={files.length === 0 || uploading || uploadDisabled}
               onClick={() => void handleUpload()}
             >
               <Upload aria-hidden="true" />

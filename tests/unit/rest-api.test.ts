@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { Id } from "../../convex/_generated/dataModel";
+import { routeMovableUnits } from "../../convex/restApi";
+
 import {
   bearerToken,
   bodyRecord,
@@ -78,6 +81,12 @@ describe("REST API helpers", () => {
       requiredScopesForRestRoute({
         method: "POST",
         segments: ["moves", "move1", "items", "batch-upsert"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["moves", "move1", "movable-units", "batch-upsert"],
       })
     ).toEqual(["inventory/write"]);
     expect(
@@ -657,4 +666,312 @@ describe("REST API helpers", () => {
       },
     });
   });
+  it("dry-runs movable-unit batch-upsert with counted boxes and stable loose items", async () => {
+    const response = await routeMovableUnits(
+      {} as never,
+      movableUnitsRequest({
+        dryRun: true,
+        units: [
+          {
+            kind: "box",
+            label: "Medium boxes",
+            count: 2,
+            dimensionsIn: { lengthIn: 18, widthIn: 18, heightIn: 16 },
+            estimatedWeightLb: 30,
+          },
+          {
+            kind: "looseItem",
+            name: "Treadmill",
+            externalSource: "agent-rough-list",
+            externalId: "treadmill-main",
+            dimensionsIn: { lengthIn: 70, widthIn: 32, heightIn: 58 },
+          },
+        ],
+      }),
+      restTestAuth,
+      restTestMoveId,
+      "batch-upsert"
+    );
+
+    expect(response.status).toBe(200);
+    const data = responseData(response);
+    expect(data.summary).toEqual({ totalUnits: 3, boxes: 2, looseItems: 1 });
+    expect(data.requests).toHaveLength(3);
+    expect(data.requests[0]).toMatchObject({
+      method: "POST",
+      path: "/moves/" + restTestMoveId + "/boxes",
+      unitIndex: 0,
+      unitCountIndex: 0,
+      unitCount: 2,
+      body: {
+        label: "Medium box 1",
+        estimatedWeightLb: 30,
+        estimatedVolumeCuFt: 3,
+      },
+    });
+    expect(data.requests[1]).toMatchObject({
+      body: {
+        label: "Medium box 2",
+        estimatedVolumeCuFt: 3,
+      },
+    });
+    expect(data.requests[2]).toMatchObject({
+      method: "POST",
+      path: "/moves/" + restTestMoveId + "/items/batch-upsert",
+      unitIndexes: [1],
+      body: {
+        dryRun: true,
+        items: [
+          expect.objectContaining({
+            name: "Treadmill",
+            externalSource: "agent-rough-list",
+            externalId: "treadmill-main",
+            status: "active",
+            quantity: 1,
+            needsReview: true,
+            disposition: "mover",
+            estimatedVolumeCuFt: 75.2,
+            dimensionsConfidence: "low",
+            volumeConfidence: "low",
+            reviewFlags: ["movableUnitReview"],
+            aiTags: ["movable-unit", "loose-item"],
+          }),
+        ],
+      },
+    });
+    expect(data.warnings?.[0]).toContain("idempotencyKey");
+  });
+
+  it("requires stable loose-item keys and refuses counted existing boxes", async () => {
+    const missingKey = await routeMovableUnits(
+      {} as never,
+      movableUnitsRequest({
+        dryRun: true,
+        units: [{ kind: "looseItem", name: "Unkeyed item" }],
+      }),
+      restTestAuth,
+      restTestMoveId,
+      "batch-upsert"
+    );
+    expect(missingKey.status).toBe(400);
+    expect(responseError(missingKey)).toMatchObject({ code: "stable_key_required" });
+
+    const countedExisting = await routeMovableUnits(
+      {} as never,
+      movableUnitsRequest({
+        dryRun: true,
+        units: [{ kind: "box", code: "B-001", count: 2 }],
+      }),
+      restTestAuth,
+      restTestMoveId,
+      "batch-upsert"
+    );
+    expect(countedExisting.status).toBe(400);
+    expect(responseError(countedExisting)).toMatchObject({ code: "validation_error" });
+    expect(responseError(countedExisting).message).toContain("count 2");
+  });
+
+  it("live-upserts rough movable units and preserves unit index mapping", async () => {
+    const { ctx, patches, inserts } = restRouteTestCtx({
+      box_rough_1: restTestBox({
+        _id: "box_rough_1" as Id<"boxes">,
+        code: "B-001",
+      }),
+      item_rough_1: restTestItem({
+        _id: "item_rough_1" as Id<"items">,
+        name: "Old treadmill label",
+        normalizedName: "old treadmill label",
+      }),
+    });
+
+    const response = await routeMovableUnits(
+      ctx,
+      movableUnitsRequest({
+        idempotencyKey: "rough-batch-1",
+        units: [
+          {
+            kind: "box",
+            boxId: "box_rough_1",
+            label: "Garage rough box",
+            dimensionsIn: { lengthIn: 24, widthIn: 18, heightIn: 18 },
+            estimatedWeightLb: 42,
+          },
+          {
+            kind: "looseItem",
+            itemId: "item_rough_1",
+            name: "Treadmill",
+            dimensionsIn: { lengthIn: 70, widthIn: 32, heightIn: 58 },
+            estimatedWeightLb: 190,
+          },
+        ],
+      }),
+      restTestAuth,
+      restTestMoveId,
+      "batch-upsert"
+    );
+
+    expect(response.status).toBe(200);
+    const data = responseData(response);
+    expect(data.summary).toEqual({ totalUnits: 2, boxes: 1, looseItems: 1 });
+    expect(data.boxes).toMatchObject([
+      {
+        unitIndex: 0,
+        ok: true,
+        action: "update",
+        boxId: "box_rough_1",
+        code: "B-001",
+        matchedBy: "boxId",
+      },
+    ]);
+    expect(data.looseItems).toMatchObject([
+      {
+        unitIndex: 1,
+        itemIndex: 0,
+        ok: true,
+        action: "update",
+        itemId: "item_rough_1",
+      },
+    ]);
+    expect(patches.find((patch) => patch.id === "box_rough_1")?.patch).toMatchObject({
+      label: "Garage rough box",
+      dimensionsIn: { lengthIn: 24, widthIn: 18, heightIn: 18 },
+      estimatedWeightLb: 42,
+      estimatedVolumeCuFt: 4.5,
+    });
+    expect(patches.find((patch) => patch.id === "item_rough_1")?.patch).toMatchObject({
+      name: "Treadmill",
+      normalizedName: "treadmill",
+      dimensionsIn: { lengthIn: 70, widthIn: 32, heightIn: 58 },
+      estimatedWeightLb: 190,
+      estimatedVolumeCuFt: 75.2,
+    });
+    expect(inserts.filter((insert) => insert.table === "auditLogs")).toHaveLength(2);
+  });
+
 });
+
+
+type RestTestRecord = Record<string, unknown> & { _id: string };
+type MovableUnitsResponseData = Record<string, unknown> & {
+  summary: Record<string, unknown>;
+  requests: Array<Record<string, unknown>>;
+  warnings?: string[];
+  boxes: Array<Record<string, unknown>>;
+  looseItems: Array<Record<string, unknown>>;
+};
+
+const restTestMoveId = "move_rest_test" as Id<"moves">;
+const restTestHouseholdId = "household_rest_test" as Id<"households">;
+const restTestUserId = "user_rest_test" as Id<"users">;
+
+const restTestAuth = {
+  householdId: restTestHouseholdId,
+  createdByUserId: restTestUserId,
+  apiKeyId: "api_key_rest_test",
+  apiKeyName: "REST test key",
+  apiKeyTokenPreview: "mmk_test",
+  actor: { apiKeyId: "api_key_rest_test" },
+} as never;
+
+function movableUnitsRequest(body: unknown) {
+  return {
+    method: "POST" as const,
+    path: "/moves/" + restTestMoveId + "/movable-units/batch-upsert",
+    query: {},
+    body,
+  };
+}
+
+function responseData(response: { body: unknown }) {
+  return bodyRecord(response.body).data as MovableUnitsResponseData;
+}
+
+function responseError(response: { body: unknown }) {
+  return bodyRecord(bodyRecord(response.body).error) as Record<string, string>;
+}
+
+function restRouteTestCtx(records: Record<string, RestTestRecord>) {
+  const store = new Map(Object.entries(records));
+  const patches: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  const inserts: Array<{ table: string; id: string; value: Record<string, unknown> }> = [];
+  const ctx = {
+    db: {
+      get: async (id: string) => store.get(String(id)) ?? null,
+      patch: async (id: string, patch: Record<string, unknown>) => {
+        patches.push({ id: String(id), patch });
+        const current = store.get(String(id)) ?? ({ _id: String(id) } as RestTestRecord);
+        store.set(String(id), { ...current, ...patch });
+      },
+      insert: async (table: string, value: Record<string, unknown>) => {
+        const id = table + "_" + (inserts.length + 1);
+        inserts.push({ table, id, value });
+        store.set(id, { _id: id, _creationTime: Date.now(), ...value });
+        return id;
+      },
+      query: () => ({
+        withIndex: () => ({
+          order: () => ({ collect: async () => [] }),
+          collect: async () => [],
+          first: async () => null,
+        }),
+        order: () => ({ collect: async () => [] }),
+        collect: async () => [],
+      }),
+    },
+  };
+  return { ctx: ctx as never, patches, inserts };
+}
+
+function restTestBox(overrides: Partial<RestTestRecord> = {}) {
+  const now = Date.now();
+  return {
+    _id: "box_rest_test",
+    _creationTime: now,
+    householdId: restTestHouseholdId,
+    moveId: restTestMoveId,
+    code: "B-REST",
+    status: "open",
+    assignmentLocked: false,
+    assignmentWarnings: [],
+    assignmentHardBlocks: [],
+    assignmentValidatedAt: now,
+    createdByUserId: restTestUserId,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  } as RestTestRecord;
+}
+
+function restTestItem(overrides: Partial<RestTestRecord> = {}) {
+  const now = Date.now();
+  return {
+    _id: "item_rest_test",
+    _creationTime: now,
+    householdId: restTestHouseholdId,
+    moveId: restTestMoveId,
+    name: "Rest test item",
+    normalizedName: "rest test item",
+    disposition: "mover",
+    status: "active",
+    quantity: 1,
+    condition: "unknown",
+    dimensionsConfidence: "none",
+    weightConfidence: "none",
+    volumeConfidence: "none",
+    fragility: "low",
+    stackable: true,
+    hazardousFlag: false,
+    highValue: false,
+    requiresPersonalTransport: false,
+    planningDefaultKeys: [],
+    needsReview: false,
+    reviewFlags: [],
+    aiTags: [],
+    createdVia: "api",
+    createdByUserId: restTestUserId,
+    updatedByUserId: restTestUserId,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  } as RestTestRecord;
+}

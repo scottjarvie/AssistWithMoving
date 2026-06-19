@@ -5,7 +5,11 @@ export default async function BoxLookupPage({
   searchParams,
 }: {
   params: Promise<{ boxId: string }>;
-  searchParams: Promise<{ householdId?: string; moveId?: string }>;
+  searchParams: Promise<{
+    householdId?: string;
+    moveId?: string;
+    returnTo?: string;
+  }>;
 }) {
   const [{ boxId }, query] = await Promise.all([params, searchParams]);
 
@@ -14,6 +18,7 @@ export default async function BoxLookupPage({
       boxId={boxId}
       householdId={query.householdId}
       moveId={query.moveId}
+      returnTo={query.returnTo}
     />
   );
 }

@@ -4,6 +4,11 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
+  requiresOverrideReason,
+  validateAssignment,
+} from "./lib/assignmentValidation";
+import { estimateItem } from "./lib/estimateEngine";
+import {
   dimensionsValidator,
   estimateConfidenceValidator,
   itemConditionValidator,
@@ -97,6 +102,12 @@ const itemWriteArgs = {
   hazardousFlag: v.optional(v.boolean()),
   highValue: v.optional(v.boolean()),
   requiresPersonalTransport: v.optional(v.boolean()),
+  assignedResourceId: v.optional(v.id("transportResources")),
+  assignedZoneId: v.optional(v.id("transportZones")),
+  assignmentLocked: v.optional(v.boolean()),
+  assignmentOverrideReason: v.optional(v.string()),
+  clearAssignedResource: v.optional(v.boolean()),
+  clearAssignedZone: v.optional(v.boolean()),
   planningDefaultKeys: v.optional(v.array(planningDefaultKeyValidator)),
   needsReview: v.optional(v.boolean()),
   reviewFlags: v.optional(v.array(v.string())),
@@ -388,6 +399,154 @@ async function assertItemSpaceTargets(
   }
 }
 
+function mergeCapacity(
+  resourceCapacity: Doc<"transportResources">["capacity"],
+  zoneCapacity?: Doc<"transportZones">["capacity"],
+) {
+  if (!zoneCapacity) {
+    return resourceCapacity;
+  }
+
+  return {
+    maxWeightLb: minOptional(
+      resourceCapacity.maxWeightLb,
+      zoneCapacity.maxWeightLb,
+    ),
+    maxVolumeCuFt: minOptional(
+      resourceCapacity.maxVolumeCuFt,
+      zoneCapacity.maxVolumeCuFt,
+    ),
+    maxItemCount: minOptional(
+      resourceCapacity.maxItemCount,
+      zoneCapacity.maxItemCount,
+    ),
+    dimensions: {
+      lengthIn: minOptional(
+        resourceCapacity.dimensions?.lengthIn,
+        zoneCapacity.dimensions?.lengthIn,
+      ),
+      widthIn: minOptional(
+        resourceCapacity.dimensions?.widthIn,
+        zoneCapacity.dimensions?.widthIn,
+      ),
+      heightIn: minOptional(
+        resourceCapacity.dimensions?.heightIn,
+        zoneCapacity.dimensions?.heightIn,
+      ),
+    },
+    weightIsUnlimited:
+      resourceCapacity.weightIsUnlimited === true &&
+      zoneCapacity.weightIsUnlimited === true,
+    volumeIsUnlimited:
+      resourceCapacity.volumeIsUnlimited === true &&
+      zoneCapacity.volumeIsUnlimited === true,
+  };
+}
+
+function minOptional(first?: number, second?: number) {
+  if (typeof first !== "number") return second;
+  if (typeof second !== "number") return first;
+  return Math.min(first, second);
+}
+
+async function loadItemAssignmentValidation(
+  ctx: MutationCtx,
+  args: {
+    moveId: Id<"moves">;
+    item: {
+      name: string;
+      category?: string;
+      quantity?: number;
+      dimensionsIn?: Doc<"items">["dimensionsIn"];
+      estimatedWeightLb?: number;
+      estimatedWeightLowLb?: number;
+      estimatedWeightHighLb?: number;
+      actualWeightLb?: number;
+      estimatedVolumeCuFt?: number;
+      estimatedPackedVolumeCuFt?: number;
+      weightConfidence?: Doc<"items">["weightConfidence"];
+      volumeConfidence?: Doc<"items">["volumeConfidence"];
+      fragility?: Doc<"items">["fragility"];
+      highValue?: boolean;
+      planningDefaultKeys?: string[];
+      requiresPersonalTransport?: boolean;
+      hazardousFlag?: boolean;
+    };
+    assignedResourceId?: Id<"transportResources">;
+    assignedZoneId?: Id<"transportZones">;
+    assignmentOverrideReason?: string;
+    enforce?: boolean;
+  },
+) {
+  if (!args.assignedResourceId) {
+    return {
+      assignmentWarnings: [],
+      assignmentHardBlocks: [],
+      assignmentValidatedAt: Date.now(),
+    };
+  }
+
+  const [resource, zone] = await Promise.all([
+    ctx.db.get(args.assignedResourceId),
+    args.assignedZoneId
+      ? ctx.db.get(args.assignedZoneId)
+      : Promise.resolve(null),
+  ]);
+  if (!resource || resource.moveId !== args.moveId || resource.archivedAt) {
+    throw new Error("Invalid transport resource.");
+  }
+  if (
+    args.assignedZoneId &&
+    (!zone ||
+      zone.moveId !== args.moveId ||
+      zone.resourceId !== args.assignedResourceId ||
+      zone.archivedAt)
+  ) {
+    throw new Error("Invalid transport zone.");
+  }
+
+  const estimate = estimateItem(args.item);
+  const validation = validateAssignment({
+    box: {
+      estimatedWeightLb: estimate.weight?.value ?? 0,
+      estimatedVolumeCuFt: estimate.volume?.value ?? 0,
+      dimensionsIn: args.item.dimensionsIn,
+      itemCount: args.item.quantity ?? 1,
+      hasFragile: args.item.fragility === "high",
+      hasHighValue: Boolean(args.item.highValue),
+      hasSensitive: Boolean(
+        args.item.planningDefaultKeys?.includes("sensitive"),
+      ),
+      hasPersonalTransport: Boolean(args.item.requiresPersonalTransport),
+      hasHazardous: Boolean(args.item.hazardousFlag),
+    },
+    target: {
+      resourceType: resource.type,
+      capacity: mergeCapacity(resource.capacity, zone?.capacity),
+    },
+  });
+
+  if (args.enforce !== false) {
+    if (validation.hardBlocks.length) {
+      throw new Error(
+        `Assignment blocked: ${validation.hardBlocks.join(", ")}`,
+      );
+    }
+    if (
+      requiresOverrideReason(validation) &&
+      !normalizeOptionalText(args.assignmentOverrideReason)
+    ) {
+      throw new Error("Assignment warnings require an override reason.");
+    }
+  }
+
+  return {
+    assignmentWarnings: validation.softWarnings,
+    assignmentHardBlocks: validation.hardBlocks,
+    assignmentValidatedAt: Date.now(),
+  };
+}
+
 export const listForMove = query({
   args: itemListArgs,
   handler: async (ctx, args) => {
@@ -539,6 +698,22 @@ export const listForMoveWithSignals = query({
       }
     }
 
+    for (const item of visibleItems) {
+      if (!item.assignedResourceId && !item.assignedZoneId) {
+        continue;
+      }
+      const signals = signalsForItem(signalsByItemId, item._id);
+      signals.assignmentCount += 1;
+      const resource = item.assignedResourceId
+        ? resourceById.get(String(item.assignedResourceId))
+        : null;
+      const zone = item.assignedZoneId
+        ? zoneById.get(String(item.assignedZoneId))
+        : null;
+      pushUnique(signals.assignedResourceNames, resource?.name);
+      pushUnique(signals.assignedZoneNames, zone?.name);
+    }
+
     return visibleItems.map((item) => ({
       ...redactItemForVisibility(item, policy.visibility),
       signals: signalsByItemId.get(String(item._id)) ?? defaultItemSignals(),
@@ -576,6 +751,31 @@ export const create = mutation({
       moveId: args.moveId,
       currentSpaceId: args.currentSpaceId,
       destinationSpaceId: args.destinationSpaceId,
+    });
+    const assignmentValidation = await loadItemAssignmentValidation(ctx, {
+      moveId: args.moveId,
+      item: {
+        name: args.name,
+        category: args.category,
+        quantity: args.quantity,
+        dimensionsIn: args.dimensionsIn,
+        estimatedWeightLb: args.estimatedWeightLb,
+        estimatedWeightLowLb: args.estimatedWeightLowLb,
+        estimatedWeightHighLb: args.estimatedWeightHighLb,
+        actualWeightLb: args.actualWeightLb,
+        estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+        estimatedPackedVolumeCuFt: args.estimatedPackedVolumeCuFt,
+        weightConfidence: args.weightConfidence,
+        volumeConfidence: args.volumeConfidence,
+        fragility: args.fragility,
+        highValue: args.highValue,
+        planningDefaultKeys: args.planningDefaultKeys,
+        requiresPersonalTransport: args.requiresPersonalTransport,
+        hazardousFlag: args.hazardousFlag,
+      },
+      assignedResourceId: args.assignedResourceId,
+      assignedZoneId: args.assignedZoneId,
+      assignmentOverrideReason: args.assignmentOverrideReason,
     });
 
     const now = Date.now();
@@ -623,6 +823,13 @@ export const create = mutation({
       hazardousFlag: args.hazardousFlag ?? false,
       highValue: args.highValue ?? false,
       requiresPersonalTransport: args.requiresPersonalTransport ?? false,
+      assignedResourceId: args.assignedResourceId,
+      assignedZoneId: args.assignedZoneId,
+      assignmentLocked: args.assignmentLocked ?? false,
+      assignmentOverrideReason: normalizeOptionalText(
+        args.assignmentOverrideReason,
+      ),
+      ...assignmentValidation,
       planningDefaultKeys: args.planningDefaultKeys ?? [],
       needsReview: args.needsReview ?? false,
       reviewFlags: normalizeStringList(args.reviewFlags),
@@ -808,6 +1015,75 @@ export const update = mutation({
     }
     if (args.planningDefaultKeys !== undefined) {
       patch.planningDefaultKeys = args.planningDefaultKeys;
+    }
+    if (args.assignedResourceId !== undefined) {
+      patch.assignedResourceId = args.assignedResourceId;
+    }
+    if (args.assignedZoneId !== undefined) {
+      patch.assignedZoneId = args.assignedZoneId;
+    }
+    if (args.assignmentLocked !== undefined) {
+      patch.assignmentLocked = args.assignmentLocked;
+    }
+    if (args.assignmentOverrideReason !== undefined) {
+      patch.assignmentOverrideReason = normalizeOptionalText(
+        args.assignmentOverrideReason,
+      );
+    }
+    if (args.clearAssignedResource) {
+      patch.assignedResourceId = undefined;
+      patch.assignedZoneId = undefined;
+      patch.assignmentWarnings = [];
+      patch.assignmentHardBlocks = [];
+      patch.assignmentValidatedAt = now;
+    } else if (args.clearAssignedZone) {
+      patch.assignedZoneId = undefined;
+    }
+    const nextAssignedResourceId =
+      args.clearAssignedResource === true
+        ? undefined
+        : (patch.assignedResourceId ?? item.assignedResourceId);
+    if (nextAssignedResourceId) {
+      const validation = await loadItemAssignmentValidation(ctx, {
+        moveId: args.moveId,
+        item: {
+          name: patch.name ?? item.name,
+          category: patch.category ?? item.category,
+          quantity: patch.quantity ?? item.quantity,
+          dimensionsIn: patch.dimensionsIn ?? item.dimensionsIn,
+          estimatedWeightLb:
+            patch.estimatedWeightLb ?? item.estimatedWeightLb,
+          estimatedWeightLowLb:
+            patch.estimatedWeightLowLb ?? item.estimatedWeightLowLb,
+          estimatedWeightHighLb:
+            patch.estimatedWeightHighLb ?? item.estimatedWeightHighLb,
+          actualWeightLb: patch.actualWeightLb ?? item.actualWeightLb,
+          estimatedVolumeCuFt:
+            patch.estimatedVolumeCuFt ?? item.estimatedVolumeCuFt,
+          estimatedPackedVolumeCuFt:
+            patch.estimatedPackedVolumeCuFt ??
+            item.estimatedPackedVolumeCuFt,
+          weightConfidence: patch.weightConfidence ?? item.weightConfidence,
+          volumeConfidence: patch.volumeConfidence ?? item.volumeConfidence,
+          fragility: patch.fragility ?? item.fragility,
+          highValue: patch.highValue ?? item.highValue,
+          planningDefaultKeys:
+            patch.planningDefaultKeys ?? item.planningDefaultKeys,
+          requiresPersonalTransport:
+            patch.requiresPersonalTransport ?? item.requiresPersonalTransport,
+          hazardousFlag: patch.hazardousFlag ?? item.hazardousFlag,
+        },
+        assignedResourceId: nextAssignedResourceId,
+        assignedZoneId:
+          args.clearAssignedZone === true
+            ? undefined
+            : (patch.assignedZoneId ?? item.assignedZoneId),
+        assignmentOverrideReason:
+          patch.assignmentOverrideReason ?? item.assignmentOverrideReason,
+      });
+      patch.assignmentWarnings = validation.assignmentWarnings;
+      patch.assignmentHardBlocks = validation.assignmentHardBlocks;
+      patch.assignmentValidatedAt = validation.assignmentValidatedAt;
     }
     if (args.needsReview !== undefined) {
       patch.needsReview = args.needsReview;
