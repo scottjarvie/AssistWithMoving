@@ -1716,6 +1716,7 @@ export default defineSchema({
     privateNotes: v.optional(v.string()),
     aiSummary: v.optional(v.string()),
     aiTags: v.array(v.string()),
+    agentLabel: v.optional(v.string()),
     createdVia: itemCreatedVia,
     reviewedAt: v.optional(v.number()),
     createdByUserId: v.id("users"),
