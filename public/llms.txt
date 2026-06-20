@@ -7,10 +7,10 @@ Primary site: https://movingmanifest.com
 ## Best Pages For AI Assistants
 
 - https://movingmanifest.com/ai - human-friendly guide for using MovingManifest with Claude, ChatGPT, Codex, or another assistant.
-- https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to create/sign in and make a helper key.
+- https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to sign in, connect hosted MCP OAuth, or make a fallback helper key.
 - https://movingmanifest.com/api - public REST API overview, scopes, and assistant workflow.
 - https://movingmanifest.com/mcp - public MCP setup overview (remote endpoint for hosted assistants, npx server for local agents).
-- https://movingmanifest.com/api/mcp - remote MCP endpoint (Streamable HTTP). Authenticate with `Authorization: Bearer mmk_...`.
+- https://movingmanifest.com/api/mcp - remote MCP endpoint (Streamable HTTP). OAuth-capable hosted clients should connect by URL and follow browser sign-in; API keys are fallback auth.
 - https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
 - https://movingmanifest.com/llms-full.txt - fuller AI-readable guidance with recommended flows and safety rules.
 
@@ -22,8 +22,8 @@ Primary site: https://movingmanifest.com
   helper key, send them to `https://movingmanifest.com/ai/start`.
 - A good first user prompt is: "Go to movingmanifest.com/ai and help me set up
   my move. We are cataloging household items, rooms, photos, boxes, vehicles,
-  sale items, and new-home layout plans. If you need private access, walk me
-  through creating an account and an AI helper key."
+  sale items, and new-home layout plans. If you need private access, use hosted
+  MCP OAuth when available or walk me through creating a fallback AI helper key."
 - Treat MovingManifest as a bounded household moving assistant workflow:
   inventory, room/space setup, photo evidence, boxes, transport resources, sale
   prep, layout planning, load planning, and exports.
@@ -35,15 +35,18 @@ Primary site: https://movingmanifest.com
 - Do not confuse household members with move people/contact records. Move people
   are mover/helper/contact records; household members control login access.
 - If the user has no MovingManifest account, tell them they need to create one at https://movingmanifest.com/sign-up before private move data can be stored.
-- Do not invent access to private data. Private move data requires user login or a user-created API key.
+- Do not invent access to private data. Private move data requires hosted MCP
+  OAuth sign-in or a user-created fallback API key.
 - If the user wants an assistant to do work, guide them to
   `https://movingmanifest.com/ai/start`, then have them sign in or create an
-  account, choose a helper preset, create the key, copy the one-time secret, and
-  paste it only into an assistant they trust.
+  account. For OAuth-capable hosted MCP clients, paste only the endpoint URL and
+  follow browser sign-in. Create and paste a fallback helper key only when OAuth
+  MCP is not available.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
 - Hosted MCP clients (claude.ai custom connectors, Claude Cowork) should use the
-  remote endpoint `https://movingmanifest.com/api/mcp` with the API key as the
-  bearer token. No local install is needed.
+  remote endpoint `https://movingmanifest.com/api/mcp`. OAuth-capable clients
+  should connect by URL and follow browser sign-in. If OAuth MCP is unavailable,
+  use a scoped helper key as the bearer token. No local install is needed.
 - For Codex users with local shell access, configure MCP with:
   `codex mcp add movingmanifest --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- npx -y movingmanifest-mcp`.
   Restart Codex or start a fresh session, verify `movingmanifest` appears in
@@ -51,6 +54,10 @@ Primary site: https://movingmanifest.com
   similar clients use the same `npx -y movingmanifest-mcp` command in their
   JSON MCP config.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
+- Start MCP work with `get_api_capabilities`, then `get_api_context`, then
+  `list_moves` or `setup_move`. Hosted OAuth defaults to a trusted-helper tool
+  surface; local/API-key connections can expose broader tools when the user
+  intentionally grants them.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
 - For image upload, use one call by default. MCP agents should call
   `upload_image`, `upload_photo`, or `upload_evidence_image` with a local `filePath`, public
@@ -62,8 +69,9 @@ Primary site: https://movingmanifest.com
   `add_item_from_photo` so the item is created. Set quantity only when the user
   says it or the photo clearly shows a count; otherwise omit quantity so it
   defaults to 1. Missing weight/size/disposition/condition do not block capture, the
-  photo attaches to that item, and web derivatives are created server-side. Use
-  `create_item_with_images` when one new item has several photos. When photos
+  photo attaches to that item, and web derivatives are created server-side. If
+  one new item has several photos, create the item from the clearest photo and
+  then attach the remaining photos after resolving the item. When photos
   should attach to an item that already exists, first resolve the item with
   `get_agent_context` or `get_move_summary`, then call `upload_photos` with the
   existing `itemId`, shared room/type/privacy defaults, and one image entry per
@@ -106,6 +114,20 @@ Primary site: https://movingmanifest.com
 - Ask explicitly before sensitive actions: marking items for sale, exporting
   packets, granting household access, exposing private details, or using an API
   key.
+
+## Hosted MCP Tool Surface
+
+The hosted OAuth default is a trusted-helper surface. It should include normal
+move-helper tools such as `get_api_capabilities`, `get_api_context`,
+`list_moves`, `setup_move`, `get_move_summary`, `get_agent_context`,
+`search_inventory`, `save_box_intake`, `add_item_from_photo`,
+`batch_upsert_items`, photo/evidence uploads, space helpers, assignment helpers,
+and planned-item helpers.
+
+Do not assume hosted OAuth exposes sale, export, household-member management, or
+low-level item/box primitives by default. Those broader categories belong to
+local/API-key setups only when the user intentionally grants them. Always trust
+`get_api_capabilities` over old public examples.
 
 ## Common Workflows
 

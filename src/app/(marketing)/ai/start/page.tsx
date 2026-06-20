@@ -19,11 +19,13 @@ export const metadata: Metadata = {
 };
 
 const keyOptions = [
-  "Add items and photos",
-  "Set up a household and move",
-  "Full trusted access",
-  "Read-only access",
+  "Hosted MCP OAuth",
+  "Fallback helper key",
+  "Move-restricted access",
+  "Read-only fallback",
 ];
+
+const remoteMcpEndpoint = "https://movingmanifest.com/api/mcp";
 
 export default function AiStartPage() {
   return (
@@ -38,8 +40,9 @@ export default function AiStartPage() {
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               MovingManifest saves the move. Your AI assistant can help fill it
-              in. You only need to sign in, create a connection, copy the
-              one-time key, and paste it back into the AI chat you trust.
+              in. You only need to sign in and connect the assistant. Use hosted
+              MCP OAuth when your assistant supports it; create a fallback key
+              only for local or non-OAuth tools.
             </p>
             <div className="mt-7">
               <AiStartActions />
@@ -64,9 +67,9 @@ export default function AiStartPage() {
             <ol className="mt-4 space-y-3">
               {[
                 "Create or sign into your account.",
-                "Choose what your assistant can do.",
-                "Click Create key and copy the one-time secret.",
-                "Paste it back into your AI assistant.",
+                "Paste the MCP endpoint into an OAuth-capable assistant.",
+                "Sign in and approve the connection.",
+                "Use a fallback helper key only if OAuth is unavailable.",
               ].map((step, index) => (
                 <li
                   key={step}
@@ -109,14 +112,30 @@ export default function AiStartPage() {
           </div>
           <div className="rounded-md border border-border p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
+              <Bot className="size-4 text-primary" aria-hidden="true" />
+              Hosted MCP endpoint
+            </div>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/35 p-3 font-mono text-xs leading-5 text-muted-foreground">
+              {remoteMcpEndpoint}
+            </pre>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Paste this URL into hosted MCP clients that support browser
+              sign-in. The hosted OAuth tool surface is intentionally narrower
+              than the local/API-key surface and prefers workflow tools such as
+              save_box_intake.
+            </p>
+          </div>
+          <div className="rounded-md border border-border p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
               <ShieldAlert className="size-4 text-primary" aria-hidden="true" />
               Use the key carefully
             </div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              A full trusted key can read and change your move data. Only paste
-              it into an assistant you trust. Do not put it in public chats,
-              screenshots, issues, or documents. You can revoke it later in
-              Settings.
+              A fallback key can read and change your move data according to
+              its scopes. Only paste it into an assistant you trust when hosted
+              OAuth is not available. Do not put keys in public chats,
+              screenshots, issues, or documents. You can revoke connections and
+              keys later in Settings.
             </p>
             <Link
               href="/ai"
