@@ -19,6 +19,7 @@ function smokeContext() {
           "moves/write",
           "inventory/read",
           "inventory/write",
+          "exports/read",
           "photos/write",
         ],
         moveRestricted: false,
@@ -37,6 +38,7 @@ function moveScopedSmokeContext() {
           "moves/write",
           "inventory/read",
           "inventory/write",
+          "exports/read",
           "photos/write",
         ],
         moveRestricted: false,
@@ -207,6 +209,40 @@ describe("agent journey smoke script", () => {
       })
     ).rejects.toThrow(
       "Smoke API key is move-restricted; use a household-scoped smoke key so setup_move can create a throwaway move."
+    );
+
+    expect(api.setupMove).not.toHaveBeenCalled();
+    expect(api.movingManifestRequest).not.toHaveBeenCalled();
+  });
+
+  it("rejects a key missing exports/read before setup writes", async () => {
+    const api = smokeApi();
+    api.getApiContext.mockResolvedValueOnce({
+      data: {
+        household: { householdId: "household1", name: "Smoke Household" },
+        apiKey: {
+          scopes: [
+            "moves/read",
+            "moves/write",
+            "inventory/read",
+            "inventory/write",
+            "photos/write",
+          ],
+          moveRestricted: false,
+        },
+      },
+    });
+
+    await expect(
+      runAgentJourneySmoke({
+        env: {
+          SMOKE_TEST_API_KEY: "mmk_smoke",
+          SMOKE_TEST_ALLOW_PRODUCTION_WRITES: "true",
+        } as unknown as NodeJS.ProcessEnv,
+        api: api as unknown as SmokeApi,
+      })
+    ).rejects.toThrow(
+      "Smoke API key is missing required scope(s): exports/read"
     );
 
     expect(api.setupMove).not.toHaveBeenCalled();

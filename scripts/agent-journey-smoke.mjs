@@ -25,6 +25,7 @@ const requiredScopes = [
   "moves/write",
   "inventory/read",
   "inventory/write",
+  "exports/read",
   "photos/write",
 ];
 
