@@ -54,11 +54,19 @@ export function WorkspaceNav({
   const mobile = variant === "mobile";
   const navItems = workspaceNavItems(workspace?.featureFlags);
 
-  function handleDashboardSetupClick(
+  function handleDashboardHashNavigation(
     event: MouseEvent<HTMLAnchorElement>,
     href: string
   ) {
-    if (pathname !== "/app/dashboard" || href !== "/app/dashboard#create-move") {
+    if (pathname !== "/app/dashboard") {
+      return;
+    }
+
+    const navigatingToSetup = href === "/app/dashboard#create-move";
+    const clearingSetupHash =
+      href === "/app/dashboard" && window.location.hash.length > 0;
+
+    if (!navigatingToSetup && !clearingSetupHash) {
       return;
     }
 
@@ -104,7 +112,7 @@ export function WorkspaceNav({
               active && "bg-sidebar-accent text-sidebar-accent-foreground"
             )}
             aria-current={active ? "page" : undefined}
-            onClick={(event) => handleDashboardSetupClick(event, href)}
+            onClick={(event) => handleDashboardHashNavigation(event, href)}
           >
             <Icon className="size-4" aria-hidden="true" />
             {item.label}
