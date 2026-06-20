@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 const starterPrompt =
-  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If I provide photos, upload the originals through the easiest image/photo tool and let MovingManifest create web-ready versions. If you need private access, walk me through creating an account and an AI helper key.";
+  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If I provide photos, upload the originals through the easiest image/photo tool and let MovingManifest create web-ready versions. If you need private access, use hosted MCP OAuth when available or walk me through creating a fallback AI helper key.";
 
 const quickCapabilities = [
   {
@@ -46,7 +46,7 @@ const quickCapabilities = [
   },
   {
     title: "Use structured tools",
-    copy: "With a key you create, it can use the API or MCP instead of asking you to click every field.",
+    copy: "With hosted MCP OAuth or a key you create, it can use structured tools instead of asking you to click every field.",
     icon: Bot,
   },
 ];
@@ -54,8 +54,8 @@ const quickCapabilities = [
 const setupSteps = [
   "Tell your assistant to open this page.",
   "Create or sign into your MovingManifest account.",
-  "Create an AI helper key and copy it once.",
-  "Paste the key only into an assistant you trust.",
+  "Use hosted MCP OAuth when your assistant supports it.",
+  "Create a fallback AI helper key only when OAuth is not available.",
 ];
 
 const examplePrompts = [
@@ -91,9 +91,10 @@ export default function AiAssistantPage() {
               If an AI sent you here, start with the setup page.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The setup page keeps the human part short: sign in, create a key,
-              copy it, and return to your assistant. The assistant can read the
-              deeper docs when it needs them.
+              The setup page keeps the human part short: sign in, connect with
+              hosted MCP OAuth when available, or create a fallback key for
+              local/headless tools. The assistant can read the deeper docs when
+              it needs them.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button asChild>
@@ -225,7 +226,7 @@ function AssistantVisual() {
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
             Human part
           </p>
-          <p className="mt-1 text-lg font-semibold">Create the key once</p>
+          <p className="mt-1 text-lg font-semibold">Connect the assistant</p>
         </div>
         <Badge>
           <KeyRound aria-hidden="true" />
@@ -235,8 +236,8 @@ function AssistantVisual() {
       <div className="mt-4 space-y-3">
         {[
           ["1", "Sign in or create an account."],
-          ["2", "Choose what the assistant can do."],
-          ["3", "Copy the one-time key."],
+          ["2", "Connect hosted MCP with OAuth when available."],
+          ["3", "Create a fallback key only when needed."],
           ["4", "Return to the AI chat."],
         ].map(([step, copy]) => (
           <div
@@ -257,7 +258,7 @@ function AssistantVisual() {
         </span>
         <p className="mt-2 text-muted-foreground">
           Your assistant only gets the access you choose, and you can revoke the
-          key later.
+          connection or key later.
         </p>
       </div>
       <Button asChild className="mt-4 w-full">

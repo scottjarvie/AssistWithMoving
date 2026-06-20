@@ -15,7 +15,9 @@ import {
   PublicBand,
   PublicPageChrome,
 } from "@/components/public-page-chrome";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "MovingManifest MCP",
@@ -26,12 +28,12 @@ export const metadata: Metadata = {
 const mcpCards = [
   {
     title: "Tool-based move work",
-    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. save_box_intake captures one packed box with dimensions, weight, photos, described contents, and existing item IDs in one call.",
+    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, and capacity checks. Hosted OAuth defaults to a trusted-helper surface for normal move help.",
     icon: Bot,
   },
   {
     title: "Hosted or local",
-    copy: "Hosted assistants (claude.ai, Claude Cowork) connect to the remote endpoint at https://movingmanifest.com/api/mcp with an API key. Desktop agents can instead run the local server via npx movingmanifest-mcp. Both expose the same tools.",
+    copy: "Hosted assistants connect to https://movingmanifest.com/api/mcp and sign in with MovingManifest OAuth when the client supports it. Desktop agents can instead run the local server via npx movingmanifest-mcp with a scoped key.",
     icon: Laptop,
   },
   {
@@ -41,38 +43,50 @@ const mcpCards = [
   },
   {
     title: "Scoped credentials",
-    copy: "Use separate keys for separate assistants. With members/manage, assistants can add existing members or create pending email invitations.",
+    copy: "OAuth connections and API keys are revocable. Use API keys for local/headless automation, and use separate keys for separate assistants when OAuth is not available.",
     icon: KeyRound,
   },
   {
     title: "Batch over chatty loops",
-    copy: "The MCP tool list favors coarse operations such as setup_move, save_box_intake, and batch_upsert_items so agents use fewer tokens and make fewer mistakes.",
+    copy: "The MCP tool list favors workflow operations such as setup_move, save_box_intake, batch_upsert_items, and apply_assignments so agents use fewer tokens and make fewer mistakes.",
     icon: Cable,
   },
   {
     title: "Human permission remains clear",
-    copy: "The public docs tell assistants not to invent access. Private move data requires the user to sign in and share a key intentionally.",
+    copy: "The public docs tell assistants not to invent access. Private move data requires the user to sign in with OAuth or intentionally create a scoped helper key.",
     icon: ShieldCheck,
   },
 ];
 
-const toolGroups = [
-  "get_api_capabilities and get_api_context",
-  "list_moves, create_move, setup_move",
-  "list_household_members and add_household_member, including pending invitations",
-  "get_agent_context and get_move_questions",
-  "search_inventory, create_item, add_item_from_photo, batch_upsert_items, update_item",
-  "list_move_spaces and create_move_space",
-  "create_item_with_images, upload_image, upload_images, upload_photo, upload_photos, upload_evidence_image, upload_evidence_images, upload_evidence_file, start_photo_upload, finalize_photo_upload, attach_photo",
-  "upsert_sale_listing",
-  "plan_get, plan_apply_ops, plan_propose_ops, plan_snapshot",
-  "save_box_intake, create_box, add_items_to_box, suggest_assignments, apply_assignments",
-  "create_export, list_exports, download_export",
+const trustedHelperToolGroups = [
+  "Start here: get_api_capabilities, get_api_context",
+  "Move context: list_moves, setup_move, get_move_summary, get_agent_context, get_move_questions, get_move_day_checklist",
+  "Inventory workflows: search_inventory, save_box_intake, add_item_from_photo, batch_upsert_items",
+  "Box workflow: save_box_intake for one box, dimensions, weight, photos, described contents, and linked existing items",
+  "Photos and evidence: upload_photo, upload_photos, upload_evidence_image, upload_evidence_images",
+  "Spaces and planning: list_move_spaces, create_move_space, suggest_assignments, apply_assignments",
+  "Move-day and planning helpers: list_planned_items, create_planned_item, update_planned_item",
+];
+
+const localExtendedToolGroups = [
+  "Move creation and local setup for headless automations",
+  "Detailed item and box primitives for advanced partial workflows",
+  "Sale-prep workflows when the user grants that scope intentionally",
+  "Export and share workflows when the user grants documentation access",
+  "Household collaborator management for admin-approved local helpers",
+  "Layout Studio operations for plan review and editing",
+  "Raw upload sessions for clients that cannot use workflow photo tools",
 ];
 
 const remoteEndpointUrl = "https://movingmanifest.com/api/mcp";
 
-const remoteCurlExample = `POST https://movingmanifest.com/api/mcp
+const remoteOAuthExample = `Paste this MCP URL into an OAuth-capable hosted client:
+https://movingmanifest.com/api/mcp
+
+The client discovers Clerk auth from:
+/.well-known/oauth-protected-resource/api/mcp`;
+
+const remoteApiKeyFallbackExample = `POST https://movingmanifest.com/api/mcp
 Authorization: Bearer mmk_replace_with_a_scoped_api_key`;
 
 const codexCliCommand = `codex mcp add movingmanifest \\
@@ -103,11 +117,40 @@ export default function McpPage() {
     <PublicPageChrome
       eyebrow="Model Context Protocol"
       title="Connect capable assistants to MovingManifest tools."
-      description="For AI apps that support MCP, MovingManifest provides a local MCP server that wraps the REST API with move-aware tools. The user still controls account creation, key creation, and revocation."
+      description="For AI apps that support MCP, MovingManifest provides a hosted OAuth MCP endpoint and a local MCP server that wrap the REST API with move-aware tools. The user still controls sign-in, connection access, API-key fallback, and revocation."
+      primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
+      secondaryAction={{ href: "/settings/ai-connections", label: "AI connections" }}
       visual={<McpVisual />}
     >
       <PublicBand>
         <FeatureGrid cards={mcpCards} />
+      </PublicBand>
+
+      <PublicBand>
+        <div className="grid gap-5 rounded-md border border-primary/25 bg-primary/5 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div>
+            <Badge variant="secondary">Hosted connection</Badge>
+            <h2 className="mt-3 text-xl font-semibold tracking-normal">
+              Paste the MCP URL, then sign in.
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              OAuth-capable hosted assistants can connect without the user
+              handling a raw secret. Settings manages revocation and API-key
+              fallback for local or headless tools.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/settings/ai-connections">
+                Open AI connections
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/ai/start">Start setup</Link>
+            </Button>
+          </div>
+        </div>
       </PublicBand>
 
       <PublicBand>
@@ -120,26 +163,34 @@ export default function McpPage() {
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               claude.ai, Claude Cowork, and other hosted MCP clients cannot run
               a local process. Add MovingManifest as a custom connector using
-              the remote endpoint and a scoped API key — no install required.
+              the remote endpoint. OAuth-capable clients open MovingManifest
+              sign-in and consent instead of asking the user to paste a key.
             </p>
           </div>
           <div className="rounded-md border border-border bg-card p-4">
-            <p className="mb-3 text-sm font-medium">Remote MCP endpoint</p>
-            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
-              {remoteEndpointUrl}
-            </pre>
-            <p className="mt-4 text-sm font-medium">
-              Authentication (Streamable HTTP)
-            </p>
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
-              {remoteCurlExample}
-            </pre>
+            <SnippetBlock
+              title="Remote MCP endpoint"
+              text={remoteEndpointUrl}
+              buttonLabel="Copy endpoint"
+            />
+            <SnippetBlock
+              title="OAuth-capable hosted clients"
+              text={remoteOAuthExample}
+              buttonLabel="Copy OAuth setup"
+            />
+            <SnippetBlock
+              title="API-key fallback"
+              text={remoteApiKeyFallbackExample}
+              buttonLabel="Copy fallback"
+            />
             <p className="mt-4 text-xs leading-5 text-muted-foreground">
               In claude.ai or Claude Cowork: Settings → Connectors → Add custom
-              connector, paste the endpoint URL, and supply the API key as the
-              bearer token. Clients that cannot set headers may append
-              ?key=mmk_... to the URL, but header auth is recommended. Create
-              and revoke keys at Settings → AI Connections in MovingManifest.
+              connector and paste the endpoint URL. If the client does not
+              support OAuth, create a scoped helper key and supply it as the
+              bearer token. Do not paste raw keys into OAuth-capable hosted
+              clients. Clients that cannot set headers may append ?key=mmk_...
+              to the URL for temporary fallback, but header auth is safer
+              because URLs can be logged.
             </p>
           </div>
         </div>
@@ -155,10 +206,10 @@ export default function McpPage() {
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Desktop and CLI agents (Claude Desktop, Claude Code, Codex) can
               run the server locally with npx — no repo clone needed. The local
-              and remote servers expose identical tools, so configs are
-              interchangeable. Household collaborators can be invited by email
-              before they create an account, then access activates when they
-              sign in with that email.
+              server can use the broader API-key tool surface. Hosted OAuth is
+              narrower by default so a mobile or hosted assistant gets trusted
+              move-helper powers without also receiving export, sale, household
+              admin, or lower-level workflow primitives.
             </p>
           </div>
           <div className="rounded-md border border-border bg-card p-4">
@@ -193,28 +244,82 @@ export default function McpPage() {
       <PublicBand>
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
+            <Badge variant="secondary">Tool surfaces</Badge>
             <h2 className="text-2xl font-semibold tracking-normal">
-              Tool categories.
+              Hosted OAuth is deliberately narrower.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The detailed local tool list is in the repo docs and in
-              get_api_capabilities. Public discovery files point assistants here
-              first so they choose the right tool group.
+              The hosted OAuth launch surface is a trusted-helper set: enough
+              for move setup, item intake, photos, boxes, transport planning,
+              and review, without publicly advertising sale, export, household
+              admin, or low-level box primitives as hosted-default tools.
             </p>
           </div>
-          <div className="grid gap-2 md:grid-cols-2">
-            {toolGroups.map((group) => (
-              <div
-                key={group}
-                className="rounded-md border border-border p-3 font-mono text-xs"
-              >
-                {group}
+          <div className="grid gap-6 md:grid-cols-2">
+            <section>
+              <h3 className="text-sm font-semibold tracking-normal">
+                Hosted OAuth trusted-helper surface
+              </h3>
+              <div className="mt-3 divide-y divide-border border-y border-border">
+                {trustedHelperToolGroups.map((group) => (
+                  <p
+                    key={group}
+                    className="py-3 font-mono text-xs leading-5 text-muted-foreground"
+                  >
+                    {group}
+                  </p>
+                ))}
               </div>
-            ))}
+            </section>
+            <section>
+              <h3 className="text-sm font-semibold tracking-normal">
+                Local/API-key extended surface
+              </h3>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Available when a user intentionally grants a broader local or
+                API-key connection.
+              </p>
+              <div className="mt-3 divide-y divide-border border-y border-border">
+                {localExtendedToolGroups.map((group) => (
+                  <p
+                    key={group}
+                    className="py-3 font-mono text-xs leading-5 text-muted-foreground"
+                  >
+                    {group}
+                  </p>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       </PublicBand>
     </PublicPageChrome>
+  );
+}
+
+function SnippetBlock({
+  title,
+  text,
+  buttonLabel,
+}: {
+  title: string;
+  text: string;
+  buttonLabel: string;
+}) {
+  return (
+    <div className="mt-4 first:mt-0">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-medium">{title}</p>
+        <CopyTextButton
+          text={text}
+          label={buttonLabel}
+          ariaLabel={`Copy ${title}`}
+        />
+      </div>
+      <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/35 p-3 font-mono text-xs leading-5 text-muted-foreground">
+        {text}
+      </pre>
+    </div>
   );
 }
 
@@ -235,10 +340,10 @@ function McpVisual() {
       </div>
       <div className="mt-4 space-y-3">
         {[
-          ["1", "User creates a MovingManifest account and key."],
+          ["1", "User signs in to MovingManifest."],
           ["2", "Assistant connects via the hosted MCP URL or a local npx server."],
-          ["3", "Assistant calls structured tools, including pending household invites."],
-          ["4", "User can revoke the key when finished."],
+          ["3", "Hosted OAuth clients ask for consent; local clients use a scoped key."],
+          ["4", "User can revoke the connection or key when finished."],
         ].map(([step, copy]) => (
           <div
             key={step}
