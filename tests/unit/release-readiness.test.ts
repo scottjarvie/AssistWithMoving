@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  agentJourneySmokeScriptResult,
   buildCommandResult,
   expectedVercelConvexBuildCommand,
   releaseReadinessResults,
@@ -26,9 +27,34 @@ describe("release readiness", () => {
 
   it("reports release readiness from parsed Vercel config", () => {
     expect(
-      releaseReadinessResults({
-        buildCommand: expectedVercelConvexBuildCommand,
-      })
-    ).toHaveLength(1);
+      releaseReadinessResults(
+        {
+          buildCommand: expectedVercelConvexBuildCommand,
+        },
+        {
+          scripts: {
+            "smoke:agent-journey": "node scripts/agent-journey-smoke.mjs",
+          },
+        }
+      )
+    ).toEqual([
+      expect.objectContaining({
+        status: "pass",
+        label: "Vercel Convex build command",
+      }),
+      expect.objectContaining({
+        status: "pass",
+        label: "Agent journey smoke script",
+      }),
+    ]);
+  });
+
+  it("fails when the release gate loses the agent journey smoke script", () => {
+    expect(agentJourneySmokeScriptResult({ scripts: {} })).toEqual({
+      status: "fail",
+      label: "Agent journey smoke script",
+      detail:
+        "package scripts must include smoke:agent-journey = node scripts/agent-journey-smoke.mjs.",
+    });
   });
 });
