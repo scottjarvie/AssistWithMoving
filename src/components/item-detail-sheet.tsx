@@ -712,13 +712,21 @@ export function ItemDetailSheet({
                   moveId={moveId}
                   itemId={item._id}
                   room={item.room}
-                  label="Item photos"
+                  label="Other Photos"
                   multiple
                 />
+                <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  The main item photo is already used as the thumbnail. Add
+                  extra angles, labels, condition shots, and evidence photos
+                  here.
+                </p>
                 <PhotoEvidenceStrip
                   householdId={householdId}
                   moveId={moveId}
                   itemId={item._id}
+                  omitFirstPhoto
+                  label="Other photos"
+                  emptyLabel="No other photos yet."
                 />
               </TabsContent>
 
