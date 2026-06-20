@@ -123,4 +123,20 @@ describe("WorkspaceNav", () => {
 
     window.removeEventListener("hashchange", hashChangeListener);
   });
+
+  it("clears dashboard setup hash changes when Dashboard is clicked", () => {
+    mockState.pathname = "/app/dashboard";
+    window.history.replaceState(null, "", "/app/dashboard#create-move");
+    const hashChangeListener = vi.fn();
+    window.addEventListener("hashchange", hashChangeListener);
+
+    render(<WorkspaceNav />);
+    fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
+
+    expect(window.location.pathname).toBe("/app/dashboard");
+    expect(window.location.hash).toBe("");
+    expect(hashChangeListener).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener("hashchange", hashChangeListener);
+  });
 });
