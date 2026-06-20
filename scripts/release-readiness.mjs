@@ -29,12 +29,36 @@ export function buildCommandResult(buildCommand) {
   };
 }
 
-export function releaseReadinessResults(vercelConfig) {
-  return [buildCommandResult(vercelConfig?.buildCommand)];
+export function agentJourneySmokeScriptResult(packageJson) {
+  const command = packageJson?.scripts?.["smoke:agent-journey"];
+  const normalizedCommand =
+    typeof command === "string" ? command.replaceAll("\\", "/") : "";
+  if (normalizedCommand.includes("scripts/agent-journey-smoke.mjs")) {
+    return {
+      status: "pass",
+      label: "Agent journey smoke script",
+      detail: "package scripts include the env-gated public API/MCP journey smoke.",
+    };
+  }
+
+  return {
+    status: "fail",
+    label: "Agent journey smoke script",
+    detail:
+      "package scripts must include smoke:agent-journey that runs scripts/agent-journey-smoke.mjs.",
+  };
+}
+
+export function releaseReadinessResults(vercelConfig, packageJson = {}) {
+  return [
+    buildCommandResult(vercelConfig?.buildCommand),
+    agentJourneySmokeScriptResult(packageJson),
+  ];
 }
 
 export async function main() {
   let vercelConfig;
+  let packageJson;
   try {
     vercelConfig = JSON.parse(readFileSync("vercel.json", "utf8"));
   } catch (error) {
@@ -45,8 +69,18 @@ export async function main() {
     );
     return;
   }
+  try {
+    packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+  } catch (error) {
+    record(
+      "fail",
+      "Package scripts",
+      error instanceof Error ? error.message : "Could not read package.json"
+    );
+    return;
+  }
 
-  results.push(...releaseReadinessResults(vercelConfig));
+  results.push(...releaseReadinessResults(vercelConfig, packageJson));
 }
 
 async function runCli() {

@@ -78,6 +78,29 @@ curl -X DELETE "https://movingmanifest.com/api/v1/items/ITEM_ID?moveId=MOVE_ID" 
   -H "Idempotency-Key: item-delete-001"
 ```
 
+## Agent Journey Smoke
+
+`npm run smoke:agent-journey` runs the canonical public API/MCP journey through
+the reusable Node client. It verifies the API key context, creates a labeled
+`[SMOKE] agent-journey ...` move, batch-upserts idempotent inventory rows,
+uploads and attaches a photo fixture, packs five items into a box, reads the
+summary, and archives the smoke move in cleanup.
+
+The command is intentionally env-gated:
+
+```bash
+SMOKE_TEST_API_KEY=mmk_dedicated_smoke_key \
+MOVINGMANIFEST_API_BASE_URL=https://preview-or-local.example/api/v1 \
+npm run smoke:agent-journey
+```
+
+If neither `SMOKE_TEST_API_KEY` nor `MOVINGMANIFEST_API_KEY` is set, the command
+skips without writing. When pointed at `https://movingmanifest.com/api/v1`, it
+also requires `SMOKE_TEST_ALLOW_PRODUCTION_WRITES=true`; use that only with a
+dedicated household-scoped smoke key and clearly synthetic test data. Never run
+the smoke with a real customer move-restricted key, and never paste secret values
+into logs, issues, or PR descriptions.
+
 ## Errors
 
 Errors return JSON:
