@@ -14,6 +14,24 @@ describe("release notes", () => {
     expect(releaseEntries[0].version).toBe("0.2.0");
   });
 
+  it("exposes the Item detail Other Photos gallery as the latest entry", () => {
+    expect(latestRelease).toBe(releaseEntries[0]);
+    expect(latestRelease.title).toBe("Item detail Other Photos gallery");
+    expect(latestRelease.releasedAt).toBe("2026-06-20T15:54:20.000Z");
+
+    const otherPhotosCopy = [
+      latestRelease.summary,
+      ...latestRelease.created,
+      ...latestRelease.fixed,
+      ...latestRelease.upgraded,
+    ].join(" ");
+
+    expect(otherPhotosCopy).toContain("Other Photos");
+    expect(otherPhotosCopy).toContain("No other photos yet");
+    expect(otherPhotosCopy).toContain("Photos page");
+    expect(otherPhotosCopy.toLowerCase()).toContain("main item image");
+  });
+
   it("uses canonical releasedAt timestamps for every entry", () => {
     expect(releaseEntries.length).toBeGreaterThan(0);
 

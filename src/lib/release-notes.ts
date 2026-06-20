@@ -15,6 +15,23 @@ export const appVersion = packageJson.version;
 export const releaseEntries: ReleaseEntry[] = [
   {
     version: "0.2.0",
+    releasedAt: "2026-06-20T15:54:20.000Z",
+    title: "Item detail Other Photos gallery",
+    summary:
+      "The item detail Evidence tab now shows an Other Photos gallery so the extra photos you upload for an item are visible alongside its main image, without exposing any private move, household, or account data.",
+    created: [
+      "Added an Other Photos gallery to the item detail Evidence tab so additional item photos are visible beneath the main item image.",
+      "Showed a No other photos yet message for items that only have a main thumbnail, with guidance to upload more photos from the Photos page.",
+    ],
+    fixed: [
+      "Stopped the current main item image from being duplicated in the Other Photos list so the hero thumbnail and the extra photos stay distinct.",
+    ],
+    upgraded: [
+      "Improved item evidence review by surfacing all of an item's uploaded photos in one place while keeping private move, inventory, and credential data out of the view.",
+    ],
+  },
+  {
+    version: "0.2.0",
     releasedAt: "2026-06-19T21:02:00.000Z",
     title: "MCP OAuth discovery preservation",
     summary:
