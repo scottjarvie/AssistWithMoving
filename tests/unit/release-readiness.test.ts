@@ -49,12 +49,31 @@ describe("release readiness", () => {
     ]);
   });
 
+  it("allows benign agent journey smoke script command variations", () => {
+    for (const command of [
+      "node ./scripts/agent-journey-smoke.mjs",
+      "node scripts/agent-journey-smoke.mjs --mock-api",
+      "cross-env NODE_ENV=test node scripts\\agent-journey-smoke.mjs",
+    ]) {
+      expect(
+        agentJourneySmokeScriptResult({
+          scripts: { "smoke:agent-journey": command },
+        })
+      ).toEqual({
+        status: "pass",
+        label: "Agent journey smoke script",
+        detail:
+          "package scripts include the env-gated public API/MCP journey smoke.",
+      });
+    }
+  });
+
   it("fails when the release gate loses the agent journey smoke script", () => {
     expect(agentJourneySmokeScriptResult({ scripts: {} })).toEqual({
       status: "fail",
       label: "Agent journey smoke script",
       detail:
-        "package scripts must include smoke:agent-journey = node scripts/agent-journey-smoke.mjs.",
+        "package scripts must include smoke:agent-journey that runs scripts/agent-journey-smoke.mjs.",
     });
   });
 });

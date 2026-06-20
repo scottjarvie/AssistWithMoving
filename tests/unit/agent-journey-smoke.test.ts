@@ -27,6 +27,25 @@ function smokeContext() {
   };
 }
 
+function moveScopedSmokeContext() {
+  return {
+    data: {
+      household: { householdId: "household1", name: "Smoke Household" },
+      apiKey: {
+        scopes: [
+          "moves/read",
+          "moves/write",
+          "inventory/read",
+          "inventory/write",
+          "photos/write",
+        ],
+        moveRestricted: false,
+        moveId: "move-scoped-key",
+      },
+    },
+  };
+}
+
 function smokeApi() {
   const firstBatchResults = Array.from({ length: 10 }, (_, index) => ({
     ok: true,
@@ -172,6 +191,26 @@ describe("agent journey smoke script", () => {
         body: { status: "archived" },
       }
     );
+  });
+
+  it("rejects a move-scoped key even when moveRestricted is false", async () => {
+    const api = smokeApi();
+    api.getApiContext.mockResolvedValueOnce(moveScopedSmokeContext());
+
+    await expect(
+      runAgentJourneySmoke({
+        env: {
+          SMOKE_TEST_API_KEY: "mmk_smoke",
+          SMOKE_TEST_ALLOW_PRODUCTION_WRITES: "true",
+        } as unknown as NodeJS.ProcessEnv,
+        api: api as unknown as SmokeApi,
+      })
+    ).rejects.toThrow(
+      "Smoke API key is move-restricted; use a household-scoped smoke key so setup_move can create a throwaway move."
+    );
+
+    expect(api.setupMove).not.toHaveBeenCalled();
+    expect(api.movingManifestRequest).not.toHaveBeenCalled();
   });
 
   it("runs the canonical agent journey with synthetic fixtures", async () => {

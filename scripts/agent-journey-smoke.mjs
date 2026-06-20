@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   addItemsToBox,
@@ -15,7 +15,10 @@ import {
 } from "../mcp-server/movingmanifest-api.mjs";
 
 const defaultBaseUrl = "https://movingmanifest.com/api/v1";
-const fixturePath = path.resolve(process.cwd(), "tests/fixtures/smoke-image.png.base64");
+const fixturePath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../tests/fixtures/smoke-image.png.base64"
+);
 const productionWriteConfirmationEnv = "SMOKE_TEST_ALLOW_PRODUCTION_WRITES";
 const requiredScopes = [
   "moves/read",
@@ -72,11 +75,10 @@ function apiKeyScopes(context) {
 function apiKeyMoveRestriction(context) {
   const payload = contextPayload(context);
   return (
-    payload.apiKey?.moveRestricted ??
-    payload.apiKey?.moveId ??
-    payload.key?.moveRestricted ??
-    payload.key?.moveId ??
-    false
+    Boolean(payload.apiKey?.moveRestricted) ||
+    Boolean(payload.apiKey?.moveId) ||
+    Boolean(payload.key?.moveRestricted) ||
+    Boolean(payload.key?.moveId)
   );
 }
 

@@ -31,7 +31,9 @@ export function buildCommandResult(buildCommand) {
 
 export function agentJourneySmokeScriptResult(packageJson) {
   const command = packageJson?.scripts?.["smoke:agent-journey"];
-  if (command === "node scripts/agent-journey-smoke.mjs") {
+  const normalizedCommand =
+    typeof command === "string" ? command.replaceAll("\\", "/") : "";
+  if (normalizedCommand.includes("scripts/agent-journey-smoke.mjs")) {
     return {
       status: "pass",
       label: "Agent journey smoke script",
@@ -43,7 +45,7 @@ export function agentJourneySmokeScriptResult(packageJson) {
     status: "fail",
     label: "Agent journey smoke script",
     detail:
-      "package scripts must include smoke:agent-journey = node scripts/agent-journey-smoke.mjs.",
+      "package scripts must include smoke:agent-journey that runs scripts/agent-journey-smoke.mjs.",
   };
 }
 
