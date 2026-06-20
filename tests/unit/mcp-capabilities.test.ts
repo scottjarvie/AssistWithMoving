@@ -8,6 +8,8 @@ import {
   MOVINGMANIFEST_API_CAPABILITIES,
 } from "../../mcp-server/capabilities.mjs";
 import {
+  MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
+  createAllowedToolFilter,
   planOpSchema,
   registerTools,
 } from "../../mcp-server/movingmanifest-mcp.mjs";
@@ -80,7 +82,7 @@ function duplicateTopLevelKeys(objectLines: string[]) {
   return [...duplicates];
 }
 
-function collectToolRegistrations() {
+function collectToolRegistrations(options?: { allowedToolNames?: readonly string[] }) {
   const registrations = new Map<
     string,
     {
@@ -102,7 +104,8 @@ function collectToolRegistrations() {
     {
       baseUrl: "https://example.com/api/v1",
       apiKey: "mmk_test_secret",
-    }
+    },
+    options
   );
 
   return registrations;
@@ -227,6 +230,207 @@ describe("MovingManifest MCP capability discovery", () => {
         ]),
       }),
     );
+  });
+
+  it("advertises save_box_intake as the preferred one-call box workflow", () => {
+    const registrations = collectToolRegistrations();
+    const saveBoxOptions = registrations.get("save_box_intake")?.options as
+      | { description?: string; inputSchema?: Record<string, unknown> }
+      | undefined;
+
+    expect(saveBoxOptions?.description).toContain("One-call workflow");
+    expect(saveBoxOptions?.description).toContain("idempotencyKey");
+    expect(saveBoxOptions?.inputSchema).toHaveProperty("box");
+    expect(saveBoxOptions?.inputSchema).toHaveProperty("photos");
+    expect(saveBoxOptions?.inputSchema).toHaveProperty("contents");
+    expect(saveBoxOptions?.inputSchema).toHaveProperty("linkedItems");
+
+    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+      expect.objectContaining({
+        id: "boxes",
+        requiredScopes: ["inventory/read", "inventory/write", "photos/write"],
+        mcpTools: expect.arrayContaining(["save_box_intake"]),
+        agentWorkflows: expect.arrayContaining([
+          expect.stringContaining("save_box_intake"),
+          expect.stringContaining("idempotencyKey"),
+        ]),
+      }),
+    );
+  });
+
+  it("offers a smaller trusted-helper MCP tool set for hosted assistants", () => {
+    const filter = createAllowedToolFilter(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS);
+    const registrations = collectToolRegistrations({
+      allowedToolNames: MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
+    });
+    const toolNames = [...registrations.keys()].sort();
+
+    expect(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(25);
+    expect(filter("save_box_intake")).toBe(true);
+    expect(filter("create_box")).toBe(false);
+    expect(toolNames).toContain("save_box_intake");
+    expect(toolNames).toContain("setup_move");
+    expect(toolNames).not.toContain("create_box");
+    expect(toolNames).not.toContain("add_items_to_box");
+    expect(toolNames).not.toContain("remove_item_from_box");
+    expect(toolNames).not.toContain("delete_item");
+    expect(toolNames).not.toContain("archive_documentation_profile");
+  });
+
+  it("validates save_box_intake before making write requests", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const registration = collectToolRegistrations().get("save_box_intake");
+    if (!registration) throw new Error("save_box_intake was not registered.");
+
+    const result = await registration.handler({
+      moveId: "codex-test-move",
+      box: { label: "Office box" },
+      photos: [
+        {
+          sourceUrl: "https://example.com/codex-test-box.jpg",
+          dataUrl: "data:image/jpeg;base64,Y29kZXgtdGVzdA==",
+        },
+      ],
+    });
+    const payload = JSON.parse(result.content[0].text);
+
+    expect(result).toHaveProperty("isError", true);
+    expect(payload.error).toContain("idempotencyKey is required");
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("allows save_box_intake dry runs to preview a new box without an idempotency key", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const registration = collectToolRegistrations().get("save_box_intake");
+    if (!registration) throw new Error("save_box_intake was not registered.");
+
+    const result = await registration.handler({
+      moveId: "codex-test-move",
+      dryRun: true,
+      box: {
+        label: "Office box",
+        dimensionsIn: { lengthIn: 18, widthIn: 12, heightIn: 12 },
+        actualWeightLb: 24,
+      },
+    });
+    const payload = JSON.parse(result.content[0].text);
+
+    expect(result).not.toHaveProperty("isError", true);
+    expect(payload.dryRun).toBe(true);
+    expect(payload.box.request).toMatchObject({
+      method: "POST",
+      path: "/moves/codex-test-move/boxes",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("runs save_box_intake in mock write order with synthetic fixture ids", async () => {
+    const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const parsed = new URL(String(url));
+      const path = parsed.pathname;
+      const method = init?.method ?? "GET";
+      const body =
+        typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      calls.push({ method, path, body });
+
+      const data = path.endsWith("/boxes")
+        ? { data: { boxId: "codex-test-box-1" } }
+        : path.endsWith("/photos/upload")
+          ? {
+              data: {
+                photoId: `codex-test-photo-${calls.length}`,
+                derivativeStatus: "pending",
+                media: { mimeType: "image/jpeg" },
+              },
+            }
+          : path.endsWith("/items/batch-upsert")
+            ? {
+                data: {
+                  dryRun: false,
+                  total: 1,
+                  succeeded: 1,
+                  failed: 0,
+                  results: [
+                    {
+                      index: 0,
+                      ok: true,
+                      action: "create",
+                      itemId: "codex-test-item-1",
+                    },
+                  ],
+                },
+              }
+            : path.endsWith("/boxes/codex-test-box-1/items")
+              ? { data: { ok: true } }
+              : { data: {} };
+
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const registration = collectToolRegistrations().get("save_box_intake");
+    if (!registration) throw new Error("save_box_intake was not registered.");
+
+    const result = await registration.handler({
+      moveId: "codex-test-move",
+      idempotencyKey: "codex-test-box-intake-001",
+      box: {
+        code: "codex-test-office-001",
+        label: "Office box",
+        dimensionsIn: { lengthIn: 18, widthIn: 12, heightIn: 12 },
+        actualWeightLb: 24,
+      },
+      photos: [
+        {
+          sourceUrl: "https://example.com/codex-test-box.jpg",
+          caption: "Open codex test office box",
+        },
+      ],
+      contents: [
+        {
+          name: "codex-test cookbooks",
+          quantity: 3,
+          images: [
+            {
+              sourceUrl: "https://example.com/codex-test-cookbooks.jpg",
+              caption: "Cookbooks in the box",
+            },
+          ],
+        },
+      ],
+      linkedItems: [{ itemId: "codex-test-existing-item", quantity: 1 }],
+      continueOnImageError: false,
+    });
+    const payload = JSON.parse(result.content[0].text);
+
+    expect(result).not.toHaveProperty("isError", true);
+    expect(payload.boxId).toBe("codex-test-box-1");
+    expect(payload.summary.describedContentCount).toBe(1);
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "POST /api/v1/moves/codex-test-move/boxes",
+      "POST /api/v1/photos/upload",
+      "POST /api/v1/moves/codex-test-move/items/batch-upsert",
+      "POST /api/v1/boxes/codex-test-box-1/items",
+      "POST /api/v1/boxes/codex-test-box-1/items",
+      "POST /api/v1/photos/upload",
+    ]);
+    expect(calls[2].body).toMatchObject({
+      items: [expect.objectContaining({ name: "codex-test cookbooks" })],
+    });
+    expect(calls[3].body).toMatchObject({
+      itemId: "codex-test-item-1",
+    });
+    expect(calls[4].body).toMatchObject({
+      itemId: "codex-test-existing-item",
+    });
+    vi.unstubAllGlobals();
   });
 
   it("documents the one-call image upload path for OpenAPI and AI readers", () => {

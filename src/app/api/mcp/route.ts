@@ -11,7 +11,10 @@
 import { createMcpHandler } from "mcp-handler";
 
 import { mcpBearerChallenge } from "@/lib/mcp-oauth";
-import { registerTools } from "../../../../mcp-server/movingmanifest-mcp.mjs";
+import {
+  MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
+  registerTools,
+} from "../../../../mcp-server/movingmanifest-mcp.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +48,20 @@ function restApiBaseUrl(): string {
   return "https://movingmanifest.com/api/v1";
 }
 
+function hostedAllowedToolNames(apiKey: string): string[] | undefined {
+  if (process.env.MOVINGMANIFEST_MCP_TOOLSET === "trusted-helper") {
+    return [...MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS];
+  }
+  const looksLikeApiKey = apiKey.startsWith("mmk_");
+  if (
+    process.env.MOVINGMANIFEST_MCP_OAUTH_TOOLSET === "trusted-helper" &&
+    !looksLikeApiKey
+  ) {
+    return [...MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS];
+  }
+  return undefined;
+}
+
 function unauthorized(request: Request, message: string): Response {
   return Response.json(
     {
@@ -75,7 +92,9 @@ async function handleMcpRequest(request: Request): Promise<Response> {
 
   const handler = createMcpHandler(
     (server) => {
-      registerTools(server, apiConfig);
+      registerTools(server, apiConfig, {
+        allowedToolNames: hostedAllowedToolNames(apiKey),
+      });
     },
     {
       serverInfo: { name: "movingmanifest", version: "0.2.0" },

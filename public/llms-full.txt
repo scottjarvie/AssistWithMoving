@@ -139,6 +139,16 @@ Family helper or mover:
   moved personally?
 - Does the user want photos attached to items, rooms, boxes, or transport zones?
 
+## Box Intake Guidance
+
+When a user says they packed, measured, photographed, or wants to add one box,
+prefer `save_box_intake` over separate low-level calls. Put the box label/code,
+dimensions, weight, room, destination, and description in `box`; put label or
+contents photos in `photos`; put newly described contents in `contents`; and
+put already-known item IDs in `linkedItems`. Use `dryRun: true` first when the
+user has not already approved the write. A live new box requires a stable
+`idempotencyKey`; updating an existing box requires `box.boxId`.
+
 ## Image Upload Guidance
 
 One user photo should normally be one upload call. MCP agents should use
@@ -337,6 +347,7 @@ Useful write tools:
 - `batch_upsert_items`
 - `add_item_from_photo`
 - `create_item_with_images`
+- `save_box_intake`
 - `upload_evidence_image`
 - `upload_evidence_images`
 - `upload_evidence_file`

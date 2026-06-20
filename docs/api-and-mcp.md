@@ -587,6 +587,14 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/boxes \
   -d '{ "code": "OFFICE-1", "label": "Office books", "room": "Office" }'
 ```
 
+For MCP agents, prefer `save_box_intake` when the user wants to add or update a
+box with dimensions, weight, photos, a description of what is inside, or
+existing item IDs. It composes box create/update, photo upload, item batch
+upsert, and item-to-box linking behind one workflow call. Use `dryRun: true`
+first for confirmation, and pass a stable `idempotencyKey` whenever creating a
+new box so retries do not create duplicates. Updating an existing box requires
+`box.boxId`; code-only box upsert remains a lower-level movable-unit workflow.
+
 Update a box through the top-level alias:
 
 ```bash
@@ -1810,6 +1818,7 @@ Available MCP tools:
 | `update_planned_item` | Update selected planned item fields, with `dryRun` support. |
 | `convert_planned_item` | Convert a planned item into owned inventory and re-point Layout Studio placements. |
 | `archive_planned_item` | Archive one planned item, with `dryRun` support. |
+| `save_box_intake` | Workflow-first box packing tool: create/update one box, attach photos, create described contents, and link existing item IDs in one dry-run/idempotent call. |
 | `create_box` | Create a box, with `dryRun` support. |
 | `add_items_to_box` | Assign multiple items to one box, with `dryRun` support. |
 | `remove_item_from_box` | Remove one item-to-box assignment without deleting the item, with `dryRun` support. |

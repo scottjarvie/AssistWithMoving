@@ -7,12 +7,20 @@ declare module "*/mcp-server/movingmanifest-mcp.mjs" {
     apiKey: string;
   }
 
+  export const MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS: string[];
+
+  export function createAllowedToolFilter(
+    allowedToolNames?: readonly string[]
+  ): (toolName: string) => boolean;
+
   export function registerTools(
     target: McpServer,
-    apiConfig: MovingManifestApiConfig
+    apiConfig: MovingManifestApiConfig,
+    options?: { allowedToolNames?: readonly string[] }
   ): void;
 
   export function createMovingManifestMcpServer(
-    apiConfig: MovingManifestApiConfig
+    apiConfig: MovingManifestApiConfig,
+    options?: { allowedToolNames?: readonly string[] }
   ): McpServer;
 }
