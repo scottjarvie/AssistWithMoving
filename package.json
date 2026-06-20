@@ -11,6 +11,7 @@
     "start": "next start -p 3827",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "contract:drift": "node scripts/contract-drift-check.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
