@@ -12,6 +12,9 @@ type PhotoEvidenceStripProps = {
   moveId: Id<"moves"> | null;
   itemId?: Id<"items">;
   boxId?: Id<"boxes">;
+  omitFirstPhoto?: boolean;
+  label?: string;
+  emptyLabel?: string;
 };
 
 type DisplayUrlState = Record<
@@ -28,6 +31,9 @@ export function PhotoEvidenceStrip({
   moveId,
   itemId,
   boxId,
+  omitFirstPhoto = false,
+  label = "Photos",
+  emptyLabel = "No photo evidence yet.",
 }: PhotoEvidenceStripProps) {
   const itemPhotos = useQuery(
     api.photos.listForItem,
@@ -40,12 +46,16 @@ export function PhotoEvidenceStrip({
     householdId && moveId && boxId ? { householdId, moveId, boxId } : "skip"
   );
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
-  const photos = useMemo(
-    () => (itemId ? itemPhotos : boxPhotos) ?? [],
-    [boxPhotos, itemId, itemPhotos]
-  );
+  const queriedPhotos = itemId ? itemPhotos : boxPhotos;
+  const photos = useMemo(() => {
+    if (queriedPhotos === undefined) {
+      return undefined;
+    }
+
+    return omitFirstPhoto && itemId ? queriedPhotos.slice(1) : queriedPhotos;
+  }, [itemId, omitFirstPhoto, queriedPhotos]);
   const [displayUrls, setDisplayUrls] = useState<DisplayUrlState>({});
-  const visiblePhotos = useMemo(() => photos.slice(0, 6), [photos]);
+  const visiblePhotos = useMemo(() => (photos ?? []).slice(0, 6), [photos]);
   const photoKey = visiblePhotos.map((photo) => photo._id).join("|");
 
   useEffect(() => {
@@ -109,7 +119,7 @@ export function PhotoEvidenceStrip({
   if (photos.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
-        No photo evidence yet.
+        {emptyLabel}
       </div>
     );
   }
@@ -119,7 +129,10 @@ export function PhotoEvidenceStrip({
       <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-2 font-medium text-foreground">
           <Images className="size-4 text-primary" aria-hidden="true" />
-          {photos.length} photo{photos.length === 1 ? "" : "s"}
+          {label}
+          <span className="text-muted-foreground">
+            {photos.length} photo{photos.length === 1 ? "" : "s"}
+          </span>
         </span>
         {photos.length > visiblePhotos.length ? (
           <span>showing {visiblePhotos.length}</span>
