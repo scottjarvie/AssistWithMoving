@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 const mcpCards = [
   {
     title: "Tool-based move work",
-    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. add_item_from_photo turns one photo plus a few words into an item, while upload_photo/upload_image send a single original and upload_photos attaches several new photos to an existing item after the agent resolves the itemId.",
+    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, sale listings, exports, and share links. save_box_intake captures one packed box with dimensions, weight, photos, described contents, and existing item IDs in one call.",
     icon: Bot,
   },
   {
@@ -46,7 +46,7 @@ const mcpCards = [
   },
   {
     title: "Batch over chatty loops",
-    copy: "The MCP tool list favors coarse operations such as setup_move and batch_upsert_items so agents use fewer tokens and make fewer mistakes.",
+    copy: "The MCP tool list favors coarse operations such as setup_move, save_box_intake, and batch_upsert_items so agents use fewer tokens and make fewer mistakes.",
     icon: Cable,
   },
   {
@@ -66,7 +66,7 @@ const toolGroups = [
   "create_item_with_images, upload_image, upload_images, upload_photo, upload_photos, upload_evidence_image, upload_evidence_images, upload_evidence_file, start_photo_upload, finalize_photo_upload, attach_photo",
   "upsert_sale_listing",
   "plan_get, plan_apply_ops, plan_propose_ops, plan_snapshot",
-  "create_box, add_items_to_box, suggest_assignments, apply_assignments",
+  "save_box_intake, create_box, add_items_to_box, suggest_assignments, apply_assignments",
   "create_export, list_exports, download_export",
 ];
 

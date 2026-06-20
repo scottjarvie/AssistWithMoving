@@ -68,6 +68,7 @@ import {
   rejectAiTextSuggestions,
   rejectPlanningSuggestions,
   revokeShareLink,
+  saveBoxIntake,
   searchInventory,
   setupMove,
   startPhotoUpload,
@@ -398,6 +399,11 @@ const evidenceImageInputSchema = z.object({
 
 const createdItemImageInputSchema = evidenceImageInputSchema.omit({
   itemId: true,
+});
+
+const boxIntakeImageInputSchema = evidenceImageInputSchema.omit({
+  itemId: true,
+  boxId: true,
 });
 
 const evidenceImageBatchDefaultsSchema = evidenceImageInputSchema.omit({
@@ -822,13 +828,81 @@ const documentationFiltersSchema = z.object({
   destinationRoom: z.string().optional(),
 });
 
-export function createMovingManifestMcpServer(apiConfig) {
+const boxIntakeBoxSchema = z.object({
+  boxId: z
+    .string()
+    .optional()
+    .describe("Existing box id to update. Omit to create a new box."),
+  code: z.string().optional(),
+  label: z.string().optional(),
+  room: z.string().optional(),
+  destinationRoom: z.string().optional(),
+  description: z.string().optional(),
+  status: z.string().optional(),
+  dimensionsIn: dimensionsInSchema.optional(),
+  estimatedWeightLb: z.number().nonnegative().optional(),
+  actualWeightLb: z.number().nonnegative().optional(),
+  estimatedVolumeCuFt: z.number().nonnegative().optional(),
+  assignedResourceId: z.string().optional(),
+  assignedZoneId: z.string().optional(),
+  assignmentLocked: z.boolean().optional(),
+  assignmentOverrideReason: z.string().optional(),
+});
+
+const boxIntakeContentSchema = inventoryItemWriteSchema.extend({
+  name: z.string().optional(),
+  images: z.array(boxIntakeImageInputSchema).max(20).optional(),
+});
+
+const boxIntakeLinkedItemSchema = z.object({
+  itemId: z.string(),
+  quantity: z.number().positive().optional(),
+  notes: z.string().optional(),
+});
+
+export const MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS = [
+  "get_api_capabilities",
+  "get_api_context",
+  "list_moves",
+  "setup_move",
+  "get_move_summary",
+  "get_agent_context",
+  "get_move_questions",
+  "get_move_day_checklist",
+  "search_inventory",
+  "save_box_intake",
+  "add_item_from_photo",
+  "batch_upsert_items",
+  "update_item",
+  "list_move_spaces",
+  "create_move_space",
+  "list_transport_resources",
+  "suggest_assignments",
+  "apply_assignments",
+  "upload_evidence_image",
+  "upload_evidence_images",
+  "upload_photo",
+  "upload_photos",
+  "list_planned_items",
+  "create_planned_item",
+  "update_planned_item",
+];
+
+const allowedToolNamesByTarget = new WeakMap();
+
+export function createAllowedToolFilter(allowedToolNames) {
+  if (!allowedToolNames) return () => true;
+  const allowed = new Set(allowedToolNames);
+  return (toolName) => allowed.has(toolName);
+}
+
+export function createMovingManifestMcpServer(apiConfig, options = {}) {
   const target = new McpServer({
     name: "movingmanifest",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
   });
-  registerTools(target, apiConfig);
+  registerTools(target, apiConfig, options);
   return target;
 }
 
@@ -839,7 +913,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   await server.connect(transport);
 }
 
-export function registerTools(target, apiConfig) {
+export function registerTools(target, apiConfig, options = {}) {
+  if (options.allowedToolNames) {
+    allowedToolNamesByTarget.set(target, new Set(options.allowedToolNames));
+  } else {
+    allowedToolNamesByTarget.delete(target);
+  }
+
   registerTool(target, "get_api_capabilities", {
     title: "Get API capabilities",
     description:
@@ -1407,6 +1487,45 @@ export function registerTools(target, apiConfig) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (input) => createBox(apiConfig, input),
+  });
+
+  registerTool(target, "save_box_intake", {
+    title: "Save box intake",
+    description:
+      "One-call workflow for a packing session: create or update one box, record dimensions/weight/description, attach box photos, create described contents, link existing itemIds into the box, and attach content photos. This is the preferred hosted-agent path when a user says they packed or photographed a box. Use dryRun first for confirmation, and pass a stable idempotencyKey when creating a new box.",
+    inputSchema: {
+      moveId: z.string(),
+      box: boxIntakeBoxSchema
+        .optional()
+        .describe("Existing boxId updates that box; otherwise this creates a new box."),
+      photos: z
+        .array(boxIntakeImageInputSchema)
+        .max(50)
+        .optional()
+        .describe("Photos of the outside label, open box, or overall contents."),
+      contents: z
+        .array(boxIntakeContentSchema)
+        .max(100)
+        .optional()
+        .describe("New or existing item rows described as being inside this box."),
+      linkedItems: z
+        .array(boxIntakeLinkedItemSchema)
+        .max(100)
+        .optional()
+        .describe("Existing itemIds to connect to this box without editing item details."),
+      photoDefaults: evidencePhotoDefaultsSchema.optional(),
+      continueOnImageError: z
+        .boolean()
+        .optional()
+        .describe("Defaults true so useful box and item writes can still return with per-image failures."),
+      idempotencyKey: z
+        .string()
+        .optional()
+        .describe("Required for a live new box without boxId so retries do not create duplicates."),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    handler: (input) => saveBoxIntake(apiConfig, input),
   });
 
   registerTool(target, "add_items_to_box", {
@@ -2332,6 +2451,11 @@ export function registerTools(target, apiConfig) {
 }
 
 function registerTool(target, name, config) {
+  const allowedToolNames = allowedToolNamesByTarget.get(target);
+  if (allowedToolNames && !allowedToolNames.has(name)) {
+    return;
+  }
+
   target.registerTool(
     name,
     {

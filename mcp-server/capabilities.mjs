@@ -243,15 +243,25 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     title: "Boxes and contents",
     status: "available",
     purpose:
-      "Create boxes and maintain item-to-box assignments without exposing deleted item data.",
-    requiredScopes: ["inventory/read", "inventory/write"],
+      "Capture box packing sessions as one workflow or use lower-level box/item assignment tools when a client needs detailed control.",
+    requiredScopes: ["inventory/read", "inventory/write", "photos/write"],
     restEndpoints: [
       "POST /api/v1/moves/:moveId/boxes",
+      "PATCH /api/v1/moves/:moveId/boxes/:boxId",
+      "POST /api/v1/moves/:moveId/items/batch-upsert",
       "POST /api/v1/boxes/:boxId/items",
+      "POST /api/v1/photos/upload",
       "DELETE /api/v1/boxes/:boxId/items/:itemId",
     ],
-    mcpTools: ["create_box", "add_items_to_box", "remove_item_from_box"],
+    mcpTools: [
+      "save_box_intake",
+      "create_box",
+      "add_items_to_box",
+      "remove_item_from_box",
+    ],
     agentWorkflows: [
+      "Use save_box_intake when a user wants to add or update a box with dimensions, weight, description, photos, newly described contents, or existing itemIds in one agent call.",
+      "Run save_box_intake with dryRun first for confirmation and pass a stable idempotencyKey when creating a new box so retries do not create duplicate boxes.",
       "Build box manifests from packing sessions.",
       "Move items between boxes while preserving inventory history.",
     ],

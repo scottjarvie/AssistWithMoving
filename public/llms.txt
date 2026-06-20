@@ -87,6 +87,12 @@ Primary site: https://movingmanifest.com
 - For fast item capture, a photo plus a few words is enough to create useful
   draft inventory. Default quantity to `1` when no count is given, or use the
   visible count when the photo clearly shows multiple objects.
+- When the user wants to add or update one packed box, prefer
+  `save_box_intake`: include box dimensions/weight/description, box photos,
+  newly described contents, and/or existing item IDs in one call. Use
+  `dryRun: true` first and pass a stable `idempotencyKey` when creating a new
+  box so retries do not duplicate it. Updating an existing box requires
+  `box.boxId`.
 - Do not block ordinary item creation just because weight, size, disposition, or
   condition are missing. Infer obvious fields, leave uncertain fields blank or
   estimated, record provenance/confidence, and summarize assumptions so the user
@@ -107,7 +113,7 @@ Primary site: https://movingmanifest.com
 - Add inventory from photos or dictated room walks.
 - Mark items sell, donate, free, dump, storage, or keep.
 - Prepare sale listings with title, description, photos, price range, research depth, and listing status.
-- Create boxes, assign items to boxes, and plan transport/resource loading.
+- Create boxes with `save_box_intake`, assign items to boxes, and plan transport/resource loading.
 - Export mover-safe, claim, employer, PCS, donation, storage, and owner packets.
 
 ## API

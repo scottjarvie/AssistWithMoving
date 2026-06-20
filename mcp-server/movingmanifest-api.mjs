@@ -560,6 +560,7 @@ export async function batchUpsertItems(config, input) {
       dryRun: input.dryRun,
       items: input.items,
     },
+    idempotencyKey: input.idempotencyKey,
   });
 }
 
@@ -734,16 +735,44 @@ export async function archivePlannedItem(config, input) {
 }
 
 export async function createBox(config, input) {
+  const body = { ...input };
+  delete body.idempotencyKey;
+  delete body.dryRun;
   if (input.dryRun) {
     return {
       dryRun: true,
-      request: { method: "POST", path: `/moves/${input.moveId}/boxes`, body: input },
+      request: { method: "POST", path: `/moves/${input.moveId}/boxes`, body },
     };
   }
   return await movingManifestRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/boxes`,
-    body: input,
+    body,
+    idempotencyKey: input.idempotencyKey,
+  });
+}
+
+export async function updateBox(config, input) {
+  const boxId = input.boxId;
+  const body = { ...input };
+  delete body.boxId;
+  delete body.idempotencyKey;
+  delete body.dryRun;
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "PATCH",
+        path: `/moves/${input.moveId}/boxes/${boxId}`,
+        body,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "PATCH",
+    path: `/moves/${input.moveId}/boxes/${boxId}`,
+    body,
+    idempotencyKey: input.idempotencyKey,
   });
 }
 
@@ -775,10 +804,138 @@ export async function addItemsToBox(config, input) {
           quantity: item.quantity,
           notes: item.notes,
         },
+        idempotencyKey: input.idempotencyKey
+          ? `${input.idempotencyKey}-${results.length + 1}`
+          : undefined,
       })
     );
   }
   return { data: results };
+}
+
+export async function saveBoxIntake(config, input) {
+  validateBoxIntake(input);
+
+  const contents = Array.isArray(input.contents) ? input.contents : [];
+  const linkedItems = Array.isArray(input.linkedItems) ? input.linkedItems : [];
+  const boxPhotos = Array.isArray(input.photos) ? input.photos : [];
+  const dryRun = Boolean(input.dryRun);
+  const idempotencyKey = input.idempotencyKey;
+  const boxInput = input.box ?? {};
+  const boxWriteInput = removeUndefined({
+    moveId: input.moveId,
+    ...boxInput,
+    idempotencyKey: idempotencyKey ? `${idempotencyKey}-box` : undefined,
+    dryRun,
+  });
+
+  const boxResult = boxInput.boxId
+    ? await updateBox(config, boxWriteInput)
+    : await createBox(config, boxWriteInput);
+  const boxData = boxResult.data ?? boxResult;
+  const boxId = boxInput.boxId ?? boxData.boxId ?? "BOX_ID_CREATED_BY_THIS_TOOL";
+
+  const boxPhotoResult = boxPhotos.length
+    ? await uploadEvidenceImages(config, {
+        ...input.photoDefaults,
+        moveId: input.moveId,
+        boxId,
+        room: input.photoDefaults?.room ?? boxInput.room,
+        photoType: input.photoDefaults?.photoType ?? "boxContents",
+        source: input.photoDefaults?.source ?? "mcp",
+        exifHandlingStatus: input.photoDefaults?.exifHandlingStatus ?? "pending",
+        images: boxPhotos,
+        continueOnError: input.continueOnImageError ?? true,
+        idempotencyKey: idempotencyKey ? `${idempotencyKey}-box-photos` : undefined,
+        dryRun,
+      })
+    : undefined;
+
+  const contentRows = contents.map((content) => {
+    const row = { ...content };
+    delete row.images;
+    return removeUndefined(row);
+  });
+  const contentResult = contentRows.length
+    ? await batchUpsertItems(config, {
+        moveId: input.moveId,
+        items: contentRows,
+        idempotencyKey: idempotencyKey ? `${idempotencyKey}-contents` : undefined,
+        dryRun,
+      })
+    : undefined;
+  const contentData = contentResult?.data ?? contentResult;
+  const contentItemIds = contentData?.results
+    ?.filter((result) => result.ok && result.itemId)
+    .map((result) => result.itemId) ?? [];
+  const failedContentCount =
+    contentData?.failed ??
+    contentData?.results?.filter((result) => !result.ok).length ??
+    0;
+  if (!dryRun && failedContentCount > 0) {
+    throw new Error("One or more contents failed validation; box intake stopped before linking.");
+  }
+
+  const linkRows = [
+    ...contentItemIds.map((itemId) => ({ itemId })),
+    ...linkedItems.map((item) => removeUndefined(item)),
+  ];
+  const linkResult = linkRows.length
+    ? await addItemsToBox(config, {
+        moveId: input.moveId,
+        boxId,
+        items: linkRows,
+        idempotencyKey: idempotencyKey ? `${idempotencyKey}-links` : undefined,
+        dryRun,
+      })
+    : undefined;
+
+  const contentPhotoResults = [];
+  if (!dryRun) {
+    for (const [index, content] of contents.entries()) {
+      const images = Array.isArray(content.images) ? content.images : [];
+      const itemId = content.itemId ?? contentItemIds[index];
+      if (!images.length || !itemId) continue;
+      contentPhotoResults.push(
+        await uploadEvidenceImages(config, {
+          ...input.photoDefaults,
+          moveId: input.moveId,
+          itemId,
+          boxId,
+          room: input.photoDefaults?.room ?? content.room ?? boxInput.room,
+          photoType: input.photoDefaults?.photoType ?? "item",
+          source: input.photoDefaults?.source ?? "mcp",
+          exifHandlingStatus: input.photoDefaults?.exifHandlingStatus ?? "pending",
+          images,
+          continueOnError: input.continueOnImageError ?? true,
+          idempotencyKey: idempotencyKey
+            ? `${idempotencyKey}-content-${index + 1}-photos`
+            : undefined,
+        })
+      );
+    }
+  }
+
+  return {
+    dryRun,
+    boxId,
+    box: boxResult,
+    boxPhotos: boxPhotoResult,
+    contents: contentResult,
+    linkedItems: linkResult,
+    contentPhotos: contentPhotoResults,
+    summary: {
+      boxAction: boxInput.boxId ? "update" : "create",
+      describedContentCount: contents.length,
+      linkedExistingItemCount: linkedItems.length,
+      boxPhotoCount: boxPhotos.length,
+      uploadedBoxPhotoCount: boxPhotoResult?.uploadedCount ?? 0,
+      contentPhotoBatchCount: contentPhotoResults.length,
+      note: dryRun
+        ? "Dry run only. Live runs create/update the box first, then attach box photos, upsert described contents, link items, and upload content photos."
+        : "Saved the box intake workflow in one agent-facing call.",
+    },
+  };
 }
 
 export async function removeItemFromBox(config, input) {
@@ -2120,6 +2277,47 @@ export async function revokeShareLink(config, input) {
     method: "DELETE",
     path: `/moves/${input.moveId}/share-links/${input.shareLinkId}`,
   });
+}
+
+function validateBoxIntake(input) {
+  if (!input?.moveId) {
+    throw new Error("moveId is required.");
+  }
+  const box = input.box ?? {};
+  if (!input.dryRun && !box.boxId && !input.idempotencyKey) {
+    throw new Error(
+      "idempotencyKey is required when save_box_intake creates a new box."
+    );
+  }
+
+  validateImageSources(input.photos ?? [], "photos");
+  for (const [index, content] of (input.contents ?? []).entries()) {
+    if (!content.itemId && !content.name) {
+      throw new Error(`contents[${index}].name is required when creating an item.`);
+    }
+    validateImageSources(content.images ?? [], `contents[${index}].images`);
+  }
+  for (const [index, item] of (input.linkedItems ?? []).entries()) {
+    if (!item.itemId) {
+      throw new Error(`linkedItems[${index}].itemId is required.`);
+    }
+  }
+}
+
+function validateImageSources(images, label) {
+  for (const [index, image] of images.entries()) {
+    const sourceCount = [
+      image.filePath,
+      image.sourceUrl,
+      image.dataUrl,
+      image.fileBase64,
+    ].filter(Boolean).length;
+    if (sourceCount !== 1) {
+      throw new Error(
+        `${label}[${index}] must provide exactly one of filePath, sourceUrl, dataUrl, or fileBase64.`
+      );
+    }
+  }
 }
 
 function removeUndefined(value) {
