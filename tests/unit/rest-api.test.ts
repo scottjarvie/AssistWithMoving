@@ -487,6 +487,50 @@ describe("REST API helpers", () => {
     ).toEqual(["exports/read"]);
   });
 
+  it("locks documentation profile route-family scopes before extraction", () => {
+    const cases = [
+      {
+        method: "GET",
+        path: "/moves/move1/documentation-profiles",
+        scopes: ["exports/read"],
+      },
+      {
+        method: "GET",
+        path: "/moves/move1/documentation-profiles/profile1",
+        scopes: ["exports/read"],
+      },
+      {
+        method: "POST",
+        path: "/moves/move1/documentation-profiles",
+        scopes: ["exports/create"],
+      },
+      {
+        method: "PATCH",
+        path: "/moves/move1/documentation-profiles/profile1",
+        scopes: ["exports/create"],
+      },
+      {
+        method: "DELETE",
+        path: "/moves/move1/documentation-profiles/profile1",
+        scopes: ["exports/create"],
+      },
+      {
+        method: "POST",
+        path: "/moves/move1/documentation-profiles/profile1/archive",
+        scopes: ["exports/create"],
+      },
+    ] as const;
+
+    for (const route of cases) {
+      expect(
+        requiredScopesForRestRoute({
+          method: route.method,
+          segments: parseRestPath(route.path),
+        })
+      ).toEqual(route.scopes);
+    }
+  });
+
   it("derives move context for move-restricted top-level routes", () => {
     expect(
       moveIdFromRestRequest({
