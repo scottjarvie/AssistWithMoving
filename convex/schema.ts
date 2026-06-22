@@ -574,6 +574,7 @@ export const itemMeasurementProvenance = v.object({
 const capacity = v.object({
   maxWeightLb: v.optional(v.number()),
   maxVolumeCuFt: v.optional(v.number()),
+  maxAreaSqFt: v.optional(v.number()),
   maxItemCount: v.optional(v.number()),
   dimensions: v.optional(dimensionsIn),
   weightIsUnlimited: v.optional(v.boolean()),

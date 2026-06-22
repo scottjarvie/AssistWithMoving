@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
@@ -43,6 +44,125 @@ function capacityChips(resource: ResourceEntry["resource"]): string[] {
     chips.push(`${capacity.maxVolumeCuFt} cu ft`);
   }
   return chips;
+}
+
+function parseCapacityLimit(value: string): number | undefined {
+  const parsed = Number(value);
+  return value.trim() !== "" && Number.isFinite(parsed) && parsed >= 0
+    ? parsed
+    : undefined;
+}
+
+// Editable weight + volume limit for the transportation method itself. Keyed on
+// the resource id by the parent so switching methods resets the inputs.
+function MethodCapacityEditor({
+  householdId,
+  moveId,
+  resource,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  resource: ResourceEntry["resource"];
+}) {
+  const updateResource = useMutation(api.transportResources.update);
+  const [editing, setEditing] = useState(false);
+  const [weight, setWeight] = useState(
+    typeof resource.capacity?.maxWeightLb === "number"
+      ? String(resource.capacity.maxWeightLb)
+      : "",
+  );
+  const [volume, setVolume] = useState(
+    typeof resource.capacity?.maxVolumeCuFt === "number"
+      ? String(resource.capacity.maxVolumeCuFt)
+      : "",
+  );
+  const [saving, setSaving] = useState(false);
+  const chips = capacityChips(resource);
+
+  async function handleSave() {
+    if (!householdId || !moveId) return;
+    setSaving(true);
+    try {
+      await updateResource({
+        householdId,
+        moveId,
+        resourceId: resource._id,
+        capacity: {
+          ...resource.capacity,
+          maxWeightLb: parseCapacityLimit(weight),
+          maxVolumeCuFt: parseCapacityLimit(volume),
+        },
+      });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">
+          Method capacity:
+        </span>
+        {chips.length ? (
+          chips.map((chip) => (
+            <Badge key={chip} variant="outline">
+              {chip}
+            </Badge>
+          ))
+        ) : (
+          <Badge variant="outline">Not set</Badge>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setEditing((value) => !value)}
+        >
+          {editing ? "Close" : "Edit"}
+        </Button>
+      </div>
+      {editing ? (
+        <div className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">
+              Weight limit (lb)
+            </label>
+            <Input
+              value={weight}
+              inputMode="decimal"
+              onChange={(event) => setWeight(event.target.value)}
+              placeholder="e.g. 5000"
+              aria-label={`${resource.name} weight limit`}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">
+              Volume limit (cu ft)
+            </label>
+            <Input
+              value={volume}
+              inputMode="decimal"
+              onChange={(event) => setVolume(event.target.value)}
+              placeholder="e.g. 1000"
+              aria-label={`${resource.name} volume limit`}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save capacity"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function TransportMethodsPanel({
@@ -237,20 +357,12 @@ export function TransportMethodsPanel({
         <CardContent className="space-y-4">
           {activeEntry ? (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Method capacity:
-                </span>
-                {capacityChips(activeEntry.resource).length ? (
-                  capacityChips(activeEntry.resource).map((chip) => (
-                    <Badge key={chip} variant="outline">
-                      {chip}
-                    </Badge>
-                  ))
-                ) : (
-                  <Badge variant="outline">Not set</Badge>
-                )}
-              </div>
+              <MethodCapacityEditor
+                key={activeEntry.resource._id}
+                householdId={householdId}
+                moveId={moveId}
+                resource={activeEntry.resource}
+              />
               <TransportTripsEditor
                 householdId={householdId}
                 moveId={moveId}

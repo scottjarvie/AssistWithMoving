@@ -801,6 +801,7 @@ export const dimensionsValidator = v.object({
 export const capacityValidator = v.object({
   maxWeightLb: v.optional(v.number()),
   maxVolumeCuFt: v.optional(v.number()),
+  maxAreaSqFt: v.optional(v.number()),
   dimensions: v.optional(dimensionsValidator),
   weightIsUnlimited: v.optional(v.boolean()),
   volumeIsUnlimited: v.optional(v.boolean()),
