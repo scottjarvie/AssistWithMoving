@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
+import { CaptureMoveSwitcher } from "@/components/capture-move-switcher";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,7 @@ export function AddToQueueButton({
   variant?: "sidebar" | "compact";
 }) {
   const [open, setOpen] = useState(false);
-  const { householdId, moveId, selectedMove } = useMoveWorkspace();
+  const { householdId, moveId } = useMoveWorkspace();
   const hasActiveMove = Boolean(householdId && moveId);
 
   // Live queue size so the always-visible capture surface doubles as the way to
@@ -87,15 +88,14 @@ export function AddToQueueButton({
             <SheetTitle>Add to Queue</SheetTitle>
             <SheetDescription>
               {hasActiveMove
-                ? selectedMove
-                  ? `Capturing for ${selectedMove.title}.`
-                  : "Capturing for the active move."
+                ? "Photos, voice notes, and directions for your connected agent."
                 : "Pick or create a move before capturing — queue entries belong to a move."}
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-3 px-4 pb-4">
             {hasActiveMove ? (
               <>
+                <CaptureMoveSwitcher />
                 <Button
                   asChild
                   variant="outline"
