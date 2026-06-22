@@ -8,7 +8,7 @@ import {
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import { PackageOpen, Truck } from "lucide-react";
+import { PackageOpen, PackagePlus, Truck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -21,6 +21,7 @@ import {
   EmptyState,
   type OnBatchAction,
 } from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -37,6 +38,7 @@ import { AssignmentBadge } from "@/components/ui/status-badges";
 import { buildBoxLookupPath } from "@/lib/box-labels";
 import {
   buildMovableUnits,
+  summarizeMovableUnits,
   type MovableUnit,
 } from "@/lib/movable-units";
 
@@ -46,19 +48,34 @@ type ResourcesWithZones = NonNullable<
   >
 >;
 
+type TripsWithSpaces = NonNullable<
+  ReturnType<typeof useQuery<typeof api.transportTrips.listForMoveWithSpaces>>
+>;
+
+type BatchAssignResult = Awaited<
+  ReturnType<
+    ReturnType<typeof useMutation<typeof api.movableUnits.batchAssign>>
+  >
+>;
+
 /**
- * Movable-unit batch assignment, shaped so a future server batch mutation can
- * replace the client-side fan-out without changing callers.
+ * Movable-unit batch assignment. This maps 1:1 onto the server
+ * `movableUnits.batchAssign` mutation (the single validated batch path shared
+ * with the agent/MCP applyAssignments lane): pick a transport method, then an
+ * optional trip / zone / trip-space, or clear the assignment entirely.
  */
 type MovableUnitBatchAction =
   | {
       type: "assign";
-      resourceId: string;
+      resourceId?: string;
+      tripId?: string;
       zoneId?: string;
+      tripSpaceId?: string;
       overrideReason?: string;
       includeLocked: boolean;
+      dryRun: boolean;
     }
-  | { type: "unassign"; includeLocked: boolean };
+  | { type: "unassign"; includeLocked: boolean; dryRun: boolean };
 
 export function MovableUnitsTable({
   householdId,
@@ -79,10 +96,17 @@ export function MovableUnitsTable({
     api.transportResources.listForMoveWithZones,
     householdId && moveId ? { householdId, moveId } : "skip",
   );
-  const updateBox = useMutation(api.boxes.update);
-  const updateItem = useMutation(api.items.update);
+  const tripsWithSpaces = useQuery(
+    api.transportTrips.listForMoveWithSpaces,
+    householdId && moveId ? { householdId, moveId } : "skip",
+  );
+  const batchAssign = useMutation(api.movableUnits.batchAssign);
 
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"info" | "error">("info");
+  // True once a dry-run preview reports soft warnings, so the batch toolbar
+  // reveals the override-reason input (the server enforces the same gate).
+  const [previewNeedsReason, setPreviewNeedsReason] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -133,14 +157,21 @@ export function MovableUnitsTable({
       }),
     [boxes, looseItems, resourceNamesById, zoneNamesById],
   );
+  const summary = useMemo(() => summarizeMovableUnits(units), [units]);
 
   const loading =
     boxes === undefined ||
     items === undefined ||
-    resourcesWithZones === undefined;
+    resourcesWithZones === undefined ||
+    tripsWithSpaces === undefined;
 
-  // Mirrors load-planner-board.tsx assignMovableUnits: branch box -> boxes.update
-  // and looseItem -> items.update, honoring assignmentLocked + overrideReason.
+  const captureHref =
+    moveId !== null ? `/app/moves/${moveId}/capture` : "/app/moves";
+
+  // Single server batch path. Maps the selected MovableUnit rows to the
+  // {kind, recordId} shape batchAssign expects (looseItem -> item), filters
+  // locked rows client-side unless the user opts in, and surfaces the unified
+  // per-row results (succeeded / failed + assignmentWarnings / hardBlocks).
   const handleBatchAction = useCallback<
     OnBatchAction<MovableUnit, MovableUnitBatchAction>
   >(
@@ -155,6 +186,7 @@ export function MovableUnitsTable({
       );
       const skippedLockedCount = rows.length - assignableUnits.length;
       if (!assignableUnits.length) {
+        setMessageTone("error");
         setMessage(
           skippedLockedCount
             ? `${skippedLockedCount} locked ${unitWord(skippedLockedCount)} skipped. Unlock first or include locked units deliberately.`
@@ -163,48 +195,65 @@ export function MovableUnitsTable({
         return;
       }
 
-      const assignmentPatch =
+      const dryRun = action.dryRun;
+      const target =
         action.type === "assign"
           ? {
-              assignedResourceId:
-                action.resourceId as Id<"transportResources">,
-              ...(action.zoneId
-                ? { assignedZoneId: action.zoneId as Id<"transportZones"> }
-                : { clearAssignedZone: true }),
+              assignedResourceId: action.resourceId
+                ? (action.resourceId as Id<"transportResources">)
+                : undefined,
+              assignedZoneId: action.zoneId
+                ? (action.zoneId as Id<"transportZones">)
+                : undefined,
+              assignedTripId: action.tripId
+                ? (action.tripId as Id<"transportTrips">)
+                : undefined,
+              assignedTripSpaceId: action.tripSpaceId
+                ? (action.tripSpaceId as Id<"tripSpaces">)
+                : undefined,
               assignmentOverrideReason: action.overrideReason,
             }
-          : { clearAssignedResource: true };
+          : { clearAssignment: true };
 
       setMessage(null);
       try {
-        await Promise.all(
-          assignableUnits.map((unit) =>
-            unit.kind === "box"
-              ? updateBox({
-                  householdId,
-                  moveId,
-                  boxId: unit.recordId as Id<"boxes">,
-                  ...assignmentPatch,
-                })
-              : updateItem({
-                  householdId,
-                  moveId,
-                  itemId: unit.recordId as Id<"items">,
-                  ...assignmentPatch,
-                }),
-          ),
-        );
-        clearSelection();
+        const result = (await batchAssign({
+          householdId,
+          moveId,
+          units: assignableUnits.map((unit) => ({
+            kind: unit.kind === "box" ? ("box" as const) : ("item" as const),
+            recordId: String(unit.recordId),
+          })),
+          target,
+          dryRun,
+        })) as BatchAssignResult;
+
+        const verb = action.type === "assign" ? "assign" : "unassign";
+        setMessageTone(result.failed > 0 ? "error" : "info");
         setMessage(
-          `${assignableUnits.length} movable ${unitWord(
-            assignableUnits.length,
-          )} ${action.type === "assign" ? "assigned" : "unassigned"}${
-            skippedLockedCount
-              ? `; ${skippedLockedCount} locked ${unitWord(skippedLockedCount)} skipped`
-              : ""
-          }.`,
+          summarizeBatchResult(result, {
+            verb,
+            dryRun,
+            skippedLockedCount,
+          }),
         );
+
+        // Reveal the override-reason input when any row reports soft warnings;
+        // hide it again once a clean preview/assign comes back.
+        if (action.type === "assign") {
+          const hadWarnings = result.results.some(
+            (row) => (row.assignmentWarnings?.length ?? 0) > 0,
+          );
+          setPreviewNeedsReason(hadWarnings);
+        }
+
+        // Only a committed (non-dry-run) run with no failures clears selection,
+        // so the user can fix or override the failures and retry.
+        if (!dryRun && result.failed === 0) {
+          clearSelection();
+        }
       } catch (error) {
+        setMessageTone("error");
         setMessage(
           error instanceof Error
             ? error.message
@@ -212,7 +261,7 @@ export function MovableUnitsTable({
         );
       }
     },
-    [householdId, moveId, updateBox, updateItem],
+    [batchAssign, householdId, moveId],
   );
 
   const columns = useMemo<ColumnDef<MovableUnit, unknown>[]>(
@@ -372,20 +421,34 @@ export function MovableUnitsTable({
           <Truck className="size-4 text-primary" aria-hidden="true" />
           Movable units
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Badge variant="secondary">{units.length} units</Badge>
-          <Badge variant="outline">
-            {units.filter((unit) => unit.kind === "box").length} boxes
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="secondary">{summary.total} units</Badge>
+          <Badge variant="outline">{summary.boxes} boxes</Badge>
+          <Badge variant="outline">{summary.looseItems} loose</Badge>
+          <Badge variant={summary.unassigned ? "destructive" : "outline"}>
+            {summary.unassigned} unassigned
           </Badge>
-          <Badge variant="outline">
-            {units.filter((unit) => unit.kind === "looseItem").length} loose
-          </Badge>
+          {summary.missingWeight ? (
+            <Badge variant="outline">
+              {summary.missingWeight} missing weight
+            </Badge>
+          ) : null}
+          <Button asChild size="sm">
+            <Link href={captureHref}>
+              <PackagePlus aria-hidden="true" />
+              Add to Queue
+            </Link>
+          </Button>
         </div>
       </div>
 
       {message ? (
         <p
-          className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+          className={
+            messageTone === "error"
+              ? "rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-foreground"
+              : "rounded-md border border-border p-3 text-sm text-muted-foreground"
+          }
           role="status"
           aria-live="polite"
         >
@@ -419,13 +482,23 @@ export function MovableUnitsTable({
             selectedRows={selectedRows}
             clearSelection={clearSelection}
             resourcesWithZones={resourcesWithZones ?? []}
+            tripsWithSpaces={tripsWithSpaces ?? []}
             onBatchAction={handleBatchAction}
+            showOverrideReason={previewNeedsReason}
           />
         )}
         emptyState={
           <EmptyState
             title="No movable units yet"
-            description="Boxes and large loose items appear here once they exist for this move."
+            description="Boxes and large loose items appear here once they exist for this move. Capture a few from a photo or paste to get started."
+            action={
+              <Button asChild size="sm">
+                <Link href={captureHref}>
+                  <PackagePlus aria-hidden="true" />
+                  Add to Queue
+                </Link>
+              </Button>
+            }
           />
         }
       />
@@ -437,15 +510,24 @@ function MovableUnitBatchActions({
   selectedRows,
   clearSelection,
   resourcesWithZones,
+  tripsWithSpaces,
   onBatchAction,
+  showOverrideReason,
 }: {
   selectedRows: MovableUnit[];
   clearSelection: () => void;
   resourcesWithZones: ResourcesWithZones;
+  tripsWithSpaces: TripsWithSpaces;
   onBatchAction: OnBatchAction<MovableUnit, MovableUnitBatchAction>;
+  // Revealed by the parent once a dry-run preview reports soft warnings, so the
+  // override-reason input only appears when the target actually needs one.
+  showOverrideReason: boolean;
 }) {
   const [resourceId, setResourceId] = useState("");
+  const [tripId, setTripId] = useState("");
   const [zoneId, setZoneId] = useState("");
+  const [tripSpaceId, setTripSpaceId] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
   const [includeLocked, setIncludeLocked] = useState(false);
 
   const zones = resourceId
@@ -453,9 +535,37 @@ function MovableUnitBatchActions({
         ({ resource }) => String(resource._id) === resourceId,
       )?.zones ?? [])
     : [];
+  // Trips for the chosen method; a trip implies its resource, so picking a trip
+  // narrows the space list and (server-side) derives the resource.
+  const trips = resourceId
+    ? tripsWithSpaces.filter(
+        (trip) => String(trip.resourceId) === resourceId,
+      )
+    : tripsWithSpaces;
+  const spaces = tripId
+    ? (tripsWithSpaces.find((trip) => String(trip._id) === tripId)?.spaces ??
+      [])
+    : [];
+
   const lockedCount = selectedRows.filter(
     (unit) => unit.assignmentLocked,
   ).length;
+  // The server can derive the resource from a trip, so either a method or a
+  // trip is enough to assign.
+  const canAssign = Boolean(resourceId || tripId);
+
+  const buildAssignAction = (
+    dryRun: boolean,
+  ): MovableUnitBatchAction => ({
+    type: "assign",
+    resourceId: resourceId || undefined,
+    tripId: tripId || undefined,
+    zoneId: zoneId || undefined,
+    tripSpaceId: tripSpaceId || undefined,
+    overrideReason: overrideReason.trim() || undefined,
+    includeLocked,
+    dryRun,
+  });
 
   return (
     <Popover>
@@ -480,16 +590,38 @@ function MovableUnitBatchActions({
           value={resourceId}
           onValueChange={(value) => {
             setResourceId(value);
+            setTripId("");
             setZoneId("");
+            setTripSpaceId("");
           }}
         >
-          <SelectTrigger size="sm" className="w-full" aria-label="Resource">
-            <SelectValue placeholder="Choose resource" />
+          <SelectTrigger size="sm" className="w-full" aria-label="Transport method">
+            <SelectValue placeholder="Choose transport method" />
           </SelectTrigger>
           <SelectContent>
             {resourcesWithZones.map(({ resource }) => (
               <SelectItem key={resource._id} value={String(resource._id)}>
                 {resource.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={tripId}
+          onValueChange={(value) => {
+            setTripId(value);
+            setTripSpaceId("");
+          }}
+          disabled={trips.length === 0}
+        >
+          <SelectTrigger size="sm" className="w-full" aria-label="Trip">
+            <SelectValue placeholder="Any trip" />
+          </SelectTrigger>
+          <SelectContent>
+            {trips.map((trip) => (
+              <SelectItem key={trip._id} value={String(trip._id)}>
+                {trip.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -512,6 +644,41 @@ function MovableUnitBatchActions({
           </SelectContent>
         </Select>
 
+        <Select
+          value={tripSpaceId}
+          onValueChange={setTripSpaceId}
+          disabled={!tripId || spaces.length === 0}
+        >
+          <SelectTrigger size="sm" className="w-full" aria-label="Trip space">
+            <SelectValue placeholder="Any space" />
+          </SelectTrigger>
+          <SelectContent>
+            {spaces.map((space) => (
+              <SelectItem key={space._id} value={String(space._id)}>
+                {space.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {showOverrideReason ? (
+          <div className="space-y-1">
+            <label
+              htmlFor="movable-unit-override-reason"
+              className="text-xs font-medium text-foreground"
+            >
+              Override reason (target reported warnings)
+            </label>
+            <Input
+              id="movable-unit-override-reason"
+              value={overrideReason}
+              placeholder="Why assign despite the warning?"
+              className="h-8 text-sm"
+              onChange={(event) => setOverrideReason(event.target.value)}
+            />
+          </div>
+        ) : null}
+
         <label className="flex items-center gap-2 text-sm">
           <Checkbox
             checked={includeLocked}
@@ -525,15 +692,25 @@ function MovableUnitBatchActions({
           <Button
             type="button"
             size="sm"
-            disabled={!resourceId}
+            variant="outline"
+            disabled={!canAssign}
             onClick={() =>
               void onBatchAction({
-                action: {
-                  type: "assign",
-                  resourceId,
-                  zoneId: zoneId || undefined,
-                  includeLocked,
-                },
+                action: buildAssignAction(true),
+                rows: selectedRows,
+                clearSelection,
+              })
+            }
+          >
+            Preview
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!canAssign}
+            onClick={() =>
+              void onBatchAction({
+                action: buildAssignAction(false),
                 rows: selectedRows,
                 clearSelection,
               })
@@ -545,9 +722,10 @@ function MovableUnitBatchActions({
             type="button"
             size="sm"
             variant="outline"
+            className="col-span-2"
             onClick={() =>
               void onBatchAction({
-                action: { type: "unassign", includeLocked },
+                action: { type: "unassign", includeLocked, dryRun: false },
                 rows: selectedRows,
                 clearSelection,
               })
@@ -556,6 +734,10 @@ function MovableUnitBatchActions({
             Unassign
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Preview runs validation without saving. Targets over capacity require
+          an override reason before they can be assigned.
+        </p>
       </PopoverContent>
     </Popover>
   );
@@ -664,4 +846,66 @@ function visibleFollowUps(unit: MovableUnit, limit = 3) {
 
 function unitWord(count: number) {
   return count === 1 ? "unit" : "units";
+}
+
+// Roll the unified per-row results from movableUnits.batchAssign into one
+// human-readable status line: counts, the unique soft warnings / hard blocks
+// the server returned, and the locked rows skipped client-side.
+function summarizeBatchResult(
+  result: BatchAssignResult,
+  {
+    verb,
+    dryRun,
+    skippedLockedCount,
+  }: { verb: "assign" | "unassign"; dryRun: boolean; skippedLockedCount: number },
+) {
+  const prefix = dryRun ? "Preview: " : "";
+  const succeededVerb =
+    verb === "assign"
+      ? dryRun
+        ? "will assign"
+        : "assigned"
+      : dryRun
+        ? "will unassign"
+        : "unassigned";
+
+  const parts: string[] = [
+    `${result.succeeded} ${unitWord(result.succeeded)} ${succeededVerb}`,
+  ];
+  if (result.failed > 0) {
+    parts.push(`${result.failed} blocked`);
+  }
+  if (skippedLockedCount > 0) {
+    parts.push(
+      `${skippedLockedCount} locked ${unitWord(skippedLockedCount)} skipped`,
+    );
+  }
+
+  const warnings = uniqueStrings(
+    result.results.flatMap((row) => row.assignmentWarnings ?? []),
+  );
+  const hardBlocks = uniqueStrings(
+    result.results.flatMap((row) => row.assignmentHardBlocks ?? []),
+  );
+  const errors = uniqueStrings(
+    result.results
+      .filter((row) => !row.ok && row.error)
+      .map((row) => row.error as string),
+  );
+
+  let summary = `${prefix}${parts.join(", ")}.`;
+  if (warnings.length) {
+    summary += ` Warnings: ${warnings.join("; ")}.`;
+  }
+  if (hardBlocks.length) {
+    summary += ` Hard blocks: ${hardBlocks.join("; ")}.`;
+  }
+  if (errors.length) {
+    summary += ` ${errors.join("; ")}`;
+  }
+  return summary;
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
 }
