@@ -226,6 +226,8 @@ export type DataTableProps<TData> = {
     table: TanstackTable<TData>
   }) => React.ReactNode
   onRowOpen?: (row: TData) => void
+  /** Optional accessible label for an openable row; defaults to "Open row details". */
+  getRowOpenLabel?: (row: TData) => string
   toolbar?: React.ReactNode
   batchActions?: React.ReactNode | BatchActionsRenderProp<TData>
   emptyState?: React.ReactNode
@@ -235,6 +237,22 @@ export type DataTableProps<TData> = {
 }
 
 const SELECT_COLUMN_ID = "__select__"
+
+// When a whole row is clickable (onRowOpen), a click or keypress that
+// originated on a nested control — the select checkbox, an inline select, an
+// action button, a link, or a text input — must NOT also trigger the row-open.
+// We bail whenever the event target sits inside one of these interactive
+// elements, so a single guard covers every table without callers touching each
+// control.
+const ROW_OPEN_IGNORE_SELECTOR =
+  'button, a, input, select, textarea, label, [role="checkbox"], [role="menuitem"], [data-row-open-ignore]'
+
+function isRowOpenIgnoredTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(ROW_OPEN_IGNORE_SELECTOR) !== null
+  )
+}
 
 function useControllableState<S>(
   controlled: S | undefined,
@@ -274,6 +292,8 @@ export function DataTable<TData>({
   pageSize = 10,
   loading = false,
   renderMobileCard,
+  onRowOpen,
+  getRowOpenLabel,
   toolbar,
   batchActions,
   emptyState,
@@ -464,10 +484,42 @@ export function DataTable<TData>({
                 ))}
               </TableHeader>
               <TableBody>
-                {pageRows.map((row) => (
+                {pageRows.map((row) => {
+                  const openable = Boolean(onRowOpen)
+                  return (
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() ? "selected" : undefined}
+                    role={openable ? "button" : undefined}
+                    tabIndex={openable ? 0 : undefined}
+                    aria-label={
+                      openable
+                        ? getRowOpenLabel?.(row.original) ?? "Open row details"
+                        : undefined
+                    }
+                    className={
+                      openable
+                        ? "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                        : undefined
+                    }
+                    onClick={
+                      openable
+                        ? (event) => {
+                            if (isRowOpenIgnoredTarget(event.target)) return
+                            onRowOpen?.(row.original)
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      openable
+                        ? (event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return
+                            if (isRowOpenIgnoredTarget(event.target)) return
+                            event.preventDefault()
+                            onRowOpen?.(row.original)
+                          }
+                        : undefined
+                    }
                   >
                     {row.getVisibleCells().map((cell) => {
                       const meta = cell.column.columnDef.meta
@@ -488,7 +540,8 @@ export function DataTable<TData>({
                       )
                     })}
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           </div>

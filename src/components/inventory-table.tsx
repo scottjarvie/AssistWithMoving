@@ -1315,6 +1315,11 @@ export function InventoryTable({
                 data={filteredItems}
                 columns={columns}
                 getRowId={(item) => item._id}
+                onRowOpen={(item) => {
+                  setSelectedItemId(item._id);
+                  setDetailOpen(true);
+                }}
+                getRowOpenLabel={(item) => `Open ${item.name} details`}
                 ariaLabel="Inventory records table"
                 enableRowSelection
                 loading={Boolean(loadingItems)}

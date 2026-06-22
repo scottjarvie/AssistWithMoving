@@ -10,10 +10,8 @@ import { BrandMark } from "@/components/brand-mark";
 import { MobileCaptureAction } from "@/components/mobile-capture-action";
 import { MoveSwitcher } from "@/components/move-switcher";
 import { ShellSectionEyebrow } from "@/components/shell-section-eyebrow";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { WorkspaceNav } from "@/components/workspace-nav";
-import { product } from "@/lib/product";
 
 // Three-region product frame: a fixed sidebar (xl+), a sticky top bar, and the
 // main content area. On mobile the sidebar collapses to a bottom tab bar plus a
@@ -76,9 +74,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="hidden sm:inline-flex">
-                Local {product.localUrl.replace("http://", "")}
-              </Badge>
               <AddToQueueButton variant="compact" />
               <AccountMenu />
             </div>

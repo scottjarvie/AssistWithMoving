@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import {
   type ColumnDef,
@@ -35,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AssignmentBadge } from "@/components/ui/status-badges";
+import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { buildBoxLookupPath } from "@/lib/box-labels";
 import {
   buildMovableUnits,
@@ -101,6 +103,15 @@ export function MovableUnitsTable({
     householdId && moveId ? { householdId, moveId } : "skip",
   );
   const batchAssign = useMutation(api.movableUnits.batchAssign);
+  const updateItem = useMutation(api.items.update);
+  const router = useRouter();
+
+  // Row-open detail target. Box units navigate to the box detail route; loose
+  // items open the same in-page ItemDetailSheet the Items table uses, so every
+  // row in this table is consistently clickable.
+  const [selectedLooseItemId, setSelectedLooseItemId] =
+    useState<Id<"items"> | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"info" | "error">("info");
@@ -158,6 +169,31 @@ export function MovableUnitsTable({
     [boxes, looseItems, resourceNamesById, zoneNamesById],
   );
   const summary = useMemo(() => summarizeMovableUnits(units), [units]);
+  const selectedLooseItem = useMemo(
+    () => items?.find((item) => item._id === selectedLooseItemId) ?? null,
+    [items, selectedLooseItemId],
+  );
+
+  const handleRowOpen = useCallback(
+    (unit: MovableUnit) => {
+      if (unit.kind === "box") {
+        if (!householdId || !moveId) return;
+        router.push(
+          buildBoxLookupPath({
+            boxId: unit.recordId as Id<"boxes">,
+            householdId,
+            moveId,
+            returnTo: "load-plan",
+          }),
+        );
+        return;
+      }
+      // Loose item -> open the in-page detail sheet.
+      setSelectedLooseItemId(unit.recordId as Id<"items">);
+      setDetailOpen(true);
+    },
+    [householdId, moveId, router],
+  );
 
   const loading =
     boxes === undefined ||
@@ -460,6 +496,12 @@ export function MovableUnitsTable({
         data={units}
         columns={columns}
         getRowId={(unit) => unit.id}
+        onRowOpen={handleRowOpen}
+        getRowOpenLabel={(unit) =>
+          unit.kind === "box"
+            ? `Open ${unit.label} contents`
+            : `Open ${unit.name} details`
+        }
         ariaLabel="Movable units"
         enableRowSelection
         loading={loading}
@@ -501,6 +543,25 @@ export function MovableUnitsTable({
             }
           />
         }
+      />
+
+      <ItemDetailSheet
+        key={selectedLooseItem?._id ?? "no-loose-item"}
+        householdId={householdId}
+        moveId={moveId}
+        item={selectedLooseItem}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onSave={async (patch) => {
+          if (!householdId || !moveId || !selectedLooseItem) return;
+          await updateItem({
+            householdId,
+            moveId,
+            itemId: selectedLooseItem._id,
+            ...patch,
+          });
+          setMessage("Item details saved.");
+        }}
       />
     </div>
   );
