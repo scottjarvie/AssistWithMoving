@@ -1,33 +1,15 @@
 "use client";
 
+import { type FormEvent, useCallback, useMemo, useState } from "react";
 import {
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import {
-  type Column,
   type ColumnDef,
   type ColumnFiltersState,
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   type RowSelectionState,
   type SortingState,
-  useReactTable,
   type VisibilityState,
 } from "@tanstack/react-table";
 import { useMutation, useQuery } from "convex/react";
 import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   Columns3,
   ListFilter,
@@ -51,16 +33,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  type ColumnMeta,
+  DataTable,
+  DataTableColumnHeader,
+  EmptyState,
+  InlineCheckboxCell,
+  InlineSelectCell,
+  type OnBatchAction,
+} from "@/components/ui/data-table";
+import { Input } from "@/components/ui/input";
+import {
+  DispositionBadge,
+  StatusBadge,
+} from "@/components/ui/status-badges";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 import {
@@ -149,33 +136,11 @@ const columnDescriptions: Record<string, string> = {
   review: "Marks records that need another look.",
 };
 
-function SortableHeader<TData, TValue>({
-  column,
-  label,
-}: {
-  column: Column<TData, TValue>;
-  label: string;
-}) {
-  const sorted = column.getIsSorted();
-  const Icon =
-    sorted === "asc" ? ArrowUp : sorted === "desc" ? ArrowDown : ArrowUpDown;
-
-  if (!column.getCanSort()) {
-    return <span>{label}</span>;
-  }
-
-  return (
-    <button
-      type="button"
-      className="inline-flex h-8 items-center gap-1 rounded-md px-1 text-left hover:bg-muted"
-      onClick={column.getToggleSortingHandler()}
-      aria-label={`Sort by ${label}`}
-    >
-      <span>{label}</span>
-      <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
-    </button>
-  );
-}
+type ItemBatchAction =
+  | { type: "status"; status: InventoryItem["status"] }
+  | { type: "disposition"; disposition: InventoryItem["disposition"] }
+  | { type: "personalTransport" }
+  | { type: "needsReview" };
 
 function SignalBadge({
   label,
@@ -343,12 +308,10 @@ function InventoryItemCard({
     >
       <div className="flex items-start justify-between gap-3">
         <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5 accent-primary"
+          <Checkbox
             checked={selected}
             aria-label={`Select ${item.name}`}
-            onChange={(event) => onSelectedChange(event.target.checked)}
+            onCheckedChange={(checked) => onSelectedChange(checked === true)}
           />
           Select
         </label>
@@ -377,47 +340,35 @@ function InventoryItemCard({
           value={item.category ?? "uncategorized"}
         />
         <div className="min-w-0 rounded-md border border-border/70 p-2">
-          <label className="block text-[0.68rem] uppercase text-muted-foreground">
+          <p className="block text-[0.68rem] uppercase text-muted-foreground">
             Status
-            <select
-              className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+          </p>
+          <div className="mt-1">
+            <InlineSelectCell
               value={item.status}
-              aria-label={`Status for ${item.name}`}
-              onChange={(event) =>
-                onPatchItem(item, {
-                  status: event.target.value as InventoryItem["status"],
-                })
-              }
-            >
-              {itemStatusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </label>
+              options={itemStatusOptions}
+              ariaLabel={`Status for ${item.name}`}
+              onValueChange={(status) => onPatchItem(item, { status })}
+            />
+          </div>
         </div>
         <div className="min-w-0 rounded-md border border-border/70 p-2">
-          <label className="block text-[0.68rem] uppercase text-muted-foreground">
+          <p className="block text-[0.68rem] uppercase text-muted-foreground">
             Disposition
-            <select
-              className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+          </p>
+          <div className="mt-1">
+            <InlineSelectCell
               value={item.disposition}
-              aria-label={`Disposition for ${item.name}`}
-              onChange={(event) =>
-                onPatchItem(item, {
-                  disposition: event.target
-                    .value as InventoryItem["disposition"],
-                })
+              options={itemDispositionOptions}
+              ariaLabel={`Disposition for ${item.name}`}
+              onValueChange={(disposition) =>
+                onPatchItem(item, { disposition })
               }
-            >
-              {itemDispositionOptions.map((disposition) => (
-                <option key={disposition} value={disposition}>
-                  {disposition}
-                </option>
-              ))}
-            </select>
-          </label>
+              renderLabel={(disposition) =>
+                disposition === "dump" ? "Trash" : disposition
+              }
+            />
+          </div>
         </div>
       </div>
 
@@ -426,14 +377,11 @@ function InventoryItemCard({
       </div>
 
       <label className="mt-3 flex items-center gap-2 rounded-md border border-border/70 px-2 py-1.5 text-xs">
-        <input
-          type="checkbox"
-          className="size-3.5 accent-primary"
+        <Checkbox
           checked={item.needsReview}
-          onChange={(event) =>
-            onPatchItem(item, {
-              needsReview: event.target.checked,
-            })
+          aria-label={`Needs review for ${item.name}`}
+          onCheckedChange={(checked) =>
+            onPatchItem(item, { needsReview: checked === true })
           }
         />
         Needs review
@@ -455,39 +403,6 @@ function InventoryCardField({
       <p className="mt-1 truncate font-medium">{value}</p>
     </div>
   );
-}
-
-function tableHeadClassName(columnId: string) {
-  switch (columnId) {
-    case "select":
-      return "w-10";
-    case "name":
-      return "min-w-[18rem] w-[32%]";
-    case "details":
-      return "w-24";
-    case "indicators":
-      return "min-w-[14rem] w-[16rem]";
-    case "status":
-    case "disposition":
-      return "w-36";
-    case "review":
-      return "w-32";
-    default:
-      return "min-w-28";
-  }
-}
-
-function tableCellClassName(columnId: string) {
-  switch (columnId) {
-    case "name":
-      return "max-w-[32rem] whitespace-normal";
-    case "indicators":
-      return "max-w-[18rem] whitespace-normal";
-    case "ownerContact":
-      return "max-w-[14rem] whitespace-normal";
-    default:
-      return "";
-  }
 }
 
 export function InventoryTable({
@@ -611,54 +526,55 @@ export function InventoryTable({
     [householdId, moveId, updateItem],
   );
 
-  async function handleBulkPatch(patch: InventoryItemPatch) {
-    const selectedItems = table
-      .getSelectedRowModel()
-      .rows.map((row) => row.original);
+  // Maps the typed item batch action to a patch. The contract is shaped so a
+  // future server-side batch mutation can replace this client-side fan-out
+  // without touching callers.
+  const handleItemBatchAction = useCallback<
+    OnBatchAction<InventoryItem, ItemBatchAction>
+  >(
+    async ({ action, rows, clearSelection }) => {
+      if (!rows.length) {
+        return;
+      }
 
-    if (!selectedItems.length) {
-      return;
-    }
+      const patch: InventoryItemPatch =
+        action.type === "status"
+          ? { status: action.status }
+          : action.type === "disposition"
+            ? { disposition: action.disposition }
+            : action.type === "personalTransport"
+              ? {
+                  disposition: "personalTransport",
+                  requiresPersonalTransport: true,
+                }
+              : { needsReview: true };
 
-    setMessage(null);
+      setMessage(null);
 
-    try {
-      await Promise.all(selectedItems.map((item) => patchItem(item, patch)));
-      setRowSelection({});
-      setMessage(`${selectedItems.length} items updated.`);
-    } catch {
-      setMessage("Could not update the selected items yet.");
-    }
-  }
+      try {
+        await Promise.all(rows.map((item) => patchItem(item, patch)));
+        clearSelection();
+        setMessage(`${rows.length} items updated.`);
+      } catch {
+        setMessage("Could not update the selected items yet.");
+      }
+    },
+    [patchItem],
+  );
 
-  const columns = useMemo<ColumnDef<InventoryItem>[]>(
+  const columns = useMemo<ColumnDef<InventoryItem, unknown>[]>(
     () => [
       {
-        id: "select",
-        header: ({ table }) => (
-          <input
-            type="checkbox"
-            className="size-3.5 accent-primary"
-            checked={table.getIsAllPageRowsSelected()}
-            aria-label="Select all visible items"
-            onChange={table.getToggleAllPageRowsSelectedHandler()}
-          />
-        ),
-        cell: ({ row }) => (
-          <input
-            type="checkbox"
-            className="size-3.5 accent-primary"
-            checked={row.getIsSelected()}
-            aria-label={`Select ${row.original.name}`}
-            onChange={row.getToggleSelectedHandler()}
-          />
-        ),
-        enableSorting: false,
-        enableHiding: false,
-      },
-      {
         accessorKey: "name",
-        header: ({ column }) => <SortableHeader column={column} label="Item" />,
+        meta: {
+          label: "Item",
+          mobile: "primary",
+          headClassName: "min-w-[18rem] w-[28%]",
+          cellClassName: "max-w-[32rem] whitespace-normal",
+        },
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Item" />
+        ),
         cell: ({ row }) => (
           <div className="min-w-0">
             <p className="font-medium">{row.original.name}</p>
@@ -670,6 +586,7 @@ export function InventoryTable({
       },
       {
         id: "details",
+        meta: { label: "Details", mobile: "hidden", headClassName: "w-24" },
         header: "",
         cell: ({ row }) => (
           <Button
@@ -689,22 +606,99 @@ export function InventoryTable({
         enableHiding: false,
       },
       {
+        accessorKey: "status",
+        meta: {
+          label: "Status",
+          mobile: "primary",
+          headClassName: "w-36",
+          editable: true,
+        },
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Status" />
+        ),
+        cell: ({ row }) => (
+          <div className="flex flex-col gap-1">
+            <StatusBadge status={row.original.status} />
+            <InlineSelectCell
+              value={row.original.status}
+              options={itemStatusOptions}
+              ariaLabel={`Status for ${row.original.name}`}
+              onValueChange={(status) =>
+                void patchItem(row.original, { status })
+              }
+            />
+          </div>
+        ),
+      },
+      {
+        accessorKey: "disposition",
+        meta: {
+          label: "Disposition",
+          mobile: "primary",
+          headClassName: "w-36",
+          editable: true,
+        },
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Disposition" />
+        ),
+        cell: ({ row }) => (
+          <div className="flex flex-col gap-1">
+            <DispositionBadge disposition={row.original.disposition} />
+            <InlineSelectCell
+              value={row.original.disposition}
+              options={itemDispositionOptions}
+              ariaLabel={`Disposition for ${row.original.name}`}
+              onValueChange={(disposition) =>
+                void patchItem(row.original, { disposition })
+              }
+              renderLabel={(disposition) =>
+                disposition === "dump" ? "Trash" : disposition
+              }
+            />
+          </div>
+        ),
+      },
+      {
+        id: "indicators",
+        meta: {
+          label: "Indicators",
+          mobile: "primary",
+          headClassName: "min-w-[14rem] w-[16rem]",
+          cellClassName: "max-w-[18rem] whitespace-normal",
+          description:
+            "Compact flags for evidence, boxes, load, value, and review.",
+        },
+        header: "Indicators",
+        enableSorting: false,
+        cell: ({ row }) => <InventoryIndicators item={row.original} />,
+      },
+      {
         accessorKey: "room",
-        header: ({ column }) => <SortableHeader column={column} label="Room" />,
+        meta: { label: "Room", mobile: "primary" },
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Room" />
+        ),
         cell: ({ row }) => row.original.room ?? "unassigned",
       },
       {
         accessorKey: "category",
+        meta: { label: "Category", mobile: "expansion" },
         header: ({ column }) => (
-          <SortableHeader column={column} label="Category" />
+          <DataTableColumnHeader column={column} label="Category" />
         ),
         cell: ({ row }) => row.original.category ?? "uncategorized",
       },
       {
         id: "ownerContact",
         accessorFn: (row) => row.ownerContact?.name ?? "",
+        meta: {
+          label: "Owner / contact",
+          mobile: "expansion",
+          cellClassName: "max-w-[14rem] whitespace-normal",
+          description: "Person responsible for the item.",
+        },
         header: ({ column }) => (
-          <SortableHeader column={column} label="Owner" />
+          <DataTableColumnHeader column={column} label="Owner" />
         ),
         cell: ({ row }) => {
           const owner = row.original.ownerContact;
@@ -723,13 +717,19 @@ export function InventoryTable({
       },
       {
         accessorKey: "condition",
+        meta: { label: "Condition", mobile: "expansion" },
         header: ({ column }) => (
-          <SortableHeader column={column} label="Condition" />
+          <DataTableColumnHeader column={column} label="Condition" />
         ),
         cell: ({ row }) => row.original.condition,
       },
       {
         id: "confidence",
+        meta: {
+          label: "Confidence",
+          mobile: "expansion",
+          description: "Weight and volume estimate confidence.",
+        },
         header: "Confidence",
         enableSorting: false,
         cell: ({ row }) => (
@@ -740,121 +740,60 @@ export function InventoryTable({
         ),
       },
       {
-        id: "indicators",
-        header: "Indicators",
-        enableSorting: false,
-        cell: ({ row }) => <InventoryIndicators item={row.original} />,
-      },
-      {
-        accessorKey: "status",
-        header: ({ column }) => (
-          <SortableHeader column={column} label="Status" />
-        ),
-        cell: ({ row }) => (
-          <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-            value={row.original.status}
-            aria-label={`Status for ${row.original.name}`}
-            onChange={(event) =>
-              void patchItem(row.original, {
-                status: event.target.value as InventoryItem["status"],
-              })
-            }
-          >
-            {itemStatusOptions.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        ),
-      },
-      {
-        accessorKey: "disposition",
-        header: ({ column }) => (
-          <SortableHeader column={column} label="Disposition" />
-        ),
-        cell: ({ row }) => (
-          <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-            value={row.original.disposition}
-            aria-label={`Disposition for ${row.original.name}`}
-            onChange={(event) =>
-              void patchItem(row.original, {
-                disposition: event.target.value as InventoryItem["disposition"],
-              })
-            }
-          >
-            {itemDispositionOptions.map((disposition) => (
-              <option key={disposition} value={disposition}>
-                {disposition}
-              </option>
-            ))}
-          </select>
-        ),
-      },
-      {
         accessorKey: "needsReview",
         id: "review",
+        meta: {
+          label: "Review",
+          mobile: "hidden",
+          headClassName: "w-32",
+          description: "Marks records that need another look.",
+          editable: true,
+        },
         header: ({ column }) => (
-          <SortableHeader column={column} label="Review" />
+          <DataTableColumnHeader column={column} label="Review" />
         ),
         cell: ({ row }) => (
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              className="size-3.5 accent-primary"
-              checked={row.original.needsReview}
-              onChange={(event) =>
-                void patchItem(row.original, {
-                  needsReview: event.target.checked,
-                })
-              }
-            />
-            needs review
-          </label>
+          <InlineCheckboxCell
+            checked={row.original.needsReview}
+            ariaLabel={`Needs review for ${row.original.name}`}
+            label="needs review"
+            onCheckedChange={(checked) =>
+              void patchItem(row.original, { needsReview: checked })
+            }
+          />
         ),
       },
     ],
     [patchItem],
   );
 
-  // TanStack Table intentionally returns mutable table helpers; this is the
-  // supported API shape and is isolated to this component.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
-    data: filteredItems,
-    columns,
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-      rowSelection,
-    },
-    initialState: {
-      pagination: {
-        pageIndex: 0,
-        pageSize: 10,
-      },
-    },
-    enableRowSelection: true,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-  });
+  // The DataTable owns the tanstack instance; the adapter keeps the shared
+  // sorting/filter/visibility/selection state and feeds it in controlled.
+  const hideableColumns = useMemo(
+    () =>
+      columns
+        .map((column) => {
+          const id =
+            column.id ??
+            ("accessorKey" in column
+              ? String(column.accessorKey)
+              : undefined);
+          if (!id || column.enableHiding === false) {
+            return null;
+          }
+          return { id, meta: column.meta };
+        })
+        .filter(
+          (entry): entry is { id: string; meta: ColumnMeta | undefined } =>
+            entry !== null,
+        ),
+    [columns],
+  );
 
-  useEffect(() => {
-    table.setPageIndex(0);
-  }, [ownerFilter, savedFilter, search, table]);
-
-  const selectedCount = table.getSelectedRowModel().rows.length;
-  const loadingItems = moveId && items === undefined;
-  const visibleRows = table.getRowModel().rows;
+  // Page reset on filter change is handled by the DataTable's tanstack
+  // instance (autoResetPageIndex), so the adapter no longer manages it.
+  const selectedCount = Object.values(rowSelection).filter(Boolean).length;
+  const loadingItems = Boolean(moveId) && items === undefined;
   const totalItemCount = items?.length ?? filteredItems.length;
   const activeSavedFilter = inventorySavedFilters.find(
     (filter) => filter.key === savedFilter,
@@ -865,9 +804,9 @@ export function InventoryTable({
   const inventoryTaskCounts: Partial<Record<InventoryTaskTab, number>> = {
     browse: filteredItems.length,
   };
-  const visibleColumnCount = table
-    .getAllLeafColumns()
-    .filter((column) => column.getIsVisible()).length;
+  const visibleColumnCount = hideableColumns.filter(
+    (column) => columnVisibility[column.id] !== false,
+  ).length;
   const hasActiveBrowseFilters =
     search.trim().length > 0 || ownerFilter !== "all" || savedFilter !== "all";
 
@@ -1040,32 +979,45 @@ export function InventoryTable({
                       Columns
                     </summary>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {table
-                        .getAllLeafColumns()
-                        .filter((column) => column.getCanHide())
-                        .map((column) => (
+                      {hideableColumns.map((column) => {
+                        const visible = columnVisibility[column.id] !== false;
+                        return (
                           <label
                             key={column.id}
                             className="flex items-start gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
                           >
-                            <input
-                              type="checkbox"
-                              className="mt-0.5 size-3.5 accent-primary"
-                              checked={column.getIsVisible()}
-                              onChange={column.getToggleVisibilityHandler()}
+                            <Checkbox
+                              className="mt-0.5"
+                              checked={visible}
+                              aria-label={`Toggle ${
+                                column.meta?.label ??
+                                columnLabels[column.id] ??
+                                column.id
+                              } column`}
+                              onCheckedChange={(checked) =>
+                                setColumnVisibility((current) => ({
+                                  ...current,
+                                  [column.id]: checked === true,
+                                }))
+                              }
                             />
                             <span>
                               <span className="block font-medium">
-                                {columnLabels[column.id] ?? column.id}
+                                {column.meta?.label ??
+                                  columnLabels[column.id] ??
+                                  column.id}
                               </span>
-                              {columnDescriptions[column.id] ? (
+                              {(column.meta?.description ??
+                                columnDescriptions[column.id]) ? (
                                 <span className="block text-xs leading-5 text-muted-foreground">
-                                  {columnDescriptions[column.id]}
+                                  {column.meta?.description ??
+                                    columnDescriptions[column.id]}
                                 </span>
                               ) : null}
                             </span>
                           </label>
-                        ))}
+                        );
+                      })}
                     </div>
                   </details>
                 </div>
@@ -1114,171 +1066,96 @@ export function InventoryTable({
                 </div>
               </section>
 
-              {selectedCount ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
-                  <Badge>{selectedCount} selected</Badge>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void handleBulkPatch({ status: "packed" })}
-                  >
-                    Pack
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      void handleBulkPatch({
-                        disposition: "personalTransport",
-                        requiresPersonalTransport: true,
-                      })
-                    }
-                  >
-                    Personal
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void handleBulkPatch({ needsReview: true })}
-                  >
-                    Review
-                  </Button>
-                </div>
-              ) : null}
-
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold">Inventory records</h3>
                   <p className="text-xs text-muted-foreground">
-                    {visibleRows.length} on this page / {filteredItems.length}{" "}
-                    filtered
+                    {filteredItems.length} filtered
+                    {selectedCount ? ` / ${selectedCount} selected` : ""}
                   </p>
                 </div>
-                {sorting.length ? (
-                  <Badge variant="outline">
-                    Sorted by {columnLabels[sorting[0].id] ?? sorting[0].id}
-                  </Badge>
-                ) : null}
               </div>
 
-              {loadingItems ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-4/5" />
-                </div>
-              ) : visibleRows.length ? (
-                <>
-                  <div
-                    role="list"
-                    aria-label="Inventory item cards"
-                    className="grid gap-3 md:hidden"
-                  >
-                    {visibleRows.map((row) => (
-                      <InventoryItemCard
-                        key={row.id}
-                        item={row.original}
-                        selected={row.getIsSelected()}
-                        onSelectedChange={(checked) =>
-                          row.toggleSelected(checked)
-                        }
-                        onOpenDetails={() => {
-                          setSelectedItemId(row.original._id);
-                          setDetailOpen(true);
-                        }}
-                        onPatchItem={(item, patch) =>
-                          void patchItem(item, patch)
-                        }
-                      />
-                    ))}
-                  </div>
-
-                  <div className="hidden overflow-x-auto rounded-md border border-border md:block">
-                    <Table
-                      aria-label="Inventory records table"
-                      className="min-w-[980px] table-fixed"
+              <DataTable
+                data={filteredItems}
+                columns={columns}
+                getRowId={(item) => item._id}
+                ariaLabel="Inventory records table"
+                enableRowSelection
+                loading={Boolean(loadingItems)}
+                sorting={sorting}
+                onSortingChange={setSorting}
+                columnFilters={columnFilters}
+                onColumnFiltersChange={setColumnFilters}
+                columnVisibility={columnVisibility}
+                onColumnVisibilityChange={setColumnVisibility}
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                renderMobileCard={({ row, selected, onSelectedChange }) => (
+                  <InventoryItemCard
+                    item={row}
+                    selected={selected}
+                    onSelectedChange={onSelectedChange}
+                    onOpenDetails={() => {
+                      setSelectedItemId(row._id);
+                      setDetailOpen(true);
+                    }}
+                    onPatchItem={(item, patch) => void patchItem(item, patch)}
+                  />
+                )}
+                batchActions={({ selectedRows, clearSelection }) => (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleItemBatchAction({
+                          action: { type: "status", status: "packed" },
+                          rows: selectedRows,
+                          clearSelection,
+                        })
+                      }
                     >
-                      <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                          <TableRow key={headerGroup.id}>
-                            {headerGroup.headers.map((header) => (
-                              <TableHead
-                                key={header.id}
-                                className={tableHeadClassName(header.column.id)}
-                              >
-                                {header.isPlaceholder
-                                  ? null
-                                  : flexRender(
-                                      header.column.columnDef.header,
-                                      header.getContext(),
-                                    )}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableHeader>
-                      <TableBody>
-                        {table.getRowModel().rows.map((row) => (
-                          <TableRow
-                            key={row.id}
-                            data-state={
-                              row.getIsSelected() ? "selected" : undefined
-                            }
-                          >
-                            {row.getVisibleCells().map((cell) => (
-                              <TableCell
-                                key={cell.id}
-                                className={tableCellClassName(cell.column.id)}
-                              >
-                                {flexRender(
-                                  cell.column.columnDef.cell,
-                                  cell.getContext(),
-                                )}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-                  Add inventory items or change the saved filter/search terms.
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-                <span>
-                  Page {table.getState().pagination.pageIndex + 1} of{" "}
-                  {Math.max(table.getPageCount(), 1)}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!table.getCanPreviousPage()}
-                    onClick={() => table.previousPage()}
-                  >
-                    <ChevronLeft aria-hidden="true" />
-                    Prev
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!table.getCanNextPage()}
-                    onClick={() => table.nextPage()}
-                  >
-                    Next
-                    <ChevronRight aria-hidden="true" />
-                  </Button>
-                </div>
-              </div>
+                      Pack
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleItemBatchAction({
+                          action: { type: "personalTransport" },
+                          rows: selectedRows,
+                          clearSelection,
+                        })
+                      }
+                    >
+                      Personal
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleItemBatchAction({
+                          action: { type: "needsReview" },
+                          rows: selectedRows,
+                          clearSelection,
+                        })
+                      }
+                    >
+                      Review
+                    </Button>
+                  </>
+                )}
+                emptyState={
+                  <EmptyState
+                    title="No inventory records"
+                    description="Add inventory items or change the saved filter and search terms."
+                  />
+                }
+              />
             </TabsContent>
 
             <TabsContent value="add" id="add-inventory">
