@@ -73,6 +73,70 @@ export async function insertTransportResourceFromPreset(
   return { resourceId, zoneIds, preset };
 }
 
+export const update = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    resourceId: v.id("transportResources"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    capacity: v.optional(capacityValidator),
+    rules: v.optional(v.array(v.string())),
+    sortOrder: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "household:edit",
+    );
+    if (actor.type !== "user") {
+      throw new Error(directConvexUserContextRequiredMessage);
+    }
+    const resource = await ctx.db.get(args.resourceId);
+    if (!resource || resource.moveId !== args.moveId) {
+      throw new Error("Transportation method not found for this move.");
+    }
+
+    const patch: Partial<Doc<"transportResources">> = { updatedAt: Date.now() };
+    if (args.name !== undefined) {
+      patch.name = args.name.trim() || resource.name;
+    }
+    if (args.description !== undefined) {
+      patch.description = normalizeOptionalText(args.description);
+    }
+    if (args.capacity !== undefined) {
+      patch.capacity = args.capacity;
+      // A manual capacity edit means the user has reviewed it; lift it out of
+      // the "unreviewed" default so capacity rollups treat it as a real value.
+      if (resource.capacityReviewStatus === "unreviewed") {
+        patch.capacityReviewStatus = "estimated";
+      }
+    }
+    if (args.rules !== undefined) {
+      patch.rules = normalizeRuleList(args.rules);
+    }
+    if (args.sortOrder !== undefined) {
+      patch.sortOrder = normalizeSortOrder(args.sortOrder);
+    }
+
+    await ctx.db.patch(args.resourceId, patch);
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "household",
+      action: "transport_resource.updated",
+      objectTable: "transportResources",
+      objectId: args.resourceId,
+      metadata: { name: patch.name ?? resource.name },
+    });
+  },
+});
+
 export const listForMove = query({
   args: {
     householdId: v.id("households"),

@@ -23,18 +23,21 @@ type Spaces = FunctionReturnType<typeof api.moveSpaces.listForMove>;
 type Space = Spaces[number];
 type SpaceKind = Space["kind"];
 
-// "Area" limits are stored on the shared capacity object. moveSpaces capacity
-// carries weight (lb) and volume (cu ft); a per-area limit picks one of them.
-type LimitType = "weight" | "volume";
+// A per-area limit is stored on the shared capacity object and picks one of
+// floor area (sq ft), weight (lb), or volume (cu ft).
+type LimitType = "weight" | "volume" | "area";
 
 const limitTypeOptions: { value: LimitType; label: string; unit: string }[] = [
+  { value: "area", label: "Area (sq ft)", unit: "sq ft" },
   { value: "weight", label: "Weight (lb)", unit: "lb" },
   { value: "volume", label: "Volume (cu ft)", unit: "cu ft" },
 ];
 
 function capacitySummary(space: Space): string | null {
+  const area = space.capacity?.maxAreaSqFt;
   const weight = space.capacity?.maxWeightLb;
   const volume = space.capacity?.maxVolumeCuFt;
+  if (typeof area === "number") return `${area} sq ft`;
   if (typeof weight === "number") return `${weight} lb`;
   if (typeof volume === "number") return `${volume} cu ft`;
   return null;
@@ -54,10 +57,15 @@ function AreaCard({
   const updateSpace = useMutation(api.moveSpaces.update);
   const [editing, setEditing] = useState(false);
   const [floorLevel, setFloorLevel] = useState(space.floorLevel ?? "");
-  const [limitType, setLimitType] = useState<LimitType>(
-    typeof space.capacity?.maxVolumeCuFt === "number" ? "volume" : "weight",
-  );
+  const [limitType, setLimitType] = useState<LimitType>(() => {
+    if (typeof space.capacity?.maxAreaSqFt === "number") return "area";
+    if (typeof space.capacity?.maxVolumeCuFt === "number") return "volume";
+    return "weight";
+  });
   const [limitValue, setLimitValue] = useState(() => {
+    if (typeof space.capacity?.maxAreaSqFt === "number") {
+      return String(space.capacity.maxAreaSqFt);
+    }
     if (typeof space.capacity?.maxVolumeCuFt === "number") {
       return String(space.capacity.maxVolumeCuFt);
     }
@@ -86,6 +94,8 @@ function AreaCard({
             hasLimit && limitType === "weight" ? parsed : undefined,
           maxVolumeCuFt:
             hasLimit && limitType === "volume" ? parsed : undefined,
+          maxAreaSqFt:
+            hasLimit && limitType === "area" ? parsed : undefined,
         },
       });
       setEditing(false);
