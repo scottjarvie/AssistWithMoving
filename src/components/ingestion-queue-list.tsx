@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { Bot, CheckCircle2, RotateCcw, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useAction, useMutation, useQuery } from "convex/react";
+import {
+  ArrowUpRight,
+  Bot,
+  CheckCircle2,
+  ImageOff,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -18,8 +26,112 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { moveWorkspacePath } from "@/lib/move-links";
 
 type QueueTask = "needsAction" | "working" | "archive";
+
+const scopeHintLabels: Record<string, string> = {
+  singleItem: "Single item",
+  multipleItems: "Multiple items",
+  scene: "Scene",
+};
+
+// Renders thumbnails for an entry's media. getDisplayUrl is an action returning
+// a short-lived signed/edge URL per photo, so we resolve them on mount the same
+// way PhotoEvidenceStrip does. Only images resolve; audio/video and unresolved
+// photos fall back to a count chip rendered by the caller.
+function QueueMediaThumbnails({
+  householdId,
+  moveId,
+  mediaPhotoIds,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  mediaPhotoIds: Id<"itemPhotos">[];
+}) {
+  const getDisplayUrl = useAction(api.photos.getDisplayUrl);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const thumbKey = mediaPhotoIds.slice(0, 4).join("|");
+  // Stable identity keyed on the id list so the resolver effect runs once per
+  // distinct set of media rather than on every parent re-render.
+  const visibleIds = useMemo(
+    () => (thumbKey ? (thumbKey.split("|") as Id<"itemPhotos">[]) : []),
+    [thumbKey],
+  );
+
+  useEffect(() => {
+    if (!householdId || !moveId || visibleIds.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      visibleIds.map(async (photoId) => {
+        try {
+          const display = await getDisplayUrl({
+            householdId,
+            moveId,
+            photoId,
+            variant: "card",
+          });
+          return [photoId, display.url] as const;
+        } catch {
+          return [photoId, null] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setUrls(
+        entries.reduce<Record<string, string>>((acc, [photoId, url]) => {
+          if (url) acc[photoId] = url;
+          return acc;
+        }, {}),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [getDisplayUrl, householdId, moveId, visibleIds]);
+
+  if (visibleIds.length === 0) {
+    return null;
+  }
+
+  const remaining = mediaPhotoIds.length - visibleIds.length;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2" aria-label="Capture media">
+      {visibleIds.map((photoId) => {
+        const url = urls[photoId];
+        return (
+          <div
+            key={photoId}
+            className="size-14 overflow-hidden rounded-md border border-border bg-muted"
+          >
+            {url ? (
+              // B2/edge delivery URLs are short-lived and provider-controlled,
+              // so Next image optimization is intentionally bypassed.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={url}
+                alt="Capture media"
+                className="size-full object-cover"
+              />
+            ) : (
+              <div className="flex size-full items-center justify-center text-muted-foreground">
+                <ImageOff className="size-4" aria-hidden="true" />
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {remaining > 0 ? (
+        <div className="flex size-14 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
+          +{remaining}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 const statusLabels: Record<string, string> = {
   queued: "Queued",
@@ -113,11 +225,20 @@ export function IngestionQueueList({
     },
     { needsAction: 0, working: 0, archive: 0 },
   );
-  const headerStatus = taskCounts.needsAction
-    ? `${taskCounts.needsAction} need action`
-    : taskCounts.working
-      ? `${taskCounts.working} working`
-      : "clear";
+  // Granular live counts for the header strip: how many captures are queued
+  // (waiting for an agent), claimed (an agent is working), and processed or
+  // asking a question (waiting for the user's review).
+  const statusCounts = sorted.reduce<Record<string, number>>(
+    (counts, entry) => {
+      counts[entry.status] = (counts[entry.status] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
+  const queuedCount = statusCounts.queued ?? 0;
+  const agentWorkingCount = statusCounts.claimed ?? 0;
+  const needsReviewCount =
+    (statusCounts.processed ?? 0) + (statusCounts.needsInput ?? 0);
   const activeQueueTask =
     queueTaskTabs.find((task) => task.value === activeTask) ?? queueTaskTabs[0];
 
@@ -200,17 +321,36 @@ export function IngestionQueueList({
                   {entry.roomHint ? (
                     <Badge variant="secondary">{entry.roomHint}</Badge>
                   ) : null}
+                  {entry.scopeHint ? (
+                    <Badge variant="outline">
+                      {scopeHintLabels[entry.scopeHint] ?? entry.scopeHint}
+                    </Badge>
+                  ) : null}
+                  {entry.dispositionHint ? (
+                    <Badge variant="outline">{entry.dispositionHint}</Badge>
+                  ) : null}
                   <Badge variant="outline">
                     {entry.mediaPhotoIds.length} media
                   </Badge>
                   {entry.claimedByAgentLabel ? (
-                    <Badge variant="outline">{entry.claimedByAgentLabel}</Badge>
+                    <Badge variant="secondary">
+                      <Bot className="size-3" aria-hidden="true" />
+                      {entry.claimedByAgentLabel}
+                    </Badge>
                   ) : null}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {new Date(entry.createdAt).toLocaleString()}
                 </span>
               </div>
+
+              {entry.mediaPhotoIds.length ? (
+                <QueueMediaThumbnails
+                  householdId={householdId}
+                  moveId={moveId}
+                  mediaPhotoIds={entry.mediaPhotoIds}
+                />
+              ) : null}
 
               {entry.agentQuestion ? (
                 <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm">
@@ -260,6 +400,25 @@ export function IngestionQueueList({
                     ? ` (${entry.resultItemIds.length} items proposed)`
                     : ""}
                 </p>
+              ) : null}
+
+              {entry.resultItemIds?.length && moveId ? (
+                <Button
+                  asChild
+                  size="sm"
+                  variant="link"
+                  className="mt-1 h-auto p-0"
+                >
+                  <Link
+                    href={`${moveWorkspacePath(moveId, "inventory")}#inventory-records`}
+                  >
+                    View{" "}
+                    {entry.resultItemIds.length === 1
+                      ? "the produced item"
+                      : `${entry.resultItemIds.length} produced items`}
+                    <ArrowUpRight aria-hidden="true" />
+                  </Link>
+                </Button>
               ) : null}
 
               <div className="mt-3 flex flex-wrap gap-2">
@@ -349,9 +508,18 @@ export function IngestionQueueList({
             </CardDescription>
           </div>
           {entries !== undefined ? (
-            <Badge variant={taskCounts.needsAction ? "secondary" : "outline"}>
-              {headerStatus}
-            </Badge>
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              aria-label="Queue counts"
+            >
+              <Badge variant="outline">{queuedCount} queued</Badge>
+              <Badge variant={agentWorkingCount ? "secondary" : "outline"}>
+                {agentWorkingCount} agent-working
+              </Badge>
+              <Badge variant={needsReviewCount ? "secondary" : "outline"}>
+                {needsReviewCount} need review
+              </Badge>
+            </div>
           ) : null}
         </div>
       </CardHeader>

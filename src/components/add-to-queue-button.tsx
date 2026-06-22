@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Camera, Plus } from "lucide-react";
+import { useQuery } from "convex/react";
+import { ArrowUpRight, Camera, ListChecks, Plus } from "lucide-react";
 
+import { api } from "../../convex/_generated/api";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -14,6 +17,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { moveWorkspacePath } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
 // The hero capture action. The big sidebar variant is the visual focus of the
@@ -28,6 +32,24 @@ export function AddToQueueButton({
   const [open, setOpen] = useState(false);
   const { householdId, moveId, selectedMove } = useMoveWorkspace();
   const hasActiveMove = Boolean(householdId && moveId);
+
+  // Live queue size so the always-visible capture surface doubles as the way to
+  // reach the queue — no fourth top-level nav item needed. Only subscribed
+  // while the Sheet is open to keep idle pages quiet.
+  const entries = useQuery(
+    api.ingestionQueue.listForMove,
+    open && householdId && moveId ? { householdId, moveId } : "skip",
+  );
+  const activeQueueCount = entries
+    ? entries.filter(
+        (entry) =>
+          entry.status === "queued" ||
+          entry.status === "claimed" ||
+          entry.status === "processed" ||
+          entry.status === "needsInput",
+      ).length
+    : null;
+  const queueHref = moveId ? moveWorkspacePath(moveId, "queue") : "/app/moves";
 
   return (
     <>
@@ -65,9 +87,31 @@ export function AddToQueueButton({
                 : "Pick or create a move before capturing — queue entries belong to a move."}
             </SheetDescription>
           </SheetHeader>
-          <div className="px-4 pb-4">
+          <div className="space-y-3 px-4 pb-4">
             {hasActiveMove ? (
-              <IngestionCaptureForm householdId={householdId} moveId={moveId} />
+              <>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full justify-between"
+                  onClick={() => setOpen(false)}
+                >
+                  <Link href={queueHref}>
+                    <span className="flex items-center gap-2">
+                      <ListChecks aria-hidden="true" />
+                      View the queue
+                      {activeQueueCount ? (
+                        <Badge variant="secondary">{activeQueueCount}</Badge>
+                      ) : null}
+                    </span>
+                    <ArrowUpRight aria-hidden="true" />
+                  </Link>
+                </Button>
+                <IngestionCaptureForm
+                  householdId={householdId}
+                  moveId={moveId}
+                />
+              </>
             ) : (
               <NoActiveMovePrompt onNavigate={() => setOpen(false)} />
             )}

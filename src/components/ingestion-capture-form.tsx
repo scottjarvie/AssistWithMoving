@@ -38,14 +38,25 @@ type PendingAttachment = {
   kind: "image" | "audio" | "video";
 };
 
+// Whether a batch of media becomes one entry per image (the agent treats each
+// photo as its own item) or a single combined scene entry.
+type CaptureScope = "perImage" | "combined";
+
 // Mobile-first capture: photos/voice notes/clips plus typed (or dictated)
-// directions become one ingestion-queue entry for the user's AI agent.
+// directions become ingestion-queue entries for the user's AI agent. With
+// multiple images the user picks whether each photo is its own item (the
+// default — this is the fix for the old collapse-everything-into-one behavior)
+// or whether the whole batch is one combined scene.
 export function IngestionCaptureForm({
   householdId,
   moveId,
+  onCreated,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
+  // Fired after at least one queue entry is successfully created — lets a host
+  // surface (e.g. the capture Sheet) refresh a count or close.
+  onCreated?: (created: { entryCount: number }) => void;
 }) {
   const initUpload = useAction(api.photos.initUpload);
   const finalizeUpload = useAction(api.photos.finalizeUpload);
@@ -55,6 +66,7 @@ export function IngestionCaptureForm({
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [instructions, setInstructions] = useState("");
   const [roomHint, setRoomHint] = useState("");
+  const [scope, setScope] = useState<CaptureScope>("perImage");
   const [saving, setSaving] = useState(false);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -62,6 +74,13 @@ export function IngestionCaptureForm({
   const canAttachMedia = Boolean(householdId && moveId && !saving);
   const canSubmit =
     canAttachMedia && (instructions.trim().length > 0 || attachments.length > 0);
+
+  const imageCount = attachments.filter(
+    (attachment) => attachment.kind === "image",
+  ).length;
+  // The per-image scope only changes behavior when there are 2+ images to split.
+  const scopeChoiceVisible = imageCount > 1;
+  const perImage = scopeChoiceVisible && scope === "perImage";
 
   function handleFilesChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -151,27 +170,79 @@ export function IngestionCaptureForm({
     setStatus(null);
 
     try {
-      const mediaPhotoIds: Id<"itemPhotos">[] = [];
+      const trimmedInstructions = instructions.trim() || undefined;
+      const trimmedRoomHint = roomHint.trim() || undefined;
+
+      // Upload every attachment first so a failure never leaves a half-created
+      // batch of entries. We capture which uploaded ids are images so the
+      // per-image split only fans out over photos (audio/video always ride
+      // along on a single entry).
+      const uploaded: Array<{ photoId: Id<"itemPhotos">; isImage: boolean }> =
+        [];
       for (const [index, attachment] of attachments.entries()) {
         setProgressLabel(
           `Uploading ${index + 1} of ${attachments.length} (${attachment.file.name})`
         );
-        mediaPhotoIds.push(await uploadAttachment(attachment));
+        uploaded.push({
+          photoId: await uploadAttachment(attachment),
+          isImage: attachment.kind === "image",
+        });
       }
 
-      setProgressLabel("Saving queue entry");
-      await createEntry({
-        householdId,
-        moveId,
-        instructions: instructions.trim() || undefined,
-        roomHint: roomHint.trim() || undefined,
-        mediaPhotoIds,
-      });
+      let entryCount = 0;
+      if (perImage) {
+        // One queued entry per image. Non-image media is attached to the first
+        // entry so nothing is dropped. Shared instructions/room hint travel with
+        // every entry; scopeHint:"singleItem" tells the agent each is one item.
+        const imageIds = uploaded
+          .filter((media) => media.isImage)
+          .map((media) => media.photoId);
+        const extraMediaIds = uploaded
+          .filter((media) => !media.isImage)
+          .map((media) => media.photoId);
+
+        for (const [index, photoId] of imageIds.entries()) {
+          setProgressLabel(
+            `Creating queue entry ${index + 1} of ${imageIds.length}`
+          );
+          await createEntry({
+            householdId,
+            moveId,
+            instructions: trimmedInstructions,
+            roomHint: trimmedRoomHint,
+            scopeHint: "singleItem",
+            mediaPhotoIds:
+              index === 0 ? [photoId, ...extraMediaIds] : [photoId],
+          });
+          entryCount += 1;
+        }
+      } else {
+        // One combined entry holding all media. With multiple images the user
+        // chose "one combined entry" (a scene); otherwise it is the natural
+        // single-capture path.
+        setProgressLabel("Saving queue entry");
+        await createEntry({
+          householdId,
+          moveId,
+          instructions: trimmedInstructions,
+          roomHint: trimmedRoomHint,
+          scopeHint:
+            scopeChoiceVisible && scope === "combined" ? "scene" : undefined,
+          mediaPhotoIds: uploaded.map((media) => media.photoId),
+        });
+        entryCount = 1;
+      }
 
       setAttachments([]);
       setInstructions("");
+      setScope("perImage");
       // Room hint intentionally kept: capture sessions usually walk one room.
-      setStatus("Added to the queue. Ready for the next capture.");
+      setStatus(
+        entryCount > 1
+          ? `Added ${entryCount} captures to the queue. Ready for the next.`
+          : "Added to the queue. Ready for the next capture."
+      );
+      onCreated?.({ entryCount });
     } catch (error) {
       setStatus(
         error instanceof Error && error.message
@@ -276,6 +347,45 @@ export function IngestionCaptureForm({
           </ul>
         ) : null}
 
+        {scopeChoiceVisible ? (
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-foreground">
+              How should your agent treat these {imageCount} photos?
+            </p>
+            <div
+              role="group"
+              aria-label="Capture scope"
+              className="mt-2 grid grid-cols-2 gap-2"
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={scope === "perImage" ? "default" : "outline"}
+                aria-pressed={scope === "perImage"}
+                disabled={saving}
+                onClick={() => setScope("perImage")}
+              >
+                One entry per photo
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={scope === "combined" ? "default" : "outline"}
+                aria-pressed={scope === "combined"}
+                disabled={saving}
+                onClick={() => setScope("combined")}
+              >
+                One combined entry
+              </Button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {scope === "perImage"
+                ? "Each photo becomes its own queued capture — best when every photo is a separate item."
+                : "All photos stay in a single capture — best for one scene, room, or box shot from several angles."}
+            </p>
+          </div>
+        ) : null}
+
         <Textarea
           value={instructions}
           onChange={(event) => setInstructions(event.target.value)}
@@ -306,9 +416,11 @@ export function IngestionCaptureForm({
             ) : (
               <Plus aria-hidden="true" />
             )}
-            {attachments.length
-              ? `Add ${attachments.length} ${attachments.length === 1 ? "file" : "files"} to queue`
-              : "Add note to queue"}
+            {perImage
+              ? `Add ${imageCount} entries to queue`
+              : attachments.length
+                ? `Add ${attachments.length} ${attachments.length === 1 ? "file" : "files"} to queue`
+                : "Add note to queue"}
           </Button>
           {!canSubmit && moveId ? (
             <span className="text-xs text-muted-foreground">
