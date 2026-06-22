@@ -25,10 +25,10 @@ import {
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   fileSha256Hex,
   imageDimensions,
@@ -260,8 +260,8 @@ export function IngestionCaptureForm({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           Add to Queue
-          <Tooltip>
-            <TooltipTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <button
                 type="button"
                 aria-label="How the queue works"
@@ -269,13 +269,13 @@ export function IngestionCaptureForm({
               >
                 <Info className="size-4" aria-hidden="true" />
               </button>
-            </TooltipTrigger>
-            <TooltipContent>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 text-xs leading-5">
               Drop photos, voice notes, and directions here. Your connected AI
               agent processes them later — nothing becomes inventory until you
               approve it.
-            </TooltipContent>
-          </Tooltip>
+            </PopoverContent>
+          </Popover>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -283,8 +283,8 @@ export function IngestionCaptureForm({
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               Media
-              <Tooltip>
-                <TooltipTrigger asChild>
+              <Popover>
+                <PopoverTrigger asChild>
                   <button
                     type="button"
                     aria-label="About adding media"
@@ -292,12 +292,12 @@ export function IngestionCaptureForm({
                   >
                     <Info className="size-3.5" aria-hidden="true" />
                   </button>
-                </TooltipTrigger>
-                <TooltipContent>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 text-xs leading-5">
                   Attach photos, voice notes, or short clips. They ride along
                   with your directions for the agent to process.
-                </TooltipContent>
-              </Tooltip>
+                </PopoverContent>
+              </Popover>
             </span>
             <span className="ml-auto flex gap-2">
               <Button

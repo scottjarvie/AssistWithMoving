@@ -65,6 +65,8 @@ const createMoveTasks: Array<{ value: CreateMoveTask; label: string }> = [
 export function MovesHome() {
   const {
     householdId,
+    households,
+    selectHousehold,
     activeMoves,
     moveId,
     selectMove,
@@ -104,6 +106,35 @@ export function MovesHome() {
           New move
         </Button>
       </header>
+
+      {households && households.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/40 px-3 py-2">
+          <label
+            htmlFor="household-switcher"
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          >
+            Household
+          </label>
+          <select
+            id="household-switcher"
+            value={householdId ?? ""}
+            onChange={(event) =>
+              selectHousehold(event.target.value as Id<"households">)
+            }
+            aria-label="Switch household"
+            className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm font-medium text-foreground sm:min-w-56 sm:flex-none"
+          >
+            {households.map((entry) => (
+              <option key={entry.household._id} value={entry.household._id}>
+                {entry.household.name}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">
+            Switch to see moves in another household.
+          </span>
+        </div>
+      ) : null}
 
       {hasHousehold ? <MovesStatsStrip activeMoves={activeMoves} /> : null}
 

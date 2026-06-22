@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Inbox, PackageCheck, Plus } from "lucide-react";
 
+import { CaptureMoveSwitcher } from "@/components/capture-move-switcher";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ export function MobileCaptureAction() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
-  const { householdId, moveId, selectedMove } = useMoveWorkspace();
+  const { householdId, moveId } = useMoveWorkspace();
   const hasActiveMove = Boolean(householdId && moveId);
 
   function openCapture() {
@@ -103,14 +104,18 @@ export function MobileCaptureAction() {
           <SheetHeader>
             <SheetTitle>Add to Queue</SheetTitle>
             <SheetDescription>
-              {selectedMove
-                ? `Capturing for ${selectedMove.title}.`
-                : "Capturing for the active move."}
+              Photos, voice notes, and directions for your connected agent.
             </SheetDescription>
           </SheetHeader>
-          <div className="px-4 pb-4">
+          <div className="space-y-3 px-4 pb-4">
             {hasActiveMove ? (
-              <IngestionCaptureForm householdId={householdId} moveId={moveId} />
+              <>
+                <CaptureMoveSwitcher />
+                <IngestionCaptureForm
+                  householdId={householdId}
+                  moveId={moveId}
+                />
+              </>
             ) : (
               <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
                 Select or create a move first.
