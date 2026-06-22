@@ -12,6 +12,11 @@ import {
   requiresOverrideReason,
   validateAssignment,
 } from "./lib/assignmentValidation";
+import {
+  BATCH_ASSIGN_MAX_ROWS,
+  runBatchAssign,
+  type BatchAssignTarget,
+} from "./lib/batchAssign";
 import { resolveBoxWeight } from "./lib/boxWeight";
 import { estimateItem, sumEstimateValues } from "./lib/estimateEngine";
 import {
@@ -620,6 +625,182 @@ export const update = mutation({
           : {}),
       },
     });
+  },
+});
+
+// UI batch editor: apply the SAME per-field patch + load validation as
+// boxes.update across up to 100 boxes. Non-assignment fields (status, room,
+// destinationRoom) are patched directly here exactly as update does; the
+// assignment fields are delegated to the shared batchAssign helper so load
+// validation is single-sourced. Per-row results + one audit event per changed
+// box (box.batch_updated). Honors assignmentLocked and dryRun.
+export const batchUpdate = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    boxIds: v.array(v.id("boxes")),
+    patch: v.object({
+      status: v.optional(boxStatusValidator),
+      room: v.optional(v.string()),
+      destinationRoom: v.optional(v.string()),
+      assignedResourceId: v.optional(v.id("transportResources")),
+      assignedZoneId: v.optional(v.id("transportZones")),
+      assignedTripId: v.optional(v.id("transportTrips")),
+      assignedTripSpaceId: v.optional(v.id("tripSpaces")),
+      clearAssignment: v.optional(v.boolean()),
+      assignmentOverrideReason: v.optional(v.string()),
+    }),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    if (actor.type !== "user") {
+      throw new Error(directConvexUserContextRequiredMessage);
+    }
+    if (args.boxIds.length > BATCH_ASSIGN_MAX_ROWS) {
+      throw new Error(
+        `Batch box updates are limited to ${BATCH_ASSIGN_MAX_ROWS} boxes.`,
+      );
+    }
+
+    const dryRun = Boolean(args.dryRun);
+    const target: BatchAssignTarget = {
+      assignedResourceId: args.patch.assignedResourceId,
+      assignedZoneId: args.patch.assignedZoneId,
+      assignedTripId: args.patch.assignedTripId,
+      assignedTripSpaceId: args.patch.assignedTripSpaceId,
+      clearAssignment: args.patch.clearAssignment,
+      assignmentOverrideReason: args.patch.assignmentOverrideReason,
+    };
+    const touchesAssignment =
+      target.assignedResourceId !== undefined ||
+      target.assignedZoneId !== undefined ||
+      target.assignedTripId !== undefined ||
+      target.assignedTripSpaceId !== undefined ||
+      target.clearAssignment === true;
+
+    // Non-assignment field patch, identical normalization to boxes.update.
+    const touchesFields =
+      args.patch.status !== undefined ||
+      args.patch.room !== undefined ||
+      args.patch.destinationRoom !== undefined;
+
+    type RowResult = {
+      index: number;
+      ok: boolean;
+      recordId?: string;
+      assignmentWarnings?: string[];
+      assignmentHardBlocks?: string[];
+      error?: string;
+      dryRun: boolean;
+    };
+    const results: RowResult[] = [];
+
+    for (const [index, boxId] of args.boxIds.entries()) {
+      try {
+        const box = await ctx.db.get(boxId);
+        if (
+          !box ||
+          box.householdId !== args.householdId ||
+          box.moveId !== args.moveId ||
+          box.archivedAt
+        ) {
+          throw new Error("Box not found.");
+        }
+        if (touchesAssignment && box.assignmentLocked) {
+          throw new Error("Locked assignments must be changed manually.");
+        }
+
+        // Validate assignment through the shared single-source helper.
+        let assignmentResult: Awaited<ReturnType<typeof runBatchAssign>> | null =
+          null;
+        if (touchesAssignment) {
+          assignmentResult = await runBatchAssign(ctx, {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            actorUserId: actor.userId,
+            rows: [{ kind: "box", recordId: box._id }],
+            target,
+            dryRun,
+          });
+          const row = assignmentResult.results[0];
+          if (!row.ok) {
+            throw new Error(row.error ?? "Assignment failed.");
+          }
+        }
+
+        if (touchesFields && !dryRun) {
+          const now = Date.now();
+          const fieldPatch: Partial<Doc<"boxes">> = { updatedAt: now };
+          if (args.patch.status !== undefined) {
+            fieldPatch.status = args.patch.status;
+            fieldPatch.archivedAt =
+              args.patch.status === "archived" ? now : undefined;
+            fieldPatch.sealedAt =
+              args.patch.status === "sealed" ? (box.sealedAt ?? now) : box.sealedAt;
+          }
+          if (args.patch.room !== undefined) {
+            fieldPatch.room = normalizeOptionalText(args.patch.room);
+          }
+          if (args.patch.destinationRoom !== undefined) {
+            fieldPatch.destinationRoom = normalizeOptionalText(
+              args.patch.destinationRoom,
+            );
+          }
+          await ctx.db.patch(box._id, fieldPatch);
+        }
+
+        if (!dryRun) {
+          await recordAuditEvent(ctx, {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            actorType: "user",
+            actorUserId: actor.userId,
+            category: "inventory",
+            action: "box.batch_updated",
+            objectTable: "boxes",
+            objectId: box._id,
+            metadata: {
+              rowIndex: index,
+              touchedFields: touchesFields,
+              touchedAssignment: touchesAssignment,
+            },
+          });
+        }
+
+        const assignmentRow = assignmentResult?.results[0];
+        results.push({
+          index,
+          ok: true,
+          recordId: box._id,
+          assignmentWarnings: assignmentRow?.assignmentWarnings,
+          assignmentHardBlocks: assignmentRow?.assignmentHardBlocks,
+          dryRun,
+        });
+      } catch (error) {
+        results.push({
+          index,
+          ok: false,
+          recordId: String(boxId),
+          error: error instanceof Error ? error.message : "Box update failed.",
+          dryRun,
+        });
+      }
+    }
+
+    const failed = results.filter((result) => !result.ok).length;
+    return {
+      dryRun,
+      total: args.boxIds.length,
+      succeeded: args.boxIds.length - failed,
+      failed,
+      results,
+    };
   },
 });
 

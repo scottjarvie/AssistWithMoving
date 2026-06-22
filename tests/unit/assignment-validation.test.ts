@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   requiresOverrideReason,
+  tripSpaceToCapacity,
   validateAssignment,
 } from "../../convex/lib/assignmentValidation";
 
@@ -87,5 +88,54 @@ describe("assignment validation", () => {
 
     expect(validation.softWarnings).toEqual([]);
     expect(requiresOverrideReason(validation)).toBe(false);
+  });
+
+  it("soft-warns when a trip-space area limit is exceeded by footprint", () => {
+    const validation = validateAssignment({
+      box: { ...baseBox, footprintSqFt: 12 },
+      target: {
+        resourceType: "trailer",
+        capacity: tripSpaceToCapacity({ maxAreaSqFt: 8 }),
+      },
+    });
+
+    expect(validation.softWarnings).toContain("spaceOverAreaCapacity");
+    expect(requiresOverrideReason(validation)).toBe(true);
+    expect(validation.hardBlocks).toEqual([]);
+  });
+
+  it("derives footprint from dimensions for the area warning", () => {
+    const validation = validateAssignment({
+      // 48in x 36in = 12 sqft floor footprint.
+      box: { ...baseBox, dimensionsIn: { lengthIn: 48, widthIn: 36, heightIn: 24 } },
+      target: {
+        resourceType: "trailer",
+        capacity: tripSpaceToCapacity({ maxAreaSqFt: 8 }),
+      },
+    });
+
+    expect(validation.softWarnings).toContain("spaceOverAreaCapacity");
+  });
+
+  it("does not warn on area when footprint fits or no area limit is set", () => {
+    const withinLimit = validateAssignment({
+      box: { ...baseBox, footprintSqFt: 4 },
+      target: {
+        resourceType: "trailer",
+        capacity: tripSpaceToCapacity({ maxAreaSqFt: 8 }),
+      },
+    });
+    expect(withinLimit.softWarnings).not.toContain("spaceOverAreaCapacity");
+
+    // No maxAreaSqFt supplied (resource/zone target): never area-warns, and
+    // existing output stays unchanged.
+    const noAreaLimit = validateAssignment({
+      box: { ...baseBox, footprintSqFt: 999 },
+      target: {
+        resourceType: "trailer",
+        capacity: { maxWeightLb: 500 },
+      },
+    });
+    expect(noAreaLimit.softWarnings).toEqual([]);
   });
 });

@@ -7,6 +7,11 @@ import {
   requiresOverrideReason,
   validateAssignment,
 } from "./lib/assignmentValidation";
+import {
+  BATCH_ASSIGN_MAX_ROWS,
+  runBatchAssign,
+  type BatchAssignTarget,
+} from "./lib/batchAssign";
 import { estimateItem } from "./lib/estimateEngine";
 import {
   dimensionsValidator,
@@ -569,6 +574,181 @@ export const listForMove = query({
   },
 });
 
+// Shared signal-building used by listForMoveWithSignals and facetedListForMove.
+// Takes the already-fetched move data plus the caller's chosen visibleItems
+// (after whatever filters the caller wants applied) and returns the redacted +
+// signal-decorated rows. Extracted so both queries are guaranteed identical.
+function buildItemsWithSignals({
+  householdId,
+  visibleItems,
+  boxItems,
+  boxes,
+  photos,
+  resources,
+  zones,
+  people,
+  visibility,
+}: {
+  householdId: Id<"households">;
+  visibleItems: Doc<"items">[];
+  boxItems: Doc<"boxItems">[];
+  boxes: Doc<"boxes">[];
+  photos: Doc<"itemPhotos">[];
+  resources: Doc<"transportResources">[];
+  zones: Doc<"transportZones">[];
+  people: Doc<"movePeople">[];
+  visibility: Awaited<ReturnType<typeof requireMovePermission>>["visibility"];
+}) {
+  const visibleItemIds = new Set(visibleItems.map((item) => String(item._id)));
+  const boxById = new Map(
+    boxes
+      .filter((box) => box.householdId === householdId && !box.archivedAt)
+      .map((box) => [String(box._id), box]),
+  );
+  const resourceById = new Map(
+    resources
+      .filter(
+        (resource) =>
+          resource.householdId === householdId && !resource.archivedAt,
+      )
+      .map((resource) => [String(resource._id), resource]),
+  );
+  const zoneById = new Map(
+    zones
+      .filter((zone) => zone.householdId === householdId && !zone.archivedAt)
+      .map((zone) => [String(zone._id), zone]),
+  );
+  const ownerContactById = new Map(
+    people
+      .filter(
+        (person) => person.householdId === householdId && !person.archivedAt,
+      )
+      .map((person) => [
+        String(person._id),
+        {
+          _id: person._id,
+          name: person.name,
+          role: person.role,
+        },
+      ]),
+  );
+  const signalsByItemId = new Map<string, MutableItemSignals>();
+
+  for (const photo of photos) {
+    if (
+      photo.householdId !== householdId ||
+      photo.archivedAt ||
+      !photo.itemId ||
+      !visibleItemIds.has(String(photo.itemId))
+    ) {
+      continue;
+    }
+    const signals = signalsForItem(signalsByItemId, photo.itemId);
+    signals.photoCount += 1;
+    if (isEvidencePhoto(photo)) {
+      signals.evidencePhotoCount += 1;
+    }
+  }
+
+  for (const membership of boxItems) {
+    if (
+      membership.householdId !== householdId ||
+      !visibleItemIds.has(String(membership.itemId))
+    ) {
+      continue;
+    }
+    const box = boxById.get(String(membership.boxId));
+    if (!box) continue;
+    const signals = signalsForItem(signalsByItemId, membership.itemId);
+    signals.boxCount += 1;
+    pushUnique(signals.boxCodes, box.code);
+
+    if (box.assignedResourceId || box.assignedZoneId) {
+      signals.assignedBoxCount += 1;
+      signals.assignmentCount += 1;
+      const resource = box.assignedResourceId
+        ? resourceById.get(String(box.assignedResourceId))
+        : null;
+      const zone = box.assignedZoneId
+        ? zoneById.get(String(box.assignedZoneId))
+        : null;
+      pushUnique(signals.assignedResourceNames, resource?.name);
+      pushUnique(signals.assignedZoneNames, zone?.name);
+    }
+  }
+
+  for (const item of visibleItems) {
+    if (!item.assignedResourceId && !item.assignedZoneId) {
+      continue;
+    }
+    const signals = signalsForItem(signalsByItemId, item._id);
+    signals.assignmentCount += 1;
+    const resource = item.assignedResourceId
+      ? resourceById.get(String(item.assignedResourceId))
+      : null;
+    const zone = item.assignedZoneId
+      ? zoneById.get(String(item.assignedZoneId))
+      : null;
+    pushUnique(signals.assignedResourceNames, resource?.name);
+    pushUnique(signals.assignedZoneNames, zone?.name);
+  }
+
+  return visibleItems.map((item) => ({
+    ...redactItemForVisibility(item, visibility),
+    signals: signalsByItemId.get(String(item._id)) ?? defaultItemSignals(),
+    ownerContact: item.ownerPersonId
+      ? ownerContactById.get(String(item.ownerPersonId))
+      : undefined,
+  }));
+}
+
+async function fetchMoveSignalData(
+  ctx: Parameters<typeof requireMovePermission>[0],
+  moveId: Id<"moves">,
+) {
+  const [items, boxItems, boxes, photos, resources, zones, people] =
+    await Promise.all([
+      ctx.db
+        .query("items")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("boxItems")
+        .withIndex("by_move", (q) => q.eq("moveId", moveId))
+        .collect(),
+      ctx.db
+        .query("boxes")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+        .collect(),
+      ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+        .collect(),
+      ctx.db
+        .query("transportResources")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+        .collect(),
+      ctx.db
+        .query("transportZones")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+        .collect(),
+      ctx.db
+        .query("movePeople")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
+        .collect(),
+    ]);
+  return { items, boxItems, boxes, photos, resources, zones, people };
+}
+
+// Disposition facet grouping for the inventory chip counts.
+const dispositionFacetGroups = {
+  moving: ["take", "mover", "personalTransport", "storage"],
+  sell: ["sell"],
+  trash: ["dump"],
+  donate: ["donate"],
+} as const;
+
 export const listForMoveWithSignals = query({
   args: itemListArgs,
   handler: async (ctx, args) => {
@@ -579,148 +759,80 @@ export const listForMoveWithSignals = query({
       "inventory:read",
     );
 
-    const [items, boxItems, boxes, photos, resources, zones, people] =
-      await Promise.all([
-        ctx.db
-          .query("items")
-          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-          .order("desc")
-          .collect(),
-        ctx.db
-          .query("boxItems")
-          .withIndex("by_move", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("boxes")
-          .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("itemPhotos")
-          .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("transportResources")
-          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("transportZones")
-          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-        ctx.db
-          .query("movePeople")
-          .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-          .collect(),
-      ]);
+    const data = await fetchMoveSignalData(ctx, args.moveId);
+    const visibleItems = filterItemRecords(data.items, args);
 
-    const visibleItems = filterItemRecords(items, args);
-    const visibleItemIds = new Set(
-      visibleItems.map((item) => String(item._id)),
-    );
-    const boxById = new Map(
-      boxes
-        .filter(
-          (box) => box.householdId === args.householdId && !box.archivedAt,
-        )
-        .map((box) => [String(box._id), box]),
-    );
-    const resourceById = new Map(
-      resources
-        .filter(
-          (resource) =>
-            resource.householdId === args.householdId && !resource.archivedAt,
-        )
-        .map((resource) => [String(resource._id), resource]),
-    );
-    const zoneById = new Map(
-      zones
-        .filter(
-          (zone) => zone.householdId === args.householdId && !zone.archivedAt,
-        )
-        .map((zone) => [String(zone._id), zone]),
-    );
-    const ownerContactById = new Map(
-      people
-        .filter(
-          (person) =>
-            person.householdId === args.householdId && !person.archivedAt,
-        )
-        .map((person) => [
-          String(person._id),
-          {
-            _id: person._id,
-            name: person.name,
-            role: person.role,
-          },
-        ]),
-    );
-    const signalsByItemId = new Map<string, MutableItemSignals>();
+    return buildItemsWithSignals({
+      householdId: args.householdId,
+      visibleItems,
+      boxItems: data.boxItems,
+      boxes: data.boxes,
+      photos: data.photos,
+      resources: data.resources,
+      zones: data.zones,
+      people: data.people,
+      visibility: policy.visibility,
+    });
+  },
+});
 
-    for (const photo of photos) {
-      if (
-        photo.householdId !== args.householdId ||
-        photo.archivedAt ||
-        !photo.itemId ||
-        !visibleItemIds.has(String(photo.itemId))
-      ) {
-        continue;
-      }
-      const signals = signalsForItem(signalsByItemId, photo.itemId);
-      signals.photoCount += 1;
-      if (isEvidencePhoto(photo)) {
-        signals.evidencePhotoCount += 1;
-      }
+// Same arg shape + same redacted/signal row shape as listForMoveWithSignals,
+// plus disposition facet counts. Facets are computed over the move's items with
+// every filter applied EXCEPT disposition, so the all/moving/sell/trash/donate
+// chip counts stay stable while a disposition chip is active. Reuses the same
+// by_move_updated scan — no new index.
+export const facetedListForMove = query({
+  args: itemListArgs,
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+
+    const data = await fetchMoveSignalData(ctx, args.moveId);
+
+    // Facet base: all filters EXCEPT disposition (so chip counts are stable).
+    const facetBase = filterItemRecords(data.items, {
+      ...args,
+      disposition: undefined,
+    });
+    const facets = {
+      disposition: {} as Record<string, number>,
+      total: facetBase.length,
+      moving: 0,
+      sell: 0,
+      trash: 0,
+      donate: 0,
+    };
+    for (const item of facetBase) {
+      facets.disposition[item.disposition] =
+        (facets.disposition[item.disposition] ?? 0) + 1;
+    }
+    for (const [group, dispositions] of Object.entries(
+      dispositionFacetGroups,
+    )) {
+      facets[group as keyof typeof dispositionFacetGroups] = dispositions.reduce(
+        (sum, disposition) => sum + (facets.disposition[disposition] ?? 0),
+        0,
+      );
     }
 
-    for (const membership of boxItems) {
-      if (
-        membership.householdId !== args.householdId ||
-        !visibleItemIds.has(String(membership.itemId))
-      ) {
-        continue;
-      }
-      const box = boxById.get(String(membership.boxId));
-      if (!box) continue;
-      const signals = signalsForItem(signalsByItemId, membership.itemId);
-      signals.boxCount += 1;
-      pushUnique(signals.boxCodes, box.code);
+    const visibleItems = filterItemRecords(data.items, args);
+    const items = buildItemsWithSignals({
+      householdId: args.householdId,
+      visibleItems,
+      boxItems: data.boxItems,
+      boxes: data.boxes,
+      photos: data.photos,
+      resources: data.resources,
+      zones: data.zones,
+      people: data.people,
+      visibility: policy.visibility,
+    });
 
-      if (box.assignedResourceId || box.assignedZoneId) {
-        signals.assignedBoxCount += 1;
-        signals.assignmentCount += 1;
-        const resource = box.assignedResourceId
-          ? resourceById.get(String(box.assignedResourceId))
-          : null;
-        const zone = box.assignedZoneId
-          ? zoneById.get(String(box.assignedZoneId))
-          : null;
-        pushUnique(signals.assignedResourceNames, resource?.name);
-        pushUnique(signals.assignedZoneNames, zone?.name);
-      }
-    }
-
-    for (const item of visibleItems) {
-      if (!item.assignedResourceId && !item.assignedZoneId) {
-        continue;
-      }
-      const signals = signalsForItem(signalsByItemId, item._id);
-      signals.assignmentCount += 1;
-      const resource = item.assignedResourceId
-        ? resourceById.get(String(item.assignedResourceId))
-        : null;
-      const zone = item.assignedZoneId
-        ? zoneById.get(String(item.assignedZoneId))
-        : null;
-      pushUnique(signals.assignedResourceNames, resource?.name);
-      pushUnique(signals.assignedZoneNames, zone?.name);
-    }
-
-    return visibleItems.map((item) => ({
-      ...redactItemForVisibility(item, policy.visibility),
-      signals: signalsByItemId.get(String(item._id)) ?? defaultItemSignals(),
-      ownerContact: item.ownerPersonId
-        ? ownerContactById.get(String(item.ownerPersonId))
-        : undefined,
-    }));
+    return { items, facets };
   },
 });
 
@@ -1132,6 +1244,240 @@ export const update = mutation({
         ...(patch.status && patch.status !== item.status
           ? { statusFrom: item.status, statusTo: patch.status }
           : {}),
+      },
+    });
+  },
+});
+
+// UI batch editor: apply the SAME per-field patch + load validation as
+// items.update across up to 100 items. Non-assignment fields (status,
+// disposition, room, destinationRoom) are patched directly; the assignment
+// fields are delegated to the shared batchAssign helper so load validation is
+// single-sourced. Per-row results + one audit event per changed item
+// (item.batch_updated). Honors assignmentLocked and dryRun.
+export const batchUpdate = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemIds: v.array(v.id("items")),
+    patch: v.object({
+      status: v.optional(itemStatusValidator),
+      disposition: v.optional(itemDispositionValidator),
+      room: v.optional(v.string()),
+      destinationRoom: v.optional(v.string()),
+      assignedResourceId: v.optional(v.id("transportResources")),
+      assignedZoneId: v.optional(v.id("transportZones")),
+      assignedTripId: v.optional(v.id("transportTrips")),
+      assignedTripSpaceId: v.optional(v.id("tripSpaces")),
+      clearAssignment: v.optional(v.boolean()),
+      assignmentOverrideReason: v.optional(v.string()),
+    }),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    if (actor.type !== "user") {
+      throw new Error(directConvexUserContextRequiredMessage);
+    }
+    if (args.itemIds.length > BATCH_ASSIGN_MAX_ROWS) {
+      throw new Error(
+        `Batch item updates are limited to ${BATCH_ASSIGN_MAX_ROWS} items.`,
+      );
+    }
+
+    const dryRun = Boolean(args.dryRun);
+    const target: BatchAssignTarget = {
+      assignedResourceId: args.patch.assignedResourceId,
+      assignedZoneId: args.patch.assignedZoneId,
+      assignedTripId: args.patch.assignedTripId,
+      assignedTripSpaceId: args.patch.assignedTripSpaceId,
+      clearAssignment: args.patch.clearAssignment,
+      assignmentOverrideReason: args.patch.assignmentOverrideReason,
+    };
+    const touchesAssignment =
+      target.assignedResourceId !== undefined ||
+      target.assignedZoneId !== undefined ||
+      target.assignedTripId !== undefined ||
+      target.assignedTripSpaceId !== undefined ||
+      target.clearAssignment === true;
+    const touchesFields =
+      args.patch.status !== undefined ||
+      args.patch.disposition !== undefined ||
+      args.patch.room !== undefined ||
+      args.patch.destinationRoom !== undefined;
+
+    type RowResult = {
+      index: number;
+      ok: boolean;
+      recordId?: string;
+      assignmentWarnings?: string[];
+      assignmentHardBlocks?: string[];
+      error?: string;
+      dryRun: boolean;
+    };
+    const results: RowResult[] = [];
+
+    for (const [index, itemId] of args.itemIds.entries()) {
+      try {
+        const item = await ctx.db.get(itemId);
+        if (
+          !item ||
+          item.householdId !== args.householdId ||
+          item.moveId !== args.moveId ||
+          item.deletedAt
+        ) {
+          throw new Error("Item not found.");
+        }
+        if (touchesAssignment && item.assignmentLocked) {
+          throw new Error("Locked assignments must be changed manually.");
+        }
+
+        let assignmentResult:
+          | Awaited<ReturnType<typeof runBatchAssign>>
+          | null = null;
+        if (touchesAssignment) {
+          assignmentResult = await runBatchAssign(ctx, {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            actorUserId: actor.userId,
+            rows: [{ kind: "item", recordId: item._id }],
+            target,
+            dryRun,
+          });
+          const row = assignmentResult.results[0];
+          if (!row.ok) {
+            throw new Error(row.error ?? "Assignment failed.");
+          }
+        }
+
+        if (touchesFields && !dryRun) {
+          const now = Date.now();
+          const fieldPatch: Partial<Doc<"items">> = {
+            updatedByUserId: actor.userId,
+            updatedAt: now,
+          };
+          if (args.patch.status !== undefined) {
+            fieldPatch.status = args.patch.status;
+          }
+          if (args.patch.disposition !== undefined) {
+            fieldPatch.disposition = args.patch.disposition;
+          }
+          if (args.patch.room !== undefined) {
+            fieldPatch.room = normalizeOptionalText(args.patch.room);
+          }
+          if (args.patch.destinationRoom !== undefined) {
+            fieldPatch.destinationRoom = normalizeOptionalText(
+              args.patch.destinationRoom,
+            );
+          }
+          await ctx.db.patch(item._id, fieldPatch);
+        }
+
+        if (!dryRun) {
+          await recordAuditEvent(ctx, {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            actorType: "user",
+            actorUserId: actor.userId,
+            category: "inventory",
+            action: "item.batch_updated",
+            objectTable: "items",
+            objectId: item._id,
+            metadata: {
+              rowIndex: index,
+              touchedFields: touchesFields,
+              touchedAssignment: touchesAssignment,
+            },
+          });
+        }
+
+        const assignmentRow = assignmentResult?.results[0];
+        results.push({
+          index,
+          ok: true,
+          recordId: item._id,
+          assignmentWarnings: assignmentRow?.assignmentWarnings,
+          assignmentHardBlocks: assignmentRow?.assignmentHardBlocks,
+          dryRun,
+        });
+      } catch (error) {
+        results.push({
+          index,
+          ok: false,
+          recordId: String(itemId),
+          error: error instanceof Error ? error.message : "Item update failed.",
+          dryRun,
+        });
+      }
+    }
+
+    const failed = results.filter((result) => !result.ok).length;
+    return {
+      dryRun,
+      total: args.itemIds.length,
+      succeeded: args.itemIds.length - failed,
+      failed,
+      results,
+    };
+  },
+});
+
+// Minimal disposition-only mutation for inline single-cell quick-classify in the
+// inventory table. Cheaper than the full update path: it patches disposition +
+// updatedBy/updatedAt and records a focused audit event. dump == "trash" is
+// already in the disposition enum, so no enum change is needed.
+export const setDisposition = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+    disposition: itemDispositionValidator,
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    if (actor.type !== "user") {
+      throw new Error(directConvexUserContextRequiredMessage);
+    }
+
+    const item = await ctx.db.get(args.itemId);
+    if (
+      !item ||
+      item.householdId !== args.householdId ||
+      item.moveId !== args.moveId ||
+      item.deletedAt
+    ) {
+      throw new Error("Item not found.");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.itemId, {
+      disposition: args.disposition,
+      updatedByUserId: actor.userId,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "inventory",
+      action: "item.disposition_set",
+      objectTable: "items",
+      objectId: args.itemId,
+      metadata: {
+        dispositionFrom: item.disposition,
+        dispositionTo: args.disposition,
       },
     });
   },
