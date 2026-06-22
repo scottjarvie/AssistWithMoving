@@ -6,6 +6,7 @@ import { AiReviewQueue } from "@/components/ai-review-queue";
 import { AiTextIntake } from "@/components/ai-text-intake";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -56,6 +57,8 @@ export function AiReviewWorkspacePage() {
         title="AI Review"
         description="AI suggestions stay suggestions until you approve them here — text intake, photo intake, and the review queue."
       />
+      <MoveOperationsNav />
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList tabs={aiReviewTabs} activeValue={activeTab} />
 

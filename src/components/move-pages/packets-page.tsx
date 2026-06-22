@@ -4,6 +4,7 @@ import { ClaimsCenterPanel } from "@/components/claims-center-panel";
 import { DocumentationPacketBuilder } from "@/components/documentation-packet-builder";
 import { FeatureUnavailable } from "@/components/feature-unavailable";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -54,6 +55,8 @@ export function PacketsWorkspacePage() {
         title="Packets"
         description="Scoped documentation for each recipient — movers, employers, insurers, and your own full record — with privacy defaults applied."
       />
+      <MoveOperationsNav />
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList tabs={packetTabs} activeValue={activeTab} />
 

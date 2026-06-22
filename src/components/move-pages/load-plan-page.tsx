@@ -3,6 +3,7 @@
 import { AiPlanningSuggestions } from "@/components/ai-planning-suggestions";
 import { LoadPlannerBoard } from "@/components/load-planner-board";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { TransportResourcesPanel } from "@/components/transport-resources-panel";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
@@ -49,6 +50,8 @@ export function LoadPlanWorkspacePage() {
         title="Load Plan"
         description="Trucks, trailers, movers, and helpers — what goes in each one, zone by zone, with capacity rollups."
       />
+      <MoveOperationsNav />
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList tabs={loadPlanTabs} activeValue={activeTab} />
 

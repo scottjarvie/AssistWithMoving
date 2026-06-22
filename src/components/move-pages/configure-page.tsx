@@ -10,6 +10,7 @@ import { MoveDetailsPanel } from "@/components/configure/move-details-panel";
 import { TransportMethodsPanel } from "@/components/configure/transport-methods-panel";
 import { HouseholdMemberManager } from "@/components/household-member-manager";
 import { MovePeopleManager } from "@/components/move-people-manager";
+import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
@@ -117,6 +118,8 @@ export function MoveConfigurePage() {
         title={selectedMove?.title ?? "Configure move"}
         description="Where the move starts and ends, how it travels, its facts, and who shares it."
       />
+
+      <MoveOperationsNav />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList tabs={tabs} activeValue={activeTab} />
