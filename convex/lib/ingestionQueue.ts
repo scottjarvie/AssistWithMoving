@@ -39,6 +39,19 @@ export const ingestionScopeHintValidator = v.union(
   v.literal("scene"),
 );
 
+// What the captured entry is intended to become / target (agent ingestion).
+export const ingestionQueueIntentValidator = v.union(
+  v.literal("general"),
+  v.literal("newMovableUnit"),
+  v.literal("newItem"),
+  v.literal("existingBox"),
+  v.literal("existingItem"),
+  v.literal("boxContents"),
+  v.literal("condition"),
+  v.literal("measurements"),
+  v.literal("floorPlan"),
+);
+
 // How long an agent's claim lasts before the entry is considered abandoned
 // and may be reclaimed by another run.
 export const ingestionClaimDurationMs = 15 * 60 * 1000;
