@@ -7,6 +7,7 @@ import {
   FileAudio,
   FileImage,
   FileVideo,
+  Info,
   Loader2,
   Plus,
   X,
@@ -19,12 +20,15 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   fileSha256Hex,
   imageDimensions,
@@ -65,12 +69,12 @@ export function IngestionCaptureForm({
 
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [instructions, setInstructions] = useState("");
-  const [roomHint, setRoomHint] = useState("");
   const [scope, setScope] = useState<CaptureScope>("perImage");
   const [saving, setSaving] = useState(false);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const canAttachMedia = Boolean(householdId && moveId && !saving);
   const canSubmit =
     canAttachMedia && (instructions.trim().length > 0 || attachments.length > 0);
@@ -115,7 +119,6 @@ export function IngestionCaptureForm({
     const session = await initUpload({
       householdId,
       moveId,
-      room: roomHint.trim() || undefined,
       mimeType: file.type,
       sizeBytes: file.size,
     });
@@ -171,7 +174,6 @@ export function IngestionCaptureForm({
 
     try {
       const trimmedInstructions = instructions.trim() || undefined;
-      const trimmedRoomHint = roomHint.trim() || undefined;
 
       // Upload every attachment first so a failure never leaves a half-created
       // batch of entries. We capture which uploaded ids are images so the
@@ -209,7 +211,6 @@ export function IngestionCaptureForm({
             householdId,
             moveId,
             instructions: trimmedInstructions,
-            roomHint: trimmedRoomHint,
             scopeHint: "singleItem",
             mediaPhotoIds:
               index === 0 ? [photoId, ...extraMediaIds] : [photoId],
@@ -225,7 +226,6 @@ export function IngestionCaptureForm({
           householdId,
           moveId,
           instructions: trimmedInstructions,
-          roomHint: trimmedRoomHint,
           scopeHint:
             scopeChoiceVisible && scope === "combined" ? "scene" : undefined,
           mediaPhotoIds: uploaded.map((media) => media.photoId),
@@ -259,38 +259,68 @@ export function IngestionCaptureForm({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Camera className="size-4 text-primary" aria-hidden="true" />
-          Capture for your AI agent
+          Add to Queue
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="How the queue works"
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Info className="size-4" aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Drop photos, voice notes, and directions here. Your connected AI
+              agent processes them later — nothing becomes inventory until you
+              approve it.
+            </TooltipContent>
+          </Tooltip>
         </CardTitle>
-        <CardDescription>
-          Snap photos, attach a voice note, and say what should happen. Your
-          agent processes the queue later — nothing becomes inventory without
-          your approval.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 font-medium text-foreground">
-                <Camera className="size-4 text-primary" aria-hidden="true" />
-                Add media for this capture
-              </div>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Photos, voice notes, or short clips can travel with one set of
-                agent directions.
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!canAttachMedia}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <FileImage aria-hidden="true" />
-              Choose files
-            </Button>
+        <div className="rounded-md border border-dashed border-border bg-muted/20 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              Media
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="About adding media"
+                    className="text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <Info className="size-3.5" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Attach photos, voice notes, or short clips. They ride along
+                  with your directions for the agent to process.
+                </TooltipContent>
+              </Tooltip>
+            </span>
+            <span className="ml-auto flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!canAttachMedia}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <FileImage aria-hidden="true" />
+                Choose files
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!canAttachMedia}
+                onClick={() => cameraInputRef.current?.click()}
+              >
+                <Camera aria-hidden="true" />
+                Camera
+              </Button>
+            </span>
           </div>
           <input
             ref={fileInputRef}
@@ -298,7 +328,17 @@ export function IngestionCaptureForm({
             accept="image/*,audio/*,video/*"
             multiple
             className="sr-only"
-            aria-label="Capture media"
+            aria-label="Choose media files"
+            disabled={!canAttachMedia}
+            onChange={handleFilesChange}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            aria-label="Take a photo"
             disabled={!canAttachMedia}
             onChange={handleFilesChange}
           />
@@ -386,23 +426,24 @@ export function IngestionCaptureForm({
           </div>
         ) : null}
 
-        <Textarea
-          value={instructions}
-          onChange={(event) => setInstructions(event.target.value)}
-          placeholder="Directions for your agent — type or use voice dictation. Example: blue bin is holiday stuff, sell the lamp, everything else goes in the trailer."
-          aria-label="Directions for your agent"
-          className="min-h-24 text-base"
-          autoCapitalize="sentences"
-          autoCorrect="on"
-          disabled={!householdId || !moveId || saving}
-        />
-        <Input
-          value={roomHint}
-          onChange={(event) => setRoomHint(event.target.value)}
-          placeholder="Room (optional, kept between captures)"
-          aria-label="Room hint"
-          disabled={!householdId || !moveId || saving}
-        />
+        <div className="space-y-1.5">
+          <label
+            htmlFor="capture-directions"
+            className="text-sm font-medium text-foreground"
+          >
+            Directions/Requests
+          </label>
+          <Textarea
+            id="capture-directions"
+            value={instructions}
+            onChange={(event) => setInstructions(event.target.value)}
+            aria-label="Directions/Requests"
+            className="min-h-40 text-base"
+            autoCapitalize="sentences"
+            autoCorrect="on"
+            disabled={!householdId || !moveId || saving}
+          />
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button

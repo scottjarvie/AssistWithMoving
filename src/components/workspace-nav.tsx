@@ -30,7 +30,7 @@ export function WorkspaceNav({
   return (
     <nav
       aria-label="Primary"
-      className={cn(mobile ? "grid grid-cols-3" : "space-y-1")}
+      className={cn(mobile ? "grid grow grid-cols-3" : "space-y-1")}
     >
       {globalNavItems.map((item) => {
         const Icon = navIcons[item.iconKey];

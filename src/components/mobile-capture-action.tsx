@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, ClipboardList, PackageCheck, Plus } from "lucide-react";
+import { ClipboardList, Inbox, PackageCheck, Plus } from "lucide-react";
 
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
@@ -15,9 +15,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
-// Mobile capture entry point: a floating action button above the bottom tab bar
-// that opens a bottom sheet with the three add choices. "Add to Queue" is the
-// highlighted default and opens the capture form for the active move.
+// Mobile add entry point. Rendered as the last cell of the bottom bar (a big
+// green "+", not a floating FAB), it opens a bottom sheet with the three add
+// choices. "Add to Queue" is the highlighted default for the active move.
 export function MobileCaptureAction() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -45,16 +45,16 @@ export function MobileCaptureAction() {
   }
 
   return (
-    <div className="xl:hidden">
-      <Button
+    <>
+      <button
         type="button"
-        size="icon-lg"
         aria-label="Add"
         onClick={() => setMenuOpen(true)}
-        className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom)+1rem)] right-4 z-30 size-14 rounded-full shadow-lg"
+        className="flex h-14 w-[4.5rem] shrink-0 flex-col items-center justify-center gap-0.5 bg-primary text-[11px] font-semibold text-primary-foreground"
       >
-        <Camera className="size-6" aria-hidden="true" />
-      </Button>
+        <Plus className="size-7" strokeWidth={2.75} aria-hidden="true" />
+        Add
+      </button>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent
@@ -64,13 +64,13 @@ export function MobileCaptureAction() {
           <SheetHeader>
             <SheetTitle>Add</SheetTitle>
             <SheetDescription>
-              Capture into the queue for your agent, or add a movable unit or
+              Drop it in the queue for your AI agent, or add a movable unit or
               item by hand.
             </SheetDescription>
           </SheetHeader>
           <div className="grid gap-2 px-4 pb-2">
             <Button type="button" size="lg" onClick={openCapture}>
-              <Camera aria-hidden="true" />
+              <Inbox aria-hidden="true" />
               Add to Queue
             </Button>
             <Button
@@ -80,7 +80,7 @@ export function MobileCaptureAction() {
               onClick={goToMovableUnits}
             >
               <PackageCheck aria-hidden="true" />
-              Add Movable Unit
+              Manually Add Movable Unit
             </Button>
             <Button
               type="button"
@@ -89,7 +89,7 @@ export function MobileCaptureAction() {
               onClick={goToItems}
             >
               <ClipboardList aria-hidden="true" />
-              Add Item
+              Manually Add Item
             </Button>
           </div>
         </SheetContent>
@@ -114,12 +114,11 @@ export function MobileCaptureAction() {
             ) : (
               <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
                 Select or create a move first.
-                <Plus className="ml-1 inline size-3.5" aria-hidden="true" />
               </p>
             )}
           </div>
         </SheetContent>
       </Sheet>
-    </div>
+    </>
   );
 }

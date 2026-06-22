@@ -3,7 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
-import { ArrowUpRight, Camera, ListChecks, Plus } from "lucide-react";
+import {
+  ArrowUpRight,
+  ClipboardList,
+  Inbox,
+  ListChecks,
+  PackageCheck,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
@@ -60,7 +66,7 @@ export function AddToQueueButton({
           className="w-full"
           onClick={() => setOpen(true)}
         >
-          <Camera aria-hidden="true" />
+          <Inbox aria-hidden="true" />
           Add to Queue
         </Button>
       ) : (
@@ -70,7 +76,7 @@ export function AddToQueueButton({
           className={cn("hidden", variant === "compact" && "sm:inline-flex")}
           onClick={() => setOpen(true)}
         >
-          <Camera aria-hidden="true" />
+          <Inbox aria-hidden="true" />
           Add to Queue
         </Button>
       )}
@@ -128,29 +134,31 @@ export function AddToQueueSidebarSecondaryActions() {
   const itemsHref = "/app/items";
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid gap-2">
       <Button
         asChild
         size="sm"
         variant="ghost"
+        className="justify-start"
         disabled={!moveId}
         aria-disabled={!moveId}
       >
         <Link href={movableUnitsHref}>
-          <Plus aria-hidden="true" />
-          Movable Unit
+          <PackageCheck aria-hidden="true" />
+          Manually Add Movable Unit
         </Link>
       </Button>
       <Button
         asChild
         size="sm"
         variant="ghost"
+        className="justify-start"
         disabled={!moveId}
         aria-disabled={!moveId}
       >
         <Link href={itemsHref}>
-          <Plus aria-hidden="true" />
-          Item
+          <ClipboardList aria-hidden="true" />
+          Manually Add Item
         </Link>
       </Button>
     </div>
