@@ -116,15 +116,15 @@ describe("IngestionCaptureForm", () => {
       />,
     );
 
-    expect(screen.getByText("Add media for this capture")).toBeInTheDocument();
+    expect(screen.getByText("Media")).toBeInTheDocument();
     expect(
-      screen.getByText("Photos, voice notes, or short clips can travel with one set of agent directions."),
+      screen.getByRole("button", { name: "Choose files" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add note to queue" })).toBeDisabled();
     expect(screen.getByText("Add a note or media first.")).toBeInTheDocument();
 
     await user.type(
-      screen.getByLabelText("Directions for your agent"),
+      screen.getByLabelText("Directions/Requests"),
       "Sell the lamp and keep the blue bin together.",
     );
     await user.click(screen.getByRole("button", { name: "Add note to queue" }));
@@ -152,7 +152,7 @@ describe("IngestionCaptureForm", () => {
       />,
     );
 
-    await user.upload(screen.getByLabelText("Capture media"), [
+    await user.upload(screen.getByLabelText("Choose media files"), [
       new File(["front"], "front.jpg", { type: "image/jpeg" }),
       new File(["voice memo"], "voice.m4a", { type: "audio/mp4" }),
     ]);
@@ -165,10 +165,9 @@ describe("IngestionCaptureForm", () => {
     expect(screen.getByRole("button", { name: "Add 2 files to queue" })).toBeEnabled();
 
     await user.type(
-      screen.getByLabelText("Directions for your agent"),
+      screen.getByLabelText("Directions/Requests"),
       "These are garage items for later sorting.",
     );
-    await user.type(screen.getByLabelText("Room hint"), "Garage");
     await user.click(screen.getByRole("button", { name: "Add 2 files to queue" }));
 
     await waitFor(() => {
@@ -186,21 +185,18 @@ describe("IngestionCaptureForm", () => {
       1,
       expect.objectContaining({
         mimeType: "image/jpeg",
-        room: "Garage",
       }),
     );
     expect(captureData.initUpload).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         mimeType: "audio/mp4",
-        room: "Garage",
       }),
     );
     expect(captureData.createEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         instructions: "These are garage items for later sorting.",
         mediaPhotoIds: ["photo_1", "photo_2"],
-        roomHint: "Garage",
       }),
     );
   });

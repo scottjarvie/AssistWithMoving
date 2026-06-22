@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 const e2eUserEmail = process.env.E2E_CLERK_USER_EMAIL;
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -37,19 +38,19 @@ test("config gaps: editable method capacity + sq-ft area limit persist", async (
 
   const client = await authedClient(page);
   const households = (await client.query(api.households.listMine, {})) as Array<{
-    household: { _id: string };
+    household: { _id: Id<"households"> };
   }>;
   const householdId = households[0].household._id;
   const moves = (await client.query(api.moves.listForHousehold, {
     householdId,
-  })) as Array<{ _id: string }>;
+  })) as Array<{ _id: Id<"moves"> }>;
   const moveId = moves[0]._id;
 
   // --- Gap A: transportResources.update makes method capacity editable ---
   let resources = (await client.query(api.transportResources.listForMove, {
     householdId,
     moveId,
-  })) as Array<{ _id: string; capacity?: { maxWeightLb?: number } }>;
+  })) as Array<{ _id: Id<"transportResources">; capacity?: { maxWeightLb?: number } }>;
   if (resources.length === 0) {
     await client.mutation(api.transportResources.create, {
       householdId,
@@ -86,7 +87,7 @@ test("config gaps: editable method capacity + sq-ft area limit persist", async (
     moveId,
     kind: "originRoom",
     name: `claude-test-gap area ${newWeight}`,
-  })) as string;
+  })) as Id<"moveSpaces">;
   const newArea = 275;
   await client.mutation(api.moveSpaces.update, {
     householdId,
@@ -97,7 +98,7 @@ test("config gaps: editable method capacity + sq-ft area limit persist", async (
   const spaces = (await client.query(api.moveSpaces.listForMove, {
     householdId,
     moveId,
-  })) as Array<{ _id: string; capacity?: { maxAreaSqFt?: number } }>;
+  })) as Array<{ _id: Id<"moveSpaces">; capacity?: { maxAreaSqFt?: number } }>;
   const area = spaces.find((s) => s._id === areaId);
   expect(area?.capacity?.maxAreaSqFt, "area sq-ft limit persisted").toBe(newArea);
 
