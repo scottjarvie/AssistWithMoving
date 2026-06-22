@@ -23,6 +23,10 @@ import {
   planWallValidator,
   planZoneValidator,
 } from "./lib/planValidators";
+import {
+  structuredLocationValidator,
+  transportTripStatusValidator,
+} from "./lib/moveFields";
 
 export const appRole = v.union(v.literal("member"), v.literal("admin"));
 
@@ -1016,6 +1020,12 @@ export default defineSchema({
     status: moveStatus,
     origin: v.optional(v.string()),
     destination: v.optional(v.string()),
+    // Structured locations are an additive superset of origin/destination strings,
+    // which remain the canonical values for the public MCP/REST contract.
+    startLocation: v.optional(structuredLocationValidator),
+    endLocation: v.optional(structuredLocationValidator),
+    distanceMiles: v.optional(v.number()),
+    travelMinutes: v.optional(v.number()),
     dateStart: v.optional(v.string()),
     dateEnd: v.optional(v.string()),
     unitSystem,
@@ -1096,6 +1106,51 @@ export default defineSchema({
     updatedAt: v.number(),
     archivedAt: v.optional(v.number()),
   })
+    .index("by_resource_sort", ["resourceId", "sortOrder"])
+    .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_household", ["householdId"]),
+
+  // A trip (run/load) of a transportation method. A method (transportResource)
+  // can have N trips; each trip can hold loadable tripSpaces.
+  transportTrips: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    resourceId: v.id("transportResources"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    scheduledDate: v.optional(v.string()),
+    status: transportTripStatusValidator,
+    sortOrder: v.number(),
+    createdByUserId: v.id("users"),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_resource_sort", ["resourceId", "sortOrder"])
+    .index("by_move_sort", ["moveId", "sortOrder"])
+    .index("by_household", ["householdId"]),
+
+  // A loadable space within a trip, with an area and/or weight restriction.
+  tripSpaces: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    resourceId: v.id("transportResources"),
+    tripId: v.id("transportTrips"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    maxAreaSqFt: v.optional(v.number()),
+    maxWeightLb: v.optional(v.number()),
+    sortOrder: v.number(),
+    createdByUserId: v.id("users"),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    updatedByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_trip_sort", ["tripId", "sortOrder"])
     .index("by_resource_sort", ["resourceId", "sortOrder"])
     .index("by_move_sort", ["moveId", "sortOrder"])
     .index("by_household", ["householdId"]),
@@ -1292,6 +1347,8 @@ export default defineSchema({
     estimatedVolumeCuFt: v.optional(v.number()),
     assignedResourceId: v.optional(v.id("transportResources")),
     assignedZoneId: v.optional(v.id("transportZones")),
+    assignedTripId: v.optional(v.id("transportTrips")),
+    assignedTripSpaceId: v.optional(v.id("tripSpaces")),
     assignmentLocked: v.optional(v.boolean()),
     assignmentOverrideReason: v.optional(v.string()),
     assignmentWarnings: v.optional(v.array(v.string())),
@@ -1307,6 +1364,7 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_assigned_resource", ["assignedResourceId"])
+    .index("by_assigned_trip", ["assignedTripId"])
     .index("by_household", ["householdId"]),
 
   boxItems: defineTable({
@@ -1712,6 +1770,8 @@ export default defineSchema({
     requiresPersonalTransport: v.boolean(),
     assignedResourceId: v.optional(v.id("transportResources")),
     assignedZoneId: v.optional(v.id("transportZones")),
+    assignedTripId: v.optional(v.id("transportTrips")),
+    assignedTripSpaceId: v.optional(v.id("tripSpaces")),
     assignmentLocked: v.optional(v.boolean()),
     assignmentOverrideReason: v.optional(v.string()),
     assignmentWarnings: v.optional(v.array(v.string())),
@@ -1741,6 +1801,7 @@ export default defineSchema({
     .index("by_move_needs_review", ["moveId", "needsReview"])
     .index("by_move_high_value", ["moveId", "highValue"])
     .index("by_assigned_resource", ["assignedResourceId"])
+    .index("by_assigned_trip", ["assignedTripId"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_household", ["householdId"]),

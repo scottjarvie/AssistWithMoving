@@ -107,6 +107,7 @@ import type * as photos from "../photos.js";
 import type * as planOps from "../planOps.js";
 import type * as plannedItems from "../plannedItems.js";
 import type * as publicPackets from "../publicPackets.js";
+import type * as rest_documentationProfiles from "../rest/documentationProfiles.js";
 import type * as restApi from "../restApi.js";
 import type * as restApiActions from "../restApiActions.js";
 import type * as saleListings from "../saleListings.js";
@@ -115,6 +116,7 @@ import type * as shareLinks from "../shareLinks.js";
 import type * as subManifests from "../subManifests.js";
 import type * as testSupport from "../testSupport.js";
 import type * as transportResources from "../transportResources.js";
+import type * as transportTrips from "../transportTrips.js";
 import type * as transportZones from "../transportZones.js";
 import type * as users from "../users.js";
 
@@ -224,6 +226,7 @@ declare const fullApi: ApiFromModules<{
   planOps: typeof planOps;
   plannedItems: typeof plannedItems;
   publicPackets: typeof publicPackets;
+  "rest/documentationProfiles": typeof rest_documentationProfiles;
   restApi: typeof restApi;
   restApiActions: typeof restApiActions;
   saleListings: typeof saleListings;
@@ -232,6 +235,7 @@ declare const fullApi: ApiFromModules<{
   subManifests: typeof subManifests;
   testSupport: typeof testSupport;
   transportResources: typeof transportResources;
+  transportTrips: typeof transportTrips;
   transportZones: typeof transportZones;
   users: typeof users;
 }>;

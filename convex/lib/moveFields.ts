@@ -805,3 +805,106 @@ export const capacityValidator = v.object({
   weightIsUnlimited: v.optional(v.boolean()),
   volumeIsUnlimited: v.optional(v.boolean()),
 });
+
+// Structured start/end location for a move. All subfields optional so the
+// column can be present-but-partial; moves.origin/destination strings are kept
+// for back-compat and remain the canonical values for the public MCP/REST contract.
+export const structuredLocationValidator = v.object({
+  label: v.optional(v.string()),
+  street: v.optional(v.string()),
+  city: v.optional(v.string()),
+  state: v.optional(v.string()),
+  postalCode: v.optional(v.string()),
+  country: v.optional(v.string()),
+  latitude: v.optional(v.number()),
+  longitude: v.optional(v.number()),
+});
+
+export const transportTripStatuses = [
+  "planned",
+  "loaded",
+  "departed",
+  "arrived",
+  "unloaded",
+  "cancelled",
+] as const;
+
+export const transportTripStatusValidator = v.union(
+  v.literal("planned"),
+  v.literal("loaded"),
+  v.literal("departed"),
+  v.literal("arrived"),
+  v.literal("unloaded"),
+  v.literal("cancelled")
+);
+
+export function normalizeStructuredLocation(
+  location:
+    | {
+        label?: string;
+        street?: string;
+        city?: string;
+        state?: string;
+        postalCode?: string;
+        country?: string;
+        latitude?: number;
+        longitude?: number;
+      }
+    | undefined
+) {
+  if (!location) {
+    return undefined;
+  }
+  const normalized = {
+    label: normalizeOptionalText(location.label),
+    street: normalizeOptionalText(location.street),
+    city: normalizeOptionalText(location.city),
+    state: normalizeOptionalText(location.state),
+    postalCode: normalizeOptionalText(location.postalCode),
+    country: normalizeOptionalText(location.country),
+    latitude:
+      typeof location.latitude === "number" && Number.isFinite(location.latitude)
+        ? location.latitude
+        : undefined,
+    longitude:
+      typeof location.longitude === "number" &&
+      Number.isFinite(location.longitude)
+        ? location.longitude
+        : undefined,
+  };
+  const hasAny = Object.values(normalized).some((value) => value !== undefined);
+  return hasAny ? normalized : undefined;
+}
+
+// Derive a human-readable single-line address string from structured fields,
+// used for back-compat write-through into moves.origin / moves.destination.
+export function structuredLocationToDisplay(
+  location:
+    | {
+        label?: string;
+        street?: string;
+        city?: string;
+        state?: string;
+        postalCode?: string;
+        country?: string;
+      }
+    | undefined
+) {
+  if (!location) {
+    return undefined;
+  }
+  if (location.label?.trim()) {
+    return location.label.trim().slice(0, 2000);
+  }
+  const cityState = [location.city?.trim(), location.state?.trim()]
+    .filter(Boolean)
+    .join(", ");
+  const parts = [
+    location.street?.trim(),
+    cityState,
+    location.postalCode?.trim(),
+    location.country?.trim(),
+  ].filter(Boolean);
+  const display = parts.join(" · ");
+  return display ? display.slice(0, 2000) : undefined;
+}
