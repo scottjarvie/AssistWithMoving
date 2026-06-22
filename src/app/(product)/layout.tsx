@@ -1,6 +1,7 @@
 import { ServerOff } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { MoveWorkspaceProvider } from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -11,15 +12,28 @@ import {
 } from "@/components/ui/card";
 import { hasPublicConvexUrl } from "@/lib/runtime-env";
 
+// One MoveWorkspaceProvider for every product page. It mounts here, above the
+// app shell's nav and top bar, and STAYS mounted across all in-app navigation —
+// the active move is derived from the URL inside the provider, never by
+// remounting or re-keying it. (Re-keying the provider on navigation was the
+// original freeze bug; do not reintroduce it.)
 export default function ProductLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  if (!hasPublicConvexUrl()) {
+    return (
+      <AppShell>
+        <ProductBackendUnavailable />
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell section="Workspace">
-      {hasPublicConvexUrl() ? children : <ProductBackendUnavailable />}
-    </AppShell>
+    <MoveWorkspaceProvider>
+      <AppShell>{children}</AppShell>
+    </MoveWorkspaceProvider>
   );
 }
 

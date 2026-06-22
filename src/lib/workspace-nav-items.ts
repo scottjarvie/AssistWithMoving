@@ -1,55 +1,32 @@
-import { flagEnabled, type EffectiveFeatureFlag } from "@/lib/feature-flags";
-
-export type WorkspaceNavItem = {
-  section?: string;
+// The global shell now has exactly three top-level destinations. Per-move work
+// (Capture/Inventory/Spaces/Sell/Boxes/Photos/Load Plan/Move Day/Packets/AI
+// Review/Layout) moved into tabs inside the move detail surface and is no longer
+// part of this global nav.
+export type GlobalNavItem = {
+  href: string;
   label: string;
-  iconKey:
-    | "dashboard"
-    | "capture"
-    | "inventory"
-    | "spaces"
-    | "sell"
-    | "boxes"
-    | "photos"
-    | "layout"
-    | "loadPlan"
-    | "moveDay"
-    | "packets"
-    | "aiReview";
+  iconKey: "moves" | "movableUnits" | "items";
+  // The active state matches any path that starts with this segment prefix.
+  match: string;
 };
 
-const baseWorkspaceNavItems: WorkspaceNavItem[] = [
-  { label: "Dashboard", iconKey: "dashboard" },
-  { section: "capture", label: "Capture", iconKey: "capture" },
-  { section: "inventory", label: "Inventory", iconKey: "inventory" },
-  { section: "spaces", label: "Spaces", iconKey: "spaces" },
-  { section: "sell", label: "Sell", iconKey: "sell" },
-  { section: "boxes", label: "Boxes", iconKey: "boxes" },
-  { section: "photos", label: "Photos", iconKey: "photos" },
-  { section: "load-plan", label: "Load Plan", iconKey: "loadPlan" },
-  { section: "move-day", label: "Move Day", iconKey: "moveDay" },
-  { section: "packets", label: "Packets", iconKey: "packets" },
-  { section: "ai-review", label: "AI Review", iconKey: "aiReview" },
+export const globalNavItems: GlobalNavItem[] = [
+  {
+    href: "/app/moves",
+    label: "Moves",
+    iconKey: "moves",
+    match: "/app/moves",
+  },
+  {
+    href: "/app/movable-units",
+    label: "Movable Units",
+    iconKey: "movableUnits",
+    match: "/app/movable-units",
+  },
+  {
+    href: "/app/items",
+    label: "Items",
+    iconKey: "items",
+    match: "/app/items",
+  },
 ];
-
-const layoutStudioNavItem: WorkspaceNavItem = {
-  section: "plan",
-  label: "Layout",
-  iconKey: "layout",
-};
-
-export function workspaceNavItems(flags: EffectiveFeatureFlag[] | undefined) {
-  if (!flagEnabled(flags, "layoutStudio", false)) {
-    return baseWorkspaceNavItems;
-  }
-
-  const photosIndex = baseWorkspaceNavItems.findIndex(
-    (item) => item.section === "photos"
-  );
-  const insertAt = photosIndex >= 0 ? photosIndex + 1 : baseWorkspaceNavItems.length;
-  return [
-    ...baseWorkspaceNavItems.slice(0, insertAt),
-    layoutStudioNavItem,
-    ...baseWorkspaceNavItems.slice(insertAt),
-  ];
-}

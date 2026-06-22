@@ -44,13 +44,13 @@ function EnabledAuthControls() {
   if (!isSignedIn) {
     return (
       <>
-        <SignInButton mode="modal" fallbackRedirectUrl="/app/dashboard">
+        <SignInButton mode="modal" fallbackRedirectUrl="/app/moves">
           <Button size="sm" variant="outline">
             <LockKeyhole aria-hidden="true" />
             Sign in
           </Button>
         </SignInButton>
-        <SignUpButton mode="modal" fallbackRedirectUrl="/app/dashboard">
+        <SignUpButton mode="modal" fallbackRedirectUrl="/app/moves">
           <Button size="sm">
             <UserPlus aria-hidden="true" />
             Create account

@@ -1,10 +1,8 @@
-import { MoveDashboard } from "@/components/move-dashboard";
-import { MoveWorkspaceProvider } from "@/components/move-workspace-context";
+import { redirect } from "next/navigation";
 
-export default function DashboardPage() {
-  return (
-    <MoveWorkspaceProvider>
-      <MoveDashboard />
-    </MoveWorkspaceProvider>
-  );
+// The dashboard surface was replaced by the moves home at /app/moves. This
+// redirect keeps older deep links (packets, marketing, settings) working while
+// the remaining #anchor links are migrated in a later pass.
+export default function DashboardRedirectPage() {
+  redirect("/app/moves");
 }

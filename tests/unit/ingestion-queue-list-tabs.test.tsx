@@ -10,6 +10,10 @@ const apiMock = vi.hoisted(() => ({
     setEntryStatus: "ingestionQueue.setEntryStatus",
     updateEntry: "ingestionQueue.updateEntry",
   },
+  // Entries with media resolve thumbnail URLs through this action.
+  photos: {
+    getDisplayUrl: "photos.getDisplayUrl",
+  },
 }));
 
 const queueData = vi.hoisted(() => ({
@@ -22,6 +26,9 @@ vi.mock("../../convex/_generated/api", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: () => queueData.mutation,
+  // Entries with media render thumbnails that resolve display URLs through a
+  // Convex action; stub it so the lane assertions don't depend on image loads.
+  useAction: () => vi.fn(),
   useQuery: (query: string) =>
     query === apiMock.ingestionQueue.listForMove
       ? [
@@ -89,7 +96,11 @@ describe("IngestionQueueList task tabs", () => {
       />,
     );
 
-    expect(screen.getByText("2 need action")).toBeInTheDocument();
+    // The header strip now shows granular live counts: queued (waiting for an
+    // agent), agent-working (claimed), and need review (processed + needsInput).
+    expect(screen.getByText("1 queued")).toBeInTheDocument();
+    expect(screen.getByText("1 agent-working")).toBeInTheDocument();
+    expect(screen.getByText("2 need review")).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: "Needs action: 2 entries" }),
     ).toHaveAttribute("data-state", "active");

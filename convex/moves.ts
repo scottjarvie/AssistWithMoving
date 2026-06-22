@@ -11,9 +11,12 @@ import {
   moveTypeValidator,
   normalizeDocumentationProfileTypes,
   normalizeOptionalText,
+  normalizeStructuredLocation,
   pcsBranchValidator,
   pcsDependentStatusValidator,
   pcsShipmentTypeValidator,
+  structuredLocationToDisplay,
+  structuredLocationValidator,
   unitSystemValidator,
 } from "./lib/moveFields";
 import {
@@ -203,6 +206,10 @@ export const updateBasics = mutation({
     status: v.optional(moveStatusValidator),
     origin: v.optional(v.string()),
     destination: v.optional(v.string()),
+    startLocation: v.optional(structuredLocationValidator),
+    endLocation: v.optional(structuredLocationValidator),
+    distanceMiles: v.optional(v.number()),
+    travelMinutes: v.optional(v.number()),
     dateStart: v.optional(v.string()),
     dateEnd: v.optional(v.string()),
     documentationProfileTypes: v.optional(
@@ -228,6 +235,11 @@ export const updateBasics = mutation({
       "household:edit",
     );
 
+    const move = await ctx.db.get(args.moveId);
+    if (!move || move.householdId !== args.householdId) {
+      throw new Error("Move not found.");
+    }
+
     const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
     if (args.title !== undefined) {
       patch.title = normalizeOptionalText(args.title);
@@ -236,6 +248,44 @@ export const updateBasics = mutation({
     if (args.origin !== undefined) patch.origin = normalizeOptionalText(args.origin);
     if (args.destination !== undefined) {
       patch.destination = normalizeOptionalText(args.destination);
+    }
+
+    // Structured locations are an additive superset. The legacy origin/destination
+    // strings remain the canonical values for the public MCP/REST contract, so we
+    // only write a derived display string back into them when the caller did NOT
+    // pass an explicit origin/destination string AND the stored value is empty —
+    // never clobbering a user's hand-typed origin/destination.
+    if (args.startLocation !== undefined) {
+      const startLocation = normalizeStructuredLocation(args.startLocation);
+      patch.startLocation = startLocation;
+      if (args.origin === undefined && !move.origin) {
+        const derived = structuredLocationToDisplay(startLocation);
+        if (derived) {
+          patch.origin = derived;
+        }
+      }
+    }
+    if (args.endLocation !== undefined) {
+      const endLocation = normalizeStructuredLocation(args.endLocation);
+      patch.endLocation = endLocation;
+      if (args.destination === undefined && !move.destination) {
+        const derived = structuredLocationToDisplay(endLocation);
+        if (derived) {
+          patch.destination = derived;
+        }
+      }
+    }
+    if (args.distanceMiles !== undefined) {
+      patch.distanceMiles =
+        Number.isFinite(args.distanceMiles) && args.distanceMiles >= 0
+          ? args.distanceMiles
+          : undefined;
+    }
+    if (args.travelMinutes !== undefined) {
+      patch.travelMinutes =
+        Number.isFinite(args.travelMinutes) && args.travelMinutes >= 0
+          ? args.travelMinutes
+          : undefined;
     }
     if (args.dateStart !== undefined) {
       patch.dateStart = normalizeOptionalText(args.dateStart);
