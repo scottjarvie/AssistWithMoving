@@ -1,142 +1,116 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
-import type { Id } from "../../convex/_generated/dataModel";
-import type { EffectiveFeatureFlag } from "@/lib/feature-flags";
-
 const mockState = vi.hoisted(() => ({
-  pathname: "/app/moves/move_123/plan",
-  featureFlags: undefined as EffectiveFeatureFlag[] | undefined,
+  pathname: "/app/moves",
 }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => mockState.pathname,
 }));
 
-vi.mock("@/components/move-workspace-context", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/components/move-workspace-context")>();
-  return {
-    ...actual,
-    useOptionalMoveWorkspace: () =>
-      ({
-        householdId: "household_123" as Id<"households">,
-        selectHousehold: vi.fn(),
-        households: [],
-        moves: [],
-        activeMoves: [],
-        moveId: "move_123" as Id<"moves">,
-        selectMove: vi.fn(),
-        selectedMove: undefined,
-        featureFlags: mockState.featureFlags,
-        loadingIdentity: false,
-        loadingHouseholds: false,
-        loadingMoves: false,
-        moveLinkMessage: null,
-      }) satisfies MoveWorkspaceValue,
-  };
-});
-
 import { WorkspaceNav } from "@/components/workspace-nav";
-
-function layoutStudioFlag(enabled: boolean): EffectiveFeatureFlag {
-  return {
-    key: "layoutStudio",
-    label: "Layout Studio",
-    description: "Experimental planner",
-    environment: "development",
-    enabled,
-    source: "default",
-  };
-}
 
 describe("WorkspaceNav", () => {
   beforeEach(() => {
-    mockState.pathname = "/app/moves/move_123/plan";
-    mockState.featureFlags = undefined;
+    mockState.pathname = "/app/moves";
   });
 
-  it("omits the Layout entry when the layoutStudio flag is unavailable", () => {
+  it("renders exactly the three global destinations", () => {
     render(<WorkspaceNav />);
 
-    expect(screen.queryByRole("link", { name: /layout/i })).not.toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    const links = within(nav).getAllByRole("link");
+    expect(links).toHaveLength(3);
+
+    expect(within(nav).getByRole("link", { name: "Moves" })).toHaveAttribute(
+      "href",
+      "/app/moves",
+    );
+    expect(
+      within(nav).getByRole("link", { name: "Movable Units" }),
+    ).toHaveAttribute("href", "/app/movable-units");
+    expect(within(nav).getByRole("link", { name: "Items" })).toHaveAttribute(
+      "href",
+      "/app/items",
+    );
   });
 
-  it("renders an active sidebar Layout entry when the flag is enabled", () => {
-    mockState.featureFlags = [layoutStudioFlag(true)];
+  it("drops the former dashboard, capture, and section links", () => {
+    render(<WorkspaceNav />);
+
+    expect(
+      screen.queryByRole("link", { name: /dashboard/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /capture/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /^inventory$/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /layout/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks Moves active on the moves home", () => {
+    mockState.pathname = "/app/moves";
 
     render(<WorkspaceNav />);
 
-    const layoutLink = screen.getByRole("link", { name: /layout/i });
-    expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/plan");
-    expect(layoutLink).toHaveClass("bg-sidebar-accent");
-    expect(layoutLink).toHaveAttribute("aria-current", "page");
+    const movesLink = screen.getByRole("link", { name: "Moves" });
+    expect(movesLink).toHaveAttribute("aria-current", "page");
+    expect(movesLink).toHaveClass("bg-sidebar-accent");
+
+    expect(
+      screen.getByRole("link", { name: "Movable Units" }),
+    ).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Items" })).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 
-  it("uses the same flag-gated Layout entry in mobile navigation", () => {
-    mockState.featureFlags = [layoutStudioFlag(true)];
+  it("keeps Moves active on a nested per-move path", () => {
+    mockState.pathname = "/app/moves/move_123/inventory";
+
+    render(<WorkspaceNav />);
+
+    expect(screen.getByRole("link", { name: "Moves" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.getByRole("link", { name: "Movable Units" }),
+    ).not.toHaveAttribute("aria-current");
+  });
+
+  it("lights up Items on the items surface and its sub-paths", () => {
+    mockState.pathname = "/app/items/item_123";
+
+    render(<WorkspaceNav />);
+
+    const itemsLink = screen.getByRole("link", { name: "Items" });
+    expect(itemsLink).toHaveAttribute("aria-current", "page");
+    expect(itemsLink).toHaveClass("bg-sidebar-accent");
+    expect(screen.getByRole("link", { name: "Moves" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("renders the same three links in a mobile grid", () => {
+    mockState.pathname = "/app/movable-units";
 
     render(<WorkspaceNav variant="mobile" />);
 
-    expect(screen.getByRole("navigation", { name: "Primary" })).toHaveClass(
-      "max-w-full",
-      "overflow-x-auto",
-    );
-    const layoutLink = screen.getByRole("link", { name: /layout/i });
-    expect(layoutLink).toHaveAttribute("href", "/app/moves/move_123/plan");
-    expect(layoutLink).toHaveClass("h-10");
-    expect(layoutLink).toHaveAttribute("aria-current", "page");
-  });
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(nav).toHaveClass("grid", "grid-cols-3");
+    expect(within(nav).getAllByRole("link")).toHaveLength(3);
 
-  it("routes locked dashboard section links to create-move setup", () => {
-    mockState.pathname = "/app/dashboard";
-
-    render(<WorkspaceNav />);
-
-    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute(
-      "href",
-      "/app/dashboard"
-    );
-    expect(screen.getByRole("link", { name: "Capture" })).toHaveAttribute(
-      "href",
-      "/app/dashboard#create-move"
-    );
-    expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
-      "href",
-      "/app/dashboard#create-move"
-    );
-  });
-
-  it("dispatches dashboard setup hash changes when already on the dashboard", () => {
-    mockState.pathname = "/app/dashboard";
-    window.history.replaceState(null, "", "/app/dashboard");
-    const hashChangeListener = vi.fn();
-    window.addEventListener("hashchange", hashChangeListener);
-
-    render(<WorkspaceNav />);
-    fireEvent.click(screen.getByRole("link", { name: "Capture" }));
-
-    expect(window.location.pathname).toBe("/app/dashboard");
-    expect(window.location.hash).toBe("#create-move");
-    expect(hashChangeListener).toHaveBeenCalledTimes(1);
-
-    window.removeEventListener("hashchange", hashChangeListener);
-  });
-
-  it("clears dashboard setup hash changes when Dashboard is clicked", () => {
-    mockState.pathname = "/app/dashboard";
-    window.history.replaceState(null, "", "/app/dashboard#create-move");
-    const hashChangeListener = vi.fn();
-    window.addEventListener("hashchange", hashChangeListener);
-
-    render(<WorkspaceNav />);
-    fireEvent.click(screen.getByRole("link", { name: "Dashboard" }));
-
-    expect(window.location.pathname).toBe("/app/dashboard");
-    expect(window.location.hash).toBe("");
-    expect(hashChangeListener).toHaveBeenCalledTimes(1);
-
-    window.removeEventListener("hashchange", hashChangeListener);
+    const unitsLink = within(nav).getByRole("link", { name: "Movable Units" });
+    expect(unitsLink).toHaveAttribute("aria-current", "page");
+    // Mobile active styling swaps to a foreground tint instead of the sidebar
+    // accent background used by the desktop rail.
+    expect(unitsLink).toHaveClass("text-foreground");
+    expect(unitsLink).not.toHaveClass("bg-sidebar-accent");
   });
 });

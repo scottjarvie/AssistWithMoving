@@ -1,19 +1,82 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import type { InventoryItem } from "@/lib/inventory-types";
 
+const apiMock = vi.hoisted(() => ({
+  items: {
+    facetedListForMove: "items.facetedListForMove",
+    create: "items.create",
+    update: "items.update",
+    setDisposition: "items.setDisposition",
+    batchUpdate: "items.batchUpdate",
+  },
+  transportResources: {
+    listForMoveWithZones: "transportResources.listForMoveWithZones",
+  },
+  // Referenced by the always-mounted ItemDetailSheet; both resolve to undefined
+  // through the useQuery mock and the sheet tolerates that.
+  audit: {
+    listForObject: "audit.listForObject",
+  },
+  movePeople: {
+    listForMove: "movePeople.listForMove",
+  },
+}));
+
 const mockItems = vi.hoisted(() => ({
   rows: [] as unknown as InventoryItem[],
-  update: vi.fn(),
-  create: vi.fn(),
   useMutation: vi.fn(),
 }));
 
+// The disposition facet groups mirror the server (convex/items.ts). We rebuild
+// the chip counts here so the rendered facet pills match whatever rows a test
+// sets up.
+const dispositionFacetGroups: Record<string, string[]> = {
+  moving: ["take", "mover", "personalTransport", "storage"],
+  sell: ["sell"],
+  trash: ["dump"],
+  donate: ["donate"],
+};
+
+function buildFacets(rows: InventoryItem[]) {
+  const disposition: Record<string, number> = {};
+  for (const item of rows) {
+    disposition[item.disposition] = (disposition[item.disposition] ?? 0) + 1;
+  }
+  const groupCounts: Record<string, number> = {};
+  for (const [group, dispositions] of Object.entries(dispositionFacetGroups)) {
+    groupCounts[group] = dispositions.reduce(
+      (sum, value) => sum + (disposition[value] ?? 0),
+      0,
+    );
+  }
+  return {
+    disposition,
+    total: rows.length,
+    moving: groupCounts.moving ?? 0,
+    sell: groupCounts.sell ?? 0,
+    trash: groupCounts.trash ?? 0,
+    donate: groupCounts.donate ?? 0,
+  };
+}
+
+vi.mock("../../convex/_generated/api", () => ({
+  api: apiMock,
+}));
+
 vi.mock("convex/react", () => ({
-  useQuery: () => mockItems.rows,
+  // The rebuilt table reads a single faceted query that returns both the rows
+  // and the disposition facet counts. Transport resources are only needed for
+  // the batch-assign menu and stay empty here.
+  useQuery: (query: string) =>
+    query === apiMock.items.facetedListForMove
+      ? { items: mockItems.rows, facets: buildFacets(mockItems.rows) }
+      : query === apiMock.transportResources.listForMoveWithZones
+        ? []
+        : undefined,
   useMutation: mockItems.useMutation,
 }));
 
@@ -45,7 +108,7 @@ describe("InventoryTable", () => {
     mockItems.useMutation.mockReturnValue(vi.fn());
   });
 
-  it("keeps find controls above explicit, compact inventory records", () => {
+  it("shows the disposition facet, action controls, and dual record views", () => {
     render(
       <InventoryTable
         householdId={"household_123" as Id<"households">}
@@ -53,6 +116,21 @@ describe("InventoryTable", () => {
       />,
     );
 
+    // Headline disposition facet chips with live counts from the server facets.
+    const facetGroup = screen.getByRole("group", {
+      name: "Disposition filter",
+    });
+    for (const chip of ["All", "Moving", "Sell", "Trash", "Donate"]) {
+      expect(
+        within(facetGroup).getByRole("button", { name: new RegExp(chip) }),
+      ).toBeInTheDocument();
+    }
+    // "All" is active by default and the single mover item lands in "Moving".
+    expect(
+      within(facetGroup).getByRole("button", { name: /All/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // Action strip + counts.
     expect(screen.getByText("Inventory actions")).toBeInTheDocument();
     expect(screen.getByText("1 shown / 1 total")).toBeInTheDocument();
     expect(
@@ -61,23 +139,24 @@ describe("InventoryTable", () => {
     expect(
       screen.getByRole("button", { name: "Bulk paste" }),
     ).toBeInTheDocument();
+
+    // Find/filter controls.
     expect(screen.getByText("Find and filter")).toBeInTheDocument();
-    expect(screen.getAllByText("All items").length).toBeGreaterThan(1);
     expect(screen.getByText("1 of 1 records")).toBeInTheDocument();
     expect(screen.getByLabelText("Search inventory")).toBeInTheDocument();
     expect(screen.getByText("Columns")).toBeInTheDocument();
+
+    // Records section + sortable headers.
     expect(screen.getByText("Inventory records")).toBeInTheDocument();
-    expect(screen.getByText("1 on this page / 1 filtered")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Sort by Item" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Sort by Room" }),
     ).toBeInTheDocument();
-    const cardList = screen.getByRole("list", { name: "Inventory item cards" });
-    expect(
-      within(cardList).getByText("Walnut media console"),
-    ).toBeInTheDocument();
+
+    // The DataTable renders both a mobile card list and the desktop table, so
+    // the item name appears twice and indicator flags surface in both.
     expect(
       screen.getByRole("table", { name: "Inventory records table" }),
     ).toBeInTheDocument();
@@ -85,9 +164,9 @@ describe("InventoryTable", () => {
     expect(screen.getAllByText("review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("value").length).toBeGreaterThan(0);
     expect(screen.getAllByText("personal").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("+4").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("+5").length).toBeGreaterThan(0);
-    expect(screen.queryByText("photos 2")).not.toBeInTheDocument();
+    // The card shows 3 indicators (+4 overflow); the table shows 2 (+5).
+    expect(screen.getByText("+4")).toBeInTheDocument();
+    expect(screen.getByText("+5")).toBeInTheDocument();
   });
 
   it("uses browse action shortcuts to switch into intake workflows", async () => {
@@ -187,13 +266,10 @@ describe("InventoryTable", () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Add" })).toHaveAttribute(
-        "data-state",
-        "active",
-      );
-    });
-
+    expect(screen.getByRole("tab", { name: "Add" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
     expect(screen.getByLabelText("New item name")).toBeInTheDocument();
     expect(screen.queryByText("Walnut media console")).not.toBeInTheDocument();
   });
@@ -212,13 +288,10 @@ describe("InventoryTable", () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Bulk paste" })).toHaveAttribute(
-        "data-state",
-        "active",
-      );
-    });
-
+    expect(screen.getByRole("tab", { name: "Bulk paste" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
     expect(
       screen.getByPlaceholderText(
         "Garage: two bikes, red toolbox, camping tent",
@@ -253,7 +326,7 @@ describe("InventoryTable", () => {
     expect(screen.getAllByText("Inventory item 1").length).toBeGreaterThan(0);
     expect(
       screen.queryByText(
-        "Add inventory items or change the saved filter/search terms.",
+        "Add inventory items or change the disposition facet, saved filter, and search terms.",
       ),
     ).not.toBeInTheDocument();
   });

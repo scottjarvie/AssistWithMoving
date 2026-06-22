@@ -16,7 +16,9 @@ describe("move links", () => {
 
   it("returns to move-specific boxes when move context is available", () => {
     expect(moveBoxesPath("move_123")).toBe("/app/moves/move_123/boxes");
-    expect(moveBoxesPath()).toBe("/app/dashboard");
+    // The dashboard is gone; without a move the boxes link falls back to the
+    // moves home instead of the old /app/dashboard.
+    expect(moveBoxesPath()).toBe("/app/moves");
   });
 
   it("resolves old workspace anchors to split move pages", () => {
@@ -169,23 +171,31 @@ describe("move links", () => {
     );
   });
 
-  it("keeps safe fallbacks for dashboard, missing moves, and unknown anchors", () => {
+  it("collapses former dashboard anchors onto the moves home", () => {
+    // The dashboard surface was replaced by the moves home, so every former
+    // dashboard task anchor now lands on /app/moves with no hash.
     expect(moveWorkspaceAnchorPath("move_123", "#active-moves")).toBe(
-      "/app/dashboard#active-moves"
+      "/app/moves"
     );
     expect(moveWorkspaceAnchorPath("move_123", "#create-move")).toBe(
-      "/app/dashboard#create-move"
+      "/app/moves"
     );
     expect(moveWorkspaceAnchorPath("move_123", "#create-move-packets")).toBe(
-      "/app/dashboard#create-move-packets"
+      "/app/moves"
     );
     expect(moveWorkspaceAnchorPath("move_123", "#household-setup")).toBe(
-      "/app/dashboard#household-setup"
+      "/app/moves"
     );
     expect(moveWorkspaceAnchorPath("move_123", "#ai-connection")).toBe(
-      "/app/dashboard#ai-connection"
+      "/app/moves"
     );
+  });
+
+  it("keeps safe fallbacks for missing moves and unknown anchors", () => {
+    // Without a move id, a section anchor cannot resolve to a move path, so the
+    // raw anchor is returned unchanged.
     expect(moveWorkspaceAnchorPath(null, "#inventory")).toBe("#inventory");
+    // An anchor the map does not know about is also returned untouched.
     expect(moveWorkspaceAnchorPath("move_123", "#custom-section")).toBe(
       "#custom-section"
     );

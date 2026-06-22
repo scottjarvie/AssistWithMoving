@@ -42,6 +42,32 @@ vi.mock("@/components/move-workspace-header", () => ({
   ),
 }));
 
+// The configure page reads count queries directly in its body. Returning
+// undefined keeps the tab badges off and exercises the loading-tolerant path.
+vi.mock("convex/react", () => ({
+  useQuery: () => undefined,
+}));
+
+// Configure page child surfaces — stubbed so the tab/hash routing is what is
+// under test, not the panels themselves.
+vi.mock("@/components/configure/location-config-card", () => ({
+  LocationConfigCard: ({ side }: { side: string }) => (
+    <div>{`${side} location config surface`}</div>
+  ),
+}));
+vi.mock("@/components/configure/move-areas-panel", () => ({
+  MoveAreasPanel: ({ title }: { title: string }) => <div>{title}</div>,
+}));
+vi.mock("@/components/configure/move-details-panel", () => ({
+  MoveDetailsPanel: () => <div>Move details surface</div>,
+}));
+vi.mock("@/components/configure/transport-methods-panel", () => ({
+  TransportMethodsPanel: () => <div>Transport methods surface</div>,
+}));
+vi.mock("@/components/household-member-manager", () => ({
+  HouseholdMemberManager: () => <div>Household member surface</div>,
+}));
+
 vi.mock("@/lib/feature-flags", () => ({
   flagEnabled: () => true,
 }));
@@ -122,7 +148,7 @@ vi.mock("@/components/estimate-summary", () => ({
 }));
 
 import { AiReviewWorkspacePage } from "@/components/move-pages/ai-review-page";
-import { CaptureWorkspacePage } from "@/components/move-pages/capture-page";
+import { MoveConfigurePage } from "@/components/move-pages/configure-page";
 import { InventoryWorkspacePage } from "@/components/move-pages/inventory-page";
 import { LoadPlanWorkspacePage } from "@/components/move-pages/load-plan-page";
 import { MoveOverviewPage } from "@/components/move-pages/overview-page";
@@ -193,40 +219,99 @@ describe("move workspace task tabs", () => {
     expect(screen.queryByText("Decision questions surface")).not.toBeInTheDocument();
   });
 
-  it("opens capture on the intake form and keeps the queue behind its tab", () => {
-    render(<CaptureWorkspacePage />);
+  it("opens the move on its configuration surface with the start tab active", () => {
+    render(<MoveConfigurePage />);
 
-    expect(screen.getByRole("tab", { name: "Capture" })).toHaveAttribute(
-      "data-state",
-      "active"
-    );
-    expect(screen.getByRole("tab", { name: "Queue" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Start location/ }),
+    ).toHaveAttribute("data-state", "active");
+    expect(
+      screen.getByRole("tab", { name: /End location/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Transportation/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Details" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Household/ }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Add rough notes, photos, and room observations without opening the review queue.",
+        "Where the move begins and the rooms or areas being packed there.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Capture form surface")).toBeInTheDocument();
-    expect(screen.queryByText("Ingestion queue surface")).not.toBeInTheDocument();
+    expect(screen.getByText("start location config surface")).toBeInTheDocument();
+    expect(screen.getByText("Start areas")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Transport methods surface"),
+    ).not.toBeInTheDocument();
   });
 
-  it("opens capture queue when routed to the queue hash", async () => {
-    window.history.replaceState(
-      null,
-      "",
-      "/app/moves/move_123/capture#capture-queue"
-    );
+  it("opens the end location when routed to the end hash", async () => {
+    window.history.replaceState(null, "", "/app/moves/move_123#end");
 
-    render(<CaptureWorkspacePage />);
+    render(<MoveConfigurePage />);
 
     await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Queue" })).toHaveAttribute(
-        "data-state",
-        "active"
-      )
+      expect(
+        screen.getByRole("tab", { name: /End location/ }),
+      ).toHaveAttribute("data-state", "active"),
     );
-    expect(screen.getByText("Ingestion queue surface")).toBeInTheDocument();
-    expect(screen.queryByText("Capture form surface")).not.toBeInTheDocument();
+    expect(screen.getByText("end location config surface")).toBeInTheDocument();
+    expect(screen.getByText("End areas")).toBeInTheDocument();
+    expect(
+      screen.queryByText("start location config surface"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens transportation when routed to the transport hash", async () => {
+    window.history.replaceState(null, "", "/app/moves/move_123#transport");
+
+    render(<MoveConfigurePage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /Transportation/ }),
+      ).toHaveAttribute("data-state", "active"),
+    );
+    expect(screen.getByText("Transport methods surface")).toBeInTheDocument();
+    expect(
+      screen.queryByText("start location config surface"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens details when routed to the details hash", async () => {
+    window.history.replaceState(null, "", "/app/moves/move_123#details");
+
+    render(<MoveConfigurePage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+        "data-state",
+        "active",
+      ),
+    );
+    expect(screen.getByText("Move details surface")).toBeInTheDocument();
+    expect(
+      screen.queryByText("start location config surface"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the household tab when routed to the household hash", async () => {
+    window.history.replaceState(null, "", "/app/moves/move_123#household");
+
+    render(<MoveConfigurePage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("tab", { name: /Household/ }),
+      ).toHaveAttribute("data-state", "active"),
+    );
+    expect(screen.getByText("Household member surface")).toBeInTheDocument();
+    expect(screen.getByText("People manager surface")).toBeInTheDocument();
+    expect(
+      screen.queryByText("start location config surface"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens photos on review and keeps upload, gaps, and coverage behind tabs", () => {
