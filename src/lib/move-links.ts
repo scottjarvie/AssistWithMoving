@@ -4,9 +4,11 @@ export function moveWorkspacePath(moveId: string, section?: string) {
 }
 
 export function moveBoxesPath(moveId?: string | null) {
-  return moveId ? moveWorkspacePath(moveId, "boxes") : "/app/dashboard";
+  return moveId ? moveWorkspacePath(moveId, "boxes") : "/app/moves";
 }
 
+// Former dashboard task anchors. The dashboard surface is gone (now the moves
+// home), so any link aimed at one of these just lands on the moves home.
 const dashboardAnchors = new Set([
   "#active-moves",
   "#ai-connection",
@@ -92,7 +94,7 @@ export function moveWorkspaceAnchorPath(
   anchor: string
 ) {
   if (dashboardAnchors.has(anchor)) {
-    return `/app/dashboard${anchor}`;
+    return "/app/moves";
   }
 
   const section = workspaceAnchorSections[anchor];

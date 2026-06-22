@@ -41,6 +41,18 @@ export type MoveWorkspaceValue = {
 
 const MoveWorkspaceContext = createContext<MoveWorkspaceValue | null>(null);
 
+// Read the move id out of an /app/moves/[moveId] route. The single provider
+// mount lives above every product page, so it derives the active move from the
+// URL instead of being remounted per route — remounting the provider on
+// navigation was the original freeze bug.
+function moveIdFromPathname(pathname: string): string | null {
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments[0] === "app" && segments[1] === "moves" && segments[2]) {
+    return decodeURIComponent(segments[2]);
+  }
+  return null;
+}
+
 export function MoveWorkspaceProvider({
   initialMoveId,
   children,
@@ -65,8 +77,15 @@ export function MoveWorkspaceProvider({
     | EffectiveFeatureFlag[]
     | undefined;
 
+  // The active move id derived from the current /app/moves/[moveId] route.
+  // This is what keeps the single hoisted provider in sync with navigation
+  // without remounting it.
+  const routeMoveId = moveIdFromPathname(pathname) ?? initialMoveId ?? null;
+
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
+  // Tracks an explicit user choice (move switcher, "select move", create move).
+  // The route move id below takes over whenever the URL points at a move.
   const [selectedMoveId, setSelectedMoveId] = useState<Id<"moves"> | null>(
     initialMoveId ? (initialMoveId as Id<"moves">) : null
   );
@@ -88,9 +107,9 @@ export function MoveWorkspaceProvider({
   // user's first household owns it.
   const linkedMove = useQuery(
     api.moves.getForLink,
-    initialMoveId ? { moveId: initialMoveId } : "skip"
+    routeMoveId ? { moveId: routeMoveId } : "skip"
   );
-  const resolvingLink = Boolean(initialMoveId) && linkedMove === undefined;
+  const resolvingLink = Boolean(routeMoveId) && linkedMove === undefined;
 
   const firstHousehold = households?.[0]?.household;
   const householdId =
@@ -108,38 +127,38 @@ export function MoveWorkspaceProvider({
   );
 
   const firstMove = activeMoves[0];
-  const selectedMoveIsAccessible = selectedMoveId
-    ? activeMoves.some((move) => move._id === selectedMoveId)
-    : false;
-  const moveId = selectedMoveIsAccessible
-    ? selectedMoveId
-    : firstMove?._id ?? null;
+  const isAccessible = (candidate: Id<"moves"> | null) =>
+    candidate ? activeMoves.some((move) => move._id === candidate) : false;
+
+  // Resolution order: the move the URL points at wins (deep links and the
+  // sidebar nav drive the URL), then an explicit user selection made off-route,
+  // then the first accessible move. This keeps the single provider in sync with
+  // navigation without ever remounting it.
+  const routeMoveIdTyped = routeMoveId as Id<"moves"> | null;
+  const moveId =
+    (isAccessible(routeMoveIdTyped) ? routeMoveIdTyped : null) ??
+    (isAccessible(selectedMoveId) ? selectedMoveId : null) ??
+    firstMove?._id ??
+    null;
   const selectedMove = activeMoves.find((move) => move._id === moveId);
-  const moveLinkMessage =
-    !resolvingLink && selectedMoveId && moves && !selectedMoveIsAccessible
-      ? "That move link is not available in this household."
-      : null;
+
+  // A move id came from the URL but the signed-in user cannot access it.
+  const routeMoveIsBroken =
+    !resolvingLink &&
+    Boolean(routeMoveIdTyped) &&
+    Boolean(moves) &&
+    !isAccessible(routeMoveIdTyped);
+  const moveLinkMessage = routeMoveIsBroken
+    ? "That move link is not available in this household."
+    : null;
 
   // If a deep link points at a move this user cannot access, fall back to
   // the first accessible move instead of rendering a broken workspace.
   useEffect(() => {
-    if (resolvingLink) {
-      return;
+    if (routeMoveIsBroken && pathname.startsWith("/app/moves/") && firstMove?._id) {
+      router.replace(moveWorkspacePath(firstMove._id));
     }
-    if (selectedMoveId && moves && !selectedMoveIsAccessible) {
-      if (pathname.startsWith("/app/moves/") && firstMove?._id) {
-        router.replace(moveWorkspacePath(firstMove._id));
-      }
-    }
-  }, [
-    firstMove?._id,
-    moves,
-    pathname,
-    resolvingLink,
-    router,
-    selectedMoveId,
-    selectedMoveIsAccessible,
-  ]);
+  }, [firstMove?._id, pathname, router, routeMoveIsBroken]);
 
   const value = useMemo<MoveWorkspaceValue>(
     () => ({
