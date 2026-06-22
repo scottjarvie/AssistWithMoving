@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  ingestionQueueIntentValidator,
   ingestionQueueStatusValidator,
   ingestionScopeHintValidator,
 } from "./lib/ingestionQueue";
@@ -579,6 +580,36 @@ const capacity = v.object({
   volumeIsUnlimited: v.optional(v.boolean()),
 });
 
+// Container type for a box (carried from agent/movable-unit work; optional so
+// existing rows that already carry it validate).
+export const boxContainerType = v.union(
+  v.literal("carton"),
+  v.literal("plasticTote"),
+  v.literal("bin"),
+  v.literal("wardrobe"),
+  v.literal("dishPack"),
+  v.literal("crate"),
+  v.literal("other")
+);
+
+// Agent research provenance on items (carried from agent research work).
+export const itemResearchSourceStatus = v.union(
+  v.literal("used"),
+  v.literal("checked"),
+  v.literal("blocked"),
+  v.literal("gated"),
+  v.literal("failed"),
+  v.literal("notRelevant")
+);
+
+export const itemResearchSource = v.object({
+  title: v.optional(v.string()),
+  url: v.optional(v.string()),
+  summary: v.optional(v.string()),
+  status: v.optional(itemResearchSourceStatus),
+  checkedAt: v.optional(v.number()),
+});
+
 const photoDerivativeRefs = v.object({
   thumb: v.optional(v.string()),
   card: v.optional(v.string()),
@@ -796,6 +827,11 @@ export default defineSchema({
     status: membershipStatus,
     invitedEmail: v.optional(v.string()),
     apiAccessStatus: v.optional(memberApiAccessStatus),
+    apiAccessUpdatedAt: v.optional(v.number()),
+    apiAccessUpdatedByUserId: v.optional(v.id("users")),
+    acceptedInvitationId: v.optional(v.id("householdInvitations")),
+    acceptedInvitationAt: v.optional(v.number()),
+    onboardingDismissedAt: v.optional(v.number()),
     createdByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1340,6 +1376,10 @@ export default defineSchema({
     destinationRoom: v.optional(v.string()),
     description: v.optional(v.string()),
     moveDayNote: v.optional(v.string()),
+    containerType: v.optional(boxContainerType),
+    destinationSpaceId: v.optional(v.id("moveSpaces")),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     status: boxStatus,
     dimensionsIn: v.optional(dimensionsIn),
     estimatedWeightLb: v.optional(v.number()),
@@ -1397,6 +1437,9 @@ export default defineSchema({
     originalBucket: v.string(),
     originalHash: v.optional(v.string()),
     derivativeRefs: photoDerivativeRefs,
+    fileName: v.optional(v.string()),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     derivativeStatus: v.optional(photoDerivativeStatus),
     derivativeError: v.optional(v.string()),
     derivativesUpdatedAt: v.optional(v.number()),
@@ -1479,6 +1522,8 @@ export default defineSchema({
     cleanupError: v.optional(v.string()),
     abandonedObjectCount: v.optional(v.number()),
     deletedAbandonedObjectCount: v.optional(v.number()),
+    agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1494,6 +1539,22 @@ export default defineSchema({
     moveId: v.id("moves"),
     status: ingestionQueueStatusValidator,
     instructions: v.optional(v.string()),
+    intent: v.optional(ingestionQueueIntentValidator),
+    targetBoxId: v.optional(v.id("boxes")),
+    targetItemId: v.optional(v.id("items")),
+    targetBoxCode: v.optional(v.string()),
+    targetLabel: v.optional(v.string()),
+    targetPlanId: v.optional(v.id("floorPlans")),
+    resultSuggestionIds: v.optional(v.array(v.id("aiTextSuggestions"))),
+    resultRefs: v.optional(
+      v.array(
+        v.object({
+          type: v.string(),
+          id: v.string(),
+          label: v.optional(v.string()),
+        })
+      )
+    ),
     roomHint: v.optional(v.string()),
     // Free string so user-defined dispositions keep working later.
     dispositionHint: v.optional(v.string()),
@@ -1784,6 +1845,15 @@ export default defineSchema({
     aiSummary: v.optional(v.string()),
     aiTags: v.array(v.string()),
     agentLabel: v.optional(v.string()),
+    aiConfidenceScore: v.optional(v.number()),
+    researchSummary: v.optional(v.string()),
+    researchSources: v.optional(v.array(itemResearchSource)),
+    researchNotes: v.optional(v.string()),
+    researchConfidence: v.optional(estimateConfidence),
+    researchedAt: v.optional(v.number()),
+    researchedByUserId: v.optional(v.id("users")),
+    researchedByApiKeyId: v.optional(v.id("apiKeys")),
+    researchedByLabel: v.optional(v.string()),
     createdVia: itemCreatedVia,
     reviewedAt: v.optional(v.number()),
     createdByUserId: v.id("users"),
