@@ -17,6 +17,7 @@ import {
   PanelRightOpen,
   RotateCcw,
   Search,
+  Truck,
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
@@ -41,8 +42,15 @@ import {
   EmptyState,
   InlineCheckboxCell,
   InlineSelectCell,
-  type OnBatchAction,
 } from "@/components/ui/data-table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   DispositionBadge,
@@ -64,6 +72,38 @@ import {
 import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 
 type InventoryTaskTab = "browse" | "add" | "bulk";
+
+// Primary disposition facet groups. The All/Moving/Sell/Trash/Donate pills are
+// the headline filter; the saved-filter chips below stay as a secondary slice.
+// The group -> disposition mapping mirrors the server's dispositionFacetGroups
+// (convex/items.ts) so the client filter and the server facet counts agree.
+type DispositionGroup = "all" | "moving" | "sell" | "trash" | "donate";
+
+const dispositionGroupMembers: Record<
+  Exclude<DispositionGroup, "all">,
+  ReadonlyArray<InventoryItem["disposition"]>
+> = {
+  moving: ["take", "mover", "personalTransport", "storage"],
+  sell: ["sell"],
+  trash: ["dump"],
+  donate: ["donate"],
+};
+
+const dispositionGroupChips: Array<{
+  key: DispositionGroup;
+  label: string;
+}> = [
+  { key: "all", label: "All" },
+  { key: "moving", label: "Moving" },
+  { key: "sell", label: "Sell" },
+  { key: "trash", label: "Trash" },
+  { key: "donate", label: "Donate" },
+];
+
+// Stored enum stays `dump`; only the visible label maps to "Trash".
+function dispositionLabel(disposition: InventoryItem["disposition"]) {
+  return disposition === "dump" ? "Trash" : disposition;
+}
 
 const inventoryTaskHashes = {
   "#add-inventory": "add",
@@ -136,11 +176,13 @@ const columnDescriptions: Record<string, string> = {
   review: "Marks records that need another look.",
 };
 
-type ItemBatchAction =
-  | { type: "status"; status: InventoryItem["status"] }
-  | { type: "disposition"; disposition: InventoryItem["disposition"] }
-  | { type: "personalTransport" }
-  | { type: "needsReview" };
+// Batch actions that the server batchUpdate mutation can apply directly.
+type ItemBatchPatch = {
+  disposition?: InventoryItem["disposition"];
+  status?: InventoryItem["status"];
+  assignedResourceId?: Id<"transportResources">;
+  assignedZoneId?: Id<"transportZones">;
+};
 
 function SignalBadge({
   label,
@@ -294,12 +336,17 @@ function InventoryItemCard({
   onSelectedChange,
   onOpenDetails,
   onPatchItem,
+  onDispositionChange,
 }: {
   item: InventoryItem;
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
   onOpenDetails: () => void;
   onPatchItem: (item: InventoryItem, patch: InventoryItemPatch) => void;
+  onDispositionChange: (
+    item: InventoryItem,
+    disposition: InventoryItem["disposition"],
+  ) => void;
 }) {
   return (
     <div
@@ -362,11 +409,9 @@ function InventoryItemCard({
               options={itemDispositionOptions}
               ariaLabel={`Disposition for ${item.name}`}
               onValueChange={(disposition) =>
-                onPatchItem(item, { disposition })
+                onDispositionChange(item, disposition)
               }
-              renderLabel={(disposition) =>
-                disposition === "dump" ? "Trash" : disposition
-              }
+              renderLabel={dispositionLabel}
             />
           </div>
         </div>
@@ -405,6 +450,75 @@ function InventoryCardField({
   );
 }
 
+// Batch transport-assign control: pick a resource, then optionally a zone.
+// Reuses the listForMoveWithZones option shape from the load planner and writes
+// through the shared batchUpdate path.
+function AssignResourceMenu({
+  householdId,
+  moveId,
+  onAssign,
+  disabled,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  onAssign: (target: {
+    assignedResourceId: Id<"transportResources">;
+    assignedZoneId?: Id<"transportZones">;
+  }) => void;
+  disabled?: boolean;
+}) {
+  const resourcesWithZones = useQuery(
+    api.transportResources.listForMoveWithZones,
+    householdId && moveId ? { householdId, moveId } : "skip",
+  );
+
+  const hasResources = (resourcesWithZones?.length ?? 0) > 0;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" size="sm" variant="outline" disabled={disabled}>
+          <Truck aria-hidden="true" />
+          Assign
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+        <DropdownMenuLabel>Assign to transport</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {!hasResources ? (
+          <DropdownMenuItem disabled>No transport resources</DropdownMenuItem>
+        ) : (
+          resourcesWithZones?.map(({ resource, zones }) => (
+            <div key={resource._id}>
+              <DropdownMenuItem
+                onSelect={() =>
+                  onAssign({ assignedResourceId: resource._id })
+                }
+              >
+                {resource.name}
+              </DropdownMenuItem>
+              {zones.map((zone) => (
+                <DropdownMenuItem
+                  key={zone._id}
+                  className="pl-6 text-xs"
+                  onSelect={() =>
+                    onAssign({
+                      assignedResourceId: resource._id,
+                      assignedZoneId: zone._id,
+                    })
+                  }
+                >
+                  {zone.name}
+                </DropdownMenuItem>
+              ))}
+            </div>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function InventoryTable({
   householdId,
   moveId,
@@ -413,6 +527,8 @@ export function InventoryTable({
   moveId: Id<"moves"> | null;
 }) {
   const [search, setSearch] = useState("");
+  const [dispositionGroup, setDispositionGroup] =
+    useState<DispositionGroup>("all");
   const [savedFilter, setSavedFilter] = useState<InventoryFilterKey>("all");
   const [ownerFilter, setOwnerFilter] = useState<InventoryOwnerFilter>("all");
   const [newItemName, setNewItemName] = useState("");
@@ -436,20 +552,43 @@ export function InventoryTable({
     inventoryTaskHashes,
   );
 
-  const items = useQuery(
-    api.items.listForMoveWithSignals,
+  // The faceted query returns the full move set plus disposition facet counts.
+  // We keep search/owner/saved-filter slicing client-side (reusing the existing
+  // helpers) and apply the primary disposition-group filter client-side too,
+  // because the facet groups (Moving spans four dispositions) don't map to the
+  // server's single-disposition arg. Facet counts come straight from the server
+  // and stay stable regardless of the active group.
+  const faceted = useQuery(
+    api.items.facetedListForMove,
     householdId && moveId ? { householdId, moveId } : "skip",
   );
+  const items = faceted?.items;
+  const facets = faceted?.facets;
   const createItem = useMutation(api.items.create);
   const updateItem = useMutation(api.items.update);
+  const setItemDisposition = useMutation(api.items.setDisposition);
+  const batchUpdateItems = useMutation(api.items.batchUpdate);
+
+  const dispositionFilteredItems = useMemo(() => {
+    if (!items) {
+      return [];
+    }
+    if (dispositionGroup === "all") {
+      return items;
+    }
+    const members = new Set<InventoryItem["disposition"]>(
+      dispositionGroupMembers[dispositionGroup],
+    );
+    return items.filter((item) => members.has(item.disposition));
+  }, [items, dispositionGroup]);
 
   const filteredItems = useMemo(
     () =>
       filterInventoryItemsByOwner(
-        filterInventoryItems(items ?? [], savedFilter, search),
+        filterInventoryItems(dispositionFilteredItems, savedFilter, search),
         ownerFilter,
       ),
-    [items, ownerFilter, savedFilter, search],
+    [dispositionFilteredItems, ownerFilter, savedFilter, search],
   );
   const ownerFilterOptions = useMemo(() => {
     const options = new Map<Id<"movePeople">, { name: string; role: string }>();
@@ -472,6 +611,16 @@ export function InventoryTable({
     () => items?.find((item) => item._id === selectedItemId) ?? null,
     [items, selectedItemId],
   );
+
+  // Live facet pill counts straight from the server. Falls back to 0 while the
+  // first query is in flight.
+  const dispositionGroupCounts: Record<DispositionGroup, number> = {
+    all: facets?.total ?? 0,
+    moving: facets?.moving ?? 0,
+    sell: facets?.sell ?? 0,
+    trash: facets?.trash ?? 0,
+    donate: facets?.donate ?? 0,
+  };
 
   async function handleCreateItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -526,28 +675,76 @@ export function InventoryTable({
     [householdId, moveId, updateItem],
   );
 
-  // Maps the typed item batch action to a patch. The contract is shaped so a
-  // future server-side batch mutation can replace this client-side fan-out
-  // without touching callers.
-  const handleItemBatchAction = useCallback<
-    OnBatchAction<InventoryItem, ItemBatchAction>
-  >(
-    async ({ action, rows, clearSelection }) => {
-      if (!rows.length) {
+  // Inline single-cell disposition quick-classify. Uses the lighter
+  // setDisposition mutation (one row -> one focused write) instead of the full
+  // update path. Status / needs-review inline edits keep using update.
+  const quickClassify = useCallback(
+    async (item: InventoryItem, disposition: InventoryItem["disposition"]) => {
+      if (!householdId || !moveId) {
         return;
       }
 
-      const patch: InventoryItemPatch =
-        action.type === "status"
-          ? { status: action.status }
-          : action.type === "disposition"
-            ? { disposition: action.disposition }
-            : action.type === "personalTransport"
-              ? {
-                  disposition: "personalTransport",
-                  requiresPersonalTransport: true,
-                }
-              : { needsReview: true };
+      try {
+        await setItemDisposition({
+          householdId,
+          moveId,
+          itemId: item._id,
+          disposition,
+        });
+      } catch {
+        setMessage("Could not update that item's disposition yet.");
+      }
+    },
+    [householdId, moveId, setItemDisposition],
+  );
+
+  // Server-side batch. Replaces the old per-row Promise.all fan-out: a single
+  // batchUpdate call applies the same disposition / status / assignment patch to
+  // every selected row, with one permission check and per-item audit on the
+  // server.
+  const handleBatchUpdate = useCallback(
+    async (
+      patch: ItemBatchPatch,
+      rows: InventoryItem[],
+      clearSelection: () => void,
+    ) => {
+      if (!householdId || !moveId || !rows.length) {
+        return;
+      }
+
+      setMessage(null);
+
+      try {
+        const result = await batchUpdateItems({
+          householdId,
+          moveId,
+          itemIds: rows.map((item) => item._id),
+          patch,
+        });
+        clearSelection();
+        setMessage(
+          result.failed > 0
+            ? `${result.succeeded} updated, ${result.failed} could not be changed.`
+            : `${result.succeeded} items updated.`,
+        );
+      } catch {
+        setMessage("Could not update the selected items yet.");
+      }
+    },
+    [batchUpdateItems, householdId, moveId],
+  );
+
+  // Personal transport + needs review are boolean flags the server batchUpdate
+  // does not cover, so they stay on the per-row update path.
+  const handleBatchFlag = useCallback(
+    async (
+      patch: InventoryItemPatch,
+      rows: InventoryItem[],
+      clearSelection: () => void,
+    ) => {
+      if (!rows.length) {
+        return;
+      }
 
       setMessage(null);
 
@@ -649,11 +846,9 @@ export function InventoryTable({
               options={itemDispositionOptions}
               ariaLabel={`Disposition for ${row.original.name}`}
               onValueChange={(disposition) =>
-                void patchItem(row.original, { disposition })
+                void quickClassify(row.original, disposition)
               }
-              renderLabel={(disposition) =>
-                disposition === "dump" ? "Trash" : disposition
-              }
+              renderLabel={dispositionLabel}
             />
           </div>
         ),
@@ -764,7 +959,7 @@ export function InventoryTable({
         ),
       },
     ],
-    [patchItem],
+    [patchItem, quickClassify],
   );
 
   // The DataTable owns the tanstack instance; the adapter keeps the shared
@@ -793,7 +988,7 @@ export function InventoryTable({
   // Page reset on filter change is handled by the DataTable's tanstack
   // instance (autoResetPageIndex), so the adapter no longer manages it.
   const selectedCount = Object.values(rowSelection).filter(Boolean).length;
-  const loadingItems = Boolean(moveId) && items === undefined;
+  const loadingItems = Boolean(moveId) && faceted === undefined;
   const totalItemCount = items?.length ?? filteredItems.length;
   const activeSavedFilter = inventorySavedFilters.find(
     (filter) => filter.key === savedFilter,
@@ -808,12 +1003,16 @@ export function InventoryTable({
     (column) => columnVisibility[column.id] !== false,
   ).length;
   const hasActiveBrowseFilters =
-    search.trim().length > 0 || ownerFilter !== "all" || savedFilter !== "all";
+    search.trim().length > 0 ||
+    ownerFilter !== "all" ||
+    savedFilter !== "all" ||
+    dispositionGroup !== "all";
 
   function clearBrowseFilters() {
     setSearch("");
     setOwnerFilter("all");
     setSavedFilter("all");
+    setDispositionGroup("all");
   }
 
   return (
@@ -822,10 +1021,10 @@ export function InventoryTable({
         <CardHeader className="gap-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Browse inventory</CardTitle>
+              <CardTitle>Items</CardTitle>
               <CardDescription className="hidden sm:block">
-                Search, filter, edit, and bulk update item records for the
-                selected move.
+                Every item in this move. Slice by disposition, search, classify
+                inline, or select rows to re-classify in a batch.
               </CardDescription>
             </div>
             <Badge variant="secondary">{filteredItems.length} visible</Badge>
@@ -868,6 +1067,42 @@ export function InventoryTable({
               id="inventory-records"
               className="space-y-2"
             >
+              {/* Primary disposition facet — the headline slice. Counts come
+                  from the server facets and stay stable while a chip is active. */}
+              <div
+                role="group"
+                aria-label="Disposition filter"
+                className="flex gap-2 overflow-x-auto rounded-md border border-border bg-background p-2"
+              >
+                {dispositionGroupChips.map((chip) => {
+                  const active = dispositionGroup === chip.key;
+                  return (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      className={`flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background hover:bg-muted"
+                      }`}
+                      aria-pressed={active}
+                      onClick={() => setDispositionGroup(chip.key)}
+                    >
+                      <span className="font-medium">{chip.label}</span>
+                      <span
+                        className={`rounded px-1.5 text-xs ${
+                          active
+                            ? "bg-primary-foreground/20"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {dispositionGroupCounts[chip.key]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
               <div className="rounded-md border border-border bg-background p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -1101,6 +1336,9 @@ export function InventoryTable({
                       setDetailOpen(true);
                     }}
                     onPatchItem={(item, patch) => void patchItem(item, patch)}
+                    onDispositionChange={(item, disposition) =>
+                      void quickClassify(item, disposition)
+                    }
                   />
                 )}
                 batchActions={({ selectedRows, clearSelection }) => (
@@ -1110,49 +1348,131 @@ export function InventoryTable({
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        void handleItemBatchAction({
-                          action: { type: "status", status: "packed" },
-                          rows: selectedRows,
+                        void handleBatchUpdate(
+                          { disposition: "take" },
+                          selectedRows,
                           clearSelection,
-                        })
+                        )
                       }
                     >
-                      Pack
+                      Moving
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        void handleItemBatchAction({
-                          action: { type: "personalTransport" },
-                          rows: selectedRows,
+                        void handleBatchUpdate(
+                          { disposition: "sell" },
+                          selectedRows,
                           clearSelection,
-                        })
+                        )
                       }
                     >
-                      Personal
+                      Sell
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        void handleItemBatchAction({
-                          action: { type: "needsReview" },
-                          rows: selectedRows,
+                        void handleBatchUpdate(
+                          { disposition: "donate" },
+                          selectedRows,
                           clearSelection,
-                        })
+                        )
                       }
                     >
-                      Review
+                      Donate
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleBatchUpdate(
+                          { disposition: "dump" },
+                          selectedRows,
+                          clearSelection,
+                        )
+                      }
+                    >
+                      Trash
+                    </Button>
+                    <AssignResourceMenu
+                      householdId={householdId}
+                      moveId={moveId}
+                      onAssign={(target) =>
+                        void handleBatchUpdate(
+                          target,
+                          selectedRows,
+                          clearSelection,
+                        )
+                      }
+                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" variant="outline">
+                          More
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            void handleBatchUpdate(
+                              { status: "packed" },
+                              selectedRows,
+                              clearSelection,
+                            )
+                          }
+                        >
+                          Mark packed
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            void handleBatchUpdate(
+                              { status: "staged" },
+                              selectedRows,
+                              clearSelection,
+                            )
+                          }
+                        >
+                          Mark staged
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            void handleBatchFlag(
+                              {
+                                disposition: "personalTransport",
+                                requiresPersonalTransport: true,
+                              },
+                              selectedRows,
+                              clearSelection,
+                            )
+                          }
+                        >
+                          Personal transport
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            void handleBatchFlag(
+                              { needsReview: true },
+                              selectedRows,
+                              clearSelection,
+                            )
+                          }
+                        >
+                          Flag for review
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </>
                 )}
                 emptyState={
                   <EmptyState
                     title="No inventory records"
-                    description="Add inventory items or change the saved filter and search terms."
+                    description="Add inventory items or change the disposition facet, saved filter, and search terms."
                   />
                 }
               />
@@ -1197,7 +1517,7 @@ export function InventoryTable({
                 >
                   {itemDispositionOptions.map((disposition) => (
                     <option key={disposition} value={disposition}>
-                      {disposition}
+                      {dispositionLabel(disposition)}
                     </option>
                   ))}
                 </select>
