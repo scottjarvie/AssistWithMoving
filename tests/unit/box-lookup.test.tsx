@@ -210,7 +210,7 @@ describe("BoxLookup", () => {
     );
     expect(screen.getByRole("link", { name: "Boxes" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/boxes",
+      "/app/movable-units",
     );
     expect(
       screen.getByText(/This is the existing rough box from the load plan/),

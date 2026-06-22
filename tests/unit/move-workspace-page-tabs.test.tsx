@@ -42,6 +42,12 @@ vi.mock("@/components/move-workspace-header", () => ({
   ),
 }));
 
+// The operations nav reads usePathname() + the optional workspace; stub it so
+// the page-tab tests stay focused on tab routing (matches the other child mocks).
+vi.mock("@/components/move-operations-nav", () => ({
+  MoveOperationsNav: () => null,
+}));
+
 // The configure page reads count queries directly in its body. Returning
 // undefined keeps the tab badges off and exercises the loading-tolerant path.
 vi.mock("convex/react", () => ({

@@ -3,8 +3,29 @@ export function moveWorkspacePath(moveId: string, section?: string) {
   return section ? `${basePath}/${encodeURIComponent(section)}` : basePath;
 }
 
+// The revamp removed Spaces / Sell / Photos and the per-move Boxes / Inventory
+// surfaces from the nav. The orphaned routes now just redirect, so anything that
+// used to point a person at one of those sections should aim straight at the new
+// home instead of bouncing through a redirect. `resolve(moveId)` lets the Spaces
+// entry keep the move id (areas now live on the Start-location config tab) while
+// the rest resolve to the global Items / Movable Units surfaces.
+const removedSectionDestinations: Record<
+  string,
+  (moveId: string) => string
+> = {
+  spaces: (moveId) => `${moveWorkspacePath(moveId)}#start`,
+  boxes: () => "/app/movable-units",
+  inventory: () => "/app/items",
+  photos: () => "/app/items",
+  sell: () => "/app/items",
+};
+
 export function moveBoxesPath(moveId?: string | null) {
-  return moveId ? moveWorkspacePath(moveId, "boxes") : "/app/moves";
+  // Boxes are now Movable Units. Keep accepting the (now ignored) move id so
+  // every existing caller — `moveBoxesPath(moveId)` — still type checks and
+  // lands on the new home without each one having to be rewritten. The resolver
+  // ignores the id; we pass it through purely to keep this param referenced.
+  return removedSectionDestinations.boxes(moveId ?? "");
 }
 
 // Former dashboard task anchors. The dashboard surface is gone (now the moves
@@ -100,6 +121,15 @@ export function moveWorkspaceAnchorPath(
   const section = workspaceAnchorSections[anchor];
   if (!moveId || !(anchor in workspaceAnchorSections)) {
     return anchor;
+  }
+
+  // Anchors that used to land on a removed section (Spaces / Sell / Photos /
+  // Boxes / Inventory) go straight to that section's new home. The section-level
+  // anchor no longer exists on the new surfaces, so we drop it rather than
+  // bouncing through a redirect that would strip it anyway. Spaces is the one
+  // exception: its destination is the per-move Start-location config tab.
+  if (section && section in removedSectionDestinations) {
+    return removedSectionDestinations[section](moveId);
   }
 
   return `${moveWorkspacePath(moveId, section ?? undefined)}${anchor}`;

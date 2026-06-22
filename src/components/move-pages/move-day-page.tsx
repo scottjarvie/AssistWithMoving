@@ -1,6 +1,7 @@
 "use client";
 
 import { MoveDayView } from "@/components/move-day-view";
+import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 
@@ -13,6 +14,8 @@ export function MoveDayWorkspacePage() {
         title="Move Day"
         description="The load-crew view: scan box codes, mark sealed/staged/loaded/delivered, and flag exceptions as they happen."
       />
+      <MoveOperationsNav />
+
       <MoveDayView householdId={householdId} moveId={moveId} />
     </div>
   );
