@@ -14,14 +14,101 @@ describe("move links", () => {
     );
   });
 
-  it("returns to move-specific boxes when move context is available", () => {
-    expect(moveBoxesPath("move_123")).toBe("/app/moves/move_123/boxes");
-    // The dashboard is gone; without a move the boxes link falls back to the
-    // moves home instead of the old /app/dashboard.
-    expect(moveBoxesPath()).toBe("/app/moves");
+  it("points boxes at the Movable Units home (with or without a move)", () => {
+    // Boxes became Movable Units; the helper ignores the (now optional) move id.
+    expect(moveBoxesPath("move_123")).toBe("/app/movable-units");
+    expect(moveBoxesPath()).toBe("/app/movable-units");
   });
 
-  it("resolves old workspace anchors to split move pages", () => {
+  it("sends removed-section anchors straight to their new homes", () => {
+    // Inventory section -> the global Items table.
+    for (const anchor of [
+      "#inventory",
+      "#add-inventory",
+      "#bulk-inventory",
+      "#bulk-paste",
+      "#inventory-records",
+      "#room-walk",
+      "#planned-items",
+      "#inventory-duplicate-review",
+      "#estimate-summary",
+      "#estimate-capacity",
+      "#estimate-warnings",
+      "#estimate-assumptions",
+      "#disposition-pipelines",
+    ]) {
+      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe("/app/items");
+    }
+    // Photos and Sell sections also collapse into the Items table.
+    for (const anchor of [
+      "#photos",
+      "#add-photos",
+      "#photo-gaps",
+      "#photo-review",
+      "#evidence-density",
+      "#sale-pipeline",
+      "#sale-listing",
+      "#sale-pricing",
+      "#sale-status",
+    ]) {
+      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe("/app/items");
+    }
+    // Boxes section -> the Movable Units table.
+    for (const anchor of [
+      "#boxes",
+      "#add-box",
+      "#box-labels",
+      "#box-load",
+      "#box-contents",
+      "#box-details",
+      "#box-photos",
+    ]) {
+      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe(
+        "/app/movable-units"
+      );
+    }
+    // Spaces section -> the per-move Start-location config tab (keeps the id).
+    for (const anchor of ["#spaces", "#add-space"]) {
+      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe(
+        "/app/moves/move_123#start"
+      );
+    }
+  });
+
+  it("keeps operational anchors on their per-move pages", () => {
+    expect(moveWorkspaceAnchorPath("move_123", "#capture")).toBe(
+      "/app/moves/move_123/capture#capture"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#ingestion-queue")).toBe(
+      "/app/moves/move_123/capture#ingestion-queue"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#packet-exports")).toBe(
+      "/app/moves/move_123/packets#packet-exports"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#claim-packets")).toBe(
+      "/app/moves/move_123/packets#claim-packets"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#ai-review-queue")).toBe(
+      "/app/moves/move_123/ai-review#ai-review-queue"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#ai-planning-suggestions")).toBe(
+      "/app/moves/move_123/load-plan#ai-planning-suggestions"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#capacity-posture")).toBe(
+      "/app/moves/move_123/load-plan#capacity-posture"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#layout-studio")).toBe(
+      "/app/moves/move_123/plan#layout-studio"
+    );
+    expect(moveWorkspaceAnchorPath("move_123", "#move-day-progress")).toBe(
+      "/app/moves/move_123/move-day#move-day-progress"
+    );
+    expect(moveWorkspaceAnchorPath("move/with/slash", "#load-plan")).toBe(
+      "/app/moves/move%2Fwith%2Fslash/load-plan#load-plan"
+    );
+  });
+
+  it("keeps null-section anchors on the move index", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#move-questions")).toBe(
       "/app/moves/move_123#move-questions"
     );
@@ -34,168 +121,22 @@ describe("move links", () => {
     expect(moveWorkspaceAnchorPath("move_123", "#planning-defaults")).toBe(
       "/app/moves/move_123#planning-defaults"
     );
-    expect(moveWorkspaceAnchorPath("move_123", "#inventory")).toBe(
-      "/app/moves/move_123/inventory#inventory"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#add-inventory")).toBe(
-      "/app/moves/move_123/inventory#add-inventory"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#bulk-inventory")).toBe(
-      "/app/moves/move_123/inventory#bulk-inventory"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#bulk-paste")).toBe(
-      "/app/moves/move_123/inventory#bulk-paste"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#inventory-records")).toBe(
-      "/app/moves/move_123/inventory#inventory-records"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#add-box")).toBe(
-      "/app/moves/move_123/boxes#add-box"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#box-labels")).toBe(
-      "/app/moves/move_123/boxes#box-labels"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#box-load")).toBe(
-      "/app/moves/move_123/boxes#box-load"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#room-walk")).toBe(
-      "/app/moves/move_123/inventory#room-walk"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#capture")).toBe(
-      "/app/moves/move_123/capture#capture"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#capture-queue")).toBe(
-      "/app/moves/move_123/capture#capture-queue"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#ingestion-queue")).toBe(
-      "/app/moves/move_123/capture#ingestion-queue"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#add-space")).toBe(
-      "/app/moves/move_123/spaces#add-space"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#spaces")).toBe(
-      "/app/moves/move_123/spaces#spaces"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#planned-items")).toBe(
-      "/app/moves/move_123/inventory#planned-items"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#inventory-duplicate-review")).toBe(
-      "/app/moves/move_123/inventory#inventory-duplicate-review"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#estimate-summary")).toBe(
-      "/app/moves/move_123/inventory#estimate-summary"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#estimate-capacity")).toBe(
-      "/app/moves/move_123/inventory#estimate-capacity"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#estimate-warnings")).toBe(
-      "/app/moves/move_123/inventory#estimate-warnings"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#estimate-assumptions")).toBe(
-      "/app/moves/move_123/inventory#estimate-assumptions"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#sale-pipeline")).toBe(
-      "/app/moves/move_123/sell#sale-pipeline"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#sale-listing")).toBe(
-      "/app/moves/move_123/sell#sale-listing"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#sale-pricing")).toBe(
-      "/app/moves/move_123/sell#sale-pricing"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#sale-status")).toBe(
-      "/app/moves/move_123/sell#sale-status"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#photos")).toBe(
-      "/app/moves/move_123/photos#photos"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#add-photos")).toBe(
-      "/app/moves/move_123/photos#add-photos"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#photo-gaps")).toBe(
-      "/app/moves/move_123/photos#photo-gaps"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#layout-studio")).toBe(
-      "/app/moves/move_123/plan#layout-studio"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#layout-review")).toBe(
-      "/app/moves/move_123/plan#layout-review"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#layout-blueprint")).toBe(
-      "/app/moves/move_123/plan#layout-blueprint"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#packet-exports")).toBe(
-      "/app/moves/move_123/packets#packet-exports"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#packet-share-links")).toBe(
-      "/app/moves/move_123/packets#packet-share-links"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#packet-views")).toBe(
-      "/app/moves/move_123/packets#packet-views"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#claim-timeline")).toBe(
-      "/app/moves/move_123/packets#claim-timeline"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#claim-packets")).toBe(
-      "/app/moves/move_123/packets#claim-packets"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#ai-review-queue")).toBe(
-      "/app/moves/move_123/ai-review#ai-review-queue"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#ai-text-intake")).toBe(
-      "/app/moves/move_123/ai-review#ai-text-intake"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#ai-photo-intake")).toBe(
-      "/app/moves/move_123/ai-review#ai-photo-intake"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#ai-planning-suggestions")).toBe(
-      "/app/moves/move_123/load-plan#ai-planning-suggestions"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#add-transport-resource")).toBe(
-      "/app/moves/move_123/load-plan#add-transport-resource"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#transport-resource-presets")).toBe(
-      "/app/moves/move_123/load-plan#transport-resource-presets"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#capacity-posture")).toBe(
-      "/app/moves/move_123/load-plan#capacity-posture"
-    );
-    expect(moveWorkspaceAnchorPath("move/with/slash", "#load-plan")).toBe(
-      "/app/moves/move%2Fwith%2Fslash/load-plan#load-plan"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#move-day-progress")).toBe(
-      "/app/moves/move_123/move-day#move-day-progress"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#move-day-exceptions")).toBe(
-      "/app/moves/move_123/move-day#move-day-exceptions"
-    );
   });
 
   it("collapses former dashboard anchors onto the moves home", () => {
-    // The dashboard surface was replaced by the moves home, so every former
-    // dashboard task anchor now lands on /app/moves with no hash.
-    expect(moveWorkspaceAnchorPath("move_123", "#active-moves")).toBe(
-      "/app/moves"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#create-move")).toBe(
-      "/app/moves"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#create-move-packets")).toBe(
-      "/app/moves"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#household-setup")).toBe(
-      "/app/moves"
-    );
-    expect(moveWorkspaceAnchorPath("move_123", "#ai-connection")).toBe(
-      "/app/moves"
-    );
+    for (const anchor of [
+      "#active-moves",
+      "#create-move",
+      "#create-move-packets",
+      "#household-setup",
+      "#ai-connection",
+    ]) {
+      expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe("/app/moves");
+    }
   });
 
   it("keeps safe fallbacks for missing moves and unknown anchors", () => {
-    // Without a move id, a section anchor cannot resolve to a move path, so the
-    // raw anchor is returned unchanged.
     expect(moveWorkspaceAnchorPath(null, "#inventory")).toBe("#inventory");
-    // An anchor the map does not know about is also returned untouched.
     expect(moveWorkspaceAnchorPath("move_123", "#custom-section")).toBe(
       "#custom-section"
     );

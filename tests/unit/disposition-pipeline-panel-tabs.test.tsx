@@ -130,7 +130,7 @@ describe("DispositionPipelinePanel task tabs", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Sell: To photograph for sale/i }),
-    ).toHaveAttribute("href", "/app/moves/move_123/photos#photos");
+    ).toHaveAttribute("href", "/app/items");
     expect(screen.queryByText("Pipeline items")).not.toBeInTheDocument();
     expect(
       screen.queryByText("Go fix disposition inputs"),
@@ -160,7 +160,7 @@ describe("DispositionPipelinePanel task tabs", () => {
     expect(screen.getByText("Go fix disposition inputs")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Inventory" })).toHaveAttribute(
       "href",
-      "/app/moves/move_123/inventory#inventory",
+      "/app/items",
     );
     expect(screen.getByRole("link", { name: "Packet links" })).toHaveAttribute(
       "href",
