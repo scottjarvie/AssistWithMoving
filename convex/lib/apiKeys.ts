@@ -39,9 +39,27 @@ export function apiKeyPreview(rawKey: string) {
   return `${rawKey.slice(0, 12)}...${rawKey.slice(-6)}`;
 }
 
+// Every "Invalid API key format" message keeps that exact phrase as its prefix
+// (callers and tests match on it) but adds a specific, actionable hint so a
+// failing agent/connector can see WHY — an OAuth token, a masked preview, or a
+// genuinely wrong shape all used to collapse into one opaque error.
+export function describeInvalidApiKeyFormat(rawKey: string) {
+  const base = "Invalid API key format.";
+  if (rawKey.startsWith("eyJ") || rawKey.split(".").length === 3) {
+    return `${base} This looks like an OAuth/JWT token, not a MovingManifest API key. The MCP/REST endpoints need a key that starts with "mmk_" — copy it from Settings → AI Connections (Authorization: Bearer mmk_...).`;
+  }
+  if (rawKey.includes("...") || rawKey.includes("…")) {
+    return `${base} The value looks like a masked preview (it contains "..."). Copy the full one-time key shown when it was created, not the masked version.`;
+  }
+  if (!rawKey.startsWith(generatedKeyPrefix)) {
+    return `${base} A MovingManifest API key starts with "mmk_".`;
+  }
+  return `${base} The key is the wrong shape — copy the full key from Settings → AI Connections, or rotate it.`;
+}
+
 export function apiKeyPrefix(rawKey: string) {
   if (!rawKey.startsWith(generatedKeyPrefix)) {
-    throw new Error("Invalid API key format.");
+    throw new Error(describeInvalidApiKeyFormat(rawKey));
   }
 
   const prefixStart = generatedKeyPrefix.length;
@@ -51,7 +69,7 @@ export function apiKeyPrefix(rawKey: string) {
     prefix.length !== generatedLookupPrefixLength ||
     rawKey[prefixEnd] !== "_"
   ) {
-    throw new Error("Invalid API key format.");
+    throw new Error(describeInvalidApiKeyFormat(rawKey));
   }
   return prefix;
 }

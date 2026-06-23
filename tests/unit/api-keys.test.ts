@@ -6,6 +6,7 @@ import {
   apiKeyPrefix,
   apiKeyPreview,
   canApiKeyPerformAction,
+  describeInvalidApiKeyFormat,
   generateApiKeySecret,
   hashApiKey,
   normalizeApiKeyScopes,
@@ -36,6 +37,48 @@ describe("api key primitives", () => {
     expect(() => apiKeyPrefix("mmk_prefix_secret")).toThrow(
       "Invalid API key format."
     );
+  });
+
+  // Regression guard for the exact failure mode that recurred in production:
+  // a change to the generator (e.g. the random byte count) or the parser (the
+  // "harden API key parsing" commit) that desyncs the two silently breaks EVERY
+  // key. Round-tripping many freshly generated keys catches a desync before it
+  // ships, including the ~20% of keys whose base64url prefix contains "_".
+  it("keeps the generator and parser in lockstep across many keys", () => {
+    for (let index = 0; index < 2000; index += 1) {
+      const rawKey = generateApiKeySecret();
+      expect(rawKey.startsWith("mmk_")).toBe(true);
+
+      // The parser must not throw, and the prefix it returns must be exactly
+      // the slice the by_prefix index stores at creation time.
+      const prefix = apiKeyPrefix(rawKey);
+      const lookupSlice = rawKey.slice("mmk_".length, "mmk_".length + 14);
+      expect(prefix).toBe(lookupSlice);
+      expect(prefix).toHaveLength(14);
+      expect(rawKey["mmk_".length + 14]).toBe("_");
+    }
+  });
+
+  it("explains WHY a key is rejected instead of one opaque message", () => {
+    // OAuth/JWT token pasted where an mmk_ key is required (the production bug).
+    const jwt =
+      "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEyMyJ9.c2lnbmF0dXJl";
+    expect(() => apiKeyPrefix(jwt)).toThrow("Invalid API key format.");
+    expect(describeInvalidApiKeyFormat(jwt)).toMatch(/OAuth\/JWT token/);
+    expect(describeInvalidApiKeyFormat(jwt)).toMatch(/mmk_/);
+
+    // A masked preview (what apiKeyPreview renders) copied by mistake.
+    const preview = apiKeyPreview(generateApiKeySecret());
+    expect(preview).toContain("...");
+    expect(describeInvalidApiKeyFormat(preview)).toMatch(/masked preview/);
+
+    // Right prefix, wrong shape.
+    expect(describeInvalidApiKeyFormat("mmk_short_secret")).toMatch(
+      /wrong shape/
+    );
+
+    // Plain garbage still names the expected prefix.
+    expect(describeInvalidApiKeyFormat("totally-bogus")).toMatch(/mmk_/);
   });
 
   it("hashes and verifies without storing the raw secret", async () => {
