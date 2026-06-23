@@ -10,6 +10,7 @@
 // mcp-server/movingmanifest-mcp.mjs so the two transports cannot drift.
 import { createMcpHandler } from "mcp-handler";
 
+import { apiKeyFromRequest } from "@/lib/mcp-request-auth";
 import { mcpBearerChallenge } from "@/lib/mcp-oauth";
 import {
   MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
@@ -26,19 +27,6 @@ const SERVER_INSTRUCTIONS = [
   "Typical workflow: setup_move → create_move_space (rooms) → batch_upsert_items / add_item_from_photo → create_box + add_items_to_box → upload photos → suggest_assignments → get_move_summary.",
   "Prefer batch tools over repeated single calls. Most write tools accept dryRun for a safe preview and an idempotencyKey for retries.",
 ].join(" ");
-
-function apiKeyFromRequest(request: Request): string | null {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.toLowerCase().startsWith("bearer ")) {
-    const token = authHeader.slice(7).trim();
-    if (token) return token;
-  }
-  const headerKey = request.headers.get("x-api-key")?.trim();
-  if (headerKey) return headerKey;
-  const queryKey = new URL(request.url).searchParams.get("key")?.trim();
-  if (queryKey) return queryKey;
-  return null;
-}
 
 function restApiBaseUrl(): string {
   const convexHttpActionsUrl = process.env.CONVEX_HTTP_ACTIONS_URL;
