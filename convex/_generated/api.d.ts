@@ -99,6 +99,8 @@ import type * as lib_transportPresets from "../lib/transportPresets.js";
 import type * as mcp from "../mcp.js";
 import type * as mcpSetup from "../mcpSetup.js";
 import type * as mcpTools from "../mcpTools.js";
+import type * as mcpToolsImages from "../mcpToolsImages.js";
+import type * as mcpToolsWrite from "../mcpToolsWrite.js";
 import type * as movableUnits from "../movableUnits.js";
 import type * as movePeople from "../movePeople.js";
 import type * as movePlanningDefaults from "../movePlanningDefaults.js";
@@ -224,6 +226,8 @@ declare const fullApi: ApiFromModules<{
   mcp: typeof mcp;
   mcpSetup: typeof mcpSetup;
   mcpTools: typeof mcpTools;
+  mcpToolsImages: typeof mcpToolsImages;
+  mcpToolsWrite: typeof mcpToolsWrite;
   movableUnits: typeof movableUnits;
   movePeople: typeof movePeople;
   movePlanningDefaults: typeof movePlanningDefaults;
