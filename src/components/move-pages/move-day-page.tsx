@@ -8,7 +8,7 @@ export function MoveDayWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Move Day"
         description="The load-crew view: scan box codes, mark sealed/staged/loaded/delivered, and flag exceptions as they happen."

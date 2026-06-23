@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  agentReadyMcpScriptResult,
+  expectedAgentReadyVerifyCommand,
   buildCommandResult,
   expectedVercelConvexBuildCommand,
   releaseReadinessResults,
@@ -26,9 +28,56 @@ describe("release readiness", () => {
 
   it("reports release readiness from parsed Vercel config", () => {
     expect(
-      releaseReadinessResults({
-        buildCommand: expectedVercelConvexBuildCommand,
+      releaseReadinessResults(
+        {
+          buildCommand: expectedVercelConvexBuildCommand,
+        },
+        {
+          scripts: {
+            "contract:drift": "node scripts/contract-drift-check.mjs",
+            "doctor:oauth-cutover": "node scripts/oauth-cutover-readiness.mjs",
+            "mcp:doctor": "node scripts/mcp-oauth-smoke.mjs --discover --endpoint https://movingmanifest.com/api/mcp",
+            "smoke:agent-journey": "node scripts/agent-journey-smoke.mjs",
+            "smoke:mcp-oauth": "node scripts/mcp-oauth-smoke.mjs",
+            "smoke:mcp-stdio": "node scripts/mcp-stdio-smoke.mjs",
+            "verify:agent-ready": expectedAgentReadyVerifyCommand,
+          },
+        }
+      )
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "pass",
+          label: "Vercel Convex build command",
+        }),
+        expect.objectContaining({
+          status: "pass",
+          label: "Agent-ready MCP verification scripts",
+        }),
+        expect.objectContaining({
+          status: "pass",
+          label: "REST/OpenAPI/MCP contract drift",
+        }),
+      ])
+    );
+  });
+
+  it("fails when the release gate loses an MCP smoke script", () => {
+    expect(
+      agentReadyMcpScriptResult({
+        scripts: {
+          "contract:drift": "node scripts/contract-drift-check.mjs",
+          "doctor:oauth-cutover": "node scripts/oauth-cutover-readiness.mjs",
+          "mcp:doctor": "node scripts/mcp-oauth-smoke.mjs --discover --endpoint https://movingmanifest.com/api/mcp",
+          "smoke:mcp-oauth": "node scripts/mcp-oauth-smoke.mjs",
+          "smoke:mcp-stdio": "node scripts/mcp-stdio-smoke.mjs",
+          "verify:agent-ready": expectedAgentReadyVerifyCommand,
+        },
       })
-    ).toHaveLength(1);
+    ).toEqual({
+      status: "fail",
+      label: "Agent-ready MCP verification scripts",
+      detail: "missing or changed script(s): smoke:agent-journey",
+    });
   });
 });

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canMembershipUseApiAccess,
+  defaultMemberApiAccessStatus,
+  effectiveMemberApiAccessStatus,
+} from "../../convex/lib/householdMembers";
+import {
   canPerformHouseholdAction,
   canEditHouseholdContent,
   canManageHousehold,
@@ -64,5 +69,39 @@ describe("household role helpers", () => {
   it("uses the stronger role for move-specific grants", () => {
     expect(strongerHouseholdRole("viewer", "editor")).toBe("editor");
     expect(strongerHouseholdRole("admin", "guest")).toBe("admin");
+  });
+
+  it("separates member API access from normal household access", () => {
+    expect(defaultMemberApiAccessStatus("owner")).toBe("enabled");
+    expect(defaultMemberApiAccessStatus("admin")).toBe("enabled");
+    expect(defaultMemberApiAccessStatus("editor")).toBe("disabled");
+    expect(
+      effectiveMemberApiAccessStatus({
+        role: "admin",
+        status: "active",
+        apiAccessStatus: "disabled",
+      }),
+    ).toBe("disabled");
+    expect(
+      canMembershipUseApiAccess({
+        role: "admin",
+        status: "active",
+        apiAccessStatus: "enabled",
+      }),
+    ).toBe(true);
+    expect(
+      canMembershipUseApiAccess({
+        role: "admin",
+        status: "active",
+        apiAccessStatus: "disabled",
+      }),
+    ).toBe(false);
+    expect(
+      canMembershipUseApiAccess({
+        role: "editor",
+        status: "active",
+        apiAccessStatus: "enabled",
+      }),
+    ).toBe(false);
   });
 });

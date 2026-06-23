@@ -49,7 +49,7 @@ export function PacketsWorkspacePage() {
   const [activeTab, setActiveTab] = useHashTab("builder", packetTabHashes);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Packets"
         description="Scoped documentation for each recipient — movers, employers, insurers, and your own full record — with privacy defaults applied."

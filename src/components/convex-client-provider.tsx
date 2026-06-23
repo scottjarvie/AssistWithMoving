@@ -4,8 +4,12 @@ import { useMemo } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { usePathname } from "next/navigation";
 
-import { IdentityBootstrapper } from "@/components/identity-bootstrapper";
+import {
+  IdentityBootstrapper,
+  isIdentitySyncPath,
+} from "@/components/identity-bootstrapper";
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -15,6 +19,7 @@ export function ConvexClientProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const convex = useMemo(() => {
     if (!convexUrl) {
       return null;
@@ -28,6 +33,10 @@ export function ConvexClientProvider({
   }
 
   if (!clerkPublishableKey) {
+    return <ConvexProvider client={convex}>{children}</ConvexProvider>;
+  }
+
+  if (!isIdentitySyncPath(pathname)) {
     return <ConvexProvider client={convex}>{children}</ConvexProvider>;
   }
 

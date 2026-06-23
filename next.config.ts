@@ -8,6 +8,15 @@ const securityHeaders = securityHeadersForMode(
 );
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      {
+        source: "/floor-plan-draft",
+        destination: "/floorplans",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

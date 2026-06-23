@@ -2,7 +2,14 @@
 
 import { Fragment, type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Pencil, ShieldCheck, UserPlus, UsersRound, X } from "lucide-react";
+import {
+  KeyRound,
+  Pencil,
+  ShieldCheck,
+  UserPlus,
+  UsersRound,
+  X,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -43,6 +50,10 @@ type HouseholdMemberRow = {
   email: string | null;
   role: string;
   status: string;
+  apiAccessStatus: "enabled" | "disabled";
+  apiAccessAllowed: boolean;
+  apiAccessReason: string;
+  activeApiKeyCount: number;
   isCurrentUser: boolean;
 };
 
@@ -142,6 +153,9 @@ function HouseholdMemberPanel({
   );
   const addExistingMember = useMutation(api.households.addExistingMember);
   const updateMemberRole = useMutation(api.households.updateMemberRole);
+  const updateMemberApiAccess = useMutation(
+    api.households.updateMemberApiAccess,
+  );
   const disableMember = useMutation(api.households.disableMember);
   const revokeInvitation = useMutation(api.households.revokeInvitation);
   const [email, setEmail] = useState("");
@@ -215,6 +229,34 @@ function HouseholdMemberPanel({
         error instanceof Error
           ? error.message
           : "Could not disable that collaborator.",
+      );
+    } finally {
+      setWorkingMemberId(null);
+    }
+  }
+
+  async function handleApiAccessChange(
+    membershipId: Id<"householdMemberships">,
+    apiAccessStatus: "enabled" | "disabled",
+  ) {
+    setWorkingMemberId(membershipId);
+    setMessage(null);
+    try {
+      await updateMemberApiAccess({
+        householdId,
+        membershipId,
+        apiAccessStatus,
+      });
+      setMessage(
+        apiAccessStatus === "enabled"
+          ? "Collaborator API access enabled."
+          : "Collaborator API access disabled. Existing keys they created cannot be used.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not update collaborator API access.",
       );
     } finally {
       setWorkingMemberId(null);
@@ -325,6 +367,15 @@ function HouseholdMemberPanel({
                                 <Badge variant="secondary">
                                   {member.status}
                                 </Badge>
+                                <Badge
+                                  variant={
+                                    member.apiAccessAllowed
+                                      ? "outline"
+                                      : "secondary"
+                                  }
+                                >
+                                  API {member.apiAccessAllowed ? "on" : "off"}
+                                </Badge>
                               </div>
                               <MemberAccessAction
                                 member={member}
@@ -342,6 +393,7 @@ function HouseholdMemberPanel({
                                 workingMemberId={workingMemberId}
                                 onClose={() => setManagingMemberId(null)}
                                 onRoleChange={handleRoleChange}
+                                onApiAccessChange={handleApiAccessChange}
                                 onDisable={handleDisable}
                                 onRevoke={handleRevoke}
                               />
@@ -358,6 +410,7 @@ function HouseholdMemberPanel({
                             <TableHead>Member</TableHead>
                             <TableHead>Role</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>API</TableHead>
                             <TableHead className="text-right">Access</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -394,6 +447,24 @@ function HouseholdMemberPanel({
                                       {member.status}
                                     </Badge>
                                   </TableCell>
+                                  <TableCell>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge
+                                        variant={
+                                          member.apiAccessAllowed
+                                            ? "outline"
+                                            : "secondary"
+                                        }
+                                      >
+                                        {member.apiAccessAllowed
+                                          ? "Enabled"
+                                          : "Disabled"}
+                                      </Badge>
+                                      <span className="text-xs text-muted-foreground">
+                                        {member.activeApiKeyCount} active keys
+                                      </span>
+                                    </div>
+                                  </TableCell>
                                   <TableCell className="text-right">
                                     <MemberAccessAction
                                       member={member}
@@ -406,9 +477,9 @@ function HouseholdMemberPanel({
                                   </TableCell>
                                 </TableRow>
                                 {isManaging ? (
-                                  <TableRow key={`${rowId}-editor`}>
+                                      <TableRow key={`${rowId}-editor`}>
                                     <TableCell
-                                      colSpan={4}
+                                      colSpan={5}
                                       className="bg-muted/20 p-3"
                                     >
                                       <MemberAccessEditor
@@ -420,6 +491,7 @@ function HouseholdMemberPanel({
                                           setManagingMemberId(null)
                                         }
                                         onRoleChange={handleRoleChange}
+                                        onApiAccessChange={handleApiAccessChange}
                                         onDisable={handleDisable}
                                         onRevoke={handleRevoke}
                                       />
@@ -552,6 +624,7 @@ function MemberAccessEditor({
   workingMemberId,
   onClose,
   onRoleChange,
+  onApiAccessChange,
   onDisable,
   onRevoke,
 }: {
@@ -565,12 +638,20 @@ function MemberAccessEditor({
     membershipId: Id<"householdMemberships">,
     nextRole: ManageableRole,
   ) => void;
+  onApiAccessChange: (
+    membershipId: Id<"householdMemberships">,
+    apiAccessStatus: "enabled" | "disabled",
+  ) => void;
   onDisable: (membershipId: Id<"householdMemberships">) => void;
   onRevoke: (invitationId: Id<"householdInvitations">) => void;
 }) {
   const membershipId = member.membershipId;
   const invitationId = member.invitationId;
   const label = member.email ?? member.name ?? "member";
+  const apiCanBeManaged =
+    canEdit && membershipId !== null && member.role === "admin";
+  const nextApiAccessStatus =
+    member.apiAccessStatus === "enabled" ? "disabled" : "enabled";
 
   return (
     <div
@@ -582,35 +663,80 @@ function MemberAccessEditor({
         .join(" ")}
     >
       {canEdit && membershipId ? (
-        <div className="grid gap-2 md:grid-cols-[minmax(180px,1fr)_auto_auto]">
-          <select
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-            value={member.role}
-            aria-label={`Role for ${label}`}
-            disabled={workingMemberId === membershipId}
-            onChange={(event) =>
-              onRoleChange(membershipId, event.target.value as ManageableRole)
-            }
-          >
-            {manageableRoles.map((roleOption) => (
-              <option key={roleOption} value={roleOption}>
-                {roleLabels[roleOption]}
-              </option>
-            ))}
-          </select>
-          <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={workingMemberId === membershipId}
-            onClick={() => onDisable(membershipId)}
-          >
-            <X aria-hidden="true" />
-            Disable access
-          </Button>
+        <div className="space-y-3">
+          <div className="grid gap-2 md:grid-cols-[minmax(180px,1fr)_auto_auto]">
+            <select
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              value={member.role}
+              aria-label={`Role for ${label}`}
+              disabled={workingMemberId === membershipId}
+              onChange={(event) =>
+                onRoleChange(membershipId, event.target.value as ManageableRole)
+              }
+            >
+              {manageableRoles.map((roleOption) => (
+                <option key={roleOption} value={roleOption}>
+                  {roleLabels[roleOption]}
+                </option>
+              ))}
+            </select>
+            <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={workingMemberId === membershipId}
+              onClick={() => onDisable(membershipId)}
+            >
+              <X aria-hidden="true" />
+              Disable access
+            </Button>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="size-4 text-primary" aria-hidden="true" />
+                  API and agent access
+                </p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  {member.apiAccessReason}
+                </p>
+                {member.activeApiKeyCount > 0 ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {member.activeApiKeyCount} active key
+                    {member.activeApiKeyCount === 1 ? "" : "s"} created by this
+                    member.
+                  </p>
+                ) : null}
+              </div>
+              <Badge
+                variant={member.apiAccessAllowed ? "outline" : "secondary"}
+              >
+                API {member.apiAccessAllowed ? "enabled" : "disabled"}
+              </Badge>
+            </div>
+            {apiCanBeManaged ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                disabled={workingMemberId === membershipId}
+                onClick={() =>
+                  onApiAccessChange(membershipId, nextApiAccessStatus)
+                }
+              >
+                <KeyRound aria-hidden="true" />
+                {nextApiAccessStatus === "enabled"
+                  ? "Enable API access"
+                  : "Disable API access"}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : isPendingInvite && invitationId ? (
         <div className="flex flex-wrap items-center justify-between gap-3">

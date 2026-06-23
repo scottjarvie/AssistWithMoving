@@ -11,8 +11,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useUser } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 
 import { api } from "../../convex/_generated/api";
@@ -50,9 +49,7 @@ export function MoveWorkspaceProvider({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useUser();
   const currentUser = useQuery(api.users.current);
-  const upsertCurrentUser = useMutation(api.users.upsertCurrent);
   const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
   const featureFlagEnvironment =
     process.env.NODE_ENV === "development" ||
@@ -70,19 +67,6 @@ export function MoveWorkspaceProvider({
   const [selectedMoveId, setSelectedMoveId] = useState<Id<"moves"> | null>(
     initialMoveId ? (initialMoveId as Id<"moves">) : null
   );
-
-  // Keep the Convex user record in sync with the Clerk identity.
-  useEffect(() => {
-    if (currentUser || !user) {
-      return;
-    }
-
-    void upsertCurrentUser({
-      email: user.primaryEmailAddress?.emailAddress,
-      name: user.fullName ?? user.username ?? undefined,
-      imageUrl: user.imageUrl,
-    });
-  }, [currentUser, upsertCurrentUser, user]);
 
   // A deep-linked move determines its own household — never assume the
   // user's first household owns it.

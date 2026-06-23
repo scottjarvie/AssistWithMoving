@@ -17,8 +17,21 @@ describe("box label URL helpers", () => {
         householdId: "household",
         moveId: "move",
         boxId: "box with spaces",
-      })
+      }),
     ).toBe("/app/boxes/box%20with%20spaces?householdId=household&moveId=move");
+  });
+
+  it("preserves optional return context for workflow handoffs", () => {
+    expect(
+      buildBoxLookupPath({
+        householdId: "household",
+        moveId: "move",
+        boxId: "box",
+        returnTo: "load-plan",
+      }),
+    ).toBe(
+      "/app/boxes/box?householdId=household&moveId=move&returnTo=load-plan",
+    );
   });
 
   it("builds absolute QR URLs from the current origin", () => {
@@ -27,13 +40,13 @@ describe("box label URL helpers", () => {
         householdId: "h",
         moveId: "m",
         boxId: "b",
-      })
+      }),
     ).toBe("https://movingmanifest.com/app/boxes/b?householdId=h&moveId=m");
   });
 
   it("builds printable label sheet paths for a selected move", () => {
     expect(buildBoxLabelSheetPath({ householdId: "h", moveId: "m" })).toBe(
-      "/app/box-labels?householdId=h&moveId=m"
+      "/app/box-labels?householdId=h&moveId=m",
     );
   });
 
@@ -43,7 +56,7 @@ describe("box label URL helpers", () => {
         householdId: "h",
         moveId: "m",
         layout: "thermal4x6",
-      })
+      }),
     ).toBe("/app/box-labels?householdId=h&moveId=m&layout=thermal4x6");
   });
 
@@ -60,13 +73,13 @@ describe("box label URL helpers", () => {
         pageSize: "4in 6in",
         printColumns: 1,
         thermal: true,
-      })
+      }),
     );
     expect(boxLabelPrintPresetFor("thermal3x2")).toEqual(
       expect.objectContaining({
         pageSize: "3in 2in",
         showUrl: false,
-      })
+      }),
     );
   });
 });

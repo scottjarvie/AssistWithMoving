@@ -60,12 +60,22 @@ type TransportResourceWithZones = {
   resource: Doc<"transportResources">;
   zones: Doc<"transportZones">[];
 };
+type MoveSpaceRecord = NonNullable<
+  ReturnType<typeof useQuery<typeof api.moveSpaces.listForMove>>
+>[number];
 type BoxRecord = NonNullable<
   ReturnType<typeof useQuery<typeof api.boxes.listForMove>>
 >[number];
 type BoxCardTask = "contents" | "details" | "photos" | "load";
 type BoxTask = "boxes" | "add" | BoxCardTask | "labels";
 type BoxStatusFilter = "all" | Doc<"boxes">["status"];
+
+const destinationSpaceKinds = new Set<Doc<"moveSpaces">["kind"]>([
+  "destinationRoom",
+  "yardOutdoor",
+  "storage",
+  "custom",
+]);
 
 const boxTaskTabs: { value: BoxTask; label: string; description: string }[] = [
   {
@@ -168,6 +178,7 @@ function BoxCard({
   boxRecord,
   items,
   resourcesWithZones,
+  destinationSpaces,
   task,
   onMessage,
 }: {
@@ -176,18 +187,24 @@ function BoxCard({
   boxRecord: BoxRecord;
   items: InventoryItem[];
   resourcesWithZones: TransportResourceWithZones[];
+  destinationSpaces: MoveSpaceRecord[];
   task: BoxCardTask;
   onMessage: (message: string) => void;
 }) {
   const { box, contents, itemCount, weightSummary } = boxRecord;
   const updateBox = useMutation(api.boxes.update);
   const addItem = useMutation(api.boxes.addItem);
+  const createItem = useMutation(api.items.create);
+  const updatePhoto = useMutation(api.photos.updateEvidence);
   const removeItem = useMutation(api.boxes.removeItem);
 
   const [label, setLabel] = useState(box.label ?? "");
   const [room, setRoom] = useState(box.room ?? "");
   const [destinationRoom, setDestinationRoom] = useState(
     box.destinationRoom ?? "",
+  );
+  const [destinationSpaceId, setDestinationSpaceId] = useState(
+    box.destinationSpaceId ?? "",
   );
   const [description, setDescription] = useState(box.description ?? "");
   const [status, setStatus] = useState(box.status);
@@ -213,6 +230,16 @@ function BoxCard({
     box.assignmentOverrideReason ?? "",
   );
   const [selectedItemId, setSelectedItemId] = useState("");
+  const [newPackedItemName, setNewPackedItemName] = useState("");
+  const [newPackedItemQuantity, setNewPackedItemQuantity] = useState("1");
+  const [newPackedItemCategory, setNewPackedItemCategory] = useState("");
+  const [newPackedItemNotes, setNewPackedItemNotes] = useState("");
+  const [creatingPackedItem, setCreatingPackedItem] = useState(false);
+  const [photoPackedItemName, setPhotoPackedItemName] = useState("");
+  const [photoPackedItemQuantity, setPhotoPackedItemQuantity] = useState("1");
+  const [photoPackedItemCategory, setPhotoPackedItemCategory] = useState("");
+  const [photoPackedItemNotes, setPhotoPackedItemNotes] = useState("");
+  const [creatingPhotoPackedItem, setCreatingPhotoPackedItem] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const zones = useMemo(
@@ -222,6 +249,16 @@ function BoxCard({
       )?.zones ?? [],
     [assignedResourceId, resourcesWithZones],
   );
+
+  function handleDestinationSpaceChange(spaceId: string) {
+    setDestinationSpaceId(spaceId);
+    const selectedSpace = destinationSpaces.find(
+      (space) => space._id === spaceId,
+    );
+    if (selectedSpace) {
+      setDestinationRoom(selectedSpace.name);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -236,6 +273,9 @@ function BoxCard({
         label,
         room,
         destinationRoom,
+        ...(destinationSpaceId
+          ? { destinationSpaceId: destinationSpaceId as Id<"moveSpaces"> }
+          : { clearDestinationSpace: true }),
         description,
         status,
         ...(estimatedWeight !== undefined
@@ -287,6 +327,144 @@ function BoxCard({
           ? error.message
           : `Could not add that item to ${box.code}.`,
       );
+    }
+  }
+
+  async function createPackedItemInsideBox({
+    itemName,
+    quantityText,
+    category,
+    notes,
+    photoId,
+  }: {
+    itemName: string;
+    quantityText: string;
+    category: string;
+    notes: string;
+    photoId?: Id<"itemPhotos">;
+  }) {
+    if (!itemName) {
+      return;
+    }
+
+    const quantity = parseOptionalNumber(quantityText) ?? 1;
+    const cleanNotes = notes.trim();
+    const itemId = await createItem({
+      householdId,
+      moveId,
+      name: itemName,
+      room: box.room ?? undefined,
+      destinationRoom: box.destinationRoom ?? undefined,
+      ...(box.destinationSpaceId
+        ? { destinationSpaceId: box.destinationSpaceId }
+        : {}),
+      category: category.trim() || undefined,
+      description:
+        cleanNotes ||
+        (photoId
+          ? `Created from a photo while opening ${box.code} contents.`
+          : `Created while opening ${box.code} contents.`),
+      disposition: "mover",
+      status: "packed",
+      quantity,
+      needsReview: true,
+      reviewFlags: photoId
+        ? ["boxContentsReview", "photoEvidenceReview"]
+        : ["boxContentsReview"],
+      aiTags: photoId
+        ? ["box-content-capture", "photo-created-item"]
+        : ["box-content-capture"],
+      createdVia: "manual",
+    });
+    await addItem({
+      householdId,
+      moveId,
+      boxId: box._id,
+      itemId,
+      quantity,
+    });
+
+    if (photoId) {
+      await updatePhoto({
+        householdId,
+        moveId,
+        photoId,
+        itemId,
+        boxId: box._id,
+        room: box.room,
+        caption: itemName,
+        photoType: "item",
+        notes:
+          cleanNotes ||
+          `Created ${itemName} from a photo while opening ${box.code}.`,
+      });
+    }
+
+    return itemId;
+  }
+
+  async function handleCreatePackedItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const itemName = newPackedItemName.trim();
+    if (!itemName) {
+      return;
+    }
+
+    setCreatingPackedItem(true);
+    try {
+      await createPackedItemInsideBox({
+        itemName,
+        quantityText: newPackedItemQuantity,
+        category: newPackedItemCategory,
+        notes: newPackedItemNotes,
+      });
+      setNewPackedItemName("");
+      setNewPackedItemQuantity("1");
+      setNewPackedItemCategory("");
+      setNewPackedItemNotes("");
+      onMessage(`${itemName} created inside ${box.code}.`);
+    } catch (error) {
+      onMessage(
+        error instanceof Error
+          ? error.message
+          : `Could not create that item inside ${box.code}.`,
+      );
+    } finally {
+      setCreatingPackedItem(false);
+    }
+  }
+
+  async function handlePhotoPackedItemUploaded(photo: {
+    photoId: Id<"itemPhotos">;
+  }) {
+    const itemName = photoPackedItemName.trim();
+    if (!itemName) {
+      onMessage(`Name the item before creating it from a ${box.code} photo.`);
+      return;
+    }
+
+    setCreatingPhotoPackedItem(true);
+    try {
+      await createPackedItemInsideBox({
+        itemName,
+        quantityText: photoPackedItemQuantity,
+        category: photoPackedItemCategory,
+        notes: photoPackedItemNotes,
+        photoId: photo.photoId,
+      });
+      setPhotoPackedItemName("");
+      setPhotoPackedItemQuantity("1");
+      setPhotoPackedItemCategory("");
+      setPhotoPackedItemNotes("");
+      onMessage(`${itemName} created from photo inside ${box.code}.`);
+    } catch (error) {
+      onMessage(
+        error instanceof Error
+          ? error.message
+          : `Could not create that photo item inside ${box.code}.`,
+      );
+    } finally {
+      setCreatingPhotoPackedItem(false);
     }
   }
 
@@ -360,6 +538,23 @@ function BoxCard({
               placeholder="Destination room"
               aria-label="Box destination room"
             />
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              value={destinationSpaceId}
+              aria-label="Box destination location"
+              onChange={(event) =>
+                handleDestinationSpaceChange(event.target.value)
+              }
+            >
+              <option value="">No destination location</option>
+              {destinationSpaces.map((space) => (
+                <option key={space._id} value={space._id}>
+                  {space.floorLevel
+                    ? `${space.name} (${space.floorLevel})`
+                    : space.name}
+                </option>
+              ))}
+            </select>
             <select
               className="h-8 rounded-md border border-input bg-background px-2 text-sm"
               value={status}
@@ -500,6 +695,125 @@ function BoxCard({
 
       {task === "contents" ? (
         <div className="mt-3 space-y-3">
+          <form
+            aria-label={`Create item inside ${box.code}`}
+            className="rounded-md border border-primary/25 bg-primary/5 p-3"
+            onSubmit={handleCreatePackedItem}
+          >
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Create item in this box</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Use this after opening the box and finding contents that were
+                  not itemized yet.
+                </p>
+              </div>
+              <Badge variant="secondary">inside {box.code}</Badge>
+            </div>
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_88px_150px_auto]">
+              <Input
+                value={newPackedItemName}
+                onChange={(event) => setNewPackedItemName(event.target.value)}
+                placeholder="Item name"
+                aria-label={`New item name inside ${box.code}`}
+              />
+              <Input
+                value={newPackedItemQuantity}
+                inputMode="decimal"
+                onChange={(event) =>
+                  setNewPackedItemQuantity(event.target.value)
+                }
+                placeholder="Qty"
+                aria-label={`New item quantity inside ${box.code}`}
+              />
+              <Input
+                value={newPackedItemCategory}
+                onChange={(event) =>
+                  setNewPackedItemCategory(event.target.value)
+                }
+                placeholder="Category"
+                aria-label={`New item category inside ${box.code}`}
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={!newPackedItemName.trim() || creatingPackedItem}
+              >
+                <PackagePlus aria-hidden="true" />
+                {creatingPackedItem ? "Creating" : "Create"}
+              </Button>
+            </div>
+            <Textarea
+              className="mt-2"
+              value={newPackedItemNotes}
+              onChange={(event) => setNewPackedItemNotes(event.target.value)}
+              placeholder="Optional notes from what you saw in the box"
+              aria-label={`New item notes inside ${box.code}`}
+            />
+          </form>
+
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Create item from photo</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Name what you see, upload one original photo, and the item
+                  will be created inside {box.code} with review flags.
+                </p>
+              </div>
+              <Badge variant="outline">photo item</Badge>
+            </div>
+            <div className="mb-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_88px_150px]">
+              <Input
+                value={photoPackedItemName}
+                onChange={(event) => setPhotoPackedItemName(event.target.value)}
+                placeholder="Item name from photo"
+                aria-label={`Photo item name inside ${box.code}`}
+              />
+              <Input
+                value={photoPackedItemQuantity}
+                inputMode="decimal"
+                onChange={(event) =>
+                  setPhotoPackedItemQuantity(event.target.value)
+                }
+                placeholder="Qty"
+                aria-label={`Photo item quantity inside ${box.code}`}
+              />
+              <Input
+                value={photoPackedItemCategory}
+                onChange={(event) =>
+                  setPhotoPackedItemCategory(event.target.value)
+                }
+                placeholder="Category"
+                aria-label={`Photo item category inside ${box.code}`}
+              />
+            </div>
+            <Textarea
+              className="mb-3"
+              value={photoPackedItemNotes}
+              onChange={(event) => setPhotoPackedItemNotes(event.target.value)}
+              placeholder="Optional notes from the photo"
+              aria-label={`Photo item notes inside ${box.code}`}
+            />
+            <PhotoUploadControl
+              householdId={householdId}
+              moveId={moveId}
+              boxId={box._id}
+              room={box.room}
+              label={`Photo for new item in ${box.code}`}
+              photoType="item"
+              uploadDisabled={
+                !photoPackedItemName.trim() || creatingPhotoPackedItem
+              }
+              uploadDisabledMessage={
+                creatingPhotoPackedItem
+                  ? "Creating the item and attaching the photo."
+                  : "Enter an item name before uploading the photo."
+              }
+              onUploaded={(photo) => void handlePhotoPackedItemUploaded(photo)}
+            />
+          </div>
+
           <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
             <select
               className="h-8 rounded-md border border-input bg-background px-2 text-sm"
@@ -871,12 +1185,17 @@ export function BoxManager({
     api.transportResources.listForMoveWithZones,
     householdId && moveId ? { householdId, moveId } : "skip",
   );
+  const spaces = useQuery(
+    api.moveSpaces.listForMove,
+    householdId && moveId ? { householdId, moveId } : "skip",
+  );
   const createBox = useMutation(api.boxes.create);
 
   const [code, setCode] = useState("");
   const [label, setLabel] = useState("");
   const [room, setRoom] = useState("");
   const [destinationRoom, setDestinationRoom] = useState("");
+  const [destinationSpaceId, setDestinationSpaceId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [activeTask, setActiveTask] = useHashTab<BoxTask>(
@@ -888,6 +1207,11 @@ export function BoxManager({
   const [statusFilter, setStatusFilter] = useState<BoxStatusFilter>("all");
 
   const visibleBoxes = useMemo(() => boxes ?? [], [boxes]);
+  const destinationSpaces = useMemo(
+    () =>
+      (spaces ?? []).filter((space) => destinationSpaceKinds.has(space.kind)),
+    [spaces],
+  );
   const activeItems = useMemo(
     () => (items ?? []).filter((item) => item.status !== "archived"),
     [items],
@@ -1118,6 +1442,7 @@ export function BoxManager({
               boxRecord={selectedBoxRecord}
               items={activeItems}
               resourcesWithZones={resourcesWithZones ?? []}
+              destinationSpaces={destinationSpaces}
               task={task}
               onMessage={setMessage}
             />
@@ -1143,11 +1468,15 @@ export function BoxManager({
         label,
         room,
         destinationRoom,
+        ...(destinationSpaceId
+          ? { destinationSpaceId: destinationSpaceId as Id<"moveSpaces"> }
+          : {}),
       });
       setCode("");
       setLabel("");
       setRoom("");
       setDestinationRoom("");
+      setDestinationSpaceId("");
       setMessage("Box created.");
       setActiveTask("boxes");
     } catch {
@@ -1248,7 +1577,7 @@ export function BoxManager({
           <TabsContent value="add" id="add-box" className="space-y-4">
             <form
               aria-label="Create box"
-              className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[120px_minmax(0,1fr)_160px_160px_auto]"
+              className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[120px_minmax(0,1fr)_150px_160px_190px_auto]"
               onSubmit={handleCreate}
             >
               <Input
@@ -1279,6 +1608,31 @@ export function BoxManager({
                 aria-label="New box destination room"
                 disabled={!moveId}
               />
+              <select
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={destinationSpaceId}
+                aria-label="New box destination location"
+                disabled={!moveId}
+                onChange={(event) => {
+                  const selectedId = event.target.value;
+                  setDestinationSpaceId(selectedId);
+                  const selectedSpace = destinationSpaces.find(
+                    (space) => space._id === selectedId,
+                  );
+                  if (selectedSpace) {
+                    setDestinationRoom(selectedSpace.name);
+                  }
+                }}
+              >
+                <option value="">No structured destination</option>
+                {destinationSpaces.map((space) => (
+                  <option key={space._id} value={space._id}>
+                    {space.floorLevel
+                      ? `${space.name} (${space.floorLevel})`
+                      : space.name}
+                  </option>
+                ))}
+              </select>
               <Button type="submit" size="sm" disabled={!moveId || creating}>
                 <Boxes aria-hidden="true" />
                 Create

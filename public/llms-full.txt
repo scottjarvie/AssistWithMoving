@@ -22,14 +22,15 @@ provide an API key.
 
 A good first user prompt is:
 
-`Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, walk me through creating an account and an AI helper key.`
+`Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, walk me through signing in with MCP OAuth or, if that is not supported, creating a fallback AI helper key.`
 
 If the user is non-technical, translate API and MCP concepts into plain
 language:
 
 - "Account" means MovingManifest can save the move.
-- "AI helper key" means a revocable password-like key that lets the assistant
-  help with the move.
+- "MCP OAuth" means the user signs in and consents without pasting a raw key.
+- "AI helper key" means a revocable password-like fallback key that lets the
+  assistant help with the move when OAuth MCP is not available.
 - "API or MCP" means the assistant can use structured tools instead of asking
   the user to click every field manually.
 - "Household member" means a signed-in person who can access the owner's
@@ -42,7 +43,8 @@ language:
 Public:
 
 - Marketing and product pages.
-- `/ai`, `/api`, `/mcp`, `/llms.txt`, `/llms-full.txt`, `/openapi.json`.
+- `/ai`, `/ai/kit`, `/api`, `/mcp`, `/llms.txt`, `/llms-full.txt`,
+  `/openapi.json`, and `/agent-kit/*`.
 - General workflow guidance.
 
 Private:
@@ -54,8 +56,8 @@ Private:
 - Values, serial numbers, private notes, and evidence files.
 - API keys.
 
-Never claim you can access private data unless the user has signed in or given
-you a valid API key.
+Never claim you can access private data unless the user has signed in through
+OAuth MCP or given you a valid API key.
 
 ## Phone User Flow
 
@@ -64,16 +66,37 @@ If a user says: "Go to movingmanifest.com and help me use it"
 1. Open `https://movingmanifest.com/ai`.
 2. Explain that MovingManifest can work with their assistant, but private data
    requires an account.
-3. If they are ready to sign in, create an account, or make a helper key, guide
+3. If they are ready to sign in, create an account, or connect an assistant, guide
    them to `https://movingmanifest.com/ai/start`.
 4. After account creation, guide them to create or select a move.
-5. Have them choose a helper preset, create the key, and copy the one-time secret.
-6. Ask the user to copy the one-time secret into the assistant or MCP client
-   only if they trust that assistant with the move work.
-7. Use `GET /api/v1/me` to verify the key and scopes.
-8. Use `GET /api/v1/moves` to find or create the move.
-9. Use `GET /api/v1/moves/{moveId}/agent-context` before writing.
-10. Use dry runs for bulk changes when available.
+5. If their hosted assistant supports OAuth MCP, give it only
+   `https://movingmanifest.com/api/mcp` and have the user complete
+   MovingManifest sign-in/consent. Do not ask for a raw `mmk_` key in that flow.
+   Do not use `https://movingmanifest.com/mcp` as the connector URL; that is the
+   human setup page. If the client shows HTML, never opens OAuth, or has no
+   MovingManifest tools, switch the connector URL to `/api/mcp`.
+   Claude may ask the user to approve every tool separately. Tell the user they
+   can approve one by one, or choose Allow all in connector permissions only if
+   they trust the MovingManifest connector and signed-in account.
+6. If OAuth MCP is not available, have them choose a helper preset, create the
+   fallback key, and copy the one-time secret only into an assistant or local
+   MCP client they trust.
+7. In MCP, call `agent_workbench` first so you choose the right workflow lane.
+8. Use `GET /api/v1/me` or MCP `get_api_context` to verify the current
+   OAuth/API-key connection, scopes, `connection.user.email`, and
+   `connection.householdMember.apiAccessAllowed` when present.
+   If `connection.status` is `needs_household`, stop private work and tell the
+   user to open `https://movingmanifest.com/app/dashboard#household-setup` with
+   that signed-in account or ask an owner to invite the same email.
+   If expected tools are missing or `get_api_context` fails with
+   `Invalid API key format`, `invalid_token`, missing scopes, or an OAuth client
+   mismatch right after setup or a MovingManifest deploy, refresh MCP tools or
+   start a fresh assistant session first. If the same private-call auth failure
+   persists, tell the user to disconnect and reconnect the MovingManifest
+   connector so the client receives fresh OAuth credentials and tool metadata.
+9. Use `GET /api/v1/moves` or MCP `list_moves` to find or create the move.
+10. Use `GET /api/v1/moves/{moveId}/agent-context` or MCP `get_agent_context` before writing.
+11. Use dry runs for bulk changes when available.
 
 ## Spouse And Collaborator Access
 
@@ -83,13 +106,24 @@ the same move, they need household membership.
 Current flow:
 
 1. The owner creates the household/move.
-2. An owner/admin adds or invites the spouse by email from Settings, or an assistant uses
-   `POST /api/v1/households/{householdId}/members` with a key that has
-   `members/manage`.
+2. An owner/admin adds or invites the spouse by email from Settings, or an assistant
+   uses `POST /api/v1/households/{householdId}/members` with an explicitly
+   approved broader local/API-key connection that has `members/manage`. The
+   first hosted OAuth trusted-helper surface may not expose member-management
+   tools; if they are absent, send the user to Settings or ask for a broader
+   approved connection instead of pretending OAuth failed.
 3. If the spouse does not have an account yet, MovingManifest keeps a pending
    invitation for that email.
 4. The spouse creates their own MovingManifest account with that email and then
    sees the shared household/move when signed in.
+5. The spouse sees a first-login household access card on the dashboard with
+   their role and next actions.
+
+API access is separate from normal household access. Owner/admin members can
+disable a collaborator's API key creation/use without removing their app
+membership. If `GET /api/v1/me` or MCP `get_api_context` fails because member
+API access is disabled, ask the user to contact a household owner/admin instead
+of retrying the same connection.
 
 Allowed member roles:
 
@@ -110,12 +144,15 @@ Phone-only user:
 
 - Use the `/ai` page and starter prompt. Use `/ai/start` when the user is
   ready for account and helper-key setup.
+- Use `/ai/kit` when the user wants a paste-ready CLAUDE.md block, Claude Code
+  skill, or ChatGPT Actions instruction block.
 - Explain account creation and key creation in ordinary language.
 - Ask for permission before using the key.
 
 Agent or coding-assistant user:
 
-- Read `/llms.txt`, `/llms-full.txt`, `/api`, `/mcp`, and `/openapi.json`.
+- Read `/llms.txt`, `/llms-full.txt`, `/api`, `/mcp`, `/ai/kit`, and
+  `/openapi.json`.
 - Prefer API or MCP calls over UI clicking.
 - Use batch endpoints and dry runs where available.
 
@@ -142,11 +179,10 @@ Family helper or mover:
 ## Image Upload Guidance
 
 One user photo should normally be one upload call. MCP agents should use
-`upload_image`, `upload_photo`, or `upload_evidence_image` with a local `filePath`, public
-`sourceUrl`, `dataUrl`, or `fileBase64`. When the user gives several ordinary
-photos from the same room/context or for one existing item, use `upload_images`,
-`upload_photos`, or `upload_evidence_images` with shared defaults and one image
-entry per photo.
+`upload_photo` with a local `filePath`, public `sourceUrl`, `dataUrl`, or
+`fileBase64`. When the user gives several ordinary photos from the same
+room/context or for one existing item, use `upload_photos` with shared defaults
+and one image entry per photo.
 When one photo should become one new inventory item, use
 `add_item_from_photo`; it accepts the item name plus one image source, creates
 the item, sets quantity only when the user says it or the photo clearly shows a
@@ -155,16 +191,32 @@ disposition, and condition blank, uploads the original image attached to that
 item, and returns item/photo IDs with derivative status and `agentReview`. Use
 `create_item_with_images` when one new item has several photos.
 
+When the user is focused on one box, prefer `save_box_intake`. It creates or
+updates the box, saves dimensions/weight/description/destination, uploads
+box-level photos, creates newly described contents, attaches optional content
+photos, and links existing items into that same box in one approval. It returns
+`boxId`, `boxCode`, `photoIds`, `packedItems`, skipped rows, and a verification
+`nextStep` in `agentReview`; use those IDs when summarizing the saved box, then
+call `get_move_summary` or `get_agent_context` before continuing if the next
+task depends on the box state. If photos are already uploaded for many rough
+boxes/totes, put the returned `photoIds` on explicit
+`batch_upsert_movable_units` box rows so the same batch attaches them; do not
+combine `photoIds` with `count`. Set `containerType` when the user says carton,
+plastic tote, bin, wardrobe box, dish pack, crate, or similar; do not bury
+reusable/recyclable container type only in `label` or `description`. Use
+lower-level opened-box tools only in
+full/API-key mode for advanced partial work.
+
 For the common "attach these new photos to the item we already added" workflow,
 do not create another inventory item. Resolve the existing item first with
 `get_agent_context` or `get_move_summary`; if the user gave a clear item name
-and only one match is plausible, use that `itemId`. Then call `upload_photos` or
-`upload_evidence_images` with shared defaults such as `moveId`, `itemId`, room,
-`photoType: "item"`, normal privacy, and one `images[]` entry per local
-`filePath`. Set `continueOnError: true` for batches so one bad image does not
-block the others. Afterward, report a short confirmation: item name, uploaded
-count, failed count, photo IDs, and whether derivatives are ready. Only ask the
-user to correct target, caption, privacy, or quantity if the result looks wrong.
+and only one match is plausible, use that `itemId`. Then call `upload_photos`
+with shared defaults such as `moveId`, `itemId`, room, `photoType: "item"`,
+normal privacy, and one `images[]` entry per local `filePath`. Set
+`continueOnError: true` for batches so one bad image does not block the others.
+Afterward, report a short confirmation: item name, uploaded count, failed count,
+photo IDs, and whether derivatives are ready. Only ask the user to correct
+target, caption, privacy, or quantity if the result looks wrong.
 
 REST agents
 should use `POST /api/v1/images/upload` or `POST /api/v1/photos/upload`
@@ -174,7 +226,11 @@ MovingManifest stores the original, reads dimensions, finalizes the evidence
 record, and creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
 server-side. Direct upload responses include `derivativeVariants` for the
 200x200 square `thumb`, 600x600 `card`, 1200x1200 `detail`, and 2400x2400
-`full` WebP display versions without exposing private storage keys. For local
+`full` WebP display versions, plus `media.display` with short-lived derivative
+URLs when generation is ready or an explicit pending/failed status when it is
+not. Photo read and ingestion-queue media payloads include `originalMetadata`
+for the preserved original's filename, MIME type, byte size, dimensions,
+capture timestamp, and hash presence. For local
 `filePath`, the MCP helper sends the original image bytes directly instead of
 putting the file into a JSON/base64 payload. Do not ask users for dimensions,
 thumbnail sizes, or derivative files for ordinary photos. Set
@@ -182,12 +238,96 @@ thumbnail sizes, or derivative files for ordinary photos. Set
 for possible item, box, or duplicate suggestions; report whether
 `aiReview.status` queued or failed.
 
-MCP image results and REST direct upload responses include `agentReview` and
-`derivativeVariants`. After uploading, use that summary to tell the user the
+MCP image results and REST direct upload responses include `agentReview`,
+`derivativeVariants`, and `media.display`. After uploading, use that summary to tell the user the
 caption, room/item/box attachment, privacy/type choice, derivative status,
 prepared web variants, AI-review status, and any confidence or assumption you
 used so they can correct only what looks wrong without slowing down the capture
 flow.
+
+## Agent Workbench Guidance
+
+For MCP sessions, call `agent_workbench` before choosing from the larger tool
+surface. Use `mode: "overview"` at the start of a new session, `mode:
+"intakeQueue"` when the user captured work in the app, `mode:
+"photoInventory"` when photos should become item/evidence records, `mode:
+"reviewFirst"` when output should become suggestions for human approval, and
+`mode: "trustedHelper"` after the user explicitly granted this assistant trusted
+helper access.
+
+For app-captured queue work, the normal path is: list queued entries with
+`ingestion_queue`, claim a small batch, fetch claimed image evidence with
+`ingestion_queue` `action: "media"`, read `get_agent_context`, then call
+`ingestion_queue` `submitResults`. For bulk phone photos, ask the user to use
+the MovingManifest Capture page or mobile Capture button first so originals go
+directly to site storage instead of being base64-wrapped through chat. Read
+queue `intent`, `targetBoxId`, `targetBoxCode`, `targetItemId`, and
+`targetLabel` before interpreting instructions. `action: "media"` returns private queue
+photos as MCP image blocks; use `action: "evidenceUrl"` only as a fallback
+for oversized, unsupported, audio, or video media. Trusted helpers should use
+`committedItems`, `committedBoxes`, `boxAssignments`, and `loadAssignments` to
+create/update inventory, pack items into boxes, assign boxes to transport
+resources/zones, and finalize the queue entry in one call; include stable
+`externalSource`/`externalId` values and `attachMediaPhotoIds` for queue media
+that belongs on each item. If queue media or the queue target points at an
+existing box because the user captured photos from an opened rough box or typed
+`B-001`, use `committedItems` plus `boxAssignments` to pack the created items
+back into that existing box; reserve `committedBoxes` for genuinely new boxes.
+Use `committedItems.appendNote` only for the user's
+capture note or concise item decision rationale that should be appended to the
+item in the same approval. Existing item queue commits append/merge
+`researchSources` by default; use `researchSourceMode: "replace"` only for
+intentional cleanup. Review-first assistants should use `proposedItems` for human approval and include
+`researchSummary`, `researchSources`, `researchNotes`, and `researchConfidence`
+when they researched item identity, specs, likely weight, or uncertainty. Include
+`currentSpaceId`/`destinationSpaceId` when known, or `spaceName`/
+`destinationSpaceName` when the API should resolve a unique move space. Include
+`attachMediaPhotoIds` so approved suggestions keep the captured queue photos on
+the final item. Use `resultItemIds`
+only when items were already created through another approved workflow, or one
+specific `needsInputQuestion` when the evidence is blocked.
+
+## Blueprint And Floor-Plan Intake
+
+For blueprint, listing-floor-plan, hand sketch, or room-layout images, do not
+route the work through ordinary item intake. Use MCP `create_floor_plan_intake`
+with the `moveId`, optional `planId`, existing `photoIds`, and/or image
+`filePaths` or `sourceUrls`. The tool uploads images as
+`photoType: "blueprint"`, creates or selects a Layout Studio plan, and creates a
+`floorPlan` ingestion queue entry tied to `targetPlanId` when possible.
+
+After creating intake, call `floor_plan_context` to read the active plan,
+source images, observations, relationships, measurement/evidence ledger, solve
+diagnostics, destination spaces, floor-plan queue entries, unresolved agent
+questions, and placed/unplaced counts. Claim floor-plan work with `ingestion_queue` using
+`scopeHint: "floorPlan"` and `targetPlanId`, download evidence URLs from that
+entry, then use `floor_plan_observations` to store atomic visible details:
+labels, OCR/handwritten text, measurements, room names, wall segments, openings,
+doorways, doorless passages, windows, fixtures, closets, halls, exterior
+structures, patios, carports, sheds, lot/property features, orientation clues,
+and unknown marks. Use `floor_plan_relationships` for topology and rules such as
+adjacent/connected/contained/part-of/same-as/conflicts-with/opening-in and
+counts-toward-area/excluded-from-area. Then use `floor_plan_evidence` to store
+known, assumption, derived, or range measurements with provenance. Record
+official or suspected square footage, lot size, wall thickness, excluded
+structures, and outdoor zones as unit-aware measurements with `areaRole` and
+`constraintStrength` where relevant. Use `floor_plan_calculate` to derive
+conditioned totals, excluded totals, footprint, lot coverage, square-footage
+variance, missing area, and confidence diagnostics. Use `floor_plan_solve` to
+validate the stored evidence graph and generate draft geometry only when the
+constraints are sufficient before `plan_propose_ops` creates reviewable walls,
+rooms, zones, underlays, and placements. Treat walls, halls, closets, bathrooms,
+utilities, and circulation paths as spaces that consume area; record wall
+thickness, clear dimensions, access paths, and hidden small-space uncertainty as
+evidence/assumptions instead of folding them into a neighboring room. If the
+solve is incomplete, use `floor_plan_questions` to get prioritized missing
+measurements/questions. Use `floor_plan_reset_draft` to archive stale generated
+solve/proposal output without deleting source images, observations,
+relationships, measurements, or user corrections. Use `plan_apply_ops` only
+when the user explicitly approved immediate writes. If scale, room labels, level
+mapping, wall thickness, access paths, or exterior areas are unclear, set the
+queue entry to `needsInput` with one specific question so the site can show it
+and another agent session can continue later.
 
 ## Data Entry Guidance
 
@@ -229,6 +369,24 @@ For photo-based inventory:
   `confirm-contents` only for fields that genuinely need user attention.
 - When the agent infers fields, summarize those choices after writing instead
   of asking the user to approve every ordinary field upfront.
+- For item locations, use `spaceId`, `spaceName`, or `currentSpaceId` for the
+  item's current/origin space and `destinationSpaceId` or
+  `destinationSpaceName` for the destination/future space. Use `room` and
+  `destinationRoom` as readable fallbacks when durable spaces exist.
+- When you research an item, store identity, model, manufacturer, manual,
+  material, care, recall, or other durable context in `researchSummary`; store
+  checked URLs/titles/summaries in `researchSources`; set each source `status`
+  to `used`, `checked`, `blocked`, `gated`, `failed`, or `notRelevant`; store
+  caveats in `researchNotes`; and set `researchConfidence`. Do not invent
+  sources. When updating an existing item through MCP, `update_item`,
+  `batch_upsert_items`, and trusted queue commits append and merge
+  `researchSources` by default; use `researchSourceMode: "replace"` only for
+  intentional cleanup. Use `measurementProvenance` for researched dimensions,
+  weight, or volume, and use sale-listing research fields only for
+  marketplace pricing/comps.
+- Use `append_item_note` for additive private observations on an existing item.
+  Do not use `update_item` with `privateNotes` just to append text; existing
+  private notes are intentionally not returned by item reads.
 - For sell items, create or update a sale listing with listing status,
   platform, title, description, pricing range, research depth, and sources.
 
@@ -257,6 +415,73 @@ Suggested discovery order:
 3. `GET /moves/{moveId}/agent-context`
 4. Read spaces, transport resources, zones, item counts, sale pipeline, and
    existing photos before writing.
+5. Store "how transported" as movable-unit assignments. Put newly discovered
+   contents, box photos, and linked existing items into one box with
+   `save_box_intake`. Capture rough boxes
+   and large loose pieces with MCP `batch_upsert_movable_units`, or REST
+   `POST /api/v1/moves/{moveId}/movable-units/batch-upsert` when using
+   OpenAPI/actions instead of MCP. If a rough row already has a resolved load
+   target, include `assignedResourceId` and optional
+   `assignedZoneId` on that row; use `apply_assignments` later for stricter
+   validation, reassignment, or review-driven load changes. Use item
+   `requiresPersonalTransport` or `disposition: "personalTransport"` for
+   owner-carried item intent. Treat only true move-as-is loose pieces as
+   movable units; ordinary unboxed detailed inventory stays in the unpacked
+   queue until it is boxed or deliberately tagged/assigned as a large loose
+   unit. Expand numbered box ranges like "boxes 1-25" or
+   `B-001-B-025` into one box row per code before calling
+   `batch_upsert_movable_units`; each physical box is its own movable unit. If
+   the user names a container/material type, set `containerType` on the box row:
+   `carton`, `plasticTote`, `bin`, `wardrobe`, `dishPack`, `crate`, or `other`.
+   If
+   the user gives new code-less boxes such as "12 medium boxes", you may send
+   one box row with `count: 12`; the tool expands it and returns
+   `unitCountIndex` / `unitCount`. If
+   photos are already uploaded for several boxes/totes, put those `photoIds`
+   on the matching explicit box rows so the same batch attaches them; do not
+   combine `photoIds` with `count`. If
+   live box rows have no `boxId` or `code`, pass a stable `idempotencyKey`
+   such as `rough-garage-2026-06-19` so retries do not create duplicate
+   auto-coded boxes. REST agents use the same `units[]` shape and should send a
+   body `idempotencyKey` or `Idempotency-Key` header for live code-less box
+   rows. If the tool creates new loose-item rows, include
+   `externalSource` plus
+   `externalId`; use stable IDs like `garage-treadmill-1` so retries and later
+   measurement patches update the same loose unit. New loose rows become
+   active, reviewable movable units in the load planner. If the user says a
+   loose unit "goes with me",
+   "goes in my car", or "do not let movers touch", store that as structured
+   owner-carry intent instead of an item note. Preserve response row mapping:
+   box results include `unitIndex`, and loose-item batch rows map back with
+   `unitIndexes` or `unitIndex`, so created ids, warnings, and row errors can
+   be explained against the user's pasted list. Read `movableUnitSummary` from
+   `get_agent_context` or `get_move_summary` before asking for measurement
+   follow-up; it reports total units, box/loose counts, known weight/volume,
+   assignment counts, missing measurement counts, bounded `measurementRoute`
+   groups, bounded gap examples, and bounded assignment examples. Use
+   `measurementRoute` to suggest the next room/source area to measure, then
+   reuse `measurementPatchHint.target` and `assignmentPatchHint.target` from
+   grouped or flat examples for follow-up writes instead of guessing IDs or
+   creating duplicate units.
+   When the user later supplies missing measurements, call
+   `batch_upsert_movable_units` again with the existing boxId/code or loose
+   itemId and only the new weight, dimensions, volume, or assignment fields.
+   Include `photoIds` on box rows when photos need to be attached later.
+   Box codes are normalized before matching, so `b 012` and `B-012` target the
+   same box.
+   Use `get_capacity_report` when checking load fit; resource and zone totals
+   include assigned boxes plus assigned large loose items.
+6. When opening a rough box later, use `save_box_intake` when named contents,
+   box measurements, photos, or linked existing items should be saved into that
+   existing box. It returns `boxId`, `boxCode`, `photoIds`, `packedItems`, and a
+   verification `nextStep` in `agentReview`; use those IDs in the user summary
+   and verify with `get_move_summary` or `get_agent_context` before continuing. If the user queued
+   several photos from the scanned/open box, claim that queue with
+   `ingestion_queue`, use media `boxId`, queue `targetBoxId`, or queue
+   `targetBoxCode` as the target, and submit `committedItems` plus
+   `boxAssignments` back into the same box. Do not create a replacement box
+   just because the rough box is now being itemized. Tell the user the physical
+   follow-up after writing, such as which box code to put on the carton/tote.
 
 Important endpoints:
 
@@ -281,19 +506,30 @@ Use `/openapi.json` for machine-readable endpoint details.
 
 ## MCP
 
-MovingManifest offers the same MCP tools two ways: a remote endpoint for
-hosted assistants and a local npx server for desktop/CLI agents.
+MovingManifest exposes one shared MCP server contract through two transports:
+a remote endpoint for hosted assistants and a local npx server for desktop/CLI
+agents. The published tool surface can differ by auth mode. For first
+hosted/mobile OAuth launch, OAuth should use the narrower trusted-helper
+surface; local/headless API-key clients can use broader explicitly scoped tools.
 
 Remote MCP (claude.ai custom connectors, Claude Cowork, any Streamable HTTP
 client — no install needed):
 
 ```
 Endpoint: https://movingmanifest.com/api/mcp
-Auth:     Authorization: Bearer mmk_replace_with_a_scoped_api_key
+Auth:     OAuth via Clerk sign-in/consent, or Authorization: Bearer mmk_replace_with_a_scoped_api_key
 ```
 
-Clients that cannot set custom headers may append `?key=mmk_...` to the
-endpoint URL, but header auth is recommended because URLs can be logged.
+OAuth-capable clients should connect by endpoint URL and follow the
+protected-resource login flow. For the first hosted/mobile OAuth launch,
+MovingManifest should set `MOVINGMANIFEST_MCP_OAUTH_TOOLSET=trusted-helper` to
+expose only setup, capture queue, researched item, photo, packing, and transport
+tools. Scoped `mmk_` keys can still use the broader local/headless tool surface.
+Before publish, run the authorized OAuth smoke with
+`--expect-trusted-helper-toolset` so the hosted connector proves the narrower
+OAuth tool list.
+Clients that cannot set custom headers may append `?key=mmk_...` to the endpoint
+URL, but header auth is recommended because URLs can be logged.
 
 Local MCP via npx — Codex setup when the user has local shell access:
 
@@ -319,34 +555,65 @@ Claude Desktop and similar JSON-config MCP clients use the same command:
 
 After configuring MCP for Codex, restart Codex or start a fresh session. The
 agent should confirm `movingmanifest` appears in `/mcp` or `codex mcp list`,
-then call `get_api_context` before accessing private data. If the current
-Codex session cannot see newly added MCP tools, tell the user a fresh Codex
-session is needed rather than assuming the key or API is broken.
+then call `get_api_context` to verify the current connection before accessing
+private data. Check `connection.user.email` and
+`connection.householdMember.apiAccessAllowed` when present. If the current Codex
+session cannot see newly added MCP tools,
+tell the user a fresh Codex session is needed rather than assuming the OAuth
+connection, key, or API is broken.
 
 Suggested first MCP tools:
 
+- `agent_workbench`
 - `get_api_capabilities`
 - `get_api_context`
 - `list_moves`
 - `get_agent_context`
 
-Useful write tools:
+OAuth trusted-helper tools:
 
+- `get_api_capabilities`
+- `agent_workbench`
+- `get_api_context`
+- `list_moves`
 - `setup_move`
+- `get_move_summary`
+- `get_agent_context`
+- `get_move_questions`
+- `get_move_day_checklist`
+- `search_inventory`
+- `list_move_spaces`
 - `create_move_space`
+- `save_box_intake`
+- `batch_upsert_movable_units`
 - `batch_upsert_items`
+- `append_item_note`
 - `add_item_from_photo`
 - `create_item_with_images`
-- `upload_evidence_image`
-- `upload_evidence_images`
-- `upload_evidence_file`
+- `upload_photo`
+- `upload_photos`
+- `get_photo_display_url`
+- `ingestion_queue` with `committedItems.appendNote` for trusted queue capture notes and append-safe queue research sources
+- `suggest_assignments`
+- `apply_assignments`
+- `get_capacity_report`
+
+Local/API-key extended tools:
+
+- `create_move`
 - `start_photo_upload`
 - `finalize_photo_upload`
 - `upsert_sale_listing`
-- `create_box`
-- `add_items_to_box`
+- `floor_plan_observations`
+- `floor_plan_relationships`
+- `floor_plan_evidence`
+- `floor_plan_calculate`
+- `floor_plan_questions`
+- `floor_plan_solve`
+- `floor_plan_reset_draft`
 - `plan_propose_ops`
-- `create_export`
+- `manage_exports`
+- household member tools such as `list_household_members` and `add_household_member`
 
 ## Safety Rules For Assistants
 
@@ -356,6 +623,9 @@ Useful write tools:
   outputs.
 - Prefer move-restricted keys when possible.
 - Verify writes by reading the created records back.
+- Use `agentLabel` and `aiConfidenceScore` on agent-created items, boxes, and
+  photos. `aiConfidenceScore` is whole-record confidence from 0 to 1, not a
+  measurement confidence field.
 - Summarize exactly what changed and what still needs user review.
 - Get clear session or batch permission before creating records or uploading
   photos. Once the user has asked the assistant to capture a room, photo, list,

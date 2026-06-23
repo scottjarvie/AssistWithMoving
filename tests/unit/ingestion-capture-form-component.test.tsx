@@ -144,9 +144,45 @@ describe("IngestionCaptureForm", () => {
       expect.objectContaining({
         instructions: "Sell the lamp and keep the blue bin together.",
         mediaPhotoIds: [],
+        scopeHint: "inventory",
       }),
     );
     expect(captureData.initUpload).not.toHaveBeenCalled();
+  });
+
+  it("stores existing-box targets as structured queue fields", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionCaptureForm
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Queue workflow"),
+      "boxContents",
+    );
+    await user.type(screen.getByLabelText("Related box code"), "B-001");
+    await user.type(
+      screen.getByLabelText("Directions for your agent"),
+      "Use these photos to identify contents and tell me what label to put on the box.",
+    );
+    await user.click(screen.getByRole("button", { name: "Add note to queue" }));
+
+    await waitFor(() => {
+      expect(captureData.createEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instructions:
+            "Use these photos to identify contents and tell me what label to put on the box.",
+          intent: "boxContents",
+          scopeHint: "packing",
+          targetBoxCode: "B-001",
+          mediaPhotoIds: [],
+        }),
+      );
+    });
   });
 
   it("shows selected media and saves uploaded attachments to the queue", async () => {
@@ -263,6 +299,7 @@ describe("IngestionCaptureForm", () => {
         instructions: "These are garage items for later sorting.",
         mediaPhotoIds: ["photo_1", "photo_2"],
         roomHint: "Garage",
+        scopeHint: "inventory",
       }),
     );
   });
@@ -279,6 +316,68 @@ describe("IngestionCaptureForm", () => {
     expect(cameraInput).toHaveAttribute("accept", "image/*");
     expect(cameraInput).toHaveAttribute("capture", "environment");
     expect(screen.getByRole("button", { name: "Take photo" })).toBeEnabled();
+  });
+
+  it("removes non-image attachments when switching an existing capture to floorplans mode", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionCaptureForm
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    const blueprint = new File(["blueprint"], "main-floor.png", {
+      type: "image/png",
+      lastModified: 1710000010000,
+    });
+    const voiceMemo = new File(["voice memo"], "voice.m4a", {
+      type: "audio/mp4",
+      lastModified: 1710000015000,
+    });
+
+    await user.upload(screen.getByLabelText("Choose media files"), [
+      blueprint,
+      voiceMemo,
+    ]);
+
+    expect(screen.getByText("main-floor.png")).toBeInTheDocument();
+    expect(screen.getByText("voice.m4a")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Floorplans" }));
+
+    expect(
+      screen.getByText("Floorplans mode keeps image files only; removed 1 non-image file."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("main-floor.png")).toBeInTheDocument();
+    expect(screen.queryByText("voice.m4a")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add 1 file to queue" })).toBeEnabled();
+
+    await user.type(
+      screen.getByLabelText("Directions for your agent"),
+      "Only interpret the blueprint.",
+    );
+    await user.click(screen.getByRole("button", { name: "Add 1 file to queue" }));
+
+    await waitFor(() => {
+      expect(captureData.createEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          instructions: "Only interpret the blueprint.",
+          mediaPhotoIds: ["photo_1"],
+          scopeHint: "floorPlan",
+          targetPlanId: "plan_123",
+        }),
+      );
+    });
+
+    expect(captureData.initUpload).toHaveBeenCalledTimes(1);
+    expect(captureData.finalizeUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: "main-floor.png",
+        photoType: "blueprint",
+      }),
+    );
   });
 
   it("uploads floor-plan captures as blueprint media with a floor-plan queue scope", async () => {

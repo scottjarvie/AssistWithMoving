@@ -54,6 +54,7 @@ type DraftEdit = {
 
 type PlanningDefaultKey = Doc<"items">["planningDefaultKeys"][number];
 type ItemFragility = "low" | "medium" | "high";
+type ItemEstimateConfidence = Doc<"items">["dimensionsConfidence"];
 
 type PendingSuggestion = {
   _id: Id<"aiTextSuggestions">;
@@ -64,14 +65,30 @@ type PendingSuggestion = {
   itemDraft?: {
     name: string;
     room?: string;
+    currentSpaceId?: Id<"moveSpaces">;
+    destinationRoom?: string;
+    destinationSpaceId?: Id<"moveSpaces">;
     category?: string;
     disposition: (typeof itemDispositionOptions)[number];
     quantity: number;
     description?: string;
+    dimensionsIn?: Doc<"items">["dimensionsIn"];
+    dimensionsConfidence?: ItemEstimateConfidence;
+    estimatedWeightLb?: number;
+    estimatedWeightLowLb?: number;
+    estimatedWeightHighLb?: number;
+    weightConfidence?: ItemEstimateConfidence;
+    estimatedVolumeCuFt?: number;
+    volumeConfidence?: ItemEstimateConfidence;
     suggestedBoxLabel?: string;
     fragility?: ItemFragility;
     highValue?: boolean;
     planningDefaultKeys?: PlanningDefaultKey[];
+    researchSummary?: string;
+    researchSources?: Doc<"items">["researchSources"];
+    researchNotes?: string;
+    researchConfidence?: ItemEstimateConfidence;
+    attachMediaPhotoIds?: Id<"itemPhotos">[];
   };
   boxDraft?: {
     code?: string;
@@ -219,14 +236,30 @@ export function AiTextIntake({
             ? {
                 name: edit.itemDraft.name,
                 room: edit.itemDraft.room || undefined,
+                currentSpaceId: suggestion.itemDraft?.currentSpaceId,
+                destinationRoom: suggestion.itemDraft?.destinationRoom,
+                destinationSpaceId: suggestion.itemDraft?.destinationSpaceId,
                 category: edit.itemDraft.category || undefined,
                 disposition: edit.itemDraft.disposition,
                 quantity: parsePositiveNumber(edit.itemDraft.quantity),
                 description: edit.itemDraft.description || undefined,
+                dimensionsIn: suggestion.itemDraft?.dimensionsIn,
+                dimensionsConfidence: suggestion.itemDraft?.dimensionsConfidence,
+                estimatedWeightLb: suggestion.itemDraft?.estimatedWeightLb,
+                estimatedWeightLowLb: suggestion.itemDraft?.estimatedWeightLowLb,
+                estimatedWeightHighLb: suggestion.itemDraft?.estimatedWeightHighLb,
+                weightConfidence: suggestion.itemDraft?.weightConfidence,
+                estimatedVolumeCuFt: suggestion.itemDraft?.estimatedVolumeCuFt,
+                volumeConfidence: suggestion.itemDraft?.volumeConfidence,
                 suggestedBoxLabel: edit.itemDraft.suggestedBoxLabel || undefined,
                 fragility: suggestion.itemDraft?.fragility,
                 highValue: suggestion.itemDraft?.highValue,
                 planningDefaultKeys: suggestion.itemDraft?.planningDefaultKeys,
+                researchSummary: suggestion.itemDraft?.researchSummary,
+                researchSources: suggestion.itemDraft?.researchSources,
+                researchNotes: suggestion.itemDraft?.researchNotes,
+                researchConfidence: suggestion.itemDraft?.researchConfidence,
+                attachMediaPhotoIds: suggestion.itemDraft?.attachMediaPhotoIds,
               }
             : undefined,
           boxDraft: edit?.boxDraft

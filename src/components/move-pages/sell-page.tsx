@@ -258,7 +258,7 @@ export function SellWorkspacePage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Sell"
         description="Marketplace prep for inventory marked sell: photos, price research, listing draft, status, and buyer follow-up."

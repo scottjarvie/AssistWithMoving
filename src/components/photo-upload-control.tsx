@@ -47,6 +47,8 @@ export function PhotoUploadControl({
   privacyLevel = "normal",
   visibilityScope = "moveCollaborators",
   multiple = false,
+  uploadDisabled = false,
+  uploadDisabledMessage,
   onUploaded,
 }: PhotoUploadTarget & {
   label?: string;
@@ -54,6 +56,8 @@ export function PhotoUploadControl({
   privacyLevel?: "normal" | "private";
   visibilityScope?: "moveCollaborators" | "private";
   multiple?: boolean;
+  uploadDisabled?: boolean;
+  uploadDisabledMessage?: string;
   onUploaded?: (photo: UploadedPhoto) => void;
 }) {
   const initUpload = useAction(api.photos.initUpload);
@@ -360,7 +364,7 @@ export function PhotoUploadControl({
             <Button
               type="button"
               size="sm"
-              disabled={files.length === 0 || uploading}
+              disabled={files.length === 0 || uploading || uploadDisabled}
               onClick={() => void handleUpload()}
             >
               <Upload aria-hidden="true" />
@@ -388,6 +392,11 @@ export function PhotoUploadControl({
               </Button>
             ) : null}
           </div>
+          {uploadDisabled && uploadDisabledMessage ? (
+            <p className="text-xs leading-5 text-muted-foreground">
+              {uploadDisabledMessage}
+            </p>
+          ) : null}
         </div>
       </div>
       {uploading ? (

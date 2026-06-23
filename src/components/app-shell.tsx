@@ -3,6 +3,7 @@ import { Settings, ShieldCheck } from "lucide-react";
 
 import { AuthControls } from "@/components/auth-controls";
 import { BrandMark } from "@/components/brand-mark";
+import { MobileAppNav } from "@/components/mobile-capture-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -65,9 +66,11 @@ export function AppShell({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="hidden sm:inline-flex">
-                Local {product.localUrl.replace("http://", "")}
-              </Badge>
+              {process.env.NODE_ENV === "development" ? (
+                <Badge variant="secondary" className="hidden sm:inline-flex">
+                  Local {product.localUrl.replace("http://", "")}
+                </Badge>
+              ) : null}
               <Button asChild variant="outline" size="sm">
                 <Link href="/settings">
                   <Settings aria-hidden="true" />
@@ -77,13 +80,16 @@ export function AppShell({
               <AuthControls />
             </div>
           </div>
-          <div className="xl:hidden">
-            <WorkspaceNav variant="mobile" />
-          </div>
         </header>
-        <main id="main-content" tabIndex={-1} aria-label="Workspace content">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          aria-label="Workspace content"
+          className="pb-28 xl:pb-0"
+        >
           {children}
         </main>
+        <MobileAppNav />
       </div>
     </div>
   );

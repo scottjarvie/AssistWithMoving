@@ -185,6 +185,16 @@ export const boxStatuses = [
   "archived",
 ] as const;
 
+export const boxContainerTypes = [
+  "carton",
+  "plasticTote",
+  "bin",
+  "wardrobe",
+  "dishPack",
+  "crate",
+  "other",
+] as const;
+
 export const photoTypes = [
   "item",
   "serialNumber",
@@ -635,6 +645,16 @@ export const boxStatusValidator = v.union(
   v.literal("missing"),
   v.literal("damaged"),
   v.literal("archived")
+);
+
+export const boxContainerTypeValidator = v.union(
+  v.literal("carton"),
+  v.literal("plasticTote"),
+  v.literal("bin"),
+  v.literal("wardrobe"),
+  v.literal("dishPack"),
+  v.literal("crate"),
+  v.literal("other")
 );
 
 export const photoTypeValidator = v.union(

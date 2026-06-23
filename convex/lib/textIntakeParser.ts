@@ -3,6 +3,7 @@ import type {
   itemFragilities,
   planningDefaultKeys,
 } from "./moveFields";
+import type { Id } from "../_generated/dataModel";
 
 type ItemDisposition = (typeof itemDispositions)[number];
 type ItemFragility = (typeof itemFragilities)[number];
@@ -11,7 +12,9 @@ type PlanningDefaultKey = (typeof planningDefaultKeys)[number];
 export type TextIntakeItemDraft = {
   name: string;
   room?: string;
+  currentSpaceId?: Id<"moveSpaces">;
   destinationRoom?: string;
+  destinationSpaceId?: Id<"moveSpaces">;
   category?: string;
   disposition: ItemDisposition;
   quantity: number;

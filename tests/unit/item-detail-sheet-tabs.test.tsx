@@ -16,6 +16,11 @@ const sheetData = vi.hoisted(() => ({
   ],
 }));
 
+const componentMocks = vi.hoisted(() => ({
+  PhotoEvidenceStrip: vi.fn(() => <div>Photo evidence strip</div>),
+  PhotoUploadControl: vi.fn(() => <div>Photo upload control</div>),
+}));
+
 vi.mock("convex/react", () => ({
   useQuery: vi.fn((_query, args) => {
     if (args === "skip") return undefined;
@@ -25,11 +30,11 @@ vi.mock("convex/react", () => ({
 }));
 
 vi.mock("@/components/photo-upload-control", () => ({
-  PhotoUploadControl: () => <div>Photo upload control</div>,
+  PhotoUploadControl: componentMocks.PhotoUploadControl,
 }));
 
 vi.mock("@/components/photo-evidence-strip", () => ({
-  PhotoEvidenceStrip: () => <div>Photo evidence strip</div>,
+  PhotoEvidenceStrip: componentMocks.PhotoEvidenceStrip,
 }));
 
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
@@ -116,6 +121,29 @@ describe("ItemDetailSheet task tabs", () => {
     expect(screen.getByText("Photo upload control")).toBeInTheDocument();
     expect(screen.getByText("Photo evidence strip")).toBeInTheDocument();
     expect(screen.getByText("Attached photos")).toBeInTheDocument();
+    expect(
+      screen.getByText(/The main item photo is already used as the thumbnail/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Queue AI follow-up for this item",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/capture?intent=existingItem&targetItemId=item_1&targetLabel=Red+toolbox",
+    );
+    expect(componentMocks.PhotoUploadControl).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "Other Photos" }),
+      undefined,
+    );
+    expect(componentMocks.PhotoEvidenceStrip).toHaveBeenCalledWith(
+      expect.objectContaining({
+        omitFirstPhoto: true,
+        label: "Other photos",
+        emptyLabel: "No other photos yet.",
+      }),
+      undefined,
+    );
     expect(screen.queryByLabelText("Review flags")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Handling" }));

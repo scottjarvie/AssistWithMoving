@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
 import type { Id } from "../../convex/_generated/dataModel";
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 vi.mock("@/components/move-workspace-context", () => ({
   useMoveWorkspace: () =>
     ({
@@ -40,6 +44,15 @@ vi.mock("@/components/move-workspace-header", () => ({
   MoveWorkspaceHeader: ({ title }: { title: string }) => (
     <header>{title}</header>
   ),
+}));
+
+// The mobile sub-nav and queue snapshot have their own tests; stub them so this
+// suite stays focused on the per-page task tabs.
+vi.mock("@/components/workspace-sub-nav", () => ({
+  WorkspaceSubNav: () => null,
+}));
+vi.mock("@/components/move-queue-snapshot", () => ({
+  MoveQueueSnapshot: () => null,
 }));
 
 vi.mock("@/lib/feature-flags", () => ({

@@ -2,6 +2,7 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { recordAuditEvent } from "./audit";
 import {
+  defaultMemberApiAccessStatus,
   normalizeCollaboratorEmail,
   type ManagedHouseholdMemberRole,
 } from "./householdMembers";
@@ -88,6 +89,8 @@ async function activateHouseholdMemberForUser(
       role,
       status: "active",
       invitedEmail: email,
+      apiAccessStatus:
+        existing.apiAccessStatus ?? defaultMemberApiAccessStatus(role),
       updatedAt: now,
     });
 
@@ -122,6 +125,7 @@ async function activateHouseholdMemberForUser(
     role,
     status: "active",
     invitedEmail: email,
+    apiAccessStatus: defaultMemberApiAccessStatus(role),
     createdByUserId:
       actor.type === "user"
         ? actor.userId
@@ -325,6 +329,12 @@ export async function claimPendingHouseholdInvitationsForUser(
       status: "accepted",
       acceptedByUserId: userId,
       acceptedAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(result.membershipId, {
+      acceptedInvitationId: invitation._id,
+      acceptedInvitationAt: now,
+      onboardingDismissedAt: undefined,
       updatedAt: now,
     });
 

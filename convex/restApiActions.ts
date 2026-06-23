@@ -16,6 +16,7 @@ import type { Id, TableNames } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import {
   parseRestPath,
+  restAgentAttributionFields,
   restError,
   restOk,
   restRateLimited,
@@ -36,6 +37,12 @@ import {
   serverDerivativeSpecs,
   type PhotoDerivativeVariant,
 } from "./lib/imageDerivatives";
+import {
+  cloudflareImageDeliveryUrl,
+  selectDerivativeRef,
+  type PhotoDeliveryProvider,
+} from "./lib/photoDelivery";
+import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
 
 const uploadSessionTtlMs = 15 * 60 * 1000;
 const photoTypes = [
@@ -80,10 +87,27 @@ const verificationStatuses = [
   "needsReview",
   "rejected",
 ] as const;
+const displayUrlTtlSeconds = 5 * 60;
+const photoDerivativeVariants = ["thumb", "card", "detail", "full"] as const;
+const ingestionEvidenceVariants = [
+  "original",
+  ...photoDerivativeVariants,
+] as const;
+const restOAuthIdentityValidator = v.object({
+  tokenIdentifier: v.string(),
+  subject: v.string(),
+  issuer: v.string(),
+  oauthClientId: v.optional(v.string()),
+  oauthTokenId: v.optional(v.string()),
+  name: v.optional(v.string()),
+  pictureUrl: v.optional(v.string()),
+  email: v.optional(v.string()),
+});
 type ApiActionAuth = {
   householdId: Id<"households">;
   moveId?: Id<"moves">;
   apiKeyId: Id<"apiKeys">;
+  apiKeyName?: string;
   createdByUserId: Id<"users">;
 };
 type DerivativeVariantSummary = {
@@ -109,6 +133,7 @@ export const handle = internalAction({
     authorization: v.optional(v.string()),
     idempotencyKey: v.optional(v.string()),
     body: v.optional(v.any()),
+    oauthIdentity: v.optional(restOAuthIdentityValidator),
   },
   handler: async (ctx, args): Promise<RestResponse> => {
     const segments = parseRestPath(args.path);
@@ -124,6 +149,28 @@ export const handle = internalAction({
     }
     if (segments[0] === "photos" && segments[1] === "finalize" && args.method === "POST") {
       return (await handlePhotoFinalize(ctx, args)) as RestResponse;
+    }
+    if (
+      (segments[0] === "photos" || segments[0] === "images") &&
+      segments[2] === "display-url" &&
+      args.method === "GET"
+    ) {
+      return (await handlePhotoDisplayUrl(ctx, args, segments[1])) as RestResponse;
+    }
+    if (
+      segments[0] === "moves" &&
+      segments[2] === "ingestion-queue" &&
+      segments[4] === "evidence" &&
+      segments[6] === "url" &&
+      args.method === "GET"
+    ) {
+      return (await handleIngestionEvidenceUrl(
+        ctx,
+        args,
+        segments[1],
+        segments[3],
+        segments[5]
+      )) as RestResponse;
     }
 
     return (await ctx.runMutation(internal.restApi.handle, args)) as RestResponse;
@@ -198,6 +245,7 @@ async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
             width: derivative.width,
             height: derivative.height,
           })),
+          ...restAgentAttributionFields(body, auth, { defaultLabel: true }),
           expiresAt,
           apiActor: {
             apiKeyId: String(auth.apiKeyId),
@@ -321,6 +369,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
           expectedMimeType: original.mimeType,
           expectedSizeBytes: original.sizeBytes,
           derivativeUploads: [],
+          ...restAgentAttributionFields(body, auth, { defaultLabel: true }),
           expiresAt,
           apiActor,
         }
@@ -352,14 +401,17 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         source: optionalPhotoSource(body.source) ?? "api",
         exifHandlingStatus: optionalExifHandlingStatus(body.exifHandlingStatus),
         confidence: optionalConfidence(body.confidence),
+        ...restAgentAttributionFields(body, auth, { defaultLabel: true }),
         notes: optionalString(body.notes),
         verificationStatus: optionalVerificationStatus(body.verificationStatus),
         capturedAt: optionalNumber(body.capturedAt),
+        fileName: media.fileName,
         apiActor,
       });
 
       let derivativeStatus: "ready" | "failed" | undefined;
       let derivativeError: string | undefined;
+      let derivativeRefs: Partial<Record<PhotoDerivativeVariant, string>> = {};
       try {
         const generated = await generateAndStoreImageDerivatives({
           bucketName: config.bucketName,
@@ -373,6 +425,7 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
           derivativeRefs: generated.derivativeRefs,
           apiActor,
         });
+        derivativeRefs = generated.derivativeRefs;
         derivativeStatus = "ready";
       } catch (error) {
         derivativeStatus = "failed";
@@ -397,10 +450,16 @@ async function handlePhotoUpload(ctx: ActionCtx, args: RestRequestInput) {
         source: media.source,
         fileName: media.fileName,
         mimeType: original.mimeType,
-        sizeBytes: media.bytes.byteLength,
-        width: metadata.width,
-        height: metadata.height,
-      };
+          sizeBytes: media.bytes.byteLength,
+          width: metadata.width,
+          height: metadata.height,
+          display: await derivativeDisplayMediaForUpload({
+            moveId,
+            photoId,
+            derivativeRefs,
+            derivativeStatus,
+          }),
+        };
       const derivativeNote = derivativeNoteForStatus(derivativeStatus);
       const derivativeVariants = derivativeVariantsForStatus(derivativeStatus);
       const agentReview = directPhotoUploadAgentReview({
@@ -546,9 +605,11 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         source: optionalPhotoSource(body.source),
         exifHandlingStatus: optionalExifHandlingStatus(body.exifHandlingStatus),
         confidence: optionalConfidence(body.confidence),
+        ...restAgentAttributionFields(body, auth, { defaultLabel: true }),
         notes: optionalString(body.notes),
         verificationStatus: optionalVerificationStatus(body.verificationStatus),
         capturedAt: optionalNumber(body.capturedAt),
+        fileName: optionalString(body.fileName),
         apiActor: {
           apiKeyId: String(auth.apiKeyId),
           createdByUserId: auth.createdByUserId,
@@ -558,6 +619,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
       let derivativeStatus: "pending" | "ready" | "failed" | undefined =
         imageDerivativeStatusForSession(session);
       let derivativeError: string | undefined;
+      let derivativeRefs = derivativeRefsForUploadSession(session);
       if (shouldGenerateServerDerivatives(session)) {
         try {
           const generated = await generateAndStoreImageDerivatives({
@@ -575,6 +637,7 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
               createdByUserId: auth.createdByUserId,
             },
           });
+          derivativeRefs = generated.derivativeRefs;
           derivativeStatus = "ready";
         } catch (error) {
           derivativeStatus = "failed";
@@ -604,6 +667,12 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         sizeBytes: session.expectedSizeBytes,
         width: optionalNumber(body.width),
         height: optionalNumber(body.height),
+        display: await derivativeDisplayMediaForUpload({
+          moveId,
+          photoId,
+          derivativeRefs,
+          derivativeStatus,
+        }),
       };
       const agentReview = directPhotoUploadAgentReview({
         body,
@@ -646,6 +715,247 @@ async function handlePhotoFinalize(ctx: ActionCtx, args: RestRequestInput) {
         status: errorStatus(error),
         code: "upload_finalize_failed",
         message: error instanceof Error ? error.message : "Upload finalization failed.",
+      });
+    }
+  });
+}
+
+async function handlePhotoDisplayUrl(
+  ctx: ActionCtx,
+  args: RestRequestInput,
+  photoIdSegment: string | undefined
+) {
+  if (!hasBearer(args.authorization)) return unknownAuthError();
+  const moveId = requiredId<"moves">(args.query.moveId, "moveId query is required.");
+  const photoId = requiredId<"itemPhotos">(photoIdSegment, "photoId is required.");
+  const authResult = await authenticateAction(ctx, args, moveId);
+  if (!authResult.ok || !authResult.auth) {
+    return authResult.response ?? unknownAuthError();
+  }
+  const auth = {
+    ...(authResult.auth as ApiActionAuth),
+    moveId: (authResult.auth as ApiActionAuth).moveId ?? moveId,
+  };
+
+  return await withActionRateLimit(ctx, args, auth, async () => {
+    try {
+      const variant = optionalPhotoDerivativeVariant(args.query.variant) ?? "detail";
+      const photo = await ctx.runQuery(internal.photos.getApiPhotoForDelivery, {
+        householdId: auth.householdId,
+        moveId,
+        photoId,
+      });
+      if (!photo) {
+        return restError({
+          status: 404,
+          code: "not_found",
+          message: "Photo not found.",
+        });
+      }
+      const mediaKind =
+        photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
+      if (mediaKind !== "image") {
+        return restError({
+          status: 400,
+          code: "validation_error",
+          message: "Display URLs are only available for image evidence.",
+        });
+      }
+      if (!canUsePhotoDerivativeForAi(photo)) {
+        return restError({
+          status: 403,
+          code: "insufficient_scope",
+          message:
+            "Photo privacy or derivative status does not allow API display delivery.",
+        });
+      }
+      const selected = selectDerivativeRef(photo.derivativeRefs, variant);
+      if (!selected) {
+        return restError({
+          status: 409,
+          code: "derivative_not_ready",
+          message: "Requested photo derivative is not ready yet.",
+        });
+      }
+
+      const cloudflareUrl = cloudflareImageDeliveryUrl({
+        accountHash: process.env.CLOUDFLARE_IMAGES_ACCOUNT_HASH,
+        deliveryBaseUrl: process.env.CLOUDFLARE_IMAGE_DELIVERY_URL,
+        deliveryDomain: process.env.CLOUDFLARE_IMAGE_DELIVERY_DOMAIN,
+        imageId: photo.cloudflareImageId,
+        variant: selected.variant,
+      });
+      const deliveryProvider: PhotoDeliveryProvider = cloudflareUrl
+        ? "cloudflareImages"
+        : "b2SignedUrl";
+      let url = cloudflareUrl;
+      if (!url) {
+        const config = requireB2Config();
+        url = await getSignedUrl(
+          b2Client(),
+          new GetObjectCommand({
+            Bucket: config.bucketName,
+            Key: selected.ref,
+          }),
+          { expiresIn: displayUrlTtlSeconds }
+        );
+      }
+
+      return restOk({
+        data: {
+          photoId,
+          moveId,
+          url,
+          expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+          requestedVariant: variant,
+          servedVariant: selected.variant,
+          deliveryProvider,
+          derivativeStatus: photo.derivativeStatus,
+          width: photo.width,
+          height: photo.height,
+          mimeType: "image/webp",
+        },
+      });
+    } catch (error) {
+      return restError({
+        status: errorStatus(error),
+        code: "photo_display_url_failed",
+        message:
+          error instanceof Error ? error.message : "Photo display URL failed.",
+      });
+    }
+  });
+}
+
+async function handleIngestionEvidenceUrl(
+  ctx: ActionCtx,
+  args: RestRequestInput,
+  rawMoveId: string,
+  rawEntryId: string,
+  rawPhotoId: string
+) {
+  if (!hasBearer(args.authorization)) return unknownAuthError();
+  const moveId = requiredId<"moves">(rawMoveId, "moveId is required.");
+  const entryId = requiredId<"ingestionQueueEntries">(
+    rawEntryId,
+    "entryId is required."
+  );
+  const photoId = requiredId<"itemPhotos">(rawPhotoId, "photoId is required.");
+  const authResult = await authenticateAction(ctx, args, moveId);
+  if (!authResult.ok || !authResult.auth) {
+    return authResult.response ?? unknownAuthError();
+  }
+  const auth = {
+    ...(authResult.auth as ApiActionAuth),
+    moveId: (authResult.auth as ApiActionAuth).moveId ?? moveId,
+  };
+
+  return await withActionRateLimit(ctx, args, auth, async () => {
+    try {
+      const variant = ingestionEvidenceVariant(args.query.variant);
+      const record = await ctx.runQuery(
+        internal.ingestionQueue.getApiEvidenceForDelivery,
+        {
+          householdId: auth.householdId,
+          moveId,
+          entryId,
+          photoId,
+        }
+      );
+      if (!record) {
+        return restError({
+          status: 404,
+          code: "not_found",
+          message: "Ingestion queue evidence not found.",
+        });
+      }
+      const { photo } = record;
+      const mediaKind =
+        photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
+      const config = requireB2Config();
+      let key = photo.originalStorageKey;
+      let bucket = photo.originalBucket || config.bucketName;
+      let mimeType = photo.mimeType;
+      let servedVariant: "original" | PhotoDerivativeVariant = "original";
+
+      if (variant !== "original") {
+        if (mediaKind !== "image") {
+          return restError({
+            status: 400,
+            code: "validation_error",
+            message: "Derivative evidence URLs are only available for images.",
+          });
+        }
+        const selected = selectDerivativeRef(photo.derivativeRefs, variant);
+        if (!selected) {
+          return restError({
+            status: 409,
+            code: "derivative_not_ready",
+            message: "Requested evidence derivative is not ready yet.",
+          });
+        }
+        const cloudflareUrl = cloudflareImageDeliveryUrl({
+          accountHash: process.env.CLOUDFLARE_IMAGES_ACCOUNT_HASH,
+          deliveryBaseUrl: process.env.CLOUDFLARE_IMAGE_DELIVERY_URL,
+          deliveryDomain: process.env.CLOUDFLARE_IMAGE_DELIVERY_DOMAIN,
+          imageId: photo.cloudflareImageId,
+          variant: selected.variant,
+        });
+        if (cloudflareUrl) {
+          return restOk({
+            data: {
+              entryId,
+              photoId,
+              moveId,
+              url: cloudflareUrl,
+              expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+              requestedVariant: variant,
+              servedVariant: selected.variant,
+              mediaKind,
+              deliveryProvider: "cloudflareImages",
+              mimeType: "image/webp",
+              derivativeStatus: photo.derivativeStatus,
+            },
+          });
+        }
+        key = selected.ref;
+        bucket = config.bucketName;
+        mimeType = "image/webp";
+        servedVariant = selected.variant;
+      }
+
+      const url = await getSignedUrl(
+        b2Client(),
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        }),
+        { expiresIn: displayUrlTtlSeconds }
+      );
+
+      return restOk({
+        data: {
+          entryId,
+          photoId,
+          moveId,
+          url,
+          expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+          requestedVariant: variant,
+          servedVariant,
+          mediaKind,
+          deliveryProvider: "b2SignedUrl",
+          mimeType,
+          derivativeStatus: photo.derivativeStatus,
+        },
+      });
+    } catch (error) {
+      return restError({
+        status: errorStatus(error),
+        code: "ingestion_evidence_url_failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Ingestion evidence URL failed.",
       });
     }
   });
@@ -963,6 +1273,92 @@ function derivativeVariantsForSession({
     }));
   }
   return derivativeVariantsForStatus(status);
+}
+
+function derivativeRefsForUploadSession(session: {
+  derivativeUploads?: Array<{
+    variant: PhotoDerivativeVariant;
+    storageKey: string;
+  }>;
+}) {
+  return (session.derivativeUploads ?? []).reduce<
+    Partial<Record<PhotoDerivativeVariant, string>>
+  >((refs, derivative) => {
+    refs[derivative.variant] = derivative.storageKey;
+    return refs;
+  }, {});
+}
+
+async function derivativeDisplayMediaForUpload({
+  moveId,
+  photoId,
+  derivativeRefs,
+  derivativeStatus,
+}: {
+  moveId: Id<"moves">;
+  photoId: Id<"itemPhotos">;
+  derivativeRefs: Partial<Record<PhotoDerivativeVariant, string>>;
+  derivativeStatus: "pending" | "ready" | "failed" | undefined;
+}) {
+  const basePath = `/api/v1/photos/${photoId}/display-url?moveId=${moveId}`;
+  const ready = derivativeStatus === "ready";
+  const expiresAt = ready ? Date.now() + displayUrlTtlSeconds * 1000 : undefined;
+  const variants = await Promise.all(
+    photoDerivativeVariants.map(async (variant) => {
+      const selected = ready ? selectDerivativeRef(derivativeRefs, variant) : null;
+      const url = selected ? await signedDerivativeUrl(selected.ref) : null;
+      return {
+        variant,
+        status: selected
+          ? ("ready" as const)
+          : derivativeStatus === "failed"
+            ? ("failed" as const)
+            : derivativeStatus
+              ? ("pending" as const)
+              : ("unsupported" as const),
+        url,
+        displayUrlPath: selected ? `${basePath}&variant=${variant}` : undefined,
+        servedVariant: selected?.variant,
+        deliveryProvider: selected ? ("b2SignedUrl" as const) : undefined,
+        expiresAt: selected ? expiresAt : undefined,
+      };
+    })
+  );
+  const detail = variants.find((variant) => variant.variant === "detail");
+
+  return {
+    status: ready
+      ? ("ready" as const)
+      : derivativeStatus === "failed"
+        ? ("failed" as const)
+        : derivativeStatus
+          ? ("pending" as const)
+          : ("unsupported" as const),
+    url: detail?.url ?? null,
+    displayUrlPath: detail?.displayUrlPath,
+    expiresAt: detail?.expiresAt,
+    deliveryProvider: detail?.deliveryProvider,
+    variants,
+    note: ready
+      ? "Short-lived derivative display URLs are ready."
+      : derivativeStatus === "failed"
+        ? "Derivative generation failed; retry or inspect derivativeError."
+        : derivativeStatus
+          ? "Image derivatives are not ready yet."
+          : "Display derivatives are available only for image evidence.",
+  };
+}
+
+async function signedDerivativeUrl(storageKey: string) {
+  const config = requireB2Config();
+  return await getSignedUrl(
+    b2Client(),
+    new GetObjectCommand({
+      Bucket: config.bucketName,
+      Key: storageKey,
+    }),
+    { expiresIn: displayUrlTtlSeconds }
+  );
 }
 
 function directPhotoUploadAgentReview({
@@ -1452,6 +1848,14 @@ function optionalConfidence(value: unknown) {
 
 function optionalVerificationStatus(value: unknown) {
   return optionalLiteral(verificationStatuses, value);
+}
+
+function optionalPhotoDerivativeVariant(value: unknown) {
+  return optionalLiteral(photoDerivativeVariants, value);
+}
+
+function ingestionEvidenceVariant(value: unknown) {
+  return optionalLiteral(ingestionEvidenceVariants, value) ?? "original";
 }
 
 function optionalLiteral<const Values extends readonly string[]>(

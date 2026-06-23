@@ -21,6 +21,8 @@ export type ExportableItem = {
   serialNumber?: string;
   modelNumber?: string;
   privateNotes?: string;
+  agentLabel?: string;
+  aiConfidenceScore?: number;
 };
 
 export type ExportableBox = {
@@ -84,6 +86,8 @@ export function inventoryCsvRows(
     "serial_number",
     "model_number",
     "private_notes",
+    "agent_label",
+    "ai_confidence_score",
   ];
   const rows = items.map((item) => [
     item.name,
@@ -100,6 +104,8 @@ export function inventoryCsvRows(
     visibility.serials ? item.serialNumber : undefined,
     visibility.serials ? item.modelNumber : undefined,
     visibility.privateNotes ? item.privateNotes : undefined,
+    item.agentLabel,
+    item.aiConfidenceScore,
   ]);
   return [header, ...rows];
 }

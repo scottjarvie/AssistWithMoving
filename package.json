@@ -1,6 +1,6 @@
 {
   "name": "movingmanifest",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "bin": {
     "movingmanifest-mcp": "./mcp-server/movingmanifest-mcp.mjs"
@@ -11,21 +11,29 @@
     "start": "next start -p 3827",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "contract:drift": "node scripts/contract-drift-check.mjs",
+    "check": "npm run contract:drift && npm run lint && npm run typecheck && npm run test",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "verify:agent-ready": "npm run contract:drift && npm test -- tests/unit/mcp-capabilities.test.ts tests/unit/mcp-client.test.ts tests/unit/mcp-stdio-smoke.test.ts tests/unit/agent-journey-smoke.test.ts tests/unit/agent-kit.test.ts tests/unit/mcp-page-copy.test.ts tests/unit/mcp-endpoint-routing.test.ts tests/unit/mcp-route-auth.test.ts tests/unit/mcp-oauth-smoke-script.test.ts tests/unit/oauth-cutover-readiness.test.ts tests/unit/release-readiness.test.ts && npm run smoke:mcp-stdio -- --mock-api && npm run doctor:release",
     "verify:launch": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:e2e",
     "doctor:launch": "node scripts/launch-readiness.mjs",
     "doctor:vercel-env": "node scripts/vercel-env-readiness.mjs",
     "doctor:vercel-preview-env": "node scripts/vercel-env-readiness.mjs --environment preview",
+    "doctor:oauth-cutover": "node scripts/oauth-cutover-readiness.mjs",
     "doctor:release": "node scripts/release-readiness.mjs",
     "doctor:convex-env": "node scripts/convex-env-readiness.mjs",
     "doctor:convex-dev-env": "node --env-file=.env.local scripts/convex-env-readiness.mjs --deployment-from-env --compare-local-storage",
     "doctor:storage": "node --no-warnings --env-file=.env.local scripts/storage-readiness.mjs",
     "doctor:layout-studio-qa": "node --env-file=.env.local scripts/layout-studio-qa-readiness.mjs",
     "doctor:webhooks": "node --env-file=.env.local scripts/webhook-readiness.mjs",
-    "doctor:all": "npm run doctor:launch && npm run doctor:vercel-env && npm run doctor:vercel-preview-env && npm run doctor:release && npm run doctor:convex-env && npm run doctor:convex-dev-env && npm run doctor:storage && npm run doctor:webhooks",
+    "doctor:all": "npm run doctor:launch && npm run doctor:vercel-env && npm run doctor:vercel-preview-env && npm run doctor:oauth-cutover && npm run doctor:release && npm run doctor:convex-env && npm run doctor:convex-dev-env && npm run doctor:storage && npm run doctor:webhooks",
     "doctor:next": "node scripts/launch-next-steps.mjs",
+    "mcp:doctor": "node scripts/mcp-oauth-smoke.mjs --discover --endpoint https://movingmanifest.com/api/mcp",
+    "smoke:agent-journey": "node scripts/agent-journey-smoke.mjs",
+    "smoke:mcp-stdio": "node scripts/mcp-stdio-smoke.mjs",
+    "smoke:mcp-oauth": "node scripts/mcp-oauth-smoke.mjs",
     "mcp": "node ./mcp-server/movingmanifest-mcp.mjs",
     "seed": "node scripts/seed.mjs"
   },
@@ -72,6 +80,7 @@
     "vitest": "^4.1.8"
   },
   "overrides": {
+    "esbuild": "0.28.1",
     "postcss": "8.5.15",
     "mcp-handler": {
       "@modelcontextprotocol/sdk": "$@modelcontextprotocol/sdk"

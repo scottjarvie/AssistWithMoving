@@ -5,8 +5,11 @@ import {
   ingestionClaimDurationMs,
   ingestionClaimIsExpired,
   ingestionEntryIsEditable,
+  ingestionScopeHintMatches,
   ingestionQueueStatuses,
   ingestionScopeHints,
+  legacyIngestionScopeHints,
+  normalizeIngestionScopeHint,
 } from "../../convex/lib/ingestionQueue";
 
 describe("ingestion queue lifecycle", () => {
@@ -57,6 +60,32 @@ describe("ingestion queue lifecycle", () => {
   });
 
   it("includes floor-plan intake as a scoped queue lane", () => {
-    expect(ingestionScopeHints).toContain("floorPlan");
+    expect(ingestionScopeHints).toEqual([
+      "inventory",
+      "packing",
+      "condition",
+      "measurements",
+      "floorPlan",
+    ]);
+    expect(legacyIngestionScopeHints).toEqual([
+      "singleItem",
+      "multipleItems",
+      "scene",
+    ]);
+  });
+
+  it("treats omitted and legacy item scopes as inventory", () => {
+    expect(normalizeIngestionScopeHint("singleItem")).toBe("inventory");
+    expect(normalizeIngestionScopeHint("multipleItems")).toBe("inventory");
+    expect(normalizeIngestionScopeHint("scene")).toBe("inventory");
+    expect(normalizeIngestionScopeHint("floorPlan")).toBe("floorPlan");
+
+    expect(ingestionScopeHintMatches(undefined, "inventory")).toBe(true);
+    expect(ingestionScopeHintMatches("singleItem", "inventory")).toBe(true);
+    expect(ingestionScopeHintMatches("multipleItems", "inventory")).toBe(true);
+    expect(ingestionScopeHintMatches("scene", "inventory")).toBe(true);
+    expect(ingestionScopeHintMatches("floorPlan", "inventory")).toBe(false);
+    expect(ingestionScopeHintMatches("inventory", "floorPlan")).toBe(false);
+    expect(ingestionScopeHintMatches("floorPlan", "floorPlan")).toBe(true);
   });
 });

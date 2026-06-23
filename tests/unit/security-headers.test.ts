@@ -42,6 +42,25 @@ describe("security headers", () => {
     });
   });
 
+  it("allows Clerk development, service, and production custom domains", () => {
+    const scriptSrc = cspDirective("script-src");
+    const scriptSrcElem = cspDirective("script-src-elem");
+    const frameSrc = cspDirective("frame-src");
+    const clerkSources = [
+      "https://*.clerk.accounts.dev",
+      "https://*.clerk.com",
+      "https://*.clerk.services",
+      "https://clerk.movingmanifest.com",
+      "https://accounts.movingmanifest.com",
+    ];
+
+    for (const source of clerkSources) {
+      expect(scriptSrc).toContain(source);
+      expect(scriptSrcElem).toContain(source);
+      expect(frameSrc).toContain(source);
+    }
+  });
+
   it("keeps the required browser hardening headers together", () => {
     const headers = securityHeadersForMode(undefined);
 
@@ -66,3 +85,12 @@ describe("security headers", () => {
     );
   });
 });
+
+function cspDirective(name: string) {
+  const directive = contentSecurityPolicy
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name} `));
+
+  expect(directive).toBeDefined();
+  return directive ?? "";
+}

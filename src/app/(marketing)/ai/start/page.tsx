@@ -5,10 +5,12 @@ import {
   Bot,
   CheckCircle2,
   KeyRound,
+  Network,
   ShieldAlert,
 } from "lucide-react";
 
 import { AiStartActions } from "@/components/ai-start-actions";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { PublicFooter, PublicHeader } from "@/components/public-page-chrome";
 import { Badge } from "@/components/ui/badge";
 
@@ -25,6 +27,8 @@ const keyOptions = [
   "Read-only access",
 ];
 
+const remoteMcpEndpoint = "https://movingmanifest.com/api/mcp";
+
 export default function AiStartPage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -38,8 +42,8 @@ export default function AiStartPage() {
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               MovingManifest saves the move. Your AI assistant can help fill it
-              in. You only need to sign in, create a connection, copy the
-              one-time key, and paste it back into the AI chat you trust.
+              in. OAuth-capable hosted assistants can connect by URL and
+              sign in; older or local assistants can use a scoped one-time key.
             </p>
             <div className="mt-7">
               <AiStartActions />
@@ -64,9 +68,9 @@ export default function AiStartPage() {
             <ol className="mt-4 space-y-3">
               {[
                 "Create or sign into your account.",
-                "Choose what your assistant can do.",
-                "Click Create key and copy the one-time secret.",
-                "Paste it back into your AI assistant.",
+                "Use MCP OAuth if your assistant supports hosted connectors.",
+                "Otherwise choose what your assistant can do.",
+                "Create a key and paste it only into the trusted assistant.",
               ].map((step, index) => (
                 <li
                   key={step}
@@ -107,6 +111,41 @@ export default function AiStartPage() {
               ))}
             </div>
           </div>
+          <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Network className="size-4 text-primary" aria-hidden="true" />
+              Better on mobile
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              If your assistant supports remote MCP with OAuth, use the
+              MovingManifest MCP endpoint and sign in. That avoids putting a raw
+              key in chat.
+            </p>
+            <div className="mt-4 rounded-md border border-border bg-background/65 p-3">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Remote MCP endpoint
+                  </p>
+                  <code className="mt-1 block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-foreground">
+                    {remoteMcpEndpoint}
+                  </code>
+                </div>
+                <CopyTextButton
+                  text={remoteMcpEndpoint}
+                  label="Copy MCP URL"
+                  ariaLabel="Copy MovingManifest remote MCP endpoint"
+                />
+              </div>
+            </div>
+            <Link
+              href="/mcp"
+              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary"
+            >
+              Open MCP setup
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
           <div className="rounded-md border border-border p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <ShieldAlert className="size-4 text-primary" aria-hidden="true" />
@@ -123,6 +162,13 @@ export default function AiStartPage() {
               className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary"
             >
               Learn what the assistant can help with
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+            <Link
+              href="/ai/kit"
+              className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary"
+            >
+              Copy or download the agent kit
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           </div>

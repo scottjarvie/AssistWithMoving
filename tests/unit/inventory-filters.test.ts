@@ -105,6 +105,20 @@ const items: InventoryFilterableItem[] = [
       assignedZoneNames: ["High-value crate"],
     },
   },
+  {
+    name: "AI guessed lamp",
+    ownerPersonId: "person-ai",
+    room: "Basement",
+    category: "Lighting",
+    disposition: "sell",
+    status: "active",
+    highValue: false,
+    needsReview: false,
+    agentLabel: "Codex intake",
+    aiConfidenceScore: 0.42,
+    requiresPersonalTransport: false,
+    planningDefaultKeys: [],
+  },
 ];
 
 describe("inventory filters", () => {
@@ -125,7 +139,7 @@ describe("inventory filters", () => {
 
   it("filters review and draft items", () => {
     expect(filterInventoryItems(items, "needsReview", "").map((item) => item.name))
-      .toEqual(["Old desk"]);
+      .toEqual(["Old desk", "AI guessed lamp"]);
   });
 
   it("filters personal transport and first-night items", () => {

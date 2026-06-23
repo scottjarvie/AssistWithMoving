@@ -8,6 +8,7 @@ import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { PlannedItemsPanel } from "@/components/planned-items-panel";
 import { RoomWalkIntake } from "@/components/room-walk-intake";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { WorkspaceSubNav } from "@/components/workspace-sub-nav";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
@@ -72,11 +73,12 @@ export function InventoryWorkspacePage() {
   const [activeTab, setActiveTab] = useHashTab("items", inventoryTabHashes);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Inventory"
         description="Browse item records, capture by room, and review disposition or estimate work."
       />
+      <WorkspaceSubNav parent="items" />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
           tabs={inventoryWorkspaceTabs}

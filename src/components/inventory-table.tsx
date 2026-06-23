@@ -227,6 +227,20 @@ function indicatorBadges(item: InventoryItem): IndicatorBadgeModel[] {
           tone: "secondary" as const,
         }
       : null,
+    typeof item.aiConfidenceScore === "number" && item.aiConfidenceScore < 0.7
+      ? {
+          label: "low confidence",
+          title: `Agent confidence: ${Math.round(item.aiConfidenceScore * 100)}%.`,
+          tone: "secondary" as const,
+        }
+      : null,
+    item.agentLabel
+      ? {
+          label: item.agentLabel,
+          title: `Created or updated by ${item.agentLabel}.`,
+          tone: "outline" as const,
+        }
+      : null,
     item.highValue
       ? {
           label: "value",

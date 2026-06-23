@@ -56,7 +56,9 @@ export function MoveWorkspaceTabList({
         </TabsList>
       </div>
       {activeTab?.description ? (
-        <p className="text-sm text-muted-foreground">{activeTab.description}</p>
+        <p className="text-[0.8125rem] leading-5 text-muted-foreground sm:text-sm">
+          {activeTab.description}
+        </p>
       ) : null}
     </div>
   );

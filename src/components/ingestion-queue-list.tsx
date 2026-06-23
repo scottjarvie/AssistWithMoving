@@ -3,10 +3,21 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { Bot, CheckCircle2, FileText, Map, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Bot,
+  Boxes,
+  CheckCircle2,
+  FileText,
+  ListChecks,
+  Map,
+  Package,
+  RotateCcw,
+  Trash2,
+  Truck,
+} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +30,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { moveWorkspaceAnchorPath } from "@/lib/move-links";
 
 type QueueTask = "needsAction" | "working" | "archive";
 
@@ -39,6 +51,18 @@ const statusOrder = [
   "resolved",
   "discarded",
 ] as const;
+
+const intentLabels: Record<string, string> = {
+  general: "General",
+  newMovableUnit: "New unit",
+  newItem: "New item",
+  existingBox: "Existing box",
+  existingItem: "Existing item",
+  boxContents: "Box contents",
+  condition: "Condition",
+  measurements: "Measurements",
+  floorPlan: "Floorplans",
+};
 
 const queueTaskTabs: Array<{
   value: QueueTask;
@@ -80,6 +104,48 @@ function formatQueueTaskCount(count: number) {
 
 function shortIdLabel(label: string, id: string) {
   return `${label} ${id.slice(-6)}`;
+}
+
+type QueueEntry = Doc<"ingestionQueueEntries">;
+type QueueResultRef = NonNullable<QueueEntry["resultRefs"]>[number];
+
+function countRefs(refs: QueueResultRef[] | undefined, type: string) {
+  return refs?.filter((ref) => ref.type === type).length ?? 0;
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function queueResultSummary(entry: QueueEntry) {
+  const itemCount =
+    entry.resultItemIds?.length || countRefs(entry.resultRefs, "item");
+  const suggestionCount =
+    entry.resultSuggestionIds?.length ||
+    countRefs(entry.resultRefs, "aiTextSuggestion");
+  const boxCount = countRefs(entry.resultRefs, "box");
+  const boxAssignmentCount = countRefs(entry.resultRefs, "boxItemAssignment");
+  const loadAssignmentCount =
+    countRefs(entry.resultRefs, "loadAssignmentBox") +
+    countRefs(entry.resultRefs, "loadAssignmentItem");
+  const planProposalCount = countRefs(entry.resultRefs, "planProposal");
+
+  return {
+    itemCount,
+    suggestionCount,
+    boxCount,
+    boxAssignmentCount,
+    loadAssignmentCount,
+    planProposalCount,
+  };
+}
+
+function queueTargetLabel(entry: QueueEntry) {
+  if (entry.targetBoxCode) return entry.targetBoxCode;
+  if (entry.targetLabel) return entry.targetLabel;
+  if (entry.targetBoxId) return shortIdLabel("box", entry.targetBoxId);
+  if (entry.targetItemId) return shortIdLabel("item", entry.targetItemId);
+  return null;
 }
 
 export function IngestionQueueList({
@@ -187,6 +253,7 @@ export function IngestionQueueList({
           const editable =
             entry.status === "queued" || entry.status === "needsInput";
           const busy = busyEntryId === entry._id;
+          const resultSummary = queueResultSummary(entry);
           return (
             <li key={entry._id} className="rounded-md border border-border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -206,6 +273,21 @@ export function IngestionQueueList({
                     <Badge variant="secondary" className="gap-1">
                       <Map className="size-3" aria-hidden="true" />
                       Floorplans
+                    </Badge>
+                  ) : null}
+                  {entry.intent ? (
+                    <Badge variant="secondary">
+                      {intentLabels[entry.intent] ?? entry.intent}
+                    </Badge>
+                  ) : null}
+                  {queueTargetLabel(entry) ? (
+                    <Badge variant="outline" className="gap-1">
+                      {entry.targetItemId ? (
+                        <Package className="size-3" aria-hidden="true" />
+                      ) : (
+                        <Boxes className="size-3" aria-hidden="true" />
+                      )}
+                      {queueTargetLabel(entry)}
                     </Badge>
                   ) : null}
                   {entry.roomHint ? (
@@ -275,10 +357,58 @@ export function IngestionQueueList({
               {entry.agentSummary ? (
                 <p className="mt-2 text-sm text-muted-foreground">
                   Agent: {entry.agentSummary}
-                  {entry.resultItemIds?.length
-                    ? ` (${entry.resultItemIds.length} items proposed)`
-                    : ""}
                 </p>
+              ) : null}
+              {resultSummary.itemCount ||
+              resultSummary.suggestionCount ||
+              resultSummary.boxCount ||
+              resultSummary.boxAssignmentCount ||
+              resultSummary.loadAssignmentCount ||
+              resultSummary.planProposalCount ? (
+                <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                  {resultSummary.itemCount ? (
+                    <Badge variant="secondary" className="gap-1">
+                      <Package className="size-3" aria-hidden="true" />
+                      {pluralize(resultSummary.itemCount, "inventory item")}
+                    </Badge>
+                  ) : null}
+                  {resultSummary.suggestionCount ? (
+                    <Badge variant="secondary" className="gap-1">
+                      <ListChecks className="size-3" aria-hidden="true" />
+                      {pluralize(
+                        resultSummary.suggestionCount,
+                        "AI review suggestion",
+                      )}
+                    </Badge>
+                  ) : null}
+                  {resultSummary.boxCount ? (
+                    <Badge variant="outline" className="gap-1">
+                      <Boxes className="size-3" aria-hidden="true" />
+                      {pluralize(resultSummary.boxCount, "box", "boxes")}
+                    </Badge>
+                  ) : null}
+                  {resultSummary.boxAssignmentCount ? (
+                    <Badge variant="outline" className="gap-1">
+                      <Boxes className="size-3" aria-hidden="true" />
+                      {pluralize(
+                        resultSummary.boxAssignmentCount,
+                        "packed item",
+                      )}
+                    </Badge>
+                  ) : null}
+                  {resultSummary.loadAssignmentCount ? (
+                    <Badge variant="outline" className="gap-1">
+                      <Truck className="size-3" aria-hidden="true" />
+                      {pluralize(resultSummary.loadAssignmentCount, "load assignment")}
+                    </Badge>
+                  ) : null}
+                  {resultSummary.planProposalCount ? (
+                    <Badge variant="outline" className="gap-1">
+                      <Map className="size-3" aria-hidden="true" />
+                      {pluralize(resultSummary.planProposalCount, "floorplan proposal")}
+                    </Badge>
+                  ) : null}
+                </div>
               ) : null}
               {entry.resultRefs?.length ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -292,6 +422,46 @@ export function IngestionQueueList({
                       {ref.label ?? shortIdLabel(ref.type, ref.id)}
                     </Badge>
                   ))}
+                </div>
+              ) : null}
+              {entry.status === "processed" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {resultSummary.itemCount ? (
+                    <Button type="button" size="sm" variant="outline" asChild>
+                      <Link
+                        href={moveWorkspaceAnchorPath(moveId, "#inventory-records")}
+                      >
+                        <Package aria-hidden="true" />
+                        Open inventory
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {resultSummary.suggestionCount ? (
+                    <Button type="button" size="sm" variant="outline" asChild>
+                      <Link
+                        href={moveWorkspaceAnchorPath(moveId, "#ai-review-queue")}
+                      >
+                        <ListChecks aria-hidden="true" />
+                        Review suggestions
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {resultSummary.boxCount || resultSummary.boxAssignmentCount ? (
+                    <Button type="button" size="sm" variant="outline" asChild>
+                      <Link href={moveWorkspaceAnchorPath(moveId, "#boxes")}>
+                        <Boxes aria-hidden="true" />
+                        Open boxes
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {resultSummary.loadAssignmentCount ? (
+                    <Button type="button" size="sm" variant="outline" asChild>
+                      <Link href={moveWorkspaceAnchorPath(moveId, "#load-plan")}>
+                        <Truck aria-hidden="true" />
+                        Open load plan
+                      </Link>
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
 

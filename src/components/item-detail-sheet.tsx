@@ -2,6 +2,7 @@
 
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useQuery } from "convex/react";
+import Link from "next/link";
 import {
   Boxes,
   Camera,
@@ -215,6 +216,19 @@ function ProvenanceCard({
       ) : null}
     </div>
   );
+}
+
+function buildItemQueueCapturePath(
+  moveId: Id<"moves">,
+  itemId: Id<"items">,
+  itemName: string,
+) {
+  const params = new URLSearchParams({
+    intent: "existingItem",
+    targetItemId: itemId,
+    targetLabel: itemName,
+  });
+  return `/app/moves/${encodeURIComponent(moveId)}/capture?${params.toString()}`;
 }
 
 export function ItemDetailSheet({
@@ -712,13 +726,34 @@ export function ItemDetailSheet({
                   moveId={moveId}
                   itemId={item._id}
                   room={item.room}
-                  label="Item photos"
+                  label="Other Photos"
                   multiple
                 />
+                {moveId ? (
+                  <Button asChild variant="outline" className="w-full sm:w-auto">
+                    <Link href={buildItemQueueCapturePath(moveId, item._id, item.name)}>
+                      <Sparkles aria-hidden="true" />
+                      Queue AI follow-up for this item
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" disabled>
+                    <Sparkles aria-hidden="true" />
+                    Queue AI follow-up for this item
+                  </Button>
+                )}
+                <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  The main item photo is already used as the thumbnail. Add
+                  extra angles, labels, condition shots, and evidence photos
+                  here.
+                </p>
                 <PhotoEvidenceStrip
                   householdId={householdId}
                   moveId={moveId}
                   itemId={item._id}
+                  omitFirstPhoto
+                  label="Other photos"
+                  emptyLabel="No other photos yet."
                 />
               </TabsContent>
 

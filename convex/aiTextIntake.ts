@@ -26,7 +26,9 @@ import {
 const itemDraftValidator = v.object({
   name: v.string(),
   room: v.optional(v.string()),
+  currentSpaceId: v.optional(v.id("moveSpaces")),
   destinationRoom: v.optional(v.string()),
+  destinationSpaceId: v.optional(v.id("moveSpaces")),
   category: v.optional(v.string()),
   disposition: itemDispositionValidator,
   quantity: v.number(),
@@ -415,7 +417,11 @@ async function createTrustedItemFromDraft(
     normalizedName: normalizedSearchName(name),
     description: normalizeOptionalText(args.draft.description),
     room: normalizeOptionalText(args.draft.room),
+    currentSpaceId: args.draft.currentSpaceId as Id<"moveSpaces"> | undefined,
     destinationRoom: normalizeOptionalText(args.draft.destinationRoom),
+    destinationSpaceId: args.draft.destinationSpaceId as
+      | Id<"moveSpaces">
+      | undefined,
     category: normalizeOptionalText(args.draft.category),
     disposition: args.draft.disposition,
     status: "active",
@@ -583,7 +589,9 @@ function normalizeItemDraft(draft: TextIntakeItemDraft | undefined) {
   return {
     name: normalizeItemName(draft.name),
     room: normalizeOptionalText(draft.room),
+    currentSpaceId: draft.currentSpaceId,
     destinationRoom: normalizeOptionalText(draft.destinationRoom),
+    destinationSpaceId: draft.destinationSpaceId,
     category: normalizeOptionalText(draft.category),
     disposition: draft.disposition,
     quantity: positiveQuantity(draft.quantity),

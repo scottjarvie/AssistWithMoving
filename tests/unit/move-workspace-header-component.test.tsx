@@ -89,7 +89,7 @@ describe("MoveWorkspaceHeader", () => {
 
     expect(screen.getByRole("heading", { name: "Inventory" })).toBeInTheDocument();
     const header = container.querySelector("section");
-    expect(header).toHaveClass("border-b", "pb-4");
+    expect(header).toHaveClass("border-b", "pb-3");
     expect(header).not.toHaveClass("rounded-lg");
     expect(within(header!).getByText("local")).toBeInTheDocument();
     expect(within(header!).getAllByText("Local move")).toHaveLength(2);

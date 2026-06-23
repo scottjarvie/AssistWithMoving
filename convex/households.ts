@@ -5,7 +5,11 @@ import { requireCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
 import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
 import {
+  canMembershipUseApiAccess,
+  defaultMemberApiAccessStatus,
+  effectiveMemberApiAccessStatus,
   memberManagementBlockReason,
+  type MemberApiAccessStatus,
   normalizeCollaboratorEmail,
   parseManagedHouseholdMemberRole,
 } from "./lib/householdMembers";
@@ -46,9 +50,41 @@ export const listMine = query({
           return null;
         }
 
+        const inviter = membership.createdByUserId
+          ? await ctx.db.get(membership.createdByUserId)
+          : null;
+        const apiAccessStatus = effectiveMemberApiAccessStatus({
+          role: membership.role,
+          status: membership.status,
+          apiAccessStatus: membership.apiAccessStatus,
+        });
+        const shouldShowOnboarding =
+          membership.role !== "owner" &&
+          typeof membership.acceptedInvitationAt === "number" &&
+          membership.onboardingDismissedAt === undefined;
+
         return {
           household,
           role: membership.role,
+          membershipId: membership._id,
+          apiAccessStatus,
+          canCreateApiKeys:
+            apiAccessStatus === "enabled" &&
+            canMembershipUseApiAccess({
+              role: membership.role,
+              status: membership.status,
+              apiAccessStatus: membership.apiAccessStatus,
+            }),
+          collaboratorOnboarding: shouldShowOnboarding
+            ? {
+                membershipId: membership._id,
+                acceptedAt: membership.acceptedInvitationAt,
+                role: membership.role,
+                invitedEmail: membership.invitedEmail ?? user.email ?? null,
+                inviterName: inviter?.name ?? null,
+                inviterEmail: inviter?.email ?? null,
+              }
+            : null,
         };
       })
     );
@@ -127,6 +163,13 @@ export const summaryStats = query({
       itemCount: items.filter((item) => item.deletedAt === undefined).length,
       boxCount: boxes.filter((box) => box.archivedAt === undefined).length,
       activeApiKeyCount: activeApiKeys.length,
+      apiCapableMemberCount: memberships.filter((membership) =>
+        canMembershipUseApiAccess({
+          role: membership.role,
+          status: membership.status,
+          apiAccessStatus: membership.apiAccessStatus,
+        }),
+      ).length,
       activeMemberCount: memberships.filter(
         (membership) => membership.status === "active",
       ).length,
@@ -156,6 +199,7 @@ export const create = mutation({
       userId: user._id,
       role: "owner",
       status: "active",
+      apiAccessStatus: "enabled",
       createdByUserId: user._id,
       createdAt: now,
       updatedAt: now,
@@ -239,12 +283,33 @@ export const listMembers = query({
         q.eq("householdId", args.householdId).eq("status", "invited"),
       )
       .collect();
+    const activeApiKeys = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_household_status", (q) =>
+        q.eq("householdId", args.householdId).eq("status", "active"),
+      )
+      .collect();
+    const activeApiKeyCountByUser = new Map<string, number>();
+    for (const key of activeApiKeys) {
+      const creatorId = String(key.createdByUserId);
+      activeApiKeyCountByUser.set(
+        creatorId,
+        (activeApiKeyCountByUser.get(creatorId) ?? 0) + 1,
+      );
+    }
 
     const members = await Promise.all(
       memberships
         .filter((membership) => membership.status !== "disabled")
         .map(async (membership) => {
           const user = await ctx.db.get(membership.userId);
+          const apiAccessStatus = effectiveMemberApiAccessStatus({
+            role: membership.role,
+            status: membership.status,
+            apiAccessStatus: membership.apiAccessStatus,
+          });
+          const roleAllowsApi =
+            defaultMemberApiAccessStatus(membership.role) === "enabled";
           return {
             membershipId: membership._id,
             invitationId: null,
@@ -254,6 +319,15 @@ export const listMembers = query({
             imageUrl: user?.imageUrl ?? null,
             role: membership.role,
             status: membership.status,
+            apiAccessStatus,
+            apiAccessAllowed: roleAllowsApi && apiAccessStatus === "enabled",
+            apiAccessReason: roleAllowsApi
+              ? apiAccessStatus === "enabled"
+                ? "Can create API keys and use keys they created."
+                : "API access disabled; existing keys they created cannot be used."
+              : "Role does not allow API key creation.",
+            activeApiKeyCount:
+              activeApiKeyCountByUser.get(String(membership.userId)) ?? 0,
             isCurrentUser:
               policy.actor.type === "user" &&
               policy.actor.userId === membership.userId,
@@ -272,6 +346,14 @@ export const listMembers = query({
       imageUrl: null,
       role: invitation.role,
       status: invitation.status,
+      apiAccessStatus: defaultMemberApiAccessStatus(invitation.role),
+      apiAccessAllowed:
+        defaultMemberApiAccessStatus(invitation.role) === "enabled",
+      apiAccessReason:
+        defaultMemberApiAccessStatus(invitation.role) === "enabled"
+          ? "Will be API-capable after accepting this invitation."
+          : "Invited role does not allow API key creation.",
+      activeApiKeyCount: 0,
       isCurrentUser: false,
       createdAt: invitation.createdAt,
       updatedAt: invitation.updatedAt,
@@ -412,6 +494,8 @@ export const updateMemberRole = mutation({
     await ctx.db.patch(args.membershipId, {
       role,
       status: "active",
+      apiAccessStatus:
+        membership.apiAccessStatus ?? defaultMemberApiAccessStatus(role),
       updatedAt: Date.now(),
     });
 
@@ -428,6 +512,115 @@ export const updateMemberRole = mutation({
         previousRole: membership.role,
         nextRole: role,
       },
+    });
+  },
+});
+
+export const updateMemberApiAccess = mutation({
+  args: {
+    householdId: v.id("households"),
+    membershipId: v.id("householdMemberships"),
+    apiAccessStatus: v.union(v.literal("enabled"), v.literal("disabled")),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireHouseholdPermission(
+      ctx,
+      args.householdId,
+      "api_keys:manage",
+    );
+    if (actor.type !== "user") {
+      throw new Error("API access changes require a signed-in user.");
+    }
+    const actorMembership = await ctx.db
+      .query("householdMemberships")
+      .withIndex("by_household_user", (q) =>
+        q.eq("householdId", args.householdId).eq("userId", actor.userId),
+      )
+      .unique();
+    if (
+      !actorMembership ||
+      !canMembershipUseApiAccess({
+        role: actorMembership.role,
+        status: actorMembership.status,
+        apiAccessStatus: actorMembership.apiAccessStatus,
+      })
+    ) {
+      throw new Error("API access is disabled for your household membership.");
+    }
+    const membership = await ctx.db.get(args.membershipId);
+    if (!membership || membership.householdId !== args.householdId) {
+      throw new Error("Household member not found.");
+    }
+
+    const blockedReason = memberManagementBlockReason({
+      action: "apiAccess",
+      currentUserId: actor.userId,
+      targetUserId: membership.userId,
+      targetRole: membership.role,
+    });
+    if (blockedReason) {
+      throw new Error(blockedReason);
+    }
+
+    if (defaultMemberApiAccessStatus(membership.role) !== "enabled") {
+      throw new Error("This member role cannot create API keys.");
+    }
+
+    const nextStatus = args.apiAccessStatus as MemberApiAccessStatus;
+    const now = Date.now();
+    await ctx.db.patch(args.membershipId, {
+      apiAccessStatus: nextStatus,
+      apiAccessUpdatedAt: now,
+      apiAccessUpdatedByUserId: actor.userId,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      actorType: actor.type,
+      actorUserId: actor.userId,
+      category: "apiKey",
+      action:
+        nextStatus === "enabled"
+          ? "api_access.enabled"
+          : "api_access.disabled",
+      objectTable: "householdMemberships",
+      objectId: args.membershipId,
+      metadata: {
+        targetUserId: membership.userId,
+        role: membership.role,
+        previousApiAccessStatus: effectiveMemberApiAccessStatus({
+          role: membership.role,
+          status: membership.status,
+          apiAccessStatus: membership.apiAccessStatus,
+        }),
+        nextApiAccessStatus: nextStatus,
+      },
+    });
+  },
+});
+
+export const acknowledgeCollaboratorOnboarding = mutation({
+  args: {
+    householdId: v.id("households"),
+    membershipId: v.id("householdMemberships"),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const membership = await ctx.db.get(args.membershipId);
+    if (
+      !membership ||
+      membership.householdId !== args.householdId ||
+      membership.userId !== user._id ||
+      membership.status !== "active"
+    ) {
+      throw new Error("Household access card not found.");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.membershipId, {
+      onboardingDismissedAt: now,
+      updatedAt: now,
     });
   },
 });

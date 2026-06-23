@@ -27,6 +27,8 @@ describe("InventoryTable", () => {
         description:
           "A very long note about scratches, cable holes, accessories, matching shelves, and packing context that should not force the entire table to become unusably wide.",
         needsReview: true,
+        agentLabel: "Codex intake",
+        aiConfidenceScore: 0.62,
         highValue: true,
         requiresPersonalTransport: true,
         signals: {
@@ -78,15 +80,16 @@ describe("InventoryTable", () => {
     expect(
       within(cardList).getByText("Walnut media console"),
     ).toBeInTheDocument();
+    expect(within(cardList).getByText("Codex intake")).toBeInTheDocument();
+    expect(within(cardList).getByText("low confidence")).toBeInTheDocument();
     expect(
       screen.getByRole("table", { name: "Inventory records table" }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Walnut media console")).toHaveLength(2);
     expect(screen.getAllByText("review").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("value").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("personal").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("+4").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("+5").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("low confidence").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+6").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+7").length).toBeGreaterThan(0);
     expect(screen.queryByText("photos 2")).not.toBeInTheDocument();
   });
 

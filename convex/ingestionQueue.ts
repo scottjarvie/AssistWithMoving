@@ -14,10 +14,14 @@ import {
   ingestionClaimDurationMs,
   ingestionClaimIsExpired,
   ingestionEntryIsEditable,
+  ingestionQueueIntentValidator,
   ingestionQueueStatusValidator,
   ingestionScopeHintValidator,
+  type IngestionQueueIntent,
+  normalizeIngestionScopeHint,
   type IngestionQueueStatus,
 } from "./lib/ingestionQueue";
+import { normalizeBoxCode } from "./lib/moveFields";
 import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
@@ -101,6 +105,75 @@ async function validateTargetPlanId(
   }
 }
 
+async function resolveQueueTarget(
+  ctx: QueryCtx | MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    targetBoxId?: Id<"boxes">;
+    targetItemId?: Id<"items">;
+    targetBoxCode?: string;
+    targetLabel?: string;
+  },
+) {
+  const cleanTargetLabel = args.targetLabel?.trim() || undefined;
+  const cleanTargetBoxCode =
+    args.targetBoxCode !== undefined
+      ? normalizeBoxCode(args.targetBoxCode) || undefined
+      : undefined;
+
+  let targetBox: Doc<"boxes"> | null = null;
+  if (args.targetBoxId) {
+    targetBox = await ctx.db.get(args.targetBoxId);
+    if (
+      !targetBox ||
+      targetBox.householdId !== args.householdId ||
+      targetBox.moveId !== args.moveId ||
+      targetBox.archivedAt
+    ) {
+      throw new Error("Target box does not belong to this move.");
+    }
+  } else if (cleanTargetBoxCode) {
+    targetBox = await ctx.db
+      .query("boxes")
+      .withIndex("by_move_code", (q) =>
+        q.eq("moveId", args.moveId).eq("code", cleanTargetBoxCode),
+      )
+      .unique();
+    if (!targetBox || targetBox.householdId !== args.householdId) {
+      throw new Error(`Target box ${cleanTargetBoxCode} was not found.`);
+    }
+  }
+
+  let targetItem: Doc<"items"> | null = null;
+  if (args.targetItemId) {
+    targetItem = await ctx.db.get(args.targetItemId);
+    if (
+      !targetItem ||
+      targetItem.householdId !== args.householdId ||
+      targetItem.moveId !== args.moveId ||
+      targetItem.deletedAt
+    ) {
+      throw new Error("Target item does not belong to this move.");
+    }
+  }
+
+  if (targetBox && targetItem) {
+    throw new Error("Choose either a target box or a target item for this queue entry.");
+  }
+
+  return {
+    targetBoxId: targetBox?._id,
+    targetItemId: targetItem?._id,
+    targetBoxCode: targetBox?.code ?? cleanTargetBoxCode,
+    targetLabel:
+      cleanTargetLabel ??
+      targetBox?.label ??
+      targetBox?.code ??
+      targetItem?.name,
+  };
+}
+
 function effectiveStatus(
   entry: Doc<"ingestionQueueEntries">,
   now: number,
@@ -129,6 +202,11 @@ export const createEntry = mutation({
     roomHint: v.optional(v.string()),
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
+    intent: v.optional(ingestionQueueIntentValidator),
+    targetBoxId: v.optional(v.id("boxes")),
+    targetItemId: v.optional(v.id("items")),
+    targetBoxCode: v.optional(v.string()),
+    targetLabel: v.optional(v.string()),
     targetPlanId: v.optional(v.id("floorPlans")),
     mediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
   },
@@ -149,8 +227,14 @@ export const createEntry = mutation({
     }
     await validateMediaIds(ctx, { ...args, mediaPhotoIds });
     await validateTargetPlanId(ctx, args);
+    const target = await resolveQueueTarget(ctx, args);
 
     const now = Date.now();
+    const scopeHint =
+      normalizeIngestionScopeHint(args.scopeHint) ??
+      (args.targetPlanId ? "floorPlan" : "inventory");
+    const intent: IngestionQueueIntent =
+      args.intent ?? (scopeHint === "floorPlan" ? "floorPlan" : "general");
     const entryId = await ctx.db.insert("ingestionQueueEntries", {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -158,7 +242,9 @@ export const createEntry = mutation({
       instructions,
       roomHint: args.roomHint?.trim() || undefined,
       dispositionHint: args.dispositionHint?.trim() || undefined,
-      scopeHint: args.scopeHint,
+      scopeHint,
+      intent,
+      ...target,
       targetPlanId: args.targetPlanId,
       mediaPhotoIds,
       sortOrder: now,
@@ -176,7 +262,7 @@ export const createEntry = mutation({
       action: "ingestion.entry_created",
       objectTable: "ingestionQueueEntries",
       objectId: entryId,
-      metadata: { mediaCount: mediaPhotoIds.length },
+      metadata: { mediaCount: mediaPhotoIds.length, intent, ...target },
     });
 
     return entryId;
@@ -192,6 +278,11 @@ export const updateEntry = mutation({
     roomHint: v.optional(v.string()),
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
+    intent: v.optional(ingestionQueueIntentValidator),
+    targetBoxId: v.optional(v.id("boxes")),
+    targetItemId: v.optional(v.id("items")),
+    targetBoxCode: v.optional(v.string()),
+    targetLabel: v.optional(v.string()),
     targetPlanId: v.optional(v.id("floorPlans")),
     mediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
     sortOrder: v.optional(v.number()),
@@ -219,6 +310,14 @@ export const updateEntry = mutation({
       });
     }
     await validateTargetPlanId(ctx, args);
+    const shouldUpdateTarget =
+      args.targetBoxId !== undefined ||
+      args.targetItemId !== undefined ||
+      args.targetBoxCode !== undefined ||
+      args.targetLabel !== undefined;
+    const target = shouldUpdateTarget
+      ? await resolveQueueTarget(ctx, args)
+      : undefined;
 
     await ctx.db.patch(args.entryId, {
       ...(args.instructions !== undefined
@@ -230,7 +329,18 @@ export const updateEntry = mutation({
       ...(args.dispositionHint !== undefined
         ? { dispositionHint: args.dispositionHint.trim() || undefined }
         : {}),
-      ...(args.scopeHint !== undefined ? { scopeHint: args.scopeHint } : {}),
+      ...(args.scopeHint !== undefined
+        ? { scopeHint: normalizeIngestionScopeHint(args.scopeHint) }
+        : {}),
+      ...(args.intent !== undefined ? { intent: args.intent } : {}),
+      ...(target
+        ? {
+            targetBoxId: target.targetBoxId,
+            targetItemId: target.targetItemId,
+            targetBoxCode: target.targetBoxCode,
+            targetLabel: target.targetLabel,
+          }
+        : {}),
       ...(args.targetPlanId !== undefined
         ? { targetPlanId: args.targetPlanId }
         : {}),

@@ -40,7 +40,13 @@ vi.mock("convex/react", () => ({
             instructions: "Turn this shelf photo into items.",
             agentSummary: "Proposed two items.",
             resultItemIds: ["item_1" as Id<"items">, "item_2" as Id<"items">],
+            resultSuggestionIds: ["suggestion_1" as Id<"aiTextSuggestions">],
             resultRefs: [
+              {
+                type: "aiTextSuggestion",
+                id: "suggestion_123456",
+                label: "Review suggestion",
+              },
               {
                 type: "planProposal",
                 id: "proposal_123456",
@@ -56,6 +62,10 @@ vi.mock("convex/react", () => ({
             _id: "entry_queued" as Id<"ingestionQueueEntries">,
             status: "queued",
             instructions: "Holiday bins need inventory.",
+            intent: "boxContents",
+            targetBoxId: "box_001" as Id<"boxes">,
+            targetBoxCode: "B-001",
+            targetLabel: "Holiday bins",
             mediaPhotoIds: [],
             createdAt: 4,
           }),
@@ -109,9 +119,22 @@ describe("IngestionQueueList task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Which room is this from?/i)).toBeInTheDocument();
     expect(screen.getByText(/Proposed two items./i)).toBeInTheDocument();
+    expect(screen.getByText("2 inventory items")).toBeInTheDocument();
+    expect(screen.getByText("1 AI review suggestion")).toBeInTheDocument();
+    expect(screen.queryByText("2 items proposed")).not.toBeInTheDocument();
     expect(screen.getByText("Floorplans")).toBeInTheDocument();
     expect(screen.getByText("plan 123456")).toBeInTheDocument();
+    expect(screen.getByText("Review suggestion")).toBeInTheDocument();
     expect(screen.getByText("Plan proposal")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Open inventory/i }),
+    ).toHaveAttribute(
+      "href",
+      "/app/moves/move_123/inventory#inventory-records",
+    );
+    expect(
+      screen.getByRole("link", { name: /Review suggestions/i }),
+    ).toHaveAttribute("href", "/app/moves/move_123/ai-review#ai-review-queue");
     expect(
       screen.queryByText("Holiday bins need inventory."),
     ).not.toBeInTheDocument();
@@ -126,6 +149,8 @@ describe("IngestionQueueList task tabs", () => {
     expect(
       screen.getByText("Holiday bins need inventory."),
     ).toBeInTheDocument();
+    expect(screen.getByText("Box contents")).toBeInTheDocument();
+    expect(screen.getByText("B-001")).toBeInTheDocument();
     expect(
       screen.getByText("Kitchen counter walkthrough."),
     ).toBeInTheDocument();

@@ -14,6 +14,8 @@ import {
   sumBy,
 } from "./lib/adminSummaries";
 
+const overviewSampleLimit = 1000;
+
 export const overview = mutation({
   args: {},
   handler: async (ctx) => {
@@ -36,23 +38,34 @@ export const overview = mutation({
       exportAudits,
       aiAudits,
     ] = await Promise.all([
-      ctx.db.query("users").collect(),
-      ctx.db.query("households").collect(),
-      ctx.db.query("moves").collect(),
-      ctx.db.query("items").collect(),
-      ctx.db.query("boxes").collect(),
-      ctx.db.query("itemPhotos").collect(),
-      ctx.db.query("photoUploadSessions").collect(),
-      ctx.db.query("exportJobs").collect(),
-      ctx.db.query("aiJobs").collect(),
-      ctx.db.query("apiKeys").collect(),
-      ctx.db.query("shareLinks").collect(),
+      boundedCollect(ctx.db.query("users")),
+      boundedCollect(ctx.db.query("households")),
+      boundedCollect(ctx.db.query("moves")),
+      boundedCollect(ctx.db.query("items")),
+      boundedCollect(ctx.db.query("boxes")),
+      boundedCollect(ctx.db.query("itemPhotos")),
+      boundedCollect(ctx.db.query("photoUploadSessions")),
+      boundedCollect(ctx.db.query("exportJobs")),
+      boundedCollect(ctx.db.query("aiJobs")),
+      boundedCollect(ctx.db.query("apiKeys")),
+      boundedCollect(ctx.db.query("shareLinks")),
       recentAuditsByCategory(ctx, "admin", 10),
       recentAuditsByCategory(ctx, "apiKey", 8),
       recentAuditsByCategory(ctx, "export", 8),
       recentAuditsByCategory(ctx, "ai", 8),
     ]);
 
+    const usersRows = users.rows;
+    const householdRows = households.rows;
+    const moveRows = moves.rows;
+    const itemRows = items.rows;
+    const boxRows = boxes.rows;
+    const photoRows = photos.rows;
+    const uploadSessionRows = uploadSessions.rows;
+    const exportJobRows = exportJobs.rows;
+    const aiJobRows = aiJobs.rows;
+    const apiKeyRows = apiKeys.rows;
+    const shareLinkRows = shareLinks.rows;
     const recentAudit = [...adminAudits, ...apiAudits, ...exportAudits, ...aiAudits]
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, 18)
@@ -60,48 +73,73 @@ export const overview = mutation({
 
     await recordAdminAccess(ctx, admin, "admin.dashboard_viewed", {
       visibleCounts: {
-        users: users.length,
-        households: households.length,
-        moves: moves.length,
+        users: usersRows.length,
+        households: householdRows.length,
+        moves: moveRows.length,
+        hasLowerBounds:
+          users.hasMore || households.hasMore || moves.hasMore,
       },
     });
+
+    const totals = {
+      users: usersRows.length,
+      activeUsers: usersRows.filter((user) => user.status === "active").length,
+      adminUsers: usersRows.filter((user) => user.appRole === "admin").length,
+      households: householdRows.length,
+      activeHouseholds: householdRows.filter(
+        (household) => household.archivedAt === undefined
+      ).length,
+      moves: moveRows.length,
+      activeMoves: moveRows.filter((move) => move.status !== "archived").length,
+      items: itemRows.length,
+      boxes: boxRows.length,
+      photos: photoRows.length,
+      photoBytes: sumBy(photoRows, (photo) => photo.sizeBytes),
+      uploadSessions: uploadSessionRows.length,
+      exportJobs: exportJobRows.length,
+      exportBytes: sumBy(exportJobRows, (job) => job.sizeBytes),
+      aiJobs: aiJobRows.length,
+      aiEstimatedCents: sumBy(aiJobRows, (job) => job.cost?.estimatedCents),
+      activeApiKeys: apiKeyRows.filter((key) => key.status === "active").length,
+      activeShareLinks: shareLinkRows.filter(
+        (link) => link.status === "active" && link.expiresAt > now
+      ).length,
+    };
+    const totalMeta = {
+      users: sampleMeta(users),
+      activeUsers: sampleMeta(users),
+      adminUsers: sampleMeta(users),
+      households: sampleMeta(households),
+      activeHouseholds: sampleMeta(households),
+      moves: sampleMeta(moves),
+      activeMoves: sampleMeta(moves),
+      items: sampleMeta(items),
+      boxes: sampleMeta(boxes),
+      photos: sampleMeta(photos),
+      photoBytes: sampleMeta(photos),
+      uploadSessions: sampleMeta(uploadSessions),
+      exportJobs: sampleMeta(exportJobs),
+      exportBytes: sampleMeta(exportJobs),
+      aiJobs: sampleMeta(aiJobs),
+      aiEstimatedCents: sampleMeta(aiJobs),
+      activeApiKeys: sampleMeta(apiKeys),
+      activeShareLinks: sampleMeta(shareLinks),
+    };
 
     return {
       generatedAt: now,
       currentAdmin: safeUserSummary(admin),
-      totals: {
-        users: users.length,
-        activeUsers: users.filter((user) => user.status === "active").length,
-        adminUsers: users.filter((user) => user.appRole === "admin").length,
-        households: households.length,
-        activeHouseholds: households.filter(
-          (household) => household.archivedAt === undefined
-        ).length,
-        moves: moves.length,
-        activeMoves: moves.filter((move) => move.status !== "archived").length,
-        items: items.length,
-        boxes: boxes.length,
-        photos: photos.length,
-        photoBytes: sumBy(photos, (photo) => photo.sizeBytes),
-        uploadSessions: uploadSessions.length,
-        exportJobs: exportJobs.length,
-        exportBytes: sumBy(exportJobs, (job) => job.sizeBytes),
-        aiJobs: aiJobs.length,
-        aiEstimatedCents: sumBy(aiJobs, (job) => job.cost?.estimatedCents),
-        activeApiKeys: apiKeys.filter((key) => key.status === "active").length,
-        activeShareLinks: shareLinks.filter(
-          (link) => link.status === "active" && link.expiresAt > now
-        ).length,
-      },
+      totals,
+      totalMeta,
       distributions: {
-        usersByStatus: countBy(users, (user) => user.status),
-        usersByRole: countBy(users, (user) => user.appRole),
-        movesByStatus: countBy(moves, (move) => move.status),
-        movesByType: countBy(moves, (move) => move.type),
-        exportsByStatus: countBy(exportJobs, (job) => job.status),
-        aiJobsByStatus: countBy(aiJobs, (job) => job.status),
-        apiKeysByStatus: countBy(apiKeys, (key) => key.status),
-        shareLinksByStatus: countBy(shareLinks, (link) => link.status),
+        usersByStatus: countBy(usersRows, (user) => user.status),
+        usersByRole: countBy(usersRows, (user) => user.appRole),
+        movesByStatus: countBy(moveRows, (move) => move.status),
+        movesByType: countBy(moveRows, (move) => move.type),
+        exportsByStatus: countBy(exportJobRows, (job) => job.status),
+        aiJobsByStatus: countBy(aiJobRows, (job) => job.status),
+        apiKeysByStatus: countBy(apiKeyRows, (key) => key.status),
+        shareLinksByStatus: countBy(shareLinkRows, (link) => link.status),
       },
       recentAudit,
     };
@@ -119,22 +157,34 @@ export const search = mutation({
     const limit = clampLimit(args.limit, 8, 20);
 
     if (query.length < 2) {
-      return { query, users: [], households: [], moves: [] };
+      return {
+        query,
+        users: [],
+        households: [],
+        moves: [],
+        searchMeta: {
+          sampledTables: {},
+          isPotentiallyIncomplete: false,
+        },
+      };
     }
 
     const [users, households, moves] = await Promise.all([
-      ctx.db.query("users").collect(),
-      ctx.db.query("households").collect(),
-      ctx.db.query("moves").collect(),
+      boundedCollect(ctx.db.query("users")),
+      boundedCollect(ctx.db.query("households")),
+      boundedCollect(ctx.db.query("moves")),
     ]);
+    const userRows = users.rows;
+    const householdRows = households.rows;
+    const moveRows = moves.rows;
 
-    const matchingUsers = users
+    const matchingUsers = userRows
       .filter((user) =>
         matchesAdminSearch(query, [user._id, user.email, user.name])
       )
       .slice(0, limit)
       .map(safeUserSummary);
-    const matchingHouseholds = households
+    const matchingHouseholds = householdRows
       .filter((household) =>
         matchesAdminSearch(query, [
           household._id,
@@ -145,7 +195,7 @@ export const search = mutation({
       )
       .slice(0, limit)
       .map(safeHouseholdSummary);
-    const matchingMoves = moves
+    const matchingMoves = moveRows
       .filter((move) =>
         matchesAdminSearch(query, [
           move._id,
@@ -167,13 +217,30 @@ export const search = mutation({
         households: matchingHouseholds.length,
         moves: matchingMoves.length,
       },
+      sampledTables: {
+        users: sampleMeta(users),
+        households: sampleMeta(households),
+        moves: sampleMeta(moves),
+      },
     });
+
+    const sampledTables = {
+      users: sampleMeta(users),
+      households: sampleMeta(households),
+      moves: sampleMeta(moves),
+    };
 
     return {
       query,
       users: matchingUsers,
       households: matchingHouseholds,
       moves: matchingMoves,
+      searchMeta: {
+        sampledTables,
+        isPotentiallyIncomplete: Object.values(sampledTables).some(
+          (meta) => meta.isLowerBound
+        ),
+      },
     };
   },
 });
@@ -498,6 +565,36 @@ export const getMove = mutation({
     };
   },
 });
+
+type TakeQuery<T> = {
+  take: (limit: number) => Promise<T[]>;
+};
+
+type BoundedRows<T> = {
+  rows: T[];
+  hasMore: boolean;
+  limit: number;
+};
+
+async function boundedCollect<T>(
+  query: TakeQuery<T>,
+  limit = overviewSampleLimit
+): Promise<BoundedRows<T>> {
+  const rows = await query.take(limit + 1);
+  return {
+    rows: rows.slice(0, limit),
+    hasMore: rows.length > limit,
+    limit,
+  };
+}
+
+function sampleMeta(sample: BoundedRows<unknown>) {
+  return {
+    isLowerBound: sample.hasMore,
+    sampleSize: sample.rows.length,
+    limit: sample.limit,
+  };
+}
 
 async function recentAuditsByCategory(
   ctx: MutationCtx,

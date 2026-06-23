@@ -79,6 +79,15 @@ export const optionalGroups = [
   },
 ];
 
+export const productionLaunchGateGroups = [
+  {
+    label: "OAuth MCP trusted-helper toolset env",
+    key: "MOVINGMANIFEST_MCP_OAUTH_TOOLSET",
+    expectedValue: "trusted-helper",
+    issue: "MOVE-240",
+  },
+];
+
 export function envArg() {
   const index = process.argv.indexOf("--environment");
   if (index === -1) return undefined;
@@ -171,7 +180,7 @@ function checkRequiredGroups(names) {
   results.push(...requiredGroupResults(names));
 }
 
-export function alternativeGroupResults(names, currentEnvironment = environment) {
+export function alternativeGroupResults(names) {
   const nextResults = [];
   for (const group of alternativeGroups) {
     const present = group.alternatives.filter((key) => names.has(key));
@@ -185,11 +194,11 @@ export function alternativeGroupResults(names, currentEnvironment = environment)
     }
 
     nextResults.push({
-      status: "blocked",
+      status: "warn",
       label: group.label,
       detail: `missing one of ${group.alternatives.join(
         ", "
-      )}; ${trackedIssueDetail(group.issue, currentEnvironment)}`,
+      )}; not required in Vercel because Clerk webhooks are handled by Convex HTTP actions; validate with npm run doctor:webhooks; tracked by ${group.issue}`,
     });
   }
 
@@ -230,6 +239,37 @@ function checkOptionalGroups(names) {
   results.push(...optionalGroupResults(names));
 }
 
+export function productionLaunchGateResults(
+  names,
+  currentEnvironment = environment
+) {
+  if (currentEnvironment !== "production") return [];
+
+  const nextResults = [];
+  for (const group of productionLaunchGateGroups) {
+    if (!names.has(group.key)) {
+      nextResults.push({
+        status: "blocked",
+        label: group.label,
+        detail: `missing ${group.key}; set ${group.expectedValue} before hosted OAuth publish; tracked by ${group.issue}`,
+      });
+      continue;
+    }
+
+    nextResults.push({
+      status: "pass",
+      label: group.label,
+      detail: `${group.key} name present; value must be ${group.expectedValue} and is verified by npm run doctor:oauth-cutover`,
+    });
+  }
+
+  return nextResults;
+}
+
+function checkProductionLaunchGateGroups(names) {
+  results.push(...productionLaunchGateResults(names));
+}
+
 export async function main() {
   const response = await run("npx", ["vercel", "env", "ls", environment]);
   if (response.code !== 0) {
@@ -251,6 +291,7 @@ export async function main() {
     checkRequiredGroups(names);
     checkAlternativeGroups(names);
     checkOptionalGroups(names);
+    checkProductionLaunchGateGroups(names);
     return;
   }
 
@@ -258,6 +299,7 @@ export async function main() {
   checkRequiredGroups(names);
   checkAlternativeGroups(names);
   checkOptionalGroups(names);
+  checkProductionLaunchGateGroups(names);
   record(
     "warn",
     "encrypted value validation",

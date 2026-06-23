@@ -99,6 +99,14 @@ type Overview = {
   generatedAt: number;
   currentAdmin: SafeUser;
   totals: Record<string, number>;
+  totalMeta?: Record<
+    string,
+    {
+      isLowerBound: boolean;
+      sampleSize: number;
+      limit: number;
+    }
+  >;
   distributions: Record<string, CountMap>;
   recentAudit: SafeAudit[];
 };
@@ -108,6 +116,17 @@ type SearchResults = {
   users: SafeUser[];
   households: SafeHousehold[];
   moves: SafeMove[];
+  searchMeta?: {
+    isPotentiallyIncomplete: boolean;
+    sampledTables: Record<
+      string,
+      {
+        isLowerBound: boolean;
+        sampleSize: number;
+        limit: number;
+      }
+    >;
+  };
 };
 
 type MembershipSummary = {
@@ -198,7 +217,7 @@ export function AdminDashboard() {
       const nextOverview = (await loadOverviewMutation({})) as Overview;
       setOverview(nextOverview);
     } catch (error) {
-      setMessage(errorMessage(error));
+      setMessage(adminErrorMessage(error));
     } finally {
       setLoading(null);
     }
@@ -215,7 +234,7 @@ export function AdminDashboard() {
         }
       } catch (error) {
         if (!cancelled) {
-          setMessage(errorMessage(error));
+          setMessage(adminErrorMessage(error));
         }
       } finally {
         if (!cancelled) {
@@ -242,7 +261,7 @@ export function AdminDashboard() {
       })) as SearchResults;
       setResults(nextResults);
     } catch (error) {
-      setMessage(errorMessage(error));
+      setMessage(adminErrorMessage(error));
     } finally {
       setLoading(null);
     }
@@ -265,7 +284,7 @@ export function AdminDashboard() {
         setMessage("That record no longer exists.");
       }
     } catch (error) {
-      setMessage(errorMessage(error));
+      setMessage(adminErrorMessage(error));
     } finally {
       setLoading(null);
     }
@@ -277,13 +296,16 @@ export function AdminDashboard() {
     }
 
     return [
-      ["AI estimate", formatCents(overview.totals.aiEstimatedCents)],
-      ["Photo storage", formatBytes(overview.totals.photoBytes)],
-      ["Export storage", formatBytes(overview.totals.exportBytes)],
-      ["Admin users", overview.totals.adminUsers.toLocaleString()],
+      ["AI estimate", formatOverviewTotal(overview, "aiEstimatedCents", "cents")],
+      ["Photo storage", formatOverviewTotal(overview, "photoBytes", "bytes")],
+      ["Export storage", formatOverviewTotal(overview, "exportBytes", "bytes")],
+      ["Admin users", formatOverviewTotal(overview, "adminUsers")],
     ];
   }, [overview]);
   const adminToolsEnabled = flagEnabled(flags, "adminTools", true);
+  const overviewHasLowerBounds = overview
+    ? Object.values(overview.totalMeta ?? {}).some((meta) => meta.isLowerBound)
+    : false;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -325,13 +347,20 @@ export function AdminDashboard() {
         </div>
       ) : overview ? (
         <>
+          {overviewHasLowerBounds ? (
+            <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+              Large global tables are sampled for dashboard speed; values marked
+              with + are lower-bound counts.
+            </div>
+          ) : null}
+
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {coreMetrics.map(([key, label, Icon]) => (
               <MetricTile
                 key={key}
                 icon={Icon}
                 label={label}
-                value={overview.totals[key]?.toLocaleString() ?? "0"}
+                value={formatOverviewTotal(overview, key)}
               />
             ))}
           </div>
@@ -463,6 +492,12 @@ function SearchResultsPanel({
 
   return (
     <div className="space-y-4">
+      {results.searchMeta?.isPotentiallyIncomplete ? (
+        <p className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+          Search scanned bounded samples for speed. Narrow the query if the
+          expected record is missing.
+        </p>
+      ) : null}
       <ResultGroup
         title="Users"
         empty="No matching users"
@@ -876,6 +911,21 @@ function formatCents(value = 0) {
   return `$${(value / 100).toFixed(2)}`;
 }
 
+function formatOverviewTotal(
+  overview: Overview,
+  key: string,
+  format: "number" | "bytes" | "cents" = "number"
+) {
+  const value = overview.totals[key] ?? 0;
+  const formatted =
+    format === "bytes"
+      ? formatBytes(value)
+      : format === "cents"
+        ? formatCents(value)
+        : value.toLocaleString();
+  return overview.totalMeta?.[key]?.isLowerBound ? `${formatted}+` : formatted;
+}
+
 function formatDate(value?: number) {
   if (!value) {
     return "-";
@@ -896,6 +946,22 @@ function labelize(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Admin request failed.";
+function adminErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message.includes("Requires MovingManifest admin access") ||
+    message.includes("[CONVEX M(admin:")
+  ) {
+    return "You do not have MovingManifest admin access. Sign in with an admin account or ask an admin to add this email.";
+  }
+
+  if (message.includes("Authentication required")) {
+    return "Sign in with an admin account to open the admin dashboard.";
+  }
+
+  if (message && !message.startsWith("[CONVEX")) {
+    return message;
+  }
+
+  return "Admin request failed.";
 }

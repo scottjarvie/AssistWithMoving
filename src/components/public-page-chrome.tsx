@@ -18,6 +18,18 @@ const publicNav = [
   { href: "/privacy", label: "Privacy" },
 ] as const;
 
+const compactPublicNav = [
+  { href: "/ai", label: "AI" },
+  { href: "/mcp", label: "MCP" },
+  { href: "/api", label: "API" },
+  { href: "/privacy", label: "Privacy" },
+] as const;
+
+const footerNav = [
+  ...publicNav,
+  { href: "/updates", label: "Updates" },
+] as const;
+
 export type PublicFeatureCard = {
   title: string;
   copy: string;
@@ -90,25 +102,44 @@ export function PublicPageChrome({
 
 export function PublicHeader() {
   return (
-    <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
-      <BrandMark />
-      <nav aria-label="Public navigation" className="hidden items-center gap-4 lg:flex">
-        {publicNav.map((item) => (
+    <header className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-between gap-4">
+        <BrandMark />
+        <nav
+          aria-label="Public navigation"
+          className="hidden items-center gap-4 lg:flex"
+        >
+          {publicNav.map((item) => (
+            <Link
+              key={item.href}
+              className="text-sm text-muted-foreground hover:text-foreground"
+              href={item.href}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <Button asChild size="sm">
+          <Link href="/sign-in">
+            Sign in
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
+      <nav
+        aria-label="Quick public navigation"
+        className="mt-4 flex gap-2 overflow-x-auto lg:hidden"
+      >
+        {compactPublicNav.map((item) => (
           <Link
             key={item.href}
-            className="text-sm text-muted-foreground hover:text-foreground"
+            className="shrink-0 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground hover:border-primary/45 hover:text-foreground"
             href={item.href}
           >
             {item.label}
           </Link>
         ))}
       </nav>
-      <Button asChild size="sm">
-        <Link href="/sign-in">
-          Sign in
-          <ArrowRight aria-hidden="true" />
-        </Link>
-      </Button>
     </header>
   );
 }
@@ -119,7 +150,7 @@ export function PublicFooter() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
         <p>{product.name} organizes move records, evidence, and documentation packets.</p>
         <div className="flex flex-wrap gap-4">
-          {publicNav.map((item) => (
+          {footerNav.map((item) => (
             <Link key={item.href} href={item.href} className="hover:text-foreground">
               {item.label}
             </Link>

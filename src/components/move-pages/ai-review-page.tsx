@@ -51,7 +51,7 @@ export function AiReviewWorkspacePage() {
   const [activeTab, setActiveTab] = useHashTab("queue", aiReviewTabHashes);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="AI Review"
         description="AI suggestions stay suggestions until you approve them here — text intake, photo intake, and the review queue."

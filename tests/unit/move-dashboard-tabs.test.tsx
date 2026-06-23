@@ -14,12 +14,34 @@ const workspaceActions = vi.hoisted(() => ({
   selectMove: vi.fn(),
 }));
 
+const workspaceState = vi.hoisted(() => ({
+  households: [
+    {
+      household: {
+        _id: "household_123",
+        _creationTime: 1,
+        name: "Jarvie household",
+        createdAt: 1,
+        updatedAt: 1,
+        createdByUserId: "user_123",
+        ownerUserId: "user_123",
+      },
+      role: "owner",
+      membershipId: "membership_owner",
+      apiAccessStatus: "enabled",
+      canCreateApiKeys: true,
+      collaboratorOnboarding: null,
+    },
+  ] as Array<unknown>,
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
 }));
 
 vi.mock("convex/react", () => ({
   useMutation: () => vi.fn(),
+  useQuery: () => ({ activeApiKeyCount: 0 }),
 }));
 
 vi.mock("@/components/convex-auth-status", () => ({
@@ -33,20 +55,7 @@ vi.mock("@/components/move-workspace-context", () => ({
       moveId: "move_123" as Id<"moves">,
       selectedMove: undefined,
       selectHousehold: workspaceActions.selectHousehold,
-      households: [
-        {
-          household: {
-            _id: "household_123" as Id<"households">,
-            _creationTime: 1,
-            name: "Jarvie household",
-            createdAt: 1,
-            updatedAt: 1,
-            createdByUserId: "user_123" as Id<"users">,
-            ownerUserId: "user_123" as Id<"users">,
-          },
-          role: "owner",
-        },
-      ],
+      households: workspaceState.households as MoveWorkspaceValue["households"],
       moves: [],
       activeMoves: [
         {
@@ -97,6 +106,24 @@ describe("MoveDashboard", () => {
     workspaceActions.selectHousehold.mockReset();
     workspaceActions.selectMove.mockReset();
     mockRouter.push.mockReset();
+    workspaceState.households = [
+      {
+        household: {
+          _id: "household_123",
+          _creationTime: 1,
+          name: "Jarvie household",
+          createdAt: 1,
+          updatedAt: 1,
+          createdByUserId: "user_123",
+          ownerUserId: "user_123",
+        },
+        role: "owner",
+        membershipId: "membership_owner",
+        apiAccessStatus: "enabled",
+        canCreateApiKeys: true,
+        collaboratorOnboarding: null,
+      },
+    ];
   });
 
   it("opens on active moves before setup forms", () => {
@@ -127,10 +154,10 @@ describe("MoveDashboard", () => {
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(
-      within(activeMoves).getAllByRole("link", { name: "Open workspace" })[0],
+      within(activeMoves).getAllByRole("link", { name: "Open" })[0],
     ).toHaveAttribute("href", "/app/moves/move_123");
     expect(
-      screen.getByRole("link", { name: "Open selected move" }),
+      screen.getByRole("link", { name: "Open move" }),
     ).toHaveAttribute("href", "/app/moves/move_123");
     expect(
       within(activeMoveCard as HTMLElement).getByRole("link", {
@@ -156,9 +183,60 @@ describe("MoveDashboard", () => {
       within(activeMoves).getByRole("button", { name: "Selected" }),
     ).toBeDisabled();
     expect(
-      within(activeMoves).getByRole("button", { name: "Select move" }),
+      within(activeMoves).getByRole("button", { name: "Select" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Connecting an AI helper?")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create a key" })).toHaveAttribute(
+      "href",
+      "/settings/ai-connections",
+    );
     expect(screen.queryByLabelText("Move title")).not.toBeInTheDocument();
+  });
+
+  it("shows newly accepted collaborator household access before the generic dashboard", async () => {
+    const user = userEvent.setup();
+    workspaceState.households = [
+      {
+        household: {
+          _id: "household_789",
+          _creationTime: 3,
+          name: "Erin household",
+          createdAt: 3,
+          updatedAt: 3,
+          createdByUserId: "user_789",
+          ownerUserId: "user_789",
+        },
+        role: "admin",
+        membershipId: "membership_erin",
+        apiAccessStatus: "enabled",
+        canCreateApiKeys: true,
+        collaboratorOnboarding: {
+          membershipId: "membership_erin",
+          acceptedAt: 10,
+          role: "admin",
+          invitedEmail: "erin@example.com",
+          inviterName: "Scott Jarvie",
+          inviterEmail: "scott@example.com",
+        },
+      },
+    ];
+
+    render(<MoveDashboard />);
+
+    expect(
+      screen.getByText("You were added to Erin household"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/added by Scott Jarvie/)).toBeInTheDocument();
+    expect(screen.getByText("API available")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create helper key" })).toHaveAttribute(
+      "href",
+      "/settings/ai-connections",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open dashboard" }));
+    expect(workspaceActions.selectHousehold).toHaveBeenCalledWith(
+      "household_789",
+    );
   });
 
   it("lets the dashboard select a different active move", async () => {
@@ -174,7 +252,7 @@ describe("MoveDashboard", () => {
     expect(fallMoveCard).not.toBeNull();
     await user.click(
       within(fallMoveCard as HTMLElement).getByRole("button", {
-        name: "Select move",
+        name: "Select",
       }),
     );
 

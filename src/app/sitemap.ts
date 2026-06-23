@@ -17,6 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ["/mcp", 0.7],
     ["/pcs-moving", 0.8],
     ["/claims-inventory", 0.8],
+    ["/updates", 0.6],
     ["/privacy", 0.5],
     ["/terms", 0.5],
   ] as const;

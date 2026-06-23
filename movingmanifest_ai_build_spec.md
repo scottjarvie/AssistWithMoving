@@ -1450,7 +1450,7 @@ Recommended tools:
 - `apply_assignment_plan`
 - `mark_item_disposition`
 - `get_capacity_report`
-- `create_export`
+- `manage_exports`
 
 The MCP server can run locally with an API key in the user's environment. A remote MCP option can be added later if OAuth/consent flow is implemented securely.
 

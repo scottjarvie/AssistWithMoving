@@ -1,33 +1,53 @@
-export const MOVINGMANIFEST_CAPABILITY_VERSION = "2026-06-12";
+export const MOVINGMANIFEST_CAPABILITY_VERSION = "2026-06-21";
+
+export const MOVINGMANIFEST_CONNECTION_RECOVERY = {
+  staleToolSymptoms: [
+    "Expected MovingManifest tools are missing after a deploy, package update, or connector change.",
+    "A hosted connector was configured with https://movingmanifest.com/mcp and sees HTML, no OAuth handoff, or no MovingManifest tools instead of the Streamable HTTP endpoint.",
+    "Private MCP calls fail with Invalid API key format, invalid_token, missing scopes, or an OAuth/client mismatch immediately after reconnecting.",
+    "The tool count or trusted-helper surface does not match get_api_capabilities, /mcp, or /llms-full.txt.",
+  ],
+  agentActions: [
+    "For hosted MCP, confirm the connector URL is https://movingmanifest.com/api/mcp; https://movingmanifest.com/mcp is the human setup page.",
+    "Refresh the MCP tool list or restart the current assistant session before diagnosing product data.",
+    "Retry agent_workbench and get_api_context after the refresh.",
+    "If Claude asks for every tool approval, explain that one-by-one approval is safer but noisy; the user can choose Allow all in connector permissions only if they trust the MovingManifest connector and signed-in account.",
+    "If the same private-call auth failure remains, tell the user to disconnect and reconnect the MovingManifest connector so the client obtains fresh OAuth credentials and tool metadata.",
+    "If the connector is on /api/mcp and the same Invalid API key format error survives one reconnect, stop asking for more reconnects; tell the user the deployed backend is likely stale/API-key-only and needs the current Next + Convex OAuth server changes deployed together.",
+    "Ask for a raw mmk_ helper key only when the client cannot use remote MCP OAuth.",
+  ],
+};
 
 export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
   {
-    issue: "MOVE-63",
-    title: "Switch Clerk to a production instance before public launch",
-    area: "auth",
+    issue: "MOVE-238",
+    title: "Prove OAuth MCP login with scott@thejarvie.com real-account flow",
+    area: "remote-mcp-oauth",
     impact:
-      "Production auth must use Clerk production keys and origins before public users are invited.",
-    owner: "external-account",
+      "Claude connector registration failed with reference ofid_a7fc26bd131d0216, so production Clerk dynamic client registration must be verified with a real hosted-client registration before publishing the OAuth connector broadly.",
+    owner: "verification",
   },
   {
     issue: "MOVE-62",
     title: "Configure production admin access",
     area: "operations",
     impact:
-      "The shipped admin dashboard cannot be used until an intended admin is granted access.",
-    owner: "external-account",
+      "Production sign-in and MCP OAuth writes work, but positive admin access still needs verification with an email listed in ADMIN_EMAILS, such as scott@thejarvie.com.",
+    owner: "verification",
   },
   {
     issue: "MOVE-68",
-    title: "Configure Clerk production webhook endpoint and Convex signing secret",
+    title:
+      "Configure Clerk production webhook endpoint and Convex signing secret",
     area: "auth-sync",
     impact:
-      "Production Clerk user/org changes will not sync into Convex until the webhook secret is configured.",
-    owner: "external-account",
+      "Production Clerk webhook endpoint and signing secret are configured; a signed Clerk test event still needs to prove end-to-end sync.",
+    owner: "verification",
   },
   {
     issue: "MOVE-64",
-    title: "Evaluate and enforce a Content Security Policy after production origins settle",
+    title:
+      "Evaluate and enforce a Content Security Policy after production origins settle",
     area: "security",
     impact:
       "CSP should be enforced after production auth, storage, analytics, and media origins are final.",
@@ -45,17 +65,40 @@ export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
 
 export const MOVINGMANIFEST_API_CAPABILITIES = [
   {
-    id: "apiContext",
-    title: "API key context",
+    id: "agentWorkbench",
+    title: "Curated agent workbench",
     status: "available",
     purpose:
-      "Confirm the current API key's household, scopes, move restriction, and safe account context.",
-    requiredScopes: ["valid API key"],
+      "Give AI agents a small read-first workflow map so they choose the right lane before using the broader REST/MCP toolbox.",
+    requiredScopes: ["valid API key for private workflows"],
+    restEndpoints: [],
+    mcpTools: ["agent_workbench"],
+    agentWorkflows: [
+      "Call agent_workbench mode=overview at the start of a new agent session.",
+      "For hosted MCP clients, use https://movingmanifest.com/api/mcp as the connector URL; /mcp is the human setup page and should not be pasted as the endpoint.",
+      "If expected tools are missing or private calls fail right after a deploy/OAuth/toolset change, refresh the MCP tool list first; if the client stays stale, ask the user to disconnect and reconnect the MovingManifest connector.",
+      "Warn Claude users that they may need to approve tools one at a time, or choose Allow all in connector permissions only after deciding they trust the connector.",
+      "Use mode=intakeQueue when the user captured photos, notes, audio, or video for later agent processing.",
+      "Use mode=photoInventory when one or more photos should become inventory or evidence.",
+      "Use mode=reviewFirst when the assistant is unsure and should submit suggestions instead of silently changing trusted inventory.",
+      "Use mode=trustedHelper only after the user explicitly created a trusted helper key or OAuth connection for the current assistant.",
+    ],
+  },
+  {
+    id: "apiContext",
+    title: "Connection context",
+    status: "available",
+    purpose:
+      "Confirm the current OAuth or API-key connection's household, scopes, move restriction, and safe account context.",
+    requiredScopes: ["valid OAuth connection or API key"],
     restEndpoints: ["GET /api/v1/me"],
     mcpTools: ["get_api_context"],
     agentWorkflows: [
-      "Check what a local agent is allowed to read or write before making changes.",
-      "Detect whether a key is restricted to one move.",
+      "Check what a local or hosted agent is allowed to read or write before making changes.",
+      "Detect whether the current connection is restricted to one move.",
+      "If no MovingManifest tools appear or OAuth never starts, verify the user did not paste https://movingmanifest.com/mcp instead of https://movingmanifest.com/api/mcp.",
+      "When get_api_context reports Invalid API key format or invalid_token after OAuth setup, refresh tools/session once, then ask the user to disconnect and reconnect the hosted connector if the failure persists.",
+      "If the exact Invalid API key format response persists after the URL is /api/mcp and one reconnect has happened, treat it as a stale deployed REST/Convex backend and ask for a current Next + Convex OAuth deploy, not another user-side reconnect.",
     ],
   },
   {
@@ -82,8 +125,8 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     agentWorkflows: [
       "Create a PCS mixed move with official fields and default documentation profiles.",
       "Set up a new move from a user conversation in one write call, then use detailed endpoints for follow-up edits.",
-      "Fetch one compact move summary before planning, exporting, or bulk updates.",
-      "Fetch one compact agent context before making multi-step AI edits so the agent sees spaces, transport, inventory, photos, sales state, and write guidance in one call.",
+      "Fetch one bounded move summary before planning, exporting, or bulk updates; inspect sectionMeta before assuming a section is complete.",
+      "Fetch one bounded agent context before multi-step AI edits, then request specific sections with maxPerSection only when deeper context is needed.",
     ],
   },
   {
@@ -91,7 +134,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     title: "Household member access",
     status: "available",
     purpose:
-      "List real household login access and add or invite a user to the household by email. Use this for spouses or family members who should sign in to the same move.",
+      "List real household login access, inspect each member's API access status, and add or invite a user to the household by email. Use this for spouses or family members who should sign in to the same move.",
     requiredScopes: ["members/manage"],
     restEndpoints: [
       "GET /api/v1/households/:householdId/members",
@@ -101,6 +144,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     agentWorkflows: [
       "Add a spouse or family member by email as editor, packer, viewer, guest, or admin; if they do not have an account yet, the invite activates when they sign in with that email.",
       "Explain the difference between household members who can log in and move people/contact records used for movers, helpers, offices, and adjusters.",
+      "If a member's API access is disabled, do not retry their old key; ask a household owner/admin to re-enable API access or issue a replacement key.",
       "Use a key with explicit members/manage scope because granting household access is more sensitive than inventory intake.",
     ],
   },
@@ -120,7 +164,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     agentWorkflows: [
       "Turn a user-provided room list into durable space targets instead of appending free-text notes.",
       "Attach future room, destination, storage, and transport photos to stable IDs.",
-      "Use currentSpaceId/destinationSpaceId on inventory while preserving readable room names.",
+      "Use currentSpaceId/destinationSpaceId on inventory and destinationSpaceId on boxes while preserving readable room names.",
     ],
   },
   {
@@ -175,9 +219,16 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     title: "Layout Studio floor plans",
     status: "available",
     purpose:
-      "Read, summarize, snapshot, directly apply, or propose Layout Studio plan operations through the same op language used by the app.",
-    requiredScopes: ["plans/read", "plans/write"],
+      "Create, read, summarize, snapshot, directly apply, or propose Layout Studio plan operations through the same op language used by the app. External agents can also create floor-plan intake work, record atomic observations/relationships, validate the evidence graph, and reset stale draft output without deleting evidence.",
+    requiredScopes: [
+      "plans/read",
+      "plans/write",
+      "photos/write",
+      "inventory/read",
+      "inventory/write",
+    ],
     restEndpoints: [
+      "POST /api/v1/plans",
       "GET /api/v1/plans?moveId=",
       "GET /api/v1/plans/:planId",
       "GET /api/v1/plans/:planId/summary",
@@ -185,18 +236,49 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "GET /api/v1/plans/:planId/proposals",
       "POST /api/v1/plans/:planId/proposals",
       "GET /api/v1/plans/:planId/snapshot.svg",
+      "GET /api/v1/plans/:planId/floorplan-evidence",
+      "POST /api/v1/plans/:planId/floorplan-evidence",
+      "PATCH /api/v1/plans/:planId/floorplan-evidence/:evidenceId",
+      "POST /api/v1/plans/:planId/floorplan-evidence/:evidenceId/supersede",
+      "GET /api/v1/plans/:planId/floorplan-observations",
+      "POST /api/v1/plans/:planId/floorplan-observations",
+      "PATCH /api/v1/plans/:planId/floorplan-observations/:observationId",
+      "POST /api/v1/plans/:planId/floorplan-observations/:observationId/supersede",
+      "GET /api/v1/plans/:planId/floorplan-relationships",
+      "POST /api/v1/plans/:planId/floorplan-relationships",
+      "PATCH /api/v1/plans/:planId/floorplan-relationships/:relationshipId",
+      "POST /api/v1/plans/:planId/floorplan-relationships/:relationshipId/supersede",
+      "POST /api/v1/plans/:planId/floorplan-solve",
+      "POST /api/v1/plans/:planId/floorplan-reset-draft",
     ],
     mcpTools: [
       "plans_list",
+      "plan_create",
       "plan_get",
       "plan_summary",
+      "floor_plan_context",
+      "create_floor_plan_intake",
+      "floor_plan_evidence",
+      "floor_plan_observations",
+      "floor_plan_relationships",
+      "floor_plan_calculate",
+      "floor_plan_questions",
+      "floor_plan_solve",
+      "floor_plan_reset_draft",
       "plan_apply_ops",
       "plan_propose_ops",
       "plan_snapshot",
     ],
     agentWorkflows: [
+      "Create a destination plan when a user shares blueprints before opening Layout Studio.",
+      "Upload blueprint images as photoType=blueprint, create a floorPlan-scoped queue entry, and preserve the queue entry for later agent sessions.",
+      "Extract every visible detail into observations, then connect observations through relationships before asking the solver to generate geometry.",
+      "Trash stale draft solve output while preserving source photos, observations, relationships, evidence, and measurements.",
       "Read the current plan document before writing any plan ops.",
       "Propose op batches with human-readable reasoning so the user can review before applying.",
+      "Use queue needsInput questions when scale, room labels, levels, or exterior areas are ambiguous.",
+      "Record official/suspected square footage, lot size, and excluded structures as evidence before solving.",
+      "Run floor_plan_calculate to derive conditioned/excluded/footprint totals and square-footage variance before proposing geometry.",
       "Render the SVG snapshot after substantial edits so a vision-capable agent can inspect its own geometry.",
     ],
   },
@@ -212,6 +294,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "POST /api/v1/moves/:moveId/items",
       "POST /api/v1/moves/:moveId/items/batch-upsert",
       "PATCH /api/v1/moves/:moveId/items/:itemId",
+      "POST /api/v1/moves/:moveId/items/:itemId/notes",
       "DELETE /api/v1/items/:itemId",
       "GET /api/v1/moves/:moveId/planned-items",
       "POST /api/v1/moves/:moveId/planned-items",
@@ -222,20 +305,31 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     mcpTools: [
       "search_inventory",
       "create_item",
+      "batch_upsert_movable_units",
       "batch_upsert_items",
       "update_item",
+      "append_item_note",
       "delete_item",
       "list_planned_items",
-      "create_planned_item",
-      "update_planned_item",
-      "convert_planned_item",
-      "archive_planned_item",
+      "manage_planned_item",
     ],
     agentWorkflows: [
       "Import inventory from spreadsheets, walkthrough notes, or agent-created item lists.",
+      "Use spaceId, spaceName, or currentSpaceId for current/origin location and destinationSpaceId/destinationSpaceName for destination location when durable move spaces exist.",
       "Track future furniture, appliances, or purchases inside Layout Studio before they should count as owned load.",
       "Convert a planned item into owned inventory when it has been purchased, preserving any existing floor-plan placements.",
+      "Use append_item_note for additive private observations so the agent does not need to read or replace existing private notes.",
       "Use dry runs before bulk inventory writes.",
+      "Use batch_upsert_movable_units when the user gives a rough move list of boxes and large loose items before detailed itemization.",
+      "For new auto-coded rough boxes such as 12 medium boxes, batch_upsert_movable_units accepts one code-less box row with count; still expand coded ranges like B-001-B-025 into explicit code rows.",
+      "Set containerType on box rows when the user says carton, plastic tote, bin, wardrobe box, dish pack, crate, or similar; do not bury reusable/recyclable container type only in label or description.",
+      "For live batch_upsert_movable_units box rows without boxId or code, pass a stable idempotencyKey so retries do not create duplicate auto-coded boxes.",
+      "New looseItem rows from batch_upsert_movable_units require externalSource plus externalId, then become active, reviewable movable units so they appear in the load planner like pasted rough-list rows.",
+      "If a rough row already has a resolved load target, include assignedResourceId and optional assignedZoneId on batch_upsert_movable_units rows; use apply_assignments later for stricter validation, reassignment, or review-driven load changes.",
+      "Before asking what to measure next, read movableUnitSummary.measurementRoute and work one room/source-area group at a time.",
+      "Use batch_upsert_movable_units again with existing boxId/code or itemId rows to patch missing movable-unit weight, dimensions, volume, or assignment without duplicating records.",
+      "Do not treat every ordinary unboxed detailed item as a movable unit; loose items count when tagged/assigned/personal-transport or clearly large by category, name, weight, volume, or dimensions.",
+      "Preserve batch_upsert_movable_units unitIndex/unitIndexes response mapping so created ids, warnings, and errors can be explained against the user's original rough-list rows.",
     ],
   },
   {
@@ -244,15 +338,32 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     status: "available",
     purpose:
       "Create boxes and maintain item-to-box assignments without exposing deleted item data.",
-    requiredScopes: ["inventory/read", "inventory/write"],
+    requiredScopes: ["inventory/read", "inventory/write", "photos/write"],
     restEndpoints: [
       "POST /api/v1/moves/:moveId/boxes",
+      "POST /api/v1/moves/:moveId/box-items",
+      "DELETE /api/v1/moves/:moveId/box-items",
+      "POST /api/v1/moves/:moveId/boxes/:boxId/items",
+      "DELETE /api/v1/moves/:moveId/boxes/:boxId/items",
       "POST /api/v1/boxes/:boxId/items",
       "DELETE /api/v1/boxes/:boxId/items/:itemId",
     ],
-    mcpTools: ["create_box", "add_items_to_box", "remove_item_from_box"],
+    mcpTools: [
+      "save_box_intake",
+      "create_box",
+      "batch_add_box_contents",
+      "add_items_to_box",
+      "remove_item_from_box",
+    ],
     agentWorkflows: [
       "Build box manifests from packing sessions.",
+      "Use save_box_intake when one user workflow should create or update a box, save dimensions/weight/description/containerType, attach box photos, create contents, and link existing items in one approval.",
+      "When many box/tote photos are already uploaded, include photoIds on explicit batch_upsert_movable_units box rows so the batch attaches them after box upsert; expand photographed boxes to one row per physical box instead of using count.",
+      "When an existing rough box is opened and several contents are discovered, prefer batch_add_box_contents so item creation and packing happen in one approval.",
+      "Assign boxes to destinationSpaceId/destinationSpaceName when the user identifies the destination room, storage unit, yard, or custom place.",
+      "Use boxCode, such as B-012, instead of boxId when the user gives a visible label or box code.",
+      "Use item externalSource/externalId instead of itemId when assigning items created from an import or agent batch.",
+      "Use stable idempotencyKey values for non-dry-run packing changes so retries do not duplicate assignment work.",
       "Move items between boxes while preserving inventory history.",
     ],
   },
@@ -274,15 +385,14 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
     mcpTools: [
       "list_transport_resources",
-      "create_transport_resource",
-      "update_transport_resource",
-      "create_transport_zone",
-      "update_transport_zone",
+      "manage_transport_resource",
+      "manage_transport_zone",
       "get_capacity_report",
     ],
     agentWorkflows: [
       "Set up a PCS move with two trucks, a trailer, and an HHG mover channel.",
-      "Compare estimated load against capacity before move day.",
+      "Compare estimated box and large loose-item load against capacity before move day.",
+      "Treat get_capacity_report resource and zone totals as mixed movable-unit totals: boxes plus assigned loose furniture, appliances, and other large unboxed pieces.",
     ],
   },
   {
@@ -291,7 +401,12 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     status: "available",
     purpose:
       "Generate deterministic box-to-resource suggestions and route AI planning suggestions through explicit review.",
-    requiredScopes: ["moves/read", "moves/write", "inventory/read", "inventory/write"],
+    requiredScopes: [
+      "moves/read",
+      "moves/write",
+      "inventory/read",
+      "inventory/write",
+    ],
     restEndpoints: [
       "POST /api/v1/moves/:moveId/assignments/suggest",
       "POST /api/v1/moves/:moveId/assignments/apply",
@@ -303,13 +418,15 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     mcpTools: [
       "suggest_assignments",
       "apply_assignments",
-      "list_planning_suggestions",
-      "generate_planning_suggestions",
-      "approve_planning_suggestions",
-      "reject_planning_suggestions",
+      "generate_ai_suggestions",
+      "approve_ai_suggestions",
+      "reject_ai_suggestions",
     ],
     agentWorkflows: [
       "Suggest load assignments without writing.",
+      "Use apply_assignments to record how boxes or large loose items are transported by assigning each movable unit to a transport resource and optional zone.",
+      "For rough planning, treat visible boxes and large loose pieces as movable units. Use batch_upsert_movable_units to capture that list first; include assignedResourceId/assignedZoneId when the load target is already resolved, or assign boxId/itemId rows later with apply_assignments.",
+      "Use dryRun and stable idempotencyKey values when applying reviewed load plans.",
       "Approve or reject specific planning suggestions instead of silently mutating user data.",
     ],
   },
@@ -338,14 +455,10 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     mcpTools: [
       "get_ai_provider_status",
       "list_ai_jobs",
-      "list_ai_text_suggestions",
-      "list_ai_photo_suggestions",
-      "generate_ai_text_suggestions",
-      "generate_ai_photo_suggestions",
-      "approve_ai_text_suggestions",
-      "reject_ai_text_suggestions",
-      "approve_ai_photo_suggestions",
-      "reject_ai_photo_suggestions",
+      "list_ai_suggestions",
+      "generate_ai_suggestions",
+      "approve_ai_suggestions",
+      "reject_ai_suggestions",
     ],
     agentWorkflows: [
       "Check whether model-backed review is configured before recommending OpenAI-backed work.",
@@ -357,39 +470,77 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
   },
   {
+    id: "ingestionQueue",
+    title: "Agent ingestion queue",
+    status: "available",
+    purpose:
+      "Let external agents list, claim, process, and resolve capture-now/process-later queue entries without directly mutating trusted inventory.",
+    requiredScopes: ["inventory/read", "inventory/write"],
+    restEndpoints: [
+      "GET /api/v1/moves/:moveId/ingestion-queue",
+      "POST /api/v1/moves/:moveId/ingestion-queue",
+      "POST /api/v1/moves/:moveId/ingestion-queue/claim",
+      "POST /api/v1/moves/:moveId/ingestion-queue/:entryId/results",
+      "POST /api/v1/moves/:moveId/ingestion-queue/:entryId/status",
+      "GET /api/v1/moves/:moveId/ingestion-queue/:entryId/evidence/:photoId/url",
+    ],
+    mcpTools: [
+      "ingestion_queue",
+      "create_floor_plan_intake",
+      "floor_plan_context",
+    ],
+    agentWorkflows: [
+      "Create floorPlan-scoped queue entries with targetPlanId so blueprint agents do not claim inventory work.",
+      "Tell users to use the MovingManifest Capture page for bulk phone photos and notes so full originals upload directly to site storage; then list queued capture entries with media summaries and filters instead of asking for base64 photos in chat.",
+      "When queue entries include intent plus targetBoxId/targetBoxCode/targetItemId, treat those as the durable target before interpreting instructions. For B-001-style targets, update or pack into that existing box instead of creating a replacement.",
+      "List queued capture entries with media summaries and filters, then claim work before processing so two agent runs do not duplicate effort.",
+      "Fetch queue image evidence through ingestion_queue action=media first so private media arrives as MCP image content blocks; use short-lived evidence URLs only as a fallback for unsupported or oversized media.",
+      "For trusted-helper queue work, submit committedItems plus committedBoxes, boxAssignments, and loadAssignments in one submitResults call when the evidence also determines packing and how boxes are transported; use committedItems.appendNote only for the user's capture note or concise agent decision rationale, and rely on the default append/merge behavior for committed item researchSources unless the user asked for cleanup.",
+      "Submit proposed items as pending AI text suggestions for human review, or mark the entry needsInput with a specific question.",
+      "Use resultRefs for future non-inventory outputs such as Layout Studio plan proposal IDs.",
+    ],
+  },
+  {
     id: "photoEvidence",
     title: "Evidence media intake",
     status: "available",
     purpose:
       "Upload image evidence through a one-call agent path, or use lower-level upload sessions for audio, video, progress bars, and custom clients.",
-    requiredScopes: ["moves/read", "inventory/read", "inventory/write", "photos/write"],
+    requiredScopes: [
+      "moves/read",
+      "inventory/read",
+      "inventory/write",
+      "photos/write",
+    ],
     restEndpoints: [
       "POST /api/v1/photos/upload",
       "POST /api/v1/images/upload",
       "POST /api/v1/uploads/init",
       "POST /api/v1/photos/finalize",
       "POST /api/v1/photos/:photoId/attach",
+      "GET /api/v1/photos/:photoId/display-url",
     ],
     mcpTools: [
       "add_item_from_photo",
+      "add_box_item_from_photo",
+      "save_box_intake",
       "create_item_with_images",
-      "upload_evidence_image",
-      "upload_evidence_images",
       "upload_photo",
       "upload_photos",
-      "upload_image",
-      "upload_images",
       "upload_evidence_file",
       "start_photo_upload",
       "finalize_photo_upload",
       "attach_photo",
+      "get_photo_display_url",
     ],
     agentWorkflows: [
       "When the user provides one picture plus a few short words for one household item, use add_item_from_photo. Set quantity only when the user says it or the photo clearly shows a count; otherwise omit quantity so it defaults to 1. Unknown weight/size/disposition/condition can stay blank. The tool uploads the original image, creates web-ready derivatives, attaches the photo, and returns item/photo IDs plus agentReview.",
+      "When a rough box is open and one or more pictures plus names should become packed contents, use save_box_intake with boxId or boxCode so the item creation, photos, and packing happen in one approval.",
       "Use create_item_with_images when the same new item has several photos or when the agent already has an images array.",
-      "For ordinary images, use upload_image, upload_photo, or upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
+      "For ordinary images, use upload_photo first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
       "Use derivativeVariants in upload responses to confirm the storage-prepped 200x200 thumb, 600x600 card, 1200x1200 detail, and 2400x2400 full WebP display variants without exposing private storage keys.",
-      "When a user gives several ordinary images from the same room/context or for an existing item, use upload_images, upload_photos, or upload_evidence_images with shared defaults and one image entry per user image. For existing items, resolve itemId first with get_agent_context or get_move_summary and pass itemId at the top level.",
+      "When derivativeStatus is ready, use get_photo_display_url for a short-lived normal image derivative URL. This does not expose original storage files.",
+      "When a user gives several ordinary images from the same room/context or for an existing item, use upload_photos with shared defaults and one image entry per user image. For existing items, resolve itemId first with get_agent_context or get_move_summary and pass itemId at the top level.",
       "Set generateAiSuggestions true when the uploaded image should also enter AI photo review; upload still succeeds if review queueing fails or the key only has photos/write.",
       "Do not ask the user for dimensions, thumbnail sizes, or derivative files during normal AI-assisted photo capture.",
       "Use upload_evidence_file for non-image media or when the agent needs to keep the storage PUT in the local process.",
@@ -411,12 +562,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "PATCH /api/v1/moves/:moveId/people/:personId",
       "DELETE /api/v1/moves/:moveId/people/:personId",
     ],
-    mcpTools: [
-      "list_move_people",
-      "create_move_person",
-      "update_move_person",
-      "archive_move_person",
-    ],
+    mcpTools: ["list_move_people", "manage_move_person"],
     agentWorkflows: [
       "Create PCS transportation office or employer relocation contacts for documentation packets.",
       "Archive contacts without losing move history.",
@@ -440,12 +586,8 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
     mcpTools: [
       "list_documentation_profiles",
-      "create_documentation_profile",
-      "update_documentation_profile",
-      "archive_documentation_profile",
-      "create_export",
-      "list_exports",
-      "download_export",
+      "manage_documentation_profile",
+      "manage_exports",
     ],
     agentWorkflows: [
       "Generate PCS, moving-company, employer-relocation, storage, donation, and claims-ready packets.",
@@ -469,8 +611,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     mcpTools: [
       "list_share_links",
       "list_share_link_comments",
-      "create_share_link",
-      "revoke_share_link",
+      "manage_share_link",
     ],
     agentWorkflows: [
       "Create profile-scoped links for movers, employers, PCS offices, donation pickup, storage, or helpers.",
@@ -480,10 +621,156 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
   },
 ];
 
+export function getAgentWorkbenchGuide(mode = "overview") {
+  const guides = {
+    overview: {
+      goal: "Pick the safest MovingManifest workflow before touching move data.",
+      firstCalls: [
+        "agent_workbench",
+        "get_api_context",
+        "list_moves",
+        "get_agent_context",
+      ],
+      lanes: [
+        {
+          mode: "intakeQueue",
+          when: "The user captured photos, notes, audio, video, or blueprint work into the app and wants an agent to process it later.",
+          primaryTools: [
+            "ingestion_queue",
+            "get_agent_context",
+            "save_box_intake",
+            "create_item",
+            "batch_upsert_items",
+            "update_item",
+            "append_item_note",
+            "apply_assignments",
+          ],
+        },
+        {
+          mode: "photoInventory",
+          when: "The user gives photos directly to the assistant or wants item/evidence photos uploaded now.",
+          primaryTools: [
+            "add_item_from_photo",
+            "create_item_with_images",
+            "upload_photo",
+            "upload_photos",
+          ],
+        },
+        {
+          mode: "reviewFirst",
+          when: "The assistant is uncertain or the user has not granted trusted-helper permission.",
+          primaryTools: [
+            "ingestion_queue action=submitResults with proposedItems",
+            "list_ai_suggestions",
+            "approve_ai_suggestions",
+          ],
+        },
+        {
+          mode: "trustedHelper",
+          when: "The user explicitly trusted this assistant to create/update move records for the selected household or move.",
+          primaryTools: [
+            "setup_move",
+            "batch_upsert_movable_units",
+            "save_box_intake",
+            "batch_upsert_items",
+            "create_item",
+            "update_item",
+            "append_item_note",
+            "suggest_assignments",
+            "apply_assignments",
+            "get_capacity_report",
+          ],
+        },
+      ],
+      rule: "MovingManifest owns durable records and permissions. The assistant owns reasoning, identification, estimates, research, and summaries.",
+    },
+    intakeQueue: {
+      goal: "Turn captured queue entries into useful inventory, questions, or review suggestions without double-processing.",
+      steps: [
+        "Call ingestion_queue action=list with status=queued and includeMedia=true to inspect work.",
+        "Call ingestion_queue action=claim with batchSize small enough to finish in one run.",
+        "For each claimed entry, read intent and targetBoxId/targetBoxCode/targetItemId first so follow-up media is tied to the existing box/item. Then call ingestion_queue action=media with the entryId and photoIds so private evidence arrives as MCP image blocks; use ingestion_queue action=evidenceUrl only when a URL fallback is needed.",
+        "Use get_agent_context to resolve existing rooms, spaces, boxes, and likely duplicate items before writing.",
+        "Research identifiable items before submitResults when brand/model/spec context would improve the durable record; store findings in researchSummary, researchSources, researchNotes, and researchConfidence instead of private notes.",
+        "When researched dimensions, weights, or volume are estimates, include confidence and measurementProvenance so users can see what needs verification.",
+        "For a trusted helper flow, call ingestion_queue action=submitResults with committedItems, stable externalSource/externalId values, attachMediaPhotoIds for queue media, optional appendNote for the user's capture note, researched item fields, and agentSummary. Existing item queue commits append/merge researchSources by default; use researchSourceMode=replace only for intentional cleanup.",
+        "When the queue result includes packing or load decisions, include committedBoxes, boxAssignments, and loadAssignments in that same submitResults call so the queue finalization stores items, boxes, and how boxes are transported in one approval. End with a clear user-facing recap of any physical labels or follow-up actions, such as put B-001 on the box.",
+        "For large loose items discovered in queue evidence, record the item itself clearly and use batch_upsert_movable_units for rough unit tracking.",
+        "If transport needs to be corrected after queue finalization, use apply_assignments with explicit boxId or itemId resource/zone rows instead of rewriting item notes.",
+        "For a review-first flow, call ingestion_queue action=submitResults with proposedItems and an agentSummary so MovingManifest creates review suggestions.",
+        "Use resultItemIds only when the items were already created through another approved workflow.",
+        "If the evidence is ambiguous, call ingestion_queue action=submitResults with needsInputQuestion containing one specific question.",
+      ],
+      idempotency:
+        "Use stable idempotency keys for writes. For queue-derived items, include the queue entry id and an item slug, for example intake-entry123-red-toolbox.",
+      avoid: [
+        "Do not claim a large batch you cannot finish.",
+        "Do not create duplicate items before searching current inventory.",
+        "Do not bury packing or transport decisions in item notes when committedBoxes, boxAssignments, or loadAssignments can store them structurally.",
+        "Do not bury research links, blocked/gated source checks, or estimated measurements in privateNotes when researchSources and measurementProvenance can store them structurally.",
+        "Do not download originals unless the derivative/evidence summary is insufficient.",
+      ],
+    },
+    photoInventory: {
+      goal: "Capture photos with the fewest reliable calls while preserving originals and server-generated derivatives.",
+      steps: [
+        "One user photo plus a few words for one new item: use add_item_from_photo.",
+        "One user photo plus a few words while opening an existing rough box: use save_box_intake with the existing boxId or boxCode and one content row with photos.",
+        "Several photos of the same new item: use create_item_with_images.",
+        "Photos for an existing item, box, room, or resource: resolve the target, then use upload_photo or upload_photos.",
+        "Set quantity only when the user says it or the photo clearly shows a count; otherwise let the default quantity be 1.",
+        "Leave unknown size, weight, condition, and disposition blank or estimated with confidence/provenance.",
+        "Report item/photo ids, derivative status, assumptions, and what the user should correct.",
+      ],
+      avoid: [
+        "Do not ask the user for thumbnail sizes or derivative files.",
+        "Do not create a second item when the user is only adding more photos to an existing item.",
+      ],
+    },
+    reviewFirst: {
+      goal: "Route uncertain agent output through MovingManifest review queues instead of committing trusted inventory.",
+      steps: [
+        "Use ingestion_queue action=submitResults with proposedItems for captured queue work.",
+        "Use generate_ai_suggestions when source text/photos should become pending suggestions.",
+        "Use approve_ai_suggestions only when the user explicitly approves exact suggestion IDs or edited drafts.",
+        "Use reject_ai_suggestions for rejected candidates.",
+      ],
+      rule: "Review-first is the default for ambiguous evidence, sensitive decisions, sale/donate/dump changes, and assistants that were not granted trusted-helper permission.",
+    },
+    trustedHelper: {
+      goal: "Efficiently perform the user's authorized move setup and inventory work with audit-friendly writes.",
+      steps: [
+        "Verify the key/OAuth context and scopes with get_api_context.",
+        "Read bounded context with get_agent_context before multi-step edits.",
+        "Prefer setup_move and batch_upsert_movable_units when the user gives a rough list of boxes and large loose items. New looseItem rows require externalSource plus externalId and become active, reviewable movable units in the load planner. Include assignedResourceId and optional assignedZoneId on rough rows when the user already gave a load hint and you have resolved it to explicit MovingManifest IDs. Set containerType on box rows when the user says carton, plastic tote, bin, wardrobe box, dish pack, crate, or similar. Include photoIds on photographed box rows after upload_photo/upload_photos, and expand photographed boxes into one explicit row per physical box instead of using count. Before asking follow-up measurement questions, read movableUnitSummary.measurementRoute and guide the user through one room/source-area group at a time. Use batch_upsert_movable_units again with existing boxId/code or itemId rows to fill missing weights, dimensions, volume, photos, or assignment without changing omitted fields. Prefer save_box_intake when one opened or newly described box needs dimensions, weight, containerType, photos, contents, or linked existing items saved in one approval. Prefer batch_upsert_items for detailed inventory batches not tied to one box. Existing item rows in batch_upsert_items append/merge researchSources by default; use researchSourceMode=replace only for intentional cleanup.",
+        "Use create_item/update_item for exact corrections in full/API-key mode, append_item_note for additive private notes, save_box_intake when item records need packing into one box, and apply_assignments for later or review-driven box/loose-item transport assignment by resource/zone.",
+        "For loose furniture or appliances that are not literally boxed, record them as looseItem rows with batch_upsert_movable_units. Use requiresPersonalTransport or disposition=personalTransport only for owner-carry intent such as 'goes with me' or 'do not let movers touch'.",
+        "For app-captured queue work, prefer ingestion_queue submitResults with committedItems, committedBoxes, boxAssignments, and loadAssignments so researched intake, capture-note preservation, append-safe research source updates, packing, and transport assignment finish in one call.",
+        "Set agentLabel and aiConfidenceScore on agent-created records.",
+        "Use update_item or batch_upsert_items with researchSummary/researchSources/researchNotes/researchConfidence for researched item identity or specs. MCP item updates, batch upsert existing rows, and trusted queue commits append/merge researchSources by default; use researchSourceMode=replace only for intentional cleanup. Set each source status to used, checked, blocked, gated, failed, or notRelevant; use measurementProvenance for researched dimensions, weight, or volume.",
+        "Verify with get_move_summary after substantial writes.",
+      ],
+      stopFor:
+        "Ask before granting household access, exporting/sharing packets, marking many items sell/donate/dump, or exposing private details.",
+    },
+  };
+
+  return {
+    product: "MovingManifest",
+    capabilityVersion: MOVINGMANIFEST_CAPABILITY_VERSION,
+    mode,
+    guide: guides[mode] ?? guides.overview,
+    connectionRecovery: MOVINGMANIFEST_CONNECTION_RECOVERY,
+    availableModes: Object.keys(guides),
+  };
+}
+
 export function getCapabilityToolNames() {
   return [
     "get_api_capabilities",
-    ...new Set(MOVINGMANIFEST_API_CAPABILITIES.flatMap((entry) => entry.mcpTools)),
+    ...new Set(
+      MOVINGMANIFEST_API_CAPABILITIES.flatMap((entry) => entry.mcpTools),
+    ),
   ];
 }
 
@@ -503,10 +790,12 @@ export function getApiCapabilities() {
       toolCount: getCapabilityToolNames().length,
       statuses,
     },
+    connectionRecovery: MOVINGMANIFEST_CONNECTION_RECOVERY,
     capabilities: MOVINGMANIFEST_API_CAPABILITIES,
     knownLaunchBlockers: MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS,
     guidance: [
-      "Call get_api_context first to inspect scopes and move restrictions.",
+      "Call get_api_context first to inspect the current OAuth/API-key connection, scopes, and move restrictions.",
+      "After a deploy, package update, OAuth/toolset change, or restore, refresh MCP tools before assuming the API is broken; if hosted OAuth private calls still fail, ask the user to disconnect and reconnect the connector.",
       "Prefer dryRun on write tools before bulk imports, load assignment changes, and scoped sharing.",
       "Use move-restricted API keys for local agents whenever possible.",
       "Do not put API keys or raw share tokens in prompts, screenshots, logs, issues, or exported docs.",

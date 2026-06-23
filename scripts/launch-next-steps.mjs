@@ -5,20 +5,41 @@ export const launchBlockerRemediations = [
     issue: "MOVE-63",
     title: "Switch Clerk to a production instance before public launch",
     why:
-      "The live app must use a Clerk production instance before customers sign in with real accounts.",
+      "The live app uses the production Clerk domain, so Clerk, Google OAuth, Vercel, and Convex production identity settings must stay aligned before public launch.",
     ownerAction:
-      "Create or activate the Clerk production instance, then allow https://movingmanifest.com and https://www.movingmanifest.com as production origins and redirects.",
+      "Keep the MovingManifest Google OAuth credentials pointed at Clerk's redirect URI, keep the Clerk production values in Vercel/Convex, verify production Dynamic client registration after the Claude failure ofid_a7fc26bd131d0216, deploy the current identity-context changes, then complete the MOVE-238 real-account MCP OAuth proof.",
     actions: [
-      "npx vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY production",
-      "npx vercel env add CLERK_SECRET_KEY production",
-      "npx vercel env add CLERK_JWT_ISSUER_DOMAIN production",
-      "npx vercel env add CLERK_FRONTEND_API_URL production",
-      "npx convex env set CLERK_JWT_ISSUER_DOMAIN <production-clerk-issuer> --prod",
+      "Verify Clerk production OAuth applications have Dynamic client registration enabled; Claude reported registration failure reference ofid_a7fc26bd131d0216",
+      "If DCR cannot be enabled immediately, create a production OAuth client for Claude and add that Client ID in the Claude connector settings as a temporary fallback",
+      "Verify Clerk production OAuth access tokens are still generated as JWTs",
+      "Configure Clerk production Google OAuth custom credentials for https://clerk.movingmanifest.com/v1/oauth_callback",
+      "Verify Vercel/Convex production Clerk env values still point at clerk.movingmanifest.com",
+      "Sign in on movingmanifest.com as scott@thejarvie.com and confirm the app uses the production Clerk domain",
+      "Deploy the current repo to production before the strict MCP OAuth smoke, so /api/v1/me and get_api_context return connection.user.email for the intended-account check",
     ],
     verify: [
+      "node --env-file=.env.local scripts/mcp-oauth-smoke.mjs --authorize --open-browser --box-intake-smoke --write-smoke --expect-trusted-helper-toolset --expected-email scott@thejarvie.com --endpoint https://movingmanifest.com/api/mcp",
+      "npm run doctor:oauth-cutover -- --strict --vercel-scope jarvies-projects",
       "npm run doctor:launch",
       "npm run doctor:vercel-env",
       "npm run doctor:convex-env",
+    ],
+  },
+  {
+    issue: "MOVE-240",
+    title: "Decide and enable trusted-helper OAuth MCP toolset before publish",
+    why:
+      "Hosted/mobile OAuth clients should launch with the narrower trusted-helper MCP surface, not the full API-key toolbelt, so users can safely authorize setup, capture queue, researched item, photo, packing, and transport help.",
+    ownerAction:
+      "After explicit production approval, set MOVINGMANIFEST_MCP_OAUTH_TOOLSET=trusted-helper in Vercel production, deploy the current MCP/OAuth changes, then prove the production OAuth session with the strict authorized smoke.",
+    actions: [
+      "npx vercel env add MOVINGMANIFEST_MCP_OAUTH_TOOLSET production",
+      "Deploy the current repo after the env value is present",
+      "Do not publish the hosted OAuth connector broadly until the authorized smoke proof includes trustedHelperToolsetVerified: true",
+    ],
+    verify: [
+      "npm run doctor:oauth-cutover -- --strict --vercel-scope jarvies-projects",
+      "node --env-file=.env.local scripts/mcp-oauth-smoke.mjs --authorize --open-browser --box-intake-smoke --write-smoke --expect-trusted-helper-toolset --expected-email scott@thejarvie.com --endpoint https://movingmanifest.com/api/mcp",
     ],
   },
   {
@@ -27,10 +48,11 @@ export const launchBlockerRemediations = [
     why:
       "Production admin routes should only unlock for explicit admin emails, not by accident or local defaults.",
     ownerAction:
-      "Decide the initial admin email list and set the same comma-separated value in Vercel production and Convex production.",
+      "After production sign-in works, verify the configured admin email can sign in and open /admin.",
     actions: [
-      "npx vercel env add ADMIN_EMAILS production",
-      'npx convex env set ADMIN_EMAILS "admin@example.com" --prod',
+      "Verify ADMIN_EMAILS is present in Vercel production and Convex production",
+      "Sign in with the intended admin account",
+      "Open /admin and confirm the dashboard audit event is written",
     ],
     verify: [
       "npm run doctor:vercel-env",
@@ -44,10 +66,11 @@ export const launchBlockerRemediations = [
     why:
       "Clerk user lifecycle events must be signed before Convex accepts them, or user records can drift from auth state.",
     ownerAction:
-      "Create the Clerk webhook endpoint for the Convex HTTP action ending in /clerk-webhook, then copy the signing secret into both production environments.",
+      "Send a Clerk production test event to the already-created Convex webhook endpoint.",
     actions: [
-      "npx vercel env add CLERK_WEBHOOK_SIGNING_SECRET production",
-      "npx convex env set CLERK_WEBHOOK_SIGNING_SECRET <svix-signing-secret> --prod",
+      "Verify Clerk production endpoint targets https://fine-crocodile-51.convex.site/clerk-webhook",
+      "Verify Convex production has CLERK_WEBHOOK_SIGNING_SECRET",
+      "Send a Clerk test event and confirm Convex accepts it",
     ],
     verify: [
       "npm run doctor:webhooks",

@@ -192,6 +192,16 @@ export type ApplyPlanOpsResult = {
     entityIds: string[];
     placementIds: string[];
   };
+  destinationSync?: Array<{
+    placementId: string;
+    sourceType: "item" | "box";
+    sourceId: string;
+    destinationSpaceId: string;
+    destinationRoom: string;
+    roomEntityId?: string;
+    roomShortId?: string;
+    inheritedFromPlacementId?: string;
+  }>;
 };
 
 export function createPlanBatchId(prefix = "batch") {

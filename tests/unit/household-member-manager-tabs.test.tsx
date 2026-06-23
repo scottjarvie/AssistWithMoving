@@ -9,6 +9,7 @@ const apiMock = vi.hoisted(() => ({
     listMembers: "households.listMembers",
     addExistingMember: "households.addExistingMember",
     updateMemberRole: "households.updateMemberRole",
+    updateMemberApiAccess: "households.updateMemberApiAccess",
     disableMember: "households.disableMember",
     revokeInvitation: "households.revokeInvitation",
   },
@@ -24,6 +25,10 @@ const householdMemberData = vi.hoisted(() => ({
       email: "scott@example.com",
       role: "owner",
       status: "active",
+      apiAccessStatus: "enabled" as const,
+      apiAccessAllowed: true,
+      apiAccessReason: "Can create API keys and use keys they created.",
+      activeApiKeyCount: 1,
       isCurrentUser: true,
     },
     {
@@ -33,6 +38,23 @@ const householdMemberData = vi.hoisted(() => ({
       email: "helper@example.com",
       role: "packer",
       status: "active",
+      apiAccessStatus: "disabled" as const,
+      apiAccessAllowed: false,
+      apiAccessReason: "Role does not allow API key creation.",
+      activeApiKeyCount: 0,
+      isCurrentUser: false,
+    },
+    {
+      membershipId: "membership_admin" as Id<"householdMemberships">,
+      invitationId: null,
+      name: "Admin helper",
+      email: "admin@example.com",
+      role: "admin",
+      status: "active",
+      apiAccessStatus: "enabled" as const,
+      apiAccessAllowed: true,
+      apiAccessReason: "Can create API keys and use keys they created.",
+      activeApiKeyCount: 2,
       isCurrentUser: false,
     },
   ],
@@ -82,6 +104,11 @@ describe("HouseholdMemberManager task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("Scott Jarvie")).toHaveLength(2);
     expect(screen.getAllByText("Packing helper")).toHaveLength(2);
+    expect(screen.getAllByText("Admin helper")).toHaveLength(2);
+    expect(screen.getAllByText("API on")).toHaveLength(2);
+    expect(screen.getAllByText("Enabled")).toHaveLength(2);
+    expect(screen.getAllByText("API off")).toHaveLength(1);
+    expect(screen.getAllByText("Disabled")).toHaveLength(1);
     expect(
       screen.queryByLabelText("Role for helper@example.com"),
     ).not.toBeInTheDocument();
@@ -105,6 +132,27 @@ describe("HouseholdMemberManager task tabs", () => {
     expect(
       screen.getAllByRole("button", { name: "Disable access" }),
     ).toHaveLength(2);
+    expect(screen.getAllByText("API and agent access")).toHaveLength(2);
+    expect(
+      screen.getAllByText("Role does not allow API key creation."),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByRole("button", { name: "Disable API access" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getAllByRole("button", {
+        name: "Manage access for admin@example.com",
+      })[0],
+    );
+
+    expect(screen.getAllByText("API and agent access")).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Disable API access" }),
+    ).toHaveLength(2);
+    expect(screen.getAllByText(/2 active keys created by this member/)).toHaveLength(
+      2,
+    );
 
     await user.click(screen.getByRole("tab", { name: "Invite" }));
 
@@ -128,6 +176,7 @@ describe("HouseholdMemberManager task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Scott Jarvie")).not.toBeInTheDocument();
     expect(screen.queryByText("Packing helper")).not.toBeInTheDocument();
+    expect(screen.queryByText("Admin helper")).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText("Role for helper@example.com"),
     ).not.toBeInTheDocument();

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import {
   ingestionQueueStatusValidator,
+  ingestionQueueIntentValidator,
   ingestionScopeHintValidator,
 } from "./lib/ingestionQueue";
 import {
@@ -545,6 +546,16 @@ export const boxStatus = v.union(
   v.literal("archived")
 );
 
+export const boxContainerType = v.union(
+  v.literal("carton"),
+  v.literal("plasticTote"),
+  v.literal("bin"),
+  v.literal("wardrobe"),
+  v.literal("dishPack"),
+  v.literal("crate"),
+  v.literal("other")
+);
+
 export const photoType = v.union(
   v.literal("item"),
   v.literal("serialNumber"),
@@ -756,6 +767,23 @@ export const itemMeasurementProvenance = v.object({
   dimensions: v.optional(measurementProvenanceEntry),
   weight: v.optional(measurementProvenanceEntry),
   volume: v.optional(measurementProvenanceEntry),
+});
+
+export const itemResearchSourceStatus = v.union(
+  v.literal("used"),
+  v.literal("checked"),
+  v.literal("blocked"),
+  v.literal("gated"),
+  v.literal("failed"),
+  v.literal("notRelevant")
+);
+
+export const itemResearchSource = v.object({
+  title: v.optional(v.string()),
+  url: v.optional(v.string()),
+  summary: v.optional(v.string()),
+  status: v.optional(itemResearchSourceStatus),
+  checkedAt: v.optional(v.number()),
 });
 
 const capacity = v.object({
@@ -1655,6 +1683,7 @@ export default defineSchema({
     moveId: v.id("moves"),
     code: v.string(),
     label: v.optional(v.string()),
+    containerType: v.optional(boxContainerType),
     room: v.optional(v.string()),
     destinationRoom: v.optional(v.string()),
     destinationSpaceId: v.optional(v.id("moveSpaces")),
@@ -1823,6 +1852,11 @@ export default defineSchema({
     // Free string so user-defined dispositions keep working later.
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
+    intent: v.optional(ingestionQueueIntentValidator),
+    targetBoxId: v.optional(v.id("boxes")),
+    targetItemId: v.optional(v.id("items")),
+    targetBoxCode: v.optional(v.string()),
+    targetLabel: v.optional(v.string()),
     targetPlanId: v.optional(v.id("floorPlans")),
     mediaPhotoIds: v.array(v.id("itemPhotos")),
     sortOrder: v.number(),
@@ -1920,7 +1954,9 @@ export default defineSchema({
       v.object({
         name: v.string(),
         room: v.optional(v.string()),
+        currentSpaceId: v.optional(v.id("moveSpaces")),
         destinationRoom: v.optional(v.string()),
+        destinationSpaceId: v.optional(v.id("moveSpaces")),
         category: v.optional(v.string()),
         disposition: itemDisposition,
         quantity: v.number(),
@@ -1937,6 +1973,11 @@ export default defineSchema({
         fragility: v.optional(itemFragility),
         highValue: v.optional(v.boolean()),
         planningDefaultKeys: v.optional(v.array(planningDefaultKey)),
+        researchSummary: v.optional(v.string()),
+        researchSources: v.optional(v.array(itemResearchSource)),
+        researchNotes: v.optional(v.string()),
+        researchConfidence: v.optional(estimateConfidence),
+        attachMediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
       })
     ),
     boxDraft: v.optional(
@@ -2120,6 +2161,13 @@ export default defineSchema({
     hazardousFlag: v.boolean(),
     highValue: v.boolean(),
     requiresPersonalTransport: v.boolean(),
+    assignedResourceId: v.optional(v.id("transportResources")),
+    assignedZoneId: v.optional(v.id("transportZones")),
+    assignmentLocked: v.optional(v.boolean()),
+    assignmentOverrideReason: v.optional(v.string()),
+    assignmentWarnings: v.optional(v.array(v.string())),
+    assignmentHardBlocks: v.optional(v.array(v.string())),
+    assignmentValidatedAt: v.optional(v.number()),
     planningDefaultKeys: v.array(planningDefaultKey),
     needsReview: v.boolean(),
     reviewFlags: v.array(v.string()),
@@ -2128,6 +2176,14 @@ export default defineSchema({
     aiTags: v.array(v.string()),
     agentLabel: v.optional(v.string()),
     aiConfidenceScore: v.optional(v.number()),
+    researchSummary: v.optional(v.string()),
+    researchSources: v.optional(v.array(itemResearchSource)),
+    researchNotes: v.optional(v.string()),
+    researchConfidence: v.optional(estimateConfidence),
+    researchedAt: v.optional(v.number()),
+    researchedByUserId: v.optional(v.id("users")),
+    researchedByApiKeyId: v.optional(v.id("apiKeys")),
+    researchedByLabel: v.optional(v.string()),
     createdVia: itemCreatedVia,
     reviewedAt: v.optional(v.number()),
     createdByUserId: v.id("users"),
@@ -2145,6 +2201,7 @@ export default defineSchema({
     .index("by_move_needs_review", ["moveId", "needsReview"])
     .index("by_move_agent_label", ["moveId", "agentLabel"])
     .index("by_move_high_value", ["moveId", "highValue"])
+    .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_household", ["householdId"]),

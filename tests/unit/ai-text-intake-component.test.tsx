@@ -32,8 +32,21 @@ const textIntakeData = vi.hoisted(() => ({
         disposition: "take",
         quantity: 2,
         description: "Fragile kitchen contents.",
+        dimensionsIn: { lengthIn: 18, widthIn: 12, heightIn: 10 },
+        estimatedWeightLb: 16,
+        weightConfidence: "medium",
         suggestedBoxLabel: "K-1",
         planningDefaultKeys: ["fragile"],
+        researchSummary: "Likely standard dish packing box from user notes.",
+        researchSources: [
+          {
+            title: "Dish box reference",
+            url: "https://example.com/dish-box",
+            status: "used",
+            summary: "Reference for likely packed weight.",
+          },
+        ],
+        attachMediaPhotoIds: ["photo_1" as Id<"itemPhotos">],
       },
     },
     {
@@ -105,5 +118,51 @@ describe("AiTextIntake responsive review surface", () => {
     for (const checkbox of screen.getAllByLabelText("Use boxes of dishes")) {
       expect(checkbox).toBeChecked();
     }
+  });
+
+  it("preserves hidden queue media and research fields when approving edited suggestions", async () => {
+    const user = userEvent.setup();
+    textIntakeData.mutation.mockResolvedValueOnce({
+      createdItemIds: ["item_1"],
+      createdBoxIds: [],
+      results: [],
+    });
+
+    render(
+      <AiTextIntake
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getAllByLabelText("Use boxes of dishes")[0]);
+    const itemNameInput = screen.getAllByDisplayValue("boxes of dishes")[0];
+    await user.clear(itemNameInput);
+    await user.type(itemNameInput, "Dinnerware boxes");
+    await user.click(screen.getByRole("button", { name: "Approve selected" }));
+
+    expect(textIntakeData.mutation).toHaveBeenCalledWith({
+      householdId: "household_123",
+      moveId: "move_123",
+      approvals: [
+        expect.objectContaining({
+          suggestionId: "suggestion_1",
+          itemDraft: expect.objectContaining({
+            name: "Dinnerware boxes",
+            dimensionsIn: { lengthIn: 18, widthIn: 12, heightIn: 10 },
+            estimatedWeightLb: 16,
+            weightConfidence: "medium",
+            researchSummary: "Likely standard dish packing box from user notes.",
+            researchSources: [
+              expect.objectContaining({
+                title: "Dish box reference",
+                status: "used",
+              }),
+            ],
+            attachMediaPhotoIds: ["photo_1"],
+          }),
+        }),
+      ],
+    });
   });
 });

@@ -28,6 +28,8 @@ export type InventoryFilterableItem = {
   serialNumber?: string;
   highValue: boolean;
   needsReview: boolean;
+  agentLabel?: string;
+  aiConfidenceScore?: number;
   requiresPersonalTransport: boolean;
   planningDefaultKeys: string[];
   signals?: {
@@ -116,6 +118,7 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
           item.status,
           item.ownerContact?.name,
           item.ownerContact?.role,
+          item.agentLabel,
           ...(item.signals?.boxCodes ?? []),
           ...(item.signals?.assignedResourceNames ?? []),
           ...(item.signals?.assignedZoneNames ?? []),
@@ -132,7 +135,12 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
       case "all":
         return true;
       case "needsReview":
-        return item.needsReview || item.status === "draft";
+        return (
+          item.needsReview ||
+          item.status === "draft" ||
+          (typeof item.aiConfidenceScore === "number" &&
+            item.aiConfidenceScore < 0.7)
+        );
       case "highValue":
         return item.highValue;
       case "personalTransport":

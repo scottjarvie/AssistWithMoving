@@ -39,11 +39,23 @@ async function waitForWorkspaceAuth(page: Page) {
 }
 
 async function ensureHousehold(page: Page, householdName: string) {
+  await page.getByRole("tab", { name: "Household" }).click();
+
   const householdInput = page.getByLabel("Household name");
   const selectedHousehold = page.getByLabel("Selected household");
   const createHousehold = page.getByRole("button", {
     name: "Create household",
   });
+
+  const existingHousehold = selectedHousehold.getByRole("option", {
+    name: `${householdName} - owner`,
+  });
+  if (await existingHousehold.isVisible().catch(() => false)) {
+    await selectedHousehold.selectOption({
+      label: `${householdName} - owner`,
+    });
+    return;
+  }
 
   await expect(householdInput).toBeVisible({ timeout: 30_000 });
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -169,13 +181,24 @@ test.describe("authenticated product flow", () => {
     const moveTitle = `E2E API move ${runId}`;
     await ensureHousehold(page, householdName);
 
+    await page.getByRole("tab", { name: "Create move" }).click();
     await expect(page.getByLabel("Move title")).toBeEnabled({
       timeout: 30_000,
     });
     await page.getByLabel("Move title").fill(moveTitle);
     await page.getByLabel("Move template").selectOption("local");
     await page.getByRole("button", { name: "Create move" }).click();
-
+    await expect(page.getByText("Move created.")).toBeVisible({
+      timeout: 30_000,
+    });
+    if (!/\/app\/moves\/[^/]+$/.test(new URL(page.url()).pathname)) {
+      await page.getByRole("tab", { name: "Moves" }).click();
+      const createdMoveCard = page.getByRole("listitem").filter({
+        has: page.getByRole("heading", { name: moveTitle }),
+      });
+      await expect(createdMoveCard).toBeVisible({ timeout: 30_000 });
+      await createdMoveCard.getByRole("link", { name: "Open workspace" }).click();
+    }
     await page.waitForURL(/\/app\/moves\/[^/]+$/, { timeout: 30_000 });
     const e2eMoveId = decodeURIComponent(
       new URL(page.url()).pathname.split("/").pop() ?? "",
@@ -190,9 +213,12 @@ test.describe("authenticated product flow", () => {
     const apiKeys = page
       .getByRole("heading", { name: "Create an AI connection", exact: true })
       .locator("xpath=ancestor::*[@data-slot='card'][1]");
-    await expect(
-      apiKeys.getByText("Recommended: full trusted helper"),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(apiKeys.getByLabel("What can it do?")).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(apiKeys.getByLabel("What can it do?")).toContainText(
+      "Full trusted helper",
+    );
 
     await apiKeys
       .getByLabel("Household")
@@ -203,7 +229,7 @@ test.describe("authenticated product flow", () => {
     );
 
     const apiKeyName = `E2E AI connection ${runId}`;
-    await apiKeys.getByText("Advanced API settings").click();
+    await apiKeys.getByText("Advanced access and API settings").click();
     await apiKeys.getByLabel("Key name").fill(apiKeyName);
     await apiKeys.getByLabel("Where can it work?").selectOption({
       label: moveTitle,
@@ -212,6 +238,7 @@ test.describe("authenticated product flow", () => {
     await expect(
       apiKeys.getByText(/^AI connection created/),
     ).toBeVisible({ timeout: 30_000 });
+    await apiKeys.getByRole("button", { name: "Show key" }).click();
     const rawApiKey = await apiKeys
       .getByLabel("One-time API key secret")
       .inputValue();
@@ -307,8 +334,8 @@ test.describe("authenticated product flow", () => {
     // "Primary" and only the visible one is in the accessibility tree.
     const sidebar = page.getByRole("navigation", { name: "Primary" });
     for (const [label, section] of [
-      ["Capture", "capture"],
-      ["Inventory", "inventory"],
+      ["Add to queue", "capture"],
+      ["Items", "inventory"],
       ["Boxes", "boxes"],
       ["Photos", "photos"],
       ["Load Plan", "load-plan"],
@@ -838,7 +865,7 @@ test.describe("authenticated product flow", () => {
       timeout: 30_000,
     });
     const apiKeyName = `E2E local agent ${runId}`;
-    await apiKeys.getByText("Advanced API settings").click();
+    await apiKeys.getByText("Advanced access and API settings").click();
     await apiKeys.getByLabel("Key name").fill(apiKeyName);
     await apiKeyMoveRestriction.selectOption({ label: moveTitle });
     await expect(apiKeys.getByText(`Move: ${moveTitle}`)).toBeVisible({
@@ -848,7 +875,8 @@ test.describe("authenticated product flow", () => {
     await expect(
       apiKeys.getByText(/^AI connection created/)
     ).toBeVisible({ timeout: 30_000 });
-    await expect(apiKeys.getByText("One-time secret")).toBeVisible();
+    await expect(apiKeys.getByText("One-time key")).toBeVisible();
+    await apiKeys.getByRole("button", { name: "Show key" }).click();
     const rawApiKey = await apiKeys
       .getByLabel("One-time API key secret")
       .inputValue();

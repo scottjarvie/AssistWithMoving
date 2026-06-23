@@ -1,5 +1,6 @@
 import { anyApi, httpRouter } from "convex/server";
-import type { FunctionReference } from "convex/server";
+import type { FunctionReference, UserIdentity } from "convex/server";
+import { createClerkClient } from "@clerk/backend";
 
 import { httpAction } from "./_generated/server";
 import {
@@ -15,6 +16,7 @@ import {
   parseRestApiBody,
   RestApiBodyParseError,
 } from "./lib/restUploadBody";
+import type { RestOAuthIdentity } from "./lib/restApi";
 
 const http = httpRouter();
 
@@ -50,6 +52,13 @@ const directImageMetadataFields = new Set([
 ]);
 const numericDirectImageMetadataFields = new Set(["capturedAt"]);
 const booleanDirectImageMetadataFields = new Set(["generateAiSuggestions"]);
+let cachedClerkClient:
+  | {
+      secretKey: string;
+      publishableKey: string;
+      client: ReturnType<typeof createClerkClient>;
+    }
+  | undefined;
 
 type ParsedDirectImageUpload =
   | {
@@ -126,6 +135,7 @@ const internalActions = anyApi as unknown as {
         authorization?: string;
         idempotencyKey?: string;
         body?: unknown;
+        oauthIdentity?: RestOAuthIdentity;
       },
       {
         status: number;
@@ -142,6 +152,7 @@ const directImageUploadHttpAction = httpAction(async (ctx, request) => {
   const query = Object.fromEntries(url.searchParams.entries());
   const authorization = request.headers.get("authorization") ?? undefined;
   const idempotencyKey = request.headers.get("idempotency-key") ?? undefined;
+  const oauthIdentity = await restOAuthIdentity(ctx, request, authorization);
 
   if (!hasBearer(authorization)) {
     return Response.json(
@@ -181,6 +192,7 @@ const directImageUploadHttpAction = httpAction(async (ctx, request) => {
       authorization,
       idempotencyKey,
       body: parsed.body,
+      oauthIdentity,
     });
     return responseFromRest(response);
   }
@@ -205,6 +217,7 @@ const directImageUploadHttpAction = httpAction(async (ctx, request) => {
     path: "uploads/init",
     query: {},
     authorization,
+    oauthIdentity,
     body: {
       moveId: parsed.body.moveId,
       itemId: parsed.body.itemId,
@@ -261,6 +274,7 @@ const directImageUploadHttpAction = httpAction(async (ctx, request) => {
       path: "photos/finalize",
       query: {},
       authorization,
+      oauthIdentity,
       body: {
         ...parsed.body,
         uploadSessionId,
@@ -460,18 +474,150 @@ for (const method of ["GET", "POST", "PATCH", "PUT", "DELETE"] as const) {
         }
         throw error;
       }
+      const authorization = request.headers.get("authorization") ?? undefined;
       const response = await ctx.runAction(internalActions.restApiActions.handle, {
         method,
         path,
         query,
-        authorization: request.headers.get("authorization") ?? undefined,
+        authorization,
         idempotencyKey: request.headers.get("idempotency-key") ?? undefined,
         body,
+        oauthIdentity: await restOAuthIdentity(ctx, request, authorization),
       });
 
       return responseFromRest(response);
     }),
   });
+}
+
+async function restOAuthIdentity(ctx: {
+  auth: { getUserIdentity(): Promise<UserIdentity | null> };
+}, request: Request, authorization?: string): Promise<RestOAuthIdentity | undefined> {
+  if (!authorization?.toLowerCase().startsWith("bearer ")) {
+    return undefined;
+  }
+  if (authorization?.toLowerCase().startsWith("bearer mmk_")) {
+    return undefined;
+  }
+  const oauthClaims = oauthIdentityClaimsFromRequest(request);
+  let identity: UserIdentity | null = null;
+  try {
+    identity = await ctx.auth.getUserIdentity();
+  } catch {
+    return await clerkOAuthIdentityFromRequest(request, oauthClaims);
+  }
+  if (!identity) {
+    return await clerkOAuthIdentityFromRequest(request, oauthClaims);
+  }
+  return {
+    tokenIdentifier: identity.tokenIdentifier,
+    subject: identity.subject,
+    issuer: identity.issuer,
+    ...oauthClaims,
+    name: identity.name,
+    pictureUrl: identity.pictureUrl,
+    email: identity.email,
+  };
+}
+
+async function clerkOAuthIdentityFromRequest(
+  request: Request,
+  oauthClaims = oauthIdentityClaimsFromRequest(request)
+): Promise<RestOAuthIdentity | undefined> {
+  const client = clerkBackendClient();
+  if (!client) return undefined;
+
+  const state = await client.authenticateRequest(request, {
+    acceptsToken: "oauth_token",
+  });
+  if (!state.isAuthenticated || state.tokenType !== "oauth_token") {
+    return undefined;
+  }
+
+  const authObject = state.toAuth();
+  if (!authObject.isAuthenticated || authObject.tokenType !== "oauth_token") {
+    return undefined;
+  }
+  const userId = authObject.userId ?? authObject.subject;
+  const user = await client.users.getUser(userId).catch(() => null);
+  const email =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.find(
+      (entry) => entry.id === user.primaryEmailAddressId
+    )?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress;
+  const name =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
+    user?.username ||
+    email;
+
+  return {
+    tokenIdentifier: authObject.id,
+    subject: userId,
+    issuer:
+      process.env.CLERK_JWT_ISSUER_DOMAIN ??
+      process.env.CLERK_FRONTEND_API_URL ??
+      "clerk-oauth",
+    ...oauthClaims,
+    name: name || undefined,
+    pictureUrl: user?.imageUrl ?? undefined,
+    email,
+  };
+}
+
+export function oauthIdentityClaimsFromRequest(request: Request) {
+  const oauthPayload = oauthAccessTokenPayloadFromRequest(request);
+  return {
+    oauthClientId: stringClaim(
+      oauthPayload?.azp ?? oauthPayload?.client_id ?? oauthPayload?.cid
+    ),
+    oauthTokenId: stringClaim(oauthPayload?.jti),
+  };
+}
+
+function oauthAccessTokenPayloadFromRequest(
+  request: Request
+): Record<string, unknown> | null {
+  const token = bearerTokenFromHttpRequest(request);
+  const payload = token?.split(".")[1];
+  if (!payload) return null;
+  try {
+    const padded = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function bearerTokenFromHttpRequest(request: Request) {
+  const header = request.headers.get("authorization");
+  if (!header?.toLowerCase().startsWith("bearer ")) return null;
+  const token = header.slice(7).trim();
+  return token || null;
+}
+
+function stringClaim(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function clerkBackendClient() {
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+    process.env.CLERK_PUBLISHABLE_KEY;
+  if (!secretKey || !publishableKey) return null;
+  if (
+    cachedClerkClient?.secretKey === secretKey &&
+    cachedClerkClient.publishableKey === publishableKey
+  ) {
+    return cachedClerkClient.client;
+  }
+  const client = createClerkClient({ secretKey, publishableKey });
+  cachedClerkClient = { secretKey, publishableKey, client };
+  return client;
 }
 
 async function parseDirectImageUploadRequest(

@@ -15,6 +15,7 @@ import {
 import { resolveBoxWeight } from "./lib/boxWeight";
 import { estimateItem, sumEstimateValues } from "./lib/estimateEngine";
 import {
+  boxContainerTypeValidator,
   boxStatusValidator,
   dimensionsValidator,
   normalizeBoxCode,
@@ -28,8 +29,11 @@ import {
 const boxWriteArgs = {
   code: v.optional(v.string()),
   label: v.optional(v.string()),
+  containerType: v.optional(boxContainerTypeValidator),
   room: v.optional(v.string()),
   destinationRoom: v.optional(v.string()),
+  destinationSpaceId: v.optional(v.id("moveSpaces")),
+  clearDestinationSpace: v.optional(v.boolean()),
   description: v.optional(v.string()),
   moveDayNote: v.optional(v.string()),
   status: v.optional(boxStatusValidator),
@@ -44,6 +48,40 @@ const boxWriteArgs = {
   clearAssignedResource: v.optional(v.boolean()),
   clearAssignedZone: v.optional(v.boolean()),
 };
+
+const destinationAssignableSpaceKinds = new Set<Doc<"moveSpaces">["kind"]>([
+  "destinationRoom",
+  "yardOutdoor",
+  "storage",
+  "custom",
+]);
+
+async function resolveDestinationSpace(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    destinationSpaceId?: Id<"moveSpaces">;
+  },
+) {
+  if (!args.destinationSpaceId) {
+    return null;
+  }
+
+  const space = await ctx.db.get(args.destinationSpaceId);
+  if (
+    !space ||
+    space.householdId !== args.householdId ||
+    space.moveId !== args.moveId ||
+    space.status === "archived"
+  ) {
+    throw new Error("Destination location is not available for this move.");
+  }
+  if (!destinationAssignableSpaceKinds.has(space.kind)) {
+    throw new Error("Destination location must be a destination room, storage, yard/outdoor, or custom space.");
+  }
+  return space;
+}
 
 async function assertResourceAndZone(
   ctx: MutationCtx,
@@ -416,6 +454,7 @@ export const create = mutation({
     }
 
     await assertResourceAndZone(ctx, args);
+    const destinationSpace = await resolveDestinationSpace(ctx, args);
 
     const now = Date.now();
     const code = args.code
@@ -442,8 +481,11 @@ export const create = mutation({
       moveId: args.moveId,
       code,
       label: normalizeOptionalText(args.label),
+      containerType: args.containerType,
       room: normalizeOptionalText(args.room),
-      destinationRoom: normalizeOptionalText(args.destinationRoom),
+      destinationRoom:
+        normalizeOptionalText(args.destinationRoom) ?? destinationSpace?.name,
+      destinationSpaceId: destinationSpace?._id,
       description: normalizeOptionalText(args.description),
       moveDayNote: normalizeOptionalText(args.moveDayNote),
       status,
@@ -519,7 +561,22 @@ export const update = mutation({
     }
     if (args.label !== undefined)
       patch.label = normalizeOptionalText(args.label);
+    if (args.containerType !== undefined) {
+      patch.containerType = args.containerType;
+    }
     if (args.room !== undefined) patch.room = normalizeOptionalText(args.room);
+    const destinationSpace =
+      args.destinationSpaceId !== undefined
+        ? await resolveDestinationSpace(ctx, args)
+        : null;
+    if (args.clearDestinationSpace) {
+      patch.destinationSpaceId = undefined;
+    } else if (args.destinationSpaceId !== undefined) {
+      patch.destinationSpaceId = destinationSpace?._id;
+      if (args.destinationRoom === undefined) {
+        patch.destinationRoom = destinationSpace?.name;
+      }
+    }
     if (args.destinationRoom !== undefined) {
       patch.destinationRoom = normalizeOptionalText(args.destinationRoom);
     }

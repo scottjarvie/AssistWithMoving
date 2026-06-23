@@ -36,6 +36,8 @@ describe("export row builders", () => {
           serialNumber: "SN-1",
           modelNumber: "M-1",
           privateNotes: "keep quiet",
+          agentLabel: "Codex intake",
+          aiConfidenceScore: 0.62,
         },
       ],
       { values: false, serials: false, privateNotes: false }
@@ -45,6 +47,8 @@ describe("export row builders", () => {
     expect(rows[1]).not.toContain("SN-1");
     expect(rows[1]).not.toContain("keep quiet");
     expect(csvFromRows(rows)).toContain("Camera");
+    expect(csvFromRows(rows)).toContain("Codex intake");
+    expect(csvFromRows(rows)).toContain("0.62");
     expect(csvFromRows(rows)).not.toContain("SN-1");
   });
 

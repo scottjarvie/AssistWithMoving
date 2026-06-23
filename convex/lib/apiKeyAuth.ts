@@ -7,6 +7,8 @@ import {
   verifyApiKeyHash,
   type ApiKeyScope,
 } from "./apiKeys";
+import { canMembershipUseApiAccess } from "./householdMembers";
+import { RestApiError } from "./restApi";
 
 export async function authenticateApiKey(
   ctx: MutationCtx,
@@ -33,41 +35,98 @@ export async function authenticateApiKey(
     .unique();
 
   if (!key) {
-    throw new Error("Invalid API key.");
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "Invalid API key.",
+    });
   }
   const hashMatches = await verifyApiKeyHash({
     rawKey,
     expectedHash: key.secretHash,
   });
   if (!hashMatches) {
-    throw new Error("Invalid API key.");
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "Invalid API key.",
+    });
   }
   const effectiveMoveId =
     allowRestrictedKeyWithoutMoveId && !moveId ? key.moveId : moveId;
   if (key.status !== "active") {
-    throw new Error("API key is revoked or inactive.");
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "API key is revoked or inactive.",
+    });
   }
   if (key.expiresAt !== undefined && key.expiresAt <= Date.now()) {
-    throw new Error("API key is expired.");
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "API key is expired.",
+    });
   }
   if (householdId && key.householdId !== householdId) {
-    throw new Error("API key is not scoped to this household.");
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: "API key is not scoped to this household.",
+    });
+  }
+  const creatorMembership = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_household_user", (q) =>
+      q.eq("householdId", key.householdId).eq("userId", key.createdByUserId),
+    )
+    .unique();
+  if (
+    !creatorMembership ||
+    !canMembershipUseApiAccess({
+      role: creatorMembership.role,
+      status: creatorMembership.status,
+      apiAccessStatus: creatorMembership.apiAccessStatus,
+    })
+  ) {
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: "API access is disabled for the member who created this key.",
+    });
   }
   if (key.moveId && effectiveMoveId && key.moveId !== effectiveMoveId) {
-    throw new Error("API key is restricted to a different move.");
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: "API key is restricted to a different move.",
+    });
   }
   if (key.moveId && !effectiveMoveId) {
-    throw new Error("API key is move-restricted; use a move-scoped endpoint.");
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: "API key is move-restricted; use a move-scoped endpoint.",
+    });
   }
   if (!apiKeyHasScopes(key.scopes, requiredScopes)) {
     const missingScopes = requiredScopes.filter(
       (scope) => !key.scopes.includes(scope),
     );
-    throw new Error(
-      `API key is missing required scope${
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: `API key is missing required scope${
         missingScopes.length === 1 ? "" : "s"
-      }: ${missingScopes.join(", ")}. Create or rotate a key in Settings with the needed scope.`,
-    );
+      }: ${missingScopes.join(", ")}.`,
+      fields: [
+        {
+          path: "scopes",
+          message: "API key lacks one or more scopes required for this route.",
+          validValues: requiredScopes,
+        },
+      ],
+    });
   }
   if (
     !validateApiKeyRecord({
@@ -83,7 +142,11 @@ export async function authenticateApiKey(
       requiredScopes,
     })
   ) {
-    throw new Error("API key is not allowed for this operation.");
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: "API key is not allowed for this operation.",
+    });
   }
 
   const now = Date.now();

@@ -6,13 +6,24 @@ export function workspaceBasePathFromPathname(pathname: string) {
   return "/app/dashboard";
 }
 
+const dashboardMoveSetupPath = "/app/dashboard#create-move";
+
 // Sections are real pages under the selected move. Outside a move workspace
-// there is no section to open, so links fall back to the dashboard where the
-// user creates or picks a move.
-export function workspaceNavHref(pathname: string, section?: string) {
+// there is no section to open yet, so section links land on the dashboard setup
+// task instead of looking like a no-op. An optional hash opens a specific tab
+// within the section (e.g. the queue tab of the capture page).
+export function workspaceNavHref(
+  pathname: string,
+  section?: string,
+  hash?: string
+) {
   const basePath = workspaceBasePathFromPathname(pathname);
-  if (!section || basePath === "/app/dashboard") {
+  if (!section) {
     return basePath;
   }
-  return `${basePath}/${section}`;
+  if (basePath === "/app/dashboard") {
+    return dashboardMoveSetupPath;
+  }
+  const sectionPath = `${basePath}/${section}`;
+  return hash ? `${sectionPath}#${hash}` : sectionPath;
 }

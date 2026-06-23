@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = process.env.PLAYWRIGHT_PORT ?? "3827";
+const baseURL = `http://localhost:${port}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -7,13 +10,13 @@ export default defineConfig({
   reporter: [["list"]],
   globalSetup: "./tests/e2e/global.setup.ts",
   use: {
-    baseURL: "http://localhost:3827",
+    baseURL,
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run build && npm run start",
-    url: "http://localhost:3827",
-    reuseExistingServer: false,
+    command: `npm run build && npx next start -p ${port}`,
+    url: baseURL,
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1",
     timeout: 480_000,
   },
   projects: [

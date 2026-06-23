@@ -10,6 +10,12 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
 }));
 
+// The mobile sub-nav is exercised in workspace-nav tests; stub it here so this
+// page test stays focused on the inventory tab structure.
+vi.mock("@/components/workspace-sub-nav", () => ({
+  WorkspaceSubNav: () => null,
+}));
+
 vi.mock("@/components/move-workspace-context", () => ({
   useMoveWorkspace: () =>
     ({

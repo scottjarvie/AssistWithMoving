@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { pathToFileURL } from "node:url";
 
 const strict = process.argv.includes("--strict");
 const targetUrlInput = process.env.LAUNCH_URL ?? "https://movingmanifest.com";
@@ -24,13 +25,10 @@ const requiredHeaders = [
 ];
 
 const results = [];
+const expectedRuntimeOrigins = new Set(["https://clerk.movingmanifest.com"]);
 
 function record(status, label, detail) {
   results.push({ status, label, detail });
-}
-
-function sameOrigin(url) {
-  return new URL(url).origin === targetUrl.origin;
 }
 
 function toUrl(path) {
@@ -41,6 +39,24 @@ function normalizeDetail(detail) {
   return detail.replaceAll(targetUrl.origin, "{target}");
 }
 
+function errorMessage(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.split(/\r?\n/, 1)[0] || message;
+}
+
+async function fetchForCheck(input, label) {
+  try {
+    return await fetch(input, { redirect: "manual" });
+  } catch (error) {
+    record(
+      "fail",
+      label,
+      `could not reach ${normalizeDetail(String(input))}: ${errorMessage(error)}`
+    );
+    return null;
+  }
+}
+
 function displayOrigin(origin) {
   const url = new URL(origin);
   if (url.origin === targetUrl.origin) return "{target}";
@@ -48,8 +64,18 @@ function displayOrigin(origin) {
   return origin;
 }
 
+export function isExpectedRuntimeOrigin(origin, targetOrigin = targetUrl.origin) {
+  const url = new URL(origin);
+  if (url.origin === targetOrigin) return true;
+  if (expectedRuntimeOrigins.has(url.origin)) return true;
+  if (/\.convex\.cloud$/.test(url.hostname)) return true;
+  return false;
+}
+
 async function checkOkRoute(path, label) {
-  const response = await fetch(toUrl(path), { redirect: "manual" });
+  const response = await fetchForCheck(toUrl(path), label);
+  if (!response) return;
+
   if (response.ok) {
     record("pass", label, `${path} returned HTTP ${response.status}`);
     return;
@@ -59,7 +85,9 @@ async function checkOkRoute(path, label) {
 }
 
 async function checkHome() {
-  const response = await fetch(targetUrl, { redirect: "manual" });
+  const response = await fetchForCheck(targetUrl, "home page");
+  if (!response) return;
+
   if (!response.ok) {
     record(
       "fail",
@@ -131,7 +159,9 @@ async function checkHome() {
 
 async function checkSignedOutProtection(path, label) {
   const protectedUrl = toUrl(path);
-  const response = await fetch(protectedUrl, { redirect: "manual" });
+  const response = await fetchForCheck(protectedUrl, label);
+  if (!response) return;
+
   const location = response.headers.get("location") ?? "";
 
   if (
@@ -154,21 +184,29 @@ async function checkSignedOutProtection(path, label) {
 }
 
 async function checkRuntimeOrigins() {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  let browser;
   const origins = new Set();
-  page.on("request", (request) => {
-    try {
-      origins.add(new URL(request.url()).origin);
-    } catch {
-      // Ignore non-URL request values from browser internals.
-    }
-  });
   try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    page.on("request", (request) => {
+      try {
+        origins.add(new URL(request.url()).origin);
+      } catch {
+        // Ignore non-URL request values from browser internals.
+      }
+    });
     await page.goto(targetUrl.href, { waitUntil: "networkidle" });
     await page.waitForTimeout(1000);
+  } catch (error) {
+    record(
+      "fail",
+      "runtime origins observed",
+      `could not load ${normalizeDetail(targetUrl.href)}: ${errorMessage(error)}`
+    );
+    return;
   } finally {
-    await browser.close();
+    await browser?.close().catch(() => {});
   }
 
   const sortedOrigins = [...origins].sort();
@@ -192,10 +230,8 @@ async function checkRuntimeOrigins() {
   }
 
   const unexpectedOrigins = sortedOrigins.filter((origin) => {
-    if (sameOrigin(origin)) return false;
     if (/\.clerk\.accounts\.dev$/.test(new URL(origin).hostname)) return false;
-    if (/\.convex\.cloud$/.test(new URL(origin).hostname)) return false;
-    return true;
+    return !isExpectedRuntimeOrigin(origin);
   });
 
   if (unexpectedOrigins.length) {
@@ -238,46 +274,56 @@ async function checkStaleAlias() {
   }
 }
 
-await checkHome();
-await checkOkRoute("/robots.txt", "robots");
-await checkOkRoute("/sitemap.xml", "sitemap");
-await checkSignedOutProtection(
-  "/app/dashboard",
-  "signed-out workspace protection"
-);
-await checkSignedOutProtection("/admin", "signed-out admin protection");
-await checkRuntimeOrigins();
-await checkStaleAlias();
+export async function runLaunchReadiness() {
+  results.length = 0;
 
-const counts = results.reduce(
-  (acc, result) => {
-    acc[result.status] += 1;
-    return acc;
-  },
-  { pass: 0, warn: 0, blocked: 0, fail: 0 }
-);
+  await checkHome();
+  await checkOkRoute("/robots.txt", "robots");
+  await checkOkRoute("/sitemap.xml", "sitemap");
+  await checkSignedOutProtection(
+    "/app/dashboard",
+    "signed-out workspace protection"
+  );
+  await checkSignedOutProtection("/admin", "signed-out admin protection");
+  await checkRuntimeOrigins();
+  await checkStaleAlias();
 
-for (const result of results) {
-  const label =
-    result.status === "pass"
-      ? "PASS"
-      : result.status === "warn"
-        ? "WARN"
-        : result.status === "blocked"
-          ? "BLOCKED"
-          : "FAIL";
-  console.log(`${label} ${result.label}: ${result.detail}`);
+  const counts = results.reduce(
+    (acc, result) => {
+      acc[result.status] += 1;
+      return acc;
+    },
+    { pass: 0, warn: 0, blocked: 0, fail: 0 }
+  );
+
+  for (const result of results) {
+    const label =
+      result.status === "pass"
+        ? "PASS"
+        : result.status === "warn"
+          ? "WARN"
+          : result.status === "blocked"
+            ? "BLOCKED"
+            : "FAIL";
+    console.log(`${label} ${result.label}: ${result.detail}`);
+  }
+
+  console.log(
+    `Launch readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
+  );
+  console.log(
+    strict
+      ? "Strict mode: failures and blockers exit nonzero."
+      : "Default mode: only code/app failures exit nonzero. Use --strict for launch gating."
+  );
+
+  if (counts.fail > 0 || (strict && counts.blocked > 0)) {
+    process.exitCode = 1;
+  }
+
+  return { results, counts };
 }
 
-console.log(
-  `Launch readiness summary: ${counts.pass} pass, ${counts.warn} warn, ${counts.blocked} blocked, ${counts.fail} fail`
-);
-console.log(
-  strict
-    ? "Strict mode: failures and blockers exit nonzero."
-    : "Default mode: only code/app failures exit nonzero. Use --strict for launch gating."
-);
-
-if (counts.fail > 0 || (strict && counts.blocked > 0)) {
-  process.exitCode = 1;
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  await runLaunchReadiness();
 }

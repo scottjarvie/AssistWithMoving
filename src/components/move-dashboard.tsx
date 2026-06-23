@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
   Bot,
@@ -25,6 +25,12 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { ConvexAuthStatus } from "@/components/convex-auth-status";
+import {
+  ActiveMoveMenu,
+  ArchivedMovesSection,
+  type ManagedMove,
+} from "@/components/move-management";
+import { MoveQueueSnapshot } from "@/components/move-queue-snapshot";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import {
   type MoveWorkspaceValue,
@@ -154,6 +160,27 @@ export function MoveDashboard() {
 
   const createHousehold = useMutation(api.households.create);
   const createMove = useMutation(api.moves.create);
+  const acknowledgeCollaboratorOnboarding = useMutation(
+    api.households.acknowledgeCollaboratorOnboarding,
+  );
+  const householdStats = useQuery(
+    api.households.summaryStats,
+    householdId ? { householdId } : "skip",
+  ) as { activeApiKeyCount: number } | undefined;
+
+  // Archived moves stay out of the active list but remain restorable; owners can
+  // also permanently delete them.
+  const allMoves = useQuery(
+    api.moves.listForHousehold,
+    householdId ? { householdId, includeArchived: true } : "skip",
+  );
+  const archivedMoves: ManagedMove[] = (
+    Array.isArray(allMoves) ? allMoves : []
+  ).filter((move) => move.status === "archived");
+  const currentRole = households?.find(
+    (entry) => entry.household._id === householdId,
+  )?.role;
+  const canPurge = currentRole === "owner";
 
   const [householdName, setHouseholdName] = useState("My household");
   const [moveTitle, setMoveTitle] = useState("");
@@ -180,6 +207,9 @@ export function MoveDashboard() {
   const [destination, setDestination] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [dismissingOnboardingId, setDismissingOnboardingId] = useState<
+    Id<"householdMemberships"> | null
+  >(null);
   const [activeDashboardTask, setActiveDashboardTask] =
     useHashTab<DashboardTask>("moves", dashboardTaskHashes);
   const [activeCreateTask, setActiveCreateTask] = useHashTab<CreateMoveTask>(
@@ -189,6 +219,10 @@ export function MoveDashboard() {
 
   const selectedPacketCount = documentationProfileTypes.length;
   const statusMessage = moveLinkMessage ?? message;
+  const showAiConnectionNudge =
+    Boolean(householdId) && householdStats?.activeApiKeyCount === 0;
+  const collaboratorOnboardingEntries =
+    households?.filter((entry) => entry.collaboratorOnboarding) ?? [];
 
   async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -270,23 +304,138 @@ export function MoveDashboard() {
     }
   }
 
+  async function handleDismissCollaboratorOnboarding({
+    householdId,
+    membershipId,
+  }: {
+    householdId: Id<"households">;
+    membershipId: Id<"householdMemberships">;
+  }) {
+    setDismissingOnboardingId(membershipId);
+    setMessage(null);
+    try {
+      await acknowledgeCollaboratorOnboarding({
+        householdId,
+        membershipId,
+      });
+    } catch {
+      setMessage("Could not dismiss that household access card yet.");
+    } finally {
+      setDismissingOnboardingId(null);
+    }
+  }
+
   return (
-    <div className="space-y-5 p-4 sm:p-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+    <div className="space-y-4 p-4 sm:p-6">
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
             Dashboard
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Open the active move first. Setup, household, and AI connection work
-            stays in the task tabs.
+          <p className="mt-1 text-sm text-muted-foreground">
+            Open your move first — setup and AI tasks stay in the tabs.
           </p>
         </div>
-        <Badge>
+        <Badge className="shrink-0">
           <ShieldCheck aria-hidden="true" />
           workspace home
         </Badge>
       </header>
+
+      {collaboratorOnboardingEntries.length ? (
+        <section
+          className="grid gap-3"
+          aria-label="New household access"
+        >
+          {collaboratorOnboardingEntries.map((entry) => {
+            const onboarding = entry.collaboratorOnboarding;
+            if (!onboarding) return null;
+            const membershipId = onboarding.membershipId;
+            const canCreateApiKey = entry.canCreateApiKeys;
+            return (
+              <div
+                key={membershipId}
+                className="rounded-md border border-primary/25 bg-primary/5 p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="flex items-center gap-2 text-base font-semibold">
+                      <CircleCheck
+                        className="size-4 text-primary"
+                        aria-hidden="true"
+                      />
+                      You were added to {entry.household.name}
+                    </h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                      Your role is {onboarding.role}
+                      {onboarding.inviterName || onboarding.inviterEmail
+                        ? `, added by ${
+                            onboarding.inviterName ??
+                            onboarding.inviterEmail
+                          }`
+                        : ""}
+                      . You can open the dashboard now
+                      {canCreateApiKey
+                        ? " or create a helper key for a trusted assistant."
+                        : "; API key setup is disabled for this membership."}
+                    </p>
+                  </div>
+                  <Badge variant={canCreateApiKey ? "outline" : "secondary"}>
+                    API {canCreateApiKey ? "available" : "disabled"}
+                  </Badge>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => selectHousehold(entry.household._id)}
+                  >
+                    <Home aria-hidden="true" />
+                    Open dashboard
+                  </Button>
+                  {canCreateApiKey ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/settings/ai-connections">
+                        <KeyRound aria-hidden="true" />
+                        Create helper key
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/settings">
+                        <ShieldCheck aria-hidden="true" />
+                        Review access
+                      </Link>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={dismissingOnboardingId === membershipId}
+                    onClick={() =>
+                      void handleDismissCollaboratorOnboarding({
+                        householdId: entry.household._id,
+                        membershipId,
+                      })
+                    }
+                  >
+                    {dismissingOnboardingId === membershipId ? (
+                      <CircleCheck
+                        className="animate-pulse"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <CircleCheck aria-hidden="true" />
+                    )}
+                    Got it
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
 
       <Tabs
         value={activeDashboardTask}
@@ -295,33 +444,31 @@ export function MoveDashboard() {
       >
         <MoveWorkspaceTabList tabs={dashboardTaskTabs} activeValue={activeDashboardTask} />
 
-        <TabsContent value="moves" className="space-y-5">
+        <TabsContent value="moves" className="space-y-4">
+          {householdId && moveId ? (
+            <MoveQueueSnapshot householdId={householdId} moveId={moveId} />
+          ) : null}
+
           <section
             id="active-moves"
             className="space-y-3"
             aria-labelledby="active-moves-heading"
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3
-                  id="active-moves-heading"
-                  className="flex items-center gap-2 text-lg font-semibold"
-                >
-                  <CalendarDays
-                    className="size-4 text-accent"
-                    aria-hidden="true"
-                  />
-                  Active moves
-                </h3>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-                  Pick up the move workspace before setup helpers and status
-                  metrics.
-                </p>
-              </div>
+            <div className="flex items-center justify-between gap-3">
+              <h3
+                id="active-moves-heading"
+                className="flex items-center gap-2 text-base font-semibold"
+              >
+                <CalendarDays
+                  className="size-4 text-accent"
+                  aria-hidden="true"
+                />
+                Active moves
+              </h3>
               {moveId ? (
                 <Button asChild size="sm" variant="outline">
                   <Link href={moveWorkspacePath(moveId)}>
-                    Open selected move
+                    Open move
                     <ArrowRight aria-hidden="true" />
                   </Link>
                 </Button>
@@ -343,6 +490,7 @@ export function MoveDashboard() {
                   <ActiveMoveCard
                     key={move._id}
                     move={move}
+                    householdId={householdId}
                     selected={move._id === moveId}
                     onSelect={selectMove}
                   />
@@ -356,40 +504,62 @@ export function MoveDashboard() {
             )}
           </section>
 
+          {householdId && archivedMoves.length ? (
+            <ArchivedMovesSection
+              householdId={householdId}
+              moves={archivedMoves}
+              canPurge={canPurge}
+            />
+          ) : null}
+
+          {showAiConnectionNudge ? (
+            <section
+              className="rounded-md border border-primary/25 bg-primary/5 p-4"
+              aria-label="AI helper key setup"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="flex items-center gap-2 text-base font-semibold">
+                    <KeyRound className="size-4 text-primary" aria-hidden="true" />
+                    Connecting an AI helper?
+                  </h3>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                    Create a scoped key, test it, then paste it into Claude,
+                    ChatGPT, Codex, or another assistant you trust.
+                  </p>
+                </div>
+                <Button asChild size="sm">
+                  <Link href="/settings/ai-connections">
+                    Create a key
+                    <ArrowRight aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
           <section
             className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px]"
             aria-labelledby="dashboard-summary-heading"
           >
-            <div className="space-y-3">
-              <div>
-                <h3
-                  id="dashboard-summary-heading"
-                  className="text-base font-semibold"
-                >
-                  Workspace summary
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Secondary context stays below the active work.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Metric
-                  label="Moves"
-                  value={activeMoves.length}
-                  icon={Truck}
-                  note="active records"
-                />
+            <div className="space-y-2">
+              <h3
+                id="dashboard-summary-heading"
+                className="text-sm font-semibold text-muted-foreground"
+              >
+                Workspace summary
+              </h3>
+              <div className="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-lg border border-border">
+                <Metric label="Moves" value={activeMoves.length} icon={Truck} />
                 <Metric
                   label="Households"
                   value={households?.length ?? 0}
                   icon={Home}
-                  note="you can access"
                 />
                 <Metric
-                  label="Packet profiles"
+                  label="Packets"
                   value={documentationProfileOptions.length}
                   icon={FileStack}
-                  note="recipient types"
                 />
               </div>
             </div>
@@ -830,62 +1000,63 @@ export function MoveDashboard() {
 
 function ActiveMoveCard({
   move,
+  householdId,
   selected,
   onSelect,
 }: {
   move: DashboardMove;
+  householdId: Id<"households"> | null;
   selected: boolean;
   onSelect: (moveId: Id<"moves">) => void;
 }) {
-  const route = [move.origin, move.destination].filter(Boolean).join(" -> ");
+  const route = [move.origin, move.destination].filter(Boolean).join(" → ");
+  const packetCount = move.documentationProfileTypes?.length ?? 0;
 
   return (
-    <Card role="listitem">
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <Card role="listitem" className="gap-3 py-4">
+      <CardHeader className="px-4">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <CardTitle className="truncate text-base">{move.title}</CardTitle>
-            <CardDescription className="mt-1">
+            <CardDescription className="mt-0.5 truncate">
               {route || "Route not set"}
             </CardDescription>
           </div>
-          <div className="flex flex-wrap justify-end gap-1.5">
-            {selected ? <Badge variant="secondary">selected</Badge> : null}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {selected ? (
+              <Badge variant="secondary" className="hidden sm:inline-flex">
+                selected
+              </Badge>
+            ) : null}
             <Badge variant="outline">{move.status}</Badge>
+            {householdId ? (
+              <ActiveMoveMenu householdId={householdId} move={move} />
+            ) : null}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
-          <DashboardMoveField label="Type" value={move.type} />
-          <DashboardMoveField
-            label="Packets"
-            value={String(move.documentationProfileTypes?.length ?? 0)}
-          />
-          <DashboardMoveField label="System" value={move.unitSystem} />
+      <CardContent className="space-y-3 px-4">
+        <p className="text-xs text-muted-foreground">
+          <span className="capitalize">{move.type}</span> · {packetCount} packet
+          {packetCount === 1 ? "" : "s"} · {move.unitSystem}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {moveQuickActions.map(({ label, section, icon: Icon }) => (
+            <Button
+              key={section}
+              asChild
+              size="sm"
+              variant="outline"
+              className="h-8"
+            >
+              <Link href={`${moveWorkspacePath(move._id)}/${section}`}>
+                <Icon aria-hidden="true" />
+                {label}
+              </Link>
+            </Button>
+          ))}
         </div>
-        <div className="rounded-md border border-border/70 bg-muted/25 p-2">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Jump to task
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {moveQuickActions.map(({ label, section, icon: Icon }) => (
-              <Button
-                key={section}
-                asChild
-                size="sm"
-                variant="outline"
-                className="h-8"
-              >
-                <Link href={`${moveWorkspacePath(move._id)}/${section}`}>
-                  <Icon aria-hidden="true" />
-                  {label}
-                </Link>
-              </Button>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex justify-end gap-2">
           {selected ? (
             <Button type="button" size="sm" variant="outline" disabled>
               <CircleCheck aria-hidden="true" />
@@ -899,12 +1070,12 @@ function ActiveMoveCard({
               onClick={() => onSelect(move._id)}
             >
               <CircleCheck aria-hidden="true" />
-              Select move
+              Select
             </Button>
           )}
           <Button asChild size="sm">
             <Link href={moveWorkspacePath(move._id)}>
-              Open workspace
+              Open
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
@@ -914,44 +1085,22 @@ function ActiveMoveCard({
   );
 }
 
-function DashboardMoveField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="min-w-0 rounded-md border border-border/70 px-2 py-1.5">
-      <p className="text-[0.68rem] uppercase text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate font-medium">{value}</p>
-    </div>
-  );
-}
-
 function Metric({
   label,
   value,
   icon: Icon,
-  note,
 }: {
   label: string;
   value: string | number;
   icon: LucideIcon;
-  note: string;
 }) {
   return (
-    <Card>
-      <CardHeader className="space-y-0 pb-2">
-        <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
-          {label}
-          <Icon className="size-4 text-primary" aria-hidden="true" />
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="font-mono text-3xl font-semibold">{value}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{note}</p>
-      </CardContent>
-    </Card>
+    <div className="bg-card/60 px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <Icon className="size-3.5 text-primary" aria-hidden="true" />
+        <span className="text-[0.68rem] uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
+    </div>
   );
 }

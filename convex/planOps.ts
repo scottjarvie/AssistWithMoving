@@ -14,6 +14,18 @@ import {
   requireMovePermission,
 } from "./lib/permissions";
 import { planOpValidator } from "./lib/planValidators";
+import { resolvePlacementRoom } from "../src/lib/plan-room-resolution";
+
+type DestinationSyncEvent = {
+  placementId: Id<"planPlacements">;
+  sourceType: "item" | "box";
+  sourceId: Id<"items"> | Id<"boxes">;
+  destinationSpaceId: Id<"moveSpaces">;
+  destinationRoom: string;
+  roomEntityId?: Id<"planEntities">;
+  roomShortId?: string;
+  inheritedFromPlacementId?: string;
+};
 
 type ApplyContext = {
   householdId: Id<"households">;
@@ -22,6 +34,7 @@ type ApplyContext = {
   batchId: string;
   actorUserId?: Id<"users">;
   actorApiKeyId?: Id<"apiKeys">;
+  createdByUserId: Id<"users">;
   agentLabel?: string;
   now: number;
   nextSeq: number;
@@ -30,6 +43,7 @@ type ApplyContext = {
     entityIds: Id<"planEntities">[];
     placementIds: Id<"planPlacements">[];
   };
+  destinationSync: DestinationSyncEvent[];
 };
 
 export const applyOps = mutation({
@@ -560,6 +574,7 @@ async function applyPlanOps(
     batchId: args.batchId,
     actorUserId,
     actorApiKeyId: args.actorApiKeyId,
+    createdByUserId: actorUserId ?? plan.createdByUserId,
     agentLabel: args.agentLabel,
     now,
     nextSeq: plan.nextSeq,
@@ -568,6 +583,7 @@ async function applyPlanOps(
       entityIds: [],
       placementIds: [],
     },
+    destinationSync: [],
   };
 
   for (const [index, op] of args.ops.entries()) {
@@ -603,12 +619,14 @@ async function applyPlanOps(
       batchId: args.batchId,
       opCount: args.ops.length,
       agentLabel: args.agentLabel,
+      destinationSyncCount: state.destinationSync.length,
     },
   });
 
   return {
     batchId: args.batchId,
     created: state.created,
+    destinationSync: state.destinationSync,
   };
 }
 
@@ -1099,6 +1117,7 @@ async function createPlacement(
   state.created.placementIds.push(placementId);
 
   await journal(ctx, state, op, { type: "deletePlacement", placementId }, opIndex);
+  await syncPlacementTreeDestinations(ctx, state, placementId);
 }
 
 async function movePlacement(
@@ -1134,6 +1153,7 @@ async function movePlacement(
     },
     opIndex,
   );
+  await syncPlacementTreeDestinations(ctx, state, placementId);
 }
 
 async function updatePlacement(
@@ -1183,6 +1203,9 @@ async function updatePlacement(
     { type: "updatePlacement", placementId, patch: inversePatch },
     opIndex,
   );
+  if (hasPlacementSourcePatch(op.patch)) {
+    await syncPlacementTreeDestinations(ctx, state, placementId);
+  }
 }
 
 function hasPlacementSourcePatch(
@@ -1228,6 +1251,250 @@ async function setContainment(
     },
     opIndex,
   );
+  await syncPlacementTreeDestinations(ctx, state, placementId);
+}
+
+async function syncPlacementTreeDestinations(
+  ctx: MutationCtx,
+  state: ApplyContext,
+  rootPlacementId: Id<"planPlacements">,
+) {
+  const context = await loadRoomResolutionContext(ctx, state);
+  const placementById = new Map(
+    context.placements.map((placement) => [placement._id, placement]),
+  );
+  const pending = [rootPlacementId];
+  const seen = new Set<string>();
+
+  while (pending.length) {
+    const placementId = pending.shift();
+    if (!placementId || seen.has(String(placementId))) continue;
+    seen.add(String(placementId));
+    const placement = placementById.get(placementId);
+    if (!placement) continue;
+
+    await syncPlacementDestination(ctx, state, context, placement);
+
+    for (const child of context.placements) {
+      if (child.parentPlacementId === placementId) {
+        pending.push(child._id);
+      }
+    }
+  }
+}
+
+async function loadRoomResolutionContext(ctx: MutationCtx, state: ApplyContext) {
+  const [levels, rooms, placements] = await Promise.all([
+    ctx.db
+      .query("planLevels")
+      .withIndex("by_plan_sort", (q) => q.eq("planId", state.planId))
+      .collect(),
+    ctx.db
+      .query("planEntities")
+      .withIndex("by_plan_type", (q) =>
+        q.eq("planId", state.planId).eq("entityType", "room"),
+      )
+      .collect(),
+    ctx.db
+      .query("planPlacements")
+      .withIndex("by_plan", (q) => q.eq("planId", state.planId))
+      .collect(),
+  ]);
+  return {
+    levels: levels.filter((level) => !level.archivedAt),
+    rooms: rooms.filter((room) => !room.archivedAt && room.room),
+    placements: placements.filter((placement) => !placement.archivedAt),
+  };
+}
+
+async function syncPlacementDestination(
+  ctx: MutationCtx,
+  state: ApplyContext,
+  context: Awaited<ReturnType<typeof loadRoomResolutionContext>>,
+  placement: Doc<"planPlacements">,
+) {
+  if (!placement.itemId && !placement.boxId) {
+    return;
+  }
+
+  const resolved = resolvePlacementRoom({
+    placementId: String(placement._id),
+    levels: context.levels.map((level) => ({
+      levelId: String(level._id),
+      name: level.name,
+      levelType: level.levelType,
+    })),
+    rooms: context.rooms.map((room) => ({
+      entityId: String(room._id),
+      levelId: String(room.levelId),
+      shortId: room.shortId,
+      name: room.name,
+      room: room.room ? { points: room.room.points } : undefined,
+    })),
+    placements: context.placements.map((entry) => ({
+      placementId: String(entry._id),
+      levelId: String(entry.levelId),
+      x: entry.x,
+      y: entry.y,
+      parentPlacementId: entry.parentPlacementId
+        ? String(entry.parentPlacementId)
+        : undefined,
+    })),
+  });
+  if (!resolved) {
+    return;
+  }
+
+  const destinationSpaceId = await ensureDestinationSpaceForResolvedRoom(
+    ctx,
+    state,
+    {
+      kind: resolved.moveSpaceKind,
+      name: resolved.roomName,
+      floorLevel: resolved.levelName,
+      linkedPlanEntityId: resolved.roomEntityId as Id<"planEntities"> | undefined,
+    },
+  );
+
+  if (placement.itemId) {
+    const item = await ctx.db.get(placement.itemId);
+    if (
+      item &&
+      item.householdId === state.householdId &&
+      item.moveId === state.moveId &&
+      !item.deletedAt
+    ) {
+      await ctx.db.patch(placement.itemId, {
+        destinationSpaceId,
+        destinationRoom: resolved.roomName,
+        updatedAt: state.now,
+      });
+      state.destinationSync.push({
+        placementId: placement._id,
+        sourceType: "item",
+        sourceId: placement.itemId,
+        destinationSpaceId,
+        destinationRoom: resolved.roomName,
+        roomEntityId: resolved.roomEntityId as Id<"planEntities"> | undefined,
+        roomShortId: resolved.roomShortId,
+        inheritedFromPlacementId: resolved.inheritedFromPlacementId,
+      });
+    }
+  }
+
+  if (placement.boxId) {
+    const box = await ctx.db.get(placement.boxId);
+    if (
+      box &&
+      box.householdId === state.householdId &&
+      box.moveId === state.moveId &&
+      !box.archivedAt
+    ) {
+      await ctx.db.patch(placement.boxId, {
+        destinationSpaceId,
+        destinationRoom: resolved.roomName,
+        updatedAt: state.now,
+      });
+      state.destinationSync.push({
+        placementId: placement._id,
+        sourceType: "box",
+        sourceId: placement.boxId,
+        destinationSpaceId,
+        destinationRoom: resolved.roomName,
+        roomEntityId: resolved.roomEntityId as Id<"planEntities"> | undefined,
+        roomShortId: resolved.roomShortId,
+        inheritedFromPlacementId: resolved.inheritedFromPlacementId,
+      });
+    }
+  }
+}
+
+async function ensureDestinationSpaceForResolvedRoom(
+  ctx: MutationCtx,
+  state: ApplyContext,
+  input: {
+    kind: "destinationRoom" | "yardOutdoor";
+    name: string;
+    floorLevel?: string;
+    linkedPlanEntityId?: Id<"planEntities">;
+  },
+) {
+  const spaces = await ctx.db
+    .query("moveSpaces")
+    .withIndex("by_move_sort", (q) => q.eq("moveId", state.moveId))
+    .collect();
+  const activeSpaces = spaces.filter(
+    (space) => space.householdId === state.householdId && space.status === "active",
+  );
+  const linked = input.linkedPlanEntityId
+    ? activeSpaces.find(
+        (space) => space.linkedPlanEntityId === input.linkedPlanEntityId,
+      )
+    : undefined;
+  if (linked) {
+    return linked._id;
+  }
+
+  const nameKey = spaceNameKey(input.name);
+  const matching = activeSpaces.find(
+    (space) => space.kind === input.kind && spaceNameKey(space.name) === nameKey,
+  );
+  if (matching) {
+    if (input.linkedPlanEntityId && !matching.linkedPlanEntityId) {
+      await ctx.db.patch(matching._id, {
+        linkedPlanEntityId: input.linkedPlanEntityId,
+        updatedByUserId: state.actorUserId,
+        updatedByApiKeyId: state.actorApiKeyId,
+        updatedAt: state.now,
+      });
+    }
+    return matching._id;
+  }
+
+  const spaceId = await ctx.db.insert("moveSpaces", {
+    householdId: state.householdId,
+    moveId: state.moveId,
+    kind: input.kind,
+    name: input.name.slice(0, 120),
+    aliases: [],
+    notes: "Created from Layout Studio placement sync.",
+    floorLevel: input.floorLevel,
+    sortOrder: state.now,
+    status: "active",
+    linkedPlanEntityId: input.linkedPlanEntityId,
+    capacity: {
+      weightIsUnlimited: false,
+      volumeIsUnlimited: false,
+    },
+    createdByUserId: state.createdByUserId,
+    createdByApiKeyId: state.actorApiKeyId,
+    updatedByUserId: state.actorUserId,
+    updatedByApiKeyId: state.actorApiKeyId,
+    createdAt: state.now,
+    updatedAt: state.now,
+  });
+  await recordAuditEvent(ctx, {
+    householdId: state.householdId,
+    moveId: state.moveId,
+    actorType: state.actorApiKeyId ? "apiKey" : "user",
+    actorUserId: state.actorUserId,
+    actorApiKeyId: state.actorApiKeyId ? String(state.actorApiKeyId) : undefined,
+    category: "inventory",
+    action: "space.created_from_plan",
+    objectTable: "moveSpaces",
+    objectId: spaceId,
+    metadata: {
+      planId: state.planId,
+      linkedPlanEntityId: input.linkedPlanEntityId,
+      kind: input.kind,
+      name: input.name,
+    },
+  });
+  return spaceId;
+}
+
+function spaceNameKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 async function deletePlacement(

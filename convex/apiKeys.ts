@@ -1,7 +1,12 @@
 import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
@@ -11,6 +16,10 @@ import {
   hashApiKey,
   normalizeApiKeyScopes,
 } from "./lib/apiKeys";
+import {
+  canMembershipUseApiAccess,
+  effectiveMemberApiAccessStatus,
+} from "./lib/householdMembers";
 import { requireHouseholdPermission } from "./lib/permissions";
 
 const apiKeyScopeValidator = v.union(
@@ -39,28 +48,67 @@ export const listForHousehold = query({
     householdId: v.id("households"),
   },
   handler: async (ctx, args) => {
-    await requireHouseholdPermission(ctx, args.householdId, "api_keys:manage");
+    const { actor } = await requireHouseholdPermission(
+      ctx,
+      args.householdId,
+      "api_keys:manage",
+    );
+    if (actor.type !== "user") {
+      throw new Error("API-key management requires a user actor.");
+    }
+    await assertActorCanUseApiAccess(ctx, {
+      householdId: args.householdId,
+      userId: actor.userId,
+    });
     const keys = await ctx.db
       .query("apiKeys")
       .withIndex("by_household_status", (q) => q.eq("householdId", args.householdId))
       .collect();
 
-    return keys
+    const rows = await Promise.all(keys
       .sort((first, second) => second.createdAt - first.createdAt)
-      .map((key) => ({
-        apiKeyId: key._id,
-        householdId: key.householdId,
-        moveId: key.moveId,
-        name: key.name,
-        tokenPreview: key.tokenPreview,
-        scopes: key.scopes,
-        status: key.status,
-        expiresAt: key.expiresAt,
-        revokedAt: key.revokedAt,
-        lastUsedAt: key.lastUsedAt,
-        lastUsedAction: key.lastUsedAction,
-        createdAt: key.createdAt,
+      .map(async (key) => {
+        const [creator, creatorMembership] = await Promise.all([
+          ctx.db.get(key.createdByUserId),
+          ctx.db
+            .query("householdMemberships")
+            .withIndex("by_household_user", (q) =>
+              q.eq("householdId", key.householdId).eq(
+                "userId",
+                key.createdByUserId,
+              ),
+            )
+            .unique(),
+        ]);
+        const creatorApiAccessStatus = creatorMembership
+          ? effectiveMemberApiAccessStatus({
+              role: creatorMembership.role,
+              status: creatorMembership.status,
+              apiAccessStatus: creatorMembership.apiAccessStatus,
+            })
+          : "disabled";
+
+        return {
+          apiKeyId: key._id,
+          householdId: key.householdId,
+          moveId: key.moveId,
+          name: key.name,
+          tokenPreview: key.tokenPreview,
+          scopes: key.scopes,
+          status: key.status,
+          expiresAt: key.expiresAt,
+          revokedAt: key.revokedAt,
+          lastUsedAt: key.lastUsedAt,
+          lastUsedAction: key.lastUsedAction,
+          createdByUserId: key.createdByUserId,
+          createdByName: creator?.name ?? null,
+          createdByEmail: creator?.email ?? null,
+          creatorApiAccessStatus,
+          createdAt: key.createdAt,
+        };
       }));
+
+    return rows;
   },
 });
 
@@ -75,6 +123,10 @@ export const create = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key management requires a user actor.");
     }
+    await assertActorCanUseApiAccess(ctx, {
+      householdId: args.householdId,
+      userId: actor.userId,
+    });
 
     await assertHouseholdEntitlement(ctx, {
       householdId: args.householdId,
@@ -147,6 +199,10 @@ export const revoke = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key management requires a user actor.");
     }
+    await assertActorCanUseApiAccess(ctx, {
+      householdId: args.householdId,
+      userId: actor.userId,
+    });
     const key = await getMutableKey(ctx, args);
     const now = Date.now();
 
@@ -184,6 +240,10 @@ export const rotate = mutation({
     if (actor.type !== "user") {
       throw new Error("API-key management requires a user actor.");
     }
+    await assertActorCanUseApiAccess(ctx, {
+      householdId: args.householdId,
+      userId: actor.userId,
+    });
     const key = await getMutableKey(ctx, args);
     const rawKey = generateApiKeySecret();
     const prefix = apiKeyPrefix(rawKey);
@@ -244,6 +304,32 @@ async function assertMoveRestriction(
   const move = await ctx.db.get(args.moveId);
   if (!move || move.householdId !== args.householdId || move.archivedAt) {
     throw new Error("Move restriction is invalid.");
+  }
+}
+
+async function assertActorCanUseApiAccess(
+  ctx: MutationCtx | QueryCtx,
+  args: {
+    householdId: Id<"households">;
+    userId: Id<"users">;
+  },
+) {
+  const membership = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_household_user", (q) =>
+      q.eq("householdId", args.householdId).eq("userId", args.userId),
+    )
+    .unique();
+
+  if (
+    !membership ||
+    !canMembershipUseApiAccess({
+      role: membership.role,
+      status: membership.status,
+      apiAccessStatus: membership.apiAccessStatus,
+    })
+  ) {
+    throw new Error("API access is disabled for this household member.");
   }
 }
 

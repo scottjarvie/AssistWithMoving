@@ -4,6 +4,7 @@ import {
   alternativeGroupResults,
   optionalGroupResults,
   parseEnvNames,
+  productionLaunchGateResults,
   requiredGroupResults,
   trackedIssueDetail,
 } from "../../scripts/vercel-env-readiness.mjs";
@@ -36,13 +37,38 @@ CLERK_SECRET_KEY                 Encrypted  Production  1d ago
     );
   });
 
+  it("blocks production launch when the OAuth MCP toolset env name is missing", () => {
+    expect(productionLaunchGateResults(new Set(), "production")).toEqual([
+      {
+        status: "blocked",
+        label: "OAuth MCP trusted-helper toolset env",
+        detail:
+          "missing MOVINGMANIFEST_MCP_OAUTH_TOOLSET; set trusted-helper before hosted OAuth publish; tracked by MOVE-240",
+      },
+    ]);
+  });
+
+  it("passes the production launch gate when the OAuth MCP toolset env name is present", () => {
+    expect(
+      productionLaunchGateResults(
+        new Set(["MOVINGMANIFEST_MCP_OAUTH_TOOLSET"]),
+        "production"
+      )
+    ).toEqual([
+      {
+        status: "pass",
+        label: "OAuth MCP trusted-helper toolset env",
+        detail:
+          "MOVINGMANIFEST_MCP_OAUTH_TOOLSET name present; value must be trusted-helper and is verified by npm run doctor:oauth-cutover",
+      },
+    ]);
+  });
+
   it("routes preview missing groups through the Preview env blocker", () => {
     const details = requiredGroupResults(new Set(), "preview").map(
       (result) => result.detail
     );
-    const webhookDetails = alternativeGroupResults(new Set(), "preview").map(
-      (result) => result.detail
-    );
+    const webhookResults = alternativeGroupResults(new Set());
 
     expect(trackedIssueDetail("MOVE-63", "preview")).toBe(
       "tracked by MOVE-106; source setup MOVE-63"
@@ -56,9 +82,13 @@ CLERK_SECRET_KEY                 Encrypted  Production  1d ago
     expect(details).toContain(
       "missing CONVEX_DEPLOY_KEY; tracked by MOVE-106; source setup MOVE-143"
     );
-    expect(webhookDetails).toContain(
-      "missing one of CLERK_WEBHOOK_SIGNING_SECRET, CLERK_WEBHOOK_SECRET; tracked by MOVE-106; source setup MOVE-68"
-    );
+    expect(webhookResults).toContainEqual({
+      status: "warn",
+      label: "Clerk webhook signing env",
+      detail:
+        "missing one of CLERK_WEBHOOK_SIGNING_SECRET, CLERK_WEBHOOK_SECRET; not required in Vercel because Clerk webhooks are handled by Convex HTTP actions; validate with npm run doctor:webhooks; tracked by MOVE-68",
+    });
+    expect(productionLaunchGateResults(new Set(), "preview")).toEqual([]);
   });
 
   it("warns when optional Cloudflare image delivery is inactive", () => {

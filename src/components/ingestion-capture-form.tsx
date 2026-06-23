@@ -3,12 +3,14 @@
 import { type ChangeEvent, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  Boxes,
   Camera,
   FileAudio,
   FileImage,
   FileVideo,
   Loader2,
   Map,
+  Package,
   Plus,
   X,
 } from "lucide-react";
@@ -52,15 +54,58 @@ type UploadedAttachmentSummary = {
 };
 
 type CaptureMode = "inventory" | "floorPlan";
+export type QueueIntent =
+  | "general"
+  | "newMovableUnit"
+  | "newItem"
+  | "existingBox"
+  | "existingItem"
+  | "boxContents"
+  | "condition"
+  | "measurements"
+  | "floorPlan";
+
+const queueIntentOptions: Array<{
+  value: QueueIntent;
+  label: string;
+  scopeHint: "inventory" | "packing" | "condition" | "measurements";
+}> = [
+  { value: "general", label: "General agent capture", scopeHint: "inventory" },
+  {
+    value: "newMovableUnit",
+    label: "New box / movable unit",
+    scopeHint: "packing",
+  },
+  { value: "boxContents", label: "Contents for existing box", scopeHint: "packing" },
+  { value: "existingBox", label: "Follow-up for existing box", scopeHint: "packing" },
+  { value: "newItem", label: "New inventory item", scopeHint: "inventory" },
+  { value: "existingItem", label: "Follow-up for existing item", scopeHint: "inventory" },
+  { value: "condition", label: "Condition / claim evidence", scopeHint: "condition" },
+  { value: "measurements", label: "Measurements", scopeHint: "measurements" },
+];
+
+function scopeHintForIntent(intent: QueueIntent) {
+  return queueIntentOptions.find((option) => option.value === intent)?.scopeHint ?? "inventory";
+}
 
 // Mobile-first capture: photos/voice notes/clips plus typed (or dictated)
 // directions become one ingestion-queue entry for the user's AI agent.
 export function IngestionCaptureForm({
   householdId,
   moveId,
+  defaultIntent = "general",
+  defaultTargetBoxId,
+  defaultTargetBoxCode = "",
+  defaultTargetItemId,
+  defaultTargetLabel = "",
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
+  defaultIntent?: QueueIntent;
+  defaultTargetBoxId?: Id<"boxes">;
+  defaultTargetBoxCode?: string;
+  defaultTargetItemId?: Id<"items">;
+  defaultTargetLabel?: string;
 }) {
   const initUpload = useAction(api.photos.initUpload);
   const finalizeUpload = useAction(api.photos.finalizeUpload);
@@ -72,6 +117,11 @@ export function IngestionCaptureForm({
   );
 
   const [captureMode, setCaptureMode] = useState<CaptureMode>("inventory");
+  const [intent, setIntent] = useState<QueueIntent>(
+    defaultIntent === "floorPlan" ? "general" : defaultIntent,
+  );
+  const [targetBoxCode, setTargetBoxCode] = useState(defaultTargetBoxCode);
+  const [targetLabel, setTargetLabel] = useState(defaultTargetLabel);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [instructions, setInstructions] = useState("");
   const [roomHint, setRoomHint] = useState("");
@@ -82,6 +132,7 @@ export function IngestionCaptureForm({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentIdRef = useRef(0);
   const isFloorPlanMode = captureMode === "floorPlan";
+  const effectiveIntent: QueueIntent = isFloorPlanMode ? "floorPlan" : intent;
   const activePlanId = activePlanDocument?.plan?._id;
   const canAttachMedia = Boolean(householdId && moveId && !saving);
   const canSubmit =
@@ -142,6 +193,23 @@ export function IngestionCaptureForm({
     setAttachments((current) => [...current, ...accepted]);
   }
 
+  function switchToInventoryMode() {
+    setCaptureMode("inventory");
+    setStatus(null);
+  }
+
+  function switchToFloorPlanMode() {
+    setCaptureMode("floorPlan");
+    const imageAttachments = attachments.filter((entry) => entry.kind === "image");
+    const removedCount = attachments.length - imageAttachments.length;
+    setAttachments(imageAttachments);
+    setStatus(
+      removedCount
+        ? `Floorplans mode keeps image files only; removed ${removedCount} non-image ${removedCount === 1 ? "file" : "files"}.`
+        : null
+    );
+  }
+
   async function uploadAttachment(
     attachment: PendingAttachment
   ): Promise<UploadedAttachmentSummary> {
@@ -162,11 +230,13 @@ export function IngestionCaptureForm({
       fileSha256Hex(file),
     ]);
 
-    const session = await initUpload({
-      householdId,
-      moveId,
-      room: roomHint.trim() || undefined,
-      mimeType: file.type,
+      const session = await initUpload({
+        householdId,
+        moveId,
+        itemId: !isFloorPlanMode ? defaultTargetItemId : undefined,
+        boxId: !isFloorPlanMode ? defaultTargetBoxId : undefined,
+        room: roomHint.trim() || undefined,
+        mimeType: file.type,
       sizeBytes: file.size,
     });
     const uploadSessionId =
@@ -250,7 +320,18 @@ export function IngestionCaptureForm({
             ? "Interpret these blueprint/floor-plan images and propose Floorplans updates for review."
             : undefined),
         roomHint: roomHint.trim() || undefined,
-        scopeHint: isFloorPlanMode ? "floorPlan" : undefined,
+        scopeHint: isFloorPlanMode ? "floorPlan" : scopeHintForIntent(intent),
+        intent: effectiveIntent,
+        targetBoxId: !isFloorPlanMode ? defaultTargetBoxId : undefined,
+        targetItemId: !isFloorPlanMode ? defaultTargetItemId : undefined,
+        targetBoxCode:
+          !isFloorPlanMode && capturesExistingBox(intent)
+            ? targetBoxCode.trim() || undefined
+            : undefined,
+        targetLabel:
+          !isFloorPlanMode
+            ? targetLabel.trim() || defaultTargetLabel || undefined
+            : undefined,
         targetPlanId: isFloorPlanMode ? activePlanId : undefined,
         mediaPhotoIds,
       });
@@ -294,7 +375,7 @@ export function IngestionCaptureForm({
             type="button"
             variant={captureMode === "inventory" ? "default" : "outline"}
             disabled={saving}
-            onClick={() => setCaptureMode("inventory")}
+            onClick={switchToInventoryMode}
             className="justify-start"
           >
             <Camera aria-hidden="true" />
@@ -304,13 +385,78 @@ export function IngestionCaptureForm({
             type="button"
             variant={isFloorPlanMode ? "default" : "outline"}
             disabled={saving}
-            onClick={() => setCaptureMode("floorPlan")}
+            onClick={switchToFloorPlanMode}
             className="justify-start"
           >
             <Map aria-hidden="true" />
             Floorplans
           </Button>
         </div>
+
+        {!isFloorPlanMode ? (
+          <div className="grid gap-3 rounded-md border border-border bg-muted/20 p-3">
+            <label className="grid gap-1.5 text-sm">
+              <span className="font-medium text-foreground">
+                What is this for?
+              </span>
+              <select
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={intent}
+                aria-label="Queue workflow"
+                disabled={saving}
+                onChange={(event) =>
+                  setIntent(event.target.value as QueueIntent)
+                }
+              >
+                {queueIntentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {capturesExistingBox(intent) ? (
+              <Input
+                value={targetBoxCode}
+                onChange={(event) => setTargetBoxCode(event.target.value)}
+                placeholder="Existing box code, e.g. B-001"
+                aria-label="Related box code"
+                disabled={
+                  saving || Boolean(defaultTargetBoxId || defaultTargetBoxCode)
+                }
+              />
+            ) : null}
+
+            {capturesTargetLabel(intent) ? (
+              <Input
+                value={targetLabel}
+                onChange={(event) => setTargetLabel(event.target.value)}
+                placeholder={
+                  intent === "existingItem"
+                    ? "Existing item name or ID"
+                    : "Visible label or short name"
+                }
+                aria-label="Related target label"
+                disabled={saving || Boolean(defaultTargetLabel)}
+              />
+            ) : null}
+
+            <div className="grid gap-2 text-xs leading-5 text-muted-foreground sm:grid-cols-2">
+              <p className="flex gap-2">
+                <Package className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                Queue photos here when you want full originals stored by the
+                site instead of sending base64 through chat.
+              </p>
+              <p className="flex gap-2">
+                <Boxes className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                For existing boxes, the queue stores the box target so the agent
+                updates that record and reports what label or code you should
+                put on it.
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -529,6 +675,20 @@ function attachmentIcon(kind: PendingAttachment["kind"]) {
 
 function capturedAtFromFile(file: File) {
   return file.lastModified > 0 ? file.lastModified : undefined;
+}
+
+function capturesExistingBox(intent: QueueIntent) {
+  return intent === "existingBox" || intent === "boxContents";
+}
+
+function capturesTargetLabel(intent: QueueIntent) {
+  return (
+    intent === "newMovableUnit" ||
+    intent === "newItem" ||
+    intent === "existingItem" ||
+    intent === "condition" ||
+    intent === "measurements"
+  );
 }
 
 function formatOriginalUploadSummary(

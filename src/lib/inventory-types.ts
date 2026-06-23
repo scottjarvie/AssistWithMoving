@@ -66,5 +66,7 @@ export type InventoryItemPatch = {
   privateNotes?: string;
   aiSummary?: string;
   aiTags?: string[];
+  agentLabel?: string;
+  aiConfidenceScore?: number;
   createdVia?: InventoryItem["createdVia"];
 };

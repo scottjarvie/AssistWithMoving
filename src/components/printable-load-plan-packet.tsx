@@ -33,6 +33,7 @@ type EstimateReport = NonNullable<
   ReturnType<typeof useQuery<typeof api.estimates.reportForMove>>
 >;
 type BoxReport = EstimateReport["boxReports"][number];
+type LooseItemReport = EstimateReport["looseItemReports"][number];
 
 export function PrintableLoadPlanPacket({
   householdId,
@@ -105,6 +106,7 @@ export function PrintableLoadPlanPacket({
             boxes,
             resourcesWithZones,
             boxReportById,
+            looseItemReports: report.looseItemReports ?? [],
             resourceReportById,
           })
         : null,
@@ -226,8 +228,9 @@ export function PrintableLoadPlanPacket({
                 {safeMode ? "crew safe" : "owner private"}
               </Badge>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <div className="mt-4 grid gap-3 sm:grid-cols-5">
               <PacketMetric label="Boxes" value={packet.totals.boxCount} />
+              <PacketMetric label="Loose" value={packet.totals.looseItemCount} />
               <PacketMetric label="Items" value={packet.totals.itemCount} />
               <PacketMetric
                 label="Weight"
@@ -246,6 +249,10 @@ export function PrintableLoadPlanPacket({
             </h2>
             <div className="mt-3 grid gap-3 xl:grid-cols-2">
               <ExceptionBlock title="Unassigned" boxes={packet.exceptions.unassigned} />
+              <LooseExceptionBlock
+                title="Unassigned loose units"
+                items={packet.exceptions.unassignedLooseItems}
+              />
               <ExceptionBlock title="Fragile" boxes={packet.exceptions.fragile} />
               <ExceptionBlock
                 title="First night"
@@ -258,6 +265,10 @@ export function PrintableLoadPlanPacket({
               <ExceptionBlock
                 title="Do not move / personal"
                 boxes={packet.exceptions.personal}
+              />
+              <LooseExceptionBlock
+                title="Owner-carried loose units"
+                items={packet.exceptions.personalLooseItems}
               />
               <ExceptionBlock
                 title="Assignment warnings"
@@ -292,10 +303,11 @@ export function PrintableLoadPlanPacket({
                 </div>
                 <div className="mt-4 space-y-4">
                   {resource.zones.map((zone) => (
-                    <ZoneTable
+                    <ZoneLoadSection
                       key={zone.zoneId}
                       title={zone.name}
                       boxes={zone.boxes}
+                      looseItems={zone.looseItems}
                       safeMode={safeMode}
                     />
                   ))}
@@ -304,9 +316,10 @@ export function PrintableLoadPlanPacket({
             ))}
             <div className="packet-section rounded-md border border-border p-4">
               <h2 className="text-xl font-semibold tracking-normal">Unassigned</h2>
-              <ZoneTable
+              <ZoneLoadSection
                 title="No resource"
                 boxes={packet.unassigned}
+                looseItems={packet.unassignedLooseItems}
                 safeMode={safeMode}
               />
             </div>
@@ -349,6 +362,81 @@ function ExceptionBlock({ title, boxes }: { title: string; boxes: PacketBox[] })
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">None in this packet.</p>
       )}
+    </div>
+  );
+}
+
+function LooseExceptionBlock({
+  title,
+  items,
+}: {
+  title: string;
+  items: PacketLooseItem[];
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">{title}</p>
+        <Badge variant={items.length ? "secondary" : "outline"}>
+          {items.length}
+        </Badge>
+      </div>
+      {items.length ? (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {items.slice(0, 16).map((item) => (
+            <Badge key={item.itemId} variant="outline">
+              {item.name}
+            </Badge>
+          ))}
+          {items.length > 16 ? (
+            <Badge variant="outline">+{items.length - 16} more</Badge>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">None in this packet.</p>
+      )}
+    </div>
+  );
+}
+
+function ZoneLoadSection({
+  title,
+  boxes,
+  looseItems,
+  safeMode,
+}: {
+  title: string;
+  boxes: PacketBox[];
+  looseItems: PacketLooseItem[];
+  safeMode: boolean;
+}) {
+  const hasBoxes = boxes.length > 0;
+  const hasLooseItems = looseItems.length > 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold tracking-normal">{title}</h3>
+        <div className="flex flex-wrap gap-1">
+          <Badge variant="outline">{boxes.length} boxes</Badge>
+          <Badge variant="outline">{looseItems.length} loose</Badge>
+        </div>
+      </div>
+      {hasBoxes ? (
+        <ZoneTable title="Boxes" boxes={boxes} safeMode={safeMode} />
+      ) : null}
+      {hasLooseItems ? (
+        <LooseUnitTable
+          title="Loose units"
+          looseItems={looseItems}
+          safeMode={safeMode}
+        />
+      ) : null}
+      {!hasBoxes && !hasLooseItems ? (
+        <p className="rounded-md border border-border px-3 py-4 text-sm text-muted-foreground">
+          No movable units in this section.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -421,6 +509,71 @@ function ZoneTable({
   );
 }
 
+function LooseUnitTable({
+  title,
+  looseItems,
+  safeMode,
+}: {
+  title: string;
+  looseItems: PacketLooseItem[];
+  safeMode: boolean;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold tracking-normal">{title}</h3>
+        <Badge variant="outline">{looseItems.length} loose</Badge>
+      </div>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="packet-table w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="px-2 py-2">Item</th>
+              <th className="px-2 py-2">Status</th>
+              <th className="px-2 py-2">From</th>
+              <th className="px-2 py-2">To</th>
+              <th className="px-2 py-2">Qty</th>
+              <th className="px-2 py-2">Weight</th>
+              <th className="px-2 py-2">Volume</th>
+              <th className="px-2 py-2">Flags</th>
+              {!safeMode ? <th className="px-2 py-2">Disposition</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {looseItems.map((item) => (
+              <tr key={item.itemId} className="border-b border-border last:border-b-0">
+                <td className="px-2 py-2 font-medium">{item.name}</td>
+                <td className="px-2 py-2">{item.status}</td>
+                <td className="px-2 py-2">{item.room ?? "unset"}</td>
+                <td className="px-2 py-2">{item.destinationRoom ?? "unset"}</td>
+                <td className="px-2 py-2">{item.quantity}</td>
+                <td className="px-2 py-2">{formatNumber(item.weightLb)} lb</td>
+                <td className="px-2 py-2">
+                  {formatNumber(item.volumeCuFt)} cu ft
+                </td>
+                <td className="px-2 py-2">{item.flags.join(", ") || "none"}</td>
+                {!safeMode ? (
+                  <td className="px-2 py-2">{item.disposition}</td>
+                ) : null}
+              </tr>
+            ))}
+            {!looseItems.length ? (
+              <tr>
+                <td
+                  colSpan={safeMode ? 8 : 9}
+                  className="px-2 py-4 text-muted-foreground"
+                >
+                  No loose units in this section.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 type PacketBox = {
   boxId: Id<"boxes">;
   code: string;
@@ -443,15 +596,32 @@ type PacketBox = {
   contents: { name: string; quantity: number }[];
 };
 
+type PacketLooseItem = {
+  itemId: Id<"items">;
+  name: string;
+  status: string;
+  room?: string;
+  destinationRoom?: string;
+  assignedResourceId?: Id<"transportResources">;
+  assignedZoneId?: Id<"transportZones">;
+  quantity: number;
+  disposition: string;
+  weightLb: number;
+  volumeCuFt: number;
+  flags: string[];
+};
+
 function buildPacketModel({
   boxes,
   resourcesWithZones,
   boxReportById,
+  looseItemReports,
   resourceReportById,
 }: {
   boxes: BoxRecord[];
   resourcesWithZones: ResourceWithZones[];
   boxReportById: Map<Id<"boxes">, BoxReport>;
+  looseItemReports: LooseItemReport[];
   resourceReportById: Map<
     Id<"transportResources">,
     EstimateReport["resourceReports"][number]
@@ -460,10 +630,14 @@ function buildPacketModel({
   const packetBoxes = boxes.map((record) =>
     packetBoxFor(record, boxReportById.get(record.box._id))
   );
+  const packetLooseItems = looseItemReports.map(packetLooseItemFor);
   const resources = resourcesWithZones.map(({ resource, zones }) => {
     const resourceReport = resourceReportById.get(resource._id);
     const resourceBoxes = packetBoxes.filter(
       (box) => box.assignedResourceId === resource._id
+    );
+    const resourceLooseItems = packetLooseItems.filter(
+      (item) => item.assignedResourceId === resource._id
     );
     return {
       resourceId: resource._id,
@@ -476,18 +650,29 @@ function buildPacketModel({
           zoneId: `${resource._id}:any`,
           name: "Any zone",
           boxes: resourceBoxes.filter((box) => !box.assignedZoneId),
+          looseItems: resourceLooseItems.filter((item) => !item.assignedZoneId),
         },
         ...zones.map((zone) => ({
           zoneId: zone._id,
           name: zone.name,
           boxes: resourceBoxes.filter((box) => box.assignedZoneId === zone._id),
+          looseItems: resourceLooseItems.filter(
+            (item) => item.assignedZoneId === zone._id
+          ),
         })),
       ],
     };
   });
   const unassigned = packetBoxes.filter((box) => !box.assignedResourceId);
+  const personalLooseItems = packetLooseItems.filter((item) =>
+    item.flags.includes("personal transport")
+  );
+  const unassignedLooseItems = packetLooseItems.filter(
+    (item) => !item.assignedResourceId && !item.flags.includes("personal transport")
+  );
   const exceptions = {
     unassigned,
+    unassignedLooseItems,
     fragile: packetBoxes.filter((box) => box.flags.includes("fragile")),
     firstNight: packetBoxes.filter((box) => box.flags.includes("first night")),
     highValue: packetBoxes.filter((box) => box.flags.includes("high value")),
@@ -496,6 +681,7 @@ function buildPacketModel({
         box.flags.includes("personal transport") ||
         box.flags.includes("do not move")
     ),
+    personalLooseItems,
     warnings: packetBoxes.filter((box) =>
       box.flags.some((flag) => flag.startsWith("warning:"))
     ),
@@ -504,12 +690,18 @@ function buildPacketModel({
   return {
     resources,
     unassigned,
+    unassignedLooseItems,
     exceptions,
     totals: {
       boxCount: packetBoxes.length,
+      looseItemCount: packetLooseItems.length,
       itemCount: packetBoxes.reduce((sum, box) => sum + box.itemCount, 0),
-      weightLb: packetBoxes.reduce((sum, box) => sum + box.weightLb, 0),
-      volumeCuFt: packetBoxes.reduce((sum, box) => sum + box.volumeCuFt, 0),
+      weightLb:
+        packetBoxes.reduce((sum, box) => sum + box.weightLb, 0) +
+        packetLooseItems.reduce((sum, item) => sum + item.weightLb, 0),
+      volumeCuFt:
+        packetBoxes.reduce((sum, box) => sum + box.volumeCuFt, 0) +
+        packetLooseItems.reduce((sum, item) => sum + item.volumeCuFt, 0),
     },
   };
 }
@@ -561,6 +753,30 @@ function packetBoxFor(record: BoxRecord, report?: BoxReport): PacketBox {
   };
 }
 
+function packetLooseItemFor(item: LooseItemReport): PacketLooseItem {
+  const flags = new Set<string>();
+  if (item.requiresPersonalTransport || item.disposition === "personalTransport") {
+    flags.add("personal transport");
+  }
+  for (const warning of item.warnings ?? []) {
+    flags.add(`warning:${warning}`);
+  }
+  return {
+    itemId: item.itemId,
+    name: item.name,
+    status: item.status,
+    room: item.room,
+    destinationRoom: item.destinationRoom,
+    assignedResourceId: item.assignedResourceId,
+    assignedZoneId: item.assignedZoneId,
+    quantity: item.quantity,
+    disposition: item.disposition,
+    weightLb: item.estimatedWeightLb,
+    volumeCuFt: item.estimatedVolumeCuFt,
+    flags: Array.from(flags),
+  };
+}
+
 function packetToCsv(
   packet: ReturnType<typeof buildPacketModel>,
   safeMode: boolean,
@@ -569,68 +785,126 @@ function packetToCsv(
   const header = [
     "resource",
     "zone",
-    "box_code",
+    "unit_type",
+    "unit",
     "status",
     "from_room",
     "to_room",
-    "item_count",
+    "quantity_or_items",
     "weight_lb",
     "weight_source",
     "volume_cuft",
     "flags",
-    ...(safeMode ? [] : ["contents"]),
+    ...(safeMode ? [] : ["contents_or_disposition"]),
+  ];
+  const zoneLabel = (
+    zone: ReturnType<typeof buildPacketModel>["resources"][number]["zones"][number]
+  ) =>
+    zone.zoneId.toString().includes(":any")
+      ? "Any zone"
+      : zoneNameById.get(zone.zoneId.toString()) ?? zone.name;
+  const boxRow = ({
+    resourceName,
+    zoneName,
+    box,
+  }: {
+    resourceName: string;
+    zoneName: string;
+    box: PacketBox;
+  }) => [
+    resourceName,
+    zoneName,
+    "box",
+    box.code,
+    box.status,
+    box.room ?? "",
+    box.destinationRoom ?? "",
+    box.itemCount,
+    box.weightSummary.valueLb === undefined
+      ? ""
+      : formatNumber(box.weightSummary.valueLb),
+    box.weightSourceLabel,
+    formatNumber(box.volumeCuFt),
+    box.flags.join("; "),
+    ...(safeMode
+      ? []
+      : [
+          box.contents
+            .map((entry) => `${entry.name} x${entry.quantity}`)
+            .join("; "),
+        ]),
+  ];
+  const looseItemRow = ({
+    resourceName,
+    zoneName,
+    item,
+  }: {
+    resourceName: string;
+    zoneName: string;
+    item: PacketLooseItem;
+  }) => [
+    resourceName,
+    zoneName,
+    "loose_item",
+    item.name,
+    item.status,
+    item.room ?? "",
+    item.destinationRoom ?? "",
+    item.quantity,
+    formatNumber(item.weightLb),
+    "item estimate",
+    formatNumber(item.volumeCuFt),
+    item.flags.join("; "),
+    ...(safeMode ? [] : [item.disposition]),
   ];
   const rows = packet.resources.flatMap((resource) =>
     resource.zones.flatMap((zone) =>
-      zone.boxes.map((box) => [
-        resource.name,
-        zone.zoneId.toString().includes(":any")
-          ? "Any zone"
-          : zoneNameById.get(zone.zoneId.toString()) ?? zone.name,
-        box.code,
-        box.status,
-        box.room ?? "",
-        box.destinationRoom ?? "",
-        box.itemCount,
-        box.weightSummary.valueLb === undefined
-          ? ""
-          : formatNumber(box.weightSummary.valueLb),
-        box.weightSourceLabel,
-        formatNumber(box.volumeCuFt),
-        box.flags.join("; "),
-        ...(safeMode
-          ? []
-          : [
-              box.contents
-                .map((entry) => `${entry.name} x${entry.quantity}`)
-                .join("; "),
-            ]),
-      ])
+      [
+        ...zone.boxes.map((box) =>
+          boxRow({
+            resourceName: resource.name,
+            zoneName: zoneLabel(zone),
+            box,
+          })
+        ),
+        ...zone.looseItems.map((item) =>
+          looseItemRow({
+            resourceName: resource.name,
+            zoneName: zoneLabel(zone),
+            item,
+          })
+        ),
+      ]
     )
   );
   for (const box of packet.unassigned) {
-    rows.push([
-      "Unassigned",
-      "",
-      box.code,
-      box.status,
-      box.room ?? "",
-      box.destinationRoom ?? "",
-      box.itemCount,
-      box.weightSummary.valueLb === undefined
-        ? ""
-        : formatNumber(box.weightSummary.valueLb),
-      box.weightSourceLabel,
-      formatNumber(box.volumeCuFt),
-      box.flags.join("; "),
-      ...(safeMode
-        ? []
-        : [
-            box.contents
-              .map((entry) => `${entry.name} x${entry.quantity}`)
-              .join("; "),
-          ]),
-    ]);
+    rows.push(
+      boxRow({
+        resourceName: "Unassigned",
+        zoneName: "",
+        box,
+      })
+    );
+  }
+  for (const item of packet.unassignedLooseItems) {
+    rows.push(
+      looseItemRow({
+        resourceName: "Unassigned",
+        zoneName: "",
+        item,
+      })
+    );
+  }
+  for (const item of packet.exceptions.personalLooseItems.filter(
+    (looseItem) => !looseItem.assignedResourceId
+  )) {
+    rows.push(
+      looseItemRow({
+        resourceName: "Personal transport",
+        zoneName: "Owner-carried",
+        item,
+      })
+    );
   }
 
   return [header, ...rows]

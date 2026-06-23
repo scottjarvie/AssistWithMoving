@@ -52,7 +52,7 @@ export function PhotosWorkspacePage() {
   const [activeTab, setActiveTab] = useHashTab("review", photoTabHashes);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Photos"
         description="Photo evidence for items, boxes, and rooms — originals stay private, and claim-readiness is scored as you go."

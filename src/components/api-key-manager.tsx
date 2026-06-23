@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Activity,
+  AlertCircle,
   Bot,
   Camera,
   CheckCircle2,
   Copy,
-  FileImage,
+  Eye,
+  EyeOff,
   Home,
   KeyRound,
   Package,
@@ -52,6 +54,8 @@ type HouseholdEntry = {
     name: string;
   };
   role: string;
+  apiAccessStatus: "enabled" | "disabled";
+  canCreateApiKeys: boolean;
 };
 
 type HouseholdStats = {
@@ -61,6 +65,7 @@ type HouseholdStats = {
   itemCount: number;
   boxCount: number;
   activeApiKeyCount: number;
+  apiCapableMemberCount: number;
   activeMemberCount: number;
   pendingInvitationCount: number;
 };
@@ -76,6 +81,9 @@ type ApiKeySummary = {
   revokedAt?: number;
   lastUsedAt?: number;
   lastUsedAction?: string;
+  createdByName?: string | null;
+  createdByEmail?: string | null;
+  creatorApiAccessStatus?: "enabled" | "disabled";
   createdAt: number;
 };
 
@@ -89,10 +97,24 @@ type HelperPreset = {
   id: string;
   title: string;
   description: string;
+  plainLanguage: string;
   name: string;
   scopes: ApiKeyScope[];
   recommended?: boolean;
 };
+
+type VerifyKeyResult =
+  | {
+      ok: true;
+      message: string;
+      scopes: string[];
+      moveRestricted: boolean;
+      householdName?: string;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
 
 const fullTrustedAccessScopes: ApiKeyScope[] = [
   "moves/read",
@@ -134,6 +156,8 @@ const helperPresets: HelperPreset[] = [
     title: "Full trusted helper",
     description:
       "Best when your assistant is actively helping set up the household, move, inventory, photos, exports, and collaborators.",
+    plainLanguage:
+      "Can read and change most move records, upload photos, create exports, and invite collaborators.",
     name: "Full trusted AI helper key",
     scopes: fullTrustedAccessScopes,
     recommended: true,
@@ -143,6 +167,8 @@ const helperPresets: HelperPreset[] = [
     title: "Add items and photos",
     description:
       "Good for a phone-based inventory session where the assistant adds furniture, rooms, photos, and notes.",
+    plainLanguage:
+      "Can add and update inventory and photo evidence, but cannot create moves or invite household members.",
     name: "Add items and photos key",
     scopes: addItemsOnlyScopes,
   },
@@ -151,6 +177,8 @@ const helperPresets: HelperPreset[] = [
     title: "Set up move and members",
     description:
       "Lets an assistant create move structure and invite household collaborators without changing inventory.",
+    plainLanguage:
+      "Can set up move-level structure and household access, but cannot edit inventory.",
     name: "Set up move and members key",
     scopes: setupMoveAndMembersScopes,
   },
@@ -159,6 +187,8 @@ const helperPresets: HelperPreset[] = [
     title: "Look but do not change",
     description:
       "Use this when an assistant only needs to summarize, plan, or explain what is already in the move.",
+    plainLanguage:
+      "Can read move context and exports, but cannot write records or upload photos.",
     name: "Read-only assistant key",
     scopes: readOnlyScopes,
   },
@@ -167,6 +197,8 @@ const helperPresets: HelperPreset[] = [
     title: "Invite collaborators",
     description:
       "A narrow key for adding people to the household when that is the only job.",
+    plainLanguage:
+      "Can invite household account members; this is different from adding mover/contact records.",
     name: "Member manager key",
     scopes: memberManagerScopes,
   },
@@ -177,7 +209,7 @@ const aiConnectionTasks = [
     value: "create",
     label: "Create key",
     description:
-      "Pick the assistant job, copy the image handoff, then create one key for that trusted tool.",
+      "Choose the household, where the assistant can work, and what it can do.",
   },
   {
     value: "connections",
@@ -234,14 +266,11 @@ export function ApiKeyManager({
     useState<Id<"households"> | null>(null);
   const effectiveHouseholdId =
     selectedHouseholdId ?? households?.[0]?.household._id ?? null;
+  const queryHouseholdId = enabled ? effectiveHouseholdId : null;
   const stats = useQuery(
     api.households.summaryStats,
-    effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip",
+    queryHouseholdId ? { householdId: queryHouseholdId } : "skip",
   ) as HouseholdStats | undefined;
-  const keys = useQuery(
-    api.apiKeys.listForHousehold,
-    effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip",
-  ) as ApiKeySummary[] | undefined;
   const createKey = useMutation(api.apiKeys.create);
   const revokeKey = useMutation(api.apiKeys.revoke);
   const rotateKey = useMutation(api.apiKeys.rotate);
@@ -253,11 +282,16 @@ export function ApiKeyManager({
   >("all");
   const [scopes, setScopes] = useState<ApiKeyScope[]>(fullTrustedAccessScopes);
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
+  const [showSecret, setShowSecret] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [verifyKeyValue, setVerifyKeyValue] = useState("");
+  const [verifyResult, setVerifyResult] = useState<VerifyKeyResult | null>(null);
   const [activeConnectionTask, setActiveConnectionTask] = useState<
     (typeof aiConnectionTasks)[number]["value"]
   >("create");
+  const verifyInputRef = useRef<HTMLInputElement | null>(null);
+  const secretRef = useRef<HTMLDivElement | null>(null);
 
   const selectedHouseholdEntry = useMemo(
     () =>
@@ -267,6 +301,14 @@ export function ApiKeyManager({
     [households, effectiveHouseholdId],
   );
   const selectedHousehold = selectedHouseholdEntry?.household;
+  const canCreateKeysForHousehold =
+    selectedHouseholdEntry?.canCreateApiKeys ?? false;
+  const keys = useQuery(
+    api.apiKeys.listForHousehold,
+    queryHouseholdId && canCreateKeysForHousehold
+      ? { householdId: queryHouseholdId }
+      : "skip",
+  ) as ApiKeySummary[] | undefined;
   const activeMoves = useMemo(
     () => stats?.moves ?? [],
     [stats],
@@ -283,6 +325,8 @@ export function ApiKeyManager({
   const selectedPresetId =
     helperPresets.find((preset) => sameScopes(scopes, preset.scopes))?.id ??
     "custom";
+  const selectedPreset =
+    helperPresets.find((preset) => preset.id === selectedPresetId) ?? null;
   const activeKeys = keys?.filter((key) => key.status === "active") ?? [];
   const revokedKeys = keys?.filter((key) => key.status !== "active") ?? [];
   const lastUsedKey = activeKeys
@@ -296,7 +340,7 @@ export function ApiKeyManager({
     agentPhotoReady
       ? "For one household item from one photo plus a few words, prefer MCP add_item_from_photo."
       : canUploadPhotos
-        ? "For ordinary image uploads, use MCP upload_image or upload_images, or POST /api/v1/images/upload."
+        ? "For ordinary image uploads, use MCP upload_photo or upload_photos, or POST /api/v1/images/upload."
         : "This key cannot upload photos; ask the user for an Add items and photos or Full trusted helper key before uploading images.",
     canUploadPhotos
       ? "Send original JPEG, PNG, or WebP files only; MovingManifest stores the original and creates web-ready versions server-side."
@@ -308,8 +352,22 @@ export function ApiKeyManager({
     .filter(Boolean)
     .join(" ");
 
+  useEffect(() => {
+    if (!oneTimeSecret) return;
+    window.setTimeout(() => {
+      if (typeof secretRef.current?.scrollIntoView !== "function") return;
+      secretRef.current.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }, 0);
+  }, [oneTimeSecret]);
+
   async function handleCreateKey() {
-    if (!effectiveHouseholdId) return;
+    if (!effectiveHouseholdId || !canCreateKeysForHousehold) {
+      setMessage("API access is disabled for your membership in this household.");
+      return;
+    }
     setBusy("create");
     setMessage(null);
     setOneTimeSecret(null);
@@ -326,6 +384,7 @@ export function ApiKeyManager({
         scopes,
         expiresAt,
       });
+      setShowSecret(false);
       setOneTimeSecret(result.rawKey);
       try {
         await navigator.clipboard.writeText(result.rawKey);
@@ -372,6 +431,7 @@ export function ApiKeyManager({
         householdId: effectiveHouseholdId,
         apiKeyId,
       });
+      setShowSecret(false);
       setOneTimeSecret(result.rawKey);
       setMessage("AI connection rotated. The previous key was revoked.");
     } catch (error) {
@@ -396,10 +456,69 @@ export function ApiKeyManager({
   async function handleCopyAgentHandoff() {
     try {
       await navigator.clipboard.writeText(agentHandoffText);
-      setMessage("Agent upload handoff copied.");
+      setMessage("Assistant instructions copied.");
     } catch {
-      setMessage("Browser copy was blocked. Select and copy the handoff text.");
+      setMessage("Browser copy was blocked. Select and copy the instructions.");
     }
+  }
+
+  async function handleVerifyKey() {
+    const rawKey = verifyKeyValue.trim();
+    setVerifyResult(null);
+    if (!rawKey) {
+      setVerifyResult({
+        ok: false,
+        message: "Paste the key you copied before testing it.",
+      });
+      return;
+    }
+    setBusy("verify-key");
+    try {
+      const response = await fetch("/api/v1/me", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${rawKey}`,
+        },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setVerifyResult({
+          ok: false,
+          message:
+            payload?.error?.message ??
+            "This key did not verify. It may be expired, revoked, mistyped, or missing required access.",
+        });
+        return;
+      }
+      const data = payload?.data ?? {};
+      setVerifyResult({
+        ok: true,
+        message: "Key verified. Your assistant can connect with this secret.",
+        scopes: Array.isArray(data.apiKey?.scopes) ? data.apiKey.scopes : [],
+        moveRestricted: Boolean(data.apiKey?.moveRestricted),
+        householdName: data.household?.name,
+      });
+      setVerifyKeyValue("");
+    } catch {
+      setVerifyResult({
+        ok: false,
+        message:
+          "Could not reach the verification endpoint from this browser. Try again before pasting the key into an assistant.",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function startVerifyPrompt(keyName?: string) {
+    setActiveConnectionTask("connections");
+    setVerifyResult({
+      ok: false,
+      message: keyName
+        ? `Paste the current secret for "${keyName}" below. Existing rows only store previews, so MovingManifest cannot test that secret without you pasting it.`
+        : "Paste the key you copied below to test it.",
+    });
+    window.setTimeout(() => verifyInputRef.current?.focus(), 0);
   }
 
   function toggleScope(scope: ApiKeyScope) {
@@ -430,7 +549,16 @@ export function ApiKeyManager({
           <Badge variant="outline">{activeKeys.length} active</Badge>
         </div>
 
-        {keys === undefined && effectiveHouseholdId ? (
+        {!canCreateKeysForHousehold && effectiveHouseholdId ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-muted-foreground">
+            <span className="font-medium text-foreground">
+              API access is disabled for your membership.
+            </span>{" "}
+            You can still use the MovingManifest app normally, but an owner or
+            admin must enable API access before you can create, rotate, or
+            inspect assistant keys for this household.
+          </div>
+        ) : keys === undefined && effectiveHouseholdId ? (
           <div className="space-y-2">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-5/6" />
@@ -445,6 +573,7 @@ export function ApiKeyManager({
                 busy={busy}
                 onRotate={handleRotateKey}
                 onRevoke={handleRevokeKey}
+                onTest={startVerifyPrompt}
               />
             ))}
           </div>
@@ -468,12 +597,227 @@ export function ApiKeyManager({
                   busy={busy}
                   onRotate={handleRotateKey}
                   onRevoke={handleRevokeKey}
+                  onTest={startVerifyPrompt}
                 />
               ))}
             </div>
           </details>
         ) : null}
       </div>
+    );
+  }
+
+  function renderVerifyKey() {
+    return (
+      <section
+        aria-label="Test copied API key"
+        className="rounded-md border border-border bg-muted/20 p-4"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
+              Test a key before leaving
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Paste the one-time secret you just copied. The browser calls GET
+              /me directly and this form does not save the key.
+            </p>
+          </div>
+          <Badge variant="outline">no storage</Badge>
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+          <Input
+            ref={verifyInputRef}
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={verifyKeyValue}
+            onChange={(event) => {
+              setVerifyKeyValue(event.target.value);
+              setVerifyResult(null);
+            }}
+            placeholder="Paste mmk_... key to verify"
+            aria-label="API key to verify"
+          />
+          <Button
+            type="button"
+            onClick={() => void handleVerifyKey()}
+            disabled={busy === "verify-key"}
+          >
+            {busy === "verify-key" ? (
+              <RefreshCw className="animate-spin" aria-hidden="true" />
+            ) : (
+              <CheckCircle2 aria-hidden="true" />
+            )}
+            Test key
+          </Button>
+        </div>
+        {verifyResult ? (
+          <div
+            className={`mt-3 rounded-md border p-3 text-sm leading-6 ${
+              verifyResult.ok
+                ? "border-emerald-700/30 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100"
+                : "border-destructive/30 bg-destructive/10 text-foreground"
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-2">
+              {verifyResult.ok ? (
+                <CheckCircle2
+                  className="mt-0.5 size-4 shrink-0 text-emerald-600"
+                  aria-hidden="true"
+                />
+              ) : (
+                <AlertCircle
+                  className="mt-0.5 size-4 shrink-0 text-destructive"
+                  aria-hidden="true"
+                />
+              )}
+              <div>
+                <p className="font-medium">{verifyResult.message}</p>
+                {verifyResult.ok ? (
+                  <p className="mt-1 text-xs">
+                    {verifyResult.householdName
+                      ? `${verifyResult.householdName} · `
+                      : ""}
+                    {verifyResult.moveRestricted
+                      ? "Restricted to one move"
+                      : "Household-wide key"}{" "}
+                    · {verifyResult.scopes.join(", ") || "No scopes returned"}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  function renderOneTimeSecret() {
+    if (!oneTimeSecret) return null;
+    const displayedSecret = showSecret
+      ? oneTimeSecret
+      : "Hidden for screenshots. Use Copy key, or Show key if manual copy is needed.";
+
+    return (
+      <div
+        ref={secretRef}
+        className="rounded-md border border-emerald-700/30 bg-emerald-500/10 p-4"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-medium">One-time key</h3>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Copy it now. Paste it only into the assistant or connector you
+              trust, then revoke it when that assistant no longer needs access.
+              MovingManifest will not show this exact key again.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setShowSecret((current) => !current)}
+            >
+              {showSecret ? (
+                <EyeOff aria-hidden="true" />
+              ) : (
+                <Eye aria-hidden="true" />
+              )}
+              {showSecret ? "Hide key" : "Show key"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:border-emerald-700 focus-visible:ring-emerald-600/30"
+              onClick={() => void handleCopySecret()}
+            >
+              <Copy aria-hidden="true" />
+              Copy key
+            </Button>
+          </div>
+        </div>
+        <Textarea
+          className="mt-3 min-h-20 font-mono text-xs"
+          readOnly
+          value={displayedSecret}
+          aria-label="One-time API key secret"
+        />
+        <details className="mt-3 rounded-md border border-border bg-background/60 p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            Optional: copy assistant instructions
+          </summary>
+          <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+              These are not another key. They are short instructions for image
+              uploads so the assistant sends originals and lets MovingManifest
+              create display versions.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleCopyAgentHandoff()}
+            >
+              <Copy aria-hidden="true" />
+              Copy instructions
+            </Button>
+          </div>
+          <p className="mt-3 rounded-md border border-border bg-background p-3 text-sm leading-6 text-muted-foreground">
+            {agentHandoffText}
+          </p>
+        </details>
+      </div>
+    );
+  }
+
+  function renderAssistantInstructions() {
+    return (
+      <details className="rounded-md border border-border p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          Optional assistant instructions for images
+        </summary>
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              This is not a separate key. It is optional text to paste after the
+              key if the assistant will upload photos.
+            </p>
+            <p className="mt-3 rounded-md border border-border bg-background p-3 text-sm leading-6 text-muted-foreground">
+              {agentHandoffText}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              onClick={() => void handleCopyAgentHandoff()}
+            >
+              <Copy aria-hidden="true" />
+              Copy instructions
+            </Button>
+          </div>
+          <div className="rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 font-medium text-foreground">
+              <Camera className="size-4 text-primary" aria-hidden="true" />
+              Best image path
+            </p>
+            <p className="mt-2 leading-5">
+              {agentPhotoReady
+                ? "add_item_from_photo, upload_photo, upload_photos"
+                : canUploadPhotos
+                  ? "upload_photo, upload_photos, /images/upload"
+                  : "Choose a photo-capable access preset first"}
+            </p>
+            <p className="mt-3 font-medium text-foreground">Selected access</p>
+            <p className="mt-1 leading-5">{summarizeScopes(scopes)}</p>
+          </div>
+        </div>
+      </details>
     );
   }
 
@@ -553,6 +897,9 @@ export function ApiKeyManager({
                     ? `, ${stats.pendingInvitationCount} invited`
                     : ""}
                 </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatStat(stats?.apiCapableMemberCount)} API-capable
+                </p>
               </div>
               <Users className="size-5 text-primary" aria-hidden="true" />
             </div>
@@ -579,23 +926,40 @@ export function ApiKeyManager({
 
         {setupMode ? (
           <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  <CheckCircle2
-                    className="size-4 text-primary"
-                    aria-hidden="true"
-                  />
-                  Recommended: full trusted helper
+            <div className="flex items-start gap-3">
+              <ShieldCheck
+                className="mt-0.5 size-5 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium">
+                  Hosted assistant? Try OAuth first.
+                </h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  On mobile, claude.ai, or another hosted MCP client, paste the
+                  MCP endpoint and sign in instead of handling a raw key. Create
+                  a key below when the assistant cannot use OAuth yet.
                 </p>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  This is the normal choice when your assistant is helping set
-                  up a move, add inventory, upload photos, export packets, or
-                  invite household collaborators.
-                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/mcp">Open MCP setup</Link>
+                  </Button>
+                  <code className="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs">
+                    https://movingmanifest.com/api/mcp
+                  </code>
+                </div>
               </div>
-              <Badge variant="secondary">{summarizeScopes(scopes)}</Badge>
             </div>
+          </div>
+        ) : null}
+
+        {!canCreateKeysForHousehold && selectedHousehold ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm leading-6 text-muted-foreground">
+            <span className="font-medium text-foreground">
+              API access is disabled for this household membership.
+            </span>{" "}
+            You can keep using the app, but this account cannot create or
+            manage assistant keys until an owner or admin enables API access.
           </div>
         ) : null}
 
@@ -629,99 +993,20 @@ export function ApiKeyManager({
                   <p className="mt-3 text-sm leading-5 text-muted-foreground">
                     {preset.description}
                   </p>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                    {preset.plainLanguage}
+                  </p>
                 </button>
               );
             })}
           </div>
-        ) : (
-          <details className="rounded-md border border-border p-4">
-            <summary className="cursor-pointer text-sm font-medium">
-              Change what the assistant can do
-            </summary>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {helperPresets.map((preset) => {
-                const selected = preset.id === selectedPresetId;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => applyPreset(preset)}
-                    className={`rounded-md border p-3 text-left transition hover:border-primary/60 hover:bg-primary/5 ${
-                      selected
-                        ? "border-primary bg-primary/10"
-                        : "border-border bg-background"
-                    }`}
-                  >
-                    <span className="flex items-center justify-between gap-2 text-sm font-medium">
-                      {preset.title}
-                      {selected ? (
-                        <CheckCircle2
-                          className="size-4 shrink-0 text-primary"
-                          aria-hidden="true"
-                        />
-                      ) : null}
-                    </span>
-                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                      {preset.description}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </details>
-        )}
+        ) : null}
 
-        <div className="rounded-md border border-border bg-muted/20 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="flex items-center gap-2 text-sm font-medium">
-                <FileImage className="size-4 text-primary" aria-hidden="true" />
-                Image upload handoff
-              </h3>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                Give this to the assistant after the key. It tells the agent to
-                send originals and let MovingManifest create web-ready image
-                versions in the background.
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void handleCopyAgentHandoff()}
-            >
-              <Copy aria-hidden="true" />
-              Copy handoff
-            </Button>
-          </div>
-          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <p className="rounded-md border border-border bg-background p-3 text-sm leading-6 text-muted-foreground">
-              {agentHandoffText}
-            </p>
-            <div className="grid gap-2 text-xs text-muted-foreground">
-              <div className="rounded-md border border-border bg-background p-3">
-                <p className="flex items-center gap-2 font-medium text-foreground">
-                  <Camera className="size-4 text-primary" aria-hidden="true" />
-                  Best image path
-                </p>
-                <p className="mt-2 leading-5">
-                  {agentPhotoReady
-                    ? "add_item_from_photo, upload_image, upload_images"
-                    : canUploadPhotos
-                      ? "upload_image, upload_images, /images/upload"
-                      : "Change preset before upload"}
-                </p>
-              </div>
-              <div className="rounded-md border border-border bg-background p-3">
-                <p className="font-medium text-foreground">Selected access</p>
-                <p className="mt-2 leading-5">{summarizeScopes(scopes)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div
+          className={
+            setupMode ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 lg:grid-cols-2"
+          }
+        >
           <div className="space-y-2">
             <label htmlFor="api-key-household" className="text-sm font-medium">
               Household
@@ -773,13 +1058,65 @@ export function ApiKeyManager({
                     moveTitleById.get(moveRestrictionId),
                   )}
             </p>
+            {activeMoves.length ? (
+              <p className="text-xs text-muted-foreground">
+                Safest setup: restrict this key to the move the assistant is
+                working on, unless it needs to create or find moves.
+              </p>
+            ) : null}
           </div>
+
+          {setupMode ? (
+            <div className="space-y-2">
+              <label htmlFor="api-key-preset" className="text-sm font-medium">
+                What can it do?
+              </label>
+              <select
+                id="api-key-preset"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={selectedPresetId}
+                onChange={(event) => {
+                  const preset = helperPresets.find(
+                    (entry) => entry.id === event.target.value,
+                  );
+                  if (preset) applyPreset(preset);
+                }}
+              >
+                {selectedPresetId === "custom" ? (
+                  <option value="custom">Custom permissions</option>
+                ) : null}
+                {helperPresets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.title}
+                    {preset.recommended ? " (recommended)" : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {selectedPreset?.plainLanguage ??
+                  `${scopes.length} custom permissions selected.`}
+              </p>
+              <details>
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                  See exact permissions
+                </summary>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  {scopes.join(", ")}
+                </p>
+              </details>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-primary/25 bg-primary/5 p-4">
           <Button
             type="button"
-            disabled={!effectiveHouseholdId || busy === "create" || !scopes.length}
+            disabled={
+              !effectiveHouseholdId ||
+              !canCreateKeysForHousehold ||
+              busy === "create" ||
+              !scopes.length
+            }
             onClick={() => void handleCreateKey()}
           >
             {busy === "create" ? (
@@ -794,6 +1131,17 @@ export function ApiKeyManager({
             trust, because it can do the job you selected above.
           </p>
         </div>
+
+        {renderOneTimeSecret()}
+
+        {scopes.includes("members/manage") ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-6 text-muted-foreground">
+            <span className="font-medium text-foreground">Member access:</span>{" "}
+            members/manage lets an agent invite people to your household
+            account. That is different from move contacts, and most helpers do
+            not need it.
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -862,6 +1210,9 @@ export function ApiKeyManager({
 
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" variant="outline">
+            <Link href="/ai/kit">Agent kit</Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
             <Link href="/ai">AI guide</Link>
           </Button>
           <Button asChild size="sm" variant="outline">
@@ -871,6 +1222,8 @@ export function ApiKeyManager({
             <Link href="/mcp">MCP docs</Link>
           </Button>
         </div>
+
+        {renderAssistantInstructions()}
       </div>
     );
   }
@@ -889,6 +1242,17 @@ export function ApiKeyManager({
                 ? "You are signed in. Create one key, copy it, and paste it into the AI assistant you trust."
                 : "Give a trusted assistant a key so it can help with your household, moves, inventory, photos, and collaborators. You can revoke access any time."}
             </CardDescription>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href="/ai/kit">Agent kit</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/api">API docs</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/mcp">MCP setup</Link>
+              </Button>
+            </div>
           </div>
           <Badge variant="outline">
             {setupMode ? "signed-in setup" : "API keys for assistants"}
@@ -918,7 +1282,7 @@ export function ApiKeyManager({
                 {renderCreateConnection()}
                 <details className="rounded-md border border-border p-4">
                   <summary className="cursor-pointer text-sm font-medium">
-                    Advanced API settings
+                    Advanced access and API settings
                   </summary>
                   <div className="mt-4">{renderAdvancedApiSettings()}</div>
                 </details>
@@ -927,6 +1291,12 @@ export function ApiKeyManager({
                     Manage existing AI connections
                   </summary>
                   <div className="mt-4">{renderConnections()}</div>
+                </details>
+                <details className="rounded-md border border-border p-4">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Test a copied key
+                  </summary>
+                  <div className="mt-4">{renderVerifyKey()}</div>
                 </details>
               </>
             ) : (
@@ -960,35 +1330,11 @@ export function ApiKeyManager({
               </Tabs>
             )}
 
-            {oneTimeSecret ? (
-              <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-medium">One-time secret</h3>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      Copy this now with the green button. MovingManifest stores
-                      only a secure hash, so this exact secret will not be shown
-                      again.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:border-emerald-700 focus-visible:ring-emerald-600/30"
-                    onClick={() => void handleCopySecret()}
-                  >
-                    <Copy aria-hidden="true" />
-                    Copy key
-                  </Button>
-                </div>
-                <Textarea
-                  className="mt-3 font-mono text-xs"
-                  readOnly
-                  value={oneTimeSecret}
-                  aria-label="One-time API key secret"
-                />
-              </div>
-            ) : null}
+            {!setupMode && activeConnectionTask !== "create"
+              ? renderOneTimeSecret()
+              : null}
+
+            {!setupMode ? renderVerifyKey() : null}
 
             {message ? (
               <p
@@ -1054,14 +1400,19 @@ function ConnectionRow({
   busy,
   onRotate,
   onRevoke,
+  onTest,
 }: {
   apiKey: ApiKeySummary;
   moveTitleById: Map<Id<"moves">, string>;
   busy: string | null;
   onRotate: (apiKeyId: Id<"apiKeys">) => Promise<void>;
   onRevoke: (apiKeyId: Id<"apiKeys">) => Promise<void>;
+  onTest: (keyName?: string) => void;
 }) {
   const active = apiKey.status === "active";
+  const creatorApiDisabled = apiKey.creatorApiAccessStatus === "disabled";
+  const creatorLabel =
+    apiKey.createdByName ?? apiKey.createdByEmail ?? "Unknown member";
   return (
     <div
       role="group"
@@ -1081,6 +1432,9 @@ function ConnectionRow({
                 apiKey.moveId ? moveTitleById.get(apiKey.moveId) : undefined,
               )}
             </Badge>
+            {creatorApiDisabled ? (
+              <Badge variant="secondary">Creator API off</Badge>
+            ) : null}
           </div>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             {apiKey.tokenPreview}
@@ -1091,8 +1445,24 @@ function ConnectionRow({
             {formatApiKeyDate(apiKey.lastUsedAt)}
             {apiKey.lastUsedAction ? ` for ${apiKey.lastUsedAction}` : ""}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Created by {creatorLabel}
+            {creatorApiDisabled
+              ? "; this key is blocked until that member's API access is enabled or the key is rotated by another admin."
+              : ""}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!active || creatorApiDisabled}
+            onClick={() => onTest(apiKey.name)}
+          >
+            <ShieldCheck aria-hidden="true" />
+            Test copied key
+          </Button>
           <Button
             type="button"
             size="sm"

@@ -5,34 +5,36 @@ export type SecurityHeader = {
   value: string;
 };
 
+const clerkSourceList = [
+  "https://*.clerk.accounts.dev",
+  "https://*.clerk.com",
+  "https://*.clerk.services",
+  "https://clerk.movingmanifest.com",
+  "https://accounts.movingmanifest.com",
+];
+
+const scriptSourceList = [
+  "'self'",
+  "'unsafe-inline'",
+  "'unsafe-eval'",
+  ...clerkSourceList,
+  "https://vercel.live",
+];
+
 export const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  [
-    "script-src",
-    "'self'",
-    "'unsafe-inline'",
-    "'unsafe-eval'",
-    "https://*.clerk.accounts.dev",
-    "https://*.clerk.com",
-    "https://*.clerk.services",
-    "https://vercel.live",
-  ].join(" "),
+  ["script-src", ...scriptSourceList].join(" "),
+  ["script-src-elem", ...scriptSourceList].join(" "),
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self' https: wss:",
   "worker-src 'self' blob:",
-  [
-    "frame-src",
-    "'self'",
-    "https://*.clerk.accounts.dev",
-    "https://*.clerk.com",
-    "https://*.clerk.services",
-  ].join(" "),
+  ["frame-src", "'self'", ...clerkSourceList].join(" "),
   "media-src 'self' blob: https:",
   "manifest-src 'self'",
   "report-uri /api/csp-report",

@@ -1,11 +1,12 @@
 import { anyApi, type FunctionReference } from "convex/server";
 import { v } from "convex/values";
 
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
-import { hashApiKey } from "./lib/apiKeys";
+import { appRoleForEmail } from "./lib/admin";
+import { apiKeyScopes, hashApiKey, type ApiKeyScope } from "./lib/apiKeys";
 import { getAiProviderStatus } from "./lib/aiProvider";
 import {
   buildMoveDayChecklist,
@@ -16,6 +17,19 @@ import {
   assertAiUsageAllowed,
   inputBytesFromText,
 } from "./lib/aiUsage";
+import {
+  canTransitionIngestionStatus,
+  allIngestionScopeHints,
+  ingestionClaimDurationMs,
+  ingestionClaimIsExpired,
+  ingestionQueueIntents,
+  ingestionScopeHintMatches,
+  normalizeIngestionScopeHint,
+  type IngestionScopeHint,
+  type IngestionQueueIntent,
+  type IngestionQueueStatus,
+} from "./lib/ingestionQueue";
+import { mediaKindForMimeType } from "./lib/mediaStorage";
 import { resolveBoxWeight } from "./lib/boxWeight";
 import {
   requiresOverrideReason,
@@ -53,12 +67,18 @@ import {
 import { itemDimensionsConfidenceForRead } from "../src/lib/inventory-measurements";
 import { summarizeMoveQuestionsFromDocs } from "./lib/moveQuestionDocuments";
 import {
+  canMembershipUseApiAccess,
+  defaultMemberApiAccessStatus,
+  effectiveMemberApiAccessStatus,
   normalizeCollaboratorEmail,
   parseManagedHouseholdMemberRole,
 } from "./lib/householdMembers";
-import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
 import {
-  boxStatuses,
+  addOrInviteHouseholdMemberByEmail,
+  claimPendingHouseholdInvitationsForUser,
+} from "./lib/householdInvitations";
+import { canPerformHouseholdAction, type PermissionAction } from "./lib/roles";
+import {
   documentationProfileTypes,
   defaultDocumentationProfilesForMoveType,
   exifHandlingStatuses,
@@ -105,10 +125,12 @@ import {
 } from "./lib/aiPlanningSuggestionWorkflow";
 import { suggestFromPhotoIntake } from "./lib/photoIntake";
 import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
+import { selectDerivativeRef } from "./lib/photoDelivery";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { parseTextIntakeSuggestions } from "./lib/textIntakeParser";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
+import { defaultPlanShortIdCounters } from "./lib/planValidators";
 import {
   describePlanDocument,
   normalizePlanDocument,
@@ -119,6 +141,17 @@ import {
   type PlanSourceSummary,
 } from "../src/lib/plan-describe";
 import {
+  floorplanSolveToPlanOps,
+  solveFloorplanPuzzle,
+  type FloorplanPuzzleInput,
+} from "../src/lib/floorplans/solver";
+import type {
+  FloorplanConfidence,
+  FloorplanObservation,
+  FloorplanRelationship,
+  FloorplanSolveDiagnostic,
+} from "../src/lib/floorplans/types";
+import {
   bearerToken,
   bodyRecord as bodyObject,
   moveIdFromRestBodyOrQuery,
@@ -127,19 +160,41 @@ import {
   parseRestPath,
   requestHashInput,
   requiredScopesForRestRoute,
+  restBoxCreateFields,
+  restBoxPatch,
+  restAssignmentFields,
+  isLooseMovableUnitRestItem,
+  restMovableUnitSummary,
+  normalizeRestBoxCode,
+  restAgentAttributionFields,
+  restPrivateItemNoteAppendPatch,
+  mergeRestItemResearchSources,
+  restResponseErrorSummary,
+  restMovableUnitLooseItemFailureRows,
+  oauthNeedsHouseholdContextPayload,
+  restMeContextPayload,
   restError,
+  restErrorFromUnknown,
   restOk,
+  safeRestBox,
   restApiRateLimit,
   restRateLimitResult,
   restRateLimitWindowStart,
   restRateLimited,
   withRestRateLimitHeaders,
+  invalidField,
+  RestApiError,
   type RestRequestInput,
   type RestRateLimitResult,
   type RestResponse,
 } from "./lib/restApi";
 
-const restMoveStatuses = ["planning", "active", "completed", "archived"] as const;
+const restMoveStatuses = [
+  "planning",
+  "active",
+  "completed",
+  "archived",
+] as const;
 const restExportJobTypes = [
   "inventory",
   "boxes",
@@ -157,6 +212,12 @@ const restShareLinkRoles = [
   "viewer",
   "guest",
 ] as const;
+const restPhotoDerivativeVariants = [
+  "thumb",
+  "card",
+  "detail",
+  "full",
+] as const;
 const restEstimateConfidences = [
   "none",
   "low",
@@ -164,6 +225,14 @@ const restEstimateConfidences = [
   "high",
   "manual",
   "actual",
+] as const;
+const restItemResearchSourceStatuses = [
+  "used",
+  "checked",
+  "blocked",
+  "gated",
+  "failed",
+  "notRelevant",
 ] as const;
 const restPlannedItemStatuses = [
   "idea",
@@ -190,6 +259,192 @@ const restAiSuggestionStatuses = [
   "edited",
   "rejected",
 ] as const;
+const restIngestionQueueStatuses = [
+  "queued",
+  "claimed",
+  "processed",
+  "needsInput",
+  "resolved",
+  "discarded",
+] as const;
+const restFloorplanEvidenceTypes = [
+  "measurement",
+  "knownFact",
+  "assumption",
+  "conflict",
+  "note",
+] as const;
+const restFloorplanEvidenceSourceTypes = [
+  "image",
+  "textNote",
+  "userEdit",
+  "agentExtraction",
+  "calculation",
+] as const;
+const restFloorplanMeasurementKinds = [
+  "known",
+  "assumption",
+  "derived",
+  "range",
+] as const;
+const restFloorplanMeasurementTypes = [
+  "width",
+  "depth",
+  "clearWidth",
+  "clearDepth",
+  "height",
+  "area",
+  "grossArea",
+  "conditionedArea",
+  "excludedArea",
+  "lotArea",
+  "footprintArea",
+  "perimeter",
+  "exteriorWidth",
+  "exteriorDepth",
+  "areaVariance",
+  "span",
+  "wallThickness",
+  "openingWidth",
+  "fixtureOffset",
+  "clearance",
+  "unknown",
+] as const;
+const restFloorplanSpaceKinds = [
+  "room",
+  "hall",
+  "closet",
+  "bath",
+  "utility",
+  "kitchen",
+  "circulation",
+  "garage",
+  "carport",
+  "patio",
+  "deck",
+  "porch",
+  "shed",
+  "yard",
+  "outdoor",
+] as const;
+const restFloorplanPropertyZoneKinds = [
+  "houseShell",
+  "garage",
+  "carport",
+  "patio",
+  "deck",
+  "porch",
+  "shed",
+  "yard",
+  "driveway",
+  "garden",
+  "fence",
+  "lot",
+  "custom",
+] as const;
+const restFloorplanAreaRoles = [
+  "conditioned",
+  "unconditioned",
+  "excluded",
+  "outdoor",
+  "unknown",
+] as const;
+const restFloorplanConstraintStrengths = [
+  "hard",
+  "strong",
+  "soft",
+  "displayOnly",
+] as const;
+const restFloorplanMeasurementUnits = [
+  "in",
+  "ft",
+  "sqft",
+  "acre",
+  "percent",
+  "count",
+] as const;
+const restFloorplanConnectionKinds = [
+  "door",
+  "opening",
+  "hall",
+  "throughRoom",
+  "unknown",
+] as const;
+const restFloorplanMeasurementSubjectTypes = [
+  "plan",
+  "level",
+  "room",
+  "structure",
+  "areaGroup",
+  "lot",
+  "zone",
+  "shell",
+  "opening",
+  "fixture",
+  "path",
+] as const;
+const restFloorplanObservationTypes = [
+  "label",
+  "ocrText",
+  "measurementText",
+  "roomName",
+  "wallSegment",
+  "opening",
+  "door",
+  "doorway",
+  "doorlessPassage",
+  "window",
+  "fixture",
+  "closet",
+  "hall",
+  "exteriorStructure",
+  "patio",
+  "carport",
+  "shed",
+  "lotFeature",
+  "orientationClue",
+  "areaTarget",
+  "unknownMark",
+  "sourceNote",
+] as const;
+const restFloorplanObservationStatuses = [
+  "active",
+  "needsReview",
+  "superseded",
+  "rejected",
+] as const;
+const restFloorplanRelationshipTypes = [
+  "adjacentTo",
+  "connectedTo",
+  "contains",
+  "partOf",
+  "leftOf",
+  "rightOf",
+  "above",
+  "below",
+  "sameAs",
+  "conflictsWith",
+  "openingIn",
+  "countsTowardArea",
+  "excludedFromArea",
+  "accessesThrough",
+  "doorlessPassageBetween",
+  "wallSharedWith",
+] as const;
+const restFloorplanSubjectKinds = [
+  "room",
+  "hall",
+  "closet",
+  "bathroom",
+  "kitchen",
+  "fixture",
+  "opening",
+  "wall",
+  "structure",
+  "zone",
+  "lot",
+  "unknown",
+] as const;
 const restMovePersonRoles = [
   "owner",
   "householdMember",
@@ -198,6 +453,31 @@ const restMovePersonRoles = [
   "contact",
 ] as const;
 const maxBatchUpsertItems = 100;
+const defaultSectionLimit = 100;
+const maxSectionLimit = 500;
+const defaultSectionLimits = {
+  resources: 100,
+  zones: 100,
+  people: 100,
+  spaces: 100,
+  items: 100,
+  boxes: 200,
+  assignments: 200,
+  photos: 100,
+  planningSuggestions: 100,
+  documentationProfiles: 100,
+  exports: 100,
+  shareLinks: 100,
+  salePipeline: 100,
+  layoutPlans: 100,
+  transportResources: 100,
+  transportZones: 100,
+} as const;
+type ApiSectionName = keyof typeof defaultSectionLimits;
+type ApiSectionOptions = {
+  sections?: Set<string>;
+  maxPerSection?: number;
+};
 
 const internalFunctions = anyApi as unknown as {
   planOps: {
@@ -218,6 +498,17 @@ const internalFunctions = anyApi as unknown as {
   };
 };
 
+const restOAuthIdentityValidator = v.object({
+  tokenIdentifier: v.string(),
+  subject: v.string(),
+  issuer: v.string(),
+  oauthClientId: v.optional(v.string()),
+  oauthTokenId: v.optional(v.string()),
+  name: v.optional(v.string()),
+  pictureUrl: v.optional(v.string()),
+  email: v.optional(v.string()),
+});
+
 export const handle = internalMutation({
   args: {
     method: v.union(
@@ -225,13 +516,14 @@ export const handle = internalMutation({
       v.literal("POST"),
       v.literal("PATCH"),
       v.literal("PUT"),
-      v.literal("DELETE")
+      v.literal("DELETE"),
     ),
     path: v.string(),
     query: v.record(v.string(), v.string()),
     authorization: v.optional(v.string()),
     idempotencyKey: v.optional(v.string()),
     body: v.optional(v.any()),
+    oauthIdentity: v.optional(restOAuthIdentityValidator),
   },
   handler: async (ctx, args): Promise<RestResponse> => {
     const segments = parseRestPath(args.path);
@@ -247,12 +539,12 @@ export const handle = internalMutation({
       });
     }
 
-    const rawKey = bearerToken(args.authorization);
-    if (!rawKey) {
+    const bearerTokenValue = bearerToken(args.authorization);
+    if (!bearerTokenValue && !args.oauthIdentity) {
       return restError({
         status: 401,
         code: "unauthorized",
-        message: "Use a Bearer API key.",
+        message: "Use a Bearer API key or OAuth access token.",
       });
     }
 
@@ -263,14 +555,30 @@ export const handle = internalMutation({
         query: args.query,
       }) as Id<"moves"> | undefined;
       const action = `${args.method} /api/v1/${segments.join("/")}`;
-      const auth = await authenticateApiKey(ctx, {
-        rawKey,
-        requiredScopes,
-        moveId,
-        action,
-        allowRestrictedKeyWithoutMoveId:
-          segments[0] === "me" || segments[0] === "plans",
+      const oauthMeOnboarding = await routeOAuthMeOnboardingIfNeeded(ctx, {
+        args,
+        segments,
+        bearerTokenValue,
       });
+      if (oauthMeOnboarding) {
+        return oauthMeOnboarding;
+      }
+      const auth = bearerTokenValue?.startsWith("mmk_")
+        ? await authenticateApiKey(ctx, {
+            rawKey: bearerTokenValue,
+            requiredScopes,
+            moveId,
+            action,
+            allowRestrictedKeyWithoutMoveId:
+              segments[0] === "me" || segments[0] === "plans",
+          })
+        : await authenticateOAuthRestActor(ctx, {
+            identity: args.oauthIdentity,
+            requiredScopes,
+            moveId,
+            householdId: householdIdFromRestRequest(ctx, args),
+            action,
+          });
 
       const rateLimit = await checkApiRateLimit(ctx, {
         householdId: auth.householdId,
@@ -283,15 +591,11 @@ export const handle = internalMutation({
       }
 
       const response = await withIdempotency(ctx, args, auth, async () =>
-        routeRequest(ctx, args, segments, auth)
+        routeRequest(ctx, args, segments, auth),
       );
       return withRestRateLimitHeaders(response, rateLimit);
     } catch (error) {
-      return restError({
-        status: errorStatus(error),
-        code: "request_failed",
-        message: error instanceof Error ? error.message : "Request failed.",
-      });
+      return restErrorFromUnknown(error);
     }
   },
 });
@@ -315,13 +619,14 @@ export const authenticateActionRequest = internalMutation({
       v.literal("POST"),
       v.literal("PATCH"),
       v.literal("PUT"),
-      v.literal("DELETE")
+      v.literal("DELETE"),
     ),
     path: v.string(),
     query: v.record(v.string(), v.string()),
     authorization: v.optional(v.string()),
     body: v.optional(v.any()),
     moveId: v.optional(v.string()),
+    oauthIdentity: v.optional(restOAuthIdentityValidator),
   },
   handler: async (ctx, args) => {
     const segments = parseRestPath(args.path);
@@ -340,44 +645,413 @@ export const authenticateActionRequest = internalMutation({
       };
     }
 
-    const rawKey = bearerToken(args.authorization);
-    if (!rawKey) {
+    const bearerTokenValue = bearerToken(args.authorization);
+    if (!bearerTokenValue && !args.oauthIdentity) {
       return {
         ok: false,
         response: restError({
           status: 401,
           code: "unauthorized",
-          message: "Use a Bearer API key.",
+          message: "Use a Bearer API key or OAuth access token.",
         }),
       };
     }
 
     try {
-      const auth = await authenticateApiKey(ctx, {
-        rawKey,
-        requiredScopes,
-        moveId: args.moveId
-          ? (args.moveId as Id<"moves">)
-          : (moveIdFromRestRequest({
-              segments,
-              body: args.body,
-              query: args.query,
-            }) as Id<"moves"> | undefined),
-        action: `${args.method} /api/v1/${segments.join("/")}`,
-      });
+      const moveId = args.moveId
+        ? (args.moveId as Id<"moves">)
+        : (moveIdFromRestRequest({
+            segments,
+            body: args.body,
+            query: args.query,
+          }) as Id<"moves"> | undefined);
+      const action = `${args.method} /api/v1/${segments.join("/")}`;
+      const auth = bearerTokenValue?.startsWith("mmk_")
+        ? await authenticateApiKey(ctx, {
+            rawKey: bearerTokenValue,
+            requiredScopes,
+            moveId,
+            action,
+          })
+        : await authenticateOAuthRestActor(ctx, {
+            identity: args.oauthIdentity,
+            requiredScopes,
+            moveId,
+            householdId: householdIdFromRestRequest(ctx, args),
+            action,
+          });
       return { ok: true, auth, segments };
     } catch (error) {
       return {
         ok: false,
-        response: restError({
-          status: errorStatus(error),
-          code: "request_failed",
-          message: error instanceof Error ? error.message : "Request failed.",
-        }),
+        response: restErrorFromUnknown(error),
       };
     }
   },
 });
+
+async function routeOAuthMeOnboardingIfNeeded(
+  ctx: MutationCtx,
+  {
+    args,
+    segments,
+    bearerTokenValue,
+  }: {
+    args: RestRequestInput;
+    segments: string[];
+    bearerTokenValue: string | null;
+  },
+) {
+  if (
+    args.method !== "GET" ||
+    segments.length !== 1 ||
+    segments[0] !== "me" ||
+    bearerTokenValue?.startsWith("mmk_") ||
+    !args.oauthIdentity?.oauthClientId
+  ) {
+    return null;
+  }
+
+  const user = await getOrCreateOAuthRestUser(ctx, args.oauthIdentity);
+  const activeMemberships = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_user_status", (q) =>
+      q.eq("userId", user._id).eq("status", "active"),
+    )
+    .take(1);
+  if (activeMemberships.length > 0) {
+    return null;
+  }
+
+  return restOk(
+    oauthNeedsHouseholdContextPayload({
+      userId: user._id,
+      email: user.email,
+      name: user.name,
+    }),
+  );
+}
+
+async function authenticateOAuthRestActor(
+  ctx: MutationCtx,
+  {
+    identity,
+    requiredScopes,
+    householdId,
+    moveId,
+    action,
+  }: {
+    identity: RestRequestInput["oauthIdentity"];
+    requiredScopes: readonly ApiKeyScope[];
+    householdId?: Id<"households">;
+    moveId?: Id<"moves">;
+    action: string;
+  },
+) {
+  if (!identity) {
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "OAuth access token was not accepted by MovingManifest.",
+    });
+  }
+  if (!identity.oauthClientId) {
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "OAuth access token is missing a client identity.",
+    });
+  }
+
+  const user = await getOrCreateOAuthRestUser(ctx, identity);
+  const effectiveHouseholdId = await resolveOAuthHouseholdId(ctx, {
+    userId: user._id,
+    householdId,
+    moveId,
+  });
+  const membership = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_household_user", (q) =>
+      q.eq("householdId", effectiveHouseholdId).eq("userId", user._id),
+    )
+    .unique();
+
+  if (!membership || membership.status !== "active") {
+    throw new RestApiError({
+      status: 403,
+      code: "forbidden",
+      message: "OAuth user is not an active member of this household.",
+    });
+  }
+  if (
+    !canMembershipUseApiAccess({
+      role: membership.role,
+      status: membership.status,
+      apiAccessStatus: membership.apiAccessStatus,
+    })
+  ) {
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: "API access is disabled for this household member.",
+    });
+  }
+
+  for (const permission of permissionActionsForApiScopes(requiredScopes)) {
+    if (!canPerformHouseholdAction(membership.role, permission)) {
+      throw new RestApiError({
+        status: 403,
+        code: "insufficient_scope",
+        message: `OAuth user lacks ${permission} permission for this household.`,
+      });
+    }
+  }
+
+  const connection = await getOrCreateOAuthApiConnection(ctx, {
+    householdId: effectiveHouseholdId,
+    userId: user._id,
+    oauthClientId: identity.oauthClientId,
+  });
+  if (connection.status !== "active") {
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "OAuth MCP connection has been revoked.",
+    });
+  }
+
+  const now = Date.now();
+  await ctx.db.patch(connection._id, {
+    lastUsedAt: now,
+    lastUsedAction: action,
+    updatedAt: now,
+  });
+
+  return {
+    actor: {
+      type: "apiKey" as const,
+      apiKeyId: String(connection._id),
+      scopes: connection.scopes,
+    },
+    connectionType: "oauth" as const,
+    apiKeyId: connection._id,
+    apiKeyName: connection.name,
+    apiKeyTokenPreview: connection.tokenPreview,
+    createdByUserId: user._id,
+    householdId: effectiveHouseholdId,
+    moveId: undefined,
+    scopes: connection.scopes,
+  };
+}
+
+async function getOrCreateOAuthRestUser(
+  ctx: MutationCtx,
+  identity: NonNullable<RestRequestInput["oauthIdentity"]>,
+) {
+  const now = Date.now();
+  const existing = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", identity.subject))
+    .unique();
+  const email = identity.email;
+  const name = identity.name;
+  const imageUrl = identity.pictureUrl;
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      email,
+      name,
+      imageUrl,
+      appRole: appRoleForEmail(email, existing.appRole),
+      updatedAt: now,
+      lastSeenAt: now,
+    });
+    await claimPendingHouseholdInvitationsForUser(ctx, {
+      userId: existing._id,
+      email,
+      actorType: "user",
+    });
+    return { ...existing, email, name, imageUrl };
+  }
+
+  const userId = await ctx.db.insert("users", {
+    clerkUserId: identity.subject,
+    email,
+    name,
+    imageUrl,
+    appRole: appRoleForEmail(email),
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+    lastSeenAt: now,
+  });
+  await claimPendingHouseholdInvitationsForUser(ctx, {
+    userId,
+    email,
+    actorType: "user",
+  });
+  const user = await ctx.db.get(userId);
+  if (!user) {
+    throw new Error("OAuth user creation failed.");
+  }
+  return user;
+}
+
+async function resolveOAuthHouseholdId(
+  ctx: MutationCtx,
+  {
+    userId,
+    householdId,
+    moveId,
+  }: {
+    userId: Id<"users">;
+    householdId?: Id<"households">;
+    moveId?: Id<"moves">;
+  },
+) {
+  if (moveId) {
+    const move = await ctx.db.get(moveId);
+    if (move && move.status !== "archived") {
+      return move.householdId;
+    }
+  }
+  if (householdId) {
+    return householdId;
+  }
+
+  const memberships = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_user_status", (q) =>
+      q.eq("userId", userId).eq("status", "active"),
+    )
+    .collect();
+  const activeMemberships = memberships.filter(
+    (membership) => membership.status === "active",
+  );
+  if (activeMemberships.length === 0) {
+    throw new RestApiError({
+      status: 403,
+      code: "forbidden",
+      message: "OAuth user does not belong to an active household.",
+    });
+  }
+  return activeMemberships[0].householdId;
+}
+
+async function getOrCreateOAuthApiConnection(
+  ctx: MutationCtx,
+  {
+    householdId,
+    userId,
+    oauthClientId,
+  }: {
+    householdId: Id<"households">;
+    userId: Id<"users">;
+    oauthClientId: string;
+  },
+) {
+  const prefix = `oauth_${userId}_${householdId}_${oauthClientId}`;
+  const existingConnections = await ctx.db
+    .query("apiKeys")
+    .withIndex("by_prefix", (q) => q.eq("prefix", prefix))
+    .collect();
+  const activeConnection = existingConnections.find(
+    (connection) => connection.status === "active",
+  );
+  if (activeConnection) return activeConnection;
+  if (
+    existingConnections.some((connection) => connection.status === "revoked")
+  ) {
+    throw new RestApiError({
+      status: 401,
+      code: "unauthorized",
+      message: "OAuth MCP connection has been revoked.",
+    });
+  }
+
+  const now = Date.now();
+  const apiKeyId = await ctx.db.insert("apiKeys", {
+    householdId,
+    name: "OAuth MCP connection",
+    prefix,
+    tokenPreview: "OAuth connection",
+    secretHash: await hashApiKey(`${prefix}:not-a-usable-secret`),
+    scopes: [...apiKeyScopes],
+    status: "active",
+    createdByUserId: userId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await recordAuditEvent(ctx, {
+    householdId,
+    actorType: "user",
+    actorUserId: userId,
+    category: "apiKey",
+    action: "oauth_mcp_connection.created",
+    objectTable: "apiKeys",
+    objectId: apiKeyId,
+    metadata: { scopes: [...apiKeyScopes], oauthClientId },
+  });
+
+  const created = await ctx.db.get(apiKeyId);
+  if (!created) {
+    throw new Error("OAuth MCP connection creation failed.");
+  }
+  return created;
+}
+
+function householdIdFromRestRequest(
+  ctx: MutationCtx,
+  args: Pick<RestRequestInput, "body" | "query">,
+) {
+  const body = bodyObject(args.body);
+  const candidate =
+    typeof body.householdId === "string"
+      ? body.householdId
+      : args.query.householdId;
+  if (!candidate) return undefined;
+  return ctx.db.normalizeId("households", candidate) ?? undefined;
+}
+
+function permissionActionsForApiScopes(
+  scopes: readonly ApiKeyScope[],
+): PermissionAction[] {
+  const actions = new Set<PermissionAction>();
+  for (const scope of scopes) {
+    switch (scope) {
+      case "moves/read":
+        actions.add("household:read");
+        break;
+      case "moves/write":
+        actions.add("household:edit");
+        break;
+      case "inventory/read":
+        actions.add("inventory:read");
+        break;
+      case "inventory/write":
+      case "photos/write":
+        actions.add("inventory:edit");
+        break;
+      case "plans/read":
+        actions.add("plan:read");
+        break;
+      case "plans/write":
+        actions.add("plan:edit");
+        break;
+      case "exports/read":
+        actions.add("documentation:read");
+        break;
+      case "exports/create":
+        actions.add("documentation:create");
+        break;
+      case "members/manage":
+        actions.add("household:manage_members");
+        break;
+    }
+  }
+  return [...actions];
+}
 
 export const checkIdempotency = internalMutation({
   args: {
@@ -386,7 +1060,7 @@ export const checkIdempotency = internalMutation({
       v.literal("POST"),
       v.literal("PATCH"),
       v.literal("PUT"),
-      v.literal("DELETE")
+      v.literal("DELETE"),
     ),
     path: v.string(),
     body: v.optional(v.any()),
@@ -401,7 +1075,9 @@ export const checkIdempotency = internalMutation({
     const existing = await ctx.db
       .query("apiIdempotencyKeys")
       .withIndex("by_api_key_key", (q) =>
-        q.eq("apiKeyId", args.apiKeyId).eq("idempotencyKey", args.idempotencyKey!)
+        q
+          .eq("apiKeyId", args.apiKeyId)
+          .eq("idempotencyKey", args.idempotencyKey!),
       )
       .unique();
     if (!existing) {
@@ -438,7 +1114,7 @@ async function checkApiRateLimit(
     moveId?: Id<"moves">;
     apiKeyId: Id<"apiKeys">;
     action: string;
-  }
+  },
 ) {
   const now = Date.now();
   await deleteExpiredRateLimitWindows(ctx, now);
@@ -447,7 +1123,7 @@ async function checkApiRateLimit(
   const existing = await ctx.db
     .query("apiRateLimitWindows")
     .withIndex("by_api_key_window", (q) =>
-      q.eq("apiKeyId", args.apiKeyId).eq("windowStart", windowStart)
+      q.eq("apiKeyId", args.apiKeyId).eq("windowStart", windowStart),
     )
     .unique();
   const count = (existing?.count ?? 0) + 1;
@@ -524,8 +1200,10 @@ async function routeRequest(
   ctx: MutationCtx,
   args: RestRequestInput,
   segments: string[],
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ) {
+  // When adding or renaming a REST route here, update convex/lib/routeManifest.mjs
+  // and run npm run contract:drift so OpenAPI and MCP clients stay in sync.
   const [resource, moveIdSegment, nested, nestedId] = segments;
   if (resource === "me" && args.method === "GET" && segments.length === 1) {
     return await routeMe(ctx, auth);
@@ -537,16 +1215,38 @@ async function routeRequest(
     return await routeTopLevelItem(ctx, args, auth, moveIdSegment);
   }
   if (resource === "boxes") {
-    return await routeTopLevelBox(ctx, args, auth, moveIdSegment, nested, nestedId);
+    return await routeTopLevelBox(
+      ctx,
+      args,
+      auth,
+      moveIdSegment,
+      nested,
+      nestedId,
+    );
   }
   if (resource === "photos") {
     return await routeTopLevelPhoto(ctx, args, auth, moveIdSegment, nested);
   }
   if (resource === "plans") {
-    return await routePlans(ctx, args, auth, moveIdSegment, nested);
+    return await routePlans(
+      ctx,
+      args,
+      auth,
+      moveIdSegment,
+      nested,
+      nestedId,
+      segments[4],
+    );
   }
   if (resource === "households") {
-    return await routeHouseholds(ctx, args, auth, moveIdSegment, nested, nestedId);
+    return await routeHouseholds(
+      ctx,
+      args,
+      auth,
+      moveIdSegment,
+      nested,
+      nestedId,
+    );
   }
   if (resource !== "moves") {
     return restError({ status: 404, code: "not_found", message: "Not found." });
@@ -556,7 +1256,7 @@ async function routeRequest(
     const moves = await ctx.db
       .query("moves")
       .withIndex("by_household_status", (q) =>
-        q.eq("householdId", auth.householdId)
+        q.eq("householdId", auth.householdId),
       )
       .collect();
     return restOk(
@@ -564,11 +1264,15 @@ async function routeRequest(
         moves
           .filter((move) => move.status !== "archived")
           .map((move) => safeMove(move)),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
-  if (args.method === "POST" && segments[1] === "setup" && segments.length === 2) {
+  if (
+    args.method === "POST" &&
+    segments[1] === "setup" &&
+    segments.length === 2
+  ) {
     return await routeSetupMove(ctx, args, auth);
   }
   if (args.method === "POST" && segments.length === 1) {
@@ -591,15 +1295,27 @@ async function routeRequest(
   if (args.method === "PATCH" && segments.length === 2) {
     const patch = movePatch(args.body);
     await ctx.db.patch(moveId, patch);
-    await auditApiWrite(ctx, auth, moveId, "move.api_updated", "moves", moveId, {
-      changedKeys: Object.keys(patch),
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "move.api_updated",
+      "moves",
+      moveId,
+      {
+        changedKeys: Object.keys(patch),
+      },
+    );
     return restOk({ data: { moveId, ...patch } });
   }
   if (nested === "summary" && args.method === "GET" && segments.length === 3) {
-    return await routeMoveSummary(ctx, auth, move);
+    return await routeMoveSummary(ctx, args, auth, move);
   }
-  if (nested === "questions" && args.method === "GET" && segments.length === 3) {
+  if (
+    nested === "questions" &&
+    args.method === "GET" &&
+    segments.length === 3
+  ) {
     return await routeMoveQuestions(ctx, auth, move);
   }
   if (nested === "move-day" && args.method === "GET" && segments.length === 3) {
@@ -612,8 +1328,12 @@ async function routeRequest(
   ) {
     return await routeCapacityReport(ctx, auth, move);
   }
-  if (nested === "agent-context" && args.method === "GET" && segments.length === 3) {
-    return await routeAgentContext(ctx, auth, move);
+  if (
+    nested === "agent-context" &&
+    args.method === "GET" &&
+    segments.length === 3
+  ) {
+    return await routeAgentContext(ctx, args, auth, move);
   }
 
   if (nested === "spaces") {
@@ -631,7 +1351,7 @@ async function routeRequest(
       auth,
       moveId,
       nestedId,
-      segments[4]
+      segments[4],
     );
   }
 
@@ -644,13 +1364,26 @@ async function routeRequest(
   }
 
   if (nested === "items") {
-    return await routeItems(ctx, args, auth, moveId, nestedId);
+    return await routeItems(ctx, args, auth, moveId, nestedId, segments[4]);
   }
   if (nested === "planned-items") {
-    return await routePlannedItems(ctx, args, auth, moveId, nestedId, segments[4]);
+    return await routePlannedItems(
+      ctx,
+      args,
+      auth,
+      moveId,
+      nestedId,
+      segments[4],
+    );
   }
   if (nested === "boxes") {
-    return await routeBoxes(ctx, args, auth, moveId, nestedId);
+    return await routeBoxes(ctx, args, auth, moveId, nestedId, segments[4]);
+  }
+  if (nested === "box-items") {
+    return await routeMoveBoxItems(ctx, args, auth, moveId);
+  }
+  if (nested === "movable-units") {
+    return await routeMovableUnits(ctx, args, auth, moveId, nestedId);
   }
   if (nested === "assignments") {
     return await routeAssignments(ctx, args, auth, moveId, nestedId);
@@ -662,7 +1395,7 @@ async function routeRequest(
       auth,
       moveId,
       nestedId,
-      segments[4]
+      segments[4],
     );
   }
   if (nested === "ai-jobs") {
@@ -674,6 +1407,17 @@ async function routeRequest(
   if (nested === "ai-photo-suggestions") {
     return await routeAiPhotoSuggestions(ctx, args, auth, moveId, nestedId);
   }
+  if (nested === "ingestion-queue") {
+    return await routeIngestionQueue(
+      ctx,
+      args,
+      auth,
+      moveId,
+      nestedId,
+      segments[4],
+      segments[5],
+    );
+  }
   if (nested === "documentation-profiles") {
     return await routeDocumentationProfiles(
       ctx,
@@ -681,16 +1425,24 @@ async function routeRequest(
       auth,
       moveId,
       nestedId,
-      segments[4]
+      segments[4],
     );
   }
   if (nested === "exports") {
     return await routeExports(ctx, args, auth, moveId, nestedId, segments[4]);
   }
   if (nested === "share-links") {
-    return await routeShareLinks(ctx, args, auth, moveId, nestedId, segments[4]);
+    return await routeShareLinks(
+      ctx,
+      args,
+      auth,
+      moveId,
+      nestedId,
+      segments[4],
+    );
   }
   if (nested === "photos" && args.method === "GET") {
+    const search = querySearchTerm(args.query);
     const photos = await ctx.db
       .query("itemPhotos")
       .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
@@ -698,27 +1450,14 @@ async function routeRequest(
       .collect();
     return restOk(
       paginate(
-        photos.filter((photo) => !photo.archivedAt).map((photo) => ({
-          photoId: photo._id,
-          itemId: photo.itemId,
-          boxId: photo.boxId,
-          spaceId: photo.spaceId,
-          transportResourceId: photo.transportResourceId,
-          transportZoneId: photo.transportZoneId,
-          room: photo.room,
-          photoType: photo.photoType,
-          privacyLevel: photo.privacyLevel,
-          verificationStatus: photo.verificationStatus,
-          caption: photo.caption,
-          width: photo.width,
-          height: photo.height,
-          mimeType: photo.mimeType,
-          sizeBytes: photo.sizeBytes,
-          capturedAt: photo.capturedAt,
-          uploadedAt: photo.createdAt,
-        })),
-        args.query
-      )
+        photos
+          .filter((photo) => !photo.archivedAt)
+          .filter((photo) =>
+            matchesSearch(search, [photo.caption, photo.fileName, photo.room]),
+          )
+          .map((photo) => safePhoto(photo)),
+        args.query,
+      ),
     );
   }
 
@@ -730,8 +1469,14 @@ async function routePlans(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   planIdSegment?: string,
-  nested?: string
+  nested?: string,
+  nestedId?: string,
+  nestedAction?: string,
 ) {
+  if (args.method === "POST" && !planIdSegment) {
+    return await routeCreatePlan(ctx, args, auth);
+  }
+
   if (args.method === "GET" && !planIdSegment) {
     const moveId = planListMoveId(args, auth);
     if (!moveId) {
@@ -775,7 +1520,9 @@ async function routePlans(
   }
   if (args.method === "GET" && nested === "summary") {
     const document = await planDocumentForApi(ctx, plan);
-    return restOk({ data: { planId: plan._id, summary: describePlanDocument(document) } });
+    return restOk({
+      data: { planId: plan._id, summary: describePlanDocument(document) },
+    });
   }
   if (args.method === "GET" && nested === "snapshot.svg") {
     const document = await planDocumentForApi(ctx, plan);
@@ -788,6 +1535,42 @@ async function routePlans(
   if (nested === "proposals") {
     return await routePlanProposals(ctx, args, auth, plan);
   }
+  if (nested === "floorplan-evidence") {
+    return await routeFloorplanEvidence(
+      ctx,
+      args,
+      auth,
+      plan,
+      nestedId as Id<"floorplanEvidenceRecords"> | undefined,
+      nestedAction,
+    );
+  }
+  if (nested === "floorplan-observations") {
+    return await routeFloorplanObservations(
+      ctx,
+      args,
+      auth,
+      plan,
+      nestedId as Id<"floorplanObservations"> | undefined,
+      nestedAction,
+    );
+  }
+  if (nested === "floorplan-relationships") {
+    return await routeFloorplanRelationships(
+      ctx,
+      args,
+      auth,
+      plan,
+      nestedId as Id<"floorplanRelationships"> | undefined,
+      nestedAction,
+    );
+  }
+  if (args.method === "POST" && nested === "floorplan-reset-draft") {
+    return await routeFloorplanResetDraft(ctx, args, auth, plan);
+  }
+  if (args.method === "POST" && nested === "floorplan-solve") {
+    return await routeFloorplanSolve(ctx, args, auth, plan);
+  }
   if (args.method === "POST" && nested === "ops") {
     return await routePlanOps(ctx, args, auth, plan);
   }
@@ -799,13 +1582,111 @@ async function routePlans(
   });
 }
 
+async function routeCreatePlan(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+) {
+  const body = bodyObject(args.body);
+  const moveId = moveIdFromRestBodyOrQuery({
+    body: args.body,
+    query: args.query,
+  }) as Id<"moves"> | undefined;
+  if (!moveId) {
+    return restError({
+      status: 400,
+      code: "move_required",
+      message: "moveId is required for creating a plan.",
+    });
+  }
+  await requireApiMove(ctx, auth.householdId, moveId);
+
+  const name = optionalString(body.name) ?? "Destination plan";
+  const kind = optionalPlanKind(body.kind);
+  const defaultWallThicknessIn =
+    positiveNumber(body.defaultWallThicknessIn) ?? 4.5;
+  const defaultCeilingHeightIn =
+    positiveNumber(body.defaultCeilingHeightIn) ?? 96;
+  const gridSnapIn = positiveNumber(body.gridSnapIn) ?? 3;
+  const northAngleDeg = optionalNumber(body.northAngleDeg) ?? 0;
+  const now = Date.now();
+
+  const planId = await ctx.db.insert("floorPlans", {
+    householdId: auth.householdId,
+    moveId,
+    name,
+    kind,
+    northAngleDeg,
+    defaultWallThicknessIn,
+    defaultCeilingHeightIn,
+    gridSnapIn,
+    shortIdCounters: { ...defaultPlanShortIdCounters },
+    nextSeq: 1,
+    status: "active",
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const mainLevelId = await ctx.db.insert("planLevels", {
+    householdId: auth.householdId,
+    moveId,
+    planId,
+    name: optionalString(body.mainLevelName) ?? "Main floor",
+    levelType: "indoor",
+    sortOrder: 0,
+    ceilingHeightIn: defaultCeilingHeightIn,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const yardLevelId = await ctx.db.insert("planLevels", {
+    householdId: auth.householdId,
+    moveId,
+    planId,
+    name: optionalString(body.yardLevelName) ?? "Yard",
+    levelType: "outdoor",
+    sortOrder: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await recordAuditEvent(ctx, {
+    householdId: auth.householdId,
+    moveId,
+    actorType: "apiKey",
+    actorApiKeyId: auth.actor.apiKeyId,
+    category: "plan",
+    action: "floor_plan.api_created",
+    objectTable: "floorPlans",
+    objectId: planId,
+    metadata: {
+      kind,
+      name,
+      levelIds: [mainLevelId, yardLevelId],
+      apiKeyId: auth.apiKeyId,
+    },
+  });
+
+  const plan = await ctx.db.get(planId);
+  return restOk(
+    {
+      data: {
+        planId,
+        moveId,
+        levelIds: [mainLevelId, yardLevelId],
+        plan: plan ? await planDocumentForApi(ctx, plan) : undefined,
+      },
+    },
+    201,
+  );
+}
+
 async function routeHouseholds(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   householdIdSegment?: string,
   nested?: string,
-  nestedId?: string
+  nestedId?: string,
 ) {
   const householdId = householdIdSegment as Id<"households"> | undefined;
   if (!householdId || nested !== "members" || nestedId) {
@@ -842,7 +1723,7 @@ async function routeHouseholds(
 
 async function listApiHouseholdMembers(
   ctx: MutationCtx,
-  householdId: Id<"households">
+  householdId: Id<"households">,
 ) {
   const memberships = await ctx.db
     .query("householdMemberships")
@@ -851,15 +1732,36 @@ async function listApiHouseholdMembers(
   const invitations = await ctx.db
     .query("householdInvitations")
     .withIndex("by_household_status", (q) =>
-      q.eq("householdId", householdId).eq("status", "invited")
+      q.eq("householdId", householdId).eq("status", "invited"),
     )
     .collect();
+  const activeApiKeys = await ctx.db
+    .query("apiKeys")
+    .withIndex("by_household_status", (q) =>
+      q.eq("householdId", householdId).eq("status", "active"),
+    )
+    .collect();
+  const activeApiKeyCountByUser = new Map<string, number>();
+  for (const key of activeApiKeys) {
+    const creatorId = String(key.createdByUserId);
+    activeApiKeyCountByUser.set(
+      creatorId,
+      (activeApiKeyCountByUser.get(creatorId) ?? 0) + 1,
+    );
+  }
 
   const members = await Promise.all(
     memberships
       .filter((membership) => membership.status !== "disabled")
       .map(async (membership) => {
         const user = await ctx.db.get(membership.userId);
+        const apiAccessStatus = effectiveMemberApiAccessStatus({
+          role: membership.role,
+          status: membership.status,
+          apiAccessStatus: membership.apiAccessStatus,
+        });
+        const roleAllowsApi =
+          defaultMemberApiAccessStatus(membership.role) === "enabled";
         return {
           membershipId: membership._id,
           invitationId: null,
@@ -868,10 +1770,19 @@ async function listApiHouseholdMembers(
           name: user?.name ?? null,
           role: membership.role,
           status: membership.status,
+          apiAccessStatus,
+          apiAccessAllowed: roleAllowsApi && apiAccessStatus === "enabled",
+          apiAccessReason: roleAllowsApi
+            ? apiAccessStatus === "enabled"
+              ? "Can create API keys and use keys they created."
+              : "API access disabled; existing keys they created cannot be used."
+            : "Role does not allow API key creation.",
+          activeApiKeyCount:
+            activeApiKeyCountByUser.get(String(membership.userId)) ?? 0,
           createdAt: membership.createdAt,
           updatedAt: membership.updatedAt,
         };
-      })
+      }),
   );
 
   const pendingInvitations = invitations.map((invitation) => ({
@@ -882,6 +1793,14 @@ async function listApiHouseholdMembers(
     name: null,
     role: invitation.role,
     status: invitation.status,
+    apiAccessStatus: defaultMemberApiAccessStatus(invitation.role),
+    apiAccessAllowed:
+      defaultMemberApiAccessStatus(invitation.role) === "enabled",
+    apiAccessReason:
+      defaultMemberApiAccessStatus(invitation.role) === "enabled"
+        ? "Will be API-capable after accepting this invitation."
+        : "Invited role does not allow API key creation.",
+    activeApiKeyCount: 0,
     createdAt: invitation.createdAt,
     updatedAt: invitation.updatedAt,
   }));
@@ -892,7 +1811,7 @@ async function listApiHouseholdMembers(
     if (left.status === "invited" && right.status !== "invited") return 1;
     if (right.status === "invited" && left.status !== "invited") return -1;
     return (left.email ?? left.name ?? "").localeCompare(
-      right.email ?? right.name ?? ""
+      right.email ?? right.name ?? "",
     );
   });
 }
@@ -901,18 +1820,18 @@ async function routeAddHouseholdMember(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  householdId: Id<"households">
+  householdId: Id<"households">,
 ) {
   const body = bodyObject(args.body);
   const normalizedEmail = normalizeCollaboratorEmail(
-    requiredBodyString(body.email, "email is required.")
+    requiredBodyString(body.email, "email is required."),
   );
   if (!normalizedEmail) {
     throw new Error("Enter a collaborator email.");
   }
 
   const role = parseManagedHouseholdMemberRole(
-    requiredBodyString(body.role, "role is required.")
+    requiredBodyString(body.role, "role is required."),
   );
   if (!role) {
     throw new Error("Owner access cannot be granted from the API.");
@@ -939,10 +1858,13 @@ async function routeAddHouseholdMember(
           email: result.email,
           role: result.role,
           status: result.status,
+          apiAccessStatus: defaultMemberApiAccessStatus(result.role),
+          apiAccessAllowed:
+            defaultMemberApiAccessStatus(result.role) === "enabled",
           reactivated: result.reactivated,
         },
       },
-      result.reactivated ? 200 : 201
+      result.reactivated ? 200 : 201,
     );
   }
 
@@ -953,11 +1875,14 @@ async function routeAddHouseholdMember(
         email: result.email,
         role: result.role,
         status: result.status,
+        apiAccessStatus: defaultMemberApiAccessStatus(result.role),
+        apiAccessAllowed:
+          defaultMemberApiAccessStatus(result.role) === "enabled",
         alreadyInvited: result.alreadyInvited,
         requiresSignup: true,
       },
     },
-    result.alreadyInvited ? 200 : 202
+    result.alreadyInvited ? 200 : 202,
   );
 }
 
@@ -965,7 +1890,7 @@ async function routePlanOps(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  plan: Doc<"floorPlans">
+  plan: Doc<"floorPlans">,
 ) {
   const body = bodyObject(args.body);
   const batchId = requiredBodyString(body.batchId, "batchId is required.");
@@ -973,15 +1898,18 @@ async function routePlanOps(
   const agentLabel = optionalString(body.agentLabel);
 
   try {
-    const result = await ctx.runMutation(internalFunctions.planOps.applyApiOps, {
-      householdId: auth.householdId,
-      moveId: plan.moveId,
-      planId: plan._id,
-      batchId,
-      ops,
-      apiKeyId: auth.apiKeyId,
-      agentLabel,
-    });
+    const result = await ctx.runMutation(
+      internalFunctions.planOps.applyApiOps,
+      {
+        householdId: auth.householdId,
+        moveId: plan.moveId,
+        planId: plan._id,
+        batchId,
+        ops,
+        apiKeyId: auth.apiKeyId,
+        agentLabel,
+      },
+    );
     return restOk({ data: result }, 201);
   } catch (error) {
     const structured = structuredPlanOpError(error);
@@ -1005,19 +1933,20 @@ async function routePlanProposals(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  plan: Doc<"floorPlans">
+  plan: Doc<"floorPlans">,
 ) {
   if (args.method === "GET") {
-    const statuses = args.query.includeReviewed === "true"
-      ? (["pending", "applied", "partiallyApplied", "rejected"] as const)
-      : (["pending"] as const);
+    const statuses =
+      args.query.includeReviewed === "true"
+        ? (["pending", "applied", "partiallyApplied", "rejected"] as const)
+        : (["pending"] as const);
     const proposals = (
       await Promise.all(
         statuses.map((status) =>
           ctx.db
             .query("planProposals")
             .withIndex("by_plan_status", (q) =>
-              q.eq("planId", plan._id).eq("status", status)
+              q.eq("planId", plan._id).eq("status", status),
             )
             .collect(),
         ),
@@ -1037,7 +1966,10 @@ async function routePlanProposals(
     const body = bodyObject(args.body);
     const batchId = requiredBodyString(body.batchId, "batchId is required.");
     const ops = requiredOps(body.ops);
-    const reasoning = requiredBodyString(body.reasoning, "reasoning is required.");
+    const reasoning = requiredBodyString(
+      body.reasoning,
+      "reasoning is required.",
+    );
     const agentLabel = optionalString(body.agentLabel);
     const now = Date.now();
     const proposalId = await ctx.db.insert("planProposals", {
@@ -1084,17 +2016,873 @@ async function routePlanProposals(
   });
 }
 
+async function routeFloorplanEvidence(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+  evidenceId?: Id<"floorplanEvidenceRecords">,
+  nestedAction?: string,
+) {
+  if (args.method === "GET" && !evidenceId) {
+    const [
+      evidence,
+      observations,
+      relationships,
+      measurements,
+      calculations,
+      solveRuns,
+    ] = await Promise.all([
+      ctx.db
+        .query("floorplanEvidenceRecords")
+        .withIndex("by_plan_status", (q) =>
+          q.eq("planId", plan._id).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("floorplanObservations")
+        .withIndex("by_plan_status", (q) =>
+          q.eq("planId", plan._id).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("floorplanRelationships")
+        .withIndex("by_plan_status", (q) =>
+          q.eq("planId", plan._id).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("floorplanMeasurements")
+        .withIndex("by_plan_subject", (q) => q.eq("planId", plan._id))
+        .collect(),
+      ctx.db
+        .query("floorplanCalculationRecords")
+        .withIndex("by_plan_status", (q) =>
+          q.eq("planId", plan._id).eq("status", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("floorplanSolveRuns")
+        .withIndex("by_plan_created", (q) => q.eq("planId", plan._id))
+        .order("desc")
+        .take(5),
+    ]);
+    return restOk({
+      data: {
+        evidence: evidence
+          .filter((entry) => entry.householdId === auth.householdId)
+          .map((entry) => safeFloorplanEvidence(entry)),
+        observations: observations
+          .filter((entry) => entry.householdId === auth.householdId)
+          .map((entry) => safeFloorplanObservation(entry)),
+        relationships: relationships
+          .filter((entry) => entry.householdId === auth.householdId)
+          .map((entry) => safeFloorplanRelationship(entry)),
+        measurements: measurements
+          .filter(
+            (entry) =>
+              entry.householdId === auth.householdId &&
+              entry.status === "active",
+          )
+          .map((entry) => safeFloorplanMeasurement(entry)),
+        calculations: calculations
+          .filter((entry) => entry.householdId === auth.householdId)
+          .map((entry) => safeFloorplanCalculation(entry)),
+        latestSolveRun: solveRuns
+          .filter(
+            (run) =>
+              run.householdId === auth.householdId && run.status !== "archived",
+          )
+          .map((run) => safeFloorplanSolveRun(run))[0],
+      },
+    });
+  }
+
+  if (args.method === "POST" && !evidenceId) {
+    return await routeCreateFloorplanEvidence(ctx, args, auth, plan);
+  }
+
+  if (!evidenceId) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Floorplan evidence route not found.",
+    });
+  }
+
+  const existing = await requireFloorplanEvidence(ctx, auth, plan, evidenceId);
+  if (args.method === "PATCH" && !nestedAction) {
+    const body = bodyObject(args.body);
+    const patch = removeUndefined({
+      title: optionalString(body.title),
+      summary: normalizeOptionalText(asString(body.summary)),
+      confidence: parseConfidence(body.confidence),
+      facts: parseStringArray(body.facts),
+      updatedAt: Date.now(),
+    });
+    await ctx.db.patch(evidenceId, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.evidence_api_updated",
+      "floorplanEvidenceRecords",
+      evidenceId,
+      { planId: plan._id, changedKeys: Object.keys(patch) },
+    );
+    const updated = await ctx.db.get(evidenceId);
+    return restOk({ data: updated ? safeFloorplanEvidence(updated) : null });
+  }
+
+  if (args.method === "POST" && nestedAction === "supersede") {
+    const now = Date.now();
+    await ctx.db.patch(evidenceId, { status: "superseded", updatedAt: now });
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.evidence_api_superseded",
+      "floorplanEvidenceRecords",
+      evidenceId,
+      { planId: plan._id, previousStatus: existing.status },
+    );
+    const updated = await ctx.db.get(evidenceId);
+    return restOk({ data: updated ? safeFloorplanEvidence(updated) : null });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Floorplan evidence route not found.",
+  });
+}
+
+async function routeCreateFloorplanEvidence(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+) {
+  const body = bodyObject(args.body);
+  const now = Date.now();
+  const evidenceType = parseFloorplanEvidenceType(body.evidenceType);
+  const confidence = parseConfidence(body.confidence) ?? "medium";
+  const sourceType = parseFloorplanEvidenceSourceType(body.sourceType);
+  const sourcePhotoId = optionalString(body.sourcePhotoId) as
+    | Id<"itemPhotos">
+    | undefined;
+  if (sourcePhotoId) {
+    await validateFloorplanSourcePhoto(
+      ctx,
+      auth.householdId,
+      plan.moveId,
+      sourcePhotoId,
+    );
+  }
+  const evidenceId = await ctx.db.insert("floorplanEvidenceRecords", {
+    householdId: auth.householdId,
+    moveId: plan.moveId,
+    planId: plan._id,
+    evidenceType,
+    status: "active",
+    title: requiredBodyString(body.title, "title is required."),
+    summary: normalizeOptionalText(asString(body.summary)),
+    confidence,
+    sourceType,
+    areaRole: parseFloorplanAreaRole(body.areaRole),
+    constraintStrength: parseFloorplanConstraintStrength(
+      body.constraintStrength,
+    ),
+    sourcePhotoId,
+    sourceLabel: normalizeOptionalText(asString(body.sourceLabel)),
+    sourceRegion: parseFloorplanSourceRegion(body.sourceRegion),
+    facts: parseStringArray(body.facts),
+    createdByApiKeyId: auth.apiKeyId,
+    agentLabel: normalizeOptionalText(asString(body.agentLabel)),
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const measurements = parseFloorplanMeasurementInputs(body.measurements);
+  const measurementIds = [];
+  for (const measurement of measurements) {
+    const measurementId = await ctx.db.insert("floorplanMeasurements", {
+      householdId: auth.householdId,
+      moveId: plan.moveId,
+      planId: plan._id,
+      evidenceId,
+      subjectType: measurement.subjectType,
+      subjectKey: measurement.subjectKey,
+      subjectLabel: measurement.subjectLabel,
+      measurementType: measurement.measurementType,
+      kind: measurement.kind,
+      status: "active",
+      valueIn: positiveNumber(measurement.valueIn),
+      minIn: positiveNumber(measurement.minIn),
+      maxIn: positiveNumber(measurement.maxIn),
+      unit: measurement.unit,
+      value: positiveNumber(measurement.value),
+      minValue: positiveNumber(measurement.minValue),
+      maxValue: positiveNumber(measurement.maxValue),
+      displayValue: measurement.displayValue,
+      confidence: measurement.confidence ?? confidence,
+      areaRole: measurement.areaRole,
+      constraintStrength: measurement.constraintStrength,
+      provenance: [
+        {
+          sourceType,
+          sourceId: String(evidenceId),
+          sourcePhotoId,
+          sourceLabel:
+            normalizeOptionalText(asString(body.sourceLabel)) ??
+            "Floorplan evidence",
+          imageNumber: optionalNumber(body.imageNumber),
+          imageRegion: parseFloorplanSourceRegion(body.sourceRegion),
+          notes: normalizeOptionalText(asString(measurement.notes)),
+          recordedAt: now,
+          recordedByApiKeyId: auth.apiKeyId,
+          recordedByLabel:
+            normalizeOptionalText(asString(body.agentLabel)) ??
+            `API key: ${auth.apiKeyName} (${auth.apiKeyTokenPreview})`,
+        },
+      ],
+      sourceObservationIds: measurement.sourceObservationIds,
+      createdByApiKeyId: auth.apiKeyId,
+      agentLabel: normalizeOptionalText(asString(body.agentLabel)),
+      createdAt: now,
+      updatedAt: now,
+    });
+    measurementIds.push(measurementId);
+  }
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    plan.moveId,
+    "floorplan.evidence_api_created",
+    "floorplanEvidenceRecords",
+    evidenceId,
+    {
+      planId: plan._id,
+      evidenceType,
+      measurementCount: measurementIds.length,
+    },
+  );
+  const created = await ctx.db.get(evidenceId);
+  return restOk(
+    {
+      data: {
+        evidence: created ? safeFloorplanEvidence(created) : { evidenceId },
+        measurementIds,
+      },
+    },
+    201,
+  );
+}
+
+async function routeFloorplanObservations(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+  observationId?: Id<"floorplanObservations">,
+  nestedAction?: string,
+) {
+  if (args.method === "GET" && !observationId) {
+    const observations = await ctx.db
+      .query("floorplanObservations")
+      .withIndex("by_plan_status", (q) =>
+        q.eq("planId", plan._id).eq("status", "active"),
+      )
+      .collect();
+    return restOk({
+      data: {
+        observations: observations
+          .filter((entry) => entry.householdId === auth.householdId)
+          .map((entry) => safeFloorplanObservation(entry)),
+      },
+    });
+  }
+
+  if (args.method === "POST" && !observationId) {
+    const body = bodyObject(args.body);
+    const now = Date.now();
+    const inputs = parseFloorplanObservationInputs(body);
+    const observationIds = [];
+    for (const input of inputs) {
+      if (input.sourcePhotoId) {
+        await validateFloorplanSourcePhoto(
+          ctx,
+          auth.householdId,
+          plan.moveId,
+          input.sourcePhotoId,
+        );
+      }
+      const sourceLabel = input.sourceLabel ?? "Floorplan observation";
+      const insertedId = await ctx.db.insert("floorplanObservations", {
+        householdId: auth.householdId,
+        moveId: plan.moveId,
+        planId: plan._id,
+        evidenceId: input.evidenceId,
+        sourcePhotoId: input.sourcePhotoId,
+        sourceLabel,
+        sourceRegion: input.sourceRegion,
+        imageNumber: input.imageNumber,
+        observationType: input.observationType,
+        status: input.status ?? "active",
+        title: input.title,
+        subjectKey: input.subjectKey,
+        subjectLabel: input.subjectLabel,
+        subjectKind: input.subjectKind,
+        rawText: input.rawText,
+        normalized: input.normalized,
+        confidence: input.confidence ?? "medium",
+        provenance: [
+          {
+            sourceType: input.sourceType ?? "agentExtraction",
+            sourceId: input.evidenceId ? String(input.evidenceId) : undefined,
+            sourcePhotoId: input.sourcePhotoId,
+            sourceLabel,
+            imageNumber: input.imageNumber,
+            imageRegion: input.sourceRegion,
+            notes: input.notes,
+            recordedAt: now,
+            recordedByApiKeyId: auth.apiKeyId,
+            recordedByLabel:
+              input.agentLabel ??
+              `API key: ${auth.apiKeyName} (${auth.apiKeyTokenPreview})`,
+          },
+        ],
+        relatedMeasurementIds: input.relatedMeasurementIds,
+        relatedObservationIds: input.relatedObservationIds,
+        createdByApiKeyId: auth.apiKeyId,
+        agentLabel: input.agentLabel,
+        createdAt: now,
+        updatedAt: now,
+      });
+      observationIds.push(insertedId);
+    }
+
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.observations_api_created",
+      "floorplanObservations",
+      observationIds[0],
+      { planId: plan._id, observationCount: observationIds.length },
+    );
+    const created = await Promise.all(
+      observationIds.map((id) => ctx.db.get(id)),
+    );
+    return restOk(
+      {
+        data: {
+          observationIds,
+          observations: created
+            .filter(isPresent)
+            .map((entry) => safeFloorplanObservation(entry)),
+        },
+      },
+      201,
+    );
+  }
+
+  if (!observationId) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Floorplan observation route not found.",
+    });
+  }
+
+  const existing = await requireFloorplanObservation(
+    ctx,
+    auth,
+    plan,
+    observationId,
+  );
+  if (args.method === "PATCH" && !nestedAction) {
+    const body = bodyObject(args.body);
+    const patch = removeUndefined({
+      title: optionalString(body.title),
+      status: parseFloorplanObservationStatus(body.status),
+      subjectKey: normalizeOptionalText(asString(body.subjectKey)),
+      subjectLabel: normalizeOptionalText(asString(body.subjectLabel)),
+      rawText: normalizeOptionalText(asString(body.rawText)),
+      normalized: body.normalized,
+      confidence: parseConfidence(body.confidence),
+      updatedAt: Date.now(),
+    });
+    await ctx.db.patch(observationId, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.observation_api_updated",
+      "floorplanObservations",
+      observationId,
+      { planId: plan._id, changedKeys: Object.keys(patch) },
+    );
+    const updated = await ctx.db.get(observationId);
+    return restOk({ data: updated ? safeFloorplanObservation(updated) : null });
+  }
+
+  if (args.method === "POST" && nestedAction === "supersede") {
+    await ctx.db.patch(observationId, {
+      status: "superseded",
+      updatedAt: Date.now(),
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.observation_api_superseded",
+      "floorplanObservations",
+      observationId,
+      { planId: plan._id, previousStatus: existing.status },
+    );
+    const updated = await ctx.db.get(observationId);
+    return restOk({ data: updated ? safeFloorplanObservation(updated) : null });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Floorplan observation route not found.",
+  });
+}
+
+async function routeFloorplanRelationships(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+  relationshipId?: Id<"floorplanRelationships">,
+  nestedAction?: string,
+) {
+  if (args.method === "GET" && !relationshipId) {
+    const relationships = await ctx.db
+      .query("floorplanRelationships")
+      .withIndex("by_plan_status", (q) =>
+        q.eq("planId", plan._id).eq("status", "active"),
+      )
+      .collect();
+    return restOk({
+      data: {
+        relationships: relationships
+          .filter((entry) => entry.householdId === auth.householdId)
+          .map((entry) => safeFloorplanRelationship(entry)),
+      },
+    });
+  }
+
+  if (args.method === "POST" && !relationshipId) {
+    const body = bodyObject(args.body);
+    const now = Date.now();
+    const inputs = parseFloorplanRelationshipInputs(ctx, body);
+    const relationshipIds = [];
+    for (const input of inputs) {
+      const insertedId = await ctx.db.insert("floorplanRelationships", {
+        householdId: auth.householdId,
+        moveId: plan.moveId,
+        planId: plan._id,
+        evidenceId: input.evidenceId,
+        relationshipType: input.relationshipType,
+        status: input.status ?? "active",
+        fromSubjectKey: input.fromSubjectKey,
+        fromSubjectLabel: input.fromSubjectLabel,
+        toSubjectKey: input.toSubjectKey,
+        toSubjectLabel: input.toSubjectLabel,
+        confidence: input.confidence ?? "medium",
+        sourceObservationIds: input.sourceObservationIds,
+        sourceMeasurementIds: input.sourceMeasurementIds,
+        evidenceIds: input.evidenceIds,
+        notes: input.notes,
+        provenance: [
+          {
+            sourceType: input.sourceType ?? "agentExtraction",
+            sourceId: input.evidenceId ? String(input.evidenceId) : undefined,
+            sourceLabel: input.sourceLabel ?? "Floorplan relationship",
+            notes: input.notes,
+            recordedAt: now,
+            recordedByApiKeyId: auth.apiKeyId,
+            recordedByLabel:
+              input.agentLabel ??
+              `API key: ${auth.apiKeyName} (${auth.apiKeyTokenPreview})`,
+          },
+        ],
+        createdByApiKeyId: auth.apiKeyId,
+        agentLabel: input.agentLabel,
+        createdAt: now,
+        updatedAt: now,
+      });
+      relationshipIds.push(insertedId);
+    }
+
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.relationships_api_created",
+      "floorplanRelationships",
+      relationshipIds[0],
+      { planId: plan._id, relationshipCount: relationshipIds.length },
+    );
+    const created = await Promise.all(
+      relationshipIds.map((id) => ctx.db.get(id)),
+    );
+    return restOk(
+      {
+        data: {
+          relationshipIds,
+          relationships: created
+            .filter(isPresent)
+            .map((entry) => safeFloorplanRelationship(entry)),
+        },
+      },
+      201,
+    );
+  }
+
+  if (!relationshipId) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Floorplan relationship route not found.",
+    });
+  }
+
+  const existing = await requireFloorplanRelationship(
+    ctx,
+    auth,
+    plan,
+    relationshipId,
+  );
+  if (args.method === "PATCH" && !nestedAction) {
+    const body = bodyObject(args.body);
+    const patch = removeUndefined({
+      status: parseFloorplanObservationStatus(body.status),
+      fromSubjectLabel: optionalString(body.fromSubjectLabel),
+      toSubjectLabel: optionalString(body.toSubjectLabel),
+      confidence: parseConfidence(body.confidence),
+      notes: normalizeOptionalText(asString(body.notes)),
+      updatedAt: Date.now(),
+    });
+    await ctx.db.patch(relationshipId, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.relationship_api_updated",
+      "floorplanRelationships",
+      relationshipId,
+      { planId: plan._id, changedKeys: Object.keys(patch) },
+    );
+    const updated = await ctx.db.get(relationshipId);
+    return restOk({
+      data: updated ? safeFloorplanRelationship(updated) : null,
+    });
+  }
+
+  if (args.method === "POST" && nestedAction === "supersede") {
+    await ctx.db.patch(relationshipId, {
+      status: "superseded",
+      updatedAt: Date.now(),
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      plan.moveId,
+      "floorplan.relationship_api_superseded",
+      "floorplanRelationships",
+      relationshipId,
+      { planId: plan._id, previousStatus: existing.status },
+    );
+    const updated = await ctx.db.get(relationshipId);
+    return restOk({
+      data: updated ? safeFloorplanRelationship(updated) : null,
+    });
+  }
+
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Floorplan relationship route not found.",
+  });
+}
+
+async function routeFloorplanResetDraft(
+  ctx: MutationCtx,
+  _args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+) {
+  const now = Date.now();
+  const solveRuns = await ctx.db
+    .query("floorplanSolveRuns")
+    .withIndex("by_plan_created", (q) => q.eq("planId", plan._id))
+    .collect();
+  let archivedSolveRunCount = 0;
+  for (const run of solveRuns) {
+    if (
+      run.householdId === auth.householdId &&
+      run.moveId === plan.moveId &&
+      run.status !== "archived"
+    ) {
+      await ctx.db.patch(run._id, { status: "archived" });
+      archivedSolveRunCount += 1;
+    }
+  }
+
+  const proposals = await ctx.db
+    .query("planProposals")
+    .withIndex("by_plan_status", (q) =>
+      q.eq("planId", plan._id).eq("status", "pending"),
+    )
+    .collect();
+  let rejectedProposalCount = 0;
+  for (const proposal of proposals) {
+    if (
+      proposal.householdId === auth.householdId &&
+      proposal.moveId === plan.moveId &&
+      proposal.batchId.startsWith("floorplan_solve")
+    ) {
+      await ctx.db.patch(proposal._id, {
+        status: "rejected",
+        reviewedAt: now,
+        updatedAt: now,
+      });
+      rejectedProposalCount += 1;
+    }
+  }
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    plan.moveId,
+    "floorplan.draft_api_reset",
+    "floorPlans",
+    plan._id,
+    { archivedSolveRunCount, rejectedProposalCount },
+  );
+
+  return restOk({
+    data: {
+      planId: plan._id,
+      archivedSolveRunCount,
+      rejectedProposalCount,
+      preserved: [
+        "photos",
+        "evidence",
+        "observations",
+        "relationships",
+        "measurements",
+      ],
+    },
+  });
+}
+
+async function routeFloorplanSolve(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+) {
+  const body = bodyObject(args.body);
+  const [measurements, observations, relationships] = await Promise.all([
+    ctx.db
+      .query("floorplanMeasurements")
+      .withIndex("by_plan_subject", (q) => q.eq("planId", plan._id))
+      .collect(),
+    ctx.db
+      .query("floorplanObservations")
+      .withIndex("by_plan_status", (q) =>
+        q.eq("planId", plan._id).eq("status", "active"),
+      )
+      .collect(),
+    ctx.db
+      .query("floorplanRelationships")
+      .withIndex("by_plan_status", (q) =>
+        q.eq("planId", plan._id).eq("status", "active"),
+      )
+      .collect(),
+  ]);
+  const activeMeasurementIds = measurements
+    .filter(
+      (measurement) =>
+        measurement.householdId === auth.householdId &&
+        measurement.status === "active",
+    )
+    .map((measurement) => measurement._id);
+  const activeMeasurements = measurements.filter(
+    (measurement) =>
+      measurement.householdId === auth.householdId &&
+      measurement.status === "active",
+  );
+  const activeObservations = observations.filter(
+    (observation) => observation.householdId === auth.householdId,
+  );
+  const activeRelationships = relationships.filter(
+    (relationship) => relationship.householdId === auth.householdId,
+  );
+  const activeObservationIds = activeObservations.map(
+    (observation) => observation._id,
+  );
+  const activeRelationshipIds = activeRelationships.map(
+    (relationship) => relationship._id,
+  );
+  const puzzle = {
+    ...parseFloorplanPuzzleInput(body),
+    measurements: activeMeasurements.map((measurement) =>
+      floorplanMeasurementForSolver(measurement),
+    ),
+    observations: activeObservations.map((observation) =>
+      floorplanObservationForSolver(observation),
+    ),
+    relationships: activeRelationships.map((relationship) =>
+      floorplanRelationshipForSolver(relationship),
+    ),
+  };
+  const solve = solveFloorplanPuzzle(puzzle);
+  if (!Array.isArray(body.rooms) || body.rooms.length === 0) {
+    solve.diagnostics = [
+      ...evidenceGraphDiagnostics(activeObservations, activeRelationships),
+      ...solve.diagnostics,
+    ];
+    if (solve.status === "valid" && solve.rooms.length === 0) {
+      solve.status = "incomplete";
+    }
+  }
+  const levels = await ctx.db
+    .query("planLevels")
+    .withIndex("by_plan_sort", (q) => q.eq("planId", plan._id))
+    .collect();
+  const levelId =
+    optionalString(body.levelId) ??
+    levels.find((level) => level.levelType === "indoor" && !level.archivedAt)
+      ?._id;
+  const proposedOps =
+    levelId && body.includeProposedOps !== false
+      ? floorplanSolveToPlanOps(solve, String(levelId))
+      : [];
+  const now = Date.now();
+  const solveRunId = await ctx.db.insert("floorplanSolveRuns", {
+    householdId: auth.householdId,
+    moveId: plan.moveId,
+    planId: plan._id,
+    status: solve.status,
+    solverVersion: solve.solverVersion,
+    diagnostics: solve.diagnostics,
+    geometry: solve,
+    proposedOps,
+    sourceMeasurementIds: activeMeasurementIds,
+    sourceObservationIds: activeObservationIds,
+    sourceRelationshipIds: activeRelationshipIds,
+    createdByApiKeyId: auth.apiKeyId,
+    agentLabel: normalizeOptionalText(asString(body.agentLabel)),
+    createdAt: now,
+  });
+  const activeMeasurementIdSet = new Set(activeMeasurementIds.map(String));
+  for (const calculation of solve.calculations) {
+    const inputMeasurementIds = calculation.inputMeasurementIds
+      .map((id) => ctx.db.normalizeId("floorplanMeasurements", id))
+      .filter(
+        (id): id is Id<"floorplanMeasurements"> =>
+          Boolean(id) && activeMeasurementIdSet.has(String(id)),
+      );
+    await ctx.db.insert("floorplanCalculationRecords", {
+      householdId: auth.householdId,
+      moveId: plan.moveId,
+      planId: plan._id,
+      solveRunId,
+      status: "active",
+      calculationKind: calculation.kind,
+      formulaName: calculation.formulaName,
+      label: calculation.label,
+      subjectKey: calculation.subjectKey,
+      subjectLabel: calculation.subjectLabel,
+      outputMeasurementType: calculation.outputMeasurementType,
+      unit: calculation.unit,
+      value: calculation.value,
+      displayValue: calculation.displayValue,
+      confidence: estimateConfidenceFromFloorplan(calculation.confidence),
+      inputMeasurementIds,
+      diagnostics: calculation.diagnostics,
+      createdByApiKeyId: auth.apiKeyId,
+      agentLabel: normalizeOptionalText(asString(body.agentLabel)),
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  let proposalId: Id<"planProposals"> | undefined;
+  if (body.createProposal === true && proposedOps.length) {
+    const batchId =
+      optionalString(body.batchId) ?? `floorplan_solve_${now.toString(36)}`;
+    const reasoning = [
+      normalizeOptionalText(asString(body.reasoning)) ??
+        "Floorplan solver generated draft room geometry from the measurement ledger.",
+      solve.diagnostics.length
+        ? `Validation diagnostics: ${solve.diagnostics
+            .map((diagnostic) => `${diagnostic.severity}: ${diagnostic.title}`)
+            .join("; ")}.`
+        : "Validation diagnostics: no room overlaps detected.",
+    ].join("\n\n");
+    proposalId = await ctx.db.insert("planProposals", {
+      householdId: auth.householdId,
+      moveId: plan.moveId,
+      planId: plan._id,
+      batchId,
+      ops: proposedOps,
+      agentLabel: normalizeOptionalText(asString(body.agentLabel)),
+      reasoning: reasoning.slice(0, 8000),
+      status: "pending",
+      appliedOpIndexes: [],
+      createdByApiKeyId: auth.apiKeyId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    plan.moveId,
+    "floorplan.solve_api_created",
+    "floorplanSolveRuns",
+    solveRunId,
+    {
+      planId: plan._id,
+      status: solve.status,
+      diagnosticCount: solve.diagnostics.length,
+      proposalId,
+    },
+  );
+
+  return restOk(
+    {
+      data: {
+        solveRunId,
+        proposalId,
+        solve,
+        proposedOps,
+        validationWarnings: solve.diagnostics,
+      },
+    },
+    201,
+  );
+}
+
 function planListMoveId(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ) {
-  return (
-    auth.moveId ??
+  return (auth.moveId ??
     moveIdFromRestBodyOrQuery({
       body: args.body,
       query: args.query,
-    })
-  ) as Id<"moves"> | undefined;
+    })) as Id<"moves"> | undefined;
 }
 
 async function planLevelSummaries(ctx: MutationCtx, planId: Id<"floorPlans">) {
@@ -1116,9 +2904,11 @@ async function planLevelSummaries(ctx: MutationCtx, planId: Id<"floorPlans">) {
 
 async function routeMoveSummary(
   ctx: MutationCtx,
+  args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  move: Doc<"moves">
+  move: Doc<"moves">,
 ) {
+  const sectionOptions = sectionOptionsFromQuery(args.query);
   const [
     resources,
     zones,
@@ -1167,7 +2957,7 @@ async function routeMoveSummary(
       .query("aiPlanningSuggestions")
       .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
       .order("desc")
-      .take(120),
+      .collect(),
     ctx.db
       .query("documentationProfiles")
       .withIndex("by_move_status", (q) => q.eq("moveId", move._id))
@@ -1184,66 +2974,145 @@ async function routeMoveSummary(
   ]);
 
   const activeResources = resources.filter(
-    (resource) => resource.householdId === auth.householdId && !resource.archivedAt
+    (resource) =>
+      resource.householdId === auth.householdId && !resource.archivedAt,
   );
   const activeZones = zones.filter(
-    (zone) => zone.householdId === auth.householdId && !zone.archivedAt
+    (zone) => zone.householdId === auth.householdId && !zone.archivedAt,
   );
   const activePeople = people.filter(
-    (person) => person.householdId === auth.householdId && !person.archivedAt
+    (person) => person.householdId === auth.householdId && !person.archivedAt,
   );
   const activeItems = items.filter(
-    (item) => item.householdId === auth.householdId && !item.deletedAt
+    (item) => item.householdId === auth.householdId && !item.deletedAt,
   );
   const activeBoxes = boxes.filter(
-    (box) => box.householdId === auth.householdId && !box.archivedAt
+    (box) => box.householdId === auth.householdId && !box.archivedAt,
   );
   const visiblePhotos = photos.filter(
-    (photo) => photo.householdId === auth.householdId && !photo.archivedAt
+    (photo) => photo.householdId === auth.householdId && !photo.archivedAt,
   );
   const activeDocumentationProfiles = documentationProfiles.filter(
     (profile) =>
-      profile.householdId === auth.householdId && profile.status !== "archived"
+      profile.householdId === auth.householdId && profile.status !== "archived",
   );
   const visiblePlanningSuggestions = planningSuggestions.filter(
-    (suggestion) => suggestion.householdId === auth.householdId
+    (suggestion) => suggestion.householdId === auth.householdId,
   );
   const visibleExportJobs = exportJobs.filter(
-    (job) => job.householdId === auth.householdId
+    (job) => job.householdId === auth.householdId,
   );
   const visibleShareLinks = shareLinks.filter(
-    (link) => link.householdId === auth.householdId
+    (link) => link.householdId === auth.householdId,
   );
   const visibleAssignments = assignments.filter(
-    (assignment) => assignment.householdId === auth.householdId
+    (assignment) => assignment.householdId === auth.householdId,
+  );
+  const activeBoxItems = visibleAssignments.filter((assignment) =>
+    activeBoxes.some((box) => box._id === assignment.boxId),
+  );
+  const movableUnitSummary = restMovableUnitSummary({
+    boxes: activeBoxes,
+    items: activeItems,
+    boxItems: activeBoxItems,
+  });
+  const sectionData: Record<string, unknown> = {};
+  const sectionMeta: Record<string, unknown> = {};
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "resources",
+    activeResources.map((resource) => safeTransportResource(resource)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "zones",
+    activeZones.map((zone) => safeTransportZone(zone)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "people",
+    activePeople.map((person) => safeMovePerson(person)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "items",
+    activeItems.map((item) => safeItem(item)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "boxes",
+    activeBoxes.map((box) => safeBox(box)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "assignments",
+    visibleAssignments.map((assignment) => safeAssignment(assignment)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "photos",
+    visiblePhotos.map((photo) => safePhoto(photo)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "planningSuggestions",
+    visiblePlanningSuggestions.map((suggestion) =>
+      safePlanningSuggestion(suggestion),
+    ),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "documentationProfiles",
+    activeDocumentationProfiles.map((profile) =>
+      safeDocumentationProfile(profile),
+    ),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "exports",
+    visibleExportJobs.map((job) => safeExportJob(job)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "shareLinks",
+    visibleShareLinks.map((link) => safeApiShareLink(link)),
   );
 
   return restOk({
     data: {
       move: safeMove(move),
-      resources: activeResources.map((resource) => safeTransportResource(resource)),
-      zones: activeZones.map((zone) => safeTransportZone(zone)),
-      people: activePeople.map((person) => safeMovePerson(person)),
-      items: activeItems.map((item) => safeItem(item)),
-      boxes: activeBoxes.map((box) => safeBox(box)),
-      assignments: visibleAssignments.map((assignment) =>
-        safeAssignment(assignment)
-      ),
-      photos: visiblePhotos.map((photo) => safePhoto(photo)),
-      planningSuggestions: visiblePlanningSuggestions.map((suggestion) =>
-        safePlanningSuggestion(suggestion)
-      ),
-      documentationProfiles: activeDocumentationProfiles.map((profile) =>
-        safeDocumentationProfile(profile)
-      ),
-      exports: visibleExportJobs.map((job) => safeExportJob(job)),
-      shareLinks: visibleShareLinks.map((link) => safeApiShareLink(link)),
+      ...sectionData,
+      sectionMeta,
       counts: {
         resources: activeResources.length,
         zones: activeZones.length,
         people: activePeople.length,
         items: activeItems.length,
         boxes: activeBoxes.length,
+        movableUnits: movableUnitSummary.total,
+        looseMovableUnits: movableUnitSummary.looseItems,
         assignments: visibleAssignments.length,
         photos: visiblePhotos.length,
         planningSuggestions: visiblePlanningSuggestions.length,
@@ -1251,6 +3120,7 @@ async function routeMoveSummary(
         exports: visibleExportJobs.length,
         shareLinks: visibleShareLinks.length,
       },
+      movableUnitSummary,
       generatedAt: Date.now(),
     },
   });
@@ -1258,14 +3128,38 @@ async function routeMoveSummary(
 
 async function routeMe(
   ctx: MutationCtx,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ) {
-  const [household, restrictedMove] = await Promise.all([
-    ctx.db.get(auth.householdId),
-    auth.moveId ? ctx.db.get(auth.moveId) : Promise.resolve(null),
-  ]);
+  const connectionType =
+    (auth as typeof auth & { connectionType?: "oauth" | "apiKey" })
+      .connectionType ?? "apiKey";
+  const [household, restrictedMove, connectionUser, connectionMembership] =
+    await Promise.all([
+      ctx.db.get(auth.householdId),
+      auth.moveId ? ctx.db.get(auth.moveId) : Promise.resolve(null),
+      auth.createdByUserId
+        ? ctx.db.get(auth.createdByUserId)
+        : Promise.resolve(null),
+      auth.createdByUserId
+        ? ctx.db
+            .query("householdMemberships")
+            .withIndex("by_household_user", (q) =>
+              q
+                .eq("householdId", auth.householdId)
+                .eq("userId", auth.createdByUserId),
+            )
+            .unique()
+        : Promise.resolve(null),
+    ]);
+  const connectionApiAccessStatus = connectionMembership
+    ? effectiveMemberApiAccessStatus({
+        role: connectionMembership.role,
+        status: connectionMembership.status,
+        apiAccessStatus: connectionMembership.apiAccessStatus,
+      })
+    : null;
   return restOk({
-    data: {
+    ...restMeContextPayload({
       household: household
         ? {
             householdId: household._id,
@@ -1273,53 +3167,72 @@ async function routeMe(
             slug: household.slug,
           }
         : { householdId: auth.householdId },
-      apiKey: {
-        apiKeyId: auth.apiKeyId,
-        scopes: auth.scopes,
-        moveRestricted: Boolean(auth.moveId),
-        moveId: auth.moveId,
-        createdByUserId: auth.createdByUserId,
-      },
+      apiKeyId: auth.apiKeyId,
+      scopes: auth.scopes,
+      connectionType,
+      moveId: auth.moveId,
+      createdByUserId: auth.createdByUserId,
+      user: connectionUser
+        ? {
+            userId: connectionUser._id,
+            email: connectionUser.email ?? null,
+            name: connectionUser.name ?? null,
+          }
+        : null,
+      householdMember: connectionMembership
+        ? {
+            membershipId: connectionMembership._id,
+            role: connectionMembership.role,
+            status: connectionMembership.status,
+            apiAccessStatus: connectionApiAccessStatus,
+            apiAccessAllowed: canMembershipUseApiAccess({
+              role: connectionMembership.role,
+              status: connectionMembership.status,
+              apiAccessStatus: connectionMembership.apiAccessStatus,
+            }),
+          }
+        : null,
       restrictedMove:
         restrictedMove && restrictedMove.householdId === auth.householdId
           ? safeMove(restrictedMove)
           : null,
       generatedAt: Date.now(),
-    },
+    }),
   });
 }
 
 async function routeMoveQuestions(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  move: Doc<"moves">
+  move: Doc<"moves">,
 ) {
-  const [items, boxes, memberships, photos, resources, zones] = await Promise.all([
-    ctx.db
-      .query("items")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
-      .collect(),
-    ctx.db
-      .query("boxes")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
-      .collect(),
-    ctx.db
-      .query("boxItems")
-      .withIndex("by_move", (q) => q.eq("moveId", move._id))
-      .collect(),
-    ctx.db
-      .query("itemPhotos")
-      .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
-      .collect(),
-    ctx.db
-      .query("transportResources")
-      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
-      .collect(),
-    ctx.db
-      .query("transportZones")
-      .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
-      .collect(),
-  ]);
+  const [items, boxes, memberships, photos, resources, zones] =
+    await Promise.all([
+      ctx.db
+        .query("items")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+        .collect(),
+      ctx.db
+        .query("boxes")
+        .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+        .collect(),
+      ctx.db
+        .query("boxItems")
+        .withIndex("by_move", (q) => q.eq("moveId", move._id))
+        .collect(),
+      ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", move._id))
+        .collect(),
+      ctx.db
+        .query("transportResources")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+        .collect(),
+      ctx.db
+        .query("transportZones")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", move._id))
+        .collect(),
+    ]);
 
   const summary = summarizeMoveQuestionsFromDocs({
     householdId: auth.householdId,
@@ -1349,7 +3262,7 @@ async function routeMoveDayChecklist(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  move: Doc<"moves">
+  move: Doc<"moves">,
 ) {
   const [items, boxes, memberships, resources, zones] = await Promise.all([
     ctx.db
@@ -1400,7 +3313,7 @@ async function routeMoveDayChecklist(
 async function routeCreateMove(
   ctx: MutationCtx,
   args: RestRequestInput,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ) {
   if (auth.moveId) {
     return restError({
@@ -1425,7 +3338,9 @@ async function routeCreateMove(
   });
 
   const now = Date.now();
-  const documentationProfileTypes = Array.isArray(body.documentationProfileTypes)
+  const documentationProfileTypes = Array.isArray(
+    body.documentationProfileTypes,
+  )
     ? parseDocumentationProfileTypes(body.documentationProfileTypes)
     : [...defaultDocumentationProfilesForMoveType(type)];
   const moveId = await ctx.db.insert("moves", {
@@ -1447,10 +3362,10 @@ async function routeCreateMove(
     pcsOrdersNumber: normalizeOptionalText(asString(body.pcsOrdersNumber)),
     pcsAllowanceNotes: normalizeOptionalText(asString(body.pcsAllowanceNotes)),
     pcsTransportationOfficeNotes: normalizeOptionalText(
-      asString(body.pcsTransportationOfficeNotes)
+      asString(body.pcsTransportationOfficeNotes),
     ),
     pcsRestrictedItemsNotes: normalizeOptionalText(
-      asString(body.pcsRestrictedItemsNotes)
+      asString(body.pcsRestrictedItemsNotes),
     ),
     proGearNotes: normalizeOptionalText(asString(body.proGearNotes)),
     notes: normalizeOptionalText(asString(body.notes)),
@@ -1477,14 +3392,14 @@ async function routeCreateMove(
         planningDefaultCount: planningDefaultIds.length,
       },
     },
-    201
+    201,
   );
 }
 
 async function routeSetupMove(
   ctx: MutationCtx,
   args: RestRequestInput,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ) {
   if (auth.moveId) {
     return restError({
@@ -1554,9 +3469,17 @@ async function routeSetupMove(
     const patch = setupMovePatch(body, notes);
     if (Object.keys(patch).length > 1) {
       await ctx.db.patch(moveId, patch);
-      await auditApiWrite(ctx, auth, moveId, "move.api_setup_updated", "moves", moveId, {
-        changedKeys: Object.keys(patch),
-      });
+      await auditApiWrite(
+        ctx,
+        auth,
+        moveId,
+        "move.api_setup_updated",
+        "moves",
+        moveId,
+        {
+          changedKeys: Object.keys(patch),
+        },
+      );
     }
   } else {
     moveAction = "create";
@@ -1565,7 +3488,9 @@ async function routeSetupMove(
       householdId: auth.householdId,
       dimension: "activeMoves",
     });
-    const documentationProfileTypes = Array.isArray(body.documentationProfileTypes)
+    const documentationProfileTypes = Array.isArray(
+      body.documentationProfileTypes,
+    )
       ? parseDocumentationProfileTypes(body.documentationProfileTypes)
       : [...defaultDocumentationProfilesForMoveType(type)];
     moveId = await ctx.db.insert("moves", {
@@ -1579,13 +3504,17 @@ async function routeSetupMove(
       dateEnd: normalizeOptionalText(asString(body.dateEnd)),
       unitSystem: parseUnitSystem(body.unitSystem) ?? "imperial",
       documentationProfileTypes,
-      moveLevelWeightAllowanceLb: optionalNumber(body.moveLevelWeightAllowanceLb),
+      moveLevelWeightAllowanceLb: optionalNumber(
+        body.moveLevelWeightAllowanceLb,
+      ),
       pcsBranch: parsePcsBranch(body.pcsBranch),
       pcsRankPayGrade: normalizeOptionalText(asString(body.pcsRankPayGrade)),
       pcsDependentStatus: parsePcsDependentStatus(body.pcsDependentStatus),
       pcsShipmentType: parsePcsShipmentType(body.pcsShipmentType),
       pcsOrdersNumber: normalizeOptionalText(asString(body.pcsOrdersNumber)),
-      pcsAllowanceNotes: normalizeOptionalText(asString(body.pcsAllowanceNotes)),
+      pcsAllowanceNotes: normalizeOptionalText(
+        asString(body.pcsAllowanceNotes),
+      ),
       pcsTransportationOfficeNotes: normalizeOptionalText(
         asString(body.pcsTransportationOfficeNotes),
       ),
@@ -1602,16 +3531,26 @@ async function routeSetupMove(
       householdId: auth.householdId,
       moveId,
     });
-    await auditApiWrite(ctx, auth, moveId, "move.api_setup_created", "moves", moveId, {
-      title,
-      type,
-      planningDefaultCount: planningDefaultIds.length,
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "move.api_setup_created",
+      "moves",
+      moveId,
+      {
+        title,
+        type,
+        planningDefaultCount: planningDefaultIds.length,
+      },
+    );
   }
 
   const spaceResults = [];
   for (const [index, input] of setupSpaceInputs(body).entries()) {
-    spaceResults.push(await upsertApiMoveSpaceForSetup(ctx, auth, moveId, input, index));
+    spaceResults.push(
+      await upsertApiMoveSpaceForSetup(ctx, auth, moveId, input, index),
+    );
   }
 
   const resourceResults = [];
@@ -1690,9 +3629,11 @@ async function routeSetupMove(
 
 async function routeAgentContext(
   ctx: MutationCtx,
+  args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  move: Doc<"moves">
+  move: Doc<"moves">,
 ) {
+  const sectionOptions = sectionOptionsFromQuery(args.query);
   const [
     items,
     photos,
@@ -1701,6 +3642,8 @@ async function routeAgentContext(
     zones,
     saleListings,
     plans,
+    boxes,
+    boxItems,
   ] = await Promise.all([
     ctx.db
       .query("items")
@@ -1730,6 +3673,14 @@ async function routeAgentContext(
       .query("floorPlans")
       .withIndex("by_move_status", (q) => q.eq("moveId", move._id))
       .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", move._id))
+      .collect(),
+    ctx.db
+      .query("boxItems")
+      .withIndex("by_move", (q) => q.eq("moveId", move._id))
+      .collect(),
   ]);
 
   const activeItems = items.filter(
@@ -1738,6 +3689,31 @@ async function routeAgentContext(
   const activePhotos = photos.filter(
     (photo) => photo.householdId === auth.householdId && !photo.archivedAt,
   );
+  const activeSpaces = spaces.filter(
+    (space) =>
+      space.householdId === auth.householdId && space.status !== "archived",
+  );
+  const activeResources = resources.filter(
+    (resource) =>
+      resource.householdId === auth.householdId && !resource.archivedAt,
+  );
+  const activeZones = zones.filter(
+    (zone) => zone.householdId === auth.householdId && !zone.archivedAt,
+  );
+  const activePlans = plans.filter(
+    (plan) => plan.householdId === auth.householdId && !plan.archivedAt,
+  );
+  const activeBoxes = boxes.filter(
+    (box) => box.householdId === auth.householdId && !box.archivedAt,
+  );
+  const activeBoxItems = boxItems.filter(
+    (assignment) => assignment.householdId === auth.householdId,
+  );
+  const movableUnitSummary = restMovableUnitSummary({
+    boxes: activeBoxes,
+    items: activeItems,
+    boxItems: activeBoxItems,
+  });
   const photosByItemId = new Map<string, number>();
   for (const photo of activePhotos) {
     if (!photo.itemId) continue;
@@ -1756,6 +3732,79 @@ async function routeAgentContext(
   const saleResearchSourceCount = Array.from(listingByItemId.values()).reduce(
     (total, listing) => total + listing.researchSourceCount,
     0,
+  );
+  const salePipeline = sellItems.map((item) => {
+    const listing = listingByItemId.get(String(item._id));
+    return {
+      item: safeItem(item),
+      photoCount: photosByItemId.get(String(item._id)) ?? 0,
+      listing: listing ? safeSaleListing(listing) : undefined,
+      needsListing: !listing,
+      needsMorePhotos: listing?.needsMorePhotos ?? true,
+      researchDepth: listing?.researchDepth ?? "none",
+      researchSourceCount: listing?.researchSourceCount ?? 0,
+    };
+  });
+  const sectionData: Record<string, unknown> = {};
+  const sectionMeta: Record<string, unknown> = {};
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "spaces",
+    activeSpaces.map((space) => safeMoveSpace(space)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "transportResources",
+    activeResources.map((resource) => safeTransportResource(resource)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "transportZones",
+    activeZones.map((zone) => safeTransportZone(zone)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "items",
+    activeItems.map((item) => ({
+      ...safeItem(item),
+      photoCount: photosByItemId.get(String(item._id)) ?? 0,
+      saleListingId: listingByItemId.get(String(item._id))?._id,
+    })),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "salePipeline",
+    salePipeline,
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "photos",
+    activePhotos.map((photo) => safePhoto(photo)),
+  );
+  addBoundedSection(
+    sectionData,
+    sectionMeta,
+    sectionOptions,
+    "layoutPlans",
+    activePlans.map((plan) => ({
+      planId: plan._id,
+      name: plan.name,
+      kind: plan.kind,
+      status: plan.status,
+      updatedAt: plan.updatedAt,
+    })),
   );
 
   return restOk({
@@ -1777,67 +3826,25 @@ async function routeAgentContext(
           "Items with disposition=sell should have a linked saleListing for pricing, marketplace draft, research, and status.",
         measurementRule:
           "If dimensions or weights are estimated, include measurementProvenance with sourceType, confidence, recordedByLabel, recordedAt, and needsVerification.",
+        movableUnitRule:
+          "Use movableUnitSummary to answer rough box/large loose item load questions. Reuse gapExamples[].measurementPatchHint.target and assignmentExamples[].assignmentPatchHint.target for follow-up writes. Patch existing boxes or loose itemIds with batch_upsert_movable_units when weights, dimensions, or volume are missing.",
       },
       counts: {
         items: activeItems.length,
+        boxes: activeBoxes.length,
+        movableUnits: movableUnitSummary.total,
+        looseMovableUnits: movableUnitSummary.looseItems,
         photos: activePhotos.length,
-        spaces: spaces.filter(
-          (space) =>
-            space.householdId === auth.householdId && space.status !== "archived",
-        ).length,
-        transportResources: resources.filter(
-          (resource) =>
-            resource.householdId === auth.householdId && !resource.archivedAt,
-        ).length,
-        transportZones: zones.filter(
-          (zone) => zone.householdId === auth.householdId && !zone.archivedAt,
-        ).length,
+        spaces: activeSpaces.length,
+        transportResources: activeResources.length,
+        transportZones: activeZones.length,
         sellItems: sellItems.length,
         saleListings: listingByItemId.size,
         saleResearchSourceCount,
       },
-      spaces: spaces
-        .filter(
-          (space) =>
-            space.householdId === auth.householdId && space.status !== "archived",
-        )
-        .map((space) => safeMoveSpace(space)),
-      transportResources: resources
-        .filter(
-          (resource) =>
-            resource.householdId === auth.householdId && !resource.archivedAt,
-        )
-        .map((resource) => safeTransportResource(resource)),
-      transportZones: zones
-        .filter((zone) => zone.householdId === auth.householdId && !zone.archivedAt)
-        .map((zone) => safeTransportZone(zone)),
-      items: activeItems.map((item) => ({
-        ...safeItem(item),
-        photoCount: photosByItemId.get(String(item._id)) ?? 0,
-        saleListingId: listingByItemId.get(String(item._id))?._id,
-      })),
-      salePipeline: sellItems.map((item) => {
-        const listing = listingByItemId.get(String(item._id));
-        return {
-          item: safeItem(item),
-          photoCount: photosByItemId.get(String(item._id)) ?? 0,
-          listing: listing ? safeSaleListing(listing) : undefined,
-          needsListing: !listing,
-          needsMorePhotos: listing?.needsMorePhotos ?? true,
-          researchDepth: listing?.researchDepth ?? "none",
-          researchSourceCount: listing?.researchSourceCount ?? 0,
-        };
-      }),
-      photos: activePhotos.slice(0, 250).map((photo) => safePhoto(photo)),
-      layoutPlans: plans
-        .filter((plan) => plan.householdId === auth.householdId && !plan.archivedAt)
-        .map((plan) => ({
-          planId: plan._id,
-          name: plan.name,
-          kind: plan.kind,
-          status: plan.status,
-          updatedAt: plan.updatedAt,
-        })),
+      movableUnitSummary,
+      ...sectionData,
+      sectionMeta,
     },
   });
 }
@@ -1847,7 +3854,7 @@ async function routeMoveSpaces(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  spaceIdSegment?: string
+  spaceIdSegment?: string,
 ) {
   if (args.method === "GET" && !spaceIdSegment) {
     const spaces = await ctx.db
@@ -1896,42 +3903,75 @@ async function routeMoveSpaces(
       createdAt: now,
       updatedAt: now,
     });
-    await auditApiWrite(ctx, auth, moveId, "space.api_created", "moveSpaces", spaceId, {
-      name,
-      kind,
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "space.api_created",
+      "moveSpaces",
+      spaceId,
+      {
+        name,
+        kind,
+      },
+    );
     const created = await ctx.db.get(spaceId);
-    return restOk({ data: created ? safeMoveSpace(created) : { spaceId } }, 201);
+    return restOk(
+      { data: created ? safeMoveSpace(created) : { spaceId } },
+      201,
+    );
   }
 
   if ((args.method === "PATCH" || args.method === "PUT") && spaceIdSegment) {
     const spaceId = spaceIdSegment as Id<"moveSpaces">;
     const space = await ctx.db.get(spaceId);
-    if (!space || space.householdId !== auth.householdId || space.moveId !== moveId) {
-      return restError({ status: 404, code: "not_found", message: "Space not found." });
+    if (
+      !space ||
+      space.householdId !== auth.householdId ||
+      space.moveId !== moveId
+    ) {
+      return restError({
+        status: 404,
+        code: "not_found",
+        message: "Space not found.",
+      });
     }
     const body = bodyObject(args.body);
     const patch: Partial<Doc<"moveSpaces">> = {
       updatedByApiKeyId: auth.apiKeyId,
       updatedAt: Date.now(),
     };
-    if (body.kind !== undefined) patch.kind = parseMoveSpaceKind(body.kind) ?? space.kind;
-    if (body.name !== undefined) patch.name = requiredBodyString(body.name, "name cannot be empty.");
-    if (body.aliases !== undefined) patch.aliases = parseStringArray(body.aliases) ?? [];
-    if (body.notes !== undefined) patch.notes = normalizeOptionalText(asString(body.notes));
+    if (body.kind !== undefined)
+      patch.kind = parseMoveSpaceKind(body.kind) ?? space.kind;
+    if (body.name !== undefined)
+      patch.name = requiredBodyString(body.name, "name cannot be empty.");
+    if (body.aliases !== undefined)
+      patch.aliases = parseStringArray(body.aliases) ?? [];
+    if (body.notes !== undefined)
+      patch.notes = normalizeOptionalText(asString(body.notes));
     if (body.floorLevel !== undefined) {
       patch.floorLevel = normalizeOptionalText(asString(body.floorLevel));
     }
-    if (body.sortOrder !== undefined) patch.sortOrder = normalizeSortOrder(optionalNumber(body.sortOrder));
+    if (body.sortOrder !== undefined)
+      patch.sortOrder = normalizeSortOrder(optionalNumber(body.sortOrder));
     if (body.status !== undefined) {
       patch.status = parseMoveSpaceStatus(body.status) ?? space.status;
       patch.archivedAt = patch.status === "archived" ? Date.now() : undefined;
     }
-    if (body.capacity !== undefined) patch.capacity = parseCapacity(body.capacity) ?? {};
+    if (body.capacity !== undefined)
+      patch.capacity = parseCapacity(body.capacity) ?? {};
     await ctx.db.patch(spaceId, patch);
-    await auditApiWrite(ctx, auth, moveId, "space.api_updated", "moveSpaces", spaceId, {
-      changedKeys: Object.keys(patch),
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "space.api_updated",
+      "moveSpaces",
+      spaceId,
+      {
+        changedKeys: Object.keys(patch),
+      },
+    );
     const updated = await ctx.db.get(spaceId);
     return restOk({ data: updated ? safeMoveSpace(updated) : { spaceId } });
   }
@@ -1948,7 +3988,7 @@ async function routeSaleListings(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  listingIdSegment?: string
+  listingIdSegment?: string,
 ) {
   if (args.method === "GET" && !listingIdSegment) {
     const [listings, items, photos] = await Promise.all([
@@ -1975,7 +4015,11 @@ async function routeSaleListings(
     );
     const photoCounts = new Map<string, number>();
     for (const photo of photos) {
-      if (photo.householdId !== auth.householdId || photo.archivedAt || !photo.itemId) {
+      if (
+        photo.householdId !== auth.householdId ||
+        photo.archivedAt ||
+        !photo.itemId
+      ) {
         continue;
       }
       photoCounts.set(
@@ -1986,7 +4030,9 @@ async function routeSaleListings(
     return restOk(
       paginate(
         items
-          .filter((item) => item.householdId === auth.householdId && !item.deletedAt)
+          .filter(
+            (item) => item.householdId === auth.householdId && !item.deletedAt,
+          )
           .map((item) => ({
             item: safeItem(item),
             photoCount: photoCounts.get(String(item._id)) ?? 0,
@@ -2001,10 +4047,22 @@ async function routeSaleListings(
 
   if (args.method === "POST" && !listingIdSegment) {
     const body = bodyObject(args.body);
-    const itemId = requiredBodyString(body.itemId, "itemId is required.") as Id<"items">;
+    const itemId = requiredBodyString(
+      body.itemId,
+      "itemId is required.",
+    ) as Id<"items">;
     const item = await ctx.db.get(itemId);
-    if (!item || item.householdId !== auth.householdId || item.moveId !== moveId || item.deletedAt) {
-      return restError({ status: 404, code: "not_found", message: "Item not found." });
+    if (
+      !item ||
+      item.householdId !== auth.householdId ||
+      item.moveId !== moveId ||
+      item.deletedAt
+    ) {
+      return restError({
+        status: 404,
+        code: "not_found",
+        message: "Item not found.",
+      });
     }
     const existing = (
       await ctx.db
@@ -2067,13 +4125,21 @@ async function routeSaleListings(
       { itemId },
     );
     const listing = await ctx.db.get(listingId);
-    return restOk({ data: listing ? safeSaleListing(listing) : { listingId } }, existing ? 200 : 201);
+    return restOk(
+      { data: listing ? safeSaleListing(listing) : { listingId } },
+      existing ? 200 : 201,
+    );
   }
 
   if ((args.method === "PATCH" || args.method === "PUT") && listingIdSegment) {
     const listingId = listingIdSegment as Id<"saleListings">;
     const listing = await ctx.db.get(listingId);
-    if (!listing || listing.householdId !== auth.householdId || listing.moveId !== moveId || listing.archivedAt) {
+    if (
+      !listing ||
+      listing.householdId !== auth.householdId ||
+      listing.moveId !== moveId ||
+      listing.archivedAt
+    ) {
       return restError({
         status: 404,
         code: "not_found",
@@ -2086,9 +4152,17 @@ async function routeSaleListings(
       updatedByApiKeyId: auth.apiKeyId,
       updatedAt: Date.now(),
     });
-    await auditApiWrite(ctx, auth, moveId, "sale_listing.api_updated", "saleListings", listingId, {
-      changedKeys: Object.keys(patch),
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "sale_listing.api_updated",
+      "saleListings",
+      listingId,
+      {
+        changedKeys: Object.keys(patch),
+      },
+    );
     const updated = await ctx.db.get(listingId);
     return restOk({ data: updated ? safeSaleListing(updated) : { listingId } });
   }
@@ -2103,7 +4177,7 @@ async function routeSaleListings(
 async function routeCapacityReport(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  move: Doc<"moves">
+  move: Doc<"moves">,
 ) {
   const [items, boxes, assignments, resources, zones] = await Promise.all([
     ctx.db
@@ -2129,23 +4203,29 @@ async function routeCapacityReport(
   ]);
 
   const activeItems = items.filter(
-    (item) => item.householdId === auth.householdId && !item.deletedAt
+    (item) => item.householdId === auth.householdId && !item.deletedAt,
   );
   const activeBoxes = boxes.filter(
-    (box) => box.householdId === auth.householdId && !box.archivedAt
+    (box) => box.householdId === auth.householdId && !box.archivedAt,
   );
   const activeAssignments = assignments.filter(
-    (assignment) => assignment.householdId === auth.householdId
+    (assignment) => assignment.householdId === auth.householdId,
   );
   const activeResources = resources.filter(
-    (resource) => resource.householdId === auth.householdId && !resource.archivedAt
+    (resource) =>
+      resource.householdId === auth.householdId && !resource.archivedAt,
   );
   const activeZones = zones.filter(
-    (zone) => zone.householdId === auth.householdId && !zone.archivedAt
+    (zone) => zone.householdId === auth.householdId && !zone.archivedAt,
   );
   const itemById = new Map(activeItems.map((item) => [item._id, item]));
+  const activeBoxIds = new Set(activeBoxes.map((box) => String(box._id)));
+  const boxedItemIds = new Set<string>();
   const assignmentsByBoxId = new Map<Id<"boxes">, Doc<"boxItems">[]>();
   for (const assignment of activeAssignments) {
+    if (activeBoxIds.has(String(assignment.boxId))) {
+      boxedItemIds.add(String(assignment.itemId));
+    }
     const existing = assignmentsByBoxId.get(assignment.boxId) ?? [];
     existing.push(assignment);
     assignmentsByBoxId.set(assignment.boxId, existing);
@@ -2159,10 +4239,10 @@ async function routeCapacityReport(
     estimate: estimateItem(item),
   }));
   const totalEstimatedWeightLb = sumEstimateValues(
-    itemEstimates.map((item) => item.estimate.weight)
+    itemEstimates.map((item) => item.estimate.weight),
   );
   const totalEstimatedVolumeCuFt = sumEstimateValues(
-    itemEstimates.map((item) => item.estimate.volume)
+    itemEstimates.map((item) => item.estimate.volume),
   );
 
   const boxReports = activeBoxes.map((box) => {
@@ -2178,13 +4258,13 @@ async function routeCapacityReport(
           : null;
       })
       .filter((estimate): estimate is NonNullable<typeof estimate> =>
-        Boolean(estimate)
+        Boolean(estimate),
       );
     const contentsWeight = sumEstimateValues(
-      contentEstimates.map((estimate) => estimate.weight)
+      contentEstimates.map((estimate) => estimate.weight),
     );
     const contentsVolume = sumEstimateValues(
-      contentEstimates.map((estimate) => estimate.volume)
+      contentEstimates.map((estimate) => estimate.volume),
     );
     const weightSummary = resolveBoxWeight({
       actualWeightLb: box.actualWeightLb,
@@ -2213,7 +4293,7 @@ async function routeCapacityReport(
       assignedZoneId: box.assignedZoneId,
       itemCount: boxAssignments.reduce(
         (sum, assignment) => sum + assignment.quantity,
-        0
+        0,
       ),
       estimatedWeightLb: roundEstimate(estimatedWeightLb),
       weightSource: weightSummary.source,
@@ -2227,15 +4307,52 @@ async function routeCapacityReport(
     };
   });
 
+  const looseItemReports = activeItems
+    .filter(
+      (item) =>
+        item.status !== "archived" &&
+        !boxedItemIds.has(String(item._id)) &&
+        isLooseMovableUnitRestItem(item),
+    )
+    .map((item) => {
+      const estimate = estimateItem(item);
+      return {
+        itemId: item._id,
+        name: item.name,
+        room: item.room,
+        destinationRoom: item.destinationRoom,
+        status: item.status,
+        disposition: item.disposition,
+        quantity: item.quantity ?? 1,
+        requiresPersonalTransport: item.requiresPersonalTransport,
+        assignedResourceId: item.assignedResourceId,
+        assignedZoneId: item.assignedZoneId,
+        estimatedWeightLb: roundEstimate(estimate.weight?.value ?? 0),
+        estimatedVolumeCuFt: roundEstimate(estimate.volume?.value ?? 0),
+        warnings: estimate.warnings,
+      };
+    });
+
   const resourceReports = activeResources.map((resource) => {
     const assignedBoxes = boxReports.filter(
-      (box) => box.assignedResourceId === resource._id
+      (box) => box.assignedResourceId === resource._id,
+    );
+    const assignedLooseItems = looseItemReports.filter(
+      (item) => item.assignedResourceId === resource._id,
     );
     const estimatedWeightLb = roundEstimate(
-      assignedBoxes.reduce((sum, box) => sum + box.estimatedWeightLb, 0)
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedWeightLb, 0) +
+        assignedLooseItems.reduce(
+          (sum, item) => sum + item.estimatedWeightLb,
+          0,
+        ),
     );
     const estimatedVolumeCuFt = roundEstimate(
-      assignedBoxes.reduce((sum, box) => sum + box.estimatedVolumeCuFt, 0)
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedVolumeCuFt, 0) +
+        assignedLooseItems.reduce(
+          (sum, item) => sum + item.estimatedVolumeCuFt,
+          0,
+        ),
     );
     return {
       resourceId: resource._id,
@@ -2256,24 +4373,41 @@ async function routeCapacityReport(
         unlimited: resource.capacity.volumeIsUnlimited,
       }),
       assignedBoxCount: assignedBoxes.length,
-      warningCount: assignedBoxes.reduce(
-        (sum, box) =>
-          sum +
-          box.warnings.length +
-          box.assignmentWarnings.length +
-          box.assignmentHardBlocks.length,
-        0
-      ),
+      assignedLooseItemCount: assignedLooseItems.length,
+      assignedUnitCount: assignedBoxes.length + assignedLooseItems.length,
+      warningCount:
+        assignedBoxes.reduce(
+          (sum, box) =>
+            sum +
+            box.warnings.length +
+            box.assignmentWarnings.length +
+            box.assignmentHardBlocks.length,
+          0,
+        ) +
+        assignedLooseItems.reduce((sum, item) => sum + item.warnings.length, 0),
     };
   });
 
   const zoneReports = activeZones.map((zone) => {
-    const assignedBoxes = boxReports.filter((box) => box.assignedZoneId === zone._id);
+    const assignedBoxes = boxReports.filter(
+      (box) => box.assignedZoneId === zone._id,
+    );
+    const assignedLooseItems = looseItemReports.filter(
+      (item) => item.assignedZoneId === zone._id,
+    );
     const estimatedWeightLb = roundEstimate(
-      assignedBoxes.reduce((sum, box) => sum + box.estimatedWeightLb, 0)
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedWeightLb, 0) +
+        assignedLooseItems.reduce(
+          (sum, item) => sum + item.estimatedWeightLb,
+          0,
+        ),
     );
     const estimatedVolumeCuFt = roundEstimate(
-      assignedBoxes.reduce((sum, box) => sum + box.estimatedVolumeCuFt, 0)
+      assignedBoxes.reduce((sum, box) => sum + box.estimatedVolumeCuFt, 0) +
+        assignedLooseItems.reduce(
+          (sum, item) => sum + item.estimatedVolumeCuFt,
+          0,
+        ),
     );
     return {
       zoneId: zone._id,
@@ -2294,6 +4428,8 @@ async function routeCapacityReport(
         unlimited: zone.capacity.volumeIsUnlimited,
       }),
       assignedBoxCount: assignedBoxes.length,
+      assignedLooseItemCount: assignedLooseItems.length,
+      assignedUnitCount: assignedBoxes.length + assignedLooseItems.length,
     };
   });
 
@@ -2308,14 +4444,15 @@ async function routeCapacityReport(
         max: move.moveLevelWeightAllowanceLb,
       }),
       missingWeightCount: itemEstimates.filter((item) =>
-        item.estimate.warnings.includes("missingWeightEstimate")
+        item.estimate.warnings.includes("missingWeightEstimate"),
       ).length,
       missingVolumeCount: itemEstimates.filter((item) =>
-        item.estimate.warnings.includes("missingVolumeEstimate")
+        item.estimate.warnings.includes("missingVolumeEstimate"),
       ).length,
       unassignedBoxCount: boxReports.filter((box) => !box.assignedResourceId)
         .length,
       boxReports,
+      looseItemReports,
       resourceReports,
       zoneReports,
       itemEstimates: itemEstimates.slice(0, 100),
@@ -2330,20 +4467,20 @@ async function routeTransportResources(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
   resourceIdSegment?: string,
-  actionSegment?: string
+  actionSegment?: string,
 ) {
   if (actionSegment === "zones" && resourceIdSegment) {
     await requireApiTransportResource(
       ctx,
       auth.householdId,
       moveId,
-      resourceIdSegment
+      resourceIdSegment,
     );
     if (args.method === "GET") {
       const zones = await ctx.db
         .query("transportZones")
         .withIndex("by_resource_sort", (q) =>
-          q.eq("resourceId", resourceIdSegment as Id<"transportResources">)
+          q.eq("resourceId", resourceIdSegment as Id<"transportResources">),
         )
         .collect();
       return restOk(
@@ -2352,8 +4489,8 @@ async function routeTransportResources(
             .filter((zone) => zone.householdId === auth.householdId)
             .filter((zone) => !zone.archivedAt)
             .map((zone) => safeTransportZone(zone)),
-          args.query
-        )
+          args.query,
+        ),
       );
     }
     if (args.method === "POST") {
@@ -2370,9 +4507,12 @@ async function routeTransportResources(
         "transport_zone.api_created",
         "transportZones",
         zoneId,
-        { resourceId: resourceIdSegment, name: zone?.name }
+        { resourceId: resourceIdSegment, name: zone?.name },
       );
-      return restOk({ data: { zone: zone ? safeTransportZone(zone) : { zoneId } } }, 201);
+      return restOk(
+        { data: { zone: zone ? safeTransportZone(zone) : { zoneId } } },
+        201,
+      );
     }
   }
 
@@ -2387,8 +4527,8 @@ async function routeTransportResources(
           .filter((entry) => entry.householdId === auth.householdId)
           .filter((entry) => !entry.archivedAt)
           .map((entry) => safeTransportResource(entry)),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
 
@@ -2397,7 +4537,7 @@ async function routeTransportResources(
       ctx,
       auth.householdId,
       moveId,
-      resourceIdSegment
+      resourceIdSegment,
     );
     return restOk({ data: safeTransportResource(resource) });
   }
@@ -2411,7 +4551,7 @@ async function routeTransportResources(
       ctx,
       auth.householdId,
       moveId,
-      resourceIdSegment
+      resourceIdSegment,
     );
     const patch = transportResourcePatch(args.body, auth);
     await ctx.db.patch(resource._id, patch);
@@ -2423,10 +4563,12 @@ async function routeTransportResources(
       "transport_resource.api_updated",
       "transportResources",
       resource._id,
-      { changedKeys: Object.keys(patch) }
+      { changedKeys: Object.keys(patch) },
     );
     return restOk({
-      data: updated ? safeTransportResource(updated) : { resourceId: resource._id },
+      data: updated
+        ? safeTransportResource(updated)
+        : { resourceId: resource._id },
     });
   }
 
@@ -2442,7 +4584,7 @@ async function routeTransportZones(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  zoneIdSegment?: string
+  zoneIdSegment?: string,
 ) {
   if (args.method === "GET" && !zoneIdSegment) {
     const zones = await ctx.db
@@ -2455,8 +4597,8 @@ async function routeTransportZones(
           .filter((entry) => entry.householdId === auth.householdId)
           .filter((entry) => !entry.archivedAt)
           .map((entry) => safeTransportZone(entry)),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
 
@@ -2465,7 +4607,7 @@ async function routeTransportZones(
       ctx,
       auth.householdId,
       moveId,
-      zoneIdSegment
+      zoneIdSegment,
     );
     return restOk({ data: safeTransportZone(zone) });
   }
@@ -2475,7 +4617,7 @@ async function routeTransportZones(
       ctx,
       auth,
       moveId,
-      bodyObject(args.body)
+      bodyObject(args.body),
     );
     const zone = await ctx.db.get(zoneId);
     await auditApiWrite(
@@ -2485,9 +4627,12 @@ async function routeTransportZones(
       "transport_zone.api_created",
       "transportZones",
       zoneId,
-      { resourceId: zone?.resourceId, name: zone?.name }
+      { resourceId: zone?.resourceId, name: zone?.name },
     );
-    return restOk({ data: { zone: zone ? safeTransportZone(zone) : { zoneId } } }, 201);
+    return restOk(
+      { data: { zone: zone ? safeTransportZone(zone) : { zoneId } } },
+      201,
+    );
   }
 
   if (args.method === "PATCH" && zoneIdSegment) {
@@ -2495,9 +4640,14 @@ async function routeTransportZones(
       ctx,
       auth.householdId,
       moveId,
-      zoneIdSegment
+      zoneIdSegment,
     );
-    const patch = await transportZonePatch(ctx, auth.householdId, moveId, args.body);
+    const patch = await transportZonePatch(
+      ctx,
+      auth.householdId,
+      moveId,
+      args.body,
+    );
     await ctx.db.patch(zone._id, patch);
     const updated = await ctx.db.get(zone._id);
     await auditApiWrite(
@@ -2507,9 +4657,11 @@ async function routeTransportZones(
       "transport_zone.api_updated",
       "transportZones",
       zone._id,
-      { changedKeys: Object.keys(patch) }
+      { changedKeys: Object.keys(patch) },
     );
-    return restOk({ data: updated ? safeTransportZone(updated) : { zoneId: zone._id } });
+    return restOk({
+      data: updated ? safeTransportZone(updated) : { zoneId: zone._id },
+    });
   }
 
   return restError({
@@ -2524,7 +4676,7 @@ async function routeMovePeople(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  personIdSegment?: string
+  personIdSegment?: string,
 ) {
   if (args.method === "GET" && !personIdSegment) {
     const includeArchived = args.query.includeArchived === "true";
@@ -2538,8 +4690,8 @@ async function routeMovePeople(
           .filter((person) => person.householdId === auth.householdId)
           .filter((person) => includeArchived || !person.archivedAt)
           .map((person) => safeMovePerson(person)),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
 
@@ -2549,7 +4701,7 @@ async function routeMovePeople(
       auth.householdId,
       moveId,
       personIdSegment,
-      args.query.includeArchived === "true"
+      args.query.includeArchived === "true",
     );
     return restOk({ data: safeMovePerson(person) });
   }
@@ -2577,13 +4729,20 @@ async function routeMovePeople(
       updatedAt: now,
     });
     const person = await ctx.db.get(personId);
-    await auditApiMovePerson(ctx, auth, moveId, "move_person.api_created", personId, {
-      role,
-      name,
-    });
+    await auditApiMovePerson(
+      ctx,
+      auth,
+      moveId,
+      "move_person.api_created",
+      personId,
+      {
+        role,
+        name,
+      },
+    );
     return restOk(
       { data: person ? safeMovePerson(person) : { personId } },
-      201
+      201,
     );
   }
 
@@ -2593,7 +4752,7 @@ async function routeMovePeople(
       auth.householdId,
       moveId,
       personIdSegment,
-      true
+      true,
     );
     const patch = movePersonPatch(args.body, auth);
     await ctx.db.patch(person._id, patch);
@@ -2604,7 +4763,7 @@ async function routeMovePeople(
       moveId,
       "move_person.api_updated",
       person._id,
-      { changedKeys: Object.keys(patch) }
+      { changedKeys: Object.keys(patch) },
     );
     return restOk({
       data: updated ? safeMovePerson(updated) : { personId: person._id },
@@ -2617,7 +4776,7 @@ async function routeMovePeople(
       auth.householdId,
       moveId,
       personIdSegment,
-      true
+      true,
     );
     const now = Date.now();
     await ctx.db.patch(person._id, {
@@ -2631,7 +4790,7 @@ async function routeMovePeople(
       auth,
       moveId,
       "move_person.api_archived",
-      person._id
+      person._id,
     );
     const updated = await ctx.db.get(person._id);
     return restOk({
@@ -2651,9 +4810,18 @@ async function routeItems(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  itemIdSegment?: string
+  itemIdSegment?: string,
+  action?: string,
 ) {
   if (args.method === "GET" && !itemIdSegment) {
+    const search = querySearchTerm(args.query);
+    const agentLabel = optionalString(args.query.agentLabel);
+    const destinationRoom = optionalString(args.query.destinationRoom);
+    const destinationSpaceId = optionalString(args.query.destinationSpaceId);
+    const maxConfidence =
+      args.query.maxConfidence !== undefined
+        ? Number(args.query.maxConfidence)
+        : undefined;
     const items = await ctx.db
       .query("items")
       .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
@@ -2664,22 +4832,85 @@ async function routeItems(
         items
           .filter((item) => !item.deletedAt)
           .filter((item) =>
-            args.query.status ? item.status === args.query.status : true
+            args.query.status ? item.status === args.query.status : true,
           )
           .filter((item) =>
             args.query.disposition
               ? item.disposition === args.query.disposition
-              : true
+              : true,
+          )
+          .filter((item) =>
+            destinationRoom ? item.destinationRoom === destinationRoom : true,
+          )
+          .filter((item) =>
+            destinationSpaceId
+              ? String(item.destinationSpaceId ?? "") === destinationSpaceId
+              : true,
+          )
+          .filter((item) =>
+            agentLabel ? item.agentLabel === agentLabel : true,
+          )
+          .filter((item) =>
+            Number.isFinite(maxConfidence)
+              ? (item.aiConfidenceScore ?? 1) <= (maxConfidence as number)
+              : true,
+          )
+          .filter((item) =>
+            matchesSearch(search, [
+              item.name,
+              item.description,
+              item.room,
+              item.destinationRoom,
+              item.category,
+            ]),
           )
           .map((item) => safeItem(item)),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
 
-  if (args.method === "GET" && itemIdSegment) {
-    const item = await requireApiItem(ctx, auth.householdId, moveId, itemIdSegment);
+  if (args.method === "GET" && itemIdSegment && !action) {
+    const item = await requireApiItem(
+      ctx,
+      auth.householdId,
+      moveId,
+      itemIdSegment,
+    );
     return restOk({ data: safeItem(item) });
+  }
+
+  if (args.method === "POST" && itemIdSegment && action === "notes") {
+    const item = await requireApiItem(
+      ctx,
+      auth.householdId,
+      moveId,
+      itemIdSegment,
+    );
+    const { patch, noteLength } = restPrivateItemNoteAppendPatch({
+      body: args.body,
+      auth,
+      item,
+    });
+    await ctx.db.patch(item._id, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "item.api_note_appended",
+      "items",
+      item._id,
+      {
+        noteLength,
+      },
+    );
+    return restOk({
+      data: {
+        itemId: item._id,
+        appended: true,
+        updatedAt: patch.updatedAt,
+      },
+    });
   }
 
   if (args.method === "POST" && itemIdSegment === "batch-upsert") {
@@ -2690,31 +4921,57 @@ async function routeItems(
     const body = bodyObject(args.body);
     await assertExternalItemKeyAvailable(ctx, auth.householdId, moveId, body);
     const { itemId, name } = await createApiItem(ctx, auth, moveId, body);
-    await auditApiWrite(ctx, auth, moveId, "item.api_created", "items", itemId, {
-      name,
-      externalSource: externalItemKeyFromInput(body)?.externalSource,
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "item.api_created",
+      "items",
+      itemId,
+      {
+        name,
+        externalSource: externalItemKeyFromInput(body)?.externalSource,
+      },
+    );
     return restOk({ data: { itemId } }, 201);
   }
 
-  if (args.method === "PATCH" && itemIdSegment) {
-    const item = await requireApiItem(ctx, auth.householdId, moveId, itemIdSegment);
+  if (args.method === "PATCH" && itemIdSegment && !action) {
+    const item = await requireApiItem(
+      ctx,
+      auth.householdId,
+      moveId,
+      itemIdSegment,
+    );
     await assertExternalItemKeyAvailable(
       ctx,
       auth.householdId,
       moveId,
       args.body,
-      item._id
+      item._id,
     );
     const patch = itemPatch(args.body, auth, item);
+    await applyItemSpaceRefs(ctx, auth.householdId, moveId, args.body, patch);
     await ctx.db.patch(item._id, patch);
-    await auditApiWrite(ctx, auth, moveId, "item.api_updated", "items", item._id, {
-      changedKeys: Object.keys(patch),
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "item.api_updated",
+      "items",
+      item._id,
+      {
+        changedKeys: Object.keys(patch),
+      },
+    );
     return restOk({ data: { itemId: item._id, ...patch } });
   }
 
-  return restError({ status: 404, code: "not_found", message: "Item route not found." });
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Item route not found.",
+  });
 }
 
 async function routePlannedItems(
@@ -2723,7 +4980,7 @@ async function routePlannedItems(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
   plannedItemIdSegment?: string,
-  action?: string
+  action?: string,
 ) {
   if (args.method === "GET" && !plannedItemIdSegment) {
     const includeArchived = args.query.includeArchived === "true";
@@ -2818,7 +5075,9 @@ async function routePlannedItems(
       { changedKeys: Object.keys(patch) },
     );
     return restOk({
-      data: updated ? safePlannedItem(updated) : { plannedItemId: plannedItem._id },
+      data: updated
+        ? safePlannedItem(updated)
+        : { plannedItemId: plannedItem._id },
     });
   }
 
@@ -2857,7 +5116,9 @@ async function routePlannedItems(
       plannedItem._id,
       {},
     );
-    return restOk({ data: { plannedItemId: plannedItem._id, archivedAt: now } });
+    return restOk({
+      data: { plannedItemId: plannedItem._id, archivedAt: now },
+    });
   }
 
   return restError({
@@ -2871,7 +5132,7 @@ async function routeBatchUpsertItems(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const body = bodyObject(args.body);
   const rows = Array.isArray(body.items) ? body.items : [];
@@ -2899,12 +5160,29 @@ async function routeBatchUpsertItems(
       const externalKey = externalItemKeyFromInput(input);
       const externalMatch =
         !itemId && externalKey
-          ? await findApiItemByExternalKey(ctx, auth.householdId, moveId, externalKey)
+          ? await findApiItemByExternalKey(
+              ctx,
+              auth.householdId,
+              moveId,
+              externalKey,
+            )
           : null;
       itemId = itemId ?? externalMatch?._id;
       if (itemId) {
-        const item = await requireApiItem(ctx, auth.householdId, moveId, itemId);
+        const item = await requireApiItem(
+          ctx,
+          auth.householdId,
+          moveId,
+          itemId,
+        );
         const patch = itemPatch(input, auth, item);
+        mergeItemPatchResearchSources(
+          input,
+          item,
+          patch,
+          `items.${index}.researchSourceMode`,
+        );
+        await applyItemSpaceRefs(ctx, auth.householdId, moveId, input, patch);
         if (
           externalKey &&
           (item.externalSource !== externalKey.externalSource ||
@@ -2915,7 +5193,7 @@ async function routeBatchUpsertItems(
             auth.householdId,
             moveId,
             input,
-            item._id
+            item._id,
           );
         }
         if (!dryRun) {
@@ -2927,7 +5205,7 @@ async function routeBatchUpsertItems(
             "item.api_batch_updated",
             "items",
             item._id,
-            { rowIndex: index, changedKeys: Object.keys(patch) }
+            { rowIndex: index, changedKeys: Object.keys(patch) },
           );
         }
         results.push({
@@ -2966,7 +5244,7 @@ async function routeBatchUpsertItems(
         "item.api_batch_created",
         "items",
         created.itemId,
-        { rowIndex: index, name: created.name }
+        { rowIndex: index, name: created.name },
       );
       results.push({
         index,
@@ -3002,8 +5280,726 @@ async function routeBatchUpsertItems(
         results,
       },
     },
-    failed > 0 ? 207 : 200
+    failed > 0 ? 207 : 200,
   );
+}
+
+type RestMovableUnitBoxRow = {
+  unit: Record<string, unknown>;
+  unitIndex: number;
+  unitCountIndex?: number;
+  unitCount?: number;
+};
+
+async function routeMovableUnits(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  action?: string,
+) {
+  if (
+    args.method !== "POST" ||
+    action !== "batch-upsert" ||
+    parseRestPath(args.path).length !== 4
+  ) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Movable units route not found.",
+    });
+  }
+
+  const body = bodyObject(args.body);
+  const units = Array.isArray(body.units) ? body.units : [];
+  const dryRun = Boolean(body.dryRun);
+  const idempotencyKey =
+    optionalString(body.idempotencyKey) ?? optionalString(args.idempotencyKey);
+  if (!units.length) {
+    return restError({
+      status: 400,
+      code: "invalid_batch",
+      message: "units must include at least one row.",
+    });
+  }
+  if (units.length > maxBatchUpsertItems) {
+    return restError({
+      status: 400,
+      code: "batch_too_large",
+      message: `Movable unit batches are limited to ${maxBatchUpsertItems} input rows.`,
+    });
+  }
+
+  const boxRows: RestMovableUnitBoxRow[] = [];
+  const looseItemUnits: Array<{
+    unit: Record<string, unknown>;
+    unitIndex: number;
+  }> = [];
+  const missingStableLooseRows: number[] = [];
+  const autoCodedBoxRows = new Set<number>();
+
+  for (const [unitIndex, row] of units.entries()) {
+    const unit = bodyObject(row);
+    if (unit.kind === "box") {
+      let expanded: RestMovableUnitBoxRow[];
+      try {
+        expanded = expandRestMovableUnitBoxRows(unit, unitIndex);
+      } catch (error) {
+        return restErrorFromUnknown(error);
+      }
+      boxRows.push(...expanded);
+      if (
+        expanded.some(
+          ({ unit: boxUnit }) =>
+            !optionalString(boxUnit.boxId) && !optionalString(boxUnit.code),
+        )
+      ) {
+        autoCodedBoxRows.add(unitIndex);
+      }
+      continue;
+    }
+
+    if (unit.kind === "looseItem") {
+      looseItemUnits.push({ unit, unitIndex });
+      if (
+        !optionalString(unit.itemId) &&
+        !hasRestStableExternalItemKey(unit)
+      ) {
+        missingStableLooseRows.push(unitIndex);
+      }
+      continue;
+    }
+
+    return restError({
+      status: 400,
+      code: "validation_error",
+      message: `units.${unitIndex}.kind must be "box" or "looseItem".`,
+    });
+  }
+
+  if (boxRows.length + looseItemUnits.length > maxBatchUpsertItems) {
+    return restError({
+      status: 400,
+      code: "batch_too_large",
+      message: `Movable unit batches are limited to ${maxBatchUpsertItems} expanded rows.`,
+    });
+  }
+  if (missingStableLooseRows.length) {
+    return restError({
+      status: 400,
+      code: "stable_key_required",
+      message: `looseItem rows require itemId for existing units or externalSource plus externalId for new units. Missing stable key on row index${missingStableLooseRows.length === 1 ? "" : "es"} ${missingStableLooseRows.join(", ")}.`,
+    });
+  }
+
+  const autoCodedBoxWarning =
+    autoCodedBoxRows.size && !idempotencyKey
+      ? `Box rows without boxId or code will receive server-generated box codes. Pass a stable idempotencyKey before live writes for row index${autoCodedBoxRows.size === 1 ? "" : "es"} ${[...autoCodedBoxRows].join(", ")} so retries do not create duplicate auto-coded boxes.`
+      : undefined;
+  const boxPhotoAttachmentCount = boxRows.reduce(
+    (total, { unit, unitIndex }) =>
+      total + restMovableUnitBoxPhotoIds(unit, unitIndex).length,
+    0,
+  );
+
+  if (!dryRun && autoCodedBoxWarning) {
+    return restError({
+      status: 400,
+      code: "idempotency_required",
+      message: `${autoCodedBoxWarning} Use explicit box codes or existing boxId rows if you do not want to rely on a batch idempotency key.`,
+    });
+  }
+
+  const itemRows = looseItemUnits.map(({ unit }) =>
+    movableUnitLooseItemBody(unit),
+  );
+
+  if (dryRun) {
+    return restOk({
+      data: {
+        dryRun: true,
+        summary: removeUndefined({
+          totalUnits: boxRows.length + looseItemUnits.length,
+          boxes: boxRows.length,
+          looseItems: looseItemUnits.length,
+          photoAttachments: boxPhotoAttachmentCount || undefined,
+        }),
+        requests: [
+          ...boxRows.flatMap(({ unit, unitIndex, unitCountIndex, unitCount }) => {
+            const boxBody = movableUnitBoxBody(unit);
+            const boxId = optionalString(unit.boxId);
+            const boxRequest = removeUndefined({
+              method: boxId ? "PATCH" : "POST",
+              path: boxId
+                ? `/moves/${moveId}/boxes/${boxId}`
+                : `/moves/${moveId}/boxes`,
+              body: boxBody,
+              unitIndex,
+              unitCountIndex,
+              unitCount,
+            });
+            const photoRequests = restMovableUnitBoxPhotoIds(
+              unit,
+              unitIndex,
+            ).map((photoId, photoIndex) =>
+              removeUndefined({
+                method: "POST",
+                path: `/photos/${photoId}/attach`,
+                body: removeUndefined({
+                  moveId,
+                  photoId,
+                  boxId,
+                  boxCode: boxId ? undefined : normalizeRestBoxCode(unit.code),
+                  dryRun: true,
+                }),
+                unitIndex,
+                unitCountIndex,
+                unitCount,
+                photoIndex,
+                deferredTarget:
+                  boxId || normalizeRestBoxCode(unit.code)
+                    ? undefined
+                    : "Attach to the boxId returned by the preceding live box create request.",
+              }),
+            );
+            return [boxRequest, ...photoRequests];
+          }),
+          ...(itemRows.length
+            ? [
+                {
+                  method: "POST",
+                  path: `/moves/${moveId}/items/batch-upsert`,
+                  body: { dryRun: true, items: itemRows },
+                  unitIndexes: looseItemUnits.map(({ unitIndex }) => unitIndex),
+                },
+              ]
+            : []),
+        ],
+        warnings: autoCodedBoxWarning ? [autoCodedBoxWarning] : undefined,
+        note: `Dry run only. Box rows with boxId update that box; rows with code update an exact existing code on live run or create a box if none exists. Box row photoIds attach to the resolved box after the box upsert. New loose item rows become active, reviewable movable units. Pass itemId to patch an existing loose movable unit without defaulting omitted status, quantity, needsReview, reviewFlags, or aiTags.${autoCodedBoxWarning ? " Live writes with auto-coded box rows require a stable idempotencyKey." : ""}`,
+      },
+    });
+  }
+
+  const boxResults = [];
+  for (const [index, boxRow] of boxRows.entries()) {
+    try {
+      const result = await upsertRestMovableUnitBox(
+        ctx,
+        auth,
+        moveId,
+        boxRow.unit,
+        {
+          rowIndex: index,
+        },
+      );
+      const photoIds = restMovableUnitBoxPhotoIds(
+        boxRow.unit,
+        boxRow.unitIndex,
+      );
+      const photoAttachments = photoIds.length
+        ? await attachRestPhotosToMovableUnitBox(ctx, auth, moveId, {
+            unit: boxRow.unit,
+            result,
+            photoIds,
+          })
+        : [];
+      boxResults.push(
+        removeUndefined({
+          ...boxRow,
+          ...result,
+          photoIds: photoIds.length ? photoIds : undefined,
+          photoAttachments: photoAttachments.length
+            ? photoAttachments
+            : undefined,
+        }),
+      );
+    } catch (error) {
+      boxResults.push(
+        removeUndefined({
+          unitIndex: boxRow.unitIndex,
+          unitCountIndex: boxRow.unitCountIndex,
+          unitCount: boxRow.unitCount,
+          ok: false,
+          action: optionalString(boxRow.unit.boxId) ? "update" : "upsert",
+          boxId: optionalString(boxRow.unit.boxId),
+          code: optionalString(boxRow.unit.code),
+          error: error instanceof Error ? error.message : "Box row failed.",
+        }),
+      );
+    }
+  }
+
+  const itemResponse = itemRows.length
+    ? await routeBatchUpsertItems(
+        ctx,
+        {
+          ...args,
+          method: "POST",
+          path: `/moves/${moveId}/items/batch-upsert`,
+          body: { dryRun: false, items: itemRows },
+        },
+        auth,
+        moveId,
+      )
+    : null;
+  const itemError = restResponseErrorSummary(
+    itemResponse,
+    "Loose movable-unit item batch failed.",
+  );
+  const itemBody = bodyObject(itemResponse?.body);
+  const itemData = bodyObject(itemBody.data);
+  const itemResultRows = Array.isArray(itemData.results)
+    ? itemData.results.map(bodyObject)
+    : [];
+  const looseItemResults =
+    restMovableUnitLooseItemFailureRows({
+      units: looseItemUnits,
+      error: itemError,
+    }) ??
+    looseItemUnits.map(({ unit, unitIndex }, itemIndex) => {
+      const result = itemResultRows.find((row) => row.index === itemIndex);
+      return removeUndefined({
+        unitIndex,
+        itemIndex,
+        ok: result?.ok,
+        action: result?.action,
+        itemId: result?.itemId ?? unit.itemId,
+        name: result?.name ?? unit.name,
+        externalSource: result?.externalSource ?? unit.externalSource,
+        externalId: result?.externalId ?? unit.externalId,
+        error: result?.error,
+      });
+    });
+
+  const failed =
+    boxResults.filter((row) => row.ok === false).length +
+    looseItemResults.filter((row) => row.ok === false).length;
+
+  return restOk(
+    {
+      data: {
+        dryRun: false,
+        summary: removeUndefined({
+          totalUnits: boxRows.length + looseItemUnits.length,
+          boxes: boxRows.length,
+          looseItems: looseItemUnits.length,
+          photoAttachments: boxPhotoAttachmentCount || undefined,
+        }),
+        boxes: boxResults,
+        items: itemData,
+        itemBatchError: itemError ?? undefined,
+        looseItems: looseItemResults,
+        nextStep:
+          "Open the Load planner Movable units tab, or call get_move_summary/get_agent_context, to review missing weights, dimensions, volume, and load assignments.",
+      },
+    },
+    failed > 0 ? 207 : 200,
+  );
+}
+
+function expandRestMovableUnitBoxRows(
+  unit: Record<string, unknown>,
+  unitIndex: number,
+): RestMovableUnitBoxRow[] {
+  const count = parseRestMovableUnitBoxCount(unit.count);
+  const photoIds = restMovableUnitBoxPhotoIds(unit, unitIndex);
+  if (
+    count > 1 &&
+    (optionalString(unit.boxId) || optionalString(unit.code))
+  ) {
+    throw new RestApiError({
+      status: 400,
+      code: "validation_error",
+      message: `Box row index ${unitIndex} has count ${count} with an existing boxId/code. Expand coded ranges into explicit box code rows, or omit count when patching an existing box.`,
+    });
+  }
+  if (count > 1 && photoIds.length) {
+    throw new RestApiError({
+      status: 400,
+      code: "validation_error",
+      message: `Box row index ${unitIndex} has count ${count} with photoIds. Expand photographed boxes into one row per physical box so each photo attaches to the correct box.`,
+    });
+  }
+  if (count === 1) {
+    const singleUnit = { ...unit };
+    delete singleUnit.count;
+    return [{ unit: singleUnit, unitIndex }];
+  }
+
+  const baseLabel = normalizeCountedRestBoxLabel(unit.label ?? unit.name);
+  return Array.from({ length: count }, (_, index) => {
+    const expandedUnit: Record<string, unknown> = {
+      ...unit,
+      label: `${baseLabel} ${index + 1}`,
+    };
+    delete expandedUnit.count;
+    return {
+      unit: expandedUnit,
+      unitIndex,
+      unitCountIndex: index,
+      unitCount: count,
+    };
+  });
+}
+
+function parseRestMovableUnitBoxCount(count: unknown) {
+  if (count === undefined || count === null || count === "") return 1;
+  const parsed = Number(count);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+    throw new RestApiError({
+      status: 400,
+      code: "validation_error",
+      message: "Box count must be an integer from 1 to 100.",
+    });
+  }
+  return parsed;
+}
+
+function normalizeCountedRestBoxLabel(label: unknown) {
+  const cleaned = typeof label === "string" ? label.trim() : "";
+  const base = cleaned || "Box";
+  return (
+    base
+      .replace(/\bboxes\b/i, "box")
+      .replace(/\s+#?\d+$/i, "")
+      .trim() || "Box"
+  );
+}
+
+function movableUnitBoxBody(unit: Record<string, unknown>) {
+  const body = { ...unit };
+  delete body.kind;
+  delete body.boxId;
+  delete body.count;
+  delete body.photoIds;
+  if (body.label === undefined && body.name !== undefined) {
+    body.label = body.name;
+  }
+  delete body.name;
+  addRestDerivedEstimatedVolume(body);
+  return body;
+}
+
+function restMovableUnitBoxPhotoIds(
+  unit: Record<string, unknown>,
+  unitIndex: number,
+) {
+  if (unit.photoIds === undefined) return [];
+  let photoIds: string[];
+  try {
+    photoIds = uniqueRestStrings(parseIdArray(unit.photoIds));
+  } catch {
+    throw new RestApiError({
+      status: 400,
+      code: "validation_error",
+      message: `Box row index ${unitIndex} photoIds must be an array of photo ID strings.`,
+    });
+  }
+  if (photoIds.length > 20) {
+    throw new RestApiError({
+      status: 400,
+      code: "validation_error",
+      message: `Box row index ${unitIndex} has ${photoIds.length} photoIds; attach at most 20 photos to one box row.`,
+    });
+  }
+  return photoIds;
+}
+
+function movableUnitLooseItemBody(unit: Record<string, unknown>) {
+  const item = { ...unit };
+  delete item.kind;
+  addRestDerivedEstimatedVolume(item);
+  const isExistingItemPatch = Boolean(optionalString(item.itemId));
+  const requiresPersonalTransport =
+    item.requiresPersonalTransport === true ||
+    item.disposition === "personalTransport";
+  const shouldSendMovableUnitTags =
+    !isExistingItemPatch || Array.isArray(item.aiTags);
+  return {
+    ...item,
+    ...(isExistingItemPatch ? {} : { status: item.status ?? "active" }),
+    ...(isExistingItemPatch ? {} : { quantity: item.quantity ?? 1 }),
+    ...(isExistingItemPatch ? {} : { needsReview: item.needsReview ?? true }),
+    ...(isExistingItemPatch || item.disposition !== undefined
+      ? {}
+      : { disposition: requiresPersonalTransport ? "personalTransport" : "mover" }),
+    ...(requiresPersonalTransport && item.requiresPersonalTransport === undefined
+      ? { requiresPersonalTransport: true }
+      : {}),
+    ...(item.estimatedWeightLb !== undefined && item.weightConfidence === undefined
+      ? { weightConfidence: "low" }
+      : {}),
+    ...(item.dimensionsIn !== undefined && item.dimensionsConfidence === undefined
+      ? { dimensionsConfidence: "low" }
+      : {}),
+    ...(item.estimatedVolumeCuFt !== undefined && item.volumeConfidence === undefined
+      ? { volumeConfidence: "low" }
+      : {}),
+    ...(shouldSendMovableUnitTags
+      ? {
+          aiTags: uniqueRestStrings([
+            ...(Array.isArray(item.aiTags) ? item.aiTags : []),
+            "movable-unit",
+            "loose-item",
+            ...(requiresPersonalTransport ? ["personal-transport"] : []),
+          ]),
+        }
+      : {}),
+    ...(isExistingItemPatch && item.reviewFlags === undefined
+      ? {}
+      : {
+          reviewFlags: uniqueRestStrings([
+            ...(Array.isArray(item.reviewFlags) ? item.reviewFlags : []),
+            ...(isExistingItemPatch ? [] : ["movableUnitReview"]),
+          ]),
+        }),
+  };
+}
+
+async function upsertRestMovableUnitBox(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  unit: Record<string, unknown>,
+  { rowIndex }: { rowIndex: number },
+) {
+  const input = movableUnitBoxBody(unit);
+  const requestedBoxId = optionalString(unit.boxId);
+  const requestedCode = normalizeRestBoxCode(unit.code);
+  const existing = requestedBoxId
+    ? await requireApiBox(ctx, auth.householdId, moveId, requestedBoxId)
+    : requestedCode
+      ? await findApiBoxByCode(ctx, auth.householdId, moveId, requestedCode)
+      : null;
+
+  if (existing) {
+    const patch = boxPatch(input);
+    if (patch.code !== undefined) {
+      await assertUniqueApiBoxCode(ctx, {
+        householdId: auth.householdId,
+        moveId,
+        code: patch.code,
+        currentBoxId: existing._id,
+      });
+    }
+    Object.assign(
+      patch,
+      await boxDestinationRefsFromInput(ctx, auth.householdId, moveId, input),
+    );
+    await ctx.db.patch(existing._id, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "box.api_movable_unit_updated",
+      "boxes",
+      existing._id,
+      { rowIndex, changedKeys: Object.keys(patch) },
+    );
+    return {
+      ok: true,
+      action: "update",
+      boxId: existing._id,
+      code: patch.code ?? existing.code,
+      changedKeys: Object.keys(patch),
+      matchedBy: requestedBoxId ? "boxId" : "code",
+    };
+  }
+
+  const now = Date.now();
+  const fields = restBoxCreateFields({ auth, moveId, body: input, now }) as Omit<
+    Doc<"boxes">,
+    "_id" | "_creationTime"
+  >;
+  Object.assign(
+    fields,
+    await boxDestinationRefsFromInput(ctx, auth.householdId, moveId, input),
+  );
+  await assertUniqueApiBoxCode(ctx, {
+    householdId: auth.householdId,
+    moveId,
+    code: fields.code,
+  });
+  const boxId = await ctx.db.insert("boxes", fields);
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "box.api_movable_unit_created",
+    "boxes",
+    boxId,
+    { rowIndex, code: fields.code },
+  );
+  return {
+    ok: true,
+    action: "create",
+    boxId,
+    code: fields.code,
+  };
+}
+
+async function attachRestPhotosToMovableUnitBox(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  {
+    unit,
+    result,
+    photoIds,
+  }: {
+    unit: Record<string, unknown>;
+    result: Record<string, unknown>;
+    photoIds: string[];
+  },
+) {
+  const boxId = optionalString(result.boxId) ?? optionalString(unit.boxId);
+  const boxCode =
+    optionalString(result.code) ?? normalizeRestBoxCode(unit.code);
+  if (!boxId && !boxCode) {
+    throw new RestApiError({
+      status: 400,
+      code: "box_target_missing",
+      message:
+        "Cannot attach box photoIds because the box upsert did not return a boxId or code.",
+    });
+  }
+
+  const attachments = [];
+  for (const photoId of photoIds) {
+    const photo = await requireApiPhotoById(
+      ctx,
+      auth.householdId,
+      photoId,
+    );
+    if (photo.moveId !== moveId) {
+      throw new RestApiError({
+        status: 404,
+        code: "not_found",
+        message: "Photo not found.",
+      });
+    }
+    const patch = await photoAttachPatch(ctx, {
+      householdId: auth.householdId,
+      moveId,
+      reviewedByUserId: auth.createdByUserId,
+      body: removeUndefined({
+        photoId,
+        boxId,
+        boxCode: boxId ? undefined : boxCode,
+      }),
+    });
+    await ctx.db.patch(photo._id, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "photo.api_attached_from_movable_unit_batch",
+      "itemPhotos",
+      photo._id,
+      { changedKeys: Object.keys(patch), boxId: patch.boxId ?? boxId },
+    );
+    attachments.push(
+      removeUndefined({
+        photoId: photo._id,
+        boxId: patch.boxId ?? boxId,
+        boxCode: boxId ? undefined : boxCode,
+        changedKeys: Object.keys(patch),
+      }),
+    );
+  }
+  return attachments;
+}
+
+async function findApiBoxByCode(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  code: string,
+) {
+  const boxes = await ctx.db
+    .query("boxes")
+    .withIndex("by_move_code", (q) => q.eq("moveId", moveId).eq("code", code))
+    .collect();
+  return (
+    boxes.find((box) => box.householdId === householdId && !box.archivedAt) ??
+    null
+  );
+}
+
+function addRestDerivedEstimatedVolume(body: Record<string, unknown>) {
+  if (body.estimatedVolumeCuFt !== undefined && body.estimatedVolumeCuFt !== null) {
+    return body;
+  }
+  const dimensions = bodyObject(body.dimensionsIn);
+  const length = optionalNumber(dimensions.lengthIn);
+  const width = optionalNumber(dimensions.widthIn);
+  const height = optionalNumber(dimensions.heightIn);
+  if (!length || !width || !height) {
+    return body;
+  }
+  body.estimatedVolumeCuFt = roundEstimate((length * width * height) / 1728);
+  return body;
+}
+
+function hasRestStableExternalItemKey(unit: Record<string, unknown>) {
+  return Boolean(optionalString(unit.externalSource) && optionalString(unit.externalId));
+}
+
+function uniqueRestStrings(values: unknown[]) {
+  return [
+    ...new Set(
+      values.filter((value): value is string => typeof value === "string" && Boolean(value.trim())),
+    ),
+  ];
+}
+
+async function assertUniqueApiBoxCode(
+  ctx: MutationCtx,
+  {
+    householdId,
+    moveId,
+    code,
+    currentBoxId,
+  }: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    code: unknown;
+    currentBoxId?: Id<"boxes">;
+  },
+) {
+  const normalizedCode = normalizeRestBoxCode(code);
+  if (!normalizedCode) {
+    return;
+  }
+
+  const matches = await ctx.db
+    .query("boxes")
+    .withIndex("by_move_code", (q) =>
+      q.eq("moveId", moveId).eq("code", normalizedCode),
+    )
+    .collect();
+  const conflict = matches.find(
+    (box) =>
+      box.householdId === householdId &&
+      !box.archivedAt &&
+      box._id !== currentBoxId,
+  );
+  if (!conflict) {
+    return;
+  }
+
+  throw new RestApiError({
+    status: 409,
+    code: "duplicate_box_code",
+    message: `Box code "${normalizedCode}" already exists for this move. Update the existing box instead of creating a duplicate.`,
+    fields: [
+      {
+        path: "code",
+        message: `Box code "${normalizedCode}" already exists.`,
+      },
+    ],
+  });
 }
 
 async function routeBoxes(
@@ -3011,9 +6007,36 @@ async function routeBoxes(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  boxIdSegment?: string
+  boxIdSegment?: string,
+  nestedSegment?: string,
 ) {
+  if (boxIdSegment && nestedSegment === "items") {
+    return await routeMoveBoxItems(
+      ctx,
+      {
+        ...args,
+        body: {
+          ...bodyObject(args.body),
+          boxId: boxIdSegment,
+        },
+      },
+      auth,
+      moveId,
+    );
+  }
+
+  if (nestedSegment) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Box route not found.",
+    });
+  }
+
   if (args.method === "GET" && !boxIdSegment) {
+    const search = querySearchTerm(args.query);
+    const destinationRoom = optionalString(args.query.destinationRoom);
+    const destinationSpaceId = optionalString(args.query.destinationSpaceId);
     const boxes = await ctx.db
       .query("boxes")
       .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
@@ -3021,14 +6044,37 @@ async function routeBoxes(
       .collect();
     return restOk(
       paginate(
-        boxes.filter((box) => !box.archivedAt).map((box) => safeBox(box)),
-        args.query
-      )
+        boxes
+          .filter((box) => !box.archivedAt)
+          .filter((box) =>
+            destinationRoom ? box.destinationRoom === destinationRoom : true,
+          )
+          .filter((box) =>
+            destinationSpaceId
+              ? String(box.destinationSpaceId ?? "") === destinationSpaceId
+              : true,
+          )
+          .filter((box) =>
+            matchesSearch(search, [
+              box.code,
+              box.label,
+              box.room,
+              box.description,
+            ]),
+          )
+          .map((box) => safeBox(box)),
+        args.query,
+      ),
     );
   }
 
   if (args.method === "GET" && boxIdSegment) {
-    const box = await requireApiBox(ctx, auth.householdId, moveId, boxIdSegment);
+    const box = await requireApiBox(
+      ctx,
+      auth.householdId,
+      moveId,
+      boxIdSegment,
+    );
     return restOk({ data: safeBox(box) });
   }
 
@@ -3036,26 +6082,20 @@ async function routeBoxes(
     const body = bodyObject(args.body);
     const now = Date.now();
     const code = body.code ? normalizeBoxCode(String(body.code)) : `API-${now}`;
-    const boxId = await ctx.db.insert("boxes", {
+    const fields = restBoxCreateFields({ auth, moveId, body, now }) as Omit<
+      Doc<"boxes">,
+      "_id" | "_creationTime"
+    >;
+    Object.assign(
+      fields,
+      await boxDestinationRefsFromInput(ctx, auth.householdId, moveId, body),
+    );
+    await assertUniqueApiBoxCode(ctx, {
       householdId: auth.householdId,
       moveId,
-      code,
-      label: normalizeOptionalText(asString(body.label)),
-      room: normalizeOptionalText(asString(body.room)),
-      destinationRoom: normalizeOptionalText(asString(body.destinationRoom)),
-      description: normalizeOptionalText(asString(body.description)),
-      status: parseBoxStatus(body.status) ?? "open",
-      estimatedWeightLb: optionalNumber(body.estimatedWeightLb),
-      actualWeightLb: optionalNumber(body.actualWeightLb),
-      estimatedVolumeCuFt: optionalNumber(body.estimatedVolumeCuFt),
-      assignmentLocked: false,
-      assignmentWarnings: [],
-      assignmentHardBlocks: [],
-      assignmentValidatedAt: now,
-      createdByUserId: auth.createdByUserId,
-      createdAt: now,
-      updatedAt: now,
+      code: fields.code,
     });
+    const boxId = await ctx.db.insert("boxes", fields);
     await auditApiWrite(ctx, auth, moveId, "box.api_created", "boxes", boxId, {
       code,
     });
@@ -3063,16 +6103,307 @@ async function routeBoxes(
   }
 
   if (args.method === "PATCH" && boxIdSegment) {
-    const box = await requireApiBox(ctx, auth.householdId, moveId, boxIdSegment);
+    const box = await requireApiBox(
+      ctx,
+      auth.householdId,
+      moveId,
+      boxIdSegment,
+    );
     const patch = boxPatch(args.body);
+    if (patch.code !== undefined) {
+      await assertUniqueApiBoxCode(ctx, {
+        householdId: auth.householdId,
+        moveId,
+        code: patch.code,
+        currentBoxId: box._id,
+      });
+    }
+    Object.assign(
+      patch,
+      await boxDestinationRefsFromInput(
+        ctx,
+        auth.householdId,
+        moveId,
+        args.body,
+      ),
+    );
     await ctx.db.patch(box._id, patch);
-    await auditApiWrite(ctx, auth, moveId, "box.api_updated", "boxes", box._id, {
-      changedKeys: Object.keys(patch),
-    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "box.api_updated",
+      "boxes",
+      box._id,
+      {
+        changedKeys: Object.keys(patch),
+      },
+    );
     return restOk({ data: { boxId: box._id, ...patch } });
   }
 
-  return restError({ status: 404, code: "not_found", message: "Box route not found." });
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Box route not found.",
+  });
+}
+
+async function routeMoveBoxItems(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+) {
+  if (
+    args.method !== "POST" &&
+    args.method !== "PUT" &&
+    args.method !== "DELETE"
+  ) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Box item route not found.",
+    });
+  }
+
+  const body = bodyObject(args.body);
+  const rows = Array.isArray(body.items) ? body.items : [body];
+  if (!rows.length) {
+    return restError({
+      status: 400,
+      code: "validation_error",
+      message: "Provide at least one item assignment row.",
+      fields: [
+        {
+          path: "items",
+          message: "items must contain at least one assignment row.",
+        },
+      ],
+    });
+  }
+  if (rows.length > 100) {
+    return restError({
+      status: 400,
+      code: "batch_too_large",
+      message: "Box item requests are limited to 100 rows.",
+    });
+  }
+
+  const dryRun = Boolean(body.dryRun);
+  const results = [];
+  for (const [index, row] of rows.entries()) {
+    const input = {
+      ...body,
+      ...bodyObject(row),
+    };
+    try {
+      const box = await resolveApiBoxRef(ctx, auth.householdId, moveId, input);
+      const item = await resolveApiItemRef(
+        ctx,
+        auth.householdId,
+        moveId,
+        input,
+      );
+      if (args.method === "DELETE") {
+        const result = await deleteApiBoxItemAssignment(ctx, {
+          auth,
+          moveId,
+          box,
+          item,
+          dryRun,
+          route: "move_box_items",
+        });
+        results.push({ index, ok: true, ...result });
+      } else {
+        const result = await upsertApiBoxItemAssignment(ctx, {
+          auth,
+          moveId,
+          box,
+          item,
+          quantity: positiveNumber(input.quantity) ?? 1,
+          notes: normalizeOptionalText(asString(input.notes)),
+          dryRun,
+          route: "move_box_items",
+        });
+        results.push({ index, ok: true, ...result });
+      }
+    } catch (error) {
+      results.push({
+        index,
+        ok: false,
+        error: error instanceof Error ? error.message : "Assignment failed.",
+        code: error instanceof RestApiError ? error.code : undefined,
+        fields: error instanceof RestApiError ? error.fields : undefined,
+        dryRun,
+      });
+    }
+  }
+
+  const failed = results.filter((result) => !result.ok).length;
+  return restOk(
+    {
+      data: Array.isArray(body.items)
+        ? {
+            dryRun,
+            total: rows.length,
+            succeeded: rows.length - failed,
+            failed,
+            results,
+          }
+        : results[0],
+    },
+    failed > 0 ? 207 : args.method === "POST" ? 201 : 200,
+  );
+}
+
+async function upsertApiBoxItemAssignment(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    box,
+    item,
+    quantity,
+    notes,
+    dryRun,
+    route,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    box: Doc<"boxes">;
+    item: Doc<"items">;
+    quantity: number;
+    notes?: string;
+    dryRun: boolean;
+    route: string;
+  },
+) {
+  const now = Date.now();
+  const existing = await ctx.db
+    .query("boxItems")
+    .withIndex("by_item", (q) => q.eq("itemId", item._id))
+    .collect();
+  const current = existing.find((entry) => entry.moveId === moveId);
+  const patch = {
+    boxId: box._id,
+    quantity,
+    notes,
+    updatedAt: now,
+  };
+
+  if (dryRun) {
+    return {
+      dryRun,
+      created: !current,
+      assignmentId: current?._id,
+      boxId: box._id,
+      boxCode: box.code,
+      itemId: item._id,
+    };
+  }
+
+  if (current) {
+    await ctx.db.patch(current._id, patch);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "assignment.api_upserted",
+      "boxItems",
+      current._id,
+      { route, boxId: box._id, itemId: item._id },
+    );
+    return {
+      dryRun,
+      created: false,
+      assignmentId: current._id,
+      boxId: box._id,
+      boxCode: box.code,
+      itemId: item._id,
+    };
+  }
+
+  const assignmentId = await ctx.db.insert("boxItems", {
+    householdId: auth.householdId,
+    moveId,
+    itemId: item._id,
+    ...patch,
+    createdAt: now,
+  });
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "assignment.api_upserted",
+    "boxItems",
+    assignmentId,
+    { route, boxId: box._id, itemId: item._id },
+  );
+  return {
+    dryRun,
+    created: true,
+    assignmentId,
+    boxId: box._id,
+    boxCode: box.code,
+    itemId: item._id,
+  };
+}
+
+async function deleteApiBoxItemAssignment(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    box,
+    item,
+    dryRun,
+    route,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    box: Doc<"boxes">;
+    item: Doc<"items">;
+    dryRun: boolean;
+    route: string;
+  },
+) {
+  const assignments = await ctx.db
+    .query("boxItems")
+    .withIndex("by_item", (q) => q.eq("itemId", item._id))
+    .collect();
+  const assignment = assignments.find(
+    (entry) => entry.moveId === moveId && entry.boxId === box._id,
+  );
+  if (!assignment) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Assignment not found.",
+    });
+  }
+
+  if (!dryRun) {
+    await ctx.db.delete(assignment._id);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "assignment.api_deleted",
+      "boxItems",
+      assignment._id,
+      { route, boxId: box._id, itemId: item._id },
+    );
+  }
+
+  return {
+    dryRun,
+    deleted: !dryRun,
+    assignmentId: assignment._id,
+    boxId: box._id,
+    boxCode: box.code,
+    itemId: item._id,
+  };
 }
 
 async function routeAssignments(
@@ -3080,7 +6411,7 @@ async function routeAssignments(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  assignmentIdSegment?: string
+  assignmentIdSegment?: string,
 ) {
   if (args.method === "POST" && assignmentIdSegment === "suggest") {
     return await routeAssignmentSuggestions(ctx, args, auth, moveId);
@@ -3106,50 +6437,29 @@ async function routeAssignments(
           createdAt: assignment.createdAt,
           updatedAt: assignment.updatedAt,
         })),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
 
-  if ((args.method === "POST" || args.method === "PUT") && !assignmentIdSegment) {
+  if (
+    (args.method === "POST" || args.method === "PUT") &&
+    !assignmentIdSegment
+  ) {
     const body = bodyObject(args.body);
-    const boxId = String(body.boxId ?? "") as Id<"boxes">;
-    const itemId = String(body.itemId ?? "") as Id<"items">;
-    await requireApiBox(ctx, auth.householdId, moveId, boxId);
-    await requireApiItem(ctx, auth.householdId, moveId, itemId);
-    const now = Date.now();
-    const existing = await ctx.db
-      .query("boxItems")
-      .withIndex("by_item", (q) => q.eq("itemId", itemId))
-      .collect();
-    const current = existing.find((entry) => entry.moveId === moveId);
-    const patch = {
-      boxId,
-      quantity: positiveNumber(body.quantity) ?? 1,
-      notes: normalizeOptionalText(asString(body.notes)),
-      updatedAt: now,
-    };
-    if (current) {
-      await ctx.db.patch(current._id, patch);
-      return restOk({ data: { assignmentId: current._id } });
-    }
-    const assignmentId = await ctx.db.insert("boxItems", {
-      householdId: auth.householdId,
-      moveId,
-      itemId,
-      ...patch,
-      createdAt: now,
-    });
-    await auditApiWrite(
-      ctx,
+    const box = await resolveApiBoxRef(ctx, auth.householdId, moveId, body);
+    const item = await resolveApiItemRef(ctx, auth.householdId, moveId, body);
+    const result = await upsertApiBoxItemAssignment(ctx, {
       auth,
       moveId,
-      "assignment.api_upserted",
-      "boxItems",
-      assignmentId,
-      { boxId, itemId }
-    );
-    return restOk({ data: { assignmentId } }, 201);
+      box,
+      item,
+      quantity: positiveNumber(body.quantity) ?? 1,
+      notes: normalizeOptionalText(asString(body.notes)),
+      dryRun: Boolean(body.dryRun),
+      route: "assignments",
+    });
+    return restOk({ data: result }, result.created ? 201 : 200);
   }
 
   if (args.method === "DELETE" && assignmentIdSegment) {
@@ -3169,7 +6479,7 @@ async function routeAssignments(
       moveId,
       "assignment.api_deleted",
       "boxItems",
-      assignmentId
+      assignmentId,
     );
     return restOk({ data: { deleted: true } });
   }
@@ -3185,7 +6495,7 @@ async function routeAssignmentSuggestions(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const body = bodyObject(args.body);
   const limit = boundedInteger(body.limit, 1, 100, 50);
@@ -3205,13 +6515,14 @@ async function routeAssignmentSuggestions(
       .collect(),
   ]);
   const activeBoxes = boxes.filter(
-    (box) => box.householdId === auth.householdId && !box.archivedAt
+    (box) => box.householdId === auth.householdId && !box.archivedAt,
   );
   const activeResources = resources.filter(
-    (resource) => resource.householdId === auth.householdId && !resource.archivedAt
+    (resource) =>
+      resource.householdId === auth.householdId && !resource.archivedAt,
   );
   const activeZones = zones.filter(
-    (zone) => zone.householdId === auth.householdId && !zone.archivedAt
+    (zone) => zone.householdId === auth.householdId && !zone.archivedAt,
   );
   const suggestions = [];
 
@@ -3262,7 +6573,7 @@ async function routeApplyAssignments(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const body = bodyObject(args.body);
   const dryRun = Boolean(body.dryRun);
@@ -3286,32 +6597,94 @@ async function routeApplyAssignments(
   for (const [index, row] of rows.entries()) {
     const input = bodyObject(row);
     const boxId = optionalString(input.boxId);
+    const itemId = optionalString(input.itemId);
     const assignedResourceId = optionalString(input.assignedResourceId);
     const assignedZoneId = optionalString(input.assignedZoneId);
-    const overrideReason = normalizeOptionalText(asString(input.overrideReason));
+    const overrideReason = normalizeOptionalText(
+      asString(input.overrideReason),
+    );
     try {
-      if (!boxId) throw new Error("boxId is required.");
-      if (!assignedResourceId) throw new Error("assignedResourceId is required.");
-      const box = await requireApiBox(ctx, auth.householdId, moveId, boxId);
-      if (box.assignmentLocked) {
+      if ((boxId ? 1 : 0) + (itemId ? 1 : 0) !== 1) {
+        throw new Error("Exactly one of boxId or itemId is required.");
+      }
+      if (!assignedResourceId)
+        throw new Error("assignedResourceId is required.");
+      if (boxId) {
+        const box = await requireApiBox(ctx, auth.householdId, moveId, boxId);
+        if (box.assignmentLocked) {
+          throw new Error("Locked assignments must be changed manually.");
+        }
+        const validation = await validateApiBoxAssignment(ctx, {
+          householdId: auth.householdId,
+          moveId,
+          box,
+          assignedResourceId,
+          assignedZoneId,
+          overrideReason,
+        });
+        if (!dryRun) {
+          await ctx.db.patch(box._id, {
+            assignedResourceId: assignedResourceId as Id<"transportResources">,
+            assignedZoneId: assignedZoneId as Id<"transportZones"> | undefined,
+            assignmentOverrideReason: overrideReason,
+            assignmentWarnings: validation.softWarnings,
+            assignmentHardBlocks: validation.hardBlocks,
+            assignmentValidatedAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+          await auditApiWrite(
+            ctx,
+            auth,
+            moveId,
+            "assignment.api_applied",
+            "boxes",
+            box._id,
+            {
+              rowIndex: index,
+              assignedResourceId,
+              assignedZoneId,
+              warningCount: validation.softWarnings.length,
+            },
+          );
+        }
+        results.push({
+          index,
+          ok: true,
+          targetType: "box",
+          boxId: box._id,
+          assignedResourceId,
+          assignedZoneId: assignedZoneId || undefined,
+          assignmentWarnings: validation.softWarnings,
+          assignmentHardBlocks: validation.hardBlocks,
+          dryRun,
+        });
+        continue;
+      }
+
+      if (!itemId) {
+        throw new Error("itemId is required.");
+      }
+      const item = await requireApiItem(ctx, auth.householdId, moveId, itemId);
+      if (item.assignmentLocked) {
         throw new Error("Locked assignments must be changed manually.");
       }
-      const validation = await validateApiBoxAssignment(ctx, {
+      const validation = await validateApiItemAssignment(ctx, {
         householdId: auth.householdId,
         moveId,
-        box,
+        item,
         assignedResourceId,
         assignedZoneId,
         overrideReason,
       });
       if (!dryRun) {
-        await ctx.db.patch(box._id, {
+        await ctx.db.patch(item._id, {
           assignedResourceId: assignedResourceId as Id<"transportResources">,
           assignedZoneId: assignedZoneId as Id<"transportZones"> | undefined,
           assignmentOverrideReason: overrideReason,
           assignmentWarnings: validation.softWarnings,
           assignmentHardBlocks: validation.hardBlocks,
           assignmentValidatedAt: Date.now(),
+          updatedByUserId: auth.createdByUserId,
           updatedAt: Date.now(),
         });
         await auditApiWrite(
@@ -3319,20 +6692,21 @@ async function routeApplyAssignments(
           auth,
           moveId,
           "assignment.api_applied",
-          "boxes",
-          box._id,
+          "items",
+          item._id,
           {
             rowIndex: index,
             assignedResourceId,
             assignedZoneId,
             warningCount: validation.softWarnings.length,
-          }
+          },
         );
       }
       results.push({
         index,
         ok: true,
-        boxId: box._id,
+        targetType: "item",
+        itemId: item._id,
         assignedResourceId,
         assignedZoneId: assignedZoneId || undefined,
         assignmentWarnings: validation.softWarnings,
@@ -3344,6 +6718,7 @@ async function routeApplyAssignments(
         index,
         ok: false,
         boxId: boxId || undefined,
+        itemId: itemId || undefined,
         assignedResourceId: assignedResourceId || undefined,
         assignedZoneId: assignedZoneId || undefined,
         error: error instanceof Error ? error.message : "Assignment failed.",
@@ -3363,7 +6738,7 @@ async function routeApplyAssignments(
         results,
       },
     },
-    failed > 0 ? 207 : 200
+    failed > 0 ? 207 : 200,
   );
 }
 
@@ -3373,7 +6748,7 @@ async function routePlanningSuggestions(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
   suggestionIdSegment?: string,
-  actionSegment?: string
+  actionSegment?: string,
 ) {
   if (args.method === "GET") {
     const suggestions = await ctx.db
@@ -3385,11 +6760,11 @@ async function routePlanningSuggestions(
     const visibleSuggestions = suggestions.filter(
       (suggestion) =>
         suggestion.householdId === auth.householdId &&
-        (status ? suggestion.status === status : true)
+        (status ? suggestion.status === status : true),
     );
     if (suggestionIdSegment && !actionSegment) {
       const suggestion = visibleSuggestions.find(
-        (entry) => entry._id === suggestionIdSegment
+        (entry) => entry._id === suggestionIdSegment,
       );
       if (!suggestion) {
         throw new Error("AI planning suggestion not found.");
@@ -3398,7 +6773,10 @@ async function routePlanningSuggestions(
     }
     if (!suggestionIdSegment) {
       return restOk(
-        paginate(visibleSuggestions.map((entry) => safePlanningSuggestion(entry)), args.query)
+        paginate(
+          visibleSuggestions.map((entry) => safePlanningSuggestion(entry)),
+          args.query,
+        ),
       );
     }
   }
@@ -3418,7 +6796,7 @@ async function routePlanningSuggestions(
       },
     });
     const suggestions = await Promise.all(
-      result.suggestionIds.map((suggestionId) => ctx.db.get(suggestionId))
+      result.suggestionIds.map((suggestionId) => ctx.db.get(suggestionId)),
     );
     return restOk(
       {
@@ -3426,11 +6804,13 @@ async function routePlanningSuggestions(
           aiJobId: result.aiJobId,
           suggestionIds: result.suggestionIds,
           suggestions: suggestions
-            .filter((entry): entry is Doc<"aiPlanningSuggestions"> => Boolean(entry))
+            .filter((entry): entry is Doc<"aiPlanningSuggestions"> =>
+              Boolean(entry),
+            )
             .map((entry) => safePlanningSuggestion(entry)),
         },
       },
-      201
+      201,
     );
   }
 
@@ -3460,7 +6840,7 @@ async function routePlanningSuggestions(
   ) {
     const body = bodyObject(args.body);
     const suggestionIds = parseIdArray(body.suggestionIds).map(
-      (suggestionId) => suggestionId as Id<"aiPlanningSuggestions">
+      (suggestionId) => suggestionId as Id<"aiPlanningSuggestions">,
     );
     if (!suggestionIds.length) {
       return restError({
@@ -3494,7 +6874,7 @@ async function routeAiJobs(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  aiJobIdSegment?: string
+  aiJobIdSegment?: string,
 ) {
   if (args.method !== "GET") {
     return restError({
@@ -3522,7 +6902,7 @@ async function routeAiJobs(
   const visibleJobs = jobs.filter(
     (job) =>
       job.householdId === auth.householdId &&
-      (status ? job.status === status : true)
+      (status ? job.status === status : true),
   );
 
   if (aiJobIdSegment) {
@@ -3533,7 +6913,12 @@ async function routeAiJobs(
     return restOk({ data: safeAiJob(job) });
   }
 
-  return restOk(paginate(visibleJobs.map((job) => safeAiJob(job)), args.query));
+  return restOk(
+    paginate(
+      visibleJobs.map((job) => safeAiJob(job)),
+      args.query,
+    ),
+  );
 }
 
 async function routeAiTextSuggestions(
@@ -3541,7 +6926,7 @@ async function routeAiTextSuggestions(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  suggestionIdSegment?: string
+  suggestionIdSegment?: string,
 ) {
   if (args.method === "POST" && suggestionIdSegment === "generate") {
     return await routeGenerateAiTextSuggestions(ctx, args, auth, moveId);
@@ -3572,12 +6957,12 @@ async function routeAiTextSuggestions(
   const visibleSuggestions = suggestions.filter(
     (suggestion) =>
       suggestion.householdId === auth.householdId &&
-      (status ? suggestion.status === status : true)
+      (status ? suggestion.status === status : true),
   );
 
   if (suggestionIdSegment) {
     const suggestion = visibleSuggestions.find(
-      (entry) => entry._id === suggestionIdSegment
+      (entry) => entry._id === suggestionIdSegment,
     );
     if (!suggestion) {
       throw new Error("AI text suggestion not found.");
@@ -3588,8 +6973,8 @@ async function routeAiTextSuggestions(
   return restOk(
     paginate(
       visibleSuggestions.map((suggestion) => safeAiTextSuggestion(suggestion)),
-      args.query
-    )
+      args.query,
+    ),
   );
 }
 
@@ -3598,7 +6983,7 @@ async function routeAiPhotoSuggestions(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  suggestionIdSegment?: string
+  suggestionIdSegment?: string,
 ) {
   if (args.method === "POST" && suggestionIdSegment === "generate") {
     return await routeGenerateAiPhotoSuggestions(ctx, args, auth, moveId);
@@ -3629,12 +7014,12 @@ async function routeAiPhotoSuggestions(
   const visibleSuggestions = suggestions.filter(
     (suggestion) =>
       suggestion.householdId === auth.householdId &&
-      (status ? suggestion.status === status : true)
+      (status ? suggestion.status === status : true),
   );
 
   if (suggestionIdSegment) {
     const suggestion = visibleSuggestions.find(
-      (entry) => entry._id === suggestionIdSegment
+      (entry) => entry._id === suggestionIdSegment,
     );
     if (!suggestion) {
       throw new Error("AI photo suggestion not found.");
@@ -3645,8 +7030,8 @@ async function routeAiPhotoSuggestions(
   return restOk(
     paginate(
       visibleSuggestions.map((suggestion) => safeAiPhotoSuggestion(suggestion)),
-      args.query
-    )
+      args.query,
+    ),
   );
 }
 
@@ -3671,7 +7056,7 @@ async function routeGenerateAiTextSuggestions(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const sourceText = parseAiTextGenerationSource(args.body);
   await assertAiUsageAllowed(ctx, {
@@ -3761,11 +7146,11 @@ async function routeGenerateAiTextSuggestions(
     "ai_text_intake.api_created",
     "aiJobs",
     aiJobId,
-    { suggestionCount: suggestionIds.length }
+    { suggestionCount: suggestionIds.length },
   );
 
   const suggestions = await Promise.all(
-    suggestionIds.map((suggestionId) => ctx.db.get(suggestionId))
+    suggestionIds.map((suggestionId) => ctx.db.get(suggestionId)),
   );
   return restOk(
     {
@@ -3777,7 +7162,7 @@ async function routeGenerateAiTextSuggestions(
           .map((entry) => safeAiTextSuggestion(entry)),
       },
     },
-    201
+    201,
   );
 }
 
@@ -3785,7 +7170,7 @@ async function routeGenerateAiPhotoSuggestions(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const photoIds = parseAiPhotoGenerationIds(args.body);
   const results = [];
@@ -3799,7 +7184,7 @@ async function routeGenerateAiPhotoSuggestions(
     }
     if (!canUsePhotoDerivativeForAi(photo)) {
       throw new Error(
-        "Photo privacy or derivative status does not allow AI intake."
+        "Photo privacy or derivative status does not allow AI intake.",
       );
     }
     if (photo.sizeBytes > aiUsageLimits.maxPhotoInputBytes) {
@@ -3809,7 +7194,7 @@ async function routeGenerateAiPhotoSuggestions(
     const existingPending = await ctx.db
       .query("aiPhotoSuggestions")
       .withIndex("by_photo_status", (q) =>
-        q.eq("photoId", photo._id).eq("status", "pending")
+        q.eq("photoId", photo._id).eq("status", "pending"),
       )
       .collect();
     if (existingPending.length) {
@@ -3931,7 +7316,7 @@ async function routeGenerateAiPhotoSuggestions(
       "ai_photo_intake.api_created",
       "aiJobs",
       aiJobId,
-      { photoId: photo._id, suggestionCount: suggestionIds.length }
+      { photoId: photo._id, suggestionCount: suggestionIds.length },
     );
 
     createdAiJobIds.push(aiJobId);
@@ -3945,7 +7330,7 @@ async function routeGenerateAiPhotoSuggestions(
   }
 
   const suggestions = await Promise.all(
-    allSuggestionIds.map((suggestionId) => ctx.db.get(suggestionId))
+    allSuggestionIds.map((suggestionId) => ctx.db.get(suggestionId)),
   );
   return restOk(
     {
@@ -3958,22 +7343,624 @@ async function routeGenerateAiPhotoSuggestions(
           .map((entry) => safeAiPhotoSuggestion(entry)),
       },
     },
-    createdAiJobIds.length ? 201 : 200
+    createdAiJobIds.length ? 201 : 200,
   );
+}
+
+async function routeIngestionQueue(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  entryId?: string,
+  action?: string,
+  actionId?: string,
+) {
+  if (args.method === "GET" && !entryId) {
+    return await routeListIngestionQueue(ctx, args, auth, moveId);
+  }
+  if (args.method === "POST" && !entryId) {
+    return await routeCreateIngestionQueueEntry(ctx, args, auth, moveId);
+  }
+  if (args.method === "POST" && entryId === "claim" && !action) {
+    return await routeClaimIngestionQueue(ctx, args, auth, moveId);
+  }
+  if (!entryId) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Ingestion queue route not found.",
+    });
+  }
+  const queueEntryId = entryId as Id<"ingestionQueueEntries">;
+  if (args.method === "POST" && action === "results" && !actionId) {
+    return await routeSubmitIngestionQueueResults(
+      ctx,
+      args,
+      auth,
+      moveId,
+      queueEntryId,
+    );
+  }
+  if (args.method === "POST" && action === "status" && !actionId) {
+    return await routeSetIngestionQueueStatus(
+      ctx,
+      args,
+      auth,
+      moveId,
+      queueEntryId,
+    );
+  }
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Ingestion queue route not found.",
+  });
+}
+
+async function routeListIngestionQueue(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+) {
+  const status = optionalIngestionQueueStatus(args.query.status);
+  const scopeHint = optionalIngestionScopeHint(args.query.scopeHint);
+  const targetPlanId = optionalString(args.query.targetPlanId) as
+    | Id<"floorPlans">
+    | undefined;
+  if (targetPlanId) {
+    await requireApiPlanForMove(ctx, auth, moveId, targetPlanId);
+  }
+  const room = normalizeOptionalText(args.query.room);
+  const hasAudio = optionalBooleanQuery(args.query.hasAudio);
+  const hasVideo = optionalBooleanQuery(args.query.hasVideo);
+  const hasImage = optionalBooleanQuery(args.query.hasImage);
+  const includeMedia = args.query.includeMedia !== "false";
+  const now = Date.now();
+
+  const entries =
+    status === "queued"
+      ? [
+          ...(await ctx.db
+            .query("ingestionQueueEntries")
+            .withIndex("by_move_status_order", (q) =>
+              q.eq("moveId", moveId).eq("status", "queued"),
+            )
+            .collect()),
+          ...(await ctx.db
+            .query("ingestionQueueEntries")
+            .withIndex("by_move_status_order", (q) =>
+              q.eq("moveId", moveId).eq("status", "claimed"),
+            )
+            .collect()),
+        ]
+      : status
+        ? await ctx.db
+            .query("ingestionQueueEntries")
+            .withIndex("by_move_status_order", (q) =>
+              q.eq("moveId", moveId).eq("status", status),
+            )
+            .collect()
+        : await ctx.db
+            .query("ingestionQueueEntries")
+            .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+            .order("desc")
+            .collect();
+
+  const rows = [];
+  for (const entry of entries) {
+    if (entry.householdId !== auth.householdId) continue;
+    const media = await mediaForIngestionEntry(
+      ctx,
+      auth.householdId,
+      moveId,
+      entry,
+    );
+    const summary = ingestionMediaSummary(media);
+    const effective = effectiveIngestionStatus(entry, now);
+    if (status && effective !== status) continue;
+    if (!ingestionScopeHintMatches(entry.scopeHint, scopeHint)) continue;
+    if (targetPlanId && entry.targetPlanId !== targetPlanId) continue;
+    if (
+      room &&
+      normalizedSearchName(entry.roomHint ?? "") !== normalizedSearchName(room)
+    ) {
+      continue;
+    }
+    if (hasAudio !== undefined && summary.hasAudio !== hasAudio) continue;
+    if (hasVideo !== undefined && summary.hasVideo !== hasVideo) continue;
+    if (hasImage !== undefined && summary.hasImage !== hasImage) continue;
+    rows.push(
+      safeIngestionQueueEntry(entry, {
+        now,
+        media: includeMedia ? media : undefined,
+        mediaSummary: summary,
+      }),
+    );
+  }
+
+  return restOk(paginate(rows, args.query));
+}
+
+async function routeCreateIngestionQueueEntry(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+) {
+  const body = bodyObject(args.body);
+  const instructions = normalizeOptionalText(asString(body.instructions));
+  const roomHint = normalizeOptionalText(asString(body.roomHint));
+  const dispositionHint = normalizeOptionalText(asString(body.dispositionHint));
+  const targetPlanId = optionalString(body.targetPlanId) as
+    | Id<"floorPlans">
+    | undefined;
+  const scopeHint =
+    normalizeIngestionScopeHint(
+      optionalIngestionScopeHint(asString(body.scopeHint)),
+    ) ?? (targetPlanId ? "floorPlan" : "inventory");
+  const intent =
+    optionalIngestionQueueIntent(asString(body.intent)) ??
+    (scopeHint === "floorPlan" ? "floorPlan" : "general");
+  const target = await resolveApiIngestionTarget(ctx, auth, moveId, {
+    targetBoxId: optionalString(body.targetBoxId) as Id<"boxes"> | undefined,
+    targetItemId: optionalString(body.targetItemId) as Id<"items"> | undefined,
+    targetBoxCode: asString(body.targetBoxCode),
+    targetLabel: asString(body.targetLabel),
+  });
+  const mediaPhotoIds = parseIngestionMediaPhotoIds(body.mediaPhotoIds);
+  if (!instructions && mediaPhotoIds.length === 0) {
+    throw invalidField(
+      "instructions",
+      "A queue entry needs instructions, mediaPhotoIds, or both.",
+    );
+  }
+  await validateApiIngestionMediaIds(
+    ctx,
+    auth.householdId,
+    moveId,
+    mediaPhotoIds,
+  );
+  if (targetPlanId) {
+    await requireApiPlanForMove(ctx, auth, moveId, targetPlanId);
+  }
+
+  const now = Date.now();
+  const entryId = await ctx.db.insert("ingestionQueueEntries", {
+    householdId: auth.householdId,
+    moveId,
+    status: "queued",
+    instructions,
+    roomHint,
+    dispositionHint,
+    scopeHint,
+    intent,
+    ...target,
+    targetPlanId,
+    mediaPhotoIds,
+    sortOrder: now,
+    createdByUserId: auth.createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "ingestion.entry_api_created",
+    "ingestionQueueEntries",
+    entryId,
+    {
+      mediaCount: mediaPhotoIds.length,
+      scopeHint,
+      intent,
+      ...target,
+      targetPlanId,
+    },
+  );
+
+  const created = await ctx.db.get(entryId);
+  return restOk(
+    {
+      data: created
+        ? safeIngestionQueueEntry(created, {
+            now,
+            media: await mediaForIngestionEntry(
+              ctx,
+              auth.householdId,
+              moveId,
+              created,
+            ),
+          })
+        : { entryId },
+    },
+    201,
+  );
+}
+
+async function routeClaimIngestionQueue(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+) {
+  const body = bodyObject(args.body);
+  const batchSize = Math.min(
+    Math.max(Math.floor(Number(body.batchSize ?? 1)), 1),
+    10,
+  );
+  const agentLabel = normalizeOptionalText(asString(body.agentLabel));
+  const scopeHint = optionalIngestionScopeHint(asString(body.scopeHint));
+  const targetPlanId = optionalString(body.targetPlanId) as
+    | Id<"floorPlans">
+    | undefined;
+  if (targetPlanId) {
+    await requireApiPlanForMove(ctx, auth, moveId, targetPlanId);
+  }
+  const now = Date.now();
+  const queued = await ctx.db
+    .query("ingestionQueueEntries")
+    .withIndex("by_move_status_order", (q) =>
+      q.eq("moveId", moveId).eq("status", "queued"),
+    )
+    .take(200);
+
+  let candidates = filterIngestionClaimCandidates(queued, {
+    householdId: auth.householdId,
+    scopeHint,
+    targetPlanId,
+  }).slice(0, batchSize);
+  if (candidates.length < batchSize) {
+    const claimed = await ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_move_status_order", (q) =>
+        q.eq("moveId", moveId).eq("status", "claimed"),
+      )
+      .take(200);
+    const expired = filterIngestionClaimCandidates(
+      claimed.filter((entry) => ingestionClaimIsExpired(entry, now)),
+      {
+        householdId: auth.householdId,
+        scopeHint,
+        targetPlanId,
+      },
+    );
+    candidates = [...candidates, ...expired].slice(0, batchSize);
+  }
+
+  const claimedIds: Id<"ingestionQueueEntries">[] = [];
+  for (const entry of candidates) {
+    await ctx.db.patch(entry._id, {
+      status: "claimed",
+      claimedByUserId: undefined,
+      claimedByApiKeyId: auth.apiKeyId,
+      claimedByAgentLabel: agentLabel,
+      claimedAt: now,
+      claimExpiresAt: now + ingestionClaimDurationMs,
+      updatedAt: now,
+    });
+    claimedIds.push(entry._id);
+  }
+
+  if (claimedIds.length) {
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "ingestion.entries_api_claimed",
+      "ingestionQueueEntries",
+      moveId,
+      { entryIds: claimedIds, count: claimedIds.length, agentLabel },
+    );
+  }
+
+  const claimedEntries = await Promise.all(
+    claimedIds.map((id) => ctx.db.get(id)),
+  );
+  const data = [];
+  for (const entry of claimedEntries) {
+    if (!entry) continue;
+    const media = await mediaForIngestionEntry(
+      ctx,
+      auth.householdId,
+      moveId,
+      entry,
+    );
+    data.push(
+      safeIngestionQueueEntry(entry, {
+        now,
+        media,
+        mediaSummary: ingestionMediaSummary(media),
+      }),
+    );
+  }
+  return restOk({ data, claimExpiresAt: now + ingestionClaimDurationMs });
+}
+
+async function routeSetIngestionQueueStatus(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  entryId: Id<"ingestionQueueEntries">,
+) {
+  const entry = await requireApiIngestionEntry(
+    ctx,
+    auth.householdId,
+    moveId,
+    entryId,
+  );
+  const body = bodyObject(args.body);
+  const status = requiredIngestionQueueStatus(body.status);
+  const now = Date.now();
+  assertIngestionTransition(entry, status, now);
+  const question = normalizeOptionalText(asString(body.question));
+  const agentSummary = normalizeOptionalText(asString(body.agentSummary));
+
+  await ctx.db.patch(entryId, {
+    status,
+    ...(status === "queued"
+      ? {
+          claimedByUserId: undefined,
+          claimedByApiKeyId: undefined,
+          claimedByAgentLabel: undefined,
+          claimedAt: undefined,
+          claimExpiresAt: undefined,
+          agentQuestion: undefined,
+        }
+      : {}),
+    ...(status === "needsInput" ? { agentQuestion: question } : {}),
+    ...(agentSummary !== undefined ? { agentSummary } : {}),
+    ...(status === "processed" ? { processedAt: now } : {}),
+    ...(status === "resolved" ? { resolvedAt: now } : {}),
+    updatedAt: now,
+  });
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    `ingestion.entry_api_${status}`,
+    "ingestionQueueEntries",
+    entryId,
+    { question: question ?? null },
+  );
+  const updated = await ctx.db.get(entryId);
+  return restOk({
+    data: updated
+      ? safeIngestionQueueEntry(updated, {
+          now,
+          mediaSummary: ingestionMediaSummary(
+            await mediaForIngestionEntry(
+              ctx,
+              auth.householdId,
+              moveId,
+              updated,
+            ),
+          ),
+        })
+      : null,
+  });
+}
+
+async function routeSubmitIngestionQueueResults(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  entryId: Id<"ingestionQueueEntries">,
+) {
+  const entry = await requireApiIngestionEntry(
+    ctx,
+    auth.householdId,
+    moveId,
+    entryId,
+  );
+  const body = bodyObject(args.body);
+  const committedItems = parseIngestionCommittedItems(body.committedItems);
+  const committedBoxes = parseIngestionCommittedBoxes(body.committedBoxes);
+  const boxAssignments = parseIngestionBoxAssignments(body.boxAssignments);
+  const loadAssignments = parseIngestionLoadAssignments(body.loadAssignments);
+  const proposedItems = parseIngestionProposedItems(body.proposedItems, entry);
+  const resultItemIds = parseOptionalItemIds(body.resultItemIds);
+  const resultRefs = parseIngestionResultRefs(body.resultRefs);
+  const question = normalizeOptionalText(asString(body.needsInputQuestion));
+  const agentSummary = normalizeOptionalText(asString(body.agentSummary));
+  const now = Date.now();
+  const nextStatus: IngestionQueueStatus = question
+    ? "needsInput"
+    : "processed";
+  assertIngestionTransition(entry, nextStatus, now);
+  await validateApiResultItems(ctx, auth.householdId, moveId, resultItemIds);
+
+  const committedResult = committedItems.length
+    ? await commitIngestionItems(ctx, {
+        auth,
+        moveId,
+        entry,
+        committedItems,
+        now,
+      })
+    : {
+        itemIds: [] as Id<"items">[],
+        results: [] as Record<string, unknown>[],
+      };
+
+  const committedBoxResult = committedBoxes.length
+    ? await commitIngestionBoxes(ctx, {
+        auth,
+        moveId,
+        committedBoxes,
+        now,
+        entryId,
+      })
+    : { boxIds: [] as Id<"boxes">[], results: [] as Record<string, unknown>[] };
+
+  const boxAssignmentResult = boxAssignments.length
+    ? await commitIngestionBoxAssignments(ctx, {
+        auth,
+        moveId,
+        boxAssignments,
+      })
+    : {
+        assignmentIds: [] as Id<"boxItems">[],
+        results: [] as Record<string, unknown>[],
+      };
+
+  const loadAssignmentResult = loadAssignments.length
+    ? await commitIngestionLoadAssignments(ctx, {
+        auth,
+        moveId,
+        loadAssignments,
+        entryId,
+      })
+    : {
+        boxIds: [] as Id<"boxes">[],
+        itemIds: [] as Id<"items">[],
+        results: [] as Record<string, unknown>[],
+      };
+
+  let aiJobId: Id<"aiJobs"> | undefined;
+  const suggestionIds: Id<"aiTextSuggestions">[] = [];
+  const proposedItemsWithSpaceRefs = proposedItems.length
+    ? await resolveApiAiTextDraftSpaceRefs(ctx, {
+        auth,
+        moveId,
+        drafts: proposedItems,
+      })
+    : proposedItems;
+  if (proposedItemsWithSpaceRefs.length) {
+    aiJobId = await createIngestionAiTextSuggestions(ctx, {
+      auth,
+      moveId,
+      entry,
+      proposedItems: proposedItemsWithSpaceRefs,
+      agentSummary,
+      now,
+      suggestionIds,
+    });
+  }
+  const allResultItemIds = [...resultItemIds];
+  for (const itemId of committedResult.itemIds) {
+    pushUniqueId(allResultItemIds, itemId);
+  }
+
+  const refs = [
+    ...resultRefs,
+    ...allResultItemIds.map((id) => ({ type: "item", id: String(id) })),
+    ...committedBoxResult.boxIds.map((id) => ({ type: "box", id: String(id) })),
+    ...boxAssignmentResult.assignmentIds.map((id) => ({
+      type: "boxItemAssignment",
+      id: String(id),
+    })),
+    ...loadAssignmentResult.boxIds.map((id) => ({
+      type: "loadAssignmentBox",
+      id: String(id),
+    })),
+    ...loadAssignmentResult.itemIds.map((id) => ({
+      type: "loadAssignmentItem",
+      id: String(id),
+    })),
+    ...suggestionIds.map((id) => ({
+      type: "aiTextSuggestion",
+      id: String(id),
+    })),
+  ];
+
+  await ctx.db.patch(entryId, {
+    status: nextStatus,
+    agentSummary,
+    agentQuestion: question,
+    resultItemIds: allResultItemIds,
+    resultSuggestionIds: suggestionIds,
+    resultRefs: refs,
+    processedAt: nextStatus === "processed" ? now : undefined,
+    updatedAt: now,
+  });
+
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    nextStatus === "processed"
+      ? "ingestion.entry_api_processed"
+      : "ingestion.entry_api_needs_input",
+    "ingestionQueueEntries",
+    entryId,
+    {
+      aiJobId,
+      suggestionIds,
+      committedItemCount: committedResult.itemIds.length,
+      committedResults: committedResult.results,
+      committedBoxCount: committedBoxResult.boxIds.length,
+      committedBoxResults: committedBoxResult.results,
+      boxAssignmentCount: boxAssignmentResult.assignmentIds.length,
+      boxAssignmentResults: boxAssignmentResult.results,
+      loadAssignmentCount:
+        loadAssignmentResult.boxIds.length +
+        loadAssignmentResult.itemIds.length,
+      loadAssignmentBoxCount: loadAssignmentResult.boxIds.length,
+      loadAssignmentItemCount: loadAssignmentResult.itemIds.length,
+      loadAssignmentResults: loadAssignmentResult.results,
+      proposedItemCount: proposedItems.length,
+      resultItemIds: allResultItemIds,
+      resultRefs: refs,
+    },
+  );
+
+  const suggestions = await Promise.all(
+    suggestionIds.map((suggestionId) => ctx.db.get(suggestionId)),
+  );
+  const updated = await ctx.db.get(entryId);
+  return restOk({
+    data: {
+      entry: updated
+        ? safeIngestionQueueEntry(updated, {
+            now,
+            mediaSummary: ingestionMediaSummary(
+              await mediaForIngestionEntry(
+                ctx,
+                auth.householdId,
+                moveId,
+                updated,
+              ),
+            ),
+          })
+        : null,
+      aiJobId,
+      suggestionIds,
+      committedItemIds: committedResult.itemIds,
+      committedResults: committedResult.results,
+      committedBoxIds: committedBoxResult.boxIds,
+      committedBoxResults: committedBoxResult.results,
+      boxAssignmentIds: boxAssignmentResult.assignmentIds,
+      boxAssignmentResults: boxAssignmentResult.results,
+      loadAssignmentBoxIds: loadAssignmentResult.boxIds,
+      loadAssignmentItemIds: loadAssignmentResult.itemIds,
+      loadAssignmentResults: loadAssignmentResult.results,
+      suggestions: suggestions
+        .filter((suggestion): suggestion is Doc<"aiTextSuggestions"> =>
+          Boolean(suggestion),
+        )
+        .map((suggestion) => safeAiTextSuggestion(suggestion)),
+    },
+  });
 }
 
 async function routeApproveAiTextSuggestions(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const { dryRun, approvals } = parseAiTextApprovals(args.body);
   const loaded = await loadPendingApiAiTextSuggestions(
     ctx,
     auth.householdId,
     moveId,
-    approvals
+    approvals,
   );
   const now = Date.now();
   const boxIdsByLabel = new Map<string, Id<"boxes">>();
@@ -3983,7 +7970,7 @@ async function routeApproveAiTextSuggestions(
   const results = [];
 
   for (const { suggestion, approval } of loaded.filter(
-    (entry) => entry.suggestion.type === "box"
+    (entry) => entry.suggestion.type === "box",
   )) {
     const draft =
       approval.boxDraft ?? normalizeApiAiTextBoxDraft(suggestion.boxDraft);
@@ -4036,7 +8023,7 @@ async function routeApproveAiTextSuggestions(
   }
 
   for (const { suggestion, approval } of loaded.filter(
-    (entry) => entry.suggestion.type === "item"
+    (entry) => entry.suggestion.type === "item",
   )) {
     const draft =
       approval.itemDraft ?? normalizeApiAiTextItemDraft(suggestion.itemDraft);
@@ -4071,6 +8058,14 @@ async function routeApproveAiTextSuggestions(
       auth,
       moveId,
       draft,
+      now,
+    });
+    await attachAiTextSuggestionMediaToItem(ctx, {
+      auth,
+      moveId,
+      suggestion,
+      itemId,
+      photoIds: draft.attachMediaPhotoIds ?? [],
       now,
     });
     createdItemIds.push(itemId);
@@ -4139,7 +8134,7 @@ async function routeApproveAiTextSuggestions(
         createdItemIds,
         createdBoxIds,
         assignmentIds,
-      }
+      },
     );
   }
 
@@ -4159,17 +8154,17 @@ async function routeRejectAiTextSuggestions(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const suggestionIds = parseAiSuggestionIds(
     bodyObject(args.body).suggestionIds,
-    "suggestionIds"
+    "suggestionIds",
   ) as Id<"aiTextSuggestions">[];
   const loaded = await loadPendingApiAiTextSuggestions(
     ctx,
     auth.householdId,
     moveId,
-    suggestionIds.map((suggestionId) => ({ suggestionId }))
+    suggestionIds.map((suggestionId) => ({ suggestionId })),
   );
   const now = Date.now();
   for (const { suggestion } of loaded) {
@@ -4187,7 +8182,7 @@ async function routeRejectAiTextSuggestions(
     "ai_text_intake.api_rejected",
     "aiTextSuggestions",
     moveId,
-    { suggestionIds }
+    { suggestionIds },
   );
   return restOk({ data: { rejectedSuggestionIds: suggestionIds } });
 }
@@ -4196,14 +8191,14 @@ async function routeApproveAiPhotoSuggestions(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const { dryRun, approvals } = parseAiPhotoApprovals(args.body);
   const loaded = await loadPendingApiAiPhotoSuggestions(
     ctx,
     auth.householdId,
     moveId,
-    approvals
+    approvals,
   );
   const now = Date.now();
   const createdItemIds: Id<"items">[] = [];
@@ -4297,7 +8292,7 @@ async function routeApproveAiPhotoSuggestions(
         suggestionIds: loaded.map((entry) => entry.suggestion._id),
         createdItemIds,
         createdBoxIds,
-      }
+      },
     );
   }
 
@@ -4316,17 +8311,17 @@ async function routeRejectAiPhotoSuggestions(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const suggestionIds = parseAiSuggestionIds(
     bodyObject(args.body).suggestionIds,
-    "suggestionIds"
+    "suggestionIds",
   ) as Id<"aiPhotoSuggestions">[];
   const loaded = await loadPendingApiAiPhotoSuggestions(
     ctx,
     auth.householdId,
     moveId,
-    suggestionIds.map((suggestionId) => ({ suggestionId }))
+    suggestionIds.map((suggestionId) => ({ suggestionId })),
   );
   const now = Date.now();
   for (const { suggestion } of loaded) {
@@ -4344,7 +8339,7 @@ async function routeRejectAiPhotoSuggestions(
     "ai_photo_intake.api_rejected",
     "aiPhotoSuggestions",
     moveId,
-    { suggestionIds }
+    { suggestionIds },
   );
   return restOk({ data: { rejectedSuggestionIds: suggestionIds } });
 }
@@ -4353,7 +8348,7 @@ async function loadPendingApiAiTextSuggestions(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  approvals: RestAiTextApproval[]
+  approvals: RestAiTextApproval[],
 ) {
   const loaded: {
     suggestion: Doc<"aiTextSuggestions">;
@@ -4380,7 +8375,7 @@ async function loadPendingApiAiPhotoSuggestions(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  approvals: RestAiPhotoApproval[]
+  approvals: RestAiPhotoApproval[],
 ) {
   const loaded: {
     suggestion: Doc<"aiPhotoSuggestions">;
@@ -4410,9 +8405,19 @@ async function createApiItemFromAiTextDraft(
     moveId: Id<"moves">;
     draft: RestAiTextItemDraft;
     now: number;
-  }
+  },
 ) {
   const name = normalizeItemName(args.draft.name);
+  const hasResearch =
+    Boolean(normalizeOptionalText(args.draft.researchSummary)) ||
+    Boolean(args.draft.researchSources?.length) ||
+    Boolean(normalizeOptionalText(args.draft.researchNotes)) ||
+    Boolean(args.draft.researchConfidence);
+  const spaceRefs = await apiAiTextDraftSpaceRefs(ctx, {
+    householdId: args.auth.householdId,
+    moveId: args.moveId,
+    draft: args.draft,
+  });
   const itemId = await ctx.db.insert("items", {
     householdId: args.auth.householdId,
     moveId: args.moveId,
@@ -4420,15 +8425,22 @@ async function createApiItemFromAiTextDraft(
     normalizedName: normalizedSearchName(name),
     description: normalizeOptionalText(args.draft.description),
     room: normalizeOptionalText(args.draft.room),
+    currentSpaceId: spaceRefs.currentSpaceId,
     destinationRoom: normalizeOptionalText(args.draft.destinationRoom),
+    destinationSpaceId: spaceRefs.destinationSpaceId,
     category: normalizeOptionalText(args.draft.category),
     disposition: args.draft.disposition,
     status: "active",
     quantity: positiveNumber(args.draft.quantity) ?? 1,
     condition: "unknown",
-    dimensionsConfidence: "none",
-    weightConfidence: "none",
-    volumeConfidence: "none",
+    dimensionsIn: args.draft.dimensionsIn,
+    dimensionsConfidence: args.draft.dimensionsConfidence ?? "none",
+    estimatedWeightLb: args.draft.estimatedWeightLb,
+    estimatedWeightLowLb: args.draft.estimatedWeightLowLb,
+    estimatedWeightHighLb: args.draft.estimatedWeightHighLb,
+    weightConfidence: args.draft.weightConfidence ?? "none",
+    estimatedVolumeCuFt: args.draft.estimatedVolumeCuFt,
+    volumeConfidence: args.draft.volumeConfidence ?? "none",
     fragility: args.draft.fragility ?? "low",
     stackable: true,
     hazardousFlag: false,
@@ -4441,6 +8453,16 @@ async function createApiItemFromAiTextDraft(
     reviewFlags: [],
     aiSummary: `Approved from text intake: ${args.draft.suggestedBoxLabel ?? args.draft.room ?? "move notes"}.`,
     aiTags: ["textIntake"],
+    researchSummary: normalizeOptionalText(args.draft.researchSummary),
+    researchSources: args.draft.researchSources ?? [],
+    researchNotes: normalizeOptionalText(args.draft.researchNotes),
+    researchConfidence: args.draft.researchConfidence,
+    researchedAt: hasResearch ? args.now : undefined,
+    researchedByUserId: hasResearch ? args.auth.createdByUserId : undefined,
+    researchedByApiKeyId: hasResearch ? args.auth.apiKeyId : undefined,
+    researchedByLabel: hasResearch
+      ? `API key: ${args.auth.apiKeyName} (${args.auth.apiKeyTokenPreview})`
+      : undefined,
     createdVia: "textAI",
     reviewedAt: args.now,
     createdByUserId: args.auth.createdByUserId,
@@ -4455,9 +8477,62 @@ async function createApiItemFromAiTextDraft(
     "item.api_created_from_ai_text",
     "items",
     itemId,
-    { name, disposition: args.draft.disposition }
+    { name, disposition: args.draft.disposition },
   );
   return itemId;
+}
+
+async function attachAiTextSuggestionMediaToItem(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    suggestion,
+    itemId,
+    photoIds,
+    now,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    suggestion: Doc<"aiTextSuggestions">;
+    itemId: Id<"items">;
+    photoIds: Id<"itemPhotos">[];
+    now: number;
+  },
+) {
+  if (!photoIds.length) return;
+
+  const aiJob = await ctx.db.get(suggestion.aiJobId);
+  const inputRef = bodyObject(aiJob?.inputRef);
+  if (inputRef.source !== "apiIngestionQueue") {
+    throw invalidField(
+      "attachMediaPhotoIds",
+      "AI text suggestion media attachments are only available for ingestion queue suggestions.",
+    );
+  }
+  const entryId = optionalString(inputRef.entryId) as
+    | Id<"ingestionQueueEntries">
+    | undefined;
+  if (!entryId) {
+    throw invalidField(
+      "attachMediaPhotoIds",
+      "AI text suggestion is missing its source queue entry.",
+    );
+  }
+  const entry = await requireApiIngestionEntry(
+    ctx,
+    auth.householdId,
+    moveId,
+    entryId,
+  );
+  await attachIngestionMediaToItem(ctx, {
+    auth,
+    moveId,
+    entry,
+    itemId,
+    photoIds,
+    now,
+  });
 }
 
 async function ensureApiBoxFromAiTextDraft(
@@ -4467,7 +8542,7 @@ async function ensureApiBoxFromAiTextDraft(
     moveId: Id<"moves">;
     draft: RestAiTextBoxDraft;
     now: number;
-  }
+  },
 ) {
   const label = normalizeOptionalText(args.draft.label) ?? "AI text intake box";
   const existing = await findApiAiBoxByLabel(ctx, args.moveId, label);
@@ -4477,7 +8552,7 @@ async function ensureApiBoxFromAiTextDraft(
     ctx,
     args.moveId,
     args.draft.code ?? label,
-    "AI-BOX"
+    "AI-BOX",
   );
   const boxId = await ctx.db.insert("boxes", {
     householdId: args.auth.householdId,
@@ -4503,7 +8578,7 @@ async function ensureApiBoxFromAiTextDraft(
     "box.api_created_from_ai_text",
     "boxes",
     boxId,
-    { code, label }
+    { code, label },
   );
   return { boxId, created: true };
 }
@@ -4517,7 +8592,7 @@ async function addApiAiTextItemToBox(
     itemId: Id<"items">;
     quantity: number;
     now: number;
-  }
+  },
 ) {
   const assignmentId = await ctx.db.insert("boxItems", {
     householdId: args.auth.householdId,
@@ -4544,7 +8619,7 @@ async function addApiAiTextItemToBox(
     "assignment.api_created_from_ai_text",
     "boxItems",
     assignmentId,
-    { boxId: args.boxId, itemId: args.itemId }
+    { boxId: args.boxId, itemId: args.itemId },
   );
   return assignmentId;
 }
@@ -4557,7 +8632,7 @@ async function createApiItemFromAiPhotoDraft(
     draft: RestAiPhotoItemDraft;
     photoId: Id<"itemPhotos">;
     now: number;
-  }
+  },
 ) {
   const name = normalizeItemName(args.draft.name);
   const itemId = await ctx.db.insert("items", {
@@ -4572,9 +8647,14 @@ async function createApiItemFromAiPhotoDraft(
     status: "active",
     quantity: positiveNumber(args.draft.quantity) ?? 1,
     condition: "unknown",
-    dimensionsConfidence: "none",
-    weightConfidence: "none",
-    volumeConfidence: "none",
+    dimensionsIn: args.draft.dimensionsIn,
+    dimensionsConfidence: args.draft.dimensionsConfidence ?? "none",
+    estimatedWeightLb: args.draft.estimatedWeightLb,
+    estimatedWeightLowLb: args.draft.estimatedWeightLowLb,
+    estimatedWeightHighLb: args.draft.estimatedWeightHighLb,
+    weightConfidence: args.draft.weightConfidence ?? "none",
+    estimatedVolumeCuFt: args.draft.estimatedVolumeCuFt,
+    volumeConfidence: args.draft.volumeConfidence ?? "none",
     fragility: args.draft.fragility ?? "low",
     stackable: true,
     hazardousFlag: false,
@@ -4601,7 +8681,7 @@ async function createApiItemFromAiPhotoDraft(
     "item.api_created_from_ai_photo",
     "items",
     itemId,
-    { photoId: args.photoId, name }
+    { photoId: args.photoId, name },
   );
   return itemId;
 }
@@ -4613,14 +8693,14 @@ async function createApiBoxFromAiPhotoDraft(
     moveId: Id<"moves">;
     draft: RestAiPhotoBoxDraft;
     now: number;
-  }
+  },
 ) {
   const label = normalizeOptionalText(args.draft.label) ?? "AI photo box";
   const code = await uniqueApiAiBoxCode(
     ctx,
     args.moveId,
     args.draft.code ?? label,
-    "AI-PHOTO-BOX"
+    "AI-PHOTO-BOX",
   );
   const boxId = await ctx.db.insert("boxes", {
     householdId: args.auth.householdId,
@@ -4645,7 +8725,7 @@ async function createApiBoxFromAiPhotoDraft(
     "box.api_created_from_ai_photo",
     "boxes",
     boxId,
-    { code, label }
+    { code, label },
   );
   return boxId;
 }
@@ -4653,7 +8733,7 @@ async function createApiBoxFromAiPhotoDraft(
 async function findApiAiBoxByLabel(
   ctx: MutationCtx,
   moveId: Id<"moves">,
-  label: string
+  label: string,
 ) {
   const normalizedLabel = normalizeApiAiBoxLabelKey(label);
   const boxes = await ctx.db
@@ -4665,7 +8745,7 @@ async function findApiAiBoxByLabel(
       (box) =>
         !box.archivedAt &&
         (normalizeApiAiBoxLabelKey(box.label ?? "") === normalizedLabel ||
-          normalizeApiAiBoxLabelKey(box.code) === normalizedLabel)
+          normalizeApiAiBoxLabelKey(box.code) === normalizedLabel),
     ) ?? null
   );
 }
@@ -4674,7 +8754,7 @@ async function uniqueApiAiBoxCode(
   ctx: MutationCtx,
   moveId: Id<"moves">,
   label: string,
-  fallback: string
+  fallback: string,
 ) {
   const base = normalizeBoxCode(label) || fallback;
   const boxes = await ctx.db
@@ -4702,13 +8782,16 @@ function parseAiTextApprovals(body: unknown) {
     }
     return {
       suggestionId: suggestionId as Id<"aiTextSuggestions">,
-      itemDraft: parseApiAiTextItemDraft(approval.itemDraft, "approval.itemDraft"),
+      itemDraft: parseApiAiTextItemDraft(
+        approval.itemDraft,
+        "approval.itemDraft",
+      ),
       boxDraft: parseApiAiTextBoxDraft(approval.boxDraft, "approval.boxDraft"),
     };
   });
   assertUniqueReviewIds(
     approvals.map((approval) => approval.suggestionId),
-    "Duplicate AI text suggestion approval."
+    "Duplicate AI text suggestion approval.",
   );
   return { dryRun: Boolean(input.dryRun), approvals };
 }
@@ -4725,13 +8808,16 @@ function parseAiPhotoApprovals(body: unknown) {
     }
     return {
       suggestionId: suggestionId as Id<"aiPhotoSuggestions">,
-      itemDraft: parseApiAiPhotoItemDraft(approval.itemDraft, "approval.itemDraft"),
+      itemDraft: parseApiAiPhotoItemDraft(
+        approval.itemDraft,
+        "approval.itemDraft",
+      ),
       boxDraft: parseApiAiPhotoBoxDraft(approval.boxDraft, "approval.boxDraft"),
     };
   });
   assertUniqueReviewIds(
     approvals.map((approval) => approval.suggestionId),
-    "Duplicate AI photo suggestion approval."
+    "Duplicate AI photo suggestion approval.",
   );
   return { dryRun: Boolean(input.dryRun), approvals };
 }
@@ -4771,7 +8857,7 @@ function parseApiAiPhotoItemDraft(value: unknown, label: string) {
 function parseApiAiItemDraft(
   value: unknown,
   label: string,
-  includeDestinationRoom: boolean
+  includeDestinationRoom: boolean,
 ) {
   const input = bodyObject(value);
   const name = normalizeItemName(String(input.name ?? ""));
@@ -4782,13 +8868,42 @@ function parseApiAiItemDraft(
   return removeUndefined({
     name,
     room: normalizeOptionalText(asString(input.room)),
+    spaceId: optionalString(input.spaceId),
+    spaceName: normalizeOptionalText(asString(input.spaceName)),
+    currentSpaceId: optionalString(input.currentSpaceId),
     destinationRoom: includeDestinationRoom
       ? normalizeOptionalText(asString(input.destinationRoom))
+      : undefined,
+    destinationSpaceId: includeDestinationRoom
+      ? optionalString(input.destinationSpaceId)
+      : undefined,
+    destinationSpaceName: includeDestinationRoom
+      ? normalizeOptionalText(asString(input.destinationSpaceName))
       : undefined,
     category: normalizeOptionalText(asString(input.category)),
     disposition,
     quantity: positiveNumber(input.quantity) ?? 1,
     description: normalizeOptionalText(asString(input.description)),
+    dimensionsIn: parseDimensionsIn(input.dimensionsIn),
+    dimensionsConfidence:
+      parsePlanningConfidence(
+        input.dimensionsConfidence,
+        `${label}.dimensionsConfidence`,
+      ) ?? undefined,
+    estimatedWeightLb: optionalNumber(input.estimatedWeightLb),
+    estimatedWeightLowLb: optionalNumber(input.estimatedWeightLowLb),
+    estimatedWeightHighLb: optionalNumber(input.estimatedWeightHighLb),
+    weightConfidence:
+      parsePlanningConfidence(
+        input.weightConfidence,
+        `${label}.weightConfidence`,
+      ) ?? undefined,
+    estimatedVolumeCuFt: optionalNumber(input.estimatedVolumeCuFt),
+    volumeConfidence:
+      parsePlanningConfidence(
+        input.volumeConfidence,
+        `${label}.volumeConfidence`,
+      ) ?? undefined,
     suggestedBoxLabel: normalizeOptionalText(asString(input.suggestedBoxLabel)),
     fragility: parseItemFragility(input.fragility, `${label}.fragility`),
     highValue:
@@ -4797,8 +8912,20 @@ function parseApiAiItemDraft(
       parseLiteralArray(
         input.planningDefaultKeys,
         planningDefaultKeys,
-        `${label}.planningDefaultKeys`
+        `${label}.planningDefaultKeys`,
       ) ?? [],
+    researchSummary: normalizeOptionalText(asString(input.researchSummary)),
+    researchSources:
+      input.researchSources === undefined
+        ? undefined
+        : (parseItemResearchSources(input.researchSources) ?? []),
+    researchNotes: normalizeOptionalText(asString(input.researchNotes)),
+    researchConfidence:
+      parsePlanningConfidence(
+        input.researchConfidence,
+        `${label}.researchConfidence`,
+      ) ?? undefined,
+    attachMediaPhotoIds: parsePhotoIdArray(input.attachMediaPhotoIds),
   });
 }
 
@@ -4817,7 +8944,7 @@ function parseApiAiPhotoBoxDraft(value: unknown, label: string) {
 function parseApiAiBoxDraft(
   value: unknown,
   label: string,
-  includeDestinationRoom: boolean
+  includeDestinationRoom: boolean,
 ) {
   const input = bodyObject(value);
   const draftLabel = normalizeOptionalText(asString(input.label));
@@ -4839,26 +8966,120 @@ function parseApiAiBoxDraft(
 }
 
 function normalizeApiAiTextItemDraft(
-  draft: RestAiTextItemDraft | undefined
+  draft: RestAiTextItemDraft | undefined,
 ): RestAiTextItemDraft | undefined {
   if (!draft?.name.trim()) return undefined;
   return {
     name: normalizeItemName(draft.name),
     room: normalizeOptionalText(draft.room),
+    currentSpaceId: draft.currentSpaceId,
     destinationRoom: normalizeOptionalText(draft.destinationRoom),
+    destinationSpaceId: draft.destinationSpaceId,
     category: normalizeOptionalText(draft.category),
     disposition: draft.disposition,
     quantity: positiveNumber(draft.quantity) ?? 1,
     description: normalizeOptionalText(draft.description),
+    dimensionsIn: draft.dimensionsIn,
+    dimensionsConfidence: draft.dimensionsConfidence,
+    estimatedWeightLb: draft.estimatedWeightLb,
+    estimatedWeightLowLb: draft.estimatedWeightLowLb,
+    estimatedWeightHighLb: draft.estimatedWeightHighLb,
+    weightConfidence: draft.weightConfidence,
+    estimatedVolumeCuFt: draft.estimatedVolumeCuFt,
+    volumeConfidence: draft.volumeConfidence,
     suggestedBoxLabel: normalizeOptionalText(draft.suggestedBoxLabel),
     fragility: draft.fragility,
     highValue: draft.highValue,
     planningDefaultKeys: draft.planningDefaultKeys ?? [],
+    researchSummary: normalizeOptionalText(draft.researchSummary),
+    researchSources: draft.researchSources ?? [],
+    researchNotes: normalizeOptionalText(draft.researchNotes),
+    researchConfidence: draft.researchConfidence,
+    attachMediaPhotoIds: draft.attachMediaPhotoIds ?? [],
   };
 }
 
+async function resolveApiAiTextDraftSpaceRefs(
+  ctx: MutationCtx,
+  args: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    drafts: RestAiTextItemDraft[];
+  },
+) {
+  const resolved: RestAiTextItemDraft[] = [];
+  for (const draft of args.drafts) {
+    const spaceRefs = await apiAiTextDraftSpaceRefs(ctx, {
+      householdId: args.auth.householdId,
+      moveId: args.moveId,
+      draft,
+    });
+    resolved.push(
+      removeUndefined({
+        ...draft,
+        currentSpaceId: spaceRefs.currentSpaceId,
+        destinationSpaceId: spaceRefs.destinationSpaceId,
+        spaceId: undefined,
+        spaceName: undefined,
+        destinationSpaceName: undefined,
+      }) as RestAiTextItemDraft,
+    );
+  }
+  return resolved;
+}
+
+async function apiAiTextDraftSpaceRefs(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    draft: RestAiTextItemDraft;
+  },
+): Promise<
+  Partial<Pick<Doc<"items">, "currentSpaceId" | "destinationSpaceId">>
+> {
+  const input = bodyObject(args.draft);
+  const refs: Partial<
+    Pick<Doc<"items">, "currentSpaceId" | "destinationSpaceId">
+  > = {};
+
+  if (
+    input.currentSpaceId !== undefined ||
+    input.spaceId !== undefined ||
+    input.spaceName !== undefined
+  ) {
+    const currentSpace = await resolveApiSpaceRef(
+      ctx,
+      args.householdId,
+      args.moveId,
+      {
+        ...input,
+        currentSpaceId: input.currentSpaceId ?? input.spaceId,
+      },
+      { idPath: "currentSpaceId", namePath: "spaceName" },
+    );
+    refs.currentSpaceId = currentSpace?._id;
+  }
+
+  if (
+    input.destinationSpaceId !== undefined ||
+    input.destinationSpaceName !== undefined
+  ) {
+    const destinationSpace = await resolveApiSpaceRef(
+      ctx,
+      args.householdId,
+      args.moveId,
+      input,
+      { idPath: "destinationSpaceId", namePath: "destinationSpaceName" },
+    );
+    refs.destinationSpaceId = destinationSpace?._id;
+  }
+
+  return refs;
+}
+
 function normalizeApiAiTextBoxDraft(
-  draft: RestAiTextBoxDraft | undefined
+  draft: RestAiTextBoxDraft | undefined,
 ): RestAiTextBoxDraft | undefined {
   if (!draft?.label.trim()) return undefined;
   return {
@@ -4871,7 +9092,7 @@ function normalizeApiAiTextBoxDraft(
 }
 
 function normalizeApiAiPhotoItemDraft(
-  draft: RestAiPhotoItemDraft | undefined
+  draft: RestAiPhotoItemDraft | undefined,
 ): RestAiPhotoItemDraft | undefined {
   if (!draft?.name.trim()) return undefined;
   return {
@@ -4881,6 +9102,14 @@ function normalizeApiAiPhotoItemDraft(
     disposition: draft.disposition,
     quantity: positiveNumber(draft.quantity) ?? 1,
     description: normalizeOptionalText(draft.description),
+    dimensionsIn: draft.dimensionsIn,
+    dimensionsConfidence: draft.dimensionsConfidence,
+    estimatedWeightLb: draft.estimatedWeightLb,
+    estimatedWeightLowLb: draft.estimatedWeightLowLb,
+    estimatedWeightHighLb: draft.estimatedWeightHighLb,
+    weightConfidence: draft.weightConfidence,
+    estimatedVolumeCuFt: draft.estimatedVolumeCuFt,
+    volumeConfidence: draft.volumeConfidence,
     suggestedBoxLabel: normalizeOptionalText(draft.suggestedBoxLabel),
     fragility: draft.fragility,
     highValue: draft.highValue,
@@ -4889,7 +9118,7 @@ function normalizeApiAiPhotoItemDraft(
 }
 
 function normalizeApiAiPhotoBoxDraft(
-  draft: RestAiPhotoBoxDraft | undefined
+  draft: RestAiPhotoBoxDraft | undefined,
 ): RestAiPhotoBoxDraft | undefined {
   if (!draft?.label.trim()) return undefined;
   return {
@@ -4917,7 +9146,9 @@ function pushUniqueId<TId extends string>(ids: TId[], id: TId) {
 }
 
 function parseAiTextGenerationSource(body: unknown) {
-  const sourceText = asString(bodyObject(body).sourceText)?.trim().slice(0, 12000);
+  const sourceText = asString(bodyObject(body).sourceText)
+    ?.trim()
+    .slice(0, 12000);
   if (!sourceText) {
     throw new Error("Text intake needs sourceText.");
   }
@@ -4929,7 +9160,7 @@ function parseAiPhotoGenerationIds(body: unknown) {
   const photoIds =
     input.photoId !== undefined
       ? [optionalString(input.photoId)].filter((entry): entry is string =>
-          Boolean(entry)
+          Boolean(entry),
         )
       : parseIdArray(input.photoIds);
   if (!photoIds.length) {
@@ -4944,7 +9175,7 @@ function parseAiPhotoGenerationIds(body: unknown) {
 
 async function duplicatePhotoIdsForApiMove(
   ctx: MutationCtx,
-  photo: Doc<"itemPhotos">
+  photo: Doc<"itemPhotos">,
 ) {
   if (!photo.originalHash) return [];
   const photos = await ctx.db
@@ -4956,7 +9187,7 @@ async function duplicatePhotoIdsForApiMove(
       (candidate) =>
         candidate._id !== photo._id &&
         !candidate.archivedAt &&
-        candidate.originalHash === photo.originalHash
+        candidate.originalHash === photo.originalHash,
     )
     .map((candidate) => candidate._id);
 }
@@ -4967,7 +9198,7 @@ async function routeDocumentationProfiles(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
   profileIdSegment?: string,
-  actionSegment?: string
+  actionSegment?: string,
 ) {
   if (args.method === "GET") {
     const profiles = await ctx.db
@@ -4978,10 +9209,12 @@ async function routeDocumentationProfiles(
     const visibleProfiles = profiles.filter(
       (profile) =>
         profile.householdId === auth.householdId &&
-        (status ? profile.status === status : profile.status !== "archived")
+        (status ? profile.status === status : profile.status !== "archived"),
     );
     if (profileIdSegment && !actionSegment) {
-      const profile = visibleProfiles.find((entry) => entry._id === profileIdSegment);
+      const profile = visibleProfiles.find(
+        (entry) => entry._id === profileIdSegment,
+      );
       if (!profile) {
         throw new Error("Documentation profile not found.");
       }
@@ -4991,8 +9224,8 @@ async function routeDocumentationProfiles(
       return restOk(
         paginate(
           visibleProfiles.map((profile) => safeDocumentationProfile(profile)),
-          args.query
-        )
+          args.query,
+        ),
       );
     }
   }
@@ -5017,24 +9250,27 @@ async function routeDocumentationProfiles(
       disclaimer: asString(body.disclaimer),
     });
     const now = Date.now();
-    const documentationProfileId = await ctx.db.insert("documentationProfiles", {
-      householdId: auth.householdId,
-      moveId,
-      type,
-      status,
-      name: config.name,
-      includedFields: config.includedFields,
-      imageRule: config.imageRule,
-      filters: config.filters,
-      allowedActions: config.allowedActions,
-      disclaimer: config.disclaimer,
-      ownerNotes: normalizeOptionalText(asString(body.ownerNotes)),
-      exportHistory: [],
-      createdByUserId: auth.createdByUserId,
-      createdByApiKeyId: auth.apiKeyId,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const documentationProfileId = await ctx.db.insert(
+      "documentationProfiles",
+      {
+        householdId: auth.householdId,
+        moveId,
+        type,
+        status,
+        name: config.name,
+        includedFields: config.includedFields,
+        imageRule: config.imageRule,
+        filters: config.filters,
+        allowedActions: config.allowedActions,
+        disclaimer: config.disclaimer,
+        ownerNotes: normalizeOptionalText(asString(body.ownerNotes)),
+        exportHistory: [],
+        createdByUserId: auth.createdByUserId,
+        createdByApiKeyId: auth.apiKeyId,
+        createdAt: now,
+        updatedAt: now,
+      },
+    );
 
     await auditApiDocumentationProfile(
       ctx,
@@ -5042,7 +9278,7 @@ async function routeDocumentationProfiles(
       moveId,
       "documentation_profile.created",
       documentationProfileId,
-      { type, status, includedFields: config.includedFields }
+      { type, status, includedFields: config.includedFields },
     );
     const profile = await ctx.db.get(documentationProfileId);
     return restOk(
@@ -5051,7 +9287,7 @@ async function routeDocumentationProfiles(
           ? safeDocumentationProfile(profile)
           : { documentationProfileId },
       },
-      201
+      201,
     );
   }
 
@@ -5060,11 +9296,12 @@ async function routeDocumentationProfiles(
       ctx,
       auth.householdId,
       moveId,
-      profileIdSegment
+      profileIdSegment,
     );
     const body = bodyObject(args.body);
     const type = parseDocumentationProfileType(body.type) ?? existing.type;
-    const status = parseDocumentationProfileStatus(body.status) ?? existing.status;
+    const status =
+      parseDocumentationProfileStatus(body.status) ?? existing.status;
     const config = normalizeDocumentationProfileConfig({
       type,
       name: body.name === undefined ? existing.name : asString(body.name),
@@ -5085,7 +9322,9 @@ async function routeDocumentationProfiles(
           ? existing.allowedActions
           : parseShareLinkActions(body.allowedActions),
       disclaimer:
-        body.disclaimer === undefined ? existing.disclaimer : asString(body.disclaimer),
+        body.disclaimer === undefined
+          ? existing.disclaimer
+          : asString(body.disclaimer),
     });
     const now = Date.now();
     const patch = {
@@ -5118,7 +9357,7 @@ async function routeDocumentationProfiles(
       moveId,
       "documentation_profile.updated",
       existing._id,
-      { previousStatus: existing.status, nextStatus: status, type }
+      { previousStatus: existing.status, nextStatus: status, type },
     );
     const updated = await ctx.db.get(existing._id);
     return restOk({
@@ -5137,7 +9376,7 @@ async function routeDocumentationProfiles(
       ctx,
       auth.householdId,
       moveId,
-      profileIdSegment
+      profileIdSegment,
     );
     const now = Date.now();
     await ctx.db.patch(existing._id, {
@@ -5152,7 +9391,7 @@ async function routeDocumentationProfiles(
       auth,
       moveId,
       "documentation_profile.archived",
-      existing._id
+      existing._id,
     );
     return restOk({
       data: { archived: true, documentationProfileId: existing._id },
@@ -5172,7 +9411,7 @@ async function routeExports(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
   exportIdSegment?: string,
-  actionSegment?: string
+  actionSegment?: string,
 ) {
   if (args.method === "GET" && !exportIdSegment) {
     const jobs = await ctx.db
@@ -5185,8 +9424,8 @@ async function routeExports(
         jobs
           .filter((job) => job.householdId === auth.householdId)
           .map((job) => safeExportJob(job)),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
 
@@ -5208,7 +9447,7 @@ async function routeExports(
       ctx,
       auth.householdId,
       moveId,
-      exportIdSegment
+      exportIdSegment,
     );
     if (actionSegment === "download") {
       return restOk({ data: artifactForApiExport(job) });
@@ -5229,7 +9468,7 @@ async function routeShareLinks(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
   shareLinkIdSegment?: string,
-  actionSegment?: string
+  actionSegment?: string,
 ) {
   if (
     args.method === "GET" &&
@@ -5239,12 +9478,16 @@ async function routeShareLinks(
     return await routeShareLinkComments(ctx, args, auth, moveId);
   }
 
-  if (args.method === "GET" && shareLinkIdSegment && actionSegment === "comments") {
+  if (
+    args.method === "GET" &&
+    shareLinkIdSegment &&
+    actionSegment === "comments"
+  ) {
     const link = await requireApiShareLink(
       ctx,
       auth.householdId,
       moveId,
-      shareLinkIdSegment
+      shareLinkIdSegment,
     );
     return await routeShareLinkComments(ctx, args, auth, moveId, link._id);
   }
@@ -5261,11 +9504,11 @@ async function routeShareLinks(
           .filter(
             (link) =>
               link.householdId === auth.householdId &&
-              (!status || link.status === status)
+              (!status || link.status === status),
           )
           .map((link) => safeApiShareLink(link)),
-        args.query
-      )
+        args.query,
+      ),
     );
   }
 
@@ -5274,16 +9517,16 @@ async function routeShareLinks(
       ctx,
       auth.householdId,
       moveId,
-      shareLinkIdSegment
+      shareLinkIdSegment,
     );
     return restOk({ data: safeApiShareLink(link) });
   }
 
   if (args.method === "POST" && !shareLinkIdSegment) {
     const body = bodyObject(args.body);
-    const documentationProfileId = optionalString(body.documentationProfileId) as
-      | Id<"documentationProfiles">
-      | undefined;
+    const documentationProfileId = optionalString(
+      body.documentationProfileId,
+    ) as Id<"documentationProfiles"> | undefined;
     const expiresAt =
       optionalNumber(body.expiresAt) ?? Date.now() + 30 * 24 * 60 * 60 * 1000;
     const result = await createGeneratedShareLink(
@@ -5304,7 +9547,7 @@ async function routeShareLinks(
         type: "apiKey",
         apiKeyId: auth.apiKeyId,
         userId: auth.createdByUserId,
-      }
+      },
     );
     return restOk(
       {
@@ -5314,7 +9557,7 @@ async function routeShareLinks(
           expiresAt,
         },
       },
-      201
+      201,
     );
   }
 
@@ -5334,9 +9577,11 @@ async function routeShareLinks(
         type: "apiKey",
         apiKeyId: auth.apiKeyId,
         userId: auth.createdByUserId,
-      }
+      },
     );
-    return restOk({ data: { revoked: true, shareLink: safeApiShareLink(link) } });
+    return restOk({
+      data: { revoked: true, shareLink: safeApiShareLink(link) },
+    });
   }
 
   return restError({
@@ -5351,10 +9596,10 @@ async function routeShareLinkComments(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  shareLinkId?: Id<"shareLinks">
+  shareLinkId?: Id<"shareLinks">,
 ) {
   const documentationProfileId = optionalString(
-    args.query.documentationProfileId
+    args.query.documentationProfileId,
   ) as Id<"documentationProfiles"> | undefined;
   const comments = await ctx.db
     .query("shareLinkComments")
@@ -5367,15 +9612,15 @@ async function routeShareLinkComments(
         comment.householdId === auth.householdId &&
         (!shareLinkId || comment.shareLinkId === shareLinkId) &&
         (!documentationProfileId ||
-          comment.documentationProfileId === documentationProfileId)
+          comment.documentationProfileId === documentationProfileId),
     ),
-    args.query
+    args.query,
   );
 
   return restOk({
     ...page,
     data: await Promise.all(
-      page.data.map((comment) => safeApiShareLinkComment(ctx, comment))
+      page.data.map((comment) => safeApiShareLinkComment(ctx, comment)),
     ),
   });
 }
@@ -5384,10 +9629,14 @@ async function routeTopLevelItem(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  itemIdSegment?: string
+  itemIdSegment?: string,
 ) {
   if (!itemIdSegment) {
-    return restError({ status: 404, code: "not_found", message: "Item not found." });
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Item not found.",
+    });
   }
   const item = await requireApiItemById(ctx, auth.householdId, itemIdSegment);
   assertApiObjectMoveAccess(auth, item.moveId);
@@ -5399,6 +9648,13 @@ async function routeTopLevelItem(
 
   if (args.method === "PATCH") {
     const patch = itemPatch(args.body, auth, item);
+    await applyItemSpaceRefs(
+      ctx,
+      auth.householdId,
+      item.moveId,
+      args.body,
+      patch,
+    );
     await ctx.db.patch(item._id, patch);
     const updated = await ctx.db.get(item._id);
     await auditApiWrite(
@@ -5408,7 +9664,7 @@ async function routeTopLevelItem(
       "item.api_updated",
       "items",
       item._id,
-      { route: "top_level", changedKeys: Object.keys(patch) }
+      { route: "top_level", changedKeys: Object.keys(patch) },
     );
     return restOk({ data: updated ? safeItem(updated) : { itemId: item._id } });
   }
@@ -5427,12 +9683,16 @@ async function routeTopLevelItem(
       "item.api_deleted",
       "items",
       item._id,
-      { route: "top_level" }
+      { route: "top_level" },
     );
     return restOk({ data: { deleted: true, itemId: item._id } });
   }
 
-  return restError({ status: 404, code: "not_found", message: "Item route not found." });
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Item route not found.",
+  });
 }
 
 async function routeTopLevelBox(
@@ -5441,10 +9701,14 @@ async function routeTopLevelBox(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   boxIdSegment?: string,
   nestedSegment?: string,
-  nestedIdSegment?: string
+  nestedIdSegment?: string,
 ) {
   if (!boxIdSegment) {
-    return restError({ status: 404, code: "not_found", message: "Box not found." });
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Box not found.",
+    });
   }
   const box = await requireApiBoxById(ctx, auth.householdId, boxIdSegment);
   assertApiObjectMoveAccess(auth, box.moveId);
@@ -5455,7 +9719,11 @@ async function routeTopLevelBox(
   }
 
   if (nestedSegment) {
-    return restError({ status: 404, code: "not_found", message: "Box route not found." });
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Box route not found.",
+    });
   }
 
   if (args.method === "GET") {
@@ -5464,6 +9732,23 @@ async function routeTopLevelBox(
 
   if (args.method === "PATCH") {
     const patch = boxPatch(args.body);
+    if (patch.code !== undefined) {
+      await assertUniqueApiBoxCode(ctx, {
+        householdId: auth.householdId,
+        moveId: box.moveId,
+        code: patch.code,
+        currentBoxId: box._id,
+      });
+    }
+    Object.assign(
+      patch,
+      await boxDestinationRefsFromInput(
+        ctx,
+        auth.householdId,
+        box.moveId,
+        args.body,
+      ),
+    );
     await ctx.db.patch(box._id, patch);
     const updated = await ctx.db.get(box._id);
     await auditApiWrite(
@@ -5473,12 +9758,16 @@ async function routeTopLevelBox(
       "box.api_updated",
       "boxes",
       box._id,
-      { route: "top_level", changedKeys: Object.keys(patch) }
+      { route: "top_level", changedKeys: Object.keys(patch) },
     );
     return restOk({ data: updated ? safeBox(updated) : { boxId: box._id } });
   }
 
-  return restError({ status: 404, code: "not_found", message: "Box route not found." });
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Box route not found.",
+  });
 }
 
 async function routeTopLevelBoxItems(
@@ -5486,82 +9775,45 @@ async function routeTopLevelBoxItems(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   box: Doc<"boxes">,
-  itemIdSegment?: string
+  itemIdSegment?: string,
 ) {
   if (args.method === "POST" && !itemIdSegment) {
     const body = bodyObject(args.body);
-    const itemId = String(body.itemId ?? "") as Id<"items">;
-    const item = await requireApiItem(ctx, auth.householdId, box.moveId, itemId);
-    const now = Date.now();
-    const existing = await ctx.db
-      .query("boxItems")
-      .withIndex("by_item", (q) => q.eq("itemId", item._id))
-      .collect();
-    const current = existing.find((entry) => entry.moveId === box.moveId);
-    const patch = {
-      boxId: box._id,
+    const item = await resolveApiItemRef(
+      ctx,
+      auth.householdId,
+      box.moveId,
+      body,
+    );
+    const result = await upsertApiBoxItemAssignment(ctx, {
+      auth,
+      moveId: box.moveId,
+      box,
+      item,
       quantity: positiveNumber(body.quantity) ?? 1,
       notes: normalizeOptionalText(asString(body.notes)),
-      updatedAt: now,
-    };
-
-    if (current) {
-      await ctx.db.patch(current._id, patch);
-      await auditApiWrite(
-        ctx,
-        auth,
-        box.moveId,
-        "assignment.api_upserted",
-        "boxItems",
-        current._id,
-        { route: "top_level_box", boxId: box._id, itemId: item._id }
-      );
-      return restOk({ data: { assignmentId: current._id } });
-    }
-
-    const assignmentId = await ctx.db.insert("boxItems", {
-      householdId: auth.householdId,
-      moveId: box.moveId,
-      itemId: item._id,
-      ...patch,
-      createdAt: now,
+      dryRun: Boolean(body.dryRun),
+      route: "top_level_box",
     });
-    await auditApiWrite(
-      ctx,
-      auth,
-      box.moveId,
-      "assignment.api_upserted",
-      "boxItems",
-      assignmentId,
-      { route: "top_level_box", boxId: box._id, itemId: item._id }
-    );
-    return restOk({ data: { assignmentId } }, 201);
+    return restOk({ data: result }, result.created ? 201 : 200);
   }
 
   if (args.method === "DELETE" && itemIdSegment) {
-    const item = await requireApiItem(ctx, auth.householdId, box.moveId, itemIdSegment);
-    const assignments = await ctx.db
-      .query("boxItems")
-      .withIndex("by_item", (q) => q.eq("itemId", item._id))
-      .collect();
-    const assignment = assignments.find(
-      (entry) => entry.moveId === box.moveId && entry.boxId === box._id
-    );
-    if (!assignment) {
-      throw new Error("Assignment not found.");
-    }
-
-    await ctx.db.delete(assignment._id);
-    await auditApiWrite(
+    const item = await requireApiItem(
       ctx,
-      auth,
+      auth.householdId,
       box.moveId,
-      "assignment.api_deleted",
-      "boxItems",
-      assignment._id,
-      { route: "top_level_box", boxId: box._id, itemId: item._id }
+      itemIdSegment,
     );
-    return restOk({ data: { deleted: true, assignmentId: assignment._id } });
+    const result = await deleteApiBoxItemAssignment(ctx, {
+      auth,
+      moveId: box.moveId,
+      box,
+      item,
+      dryRun: false,
+      route: "top_level_box",
+    });
+    return restOk({ data: result });
   }
 
   return restError({
@@ -5576,10 +9828,14 @@ async function routeTopLevelPhoto(
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   photoIdSegment?: string,
-  actionSegment?: string
+  actionSegment?: string,
 ) {
   if (!photoIdSegment) {
-    return restError({ status: 404, code: "not_found", message: "Photo not found." });
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Photo not found.",
+    });
   }
   if (args.method !== "POST" || actionSegment !== "attach") {
     return restError({
@@ -5589,7 +9845,11 @@ async function routeTopLevelPhoto(
     });
   }
 
-  const photo = await requireApiPhotoById(ctx, auth.householdId, photoIdSegment);
+  const photo = await requireApiPhotoById(
+    ctx,
+    auth.householdId,
+    photoIdSegment,
+  );
   assertApiObjectMoveAccess(auth, photo.moveId);
   assertRequestedMoveMatches(args, photo.moveId, "Photo not found.");
   const patch = await photoAttachPatch(ctx, {
@@ -5614,22 +9874,33 @@ async function routeTopLevelPhoto(
     "photo.api_attached",
     "itemPhotos",
     photo._id,
-    { changedKeys: Object.keys(patch) }
+    { changedKeys: Object.keys(patch) },
   );
-  return restOk({ data: updated ? safePhoto(updated) : { photoId: photo._id } });
+  return restOk({
+    data: updated ? safePhoto(updated) : { photoId: photo._id },
+  });
 }
 
 async function routeTopLevelExport(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  exportIdSegment?: string
+  exportIdSegment?: string,
 ) {
   if (!exportIdSegment) {
-    return restError({ status: 404, code: "not_found", message: "Export not found." });
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Export not found.",
+    });
   }
   const moveId = requiredQueryMoveId(args.query);
-  const job = await requireApiExportJob(ctx, auth.householdId, moveId, exportIdSegment);
+  const job = await requireApiExportJob(
+    ctx,
+    auth.householdId,
+    moveId,
+    exportIdSegment,
+  );
   return restOk({
     data:
       args.query.download === "1" || args.query.download === "true"
@@ -5642,7 +9913,7 @@ async function withIdempotency(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  createResponse: () => Promise<RestResponse>
+  createResponse: () => Promise<RestResponse>,
 ) {
   if (args.method === "GET" || !args.idempotencyKey) {
     return await createResponse();
@@ -5651,7 +9922,9 @@ async function withIdempotency(
   const existing = await ctx.db
     .query("apiIdempotencyKeys")
     .withIndex("by_api_key_key", (q) =>
-      q.eq("apiKeyId", auth.apiKeyId).eq("idempotencyKey", args.idempotencyKey!)
+      q
+        .eq("apiKeyId", auth.apiKeyId)
+        .eq("idempotencyKey", args.idempotencyKey!),
     )
     .unique();
   if (existing) {
@@ -5672,6 +9945,9 @@ async function withIdempotency(
     };
   }
   const response = await createResponse();
+  if (response.status >= 500) {
+    return response;
+  }
   await ctx.db.insert("apiIdempotencyKeys", {
     householdId: auth.householdId,
     moveId: auth.moveId,
@@ -5689,11 +9965,15 @@ async function withIdempotency(
 async function requireApiMove(
   ctx: MutationCtx,
   householdId: Id<"households">,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const move = await ctx.db.get(moveId);
   if (!move || move.householdId !== householdId || move.status === "archived") {
-    throw new Error("Move not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Move not found.",
+    });
   }
   return move;
 }
@@ -5701,7 +9981,7 @@ async function requireApiMove(
 async function requireApiPlan(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  planIdSegment: string
+  planIdSegment: string,
 ) {
   const plan = await ctx.db.get(planIdSegment as Id<"floorPlans">);
   if (
@@ -5710,10 +9990,18 @@ async function requireApiPlan(
     plan.archivedAt ||
     plan.status !== "active"
   ) {
-    throw new Error("Plan not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Plan not found.",
+    });
   }
   if (auth.moveId && auth.moveId !== plan.moveId) {
-    throw new Error("Plan not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Plan not found.",
+    });
   }
   await requireApiMove(ctx, auth.householdId, plan.moveId);
   return plan;
@@ -5721,41 +10009,48 @@ async function requireApiPlan(
 
 async function planDocumentForApi(
   ctx: MutationCtx,
-  plan: Doc<"floorPlans">
+  plan: Doc<"floorPlans">,
 ): Promise<PlanDocumentInput> {
-  const [levels, entities, placements, items, boxes, plannedItems, pendingProposals] =
-    await Promise.all([
-      ctx.db
-        .query("planLevels")
-        .withIndex("by_plan_sort", (q) => q.eq("planId", plan._id))
-        .collect(),
-      ctx.db
-        .query("planEntities")
-        .withIndex("by_plan_type", (q) => q.eq("planId", plan._id))
-        .collect(),
-      ctx.db
-        .query("planPlacements")
-        .withIndex("by_plan", (q) => q.eq("planId", plan._id))
-        .collect(),
-      ctx.db
-        .query("items")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
-        .collect(),
-      ctx.db
-        .query("boxes")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
-        .collect(),
-      ctx.db
-        .query("plannedItems")
-        .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
-        .collect(),
-      ctx.db
-        .query("planProposals")
-        .withIndex("by_plan_status", (q) =>
-          q.eq("planId", plan._id).eq("status", "pending")
-        )
-        .collect(),
-    ]);
+  const [
+    levels,
+    entities,
+    placements,
+    items,
+    boxes,
+    plannedItems,
+    pendingProposals,
+  ] = await Promise.all([
+    ctx.db
+      .query("planLevels")
+      .withIndex("by_plan_sort", (q) => q.eq("planId", plan._id))
+      .collect(),
+    ctx.db
+      .query("planEntities")
+      .withIndex("by_plan_type", (q) => q.eq("planId", plan._id))
+      .collect(),
+    ctx.db
+      .query("planPlacements")
+      .withIndex("by_plan", (q) => q.eq("planId", plan._id))
+      .collect(),
+    ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
+      .collect(),
+    ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
+      .collect(),
+    ctx.db
+      .query("plannedItems")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", plan.moveId))
+      .collect(),
+    ctx.db
+      .query("planProposals")
+      .withIndex("by_plan_status", (q) =>
+        q.eq("planId", plan._id).eq("status", "pending"),
+      )
+      .collect(),
+  ]);
   const itemsById = new Map(items.map((item) => [String(item._id), item]));
   const boxesById = new Map(boxes.map((box) => [String(box._id), box]));
   const plannedItemsById = new Map(
@@ -5789,43 +10084,47 @@ async function planDocumentForApi(
       })),
     entities: entities
       .filter((entity) => !entity.archivedAt)
-      .map((entity): PlanEntitySummary => ({
-        entityId: entity._id,
-        levelId: entity.levelId,
-        shortId: entity.shortId,
-        entityType: entity.entityType,
-        name: entity.name,
-        color: entity.color,
-        locked: entity.locked,
-        wall: entity.wall,
-        room: entity.room,
-        opening: entity.opening,
-        feature: entity.feature,
-        zone: entity.zone,
-        annotation: entity.annotation,
-      })),
+      .map(
+        (entity): PlanEntitySummary => ({
+          entityId: entity._id,
+          levelId: entity.levelId,
+          shortId: entity.shortId,
+          entityType: entity.entityType,
+          name: entity.name,
+          color: entity.color,
+          locked: entity.locked,
+          wall: entity.wall,
+          room: entity.room,
+          opening: entity.opening,
+          feature: entity.feature,
+          zone: entity.zone,
+          annotation: entity.annotation,
+        }),
+      ),
     placements: placements
       .filter((placement) => !placement.archivedAt)
-      .map((placement): PlanPlacementSummary => ({
-        placementId: placement._id,
-        levelId: placement.levelId,
-        shortId: placement.shortId,
-        source: placementSourceForApi(
-          placement,
-          itemsById,
-          boxesById,
-          plannedItemsById,
-        ),
-        x: placement.x,
-        y: placement.y,
-        rotationDeg: placement.rotationDeg,
-        footprintOverrideIn: placement.footprintOverrideIn,
-        parentPlacementId: placement.parentPlacementId,
-        containmentMode: placement.containmentMode,
-        zOrder: placement.zOrder,
-        color: placement.color,
-        locked: placement.locked,
-      })),
+      .map(
+        (placement): PlanPlacementSummary => ({
+          placementId: placement._id,
+          levelId: placement.levelId,
+          shortId: placement.shortId,
+          source: placementSourceForApi(
+            placement,
+            itemsById,
+            boxesById,
+            plannedItemsById,
+          ),
+          x: placement.x,
+          y: placement.y,
+          rotationDeg: placement.rotationDeg,
+          footprintOverrideIn: placement.footprintOverrideIn,
+          parentPlacementId: placement.parentPlacementId,
+          containmentMode: placement.containmentMode,
+          zOrder: placement.zOrder,
+          color: placement.color,
+          locked: placement.locked,
+        }),
+      ),
     pendingProposalCount: pendingProposals.length,
   });
 }
@@ -5902,11 +10201,20 @@ async function requireApiItem(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  itemIdSegment: string
+  itemIdSegment: string,
 ) {
   const item = await ctx.db.get(itemIdSegment as Id<"items">);
-  if (!item || item.householdId !== householdId || item.moveId !== moveId || item.deletedAt) {
-    throw new Error("Item not found.");
+  if (
+    !item ||
+    item.householdId !== householdId ||
+    item.moveId !== moveId ||
+    item.deletedAt
+  ) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Item not found.",
+    });
   }
   return item;
 }
@@ -5916,16 +10224,22 @@ async function requireApiPlannedItem(
   householdId: Id<"households">,
   moveId: Id<"moves">,
   plannedItemIdSegment: string,
-  includeArchived = false
+  includeArchived = false,
 ) {
-  const plannedItem = await ctx.db.get(plannedItemIdSegment as Id<"plannedItems">);
+  const plannedItem = await ctx.db.get(
+    plannedItemIdSegment as Id<"plannedItems">,
+  );
   if (
     !plannedItem ||
     plannedItem.householdId !== householdId ||
     plannedItem.moveId !== moveId ||
     (!includeArchived && plannedItem.archivedAt)
   ) {
-    throw new Error("Planned item not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Planned item not found.",
+    });
   }
   return plannedItem;
 }
@@ -5933,11 +10247,15 @@ async function requireApiPlannedItem(
 async function requireApiItemById(
   ctx: MutationCtx,
   householdId: Id<"households">,
-  itemIdSegment: string
+  itemIdSegment: string,
 ) {
   const item = await ctx.db.get(itemIdSegment as Id<"items">);
   if (!item || item.householdId !== householdId || item.deletedAt) {
-    throw new Error("Item not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Item not found.",
+    });
   }
   return item;
 }
@@ -5946,23 +10264,81 @@ async function requireApiBox(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  boxIdSegment: string
+  boxIdSegment: string,
 ) {
   const box = await ctx.db.get(boxIdSegment as Id<"boxes">);
-  if (!box || box.householdId !== householdId || box.moveId !== moveId || box.archivedAt) {
-    throw new Error("Box not found.");
+  if (
+    !box ||
+    box.householdId !== householdId ||
+    box.moveId !== moveId ||
+    box.archivedAt
+  ) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Box not found.",
+    });
   }
   return box;
+}
+
+async function resolveApiBoxRef(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  input: Record<string, unknown>,
+) {
+  const boxId = optionalString(input.boxId);
+  if (boxId) {
+    return await requireApiBox(ctx, householdId, moveId, boxId);
+  }
+
+  const boxCode = normalizeRestBoxCode(input.boxCode);
+  if (!boxCode) {
+    throw invalidField("boxId", "Provide boxId or boxCode to resolve the box.");
+  }
+
+  const boxes = await ctx.db
+    .query("boxes")
+    .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
+    .collect();
+  const active = boxes.filter(
+    (box) => box.householdId === householdId && !box.archivedAt,
+  );
+  const matches = active.filter(
+    (box) => normalizeRestBoxCode(box.code) === boxCode,
+  );
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    throw referenceError({
+      status: 409,
+      code: "ambiguous_name",
+      path: "boxCode",
+      message: `Box code "${boxCode}" matched multiple boxes.`,
+      candidates: matches.map((box) => box.code),
+    });
+  }
+  throw referenceError({
+    status: 404,
+    code: "name_not_found",
+    path: "boxCode",
+    message: `Box code "${boxCode}" was not found in this move.`,
+    candidates: active.map((box) => box.code).slice(0, 5),
+  });
 }
 
 async function requireApiBoxById(
   ctx: MutationCtx,
   householdId: Id<"households">,
-  boxIdSegment: string
+  boxIdSegment: string,
 ) {
   const box = await ctx.db.get(boxIdSegment as Id<"boxes">);
   if (!box || box.householdId !== householdId || box.archivedAt) {
-    throw new Error("Box not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Box not found.",
+    });
   }
   return box;
 }
@@ -5972,7 +10348,7 @@ async function requireApiMovePerson(
   householdId: Id<"households">,
   moveId: Id<"moves">,
   personIdSegment: string,
-  includeArchived = false
+  includeArchived = false,
 ) {
   const person = await ctx.db.get(personIdSegment as Id<"movePeople">);
   if (
@@ -5981,7 +10357,11 @@ async function requireApiMovePerson(
     person.moveId !== moveId ||
     (!includeArchived && person.archivedAt)
   ) {
-    throw new Error("Move person not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Move person not found.",
+    });
   }
   return person;
 }
@@ -5989,23 +10369,232 @@ async function requireApiMovePerson(
 async function requireApiPhotoById(
   ctx: MutationCtx,
   householdId: Id<"households">,
-  photoIdSegment: string
+  photoIdSegment: string,
 ) {
   const photo = await ctx.db.get(photoIdSegment as Id<"itemPhotos">);
   if (!photo || photo.householdId !== householdId || photo.archivedAt) {
-    throw new Error("Photo not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Photo not found.",
+    });
   }
   return photo;
+}
+
+async function resolveApiItemRef(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  input: Record<string, unknown>,
+) {
+  const itemId = optionalString(input.itemId);
+  if (itemId) {
+    return await requireApiItem(ctx, householdId, moveId, itemId);
+  }
+
+  const externalKey = externalItemKeyFromInput(input);
+  if (!externalKey) {
+    throw invalidField(
+      "itemId",
+      "Provide itemId or externalSource and externalId to resolve the item.",
+    );
+  }
+  const item = await findApiItemByExternalKey(
+    ctx,
+    householdId,
+    moveId,
+    externalKey,
+  );
+  if (!item) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: `Item external key ${externalKey.externalSource}/${externalKey.externalId} was not found in this move.`,
+      fields: [
+        {
+          path: "externalId",
+          message:
+            "No active item exists with this externalSource and externalId in the move.",
+        },
+      ],
+    });
+  }
+  return item;
+}
+
+async function resolveApiSpaceRef(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  input: Record<string, unknown>,
+  options: { idPath?: string; namePath?: string } = {},
+) {
+  const idPath = options.idPath ?? "spaceId";
+  const namePath = options.namePath ?? "spaceName";
+  const spaceId = optionalString(input[idPath]);
+  if (spaceId) {
+    const space = await ctx.db.get(spaceId as Id<"moveSpaces">);
+    if (
+      !space ||
+      space.householdId !== householdId ||
+      space.moveId !== moveId ||
+      space.status === "archived"
+    ) {
+      throw new RestApiError({
+        status: 404,
+        code: "not_found",
+        message: "Space not found.",
+      });
+    }
+    return space;
+  }
+
+  const spaceName = normalizeOptionalText(asString(input[namePath]));
+  if (!spaceName) return null;
+  const spaces = await ctx.db
+    .query("moveSpaces")
+    .withIndex("by_move_name", (q) => q.eq("moveId", moveId))
+    .collect();
+  const active = spaces.filter(
+    (space) => space.householdId === householdId && space.status !== "archived",
+  );
+  const normalized = spaceName.toLowerCase();
+  const matches = active.filter(
+    (space) => space.name.toLowerCase() === normalized,
+  );
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    throw referenceError({
+      status: 409,
+      code: "ambiguous_name",
+      path: namePath,
+      message: `Space name "${spaceName}" matched multiple spaces.`,
+      candidates: matches.map((space) => space.name),
+    });
+  }
+  throw referenceError({
+    status: 404,
+    code: "name_not_found",
+    path: namePath,
+    message: `Space name "${spaceName}" was not found in this move.`,
+    candidates: active.map((space) => space.name).slice(0, 5),
+  });
+}
+
+const destinationAssignableSpaceKinds = new Set<Doc<"moveSpaces">["kind"]>([
+  "destinationRoom",
+  "yardOutdoor",
+  "storage",
+  "custom",
+]);
+
+function assertDestinationAssignableSpace(
+  space: Doc<"moveSpaces">,
+  path: string,
+) {
+  if (destinationAssignableSpaceKinds.has(space.kind)) {
+    return;
+  }
+  throw new RestApiError({
+    status: 400,
+    code: "validation_error",
+    message:
+      "Destination location must be a destination room, storage, yard/outdoor, or custom space.",
+    fields: [
+      {
+        path,
+        message:
+          "Origin rooms and transport spaces cannot be used as destination locations.",
+        validValues: Array.from(destinationAssignableSpaceKinds),
+      },
+    ],
+  });
+}
+
+async function boxDestinationRefsFromInput(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  body: unknown,
+): Promise<
+  Partial<Pick<Doc<"boxes">, "destinationRoom" | "destinationSpaceId">>
+> {
+  const input = bodyObject(body);
+  const patch: Partial<
+    Pick<Doc<"boxes">, "destinationRoom" | "destinationSpaceId">
+  > = {};
+
+  if (input.clearDestinationSpace === true) {
+    patch.destinationSpaceId = undefined;
+  }
+
+  if (
+    input.destinationSpaceId !== undefined ||
+    input.destinationSpaceName !== undefined
+  ) {
+    const destinationSpace = await resolveApiSpaceRef(
+      ctx,
+      householdId,
+      moveId,
+      input,
+      { idPath: "destinationSpaceId", namePath: "destinationSpaceName" },
+    );
+    if (destinationSpace) {
+      assertDestinationAssignableSpace(
+        destinationSpace,
+        input.destinationSpaceId !== undefined
+          ? "destinationSpaceId"
+          : "destinationSpaceName",
+      );
+      patch.destinationSpaceId = destinationSpace._id;
+      if (input.destinationRoom === undefined) {
+        patch.destinationRoom = destinationSpace.name;
+      }
+    }
+  }
+
+  return patch;
+}
+
+function referenceError({
+  status,
+  code,
+  path,
+  message,
+  candidates,
+}: {
+  status: number;
+  code: string;
+  path: string;
+  message: string;
+  candidates: string[];
+}) {
+  return new RestApiError({
+    status,
+    code,
+    message,
+    fields: [
+      {
+        path,
+        message:
+          candidates.length > 0
+            ? "Use one of the listed candidate values or pass the explicit ID."
+            : "No candidates were found for this move.",
+        validValues: candidates,
+      },
+    ],
+  });
 }
 
 async function requireApiTransportResource(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  resourceIdSegment: string
+  resourceIdSegment: string,
 ) {
   const resource = await ctx.db.get(
-    resourceIdSegment as Id<"transportResources">
+    resourceIdSegment as Id<"transportResources">,
   );
   if (
     !resource ||
@@ -6013,7 +10602,11 @@ async function requireApiTransportResource(
     resource.moveId !== moveId ||
     resource.archivedAt
   ) {
-    throw new Error("Transport resource not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Transport resource not found.",
+    });
   }
   return resource;
 }
@@ -6022,7 +10615,7 @@ async function requireApiTransportZone(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  zoneIdSegment: string
+  zoneIdSegment: string,
 ) {
   const zone = await ctx.db.get(zoneIdSegment as Id<"transportZones">);
   if (
@@ -6031,7 +10624,11 @@ async function requireApiTransportZone(
     zone.moveId !== moveId ||
     zone.archivedAt
   ) {
-    throw new Error("Transport zone not found.");
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Transport zone not found.",
+    });
   }
   return zone;
 }
@@ -6042,7 +10639,7 @@ async function requireApiDocumentationProfile(
     householdId: Id<"households">;
     moveId: Id<"moves">;
     documentationProfileId?: Id<"documentationProfiles">;
-  }
+  },
 ) {
   if (!args.documentationProfileId) {
     throw new Error("Documentation profile export requires a profile.");
@@ -6063,10 +10660,16 @@ async function requireApiMutableDocumentationProfile(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  profileIdSegment: string
+  profileIdSegment: string,
 ) {
-  const profile = await ctx.db.get(profileIdSegment as Id<"documentationProfiles">);
-  if (!profile || profile.householdId !== householdId || profile.moveId !== moveId) {
+  const profile = await ctx.db.get(
+    profileIdSegment as Id<"documentationProfiles">,
+  );
+  if (
+    !profile ||
+    profile.householdId !== householdId ||
+    profile.moveId !== moveId
+  ) {
     throw new Error("Documentation profile not found.");
   }
   return profile;
@@ -6076,7 +10679,7 @@ async function requireApiExportJob(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  exportIdSegment: string
+  exportIdSegment: string,
 ) {
   const job = await ctx.db.get(exportIdSegment as Id<"exportJobs">);
   if (!job || job.householdId !== householdId || job.moveId !== moveId) {
@@ -6089,7 +10692,7 @@ async function requireApiShareLink(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  shareLinkIdSegment: string
+  shareLinkIdSegment: string,
 ) {
   const link = await ctx.db.get(shareLinkIdSegment as Id<"shareLinks">);
   if (!link || link.householdId !== householdId || link.moveId !== moveId) {
@@ -6100,28 +10703,32 @@ async function requireApiShareLink(
 
 function requiredQueryMoveId(query: Record<string, string>) {
   if (!query.moveId) {
-    throw new Error("moveId query parameter is required.");
+    throw invalidField("moveId", "moveId query parameter is required.");
   }
   return query.moveId as Id<"moves">;
 }
 
 function assertApiObjectMoveAccess(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  objectMoveId: Id<"moves">
+  objectMoveId: Id<"moves">,
 ) {
   if (auth.moveId && auth.moveId !== objectMoveId) {
-    throw new Error("API key is not allowed for this operation.");
+    throw new RestApiError({
+      status: 403,
+      code: "insufficient_scope",
+      message: "API key is not allowed for this operation.",
+    });
   }
 }
 
 function assertRequestedMoveMatches(
   args: RestRequestInput,
   objectMoveId: Id<"moves">,
-  message: string
+  message: string,
 ) {
   const requestedMoveId = optionalRequestMoveId(args);
   if (requestedMoveId && requestedMoveId !== objectMoveId) {
-    throw new Error(message);
+    throw new RestApiError({ status: 404, code: "not_found", message });
   }
 }
 
@@ -6160,6 +10767,9 @@ function safeItem(item: Doc<"items">) {
     destinationRoom: item.destinationRoom,
     currentSpaceId: item.currentSpaceId,
     destinationSpaceId: item.destinationSpaceId,
+    destinationSpaceName: item.destinationSpaceId
+      ? item.destinationRoom
+      : undefined,
     category: item.category,
     disposition: item.disposition,
     status: item.status,
@@ -6185,6 +10795,23 @@ function safeItem(item: Doc<"items">) {
     volumeConfidence: item.volumeConfidence,
     highValue: item.highValue,
     needsReview: item.needsReview,
+    assignedResourceId: item.assignedResourceId,
+    assignedZoneId: item.assignedZoneId,
+    assignmentLocked: item.assignmentLocked,
+    assignmentOverrideReason: item.assignmentOverrideReason,
+    assignmentWarnings: item.assignmentWarnings ?? [],
+    assignmentHardBlocks: item.assignmentHardBlocks ?? [],
+    assignmentValidatedAt: item.assignmentValidatedAt,
+    agentLabel: item.agentLabel,
+    aiConfidenceScore: item.aiConfidenceScore,
+    researchSummary: item.researchSummary,
+    researchSources: item.researchSources ?? [],
+    researchNotes: item.researchNotes,
+    researchConfidence: item.researchConfidence,
+    researchedAt: item.researchedAt,
+    researchedByLabel: item.researchedByLabel,
+    deletedAt: item.deletedAt,
+    archivedAt: item.deletedAt ?? null,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };
@@ -6214,24 +10841,7 @@ function safePlannedItem(plannedItem: Doc<"plannedItems">) {
 }
 
 function safeBox(box: Doc<"boxes">) {
-  return {
-    boxId: box._id,
-    code: box.code,
-    label: box.label,
-    room: box.room,
-    destinationRoom: box.destinationRoom,
-    status: box.status,
-    estimatedWeightLb: box.estimatedWeightLb,
-    actualWeightLb: box.actualWeightLb,
-    estimatedVolumeCuFt: box.estimatedVolumeCuFt,
-    assignedResourceId: box.assignedResourceId,
-    assignedZoneId: box.assignedZoneId,
-    assignmentLocked: box.assignmentLocked,
-    assignmentWarnings: box.assignmentWarnings,
-    assignmentHardBlocks: box.assignmentHardBlocks,
-    createdAt: box.createdAt,
-    updatedAt: box.updatedAt,
-  };
+  return safeRestBox(box);
 }
 
 function safeMovePerson(person: Doc<"movePeople">) {
@@ -6442,7 +11052,2199 @@ function safeAiPhotoSuggestion(suggestion: Doc<"aiPhotoSuggestions">) {
   };
 }
 
+function effectiveIngestionStatus(
+  entry: Doc<"ingestionQueueEntries">,
+  now: number,
+): IngestionQueueStatus {
+  return ingestionClaimIsExpired(entry, now) ? "queued" : entry.status;
+}
+
+function optionalIngestionQueueStatus(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  return requiredIngestionQueueStatus(value);
+}
+
+function parseFloorplanEvidenceType(value: unknown) {
+  if (value === undefined || value === "") return "note";
+  if (includesLiteral(restFloorplanEvidenceTypes, value)) {
+    return value as (typeof restFloorplanEvidenceTypes)[number];
+  }
+  throw invalidField(
+    "evidenceType",
+    "Unsupported floorplan evidence type.",
+    restFloorplanEvidenceTypes,
+  );
+}
+
+function parseFloorplanEvidenceSourceType(value: unknown) {
+  if (value === undefined || value === "") return "agentExtraction";
+  if (includesLiteral(restFloorplanEvidenceSourceTypes, value)) {
+    return value as (typeof restFloorplanEvidenceSourceTypes)[number];
+  }
+  throw invalidField(
+    "sourceType",
+    "Unsupported floorplan evidence source type.",
+    restFloorplanEvidenceSourceTypes,
+  );
+}
+
+function parseFloorplanMeasurementKind(value: unknown) {
+  if (value === undefined || value === "") return "known";
+  if (includesLiteral(restFloorplanMeasurementKinds, value)) {
+    return value as (typeof restFloorplanMeasurementKinds)[number];
+  }
+  throw invalidField(
+    "kind",
+    "Unsupported floorplan measurement kind.",
+    restFloorplanMeasurementKinds,
+  );
+}
+
+function parseFloorplanMeasurementType(value: unknown) {
+  if (includesLiteral(restFloorplanMeasurementTypes, value)) {
+    return value as (typeof restFloorplanMeasurementTypes)[number];
+  }
+  throw invalidField(
+    "measurementType",
+    "Unsupported floorplan measurement type.",
+    restFloorplanMeasurementTypes,
+  );
+}
+
+function parseFloorplanSpaceKind(value: unknown) {
+  if (value === undefined) return undefined;
+  if (includesLiteral(restFloorplanSpaceKinds, value)) {
+    return value as (typeof restFloorplanSpaceKinds)[number];
+  }
+  throw invalidField(
+    "kind",
+    "Unsupported floorplan space kind.",
+    restFloorplanSpaceKinds,
+  );
+}
+
+function parseFloorplanPropertyZoneKind(value: unknown, path: string) {
+  if (includesLiteral(restFloorplanPropertyZoneKinds, value)) {
+    return value as (typeof restFloorplanPropertyZoneKinds)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan property zone kind.",
+    restFloorplanPropertyZoneKinds,
+  );
+}
+
+function parseFloorplanAreaRole(value: unknown, path = "areaRole") {
+  if (value === undefined || value === "") return undefined;
+  if (includesLiteral(restFloorplanAreaRoles, value)) {
+    return value as (typeof restFloorplanAreaRoles)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan area role.",
+    restFloorplanAreaRoles,
+  );
+}
+
+function parseFloorplanConstraintStrength(
+  value: unknown,
+  path = "constraintStrength",
+) {
+  if (value === undefined || value === "") return undefined;
+  if (includesLiteral(restFloorplanConstraintStrengths, value)) {
+    return value as (typeof restFloorplanConstraintStrengths)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan constraint strength.",
+    restFloorplanConstraintStrengths,
+  );
+}
+
+function parseFloorplanMeasurementUnit(value: unknown, path = "unit") {
+  if (value === undefined || value === "") return undefined;
+  if (includesLiteral(restFloorplanMeasurementUnits, value)) {
+    return value as (typeof restFloorplanMeasurementUnits)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan measurement unit.",
+    restFloorplanMeasurementUnits,
+  );
+}
+
+function parseFloorplanConnectionKind(value: unknown, path: string) {
+  if (includesLiteral(restFloorplanConnectionKinds, value)) {
+    return value as (typeof restFloorplanConnectionKinds)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan connection kind.",
+    restFloorplanConnectionKinds,
+  );
+}
+
+function parseFloorplanMeasurementSubjectType(value: unknown) {
+  if (includesLiteral(restFloorplanMeasurementSubjectTypes, value)) {
+    return value as (typeof restFloorplanMeasurementSubjectTypes)[number];
+  }
+  throw invalidField(
+    "subjectType",
+    "Unsupported floorplan measurement subject type.",
+    restFloorplanMeasurementSubjectTypes,
+  );
+}
+
+function parseFloorplanMeasurementInputs(value: unknown) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField("measurements", "Expected an array of measurements.");
+  }
+  return value.map((entry, index) => {
+    const input = bodyObject(entry);
+    return {
+      subjectType: parseFloorplanMeasurementSubjectType(input.subjectType),
+      subjectKey: requiredBodyString(
+        input.subjectKey,
+        `measurements.${index}.subjectKey is required.`,
+      ),
+      subjectLabel: requiredBodyString(
+        input.subjectLabel,
+        `measurements.${index}.subjectLabel is required.`,
+      ),
+      measurementType: parseFloorplanMeasurementType(input.measurementType),
+      kind: parseFloorplanMeasurementKind(input.kind),
+      valueIn: optionalNumber(input.valueIn),
+      minIn: optionalNumber(input.minIn),
+      maxIn: optionalNumber(input.maxIn),
+      unit: parseFloorplanMeasurementUnit(
+        input.unit,
+        `measurements.${index}.unit`,
+      ),
+      value: optionalNumber(input.value),
+      minValue: optionalNumber(input.minValue),
+      maxValue: optionalNumber(input.maxValue),
+      displayValue:
+        optionalString(input.displayValue) ??
+        displayMeasurementValue(
+          input.valueIn ?? input.value,
+          input.minIn ?? input.minValue,
+          input.maxIn ?? input.maxValue,
+        ),
+      confidence: parseConfidence(input.confidence),
+      areaRole: parseFloorplanAreaRole(
+        input.areaRole,
+        `measurements.${index}.areaRole`,
+      ),
+      constraintStrength: parseFloorplanConstraintStrength(
+        input.constraintStrength,
+        `measurements.${index}.constraintStrength`,
+      ),
+      sourceObservationIds: parseOptionalTypedIdArray<"floorplanObservations">(
+        input.sourceObservationIds,
+      ),
+      notes: normalizeOptionalText(asString(input.notes)),
+    };
+  });
+}
+
+function parseFloorplanObservationInputs(value: Record<string, unknown>) {
+  const rows = Array.isArray(value.observations)
+    ? value.observations
+    : [value].filter((entry) => Object.keys(entry).length > 0);
+  if (!rows.length) {
+    throw invalidField(
+      "observations",
+      "Provide at least one floorplan observation.",
+    );
+  }
+  return rows.map((entry, index) => {
+    const input = bodyObject(entry);
+    const sourcePhotoId = optionalString(input.sourcePhotoId) as
+      | Id<"itemPhotos">
+      | undefined;
+    return {
+      evidenceId: optionalString(input.evidenceId) as
+        | Id<"floorplanEvidenceRecords">
+        | undefined,
+      sourceType: parseFloorplanEvidenceSourceType(input.sourceType),
+      sourcePhotoId,
+      sourceLabel: normalizeOptionalText(asString(input.sourceLabel)),
+      sourceRegion: parseFloorplanSourceRegion(input.sourceRegion),
+      imageNumber: optionalNumber(input.imageNumber),
+      observationType: parseFloorplanObservationType(
+        input.observationType,
+        `observations.${index}.observationType`,
+      ),
+      status: parseFloorplanObservationStatus(
+        input.status,
+        `observations.${index}.status`,
+      ),
+      title: requiredBodyString(
+        input.title,
+        `observations.${index}.title is required.`,
+      ),
+      subjectKey: normalizeOptionalText(asString(input.subjectKey)),
+      subjectLabel: normalizeOptionalText(asString(input.subjectLabel)),
+      subjectKind: parseFloorplanSubjectKind(
+        input.subjectKind,
+        `observations.${index}.subjectKind`,
+      ),
+      rawText: normalizeOptionalText(asString(input.rawText)),
+      normalized: input.normalized,
+      confidence: parseConfidence(input.confidence),
+      relatedMeasurementIds: parseOptionalTypedIdArray<"floorplanMeasurements">(
+        input.relatedMeasurementIds,
+      ),
+      relatedObservationIds: parseOptionalTypedIdArray<"floorplanObservations">(
+        input.relatedObservationIds,
+      ),
+      notes: normalizeOptionalText(asString(input.notes)),
+      agentLabel: normalizeOptionalText(
+        asString(input.agentLabel ?? value.agentLabel),
+      ),
+    };
+  });
+}
+
+function parseFloorplanRelationshipInputs(
+  _ctx: MutationCtx,
+  value: Record<string, unknown>,
+) {
+  const rows = Array.isArray(value.relationships)
+    ? value.relationships
+    : [value].filter((entry) => Object.keys(entry).length > 0);
+  if (!rows.length) {
+    throw invalidField(
+      "relationships",
+      "Provide at least one floorplan relationship.",
+    );
+  }
+  return rows.map((entry, index) => {
+    const input = bodyObject(entry);
+    return {
+      evidenceId: optionalString(input.evidenceId) as
+        | Id<"floorplanEvidenceRecords">
+        | undefined,
+      sourceType: parseFloorplanEvidenceSourceType(input.sourceType),
+      sourceLabel: normalizeOptionalText(asString(input.sourceLabel)),
+      relationshipType: parseFloorplanRelationshipType(
+        input.relationshipType,
+        `relationships.${index}.relationshipType`,
+      ),
+      status: parseFloorplanObservationStatus(
+        input.status,
+        `relationships.${index}.status`,
+      ),
+      fromSubjectKey: requiredBodyString(
+        input.fromSubjectKey,
+        `relationships.${index}.fromSubjectKey is required.`,
+      ),
+      fromSubjectLabel:
+        optionalString(input.fromSubjectLabel) ??
+        requiredBodyString(
+          input.fromSubjectKey,
+          `relationships.${index}.fromSubjectKey is required.`,
+        ),
+      toSubjectKey: requiredBodyString(
+        input.toSubjectKey,
+        `relationships.${index}.toSubjectKey is required.`,
+      ),
+      toSubjectLabel:
+        optionalString(input.toSubjectLabel) ??
+        requiredBodyString(
+          input.toSubjectKey,
+          `relationships.${index}.toSubjectKey is required.`,
+        ),
+      confidence: parseConfidence(input.confidence),
+      sourceObservationIds: parseOptionalTypedIdArray<"floorplanObservations">(
+        input.sourceObservationIds,
+      ),
+      sourceMeasurementIds: parseOptionalTypedIdArray<"floorplanMeasurements">(
+        input.sourceMeasurementIds,
+      ),
+      evidenceIds: parseOptionalTypedIdArray<"floorplanEvidenceRecords">(
+        input.evidenceIds,
+      ),
+      notes: normalizeOptionalText(asString(input.notes)),
+      agentLabel: normalizeOptionalText(
+        asString(input.agentLabel ?? value.agentLabel),
+      ),
+    };
+  });
+}
+
+function parseFloorplanObservationType(value: unknown, path: string) {
+  if (includesLiteral(restFloorplanObservationTypes, value)) {
+    return value as (typeof restFloorplanObservationTypes)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan observation type.",
+    restFloorplanObservationTypes,
+  );
+}
+
+function parseFloorplanObservationStatus(value: unknown, path = "status") {
+  if (value === undefined || value === "") return undefined;
+  if (includesLiteral(restFloorplanObservationStatuses, value)) {
+    return value as (typeof restFloorplanObservationStatuses)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan observation status.",
+    restFloorplanObservationStatuses,
+  );
+}
+
+function parseFloorplanRelationshipType(value: unknown, path: string) {
+  if (includesLiteral(restFloorplanRelationshipTypes, value)) {
+    return value as (typeof restFloorplanRelationshipTypes)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan relationship type.",
+    restFloorplanRelationshipTypes,
+  );
+}
+
+function parseFloorplanSubjectKind(value: unknown, path: string) {
+  if (value === undefined || value === "") return undefined;
+  if (includesLiteral(restFloorplanSubjectKinds, value)) {
+    return value as (typeof restFloorplanSubjectKinds)[number];
+  }
+  throw invalidField(
+    path,
+    "Unsupported floorplan subject kind.",
+    restFloorplanSubjectKinds,
+  );
+}
+
+function parseOptionalTypedIdArray<TTable extends TableNames>(value: unknown) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw invalidField("ids", "Expected an array of IDs.");
+  }
+  return value.filter(
+    (entry): entry is Id<TTable> => typeof entry === "string",
+  );
+}
+
+function parseFloorplanPuzzleInput(
+  value: Record<string, unknown>,
+): FloorplanPuzzleInput {
+  const rooms = Array.isArray(value.rooms) ? value.rooms : [];
+  return {
+    rooms: rooms.map((entry, index) => {
+      const room = bodyObject(entry);
+      const relativeTo = room.relativeTo
+        ? parseFloorplanRelativeTo(room.relativeTo, index)
+        : undefined;
+      return {
+        id: requiredBodyString(room.id, `rooms.${index}.id is required.`),
+        label:
+          optionalString(room.label) ??
+          requiredBodyString(room.id, `rooms.${index}.id is required.`),
+        kind: parseFloorplanSpaceKind(room.kind),
+        areaRole: parseFloorplanAreaRole(
+          room.areaRole,
+          `rooms.${index}.areaRole`,
+        ),
+        confidence: parseFloorplanVisualConfidence(room.confidence),
+        xIn: optionalNumber(room.xIn),
+        yIn: optionalNumber(room.yIn),
+        widthIn: optionalNumber(room.widthIn),
+        depthIn: optionalNumber(room.depthIn),
+        clearWidthIn: optionalNumber(room.clearWidthIn),
+        clearDepthIn: optionalNumber(room.clearDepthIn),
+        wallThicknessIn: optionalNumber(room.wallThicknessIn),
+        widthRangeIn: parseFloorplanRange(
+          room.widthRangeIn,
+          `rooms.${index}.widthRangeIn`,
+        ),
+        depthRangeIn: parseFloorplanRange(
+          room.depthRangeIn,
+          `rooms.${index}.depthRangeIn`,
+        ),
+        accessNote: normalizeOptionalText(asString(room.accessNote)),
+        unresolvedSubspaces: parseStringArray(room.unresolvedSubspaces),
+        connectsTo: parseFloorplanConnections(room.connectsTo, index),
+        containedIn: optionalString(room.containedIn),
+        partialOutside: room.partialOutside === true,
+        sourceMeasurementIds: parseStringArray(room.sourceMeasurementIds),
+        relativeTo,
+      };
+    }),
+    zones: parseFloorplanPropertyZones(value.zones),
+  };
+}
+
+function parseFloorplanPropertyZones(value: unknown) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw invalidField("zones", "zones must be an array.");
+  }
+  return value.map((entry, index) => {
+    const zone = bodyObject(entry);
+    return {
+      id: requiredBodyString(zone.id, `zones.${index}.id is required.`),
+      label:
+        optionalString(zone.label) ??
+        requiredBodyString(zone.id, `zones.${index}.id is required.`),
+      kind: parseFloorplanPropertyZoneKind(zone.kind, `zones.${index}.kind`),
+      areaRole: parseFloorplanAreaRole(
+        zone.areaRole,
+        `zones.${index}.areaRole`,
+      ),
+      confidence: parseFloorplanVisualConfidence(zone.confidence),
+      xIn: optionalNumber(zone.xIn),
+      yIn: optionalNumber(zone.yIn),
+      widthIn: optionalNumber(zone.widthIn),
+      depthIn: optionalNumber(zone.depthIn),
+      widthRangeIn: parseFloorplanRange(
+        zone.widthRangeIn,
+        `zones.${index}.widthRangeIn`,
+      ),
+      depthRangeIn: parseFloorplanRange(
+        zone.depthRangeIn,
+        `zones.${index}.depthRangeIn`,
+      ),
+      sourceMeasurementIds: parseStringArray(zone.sourceMeasurementIds),
+      partialOutside: zone.partialOutside === true,
+      note: normalizeOptionalText(asString(zone.note)),
+    };
+  });
+}
+
+function parseFloorplanConnections(value: unknown, roomIndex: number) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw invalidField(
+      `rooms.${roomIndex}.connectsTo`,
+      "connectsTo must be an array.",
+    );
+  }
+  return value.map((entry, index) => {
+    const input = bodyObject(entry);
+    const confidence = (parseFloorplanVisualConfidence(input.confidence) ??
+      "low") as "high" | "medium" | "low" | "conflict";
+    return {
+      targetRoomId: requiredBodyString(
+        input.targetRoomId,
+        `rooms.${roomIndex}.connectsTo.${index}.targetRoomId is required.`,
+      ),
+      label: requiredBodyString(
+        input.label,
+        `rooms.${roomIndex}.connectsTo.${index}.label is required.`,
+      ),
+      kind: parseFloorplanConnectionKind(
+        input.kind,
+        `rooms.${roomIndex}.connectsTo.${index}.kind`,
+      ),
+      confidence,
+      note: normalizeOptionalText(asString(input.note)),
+    };
+  });
+}
+
+function parseFloorplanRelativeTo(value: unknown, index: number) {
+  const input = bodyObject(value);
+  const relation = input.relation;
+  if (
+    relation !== "rightOf" &&
+    relation !== "leftOf" &&
+    relation !== "above" &&
+    relation !== "below"
+  ) {
+    throw invalidField(
+      `rooms.${index}.relativeTo.relation`,
+      "relation must be rightOf, leftOf, above, or below.",
+    );
+  }
+  const typedRelation = relation as "rightOf" | "leftOf" | "above" | "below";
+  const align = input.align;
+  if (
+    align !== undefined &&
+    align !== "start" &&
+    align !== "center" &&
+    align !== "end"
+  ) {
+    throw invalidField(
+      `rooms.${index}.relativeTo.align`,
+      "align must be start, center, or end.",
+    );
+  }
+  const typedAlign = align as "start" | "center" | "end" | undefined;
+  return {
+    roomId: requiredBodyString(
+      input.roomId,
+      `rooms.${index}.relativeTo.roomId is required.`,
+    ),
+    relation: typedRelation,
+    align: typedAlign,
+    gapIn: optionalNumber(input.gapIn),
+  };
+}
+
+function parseFloorplanRange(value: unknown, path: string) {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    typeof value[0] !== "number" ||
+    typeof value[1] !== "number"
+  ) {
+    throw invalidField(path, "Range must be [minIn, maxIn].");
+  }
+  return [value[0], value[1]] as [number, number];
+}
+
+function parseFloorplanVisualConfidence(
+  value: unknown,
+): FloorplanConfidence | undefined {
+  if (
+    value === "high" ||
+    value === "medium" ||
+    value === "low" ||
+    value === "conflict"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function floorplanConfidenceFromEstimate(
+  confidence: string,
+): FloorplanConfidence {
+  if (
+    confidence === "high" ||
+    confidence === "medium" ||
+    confidence === "low"
+  ) {
+    return confidence;
+  }
+  if (confidence === "actual" || confidence === "manual") return "high";
+  return "low";
+}
+
+function estimateConfidenceFromFloorplan(confidence: FloorplanConfidence) {
+  return confidence === "conflict" ? "low" : confidence;
+}
+
+function parseFloorplanSourceRegion(value: unknown) {
+  if (value === undefined) return undefined;
+  const input = bodyObject(value);
+  const region = {
+    xPct: optionalNumber(input.xPct),
+    yPct: optionalNumber(input.yPct),
+    widthPct: optionalNumber(input.widthPct),
+    heightPct: optionalNumber(input.heightPct),
+  };
+  if (
+    region.xPct === undefined ||
+    region.yPct === undefined ||
+    region.widthPct === undefined ||
+    region.heightPct === undefined
+  ) {
+    throw invalidField(
+      "sourceRegion",
+      "sourceRegion requires xPct, yPct, widthPct, and heightPct.",
+    );
+  }
+  return region as {
+    xPct: number;
+    yPct: number;
+    widthPct: number;
+    heightPct: number;
+  };
+}
+
+async function validateFloorplanSourcePhoto(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  photoId: Id<"itemPhotos">,
+) {
+  const photo = await ctx.db.get(photoId);
+  if (
+    !photo ||
+    photo.householdId !== householdId ||
+    photo.moveId !== moveId ||
+    photo.archivedAt
+  ) {
+    throw invalidField(
+      "sourcePhotoId",
+      "Source photo was not found on this move.",
+    );
+  }
+}
+
+async function requireFloorplanEvidence(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+  evidenceId: Id<"floorplanEvidenceRecords">,
+) {
+  const evidence = await ctx.db.get(evidenceId);
+  if (
+    !evidence ||
+    evidence.householdId !== auth.householdId ||
+    evidence.moveId !== plan.moveId ||
+    evidence.planId !== plan._id
+  ) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Floorplan evidence not found.",
+    });
+  }
+  return evidence;
+}
+
+async function requireFloorplanObservation(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+  observationId: Id<"floorplanObservations">,
+) {
+  const observation = await ctx.db.get(observationId);
+  if (
+    !observation ||
+    observation.householdId !== auth.householdId ||
+    observation.moveId !== plan.moveId ||
+    observation.planId !== plan._id
+  ) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Floorplan observation not found.",
+    });
+  }
+  return observation;
+}
+
+async function requireFloorplanRelationship(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  plan: Doc<"floorPlans">,
+  relationshipId: Id<"floorplanRelationships">,
+) {
+  const relationship = await ctx.db.get(relationshipId);
+  if (
+    !relationship ||
+    relationship.householdId !== auth.householdId ||
+    relationship.moveId !== plan.moveId ||
+    relationship.planId !== plan._id
+  ) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Floorplan relationship not found.",
+    });
+  }
+  return relationship;
+}
+
+function safeFloorplanEvidence(entry: Doc<"floorplanEvidenceRecords">) {
+  return {
+    evidenceId: entry._id,
+    planId: entry.planId,
+    moveId: entry.moveId,
+    evidenceType: entry.evidenceType,
+    status: entry.status,
+    title: entry.title,
+    summary: entry.summary,
+    confidence: entry.confidence,
+    sourceType: entry.sourceType,
+    areaRole: entry.areaRole,
+    constraintStrength: entry.constraintStrength,
+    sourcePhotoId: entry.sourcePhotoId,
+    sourceLabel: entry.sourceLabel,
+    sourceRegion: entry.sourceRegion,
+    facts: entry.facts,
+    agentLabel: entry.agentLabel,
+    supersededById: entry.supersededById,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+function safeFloorplanObservation(entry: Doc<"floorplanObservations">) {
+  return {
+    observationId: entry._id,
+    planId: entry.planId,
+    moveId: entry.moveId,
+    evidenceId: entry.evidenceId,
+    sourcePhotoId: entry.sourcePhotoId,
+    sourceLabel: entry.sourceLabel,
+    sourceRegion: entry.sourceRegion,
+    imageNumber: entry.imageNumber,
+    observationType: entry.observationType,
+    status: entry.status,
+    title: entry.title,
+    subjectKey: entry.subjectKey,
+    subjectLabel: entry.subjectLabel,
+    subjectKind: entry.subjectKind,
+    rawText: entry.rawText,
+    normalized: entry.normalized,
+    confidence: entry.confidence,
+    provenance: entry.provenance,
+    relatedMeasurementIds: entry.relatedMeasurementIds,
+    relatedObservationIds: entry.relatedObservationIds,
+    supersededById: entry.supersededById,
+    agentLabel: entry.agentLabel,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+function safeFloorplanRelationship(entry: Doc<"floorplanRelationships">) {
+  return {
+    relationshipId: entry._id,
+    planId: entry.planId,
+    moveId: entry.moveId,
+    evidenceId: entry.evidenceId,
+    relationshipType: entry.relationshipType,
+    status: entry.status,
+    fromSubjectKey: entry.fromSubjectKey,
+    fromSubjectLabel: entry.fromSubjectLabel,
+    toSubjectKey: entry.toSubjectKey,
+    toSubjectLabel: entry.toSubjectLabel,
+    confidence: entry.confidence,
+    sourceObservationIds: entry.sourceObservationIds,
+    sourceMeasurementIds: entry.sourceMeasurementIds,
+    evidenceIds: entry.evidenceIds,
+    notes: entry.notes,
+    provenance: entry.provenance,
+    supersededById: entry.supersededById,
+    agentLabel: entry.agentLabel,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+function safeFloorplanMeasurement(entry: Doc<"floorplanMeasurements">) {
+  return {
+    measurementId: entry._id,
+    planId: entry.planId,
+    moveId: entry.moveId,
+    evidenceId: entry.evidenceId,
+    subjectType: entry.subjectType,
+    subjectKey: entry.subjectKey,
+    subjectLabel: entry.subjectLabel,
+    measurementType: entry.measurementType,
+    kind: entry.kind,
+    status: entry.status,
+    valueIn: entry.valueIn,
+    minIn: entry.minIn,
+    maxIn: entry.maxIn,
+    unit: entry.unit,
+    value: entry.value,
+    minValue: entry.minValue,
+    maxValue: entry.maxValue,
+    displayValue: entry.displayValue,
+    confidence: entry.confidence,
+    areaRole: entry.areaRole,
+    constraintStrength: entry.constraintStrength,
+    provenance: entry.provenance,
+    sourceObservationIds: entry.sourceObservationIds,
+    derivedFromMeasurementIds: entry.derivedFromMeasurementIds,
+    supersededById: entry.supersededById,
+    agentLabel: entry.agentLabel,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+function safeFloorplanCalculation(entry: Doc<"floorplanCalculationRecords">) {
+  return {
+    calculationId: entry._id,
+    planId: entry.planId,
+    moveId: entry.moveId,
+    solveRunId: entry.solveRunId,
+    status: entry.status,
+    calculationKind: entry.calculationKind,
+    formulaName: entry.formulaName,
+    label: entry.label,
+    subjectKey: entry.subjectKey,
+    subjectLabel: entry.subjectLabel,
+    outputMeasurementType: entry.outputMeasurementType,
+    unit: entry.unit,
+    value: entry.value,
+    displayValue: entry.displayValue,
+    confidence: entry.confidence,
+    inputMeasurementIds: entry.inputMeasurementIds,
+    outputMeasurementId: entry.outputMeasurementId,
+    diagnostics: entry.diagnostics,
+    agentLabel: entry.agentLabel,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+function floorplanMeasurementForSolver(entry: Doc<"floorplanMeasurements">) {
+  return {
+    id: String(entry._id),
+    subjectType: entry.subjectType,
+    subjectKey: entry.subjectKey,
+    subjectLabel: entry.subjectLabel,
+    measurementType: entry.measurementType,
+    kind: entry.kind,
+    status: entry.status,
+    valueIn: entry.valueIn,
+    minIn: entry.minIn,
+    maxIn: entry.maxIn,
+    unit: entry.unit,
+    value: entry.value,
+    minValue: entry.minValue,
+    maxValue: entry.maxValue,
+    displayValue: entry.displayValue,
+    confidence: floorplanConfidenceFromEstimate(entry.confidence),
+    areaRole: entry.areaRole,
+    constraintStrength: entry.constraintStrength,
+    provenance: entry.provenance.map((source, index) => ({
+      id: `${entry._id}-prov-${index}`,
+      sourceType: source.sourceType,
+      sourceId: source.sourceId,
+      sourcePhotoId: source.sourcePhotoId
+        ? String(source.sourcePhotoId)
+        : undefined,
+      sourceLabel: source.sourceLabel,
+      imageNumber: source.imageNumber,
+      imageRegion: source.imageRegion,
+      notes: source.notes,
+      recordedByLabel: source.recordedByLabel,
+    })),
+    derivedFromMeasurementIds: entry.derivedFromMeasurementIds?.map(String),
+  };
+}
+
+function floorplanObservationForSolver(
+  entry: Doc<"floorplanObservations">,
+): FloorplanObservation {
+  return {
+    id: String(entry._id),
+    observationType: entry.observationType,
+    status: entry.status,
+    title: entry.title,
+    subjectKey: entry.subjectKey,
+    subjectLabel: entry.subjectLabel,
+    subjectKind: entry.subjectKind,
+    rawText: entry.rawText,
+    normalized: entry.normalized,
+    confidence: floorplanConfidenceFromEstimate(entry.confidence),
+    sourcePhotoId: entry.sourcePhotoId
+      ? String(entry.sourcePhotoId)
+      : undefined,
+    sourceLabel: entry.sourceLabel ?? "Floorplan evidence",
+    imageNumber: entry.imageNumber,
+    imageRegion: entry.sourceRegion,
+    relatedMeasurementIds: entry.relatedMeasurementIds?.map(String),
+    relatedObservationIds: entry.relatedObservationIds?.map(String),
+    supersededById: entry.supersededById
+      ? String(entry.supersededById)
+      : undefined,
+    notes: undefined,
+    provenance: entry.provenance.map((source, index) => ({
+      id: `${entry._id}-prov-${index}`,
+      sourceType: source.sourceType,
+      sourceId: source.sourceId,
+      sourcePhotoId: source.sourcePhotoId
+        ? String(source.sourcePhotoId)
+        : undefined,
+      sourceLabel: source.sourceLabel,
+      imageNumber: source.imageNumber,
+      imageRegion: source.imageRegion,
+      notes: source.notes,
+      recordedByLabel: source.recordedByLabel,
+    })),
+  };
+}
+
+function floorplanRelationshipForSolver(
+  entry: Doc<"floorplanRelationships">,
+): FloorplanRelationship {
+  return {
+    id: String(entry._id),
+    relationshipType: entry.relationshipType,
+    status: entry.status,
+    fromSubjectKey: entry.fromSubjectKey,
+    fromSubjectLabel: entry.fromSubjectLabel,
+    toSubjectKey: entry.toSubjectKey,
+    toSubjectLabel: entry.toSubjectLabel,
+    confidence: floorplanConfidenceFromEstimate(entry.confidence),
+    sourceObservationIds: entry.sourceObservationIds?.map(String),
+    sourceMeasurementIds: entry.sourceMeasurementIds?.map(String),
+    evidenceIds: entry.evidenceIds?.map(String),
+    supersededById: entry.supersededById
+      ? String(entry.supersededById)
+      : undefined,
+    notes: entry.notes,
+    provenance: entry.provenance.map((source, index) => ({
+      id: `${entry._id}-prov-${index}`,
+      sourceType: source.sourceType,
+      sourceId: source.sourceId,
+      sourcePhotoId: source.sourcePhotoId
+        ? String(source.sourcePhotoId)
+        : undefined,
+      sourceLabel: source.sourceLabel,
+      imageNumber: source.imageNumber,
+      imageRegion: source.imageRegion,
+      notes: source.notes,
+      recordedByLabel: source.recordedByLabel,
+    })),
+  };
+}
+
+function evidenceGraphDiagnostics(
+  observations: Doc<"floorplanObservations">[],
+  relationships: Doc<"floorplanRelationships">[],
+) {
+  const diagnostics: FloorplanSolveDiagnostic[] = [];
+  if (!observations.length) {
+    diagnostics.push({
+      id: "no-observations",
+      severity: "warning",
+      title: "No extracted observations yet",
+      detail:
+        "The solver needs AI/user observations before it can honestly generate CAD-like geometry.",
+    });
+  }
+  const relationshipSubjectKeys = new Set(
+    relationships.flatMap((relationship) => [
+      relationship.fromSubjectKey,
+      relationship.toSubjectKey,
+    ]),
+  );
+  const floating = observations.filter(
+    (observation) =>
+      observation.subjectKey &&
+      [
+        "opening",
+        "door",
+        "doorway",
+        "doorlessPassage",
+        "window",
+        "fixture",
+      ].includes(observation.observationType) &&
+      !relationshipSubjectKeys.has(observation.subjectKey),
+  );
+  if (floating.length) {
+    diagnostics.push({
+      id: "floating-openings-fixtures",
+      severity: "warning",
+      title: "Some openings or fixtures are not attached",
+      detail: `${floating
+        .slice(0, 5)
+        .map((observation) => observation.title)
+        .join(
+          ", ",
+        )} need openingIn/connectedTo/partOf relationships before draft generation.`,
+    });
+  }
+  const conflicts = relationships.filter(
+    (relationship) => relationship.relationshipType === "conflictsWith",
+  );
+  if (conflicts.length) {
+    diagnostics.push({
+      id: "active-relationship-conflicts",
+      severity: "conflict",
+      title: "Conflict relationships are active",
+      detail:
+        "Resolve or supersede conflicts before generating a final non-overlapping layout.",
+    });
+  }
+  return diagnostics;
+}
+
+function safeFloorplanSolveRun(entry: Doc<"floorplanSolveRuns">) {
+  return {
+    solveRunId: entry._id,
+    planId: entry.planId,
+    moveId: entry.moveId,
+    status: entry.status,
+    solverVersion: entry.solverVersion,
+    diagnostics: entry.diagnostics,
+    geometry: entry.geometry,
+    proposedOps: entry.proposedOps,
+    sourceMeasurementIds: entry.sourceMeasurementIds,
+    sourceObservationIds: entry.sourceObservationIds,
+    sourceRelationshipIds: entry.sourceRelationshipIds,
+    agentLabel: entry.agentLabel,
+    createdAt: entry.createdAt,
+  };
+}
+
+function displayMeasurementValue(
+  valueIn: unknown,
+  minIn: unknown,
+  maxIn: unknown,
+) {
+  const value = optionalNumber(valueIn);
+  if (value !== undefined) return `${value} in`;
+  const min = optionalNumber(minIn);
+  const max = optionalNumber(maxIn);
+  if (min !== undefined && max !== undefined) return `${min}-${max} in`;
+  return "unmeasured";
+}
+
+function requiredIngestionQueueStatus(value: unknown): IngestionQueueStatus {
+  if (
+    typeof value === "string" &&
+    restIngestionQueueStatuses.includes(
+      value as (typeof restIngestionQueueStatuses)[number],
+    )
+  ) {
+    return value as IngestionQueueStatus;
+  }
+  throw invalidField(
+    "status",
+    "Unsupported ingestion queue status.",
+    restIngestionQueueStatuses,
+  );
+}
+
+function optionalIngestionScopeHint(
+  value: unknown,
+): IngestionScopeHint | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (
+    typeof value === "string" &&
+    allIngestionScopeHints.includes(
+      value as (typeof allIngestionScopeHints)[number],
+    )
+  ) {
+    return value as IngestionScopeHint;
+  }
+  throw invalidField(
+    "scopeHint",
+    "Unsupported ingestion queue scope hint.",
+    allIngestionScopeHints,
+  );
+}
+
+function optionalIngestionQueueIntent(
+  value: unknown,
+): IngestionQueueIntent | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (
+    typeof value === "string" &&
+    ingestionQueueIntents.includes(
+      value as (typeof ingestionQueueIntents)[number],
+    )
+  ) {
+    return value as IngestionQueueIntent;
+  }
+  throw invalidField(
+    "intent",
+    "Unsupported ingestion queue intent.",
+    ingestionQueueIntents,
+  );
+}
+
+function parseIngestionMediaPhotoIds(value: unknown): Id<"itemPhotos">[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw invalidField("mediaPhotoIds", "Expected an array of photo IDs.");
+  }
+  return value.map((entry, index) => {
+    const photoId = optionalString(entry);
+    if (!photoId) {
+      throw invalidField(
+        `mediaPhotoIds.${index}`,
+        "Photo IDs must be strings.",
+      );
+    }
+    return photoId as Id<"itemPhotos">;
+  });
+}
+
+async function validateApiIngestionMediaIds(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  mediaPhotoIds: Id<"itemPhotos">[],
+) {
+  for (const photoId of mediaPhotoIds) {
+    const photo = await ctx.db.get(photoId);
+    if (
+      !photo ||
+      photo.householdId !== householdId ||
+      photo.moveId !== moveId ||
+      photo.archivedAt
+    ) {
+      throw invalidField(
+        "mediaPhotoIds",
+        "Attached media does not belong to this move.",
+      );
+    }
+  }
+}
+
+async function requireApiPlanForMove(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  planId: Id<"floorPlans">,
+) {
+  const plan = await ctx.db.get(planId);
+  if (
+    !plan ||
+    plan.householdId !== auth.householdId ||
+    plan.moveId !== moveId ||
+    plan.archivedAt
+  ) {
+    throw invalidField("targetPlanId", "Target floor plan was not found.");
+  }
+  return plan;
+}
+
+function filterIngestionClaimCandidates(
+  entries: Doc<"ingestionQueueEntries">[],
+  filters: {
+    householdId: Id<"households">;
+    scopeHint?: IngestionScopeHint;
+    targetPlanId?: Id<"floorPlans">;
+  },
+) {
+  return entries.filter((entry) => {
+    if (entry.householdId !== filters.householdId) return false;
+    if (!ingestionScopeHintMatches(entry.scopeHint, filters.scopeHint))
+      return false;
+    if (filters.targetPlanId && entry.targetPlanId !== filters.targetPlanId) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function optionalBooleanQuery(value: string | undefined) {
+  if (value === undefined || value === "") return undefined;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw invalidField("query", "Boolean query filters must be true or false.");
+}
+
+async function resolveApiIngestionTarget(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  input: {
+    targetBoxId?: Id<"boxes">;
+    targetItemId?: Id<"items">;
+    targetBoxCode?: string | undefined;
+    targetLabel?: string | undefined;
+  },
+) {
+  const cleanTargetLabel = normalizeOptionalText(input.targetLabel);
+  const cleanTargetBoxCode =
+    input.targetBoxCode !== undefined
+      ? normalizeBoxCode(input.targetBoxCode) || undefined
+      : undefined;
+
+  let targetBox: Doc<"boxes"> | null = null;
+  if (input.targetBoxId) {
+    targetBox = await ctx.db.get(input.targetBoxId);
+    if (
+      !targetBox ||
+      targetBox.householdId !== auth.householdId ||
+      targetBox.moveId !== moveId ||
+      targetBox.archivedAt
+    ) {
+      throw invalidField("targetBoxId", "Target box was not found.");
+    }
+  } else if (cleanTargetBoxCode) {
+    targetBox = await ctx.db
+      .query("boxes")
+      .withIndex("by_move_code", (q) =>
+        q.eq("moveId", moveId).eq("code", cleanTargetBoxCode),
+      )
+      .unique();
+    if (!targetBox || targetBox.householdId !== auth.householdId) {
+      throw invalidField("targetBoxCode", "Target box code was not found.");
+    }
+  }
+
+  let targetItem: Doc<"items"> | null = null;
+  if (input.targetItemId) {
+    targetItem = await ctx.db.get(input.targetItemId);
+    if (
+      !targetItem ||
+      targetItem.householdId !== auth.householdId ||
+      targetItem.moveId !== moveId ||
+      targetItem.deletedAt
+    ) {
+      throw invalidField("targetItemId", "Target item was not found.");
+    }
+  }
+
+  if (targetBox && targetItem) {
+    throw invalidField(
+      "target",
+      "Choose either a target box or a target item for this queue entry.",
+    );
+  }
+
+  return {
+    targetBoxId: targetBox?._id,
+    targetItemId: targetItem?._id,
+    targetBoxCode: targetBox?.code ?? cleanTargetBoxCode,
+    targetLabel:
+      cleanTargetLabel ??
+      targetBox?.label ??
+      targetBox?.code ??
+      targetItem?.name,
+  };
+}
+
+async function requireApiIngestionEntry(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  entryId: Id<"ingestionQueueEntries">,
+) {
+  const entry = await ctx.db.get(entryId);
+  if (!entry || entry.householdId !== householdId || entry.moveId !== moveId) {
+    throw new RestApiError({
+      status: 404,
+      code: "not_found",
+      message: "Ingestion queue entry not found.",
+    });
+  }
+  return entry;
+}
+
+function assertIngestionTransition(
+  entry: Doc<"ingestionQueueEntries">,
+  to: IngestionQueueStatus,
+  now: number,
+) {
+  const from = effectiveIngestionStatus(entry, now);
+  if (!canTransitionIngestionStatus(from, to)) {
+    throw invalidField(
+      "status",
+      `Cannot move a ${from} queue entry to ${to}.`,
+      restIngestionQueueStatuses,
+    );
+  }
+}
+
+async function mediaForIngestionEntry(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  entry: Doc<"ingestionQueueEntries">,
+) {
+  const media = await Promise.all(
+    entry.mediaPhotoIds.map((id) => ctx.db.get(id)),
+  );
+  return media.filter(
+    (photo): photo is Doc<"itemPhotos"> =>
+      photo !== null &&
+      photo.householdId === householdId &&
+      photo.moveId === moveId &&
+      !photo.archivedAt,
+  );
+}
+
+function ingestionMediaKind(photo: Doc<"itemPhotos">) {
+  return photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
+}
+
+function ingestionMediaSummary(media: Doc<"itemPhotos">[]) {
+  const kinds = media.map(ingestionMediaKind);
+  return {
+    count: media.length,
+    imageCount: kinds.filter((kind) => kind === "image").length,
+    audioCount: kinds.filter((kind) => kind === "audio").length,
+    videoCount: kinds.filter((kind) => kind === "video").length,
+    hasImage: kinds.includes("image"),
+    hasAudio: kinds.includes("audio"),
+    hasVideo: kinds.includes("video"),
+  };
+}
+
+function safeIngestionMedia(photo: Doc<"itemPhotos">) {
+  return {
+    ...safePhoto(photo),
+    mediaKind: ingestionMediaKind(photo),
+    evidenceUrlPath: `/api/v1/moves/${photo.moveId}/ingestion-queue/{entryId}/evidence/${photo._id}/url`,
+  };
+}
+
+function safeIngestionQueueEntry(
+  entry: Doc<"ingestionQueueEntries">,
+  {
+    now,
+    media,
+    mediaSummary,
+  }: {
+    now: number;
+    media?: Doc<"itemPhotos">[];
+    mediaSummary?: ReturnType<typeof ingestionMediaSummary>;
+  },
+) {
+  return {
+    entryId: entry._id,
+    moveId: entry.moveId,
+    status: effectiveIngestionStatus(entry, now),
+    storedStatus: entry.status,
+    instructions: entry.instructions,
+    roomHint: entry.roomHint,
+    dispositionHint: entry.dispositionHint,
+    scopeHint: entry.scopeHint,
+    intent: entry.intent,
+    targetBoxId: entry.targetBoxId,
+    targetItemId: entry.targetItemId,
+    targetBoxCode: entry.targetBoxCode,
+    targetLabel: entry.targetLabel,
+    targetPlanId: entry.targetPlanId,
+    mediaPhotoIds: entry.mediaPhotoIds,
+    mediaSummary: mediaSummary ?? ingestionMediaSummary(media ?? []),
+    media: media?.map((photo) => ({
+      ...safeIngestionMedia(photo),
+      evidenceUrlPath: `/api/v1/moves/${entry.moveId}/ingestion-queue/${entry._id}/evidence/${photo._id}/url`,
+    })),
+    sortOrder: entry.sortOrder,
+    claimedByAgentLabel: entry.claimedByAgentLabel,
+    claimedAt: entry.claimedAt,
+    claimExpiresAt: entry.claimExpiresAt,
+    agentSummary: entry.agentSummary,
+    agentQuestion: entry.agentQuestion,
+    resultItemIds: entry.resultItemIds,
+    resultSuggestionIds: entry.resultSuggestionIds,
+    resultRefs: entry.resultRefs,
+    processedAt: entry.processedAt,
+    resolvedAt: entry.resolvedAt,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+function parseOptionalItemIds(value: unknown) {
+  if (value === undefined) return [] as Id<"items">[];
+  if (!Array.isArray(value)) {
+    throw invalidField("resultItemIds", "Expected an array of IDs.");
+  }
+  return value.map((id) => {
+    if (typeof id !== "string" || !id) {
+      throw invalidField("resultItemIds", "IDs must be non-empty strings.");
+    }
+    return id as Id<"items">;
+  });
+}
+
+function parseIngestionResultRefs(value: unknown) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField("resultRefs", "Expected an array of result references.");
+  }
+  return value.map((entry, index) => {
+    const input = bodyObject(entry);
+    const type = normalizeOptionalText(asString(input.type));
+    const id = normalizeOptionalText(asString(input.id));
+    if (!type || !id) {
+      throw invalidField(
+        `resultRefs.${index}`,
+        "Each result reference needs type and id.",
+      );
+    }
+    const label = normalizeOptionalText(asString(input.label));
+    return {
+      type,
+      id,
+      ...(label ? { label } : {}),
+    };
+  });
+}
+
+function parseIngestionProposedItems(
+  value: unknown,
+  entry: Doc<"ingestionQueueEntries">,
+) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField("proposedItems", "Expected an array of proposed items.");
+  }
+  if (value.length > 100) {
+    throw invalidField("proposedItems", "Proposed items are limited to 100.");
+  }
+  return value.map((rawEntry, index) => {
+    const input = bodyObject(rawEntry);
+    const draft = parseApiAiTextItemDraft(input, `proposedItems.${index}`);
+    if (!draft) {
+      throw invalidField(`proposedItems.${index}`, "Expected a proposed item.");
+    }
+    if (input.attachMediaPhotoIds !== undefined) {
+      draft.attachMediaPhotoIds = parseIngestionAttachedMediaIds(
+        input.attachMediaPhotoIds,
+        entry,
+        `proposedItems.${index}.attachMediaPhotoIds`,
+      );
+    }
+    return draft;
+  });
+}
+
+function parseIngestionCommittedItems(
+  value: unknown,
+): Record<string, unknown>[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField(
+      "committedItems",
+      "Expected an array of committed items.",
+    );
+  }
+  if (value.length > 100) {
+    throw invalidField("committedItems", "Committed items are limited to 100.");
+  }
+  return value.map((entry, index) => {
+    const input = bodyObject(entry);
+    if (!Object.keys(input).length) {
+      throw invalidField(
+        `committedItems.${index}`,
+        "Expected a committed item.",
+      );
+    }
+    return input;
+  });
+}
+
+function parseIngestionCommittedBoxes(
+  value: unknown,
+): Record<string, unknown>[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField(
+      "committedBoxes",
+      "Expected an array of committed boxes.",
+    );
+  }
+  if (value.length > 100) {
+    throw invalidField("committedBoxes", "Committed boxes are limited to 100.");
+  }
+  return value.map((entry, index) => {
+    const input = bodyObject(entry);
+    if (!Object.keys(input).length) {
+      throw invalidField(
+        `committedBoxes.${index}`,
+        "Expected a committed box.",
+      );
+    }
+    return input;
+  });
+}
+
+function parseIngestionBoxAssignments(
+  value: unknown,
+): Record<string, unknown>[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField(
+      "boxAssignments",
+      "Expected an array of box assignments.",
+    );
+  }
+  if (value.length > 100) {
+    throw invalidField("boxAssignments", "Box assignments are limited to 100.");
+  }
+  return value.map((entry, index) => {
+    const input = bodyObject(entry);
+    if (!Object.keys(input).length) {
+      throw invalidField(
+        `boxAssignments.${index}`,
+        "Expected a box assignment.",
+      );
+    }
+    return input;
+  });
+}
+
+function parseIngestionLoadAssignments(
+  value: unknown,
+): Record<string, unknown>[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField(
+      "loadAssignments",
+      "Expected an array of load assignments.",
+    );
+  }
+  if (value.length > 100) {
+    throw invalidField(
+      "loadAssignments",
+      "Load assignments are limited to 100.",
+    );
+  }
+  return value.map((entry, index) => {
+    const input = bodyObject(entry);
+    if (!Object.keys(input).length) {
+      throw invalidField(
+        `loadAssignments.${index}`,
+        "Expected a load assignment.",
+      );
+    }
+    return input;
+  });
+}
+
+function parseIngestionAttachedMediaIds(
+  value: unknown,
+  entry: Doc<"ingestionQueueEntries">,
+  path: string,
+): Id<"itemPhotos">[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw invalidField(path, "Expected an array of queue media photo IDs.");
+  }
+  const allowed = new Set(entry.mediaPhotoIds.map(String));
+  return value.map((id, index) => {
+    const photoId = optionalString(id);
+    if (!photoId) {
+      throw invalidField(
+        `${path}.${index}`,
+        "Photo IDs must be non-empty strings.",
+      );
+    }
+    if (!allowed.has(photoId)) {
+      throw invalidField(
+        `${path}.${index}`,
+        "Committed item media attachments must reference media on this queue entry.",
+      );
+    }
+    return photoId as Id<"itemPhotos">;
+  });
+}
+
+function committedItemInputWithoutQueueFields(input: Record<string, unknown>) {
+  const itemInput = { ...input };
+  delete itemInput.attachMediaPhotoIds;
+  delete itemInput.appendNote;
+  delete itemInput.appendNoteLabel;
+  delete itemInput.researchSourceMode;
+  return itemInput;
+}
+
+function committedItemAppendNoteBody(input: Record<string, unknown>) {
+  if (input.appendNote === undefined) return undefined;
+  return {
+    note: input.appendNote,
+    label: input.appendNoteLabel,
+    agentLabel: input.agentLabel,
+  };
+}
+
+function itemResearchSourceModeForPatch(
+  input: Record<string, unknown>,
+  fieldPath: string,
+) {
+  const mode = input.researchSourceMode;
+  if (mode === undefined || mode === null || mode === "" || mode === "append") {
+    return "append";
+  }
+  if (mode === "replace") {
+    return "replace";
+  }
+  throw invalidField(
+    fieldPath,
+    "researchSourceMode must be append or replace.",
+  );
+}
+
+function mergeItemPatchResearchSources(
+  rawInput: Record<string, unknown>,
+  item: Doc<"items">,
+  patch: Partial<Doc<"items">>,
+  fieldPath: string,
+) {
+  if (rawInput.researchSources === undefined) return;
+  if (itemResearchSourceModeForPatch(rawInput, fieldPath) === "replace") return;
+  patch.researchSources = mergeRestItemResearchSources(
+    item.researchSources,
+    parseItemResearchSources(rawInput.researchSources) ?? [],
+  ) as NonNullable<Doc<"items">["researchSources"]>;
+}
+
+async function commitIngestionItems(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    entry,
+    committedItems,
+    now,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    entry: Doc<"ingestionQueueEntries">;
+    committedItems: Record<string, unknown>[];
+    now: number;
+  },
+) {
+  const itemIds: Id<"items">[] = [];
+  const results: Record<string, unknown>[] = [];
+
+  for (const [index, rawInput] of committedItems.entries()) {
+    const attachMediaPhotoIds = parseIngestionAttachedMediaIds(
+      rawInput.attachMediaPhotoIds,
+      entry,
+      `committedItems.${index}.attachMediaPhotoIds`,
+    );
+    const input = committedItemInputWithoutQueueFields(rawInput);
+    const externalKey = externalItemKeyFromInput(input);
+    const explicitItemId = optionalString(input.itemId) as
+      | Id<"items">
+      | undefined;
+    const externalMatch =
+      !explicitItemId && externalKey
+        ? await findApiItemByExternalKey(
+            ctx,
+            auth.householdId,
+            moveId,
+            externalKey,
+          )
+        : null;
+    const matchedItemId = explicitItemId ?? externalMatch?._id;
+
+    let itemId: Id<"items">;
+    let action: "create" | "update";
+    let changedKeys: string[] = [];
+    let appendedNoteLength: number | undefined;
+    const appendNoteBody = committedItemAppendNoteBody(rawInput);
+
+    if (matchedItemId) {
+      const item = await requireApiItem(
+        ctx,
+        auth.householdId,
+        moveId,
+        matchedItemId,
+      );
+      if (
+        externalKey &&
+        (item.externalSource !== externalKey.externalSource ||
+          item.externalId !== externalKey.externalId)
+      ) {
+        await assertExternalItemKeyAvailable(
+          ctx,
+          auth.householdId,
+          moveId,
+          input,
+          item._id,
+        );
+      }
+      const patch = itemPatch(input, auth, item);
+      mergeItemPatchResearchSources(
+        rawInput,
+        item,
+        patch,
+        `committedItems.${index}.researchSourceMode`,
+      );
+      await applyItemSpaceRefs(ctx, auth.householdId, moveId, input, patch);
+      await ctx.db.patch(item._id, patch);
+      itemId = item._id;
+      action = "update";
+      changedKeys = Object.keys(patch);
+      await auditApiWrite(
+        ctx,
+        auth,
+        moveId,
+        "item.api_ingestion_committed_updated",
+        "items",
+        itemId,
+        { entryId: entry._id, rowIndex: index, changedKeys },
+      );
+    } else {
+      const name = normalizeItemName(String(input.name ?? ""));
+      if (!name) {
+        throw invalidField(
+          `committedItems.${index}.name`,
+          "name is required when creating a committed item.",
+        );
+      }
+      await assertExternalItemKeyAvailable(
+        ctx,
+        auth.householdId,
+        moveId,
+        input,
+      );
+      const created = await createApiItem(ctx, auth, moveId, input);
+      itemId = created.itemId;
+      action = "create";
+      await auditApiWrite(
+        ctx,
+        auth,
+        moveId,
+        "item.api_ingestion_committed_created",
+        "items",
+        itemId,
+        { entryId: entry._id, rowIndex: index, name: created.name },
+      );
+    }
+
+    await attachIngestionMediaToItem(ctx, {
+      auth,
+      moveId,
+      entry,
+      itemId,
+      photoIds: attachMediaPhotoIds,
+      now,
+    });
+    if (appendNoteBody) {
+      const item = await requireApiItem(ctx, auth.householdId, moveId, itemId);
+      const { patch, noteLength } = restPrivateItemNoteAppendPatch({
+        body: appendNoteBody,
+        auth,
+        item,
+        now,
+      });
+      await ctx.db.patch(itemId, patch);
+      appendedNoteLength = noteLength;
+      changedKeys = Array.from(new Set([...changedKeys, "privateNotes"]));
+      await auditApiWrite(
+        ctx,
+        auth,
+        moveId,
+        "item.api_ingestion_note_appended",
+        "items",
+        itemId,
+        { entryId: entry._id, rowIndex: index, noteLength },
+      );
+    }
+    pushUniqueId(itemIds, itemId);
+    results.push({
+      index,
+      ok: true,
+      action,
+      itemId,
+      matchedBy: externalMatch
+        ? "externalKey"
+        : explicitItemId
+          ? "itemId"
+          : undefined,
+      attachedMediaPhotoIds: attachMediaPhotoIds,
+      appendedNote: appendedNoteLength !== undefined,
+      appendedNoteLength,
+      changedKeys,
+    });
+  }
+
+  return { itemIds, results };
+}
+
+async function commitIngestionBoxes(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    committedBoxes,
+    now,
+    entryId,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    committedBoxes: Record<string, unknown>[];
+    now: number;
+    entryId: Id<"ingestionQueueEntries">;
+  },
+) {
+  const boxIds: Id<"boxes">[] = [];
+  const results: Record<string, unknown>[] = [];
+
+  for (const [index, input] of committedBoxes.entries()) {
+    const fields = restBoxCreateFields({
+      auth,
+      moveId,
+      body: input,
+      now,
+    }) as Omit<Doc<"boxes">, "_id" | "_creationTime">;
+    Object.assign(
+      fields,
+      await boxDestinationRefsFromInput(ctx, auth.householdId, moveId, input),
+    );
+    const boxId = await ctx.db.insert("boxes", fields);
+    pushUniqueId(boxIds, boxId);
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "box.api_ingestion_committed_created",
+      "boxes",
+      boxId,
+      { entryId, rowIndex: index, code: fields.code },
+    );
+    results.push({
+      index,
+      ok: true,
+      action: "create",
+      boxId,
+      boxCode: fields.code,
+    });
+  }
+
+  return { boxIds, results };
+}
+
+async function commitIngestionBoxAssignments(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    boxAssignments,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    boxAssignments: Record<string, unknown>[];
+  },
+) {
+  const assignmentIds: Id<"boxItems">[] = [];
+  const results: Record<string, unknown>[] = [];
+
+  for (const [index, input] of boxAssignments.entries()) {
+    const box = await resolveApiBoxRef(ctx, auth.householdId, moveId, input);
+    const item = await resolveApiItemRef(ctx, auth.householdId, moveId, input);
+    const result = await upsertApiBoxItemAssignment(ctx, {
+      auth,
+      moveId,
+      box,
+      item,
+      quantity: positiveNumber(input.quantity) ?? 1,
+      notes: normalizeOptionalText(asString(input.notes)),
+      dryRun: false,
+      route: "ingestion_queue",
+    });
+    if (result.assignmentId) {
+      pushUniqueId(assignmentIds, result.assignmentId);
+    }
+    results.push({ index, ok: true, ...result });
+  }
+
+  return { assignmentIds, results };
+}
+
+async function commitIngestionLoadAssignments(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    loadAssignments,
+    entryId,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    loadAssignments: Record<string, unknown>[];
+    entryId: Id<"ingestionQueueEntries">;
+  },
+) {
+  const boxIds: Id<"boxes">[] = [];
+  const itemIds: Id<"items">[] = [];
+  const results: Record<string, unknown>[] = [];
+
+  for (const [index, input] of loadAssignments.entries()) {
+    const hasBoxRef = Boolean(
+      optionalString(input.boxId) || optionalString(input.boxCode),
+    );
+    const hasItemRef = Boolean(
+      optionalString(input.itemId) || externalItemKeyFromInput(input),
+    );
+    const assignedResourceId = optionalString(input.assignedResourceId);
+    const assignedZoneId = optionalString(input.assignedZoneId);
+    const overrideReason = normalizeOptionalText(
+      asString(input.overrideReason),
+    );
+    if ((hasBoxRef ? 1 : 0) + (hasItemRef ? 1 : 0) !== 1) {
+      throw invalidField(
+        `loadAssignments.${index}`,
+        "Exactly one box ref (boxId or boxCode) or item ref (itemId or externalSource/externalId) is required.",
+      );
+    }
+    if (!assignedResourceId) {
+      throw invalidField(
+        `loadAssignments.${index}.assignedResourceId`,
+        "assignedResourceId is required.",
+      );
+    }
+
+    if (hasBoxRef) {
+      const box = await resolveApiBoxRef(ctx, auth.householdId, moveId, input);
+      if (box.assignmentLocked) {
+        throw invalidField(
+          `loadAssignments.${index}.boxId`,
+          "Locked assignments must be changed manually.",
+        );
+      }
+      const validation = await validateApiBoxAssignment(ctx, {
+        householdId: auth.householdId,
+        moveId,
+        box,
+        assignedResourceId,
+        assignedZoneId,
+        overrideReason,
+      });
+      const now = Date.now();
+      await ctx.db.patch(box._id, {
+        assignedResourceId: assignedResourceId as Id<"transportResources">,
+        assignedZoneId: assignedZoneId as Id<"transportZones"> | undefined,
+        assignmentOverrideReason: overrideReason,
+        assignmentWarnings: validation.softWarnings,
+        assignmentHardBlocks: validation.hardBlocks,
+        assignmentValidatedAt: now,
+        updatedAt: now,
+      });
+      await auditApiWrite(
+        ctx,
+        auth,
+        moveId,
+        "assignment.api_ingestion_load_applied",
+        "boxes",
+        box._id,
+        {
+          entryId,
+          rowIndex: index,
+          assignedResourceId,
+          assignedZoneId,
+          warningCount: validation.softWarnings.length,
+        },
+      );
+      pushUniqueId(boxIds, box._id);
+      results.push({
+        index,
+        ok: true,
+        targetType: "box",
+        boxId: box._id,
+        boxCode: box.code,
+        assignedResourceId,
+        assignedZoneId: assignedZoneId || undefined,
+        assignmentWarnings: validation.softWarnings,
+        assignmentHardBlocks: validation.hardBlocks,
+      });
+      continue;
+    }
+
+    const item = await resolveApiItemRef(ctx, auth.householdId, moveId, input);
+    if (item.assignmentLocked) {
+      throw invalidField(
+        `loadAssignments.${index}.itemId`,
+        "Locked assignments must be changed manually.",
+      );
+    }
+    const validation = await validateApiItemAssignment(ctx, {
+      householdId: auth.householdId,
+      moveId,
+      item,
+      assignedResourceId,
+      assignedZoneId,
+      overrideReason,
+    });
+    const now = Date.now();
+    await ctx.db.patch(item._id, {
+      assignedResourceId: assignedResourceId as Id<"transportResources">,
+      assignedZoneId: assignedZoneId as Id<"transportZones"> | undefined,
+      assignmentOverrideReason: overrideReason,
+      assignmentWarnings: validation.softWarnings,
+      assignmentHardBlocks: validation.hardBlocks,
+      assignmentValidatedAt: now,
+      updatedByUserId: auth.createdByUserId,
+      updatedAt: now,
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "assignment.api_ingestion_load_applied",
+      "items",
+      item._id,
+      {
+        entryId,
+        rowIndex: index,
+        assignedResourceId,
+        assignedZoneId,
+        warningCount: validation.softWarnings.length,
+      },
+    );
+    pushUniqueId(itemIds, item._id);
+    results.push({
+      index,
+      ok: true,
+      targetType: "item",
+      itemId: item._id,
+      itemName: item.name,
+      assignedResourceId,
+      assignedZoneId: assignedZoneId || undefined,
+      assignmentWarnings: validation.softWarnings,
+      assignmentHardBlocks: validation.hardBlocks,
+    });
+  }
+
+  return { boxIds, itemIds, results };
+}
+
+async function attachIngestionMediaToItem(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    entry,
+    itemId,
+    photoIds,
+    now,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    entry: Doc<"ingestionQueueEntries">;
+    itemId: Id<"items">;
+    photoIds: Id<"itemPhotos">[];
+    now: number;
+  },
+) {
+  for (const photoId of photoIds) {
+    const photo = await ctx.db.get(photoId);
+    if (
+      !photo ||
+      photo.householdId !== auth.householdId ||
+      photo.moveId !== moveId ||
+      photo.archivedAt ||
+      !entry.mediaPhotoIds.includes(photoId)
+    ) {
+      throw invalidField(
+        "attachMediaPhotoIds",
+        "Attached queue media does not belong to this queue entry.",
+      );
+    }
+    await ctx.db.patch(photoId, {
+      itemId,
+      verificationStatus: "verified",
+      reviewedByUserId: auth.createdByUserId,
+      reviewedAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+async function validateApiResultItems(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  itemIds: Id<"items">[],
+) {
+  for (const itemId of itemIds) {
+    const item = await ctx.db.get(itemId);
+    if (!item || item.householdId !== householdId || item.moveId !== moveId) {
+      throw new RestApiError({
+        status: 404,
+        code: "not_found",
+        message: "Result item not found.",
+      });
+    }
+  }
+}
+
+async function createIngestionAiTextSuggestions(
+  ctx: MutationCtx,
+  {
+    auth,
+    moveId,
+    entry,
+    proposedItems,
+    agentSummary,
+    now,
+    suggestionIds,
+  }: {
+    auth: Awaited<ReturnType<typeof authenticateApiKey>>;
+    moveId: Id<"moves">;
+    entry: Doc<"ingestionQueueEntries">;
+    proposedItems: RestAiTextItemDraft[];
+    agentSummary?: string;
+    now: number;
+    suggestionIds: Id<"aiTextSuggestions">[];
+  },
+) {
+  const sourceText = [
+    entry.instructions,
+    entry.roomHint ? `Room: ${entry.roomHint}` : undefined,
+    entry.dispositionHint ? `Disposition: ${entry.dispositionHint}` : undefined,
+    agentSummary,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  await assertAiUsageAllowed(ctx, {
+    householdId: auth.householdId,
+    moveId,
+    userId: auth.createdByUserId,
+    inputSizeBytes: inputBytesFromText(sourceText || "ingestion queue result"),
+    estimatedCents: 0,
+  });
+  const aiJobId = await ctx.db.insert("aiJobs", {
+    householdId: auth.householdId,
+    moveId,
+    type: "inventoryExtraction",
+    status: "succeeded",
+    modality: "structured",
+    provider: "external-agent",
+    model: "ingestion-queue-api",
+    inputRef: {
+      source: "apiIngestionQueue",
+      entryId: entry._id,
+      mediaPhotoIds: entry.mediaPhotoIds,
+    },
+    inputSummary: sourceText.slice(0, 500),
+    outputRef: {
+      proposedItemCount: proposedItems.length,
+    },
+    outputSummary: `${proposedItems.length} ingestion queue item suggestions submitted.`,
+    confidence: "medium",
+    reviewStatus: "unreviewed",
+    tokenUsage: {
+      inputTokens: Math.max(32, Math.ceil((sourceText.length || 32) / 4)),
+      outputTokens: proposedItems.length * 48,
+      totalTokens:
+        Math.max(32, Math.ceil((sourceText.length || 32) / 4)) +
+        proposedItems.length * 48,
+    },
+    cost: {
+      estimatedCents: 0,
+      actualCents: 0,
+      currency: "USD",
+    },
+    retryCount: 0,
+    maxRetries: 0,
+    createdByUserId: auth.createdByUserId,
+    createdByApiKeyId: auth.apiKeyId,
+    startedAt: now,
+    completedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  for (const [index, draft] of proposedItems.entries()) {
+    const suggestionId = await ctx.db.insert("aiTextSuggestions", {
+      householdId: auth.householdId,
+      moveId,
+      aiJobId,
+      type: "item",
+      status: "pending",
+      sourceText: sourceText || `Ingestion queue entry ${entry._id}`,
+      sourceLine: draft.name,
+      sourceIndex: index,
+      confidence: draft.highValue ? "medium" : "low",
+      reasoning:
+        agentSummary ??
+        "Submitted by an external agent from ingestion queue evidence.",
+      itemDraft: normalizeApiAiTextItemDraft(draft),
+      createdByUserId: auth.createdByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    suggestionIds.push(suggestionId);
+  }
+
+  return aiJobId;
+}
+
 function safePhoto(photo: Doc<"itemPhotos">) {
+  const mediaKind = restPhotoMediaKind(photo);
   return {
     photoId: photo._id,
     itemId: photo.itemId,
@@ -6459,11 +13261,111 @@ function safePhoto(photo: Doc<"itemPhotos">) {
     caption: photo.caption,
     width: photo.width,
     height: photo.height,
+    fileName: photo.fileName,
     mimeType: photo.mimeType,
     sizeBytes: photo.sizeBytes,
+    mediaKind,
+    media: safePhotoMedia(photo),
+    source: photo.source,
+    exifHandlingStatus: photo.exifHandlingStatus,
+    originalMetadata: {
+      source: photo.source,
+      mediaKind,
+      fileName: photo.fileName,
+      mimeType: photo.mimeType,
+      sizeBytes: photo.sizeBytes,
+      width: photo.width,
+      height: photo.height,
+      capturedAt: photo.capturedAt,
+      exifHandlingStatus: photo.exifHandlingStatus,
+      hasOriginalHash: Boolean(photo.originalHash),
+      derivativeStatus: photo.derivativeStatus,
+      derivativesUpdatedAt: photo.derivativesUpdatedAt,
+    },
+    derivativeStatus: photo.derivativeStatus,
+    derivativeError: photo.derivativeError,
+    derivativesUpdatedAt: photo.derivativesUpdatedAt,
+    agentLabel: photo.agentLabel,
+    aiConfidenceScore: photo.aiConfidenceScore,
     capturedAt: photo.capturedAt,
     uploadedAt: photo.createdAt,
     updatedAt: photo.updatedAt,
+  };
+}
+
+function restPhotoMediaKind(photo: Doc<"itemPhotos">) {
+  return photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
+}
+
+function safePhotoMedia(photo: Doc<"itemPhotos">) {
+  const mediaKind = restPhotoMediaKind(photo);
+  const displayUrlBasePath = `/api/v1/photos/${photo._id}/display-url?moveId=${photo.moveId}`;
+  const canAttemptDisplay =
+    mediaKind === "image" &&
+    photo.visibilityScope !== "private" &&
+    !["claimOnly", "sensitive", "hiddenFromGuests", "private"].includes(
+      photo.privacyLevel,
+    );
+  const derivativeReady =
+    canAttemptDisplay &&
+    photo.derivativeStatus === "ready" &&
+    canUsePhotoDerivativeForAi(photo);
+
+  const displayStatus =
+    mediaKind !== "image"
+      ? "unsupported"
+      : !canAttemptDisplay
+        ? "restricted"
+        : derivativeReady
+          ? "ready"
+          : photo.derivativeStatus === "failed"
+            ? "failed"
+            : "pending";
+
+  const variants = restPhotoDerivativeVariants.map((variant) => {
+    const selected =
+      canAttemptDisplay && photo.derivativeStatus === "ready"
+        ? selectDerivativeRef(photo.derivativeRefs, variant)
+        : null;
+    return {
+      variant,
+      status: selected
+        ? ("ready" as const)
+        : displayStatus === "failed"
+          ? ("failed" as const)
+          : displayStatus === "restricted"
+            ? ("restricted" as const)
+            : displayStatus === "unsupported"
+              ? ("unsupported" as const)
+              : ("pending" as const),
+      url: null,
+      displayUrlPath: selected
+        ? `${displayUrlBasePath}&variant=${variant}`
+        : undefined,
+      servedVariant: selected?.variant,
+    };
+  });
+
+  return {
+    kind: mediaKind,
+    display: {
+      status: displayStatus,
+      url: null,
+      displayUrlPath: derivativeReady
+        ? `${displayUrlBasePath}&variant=detail`
+        : undefined,
+      variants,
+      note:
+        displayStatus === "ready"
+          ? "Use displayUrlPath to request a short-lived derivative URL."
+          : displayStatus === "pending"
+            ? "Image derivatives are not ready yet."
+            : displayStatus === "failed"
+              ? "Derivative generation failed; retry or inspect derivativeError."
+              : displayStatus === "restricted"
+                ? "This photo's privacy settings do not allow API derivative display."
+                : "Display derivatives are available only for image evidence.",
+    },
   };
 }
 
@@ -6524,7 +13426,7 @@ function safeApiShareLink(link: Doc<"shareLinks">) {
 
 async function safeApiShareLinkComment(
   ctx: MutationCtx,
-  comment: Doc<"shareLinkComments">
+  comment: Doc<"shareLinkComments">,
 ) {
   const [link, profile] = await Promise.all([
     ctx.db.get(comment.shareLinkId),
@@ -6608,7 +13510,9 @@ function setupMovePatch(
     patch.unitSystem = parseUnitSystem(body.unitSystem) ?? "imperial";
   }
   if (body.documentationProfileTypes !== undefined) {
-    patch.documentationProfileTypes = Array.isArray(body.documentationProfileTypes)
+    patch.documentationProfileTypes = Array.isArray(
+      body.documentationProfileTypes,
+    )
       ? parseDocumentationProfileTypes(body.documentationProfileTypes)
       : undefined;
   }
@@ -6654,11 +13558,13 @@ function setupSpaceInputs(body: Record<string, unknown>) {
   const explicitSpaces = Array.isArray(body.spaces)
     ? body.spaces.map((input) => bodyObject(input))
     : [];
-  const originRooms = (parseStringArray(body.originRooms) ?? []).map((name, index) => ({
-    kind: "originRoom",
-    name,
-    sortOrder: index,
-  }));
+  const originRooms = (parseStringArray(body.originRooms) ?? []).map(
+    (name, index) => ({
+      kind: "originRoom",
+      name,
+      sortOrder: index,
+    }),
+  );
   const destinationRooms = (parseStringArray(body.destinationRooms) ?? []).map(
     (name, index) => ({
       kind: "destinationRoom",
@@ -6668,7 +13574,9 @@ function setupSpaceInputs(body: Record<string, unknown>) {
   );
   const inputs = [...originRooms, ...destinationRooms, ...explicitSpaces];
   if (inputs.length > 100) {
-    throw new Error("spaces plus origin/destination rooms are limited to 100 rows.");
+    throw new Error(
+      "spaces plus origin/destination rooms are limited to 100 rows.",
+    );
   }
   return inputs;
 }
@@ -6749,10 +13657,18 @@ async function upsertApiMoveSpaceForSetup(
     createdAt: now,
     updatedAt: now,
   });
-  await auditApiWrite(ctx, auth, moveId, "space.api_setup_created", "moveSpaces", spaceId, {
-    name,
-    kind,
-  });
+  await auditApiWrite(
+    ctx,
+    auth,
+    moveId,
+    "space.api_setup_created",
+    "moveSpaces",
+    spaceId,
+    {
+      name,
+      kind,
+    },
+  );
   return { action: "created" as const, spaceId, name, kind };
 }
 
@@ -6768,7 +13684,9 @@ async function upsertApiTransportResourceForSetup(
   const preset = presetKey ? getTransportResourcePreset(presetKey) : null;
   const resolvedName = name ?? preset?.name;
   if (!resolvedName) {
-    throw new Error("transportResources[].name is required unless presetKey is provided.");
+    throw new Error(
+      "transportResources[].name is required unless presetKey is provided.",
+    );
   }
 
   const existing = await findApiTransportResourceByName(
@@ -6800,7 +13718,9 @@ async function upsertApiTransportResourceForSetup(
     action = "create";
     const type = preset?.type ?? parseTransportResourceType(input.type);
     if (!type) {
-      throw new Error("transportResources[].type is required unless presetKey is provided.");
+      throw new Error(
+        "transportResources[].type is required unless presetKey is provided.",
+      );
     }
     resourceId = await ctx.db.insert("transportResources", {
       householdId: auth.householdId,
@@ -6808,12 +13728,15 @@ async function upsertApiTransportResourceForSetup(
       type,
       name: resolvedName,
       description:
-        normalizeOptionalText(asString(input.description)) ?? preset?.description,
+        normalizeOptionalText(asString(input.description)) ??
+        preset?.description,
       capacity: parseCapacity(input.capacity) ?? preset?.capacity ?? {},
       capacityReviewStatus:
         parseCapacityReviewStatus(input.capacityReviewStatus) ?? "unreviewed",
       capacityNotes: normalizeOptionalText(asString(input.capacityNotes)),
-      rules: normalizeRuleList(parseStringArray(input.rules) ?? preset?.rules ?? []),
+      rules: normalizeRuleList(
+        parseStringArray(input.rules) ?? preset?.rules ?? [],
+      ),
       sortOrder:
         input.sortOrder !== undefined
           ? normalizeSortOrder(optionalNumber(input.sortOrder))
@@ -6840,7 +13763,14 @@ async function upsertApiTransportResourceForSetup(
   const zoneResults = [];
   for (const [zoneIndex, zone] of zones.entries()) {
     zoneResults.push(
-      await upsertApiTransportZoneForSetup(ctx, auth, moveId, resourceId, zone, zoneIndex),
+      await upsertApiTransportZoneForSetup(
+        ctx,
+        auth,
+        moveId,
+        resourceId,
+        zone,
+        zoneIndex,
+      ),
     );
   }
 
@@ -6890,7 +13820,9 @@ async function upsertApiTransportZoneForSetup(
     name,
     description: normalizeOptionalText(asString(input.description)),
     capacity: parseCapacity(input.capacity) ?? {},
-    preferredTags: normalizeRuleList(parseStringArray(input.preferredTags) ?? []),
+    preferredTags: normalizeRuleList(
+      parseStringArray(input.preferredTags) ?? [],
+    ),
     sortOrder:
       input.sortOrder !== undefined
         ? normalizeSortOrder(optionalNumber(input.sortOrder))
@@ -6950,7 +13882,7 @@ async function createApiTransportResource(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  moveId: Id<"moves">
+  moveId: Id<"moves">,
 ) {
   const body = bodyObject(args.body);
   const presetKey = parseTransportResourcePresetKey(body.presetKey);
@@ -6963,7 +13895,8 @@ async function createApiTransportResource(
       moveId,
       type: preset.type,
       name: normalizeOptionalText(asString(body.name)) ?? preset.name,
-      description: normalizeOptionalText(asString(body.description)) ?? preset.description,
+      description:
+        normalizeOptionalText(asString(body.description)) ?? preset.description,
       capacity: parseCapacity(body.capacity) ?? preset.capacity,
       capacityReviewStatus:
         parseCapacityReviewStatus(body.capacityReviewStatus) ?? "unreviewed",
@@ -6989,7 +13922,7 @@ async function createApiTransportResource(
           createdByUserId: auth.createdByUserId,
           createdAt: now,
           updatedAt: now,
-        })
+        }),
       );
     }
     const [resource, zones] = await Promise.all([
@@ -7003,7 +13936,7 @@ async function createApiTransportResource(
       "transport_resource.api_preset_created",
       "transportResources",
       resourceId,
-      { presetKey, type: preset.type, zoneCount: zoneIds.length }
+      { presetKey, type: preset.type, zoneCount: zoneIds.length },
     );
     return restOk(
       {
@@ -7014,7 +13947,7 @@ async function createApiTransportResource(
             .map((zone) => safeTransportZone(zone)),
         },
       },
-      201
+      201,
     );
   }
 
@@ -7050,11 +13983,15 @@ async function createApiTransportResource(
     "transport_resource.api_created",
     "transportResources",
     resourceId,
-    { type, name }
+    { type, name },
   );
   return restOk(
-    { data: { resource: resource ? safeTransportResource(resource) : { resourceId } } },
-    201
+    {
+      data: {
+        resource: resource ? safeTransportResource(resource) : { resourceId },
+      },
+    },
+    201,
   );
 }
 
@@ -7062,7 +13999,7 @@ async function createApiTransportZone(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ) {
   const resourceId = optionalString(body.resourceId);
   if (!resourceId) {
@@ -7081,7 +14018,9 @@ async function createApiTransportZone(
     name,
     description: normalizeOptionalText(asString(body.description)),
     capacity: parseCapacity(body.capacity) ?? {},
-    preferredTags: normalizeRuleList(parseStringArray(body.preferredTags) ?? []),
+    preferredTags: normalizeRuleList(
+      parseStringArray(body.preferredTags) ?? [],
+    ),
     sortOrder: normalizeSortOrder(optionalNumber(body.sortOrder)),
     createdByUserId: auth.createdByUserId,
     createdAt: now,
@@ -7098,37 +14037,38 @@ async function loadableApiBoxFor(ctx: MutationCtx, box: Doc<"boxes">) {
     memberships.map(async (membership) => {
       const item = await ctx.db.get(membership.itemId);
       return item && !item.deletedAt ? { item, membership } : null;
-    })
+    }),
   );
   const activeContents = contents.filter(
     (entry): entry is { item: Doc<"items">; membership: Doc<"boxItems"> } =>
-      Boolean(entry)
+      Boolean(entry),
   );
   const contentEstimates = activeContents.map(({ item, membership }) =>
-    estimateItem({ ...item, quantity: membership.quantity })
+    estimateItem({ ...item, quantity: membership.quantity }),
   );
   const contentsWeight = sumEstimateValues(
-    contentEstimates.map((estimate) => estimate.weight)
+    contentEstimates.map((estimate) => estimate.weight),
   );
   const contentsVolume = sumEstimateValues(
-    contentEstimates.map((estimate) => estimate.volume)
+    contentEstimates.map((estimate) => estimate.volume),
   );
 
   return {
-    estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight,
+    estimatedWeightLb:
+      box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight,
     estimatedVolumeCuFt: box.estimatedVolumeCuFt ?? contentsVolume,
     dimensionsIn: box.dimensionsIn,
     itemCount: activeContents.reduce(
       (sum, entry) => sum + entry.membership.quantity,
-      0
+      0,
     ),
     hasFragile: activeContents.some((entry) => entry.item.fragility === "high"),
     hasHighValue: activeContents.some((entry) => entry.item.highValue),
     hasSensitive: activeContents.some((entry) =>
-      entry.item.planningDefaultKeys.includes("sensitive")
+      entry.item.planningDefaultKeys.includes("sensitive"),
     ),
     hasPersonalTransport: activeContents.some(
-      (entry) => entry.item.requiresPersonalTransport
+      (entry) => entry.item.requiresPersonalTransport,
     ),
     hasHazardous: activeContents.some((entry) => entry.item.hazardousFlag),
   };
@@ -7143,20 +14083,20 @@ async function validateApiBoxAssignment(
     assignedResourceId: string;
     assignedZoneId?: string;
     overrideReason?: string;
-  }
+  },
 ) {
   const resource = await requireApiTransportResource(
     ctx,
     args.householdId,
     args.moveId,
-    args.assignedResourceId
+    args.assignedResourceId,
   );
   const zone = args.assignedZoneId
     ? await requireApiTransportZone(
         ctx,
         args.householdId,
         args.moveId,
-        args.assignedZoneId
+        args.assignedZoneId,
       )
     : null;
   if (zone && zone.resourceId !== resource._id) {
@@ -7179,15 +14119,80 @@ async function validateApiBoxAssignment(
   return validation;
 }
 
+function loadableApiItemFor(item: Doc<"items">) {
+  const estimate = estimateItem(item);
+  return {
+    estimatedWeightLb: estimate.weight?.value ?? 0,
+    estimatedVolumeCuFt: estimate.volume?.value ?? 0,
+    dimensionsIn: item.dimensionsIn,
+    itemCount: item.quantity ?? 1,
+    hasFragile: item.fragility === "high",
+    hasHighValue: item.highValue,
+    hasSensitive: item.planningDefaultKeys.includes("sensitive"),
+    hasPersonalTransport: item.requiresPersonalTransport,
+    hasHazardous: item.hazardousFlag,
+  };
+}
+
+async function validateApiItemAssignment(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    item: Doc<"items">;
+    assignedResourceId: string;
+    assignedZoneId?: string;
+    overrideReason?: string;
+  },
+) {
+  const resource = await requireApiTransportResource(
+    ctx,
+    args.householdId,
+    args.moveId,
+    args.assignedResourceId,
+  );
+  const zone = args.assignedZoneId
+    ? await requireApiTransportZone(
+        ctx,
+        args.householdId,
+        args.moveId,
+        args.assignedZoneId,
+      )
+    : null;
+  if (zone && zone.resourceId !== resource._id) {
+    throw new Error("Zone does not belong to the assigned resource.");
+  }
+  const validation = validateAssignment({
+    box: loadableApiItemFor(args.item),
+    target: {
+      resourceType: resource.type,
+      capacity: mergeCapacity(resource.capacity, zone?.capacity),
+    },
+  });
+  if (validation.hardBlocks.length) {
+    throw new Error(`Assignment blocked: ${validation.hardBlocks.join(", ")}`);
+  }
+  if (requiresOverrideReason(validation) && !args.overrideReason) {
+    throw new Error("Assignment warnings require an override reason.");
+  }
+  return validation;
+}
+
 async function createApiItem(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
   moveId: Id<"moves">,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ) {
   const now = Date.now();
   const name = normalizeItemName(String(body.name ?? ""));
   const externalKey = externalItemKeyFromInput(body);
+  const spaceRefs = await itemSpaceRefsFromInput(
+    ctx,
+    auth.householdId,
+    moveId,
+    body,
+  );
   const itemId = await ctx.db.insert("items", {
     householdId: auth.householdId,
     moveId,
@@ -7198,12 +14203,22 @@ async function createApiItem(
     description: normalizeOptionalText(asString(body.description)),
     room: normalizeOptionalText(asString(body.room)),
     destinationRoom: normalizeOptionalText(asString(body.destinationRoom)),
+    ...spaceRefs,
     category: normalizeOptionalText(asString(body.category)),
     subcategory: normalizeOptionalText(asString(body.subcategory)),
-    disposition: parseDisposition(body.disposition) ?? "undecided",
-    status: parseItemStatus(body.status) ?? "active",
+    disposition:
+      body.disposition !== undefined
+        ? enumField("disposition", body.disposition, itemDispositions)
+        : "undecided",
+    status:
+      body.status !== undefined
+        ? enumField("status", body.status, itemStatuses)
+        : "active",
     quantity: positiveNumber(body.quantity) ?? 1,
-    condition: parseCondition(body.condition) ?? "unknown",
+    condition:
+      body.condition !== undefined
+        ? enumField("condition", body.condition, itemConditions)
+        : "unknown",
     valueCents: optionalNumber(body.valueCents),
     replacementValueCents: optionalNumber(body.replacementValueCents),
     serialNumber: normalizeOptionalText(asString(body.serialNumber)),
@@ -7219,23 +14234,34 @@ async function createApiItem(
     estimatedVolumeCuFt: optionalNumber(body.estimatedVolumeCuFt),
     estimatedPackedVolumeCuFt: optionalNumber(body.estimatedPackedVolumeCuFt),
     dimensionsConfidence:
-      parsePlanningConfidence(body.dimensionsConfidence, "dimensionsConfidence") ??
-      "none",
+      parsePlanningConfidence(
+        body.dimensionsConfidence,
+        "dimensionsConfidence",
+      ) ?? "none",
     weightConfidence:
-      parsePlanningConfidence(body.weightConfidence, "weightConfidence") ?? "none",
+      parsePlanningConfidence(body.weightConfidence, "weightConfidence") ??
+      "none",
     volumeConfidence:
-      parsePlanningConfidence(body.volumeConfidence, "volumeConfidence") ?? "none",
-    fragility: parseFragility(body.fragility) ?? "low",
+      parsePlanningConfidence(body.volumeConfidence, "volumeConfidence") ??
+      "none",
+    fragility:
+      body.fragility !== undefined
+        ? enumField("fragility", body.fragility, itemFragilities)
+        : "low",
     stackable: body.stackable === undefined ? true : Boolean(body.stackable),
     hazardousFlag: Boolean(body.hazardousFlag),
     highValue: Boolean(body.highValue),
     requiresPersonalTransport: Boolean(body.requiresPersonalTransport),
-    planningDefaultKeys: parsePlanningDefaultKeys(body.planningDefaultKeys) ?? [],
+    planningDefaultKeys:
+      parsePlanningDefaultKeys(body.planningDefaultKeys) ?? [],
     needsReview: Boolean(body.needsReview),
     reviewFlags: normalizeRuleList(parseStringArray(body.reviewFlags) ?? []),
     privateNotes: normalizeOptionalText(asString(body.privateNotes)),
     aiSummary: normalizeOptionalText(asString(body.aiSummary)),
     aiTags: normalizeRuleList(parseStringArray(body.aiTags) ?? []),
+    ...restAssignmentFields(body, now),
+    ...itemResearchFieldsFromBody(body, auth, now),
+    ...restAgentAttributionFields(body, auth, { defaultLabel: true }),
     createdVia: "api",
     createdByUserId: auth.createdByUserId,
     updatedByUserId: auth.createdByUserId,
@@ -7249,7 +14275,7 @@ async function createApiItem(
 async function convertApiPlannedItem(
   ctx: MutationCtx,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  plannedItem: Doc<"plannedItems">
+  plannedItem: Doc<"plannedItems">,
 ) {
   if (plannedItem.convertedItemId) {
     return {
@@ -7296,7 +14322,9 @@ async function convertApiPlannedItem(
   const placements = (
     await ctx.db
       .query("planPlacements")
-      .withIndex("by_planned_item", (q) => q.eq("plannedItemId", plannedItem._id))
+      .withIndex("by_planned_item", (q) =>
+        q.eq("plannedItemId", plannedItem._id),
+      )
       .collect()
   ).filter(
     (placement) =>
@@ -7345,7 +14373,7 @@ async function createApiCsvExport(
     moveId: Id<"moves">;
     type: RestExportJobType;
     documentationProfileId?: Id<"documentationProfiles">;
-  }
+  },
 ) {
   const [items, boxes, boxItems, resources, zones] = await Promise.all([
     ctx.db
@@ -7384,7 +14412,7 @@ async function createApiCsvExport(
     ? activeItems.filter((item) => itemMatchesProfile(item, profile))
     : activeItems;
   const resourceNameById = new Map(
-    resources.map((resource) => [resource._id, resource.name])
+    resources.map((resource) => [resource._id, resource.name]),
   );
   const zoneNameById = new Map(zones.map((zone) => [zone._id, zone.name]));
   const rows = rowsForExport({
@@ -7439,12 +14467,20 @@ async function createApiCsvExport(
     });
   }
 
-  await auditApiWrite(ctx, args.auth, args.moveId, "export.api_completed", "exportJobs", exportJobId, {
-    type: args.type,
-    format: "csv",
-    rowCount: Math.max(rows.length - 1, 0),
-    documentationProfileId: profile?._id,
-  });
+  await auditApiWrite(
+    ctx,
+    args.auth,
+    args.moveId,
+    "export.api_completed",
+    "exportJobs",
+    exportJobId,
+    {
+      type: args.type,
+      format: "csv",
+      rowCount: Math.max(rows.length - 1, 0),
+      documentationProfileId: profile?._id,
+    },
+  );
 
   return {
     exportJobId,
@@ -7455,7 +14491,7 @@ async function createApiCsvExport(
 }
 
 function apiExportVisibility(
-  profile: Doc<"documentationProfiles"> | null
+  profile: Doc<"documentationProfiles"> | null,
 ): ExportVisibility {
   if (!profile) {
     return { values: false, serials: false, privateNotes: false };
@@ -7471,10 +14507,13 @@ function apiExportVisibility(
 
 function itemMatchesProfile(
   item: Doc<"items">,
-  profile: Doc<"documentationProfiles">
+  profile: Doc<"documentationProfiles">,
 ) {
   const filters = profile.filters;
-  if (filters.dispositions?.length && !filters.dispositions.includes(item.disposition)) {
+  if (
+    filters.dispositions?.length &&
+    !filters.dispositions.includes(item.disposition)
+  ) {
     return false;
   }
   if (filters.statuses?.length && !filters.statuses.includes(item.status)) {
@@ -7482,14 +14521,19 @@ function itemMatchesProfile(
   }
   if (
     filters.planningDefaultKeys?.length &&
-    !filters.planningDefaultKeys.some((key) => item.planningDefaultKeys.includes(key))
+    !filters.planningDefaultKeys.some((key) =>
+      item.planningDefaultKeys.includes(key),
+    )
   ) {
     return false;
   }
   if (filters.room && item.room !== filters.room) {
     return false;
   }
-  if (filters.destinationRoom && item.destinationRoom !== filters.destinationRoom) {
+  if (
+    filters.destinationRoom &&
+    item.destinationRoom !== filters.destinationRoom
+  ) {
     return false;
   }
   return true;
@@ -7523,8 +14567,10 @@ function rowsForExport({
           assignedResource: box.assignedResourceId
             ? resourceNameById.get(box.assignedResourceId)
             : undefined,
-          assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
-        }))
+          assignedZone: box.assignedZoneId
+            ? zoneNameById.get(box.assignedZoneId)
+            : undefined,
+        })),
       );
     case "assignments":
       return assignmentCsvRows(
@@ -7535,12 +14581,14 @@ function rowsForExport({
           assignedResource: box.assignedResourceId
             ? resourceNameById.get(box.assignedResourceId)
             : undefined,
-          assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
+          assignedZone: box.assignedZoneId
+            ? zoneNameById.get(box.assignedZoneId)
+            : undefined,
           itemCount: boxItems
             .filter((membership) => membership.boxId === box._id)
             .reduce((total, membership) => total + membership.quantity, 0),
           estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
-        }))
+        })),
       );
   }
 }
@@ -7550,18 +14598,21 @@ function movePatch(body: unknown): Partial<Doc<"moves">> {
   const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
   if (input.title !== undefined) patch.title = String(input.title).trim();
   if (input.status !== undefined) patch.status = parseMoveStatus(input.status);
-  if (input.origin !== undefined) patch.origin = normalizeOptionalText(asString(input.origin));
+  if (input.origin !== undefined)
+    patch.origin = normalizeOptionalText(asString(input.origin));
   if (input.destination !== undefined) {
     patch.destination = normalizeOptionalText(asString(input.destination));
   }
-  if (input.dateStart !== undefined) patch.dateStart = normalizeOptionalText(asString(input.dateStart));
-  if (input.dateEnd !== undefined) patch.dateEnd = normalizeOptionalText(asString(input.dateEnd));
+  if (input.dateStart !== undefined)
+    patch.dateStart = normalizeOptionalText(asString(input.dateStart));
+  if (input.dateEnd !== undefined)
+    patch.dateEnd = normalizeOptionalText(asString(input.dateEnd));
   return patch;
 }
 
 function transportResourcePatch(
   body: unknown,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ): Partial<Doc<"transportResources">> {
   const input = bodyObject(body);
   const now = Date.now();
@@ -7605,7 +14656,7 @@ async function transportZonePatch(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  body: unknown
+  body: unknown,
 ): Promise<Partial<Doc<"transportZones">>> {
   const input = bodyObject(body);
   const patch: Partial<Doc<"transportZones">> = { updatedAt: Date.now() };
@@ -7627,7 +14678,9 @@ async function transportZonePatch(
     patch.capacity = parseCapacity(input.capacity) ?? {};
   }
   if (input.preferredTags !== undefined) {
-    patch.preferredTags = normalizeRuleList(parseStringArray(input.preferredTags) ?? []);
+    patch.preferredTags = normalizeRuleList(
+      parseStringArray(input.preferredTags) ?? [],
+    );
   }
   if (input.sortOrder !== undefined) {
     patch.sortOrder = normalizeSortOrder(optionalNumber(input.sortOrder));
@@ -7637,7 +14690,7 @@ async function transportZonePatch(
 
 function movePersonPatch(
   body: unknown,
-  auth: Awaited<ReturnType<typeof authenticateApiKey>>
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ): Partial<Doc<"movePeople">> {
   const input = bodyObject(body);
   const patch: Partial<Doc<"movePeople">> = {
@@ -7680,9 +14733,9 @@ function verificationNeeded(confidence: Doc<"items">["weightConfidence"]) {
 function hasDimensionsIn(dimensions: Doc<"items">["dimensionsIn"] | undefined) {
   return Boolean(
     dimensions &&
-      (dimensions.lengthIn !== undefined ||
-        dimensions.widthIn !== undefined ||
-        dimensions.heightIn !== undefined),
+    (dimensions.lengthIn !== undefined ||
+      dimensions.widthIn !== undefined ||
+      dimensions.heightIn !== undefined),
   );
 }
 
@@ -7716,8 +14769,10 @@ function apiMeasurementProvenanceEntry({
   fallbackNotes?: string;
 }): NonNullable<NonNullable<Doc<"items">["measurementProvenance"]>["weight"]> {
   const confidence =
-    parsePlanningConfidence(input.confidence, "measurementProvenance.confidence") ??
-    fallbackConfidence;
+    parsePlanningConfidence(
+      input.confidence,
+      "measurementProvenance.confidence",
+    ) ?? fallbackConfidence;
   const apiKeyLabel = `${auth.apiKeyName} (${auth.apiKeyTokenPreview})`;
   return {
     sourceType:
@@ -7793,8 +14848,10 @@ function inferredApiMeasurementProvenance(
   if (body.dimensionsIn !== undefined && hasDimensionsIn(dimensions)) {
     changed = true;
     const confidence =
-      parsePlanningConfidence(body.dimensionsConfidence, "dimensionsConfidence") ??
-      "low";
+      parsePlanningConfidence(
+        body.dimensionsConfidence,
+        "dimensionsConfidence",
+      ) ?? "low";
     provenance.dimensions = apiMeasurementProvenanceEntry({
       input: {},
       auth,
@@ -7833,7 +14890,8 @@ function inferredApiMeasurementProvenance(
   ) {
     changed = true;
     const confidence =
-      parsePlanningConfidence(body.volumeConfidence, "volumeConfidence") ?? "low";
+      parsePlanningConfidence(body.volumeConfidence, "volumeConfidence") ??
+      "low";
     provenance.volume = apiMeasurementProvenanceEntry({
       input: {},
       auth,
@@ -7866,18 +14924,33 @@ function itemPatch(
   if (input.description !== undefined) {
     patch.description = normalizeOptionalText(asString(input.description));
   }
-  if (input.room !== undefined) patch.room = normalizeOptionalText(asString(input.room));
+  if (input.room !== undefined)
+    patch.room = normalizeOptionalText(asString(input.room));
   if (input.destinationRoom !== undefined) {
-    patch.destinationRoom = normalizeOptionalText(asString(input.destinationRoom));
+    patch.destinationRoom = normalizeOptionalText(
+      asString(input.destinationRoom),
+    );
   }
   if (input.category !== undefined) {
     patch.category = normalizeOptionalText(asString(input.category));
   }
-  if (input.disposition !== undefined) patch.disposition = parseDisposition(input.disposition);
-  if (input.status !== undefined) patch.status = parseItemStatus(input.status);
-  if (input.quantity !== undefined) patch.quantity = positiveNumber(input.quantity) ?? 1;
-  if (input.condition !== undefined) patch.condition = parseCondition(input.condition);
-  if (input.valueCents !== undefined) patch.valueCents = optionalNumber(input.valueCents);
+  if (input.disposition !== undefined) {
+    patch.disposition = enumField(
+      "disposition",
+      input.disposition,
+      itemDispositions,
+    );
+  }
+  if (input.status !== undefined) {
+    patch.status = enumField("status", input.status, itemStatuses);
+  }
+  if (input.quantity !== undefined)
+    patch.quantity = positiveNumber(input.quantity) ?? 1;
+  if (input.condition !== undefined) {
+    patch.condition = enumField("condition", input.condition, itemConditions);
+  }
+  if (input.valueCents !== undefined)
+    patch.valueCents = optionalNumber(input.valueCents);
   if (input.replacementValueCents !== undefined) {
     patch.replacementValueCents = optionalNumber(input.replacementValueCents);
   }
@@ -7899,7 +14972,7 @@ function itemPatch(
   if (input.dimensionsConfidence !== undefined) {
     patch.dimensionsConfidence = parsePlanningConfidence(
       input.dimensionsConfidence,
-      "dimensionsConfidence"
+      "dimensionsConfidence",
     );
   }
   if (input.estimatedWeightLb !== undefined) {
@@ -7918,18 +14991,22 @@ function itemPatch(
     patch.estimatedVolumeCuFt = optionalNumber(input.estimatedVolumeCuFt);
   }
   if (input.estimatedPackedVolumeCuFt !== undefined) {
-    patch.estimatedPackedVolumeCuFt = optionalNumber(input.estimatedPackedVolumeCuFt);
+    patch.estimatedPackedVolumeCuFt = optionalNumber(
+      input.estimatedPackedVolumeCuFt,
+    );
   }
   if (input.weightConfidence !== undefined) {
     patch.weightConfidence =
-      parsePlanningConfidence(input.weightConfidence, "weightConfidence") ?? "none";
+      parsePlanningConfidence(input.weightConfidence, "weightConfidence") ??
+      "none";
   }
   if (input.volumeConfidence !== undefined) {
     patch.volumeConfidence =
-      parsePlanningConfidence(input.volumeConfidence, "volumeConfidence") ?? "none";
+      parsePlanningConfidence(input.volumeConfidence, "volumeConfidence") ??
+      "none";
   }
   if (input.fragility !== undefined) {
-    patch.fragility = parseFragility(input.fragility) ?? "low";
+    patch.fragility = enumField("fragility", input.fragility, itemFragilities);
   }
   if (input.stackable !== undefined) patch.stackable = Boolean(input.stackable);
   if (input.hazardousFlag !== undefined) {
@@ -7940,11 +15017,15 @@ function itemPatch(
     patch.requiresPersonalTransport = Boolean(input.requiresPersonalTransport);
   }
   if (input.planningDefaultKeys !== undefined) {
-    patch.planningDefaultKeys = parsePlanningDefaultKeys(input.planningDefaultKeys) ?? [];
+    patch.planningDefaultKeys =
+      parsePlanningDefaultKeys(input.planningDefaultKeys) ?? [];
   }
-  if (input.needsReview !== undefined) patch.needsReview = Boolean(input.needsReview);
+  if (input.needsReview !== undefined)
+    patch.needsReview = Boolean(input.needsReview);
   if (input.reviewFlags !== undefined) {
-    patch.reviewFlags = normalizeRuleList(parseStringArray(input.reviewFlags) ?? []);
+    patch.reviewFlags = normalizeRuleList(
+      parseStringArray(input.reviewFlags) ?? [],
+    );
   }
   if (input.privateNotes !== undefined) {
     patch.privateNotes = normalizeOptionalText(asString(input.privateNotes));
@@ -7954,6 +15035,11 @@ function itemPatch(
   }
   if (input.aiTags !== undefined) {
     patch.aiTags = normalizeRuleList(parseStringArray(input.aiTags) ?? []);
+  }
+  Object.assign(patch, restAssignmentFields(input, now));
+  Object.assign(patch, itemResearchFieldsFromBody(input, auth, now));
+  if (input.agentLabel !== undefined || input.aiConfidenceScore !== undefined) {
+    Object.assign(patch, restAgentAttributionFields(input));
   }
   if (input.externalSource !== undefined || input.externalId !== undefined) {
     const externalKey = externalItemKeyFromInput(input);
@@ -7974,9 +15060,65 @@ function itemPatch(
   return patch;
 }
 
+async function itemSpaceRefsFromInput(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  body: unknown,
+) {
+  const input = bodyObject(body);
+  const refs: Partial<
+    Pick<Doc<"items">, "currentSpaceId" | "destinationSpaceId">
+  > = {};
+  if (
+    input.spaceId !== undefined ||
+    input.currentSpaceId !== undefined ||
+    input.spaceName !== undefined
+  ) {
+    const currentSpace = await resolveApiSpaceRef(
+      ctx,
+      householdId,
+      moveId,
+      {
+        ...input,
+        currentSpaceId: input.currentSpaceId ?? input.spaceId,
+      },
+      { idPath: "currentSpaceId", namePath: "spaceName" },
+    );
+    refs.currentSpaceId = currentSpace?._id;
+  }
+  if (
+    input.destinationSpaceId !== undefined ||
+    input.destinationSpaceName !== undefined
+  ) {
+    const destinationSpace = await resolveApiSpaceRef(
+      ctx,
+      householdId,
+      moveId,
+      input,
+      { idPath: "destinationSpaceId", namePath: "destinationSpaceName" },
+    );
+    refs.destinationSpaceId = destinationSpace?._id;
+  }
+  return refs;
+}
+
+async function applyItemSpaceRefs(
+  ctx: MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  body: unknown,
+  patch: Partial<Doc<"items">>,
+) {
+  Object.assign(
+    patch,
+    await itemSpaceRefsFromInput(ctx, householdId, moveId, body),
+  );
+}
+
 function plannedItemPatch(
   body: unknown,
-  userId: Id<"users">
+  userId: Id<"users">,
 ): Partial<Doc<"plannedItems">> {
   const input = bodyObject(body);
   const patch: Partial<Doc<"plannedItems">> = {
@@ -8006,7 +15148,7 @@ function plannedItemPatch(
   if (input.dimensionsConfidence !== undefined) {
     patch.dimensionsConfidence = parsePlanningConfidence(
       input.dimensionsConfidence,
-      "dimensionsConfidence"
+      "dimensionsConfidence",
     );
   }
   if (input.estimatedPriceCents !== undefined) {
@@ -8016,7 +15158,9 @@ function plannedItemPatch(
     patch.url = normalizeOptionalText(asString(input.url));
   }
   if (input.priority !== undefined) {
-    patch.priority = normalizePlannedItemPriority(optionalNumber(input.priority));
+    patch.priority = normalizePlannedItemPriority(
+      optionalNumber(input.priority),
+    );
   }
   if (input.notes !== undefined) {
     patch.notes = normalizeOptionalText(asString(input.notes));
@@ -8028,7 +15172,7 @@ function plannedItemPatch(
 }
 
 function parseDimensionsIn(
-  value: unknown
+  value: unknown,
 ): Doc<"items">["dimensionsIn"] | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -8046,28 +15190,7 @@ function parseDimensionsIn(
 }
 
 function boxPatch(body: unknown): Partial<Doc<"boxes">> {
-  const input = bodyObject(body);
-  const patch: Partial<Doc<"boxes">> = { updatedAt: Date.now() };
-  if (input.code !== undefined) patch.code = normalizeBoxCode(String(input.code));
-  if (input.label !== undefined) patch.label = normalizeOptionalText(asString(input.label));
-  if (input.room !== undefined) patch.room = normalizeOptionalText(asString(input.room));
-  if (input.destinationRoom !== undefined) {
-    patch.destinationRoom = normalizeOptionalText(asString(input.destinationRoom));
-  }
-  if (input.description !== undefined) {
-    patch.description = normalizeOptionalText(asString(input.description));
-  }
-  if (input.status !== undefined) patch.status = parseBoxStatus(input.status);
-  if (input.estimatedWeightLb !== undefined) {
-    patch.estimatedWeightLb = optionalNumber(input.estimatedWeightLb);
-  }
-  if (input.actualWeightLb !== undefined) {
-    patch.actualWeightLb = optionalNumber(input.actualWeightLb);
-  }
-  if (input.estimatedVolumeCuFt !== undefined) {
-    patch.estimatedVolumeCuFt = optionalNumber(input.estimatedVolumeCuFt);
-  }
-  return patch;
+  return restBoxPatch(body) as Partial<Doc<"boxes">>;
 }
 
 async function photoAttachPatch(
@@ -8077,7 +15200,7 @@ async function photoAttachPatch(
     moveId: Id<"moves">;
     reviewedByUserId: Id<"users">;
     body: unknown;
-  }
+  },
 ): Promise<Partial<Doc<"itemPhotos">>> {
   const input = bodyObject(args.body);
   const now = Date.now();
@@ -8089,6 +15212,17 @@ async function photoAttachPatch(
       await requireApiItem(ctx, args.householdId, args.moveId, itemId);
     }
     patch.itemId = itemId;
+  } else if (
+    input.externalSource !== undefined ||
+    input.externalId !== undefined
+  ) {
+    const item = await resolveApiItemRef(
+      ctx,
+      args.householdId,
+      args.moveId,
+      input,
+    );
+    patch.itemId = item._id;
   }
   if (input.boxId !== undefined) {
     const boxId = optionalString(input.boxId) as Id<"boxes"> | undefined;
@@ -8096,9 +15230,19 @@ async function photoAttachPatch(
       await requireApiBox(ctx, args.householdId, args.moveId, boxId);
     }
     patch.boxId = boxId;
+  } else if (input.boxCode !== undefined) {
+    const box = await resolveApiBoxRef(
+      ctx,
+      args.householdId,
+      args.moveId,
+      input,
+    );
+    patch.boxId = box._id;
   }
   if (input.spaceId !== undefined) {
-    const spaceId = optionalString(input.spaceId) as Id<"moveSpaces"> | undefined;
+    const spaceId = optionalString(input.spaceId) as
+      | Id<"moveSpaces">
+      | undefined;
     if (spaceId) {
       const space = await ctx.db.get(spaceId);
       if (
@@ -8111,6 +15255,14 @@ async function photoAttachPatch(
       }
     }
     patch.spaceId = spaceId;
+  } else if (input.spaceName !== undefined) {
+    const space = await resolveApiSpaceRef(
+      ctx,
+      args.householdId,
+      args.moveId,
+      input,
+    );
+    patch.spaceId = space?._id;
   }
   if (input.transportResourceId !== undefined) {
     const transportResourceId = optionalString(input.transportResourceId) as
@@ -8154,26 +15306,28 @@ async function photoAttachPatch(
   }
   if (input.documentationProfileTypes !== undefined) {
     patch.documentationProfileTypes = parseDocumentationProfileTypes(
-      input.documentationProfileTypes
+      input.documentationProfileTypes,
     );
   }
   if (input.caption !== undefined) {
     patch.caption = normalizeOptionalText(asString(input.caption));
   }
   if (input.photoType !== undefined) {
-    const photoType = parsePhotoType(input.photoType);
-    if (!photoType) throw new Error("Unsupported photoType.");
-    patch.photoType = photoType;
+    patch.photoType = enumField("photoType", input.photoType, photoTypes);
   }
   if (input.privacyLevel !== undefined) {
-    const privacyLevel = parsePhotoPrivacyLevel(input.privacyLevel);
-    if (!privacyLevel) throw new Error("Unsupported privacyLevel.");
-    patch.privacyLevel = privacyLevel;
+    patch.privacyLevel = enumField(
+      "privacyLevel",
+      input.privacyLevel,
+      photoPrivacyLevels,
+    );
   }
   if (input.visibilityScope !== undefined) {
-    const visibilityScope = parsePhotoVisibilityScope(input.visibilityScope);
-    if (!visibilityScope) throw new Error("Unsupported visibilityScope.");
-    patch.visibilityScope = visibilityScope;
+    patch.visibilityScope = enumField(
+      "visibilityScope",
+      input.visibilityScope,
+      photoVisibilityScopes,
+    );
   }
   if (input.source !== undefined) {
     const source = parsePhotoSource(input.source);
@@ -8181,7 +15335,9 @@ async function photoAttachPatch(
     patch.source = source;
   }
   if (input.exifHandlingStatus !== undefined) {
-    const exifHandlingStatus = parseExifHandlingStatus(input.exifHandlingStatus);
+    const exifHandlingStatus = parseExifHandlingStatus(
+      input.exifHandlingStatus,
+    );
     if (!exifHandlingStatus) throw new Error("Unsupported exifHandlingStatus.");
     patch.exifHandlingStatus = exifHandlingStatus;
   }
@@ -8190,12 +15346,15 @@ async function photoAttachPatch(
     if (!confidence) throw new Error("Unsupported confidence.");
     patch.confidence = confidence;
   }
+  if (input.agentLabel !== undefined || input.aiConfidenceScore !== undefined) {
+    Object.assign(patch, restAgentAttributionFields(input));
+  }
   if (input.notes !== undefined) {
     patch.notes = normalizeOptionalText(asString(input.notes));
   }
   if (input.verificationStatus !== undefined) {
     const verificationStatus = parsePhotoVerificationStatus(
-      input.verificationStatus
+      input.verificationStatus,
     );
     if (!verificationStatus) throw new Error("Unsupported verificationStatus.");
     patch.verificationStatus = verificationStatus;
@@ -8219,7 +15378,7 @@ async function auditApiWrite(
   action: string,
   objectTable: string,
   objectId: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ) {
   await recordAuditEvent(ctx, {
     householdId: auth.householdId,
@@ -8240,7 +15399,7 @@ async function auditApiDocumentationProfile(
   moveId: Id<"moves">,
   action: string,
   documentationProfileId: Id<"documentationProfiles">,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ) {
   await recordAuditEvent(ctx, {
     householdId: auth.householdId,
@@ -8261,7 +15420,7 @@ async function auditApiMovePerson(
   moveId: Id<"moves">,
   action: string,
   personId: Id<"movePeople">,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ) {
   await recordAuditEvent(ctx, {
     householdId: auth.householdId,
@@ -8277,7 +15436,19 @@ async function auditApiMovePerson(
 }
 
 function optionalNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function optionalPlanKind(value: unknown): "destination" | "origin" {
+  if (value === undefined || value === "") {
+    return "destination";
+  }
+  if (value === "destination" || value === "origin") {
+    return value;
+  }
+  throw invalidField("kind", "Plan kind must be destination or origin.");
 }
 
 function positiveNumber(value: unknown) {
@@ -8290,7 +15461,12 @@ function normalizePlannedItemPriority(value: number | undefined) {
   return Math.min(4, Math.max(1, Math.round(value)));
 }
 
-function boundedInteger(value: unknown, min: number, max: number, fallback: number) {
+function boundedInteger(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
   }
@@ -8305,16 +15481,82 @@ function optionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function querySearchTerm(query: Record<string, string>) {
+  return optionalString(query.query) ?? optionalString(query.search);
+}
+
+function sectionOptionsFromQuery(
+  query: Record<string, string>,
+): ApiSectionOptions {
+  const sections = optionalString(query.sections)
+    ?.split(",")
+    .map((section) => section.trim())
+    .filter(Boolean);
+  const requestedLimit = Number(optionalString(query.maxPerSection) ?? "");
+  return {
+    sections: sections?.length ? new Set(sections) : undefined,
+    maxPerSection: Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.floor(requestedLimit), 1), maxSectionLimit)
+      : undefined,
+  };
+}
+
+function sectionIncluded(options: ApiSectionOptions, section: ApiSectionName) {
+  return !options.sections || options.sections.has(section);
+}
+
+function boundedSection<T>(
+  rows: T[],
+  section: ApiSectionName,
+  options: ApiSectionOptions,
+) {
+  const defaultLimit = defaultSectionLimits[section] ?? defaultSectionLimit;
+  const limit = options.maxPerSection ?? defaultLimit;
+  return {
+    rows: rows.slice(0, limit),
+    meta: {
+      total: rows.length,
+      limit,
+      returned: Math.min(rows.length, limit),
+      truncated: rows.length > limit,
+    },
+  };
+}
+
+function addBoundedSection<T>(
+  target: Record<string, unknown>,
+  meta: Record<string, unknown>,
+  options: ApiSectionOptions,
+  section: ApiSectionName,
+  rows: T[],
+) {
+  if (!sectionIncluded(options, section)) return;
+  const bounded = boundedSection(rows, section, options);
+  target[section] = bounded.rows;
+  meta[section] = bounded.meta;
+}
+
+function matchesSearch(search: string | undefined, values: unknown[]) {
+  if (!search) return true;
+  const normalized = search.toLowerCase();
+  return values
+    .filter(
+      (value): value is string | number =>
+        typeof value === "string" || typeof value === "number",
+    )
+    .some((value) => String(value).toLowerCase().includes(normalized));
+}
+
 function requiredBodyString(value: unknown, message: string) {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(message);
+    throw invalidField("body", message);
   }
   return value.trim();
 }
 
 function requiredOps(value: unknown) {
   if (!Array.isArray(value)) {
-    throw new Error("ops must be an array.");
+    throw invalidField("ops", "ops must be an array.");
   }
   return value;
 }
@@ -8360,12 +15602,26 @@ function externalItemKeyFromInput(input: Record<string, unknown>) {
 
   const externalSource = normalizeExternalKeyPart(
     input.externalSource,
-    "externalSource"
+    "externalSource",
   );
   const externalId = normalizeExternalKeyPart(input.externalId, "externalId");
   if (!externalSource && !externalId) return null;
   if (!externalSource || !externalId) {
-    throw new Error("externalSource and externalId must be provided together.");
+    throw new RestApiError({
+      status: 400,
+      code: "validation_error",
+      message: "externalSource and externalId must be provided together.",
+      fields: [
+        {
+          path: "externalSource",
+          message: "externalSource is required when externalId is provided.",
+        },
+        {
+          path: "externalId",
+          message: "externalId is required when externalSource is provided.",
+        },
+      ],
+    });
   }
   return { externalSource, externalId };
 }
@@ -8374,7 +15630,7 @@ async function findApiItemByExternalKey(
   ctx: MutationCtx,
   householdId: Id<"households">,
   moveId: Id<"moves">,
-  externalKey: { externalSource: string; externalId: string }
+  externalKey: { externalSource: string; externalId: string },
 ) {
   const item = await ctx.db
     .query("items")
@@ -8382,12 +15638,13 @@ async function findApiItemByExternalKey(
       q
         .eq("moveId", moveId)
         .eq("externalSource", externalKey.externalSource)
-        .eq("externalId", externalKey.externalId)
+        .eq("externalId", externalKey.externalId),
     )
     .collect();
   return (
-    item.find((entry) => entry.householdId === householdId && !entry.deletedAt) ??
-    null
+    item.find(
+      (entry) => entry.householdId === householdId && !entry.deletedAt,
+    ) ?? null
   );
 }
 
@@ -8396,7 +15653,7 @@ async function assertExternalItemKeyAvailable(
   householdId: Id<"households">,
   moveId: Id<"moves">,
   input: unknown,
-  allowedItemId?: Id<"items">
+  allowedItemId?: Id<"items">,
 ) {
   const externalKey = externalItemKeyFromInput(bodyObject(input));
   if (!externalKey) return;
@@ -8404,10 +15661,21 @@ async function assertExternalItemKeyAvailable(
     ctx,
     householdId,
     moveId,
-    externalKey
+    externalKey,
   );
   if (existing && existing._id !== allowedItemId) {
-    throw new Error("External source key already exists for this move.");
+    throw new RestApiError({
+      status: 409,
+      code: "external_key_conflict",
+      message: "External source key already exists for this move.",
+      fields: [
+        {
+          path: "externalId",
+          message:
+            "externalSource and externalId must be unique within a move.",
+        },
+      ],
+    });
   }
 }
 
@@ -8418,7 +15686,9 @@ function parseMoveStatus(value: unknown) {
 }
 
 function parseMoveType(value: unknown) {
-  return includesLiteral(moveTypes, value) ? (value as Doc<"moves">["type"]) : undefined;
+  return includesLiteral(moveTypes, value)
+    ? (value as Doc<"moves">["type"])
+    : undefined;
 }
 
 function parseUnitSystem(value: unknown) {
@@ -8442,12 +15712,6 @@ function parsePcsDependentStatus(value: unknown) {
 function parsePcsShipmentType(value: unknown) {
   return includesLiteral(pcsShipmentTypes, value)
     ? (value as Doc<"moves">["pcsShipmentType"])
-    : undefined;
-}
-
-function parseItemStatus(value: unknown) {
-  return includesLiteral(itemStatuses, value)
-    ? (value as Doc<"items">["status"])
     : undefined;
 }
 
@@ -8507,6 +15771,78 @@ function parseSaleResearchSources(value: unknown) {
   });
 }
 
+function parseItemResearchSources(
+  value: unknown,
+): NonNullable<Doc<"items">["researchSources"]> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .slice(0, 25)
+    .map((entry) => {
+      const source = bodyObject(entry);
+      return removeUndefined({
+        title: normalizeOptionalText(asString(source.title)),
+        url: normalizeOptionalText(asString(source.url)),
+        summary: normalizeOptionalText(asString(source.summary)),
+        status: parseItemResearchSourceStatus(source.status),
+        checkedAt: optionalNumber(source.checkedAt),
+      });
+    })
+    .filter((source) => Object.keys(source).length > 0);
+}
+
+function parseItemResearchSourceStatus(value: unknown) {
+  return includesLiteral(restItemResearchSourceStatuses, value)
+    ? (value as (typeof restItemResearchSourceStatuses)[number])
+    : undefined;
+}
+
+function itemResearchFieldsFromBody(
+  body: unknown,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  now: number,
+): Partial<Doc<"items">> {
+  const input = bodyObject(body);
+  const touched =
+    input.researchSummary !== undefined ||
+    input.researchSources !== undefined ||
+    input.researchNotes !== undefined ||
+    input.researchConfidence !== undefined ||
+    input.researchedAt !== undefined ||
+    input.researchedByLabel !== undefined;
+
+  if (!touched) return {};
+
+  const patch: Partial<Doc<"items">> = {
+    researchedAt: optionalNumber(input.researchedAt) ?? now,
+    researchedByUserId: auth.createdByUserId,
+    researchedByApiKeyId: auth.apiKeyId,
+    researchedByLabel:
+      normalizeOptionalText(asString(input.researchedByLabel)) ??
+      `API key: ${auth.apiKeyName} (${auth.apiKeyTokenPreview})`,
+  };
+
+  if (input.researchSummary !== undefined) {
+    patch.researchSummary = normalizeOptionalText(
+      asString(input.researchSummary),
+    );
+  }
+  if (input.researchSources !== undefined) {
+    patch.researchSources =
+      parseItemResearchSources(input.researchSources) ?? [];
+  }
+  if (input.researchNotes !== undefined) {
+    patch.researchNotes = normalizeOptionalText(asString(input.researchNotes));
+  }
+  if (input.researchConfidence !== undefined) {
+    patch.researchConfidence = parsePlanningConfidence(
+      input.researchConfidence,
+      "researchConfidence",
+    );
+  }
+
+  return patch;
+}
+
 function parsePhotoIdArray(value: unknown) {
   if (!Array.isArray(value)) return undefined;
   return value
@@ -8524,7 +15860,8 @@ function saleListingPatchFromBody(
     patch.status = parseSaleListingStatus(body.status) ?? "needsPrep";
   }
   if (body.platform !== undefined) {
-    patch.platform = parseSaleListingPlatform(body.platform) ?? "facebookMarketplace";
+    patch.platform =
+      parseSaleListingPlatform(body.platform) ?? "facebookMarketplace";
   }
   if (body.platformLabel !== undefined) {
     patch.platformLabel = normalizeOptionalText(asString(body.platformLabel));
@@ -8533,7 +15870,9 @@ function saleListingPatchFromBody(
     patch.listingTitle = normalizeOptionalText(asString(body.listingTitle));
   }
   if (body.listingDescription !== undefined) {
-    patch.listingDescription = normalizeOptionalText(asString(body.listingDescription));
+    patch.listingDescription = normalizeOptionalText(
+      asString(body.listingDescription),
+    );
   }
   if (body.category !== undefined) {
     patch.category = normalizeOptionalText(asString(body.category));
@@ -8550,7 +15889,8 @@ function saleListingPatchFromBody(
   if (body.listingUrl !== undefined) {
     patch.listingUrl = normalizeOptionalText(asString(body.listingUrl));
   }
-  if (body.listedAt !== undefined) patch.listedAt = optionalNumber(body.listedAt);
+  if (body.listedAt !== undefined)
+    patch.listedAt = optionalNumber(body.listedAt);
   if (body.lastRefreshedAt !== undefined) {
     patch.lastRefreshedAt = optionalNumber(body.lastRefreshedAt);
   }
@@ -8558,20 +15898,26 @@ function saleListingPatchFromBody(
     patch.suggestedPriceLowCents = optionalNumber(body.suggestedPriceLowCents);
   }
   if (body.suggestedPriceHighCents !== undefined) {
-    patch.suggestedPriceHighCents = optionalNumber(body.suggestedPriceHighCents);
+    patch.suggestedPriceHighCents = optionalNumber(
+      body.suggestedPriceHighCents,
+    );
   }
   if (body.officialPriceCents !== undefined) {
     patch.officialPriceCents = optionalNumber(body.officialPriceCents);
   }
   if (body.currency !== undefined) {
-    const currency = normalizeOptionalText(asString(body.currency))?.toUpperCase();
+    const currency = normalizeOptionalText(
+      asString(body.currency),
+    )?.toUpperCase();
     patch.currency = currency && /^[A-Z]{3}$/.test(currency) ? currency : "USD";
   }
   if (body.pricingConfidence !== undefined) {
     patch.pricingConfidence = parseConfidence(body.pricingConfidence) ?? "none";
   }
   if (body.priceDecisionSource !== undefined) {
-    patch.priceDecisionSource = normalizeOptionalText(asString(body.priceDecisionSource));
+    patch.priceDecisionSource = normalizeOptionalText(
+      asString(body.priceDecisionSource),
+    );
   }
   if (body.userOverrodePrice !== undefined) {
     patch.userOverrodePrice = Boolean(body.userOverrodePrice);
@@ -8580,7 +15926,8 @@ function saleListingPatchFromBody(
     patch.researchDepth = parseSaleResearchDepth(body.researchDepth) ?? "none";
   }
   if (body.researchSources !== undefined) {
-    patch.researchSources = parseSaleResearchSources(body.researchSources) ?? [];
+    patch.researchSources =
+      parseSaleResearchSources(body.researchSources) ?? [];
     patch.researchSourceCount = patch.researchSources.length;
   }
   if (body.researchSourceCount !== undefined) {
@@ -8630,39 +15977,9 @@ function saleListingPatchFromBody(
   return patch;
 }
 
-function parseCondition(value: unknown) {
-  return includesLiteral(itemConditions, value)
-    ? (value as Doc<"items">["condition"])
-    : undefined;
-}
-
-function parseBoxStatus(value: unknown) {
-  return includesLiteral(boxStatuses, value)
-    ? (value as Doc<"boxes">["status"])
-    : undefined;
-}
-
 function parseMovePersonRole(value: unknown) {
   return includesLiteral(restMovePersonRoles, value)
     ? (value as Doc<"movePeople">["role"])
-    : undefined;
-}
-
-function parsePhotoType(value: unknown) {
-  return includesLiteral(photoTypes, value)
-    ? (value as Doc<"itemPhotos">["photoType"])
-    : undefined;
-}
-
-function parsePhotoPrivacyLevel(value: unknown) {
-  return includesLiteral(photoPrivacyLevels, value)
-    ? (value as Doc<"itemPhotos">["privacyLevel"])
-    : undefined;
-}
-
-function parsePhotoVisibilityScope(value: unknown) {
-  return includesLiteral(photoVisibilityScopes, value)
-    ? (value as Doc<"itemPhotos">["visibilityScope"])
     : undefined;
 }
 
@@ -8714,7 +16031,9 @@ function parseAiSuggestionStatus(value: unknown) {
   return value as Doc<"aiTextSuggestions">["status"];
 }
 
-function parsePlanningApprovals(body: unknown): PlanningSuggestionApprovalInput[] {
+function parsePlanningApprovals(
+  body: unknown,
+): PlanningSuggestionApprovalInput[] {
   const input = bodyObject(body);
   const rows = Array.isArray(input.approvals) ? input.approvals : [];
   if (!rows.length) {
@@ -8734,14 +16053,14 @@ function parsePlanningApprovals(body: unknown): PlanningSuggestionApprovalInput[
       estimateDraft: parseEstimateDraftPatch(approval.estimateDraft),
       assignmentDraft: parseAssignmentDraftPatch(approval.assignmentDraft),
       assignmentOverrideReason: normalizeOptionalText(
-        asString(approval.assignmentOverrideReason)
+        asString(approval.assignmentOverrideReason),
       ),
     };
   });
 }
 
 function parseEstimateDraftPatch(
-  value: unknown
+  value: unknown,
 ): PlanningSuggestionApprovalInput["estimateDraft"] {
   if (value === undefined) return undefined;
   const input = bodyObject(value);
@@ -8754,17 +16073,17 @@ function parseEstimateDraftPatch(
     estimatedPackedVolumeCuFt: optionalNumber(input.estimatedPackedVolumeCuFt),
     weightConfidence: parsePlanningConfidence(
       input.weightConfidence,
-      "estimateDraft.weightConfidence"
+      "estimateDraft.weightConfidence",
     ),
     volumeConfidence: parsePlanningConfidence(
       input.volumeConfidence,
-      "estimateDraft.volumeConfidence"
+      "estimateDraft.volumeConfidence",
     ),
   });
 }
 
 function parseAssignmentDraftPatch(
-  value: unknown
+  value: unknown,
 ): PlanningSuggestionApprovalInput["assignmentDraft"] {
   if (value === undefined) return undefined;
   const input = bodyObject(value);
@@ -8792,14 +16111,6 @@ function parsePlanningConfidence(value: unknown, label: string) {
   return value as Doc<"aiPlanningSuggestions">["confidence"];
 }
 
-function parseFragility(value: unknown): Doc<"items">["fragility"] | undefined {
-  if (value === undefined || value === "") return undefined;
-  if (!includesLiteral(itemFragilities, value)) {
-    throw new Error("Unsupported fragility.");
-  }
-  return value as Doc<"items">["fragility"];
-}
-
 function parsePlanningDefaultKeys(
   value: unknown,
 ): Doc<"items">["planningDefaultKeys"] | undefined {
@@ -8812,7 +16123,7 @@ function parsePlanningDefaultKeys(
 
 function parseDocumentationProfileTypes(value: unknown) {
   const values = parseStringArray(value)?.filter((entry) =>
-    includesLiteral(documentationProfileTypes, entry)
+    includesLiteral(documentationProfileTypes, entry),
   ) as (typeof documentationProfileTypes)[number][] | undefined;
   return normalizeDocumentationProfileTypes(values);
 }
@@ -8832,7 +16143,7 @@ function parseDocumentationProfileType(value: unknown) {
 }
 
 function parseDocumentationProfileStatus(
-  value: unknown
+  value: unknown,
 ): DocumentationProfileStatus | undefined {
   if (value === undefined || value === "") return undefined;
   if (!includesLiteral(documentationProfileStatuses, value)) {
@@ -8842,17 +16153,15 @@ function parseDocumentationProfileStatus(
 }
 
 function parseDocumentationFieldKeys(
-  value: unknown
+  value: unknown,
 ): DocumentationFieldKey[] | undefined {
-  return parseLiteralArray(
-    value,
-    documentationFieldKeys,
-    "includedFields"
-  ) as DocumentationFieldKey[] | undefined;
+  return parseLiteralArray(value, documentationFieldKeys, "includedFields") as
+    | DocumentationFieldKey[]
+    | undefined;
 }
 
 function parseDocumentationImageRule(
-  value: unknown
+  value: unknown,
 ): DocumentationImageRule | undefined {
   if (value === undefined || value === "") return undefined;
   if (!includesLiteral(documentationImageRules, value)) {
@@ -8861,7 +16170,9 @@ function parseDocumentationImageRule(
   return value as DocumentationImageRule;
 }
 
-function parseDocumentationFilters(value: unknown): DocumentationFilters | undefined {
+function parseDocumentationFilters(
+  value: unknown,
+): DocumentationFilters | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("filters must be an object.");
@@ -8871,13 +16182,17 @@ function parseDocumentationFilters(value: unknown): DocumentationFilters | undef
     dispositions: parseLiteralArray(
       input.dispositions,
       itemDispositions,
-      "filters.dispositions"
+      "filters.dispositions",
     ),
-    statuses: parseLiteralArray(input.statuses, itemStatuses, "filters.statuses"),
+    statuses: parseLiteralArray(
+      input.statuses,
+      itemStatuses,
+      "filters.statuses",
+    ),
     planningDefaultKeys: parseLiteralArray(
       input.planningDefaultKeys,
       planningDefaultKeys,
-      "filters.planningDefaultKeys"
+      "filters.planningDefaultKeys",
     ),
     room: asString(input.room),
     destinationRoom: asString(input.destinationRoom),
@@ -8887,7 +16202,7 @@ function parseDocumentationFilters(value: unknown): DocumentationFilters | undef
 function parseLiteralArray<TValue extends string>(
   value: unknown,
   allowed: readonly TValue[],
-  label: string
+  label: string,
 ): TValue[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) {
@@ -8956,15 +16271,19 @@ function parseTransportResourcePresetKey(value: unknown) {
 
 function parseCapacityReviewStatus(value: unknown) {
   if (value === undefined || value === "") return undefined;
-  if (value === "unreviewed" || value === "estimated" || value === "confirmed") {
+  if (
+    value === "unreviewed" ||
+    value === "estimated" ||
+    value === "confirmed"
+  ) {
     return value;
   }
   throw new Error("Invalid capacityReviewStatus.");
 }
 
-function parseCapacity(value: unknown):
-  | Doc<"transportResources">["capacity"]
-  | undefined {
+function parseCapacity(
+  value: unknown,
+): Doc<"transportResources">["capacity"] | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
@@ -9016,21 +16335,29 @@ function parseIdArray(value: unknown) {
   if (!Array.isArray(value)) {
     throw new Error("Expected an array of IDs.");
   }
-  const ids = value.filter((entry): entry is string => typeof entry === "string");
+  const ids = value.filter(
+    (entry): entry is string => typeof entry === "string",
+  );
   if (ids.length !== value.length) {
     throw new Error("ID arrays may only contain strings.");
   }
   return ids;
 }
 
-function removeUndefined<TValue extends Record<string, unknown>>(value: TValue) {
+function removeUndefined<TValue extends Record<string, unknown>>(
+  value: TValue,
+) {
   return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined)
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
   ) as {
     [TKey in keyof TValue as undefined extends TValue[TKey] ? TKey : TKey]:
       | Exclude<TValue[TKey], undefined>
       | undefined;
   };
+}
+
+function isPresent<TValue>(value: TValue | null | undefined): value is TValue {
+  return value !== null && value !== undefined;
 }
 
 function capacityPercent({
@@ -9047,7 +16374,7 @@ function capacityPercent({
 
 function mergeCapacity(
   resourceCapacity: Doc<"transportResources">["capacity"],
-  zoneCapacity?: Doc<"transportZones">["capacity"]
+  zoneCapacity?: Doc<"transportZones">["capacity"],
 ) {
   if (!zoneCapacity) {
     return resourceCapacity;
@@ -9056,28 +16383,28 @@ function mergeCapacity(
   return {
     maxWeightLb: minOptional(
       resourceCapacity.maxWeightLb,
-      zoneCapacity.maxWeightLb
+      zoneCapacity.maxWeightLb,
     ),
     maxVolumeCuFt: minOptional(
       resourceCapacity.maxVolumeCuFt,
-      zoneCapacity.maxVolumeCuFt
+      zoneCapacity.maxVolumeCuFt,
     ),
     maxItemCount: minOptional(
       resourceCapacity.maxItemCount,
-      zoneCapacity.maxItemCount
+      zoneCapacity.maxItemCount,
     ),
     dimensions: {
       lengthIn: minOptional(
         resourceCapacity.dimensions?.lengthIn,
-        zoneCapacity.dimensions?.lengthIn
+        zoneCapacity.dimensions?.lengthIn,
       ),
       widthIn: minOptional(
         resourceCapacity.dimensions?.widthIn,
-        zoneCapacity.dimensions?.widthIn
+        zoneCapacity.dimensions?.widthIn,
       ),
       heightIn: minOptional(
         resourceCapacity.dimensions?.heightIn,
-        zoneCapacity.dimensions?.heightIn
+        zoneCapacity.dimensions?.heightIn,
       ),
     },
     weightIsUnlimited:
@@ -9099,13 +16426,13 @@ function includesLiteral(values: readonly string[], value: unknown) {
   return typeof value === "string" && values.includes(value);
 }
 
-function errorStatus(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  if (message.includes("invalid api key") || message.includes("bearer")) return 401;
-  if (message.includes("not allowed") || message.includes("scope")) return 403;
-  if (message.includes("not found")) return 404;
-  if (message.includes("idempotency") || message.includes("already exists")) {
-    return 409;
+function enumField<T extends string>(
+  path: string,
+  value: unknown,
+  validValues: readonly T[],
+): T {
+  if (includesLiteral(validValues, value)) {
+    return value as T;
   }
-  return 400;
+  throw invalidField(path, `Unsupported ${path}.`, validValues);
 }

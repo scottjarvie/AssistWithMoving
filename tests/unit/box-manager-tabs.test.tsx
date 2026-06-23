@@ -4,8 +4,39 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 
+const apiMock = vi.hoisted(() => ({
+  boxes: {
+    addItem: "boxes.addItem",
+    create: "boxes.create",
+    listForMove: "boxes.listForMove",
+    removeItem: "boxes.removeItem",
+    update: "boxes.update",
+  },
+  items: {
+    create: "items.create",
+    listForMove: "items.listForMove",
+  },
+  photos: {
+    updateEvidence: "photos.updateEvidence",
+  },
+  moveSpaces: {
+    listForMove: "moveSpaces.listForMove",
+  },
+  transportResources: {
+    listForMoveWithZones: "transportResources.listForMoveWithZones",
+  },
+}));
+
 const boxData = vi.hoisted(() => ({
   queryCall: 0,
+  mutations: {
+    addItem: vi.fn(),
+    createBox: vi.fn(),
+    createItem: vi.fn(),
+    removeItem: vi.fn(),
+    updatePhoto: vi.fn(),
+    updateBox: vi.fn(),
+  },
   boxes: [
     {
       box: {
@@ -114,20 +145,92 @@ const boxData = vi.hoisted(() => ({
     } as unknown as Doc<"items">,
   ],
   resources: [],
+  spaces: [
+    {
+      _id: "space_storage" as Id<"moveSpaces">,
+      _creationTime: 1,
+      householdId: "household_123" as Id<"households">,
+      moveId: "move_123" as Id<"moves">,
+      kind: "storage",
+      name: "Storage",
+      floorLevel: "Garage",
+      status: "active",
+      aliases: [],
+      photoCount: 0,
+      createdByUserId: "user_123" as Id<"users">,
+      updatedByUserId: "user_123" as Id<"users">,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ],
+}));
+
+vi.mock("../../convex/_generated/api", () => ({
+  api: apiMock,
 }));
 
 vi.mock("convex/react", () => ({
-  useMutation: () => vi.fn(),
-  useQuery: () => {
-    const results = [boxData.boxes, boxData.items, boxData.resources];
-    const result = results[boxData.queryCall % results.length];
-    boxData.queryCall += 1;
-    return result;
+  useMutation: (mutation: string) => {
+    switch (mutation) {
+      case apiMock.boxes.addItem:
+        return boxData.mutations.addItem;
+      case apiMock.boxes.create:
+        return boxData.mutations.createBox;
+      case apiMock.boxes.removeItem:
+        return boxData.mutations.removeItem;
+      case apiMock.boxes.update:
+        return boxData.mutations.updateBox;
+      case apiMock.items.create:
+        return boxData.mutations.createItem;
+      case apiMock.photos.updateEvidence:
+        return boxData.mutations.updatePhoto;
+      default:
+        return vi.fn();
+    }
+  },
+  useQuery: (query: string) => {
+    switch (query) {
+      case apiMock.boxes.listForMove:
+        return boxData.boxes;
+      case apiMock.items.listForMove:
+        return boxData.items;
+      case apiMock.transportResources.listForMoveWithZones:
+        return boxData.resources;
+      case apiMock.moveSpaces.listForMove:
+        return boxData.spaces;
+      default:
+        return undefined;
+    }
   },
 }));
 
 vi.mock("@/components/photo-upload-control", () => ({
-  PhotoUploadControl: () => <div>Photo upload control</div>,
+  PhotoUploadControl: (props: {
+    label?: string;
+    uploadDisabled?: boolean;
+    uploadDisabledMessage?: string;
+    onUploaded?: (photo: { photoId: Id<"itemPhotos"> }) => void;
+  }) => (
+    <div>
+      <p>Photo upload control</p>
+      {props.label ? <p>{props.label}</p> : null}
+      {props.uploadDisabled && props.uploadDisabledMessage ? (
+        <p>{props.uploadDisabledMessage}</p>
+      ) : null}
+      <button
+        type="button"
+        disabled={props.uploadDisabled}
+        aria-label={`Simulate ${props.label ?? "photo upload"}`}
+        onClick={() =>
+          props.onUploaded?.({
+            photoId: "photo_uploaded" as Id<"itemPhotos">,
+          })
+        }
+      >
+        Simulate upload
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/photo-evidence-strip", () => ({
@@ -139,6 +242,12 @@ import { BoxManager } from "@/components/box-manager";
 describe("BoxManager", () => {
   beforeEach(() => {
     boxData.queryCall = 0;
+    boxData.mutations.addItem.mockReset();
+    boxData.mutations.createBox.mockReset();
+    boxData.mutations.createItem.mockReset();
+    boxData.mutations.removeItem.mockReset();
+    boxData.mutations.updatePhoto.mockReset();
+    boxData.mutations.updateBox.mockReset();
     window.history.replaceState(null, "", "/app/moves/move_123/boxes");
   });
 
@@ -178,6 +287,9 @@ describe("BoxManager", () => {
     expect(
       screen.getByRole("form", { name: "Create box" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("New box destination location")).toHaveValue(
+      "",
+    );
 
     await user.click(screen.getByRole("tab", { name: "Boxes" }));
     await user.click(screen.getByRole("button", { name: "Labels" }));
@@ -218,6 +330,7 @@ describe("BoxManager", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
     expect(screen.getByLabelText("Box label")).toBeInTheDocument();
+    expect(screen.getByLabelText("Box destination location")).toBeInTheDocument();
     expect(screen.queryByText("B-002")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Change box" }));
@@ -259,7 +372,8 @@ describe("BoxManager", () => {
     expect(screen.getByText("Focused on B-001")).toBeInTheDocument();
     expect(screen.getByLabelText("Item to add to box")).toBeInTheDocument();
     expect(screen.queryByLabelText("Box label")).not.toBeInTheDocument();
-    expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
+    expect(screen.getByText("Photo upload control")).toBeInTheDocument();
+    expect(screen.getByText("Photo for new item in B-001")).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Assigned transport resource"),
     ).not.toBeInTheDocument();
@@ -299,6 +413,188 @@ describe("BoxManager", () => {
       screen.getByRole("columnheader", { name: "Code" }),
     ).toBeInTheDocument();
     expect(screen.getAllByText("Storage").length).toBeGreaterThan(0);
+  }, 10000);
+
+  it("creates a new item directly inside the focused box", async () => {
+    const user = userEvent.setup();
+    boxData.mutations.createItem.mockResolvedValueOnce(
+      "item_created" as Id<"items">,
+    );
+    boxData.mutations.addItem.mockResolvedValueOnce(undefined);
+
+    render(
+      <BoxManager
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Contents" }));
+    await user.click(
+      screen.getByRole("button", { name: "Open contents for B-001" }),
+    );
+
+    const createInsideForm = screen.getByRole("form", {
+      name: "Create item inside B-001",
+    });
+    await user.type(
+      within(createInsideForm).getByLabelText("New item name inside B-001"),
+      "Tape dispenser",
+    );
+    await user.clear(
+      within(createInsideForm).getByLabelText("New item quantity inside B-001"),
+    );
+    await user.type(
+      within(createInsideForm).getByLabelText(
+        "New item quantity inside B-001",
+      ),
+      "2",
+    );
+    await user.type(
+      within(createInsideForm).getByLabelText(
+        "New item category inside B-001",
+      ),
+      "Packing",
+    );
+    await user.type(
+      within(createInsideForm).getByLabelText("New item notes inside B-001"),
+      "Found after opening the box.",
+    );
+    await user.click(within(createInsideForm).getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(boxData.mutations.createItem).toHaveBeenCalledWith({
+        householdId: "household_123",
+        moveId: "move_123",
+        name: "Tape dispenser",
+        room: "Garage",
+        destinationRoom: "Storage",
+        category: "Packing",
+        description: "Found after opening the box.",
+        disposition: "mover",
+        status: "packed",
+        quantity: 2,
+        needsReview: true,
+        reviewFlags: ["boxContentsReview"],
+        aiTags: ["box-content-capture"],
+        createdVia: "manual",
+      }),
+    );
+    expect(boxData.mutations.addItem).toHaveBeenCalledWith({
+      householdId: "household_123",
+      moveId: "move_123",
+      boxId: "box_1",
+      itemId: "item_created",
+      quantity: 2,
+    });
+    expect(
+      await screen.findByText("Tape dispenser created inside B-001."),
+    ).toBeInTheDocument();
+    expect(
+      within(createInsideForm).getByLabelText("New item name inside B-001"),
+    ).toHaveValue("");
+    expect(
+      within(createInsideForm).getByLabelText("New item quantity inside B-001"),
+    ).toHaveValue("1");
+  });
+
+  it("creates a boxed item from a photo and attaches the uploaded photo", async () => {
+    const user = userEvent.setup();
+    boxData.mutations.createItem.mockResolvedValueOnce(
+      "photo_item_created" as Id<"items">,
+    );
+    boxData.mutations.addItem.mockResolvedValueOnce(undefined);
+    boxData.mutations.updatePhoto.mockResolvedValueOnce(undefined);
+
+    render(
+      <BoxManager
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Contents" }));
+    await user.click(
+      screen.getByRole("button", { name: "Open contents for B-001" }),
+    );
+
+    expect(
+      screen.getByText("Enter an item name before uploading the photo."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Simulate Photo for new item in B-001",
+      }),
+    ).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText("Photo item name inside B-001"),
+      "Loose drill bits",
+    );
+    await user.clear(screen.getByLabelText("Photo item quantity inside B-001"));
+    await user.type(
+      screen.getByLabelText("Photo item quantity inside B-001"),
+      "3",
+    );
+    await user.type(
+      screen.getByLabelText("Photo item category inside B-001"),
+      "Tools",
+    );
+    await user.type(
+      screen.getByLabelText("Photo item notes inside B-001"),
+      "Three small bins visible in the photo.",
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Simulate Photo for new item in B-001",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(boxData.mutations.createItem).toHaveBeenCalledWith({
+        householdId: "household_123",
+        moveId: "move_123",
+        name: "Loose drill bits",
+        room: "Garage",
+        destinationRoom: "Storage",
+        category: "Tools",
+        description: "Three small bins visible in the photo.",
+        disposition: "mover",
+        status: "packed",
+        quantity: 3,
+        needsReview: true,
+        reviewFlags: ["boxContentsReview", "photoEvidenceReview"],
+        aiTags: ["box-content-capture", "photo-created-item"],
+        createdVia: "manual",
+      }),
+    );
+    expect(boxData.mutations.addItem).toHaveBeenCalledWith({
+      householdId: "household_123",
+      moveId: "move_123",
+      boxId: "box_1",
+      itemId: "photo_item_created",
+      quantity: 3,
+    });
+    expect(boxData.mutations.updatePhoto).toHaveBeenCalledWith({
+      householdId: "household_123",
+      moveId: "move_123",
+      photoId: "photo_uploaded",
+      itemId: "photo_item_created",
+      boxId: "box_1",
+      room: "Garage",
+      caption: "Loose drill bits",
+      photoType: "item",
+      notes: "Three small bins visible in the photo.",
+    });
+    expect(
+      await screen.findByText("Loose drill bits created from photo inside B-001."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Photo item name inside B-001")).toHaveValue(
+      "",
+    );
+    expect(screen.getByLabelText("Photo item quantity inside B-001")).toHaveValue(
+      "1",
+    );
   });
 
   it("opens label workflow when routed to the box labels hash", async () => {

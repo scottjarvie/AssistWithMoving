@@ -128,7 +128,7 @@ export function SpacesWorkspacePage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Spaces"
         description="Rooms, destination rooms, yards, storage areas, and transport zones that inventory and photos can target."

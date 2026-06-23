@@ -44,7 +44,7 @@ export function LoadPlanWorkspacePage() {
   const [activeTab, setActiveTab] = useHashTab("board", loadPlanTabHashes);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Load Plan"
         description="Trucks, trailers, movers, and helpers — what goes in each one, zone by zone, with capacity rollups."

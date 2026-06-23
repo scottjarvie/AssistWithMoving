@@ -1,9 +1,11 @@
 "use client";
 
 import { MovePeopleManager } from "@/components/move-people-manager";
+import { MoveQueueSnapshot } from "@/components/move-queue-snapshot";
 import { MoveQuestionsPanel } from "@/components/move-questions-panel";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
+import { WorkspaceSubNav } from "@/components/workspace-sub-nav";
 import { PackingDebtDashboard } from "@/components/packing-debt-dashboard";
 import { PlanningDefaultsPanel } from "@/components/planning-defaults-panel";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
@@ -49,11 +51,13 @@ export function MoveOverviewPage() {
   const [activeTab, setActiveTab] = useHashTab("decisions", overviewTabHashes);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title={selectedMove?.title ?? "Move overview"}
         description="What still needs a decision, who is involved, and the defaults that steer packing, packets, and AI suggestions."
       />
+      <WorkspaceSubNav parent="home" />
+      <MoveQueueSnapshot householdId={householdId} moveId={moveId} />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList tabs={overviewTabs} activeValue={activeTab} />
 

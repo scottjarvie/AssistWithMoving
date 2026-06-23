@@ -26,20 +26,94 @@ export const ingestionQueueStatusValidator = v.union(
 );
 
 export const ingestionScopeHints = [
-  "singleItem",
-  "multipleItems",
-  "scene",
+  "inventory",
+  "packing",
+  "condition",
+  "measurements",
   "floorPlan",
 ] as const;
 
-export type IngestionScopeHint = (typeof ingestionScopeHints)[number];
+export const ingestionQueueIntents = [
+  "general",
+  "newMovableUnit",
+  "newItem",
+  "existingBox",
+  "existingItem",
+  "boxContents",
+  "condition",
+  "measurements",
+  "floorPlan",
+] as const;
+
+export type IngestionQueueIntent = (typeof ingestionQueueIntents)[number];
+
+export const ingestionQueueIntentValidator = v.union(
+  v.literal("general"),
+  v.literal("newMovableUnit"),
+  v.literal("newItem"),
+  v.literal("existingBox"),
+  v.literal("existingItem"),
+  v.literal("boxContents"),
+  v.literal("condition"),
+  v.literal("measurements"),
+  v.literal("floorPlan"),
+);
+
+export const legacyIngestionScopeHints = [
+  "singleItem",
+  "multipleItems",
+  "scene",
+] as const;
+
+export type IngestionScopeHint =
+  | (typeof ingestionScopeHints)[number]
+  | (typeof legacyIngestionScopeHints)[number];
 
 export const ingestionScopeHintValidator = v.union(
+  v.literal("inventory"),
+  v.literal("packing"),
+  v.literal("condition"),
+  v.literal("measurements"),
+  v.literal("floorPlan"),
   v.literal("singleItem"),
   v.literal("multipleItems"),
   v.literal("scene"),
-  v.literal("floorPlan"),
 );
+
+export const allIngestionScopeHints = [
+  ...ingestionScopeHints,
+  ...legacyIngestionScopeHints,
+] as const;
+
+export function normalizeIngestionScopeHint(
+  scopeHint: IngestionScopeHint | undefined,
+) {
+  if (
+    scopeHint === "singleItem" ||
+    scopeHint === "multipleItems" ||
+    scopeHint === "scene"
+  ) {
+    return "inventory";
+  }
+  return scopeHint;
+}
+
+export function ingestionScopeHintMatches(
+  entryScopeHint: IngestionScopeHint | undefined,
+  requestedScopeHint: IngestionScopeHint | undefined,
+) {
+  if (!requestedScopeHint) {
+    return true;
+  }
+  const normalizedRequest = normalizeIngestionScopeHint(requestedScopeHint);
+  if (normalizedRequest === "inventory") {
+    return (
+      entryScopeHint === undefined ||
+      normalizeIngestionScopeHint(entryScopeHint) === "inventory"
+    );
+  }
+  return normalizeIngestionScopeHint(entryScopeHint) === normalizedRequest;
+}
 
 // How long an agent's claim lasts before the entry is considered abandoned
 // and may be reclaimed by another run.
