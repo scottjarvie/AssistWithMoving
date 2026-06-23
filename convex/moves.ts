@@ -381,3 +381,218 @@ export const archive = mutation({
     });
   },
 });
+
+// Bring an archived move back to active planning so the reversible "remove"
+// action can be undone.
+export const unarchive = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "household:manage_settings",
+    );
+
+    const move = await ctx.db.get(args.moveId);
+    if (!move || move.householdId !== args.householdId) {
+      throw new Error("Move not found in this household.");
+    }
+
+    await ctx.db.patch(args.moveId, {
+      status: "planning",
+      archivedAt: undefined,
+      updatedAt: Date.now(),
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: actor.type,
+      actorUserId: actor.type === "user" ? actor.userId : undefined,
+      actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
+      category: "household",
+      action: "move.unarchived",
+      objectTable: "moves",
+      objectId: args.moveId,
+    });
+  },
+});
+
+// Permanently erase a move and every record that belongs to it. This is
+// irreversible — the everyday "remove" path is archive(); purge is owner-only,
+// requires the move title typed back exactly, and supports dryRun to preview the
+// per-table counts before anything is deleted.
+//
+// The two lists are verified against the schema by
+// tests/unit/move-purge-coverage.test.ts: every table carrying a moveId must
+// appear here, so a new move-scoped table cannot silently survive a purge.
+
+// Tables addressed by a moveId-first index (eq on moveId).
+const MOVE_INDEXED_PURGE_TABLES: Array<{ table: string; index: string }> = [
+  { table: "moveRoleGrants", index: "by_move_user" },
+  { table: "documentationProfiles", index: "by_move_status" },
+  { table: "exportJobs", index: "by_move_created" },
+  { table: "apiKeys", index: "by_move_status" },
+  { table: "shareLinks", index: "by_move_status" },
+  { table: "shareLinkComments", index: "by_move_created" },
+  { table: "auditLogs", index: "by_move_time" },
+  { table: "movePeople", index: "by_move_sort" },
+  { table: "transportResources", index: "by_move_sort" },
+  { table: "transportZones", index: "by_move_sort" },
+  { table: "transportTrips", index: "by_move_sort" },
+  { table: "tripSpaces", index: "by_move_sort" },
+  { table: "moveSpaces", index: "by_move_sort" },
+  { table: "movePlanningDefaults", index: "by_move_sort" },
+  { table: "floorPlans", index: "by_move_status" },
+  { table: "planLevels", index: "by_move" },
+  { table: "planProposals", index: "by_move_status" },
+  { table: "boxes", index: "by_move_status" },
+  { table: "boxItems", index: "by_move" },
+  { table: "itemPhotos", index: "by_move_created" },
+  { table: "photoUploadSessions", index: "by_move_status" },
+  { table: "ingestionQueueEntries", index: "by_move_status_order" },
+  { table: "aiJobs", index: "by_move_status" },
+  { table: "aiTextSuggestions", index: "by_move_status" },
+  { table: "aiPhotoSuggestions", index: "by_move_status" },
+  { table: "aiPlanningSuggestions", index: "by_move_status" },
+  { table: "inventoryDuplicateDecisions", index: "by_move_status" },
+  { table: "items", index: "by_move_status" },
+  { table: "saleListings", index: "by_move_status" },
+  { table: "plannedItems", index: "by_move_status" },
+];
+
+// Tables with a moveId but no moveId-first index: scan by household, filter.
+const HOUSEHOLD_FILTER_PURGE_TABLES: Array<{ table: string; index: string }> = [
+  { table: "planEntities", index: "by_household" },
+  { table: "planPlacements", index: "by_household" },
+  { table: "planOps", index: "by_household" },
+  { table: "apiIdempotencyKeys", index: "by_household" },
+  { table: "apiRateLimitWindows", index: "by_household" },
+];
+
+export const MOVE_PURGE_TABLE_NAMES: string[] = [
+  ...MOVE_INDEXED_PURGE_TABLES.map((entry) => entry.table),
+  ...HOUSEHOLD_FILTER_PURGE_TABLES.map((entry) => entry.table),
+];
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function purgeMoveData(
+  ctx: any,
+  {
+    householdId,
+    moveId,
+    dryRun,
+  }: { householdId: any; moveId: any; dryRun: boolean },
+) {
+  const counts: Record<string, number> = {};
+  let total = 0;
+
+  async function deleteDocs(table: string, docs: Array<{ _id: any }>) {
+    counts[table] = docs.length;
+    total += docs.length;
+    if (!dryRun) {
+      for (const doc of docs) {
+        await ctx.db.delete(doc._id);
+      }
+    }
+  }
+
+  for (const { table, index } of MOVE_INDEXED_PURGE_TABLES) {
+    const docs = await ctx.db
+      .query(table)
+      .withIndex(index, (q: any) => q.eq("moveId", moveId))
+      .collect();
+    await deleteDocs(table, docs);
+  }
+
+  for (const { table, index } of HOUSEHOLD_FILTER_PURGE_TABLES) {
+    const docs = (
+      await ctx.db
+        .query(table)
+        .withIndex(index, (q: any) => q.eq("householdId", householdId))
+        .collect()
+    ).filter((doc: any) => doc.moveId === moveId);
+    await deleteDocs(table, docs);
+  }
+
+  return { counts, total };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+export const purge = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    confirmTitle: v.string(),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const { actor, role } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "household:manage_settings",
+    );
+    if (actor.type !== "user") {
+      throw new Error(directConvexUserContextRequiredMessage);
+    }
+    if (role !== "owner") {
+      throw new Error(
+        "Only the household owner can permanently delete a move.",
+      );
+    }
+
+    const move = await ctx.db.get(args.moveId);
+    if (!move || move.householdId !== args.householdId) {
+      throw new Error("Move not found in this household.");
+    }
+
+    const dryRun = args.dryRun ?? false;
+
+    if (!dryRun && args.confirmTitle.trim() !== move.title.trim()) {
+      throw new Error(
+        "Type the move title exactly to confirm permanent deletion.",
+      );
+    }
+
+    const { counts, total } = await purgeMoveData(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      dryRun,
+    });
+
+    if (dryRun) {
+      return {
+        dryRun: true as const,
+        moveTitle: move.title,
+        deletedRecordCount: total,
+        counts,
+      };
+    }
+
+    await ctx.db.delete(args.moveId);
+
+    // Household-level audit (no moveId — the move and its own logs are gone).
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "household",
+      action: "move.purged",
+      objectTable: "moves",
+      objectId: args.moveId,
+      metadata: { title: move.title, deletedRecordCount: total, counts },
+    });
+
+    return {
+      dryRun: false as const,
+      moveTitle: move.title,
+      deletedRecordCount: total,
+      counts,
+    };
+  },
+});
