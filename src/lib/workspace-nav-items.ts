@@ -5,7 +5,9 @@
 export type GlobalNavItem = {
   href: string;
   label: string;
-  iconKey: "moves" | "movableUnits" | "items";
+  // Shorter label used in the cramped mobile bottom bar (falls back to label).
+  shortLabel?: string;
+  iconKey: "moves" | "movableUnits" | "items" | "queue";
   // The active state matches any path that starts with this segment prefix.
   match: string;
 };
@@ -20,6 +22,7 @@ export const globalNavItems: GlobalNavItem[] = [
   {
     href: "/app/movable-units",
     label: "Movable Units",
+    shortLabel: "Units",
     iconKey: "movableUnits",
     match: "/app/movable-units",
   },
@@ -28,5 +31,11 @@ export const globalNavItems: GlobalNavItem[] = [
     label: "Items",
     iconKey: "items",
     match: "/app/items",
+  },
+  {
+    href: "/app/queue",
+    label: "Queue",
+    iconKey: "queue",
+    match: "/app/queue",
   },
 ];

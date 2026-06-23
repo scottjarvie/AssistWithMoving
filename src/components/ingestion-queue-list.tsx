@@ -192,9 +192,13 @@ function formatQueueTaskCount(count: number) {
 export function IngestionQueueList({
   householdId,
   moveId,
+  view = "tabs",
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
+  // "tabs" = Needs action / Working / Archive (default, used inside a move).
+  // "todo-done" = a simple To do / Done toggle for the top-level Queue page.
+  view?: "tabs" | "todo-done";
 }) {
   const entries = useQuery(
     api.ingestionQueue.listForMove,
@@ -210,6 +214,7 @@ export function IngestionQueueList({
     useState<Id<"ingestionQueueEntries"> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<QueueTask>("needsAction");
+  const [binaryTab, setBinaryTab] = useState<"todo" | "done">("todo");
 
   const loading = Boolean(householdId && moveId) && entries === undefined;
   const sorted = [...(entries ?? [])].sort(
@@ -278,18 +283,12 @@ export function IngestionQueueList({
     }
   }
 
-  function renderEntries(task: QueueTask) {
-    const visibleEntries = sorted.filter(
-      (entry) => queueTaskForStatus(entry.status) === task,
-    );
-
+  function renderEntryList(
+    visibleEntries: typeof sorted,
+    emptyMessage: string,
+    ariaLabel: string,
+  ) {
     if (!visibleEntries.length) {
-      const emptyMessage =
-        task === "needsAction"
-          ? "No captures need your answer or review right now."
-          : task === "working"
-            ? "No captures are queued or currently claimed by an agent."
-            : "No resolved or discarded captures yet.";
       return (
         <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
           {emptyMessage}
@@ -298,7 +297,7 @@ export function IngestionQueueList({
     }
 
     return (
-      <ul className="space-y-3" aria-label={`${task} ingestion queue entries`}>
+      <ul className="space-y-3" aria-label={ariaLabel}>
         {visibleEntries.map((entry) => {
           const editable =
             entry.status === "queued" || entry.status === "needsInput";
@@ -493,6 +492,34 @@ export function IngestionQueueList({
     );
   }
 
+  function renderEntries(task: QueueTask) {
+    const visibleEntries = sorted.filter(
+      (entry) => queueTaskForStatus(entry.status) === task,
+    );
+    const emptyMessage =
+      task === "needsAction"
+        ? "No captures need your answer or review right now."
+        : task === "working"
+          ? "No captures are queued or currently claimed by an agent."
+          : "No resolved or discarded captures yet.";
+    return renderEntryList(
+      visibleEntries,
+      emptyMessage,
+      `${task} ingestion queue entries`,
+    );
+  }
+
+  // The top-level Queue page collapses the three task views into a simple
+  // To do (not done) vs Done (resolved/discarded) switch.
+  const todoEntries = sorted.filter(
+    (entry) => queueTaskForStatus(entry.status) !== "archive",
+  );
+  const doneEntries = sorted.filter(
+    (entry) => queueTaskForStatus(entry.status) === "archive",
+  );
+  const todoCount = taskCounts.needsAction + taskCounts.working;
+  const doneCount = taskCounts.archive;
+
   return (
     <Card id="ingestion-queue">
       <CardHeader>
@@ -530,6 +557,55 @@ export function IngestionQueueList({
             <Skeleton className="h-16 w-4/5" />
           </div>
         ) : sorted.length ? (
+          view === "todo-done" ? (
+            <Tabs
+              value={binaryTab}
+              onValueChange={(value) =>
+                setBinaryTab(value as "todo" | "done")
+              }
+              className="gap-3"
+            >
+              <TabsList aria-label="Queue views">
+                <TabsTrigger value="todo" className="gap-2">
+                  To do
+                  <Badge
+                    variant={binaryTab === "todo" ? "secondary" : "outline"}
+                    className="h-5 min-w-5 px-1"
+                  >
+                    {todoCount}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="done" className="gap-2">
+                  Done
+                  <Badge
+                    variant={binaryTab === "done" ? "secondary" : "outline"}
+                    className="h-5 min-w-5 px-1"
+                  >
+                    {doneCount}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
+              <p className="text-sm text-muted-foreground">
+                {binaryTab === "todo"
+                  ? "Captures still being processed or waiting for your review."
+                  : "Resolved or discarded captures kept out of the active queue."}
+              </p>
+              <TabsContent value="todo">
+                {renderEntryList(
+                  todoEntries,
+                  "Nothing to do — captures you add show up here until they're resolved.",
+                  "to-do ingestion queue entries",
+                )}
+              </TabsContent>
+              <TabsContent value="done">
+                {renderEntryList(
+                  doneEntries,
+                  "No resolved or discarded captures yet.",
+                  "done ingestion queue entries",
+                )}
+              </TabsContent>
+            </Tabs>
+          ) : (
           <Tabs
             value={activeTask}
             onValueChange={(value) => setActiveTask(value as QueueTask)}
@@ -571,6 +647,7 @@ export function IngestionQueueList({
               {renderEntries("archive")}
             </TabsContent>
           </Tabs>
+          )
         ) : (
           <div className="rounded-md border border-dashed border-border p-6 text-sm leading-6 text-muted-foreground">
             The queue is empty. Capture photos and notes on your phone as you

@@ -4,17 +4,24 @@ import { isGlobalNavActive } from "../../src/lib/workspace-nav";
 import { globalNavItems } from "../../src/lib/workspace-nav-items";
 
 describe("global nav", () => {
-  it("exposes exactly the three top-level destinations", () => {
+  it("exposes exactly the four top-level destinations", () => {
     expect(globalNavItems.map((item) => item.label)).toEqual([
       "Moves",
       "Movable Units",
       "Items",
+      "Queue",
     ]);
     expect(globalNavItems.map((item) => item.href)).toEqual([
       "/app/moves",
       "/app/movable-units",
       "/app/items",
+      "/app/queue",
     ]);
+    // Movable Units gets a shorter label for the cramped mobile bottom bar.
+    expect(
+      globalNavItems.find((item) => item.href === "/app/movable-units")
+        ?.shortLabel
+    ).toBe("Units");
   });
 
   it("lights up the matching section for exact and nested paths", () => {
@@ -24,11 +31,15 @@ describe("global nav", () => {
       isGlobalNavActive("/app/movable-units", "/app/movable-units")
     ).toBe(true);
     expect(isGlobalNavActive("/app/items", "/app/items")).toBe(true);
+    expect(isGlobalNavActive("/app/queue", "/app/queue")).toBe(true);
   });
 
   it("does not cross-activate sibling sections", () => {
     expect(isGlobalNavActive("/app/movable-units", "/app/moves")).toBe(false);
     expect(isGlobalNavActive("/app/items", "/app/moves")).toBe(false);
     expect(isGlobalNavActive("/app/moves", "/app/movable-units")).toBe(false);
+    // The per-move queue (/app/moves/x/queue) belongs to Moves, not Queue.
+    expect(isGlobalNavActive("/app/moves/x/queue", "/app/queue")).toBe(false);
+    expect(isGlobalNavActive("/app/queue", "/app/moves")).toBe(false);
   });
 });

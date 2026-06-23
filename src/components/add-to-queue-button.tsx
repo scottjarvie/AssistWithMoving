@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 export function AddToQueueButton({
   variant = "sidebar",
 }: {
-  variant?: "sidebar" | "compact";
+  variant?: "sidebar" | "compact" | "inline";
 }) {
   const [open, setOpen] = useState(false);
   const { householdId, moveId } = useMoveWorkspace();
@@ -74,7 +74,9 @@ export function AddToQueueButton({
         <Button
           type="button"
           size="sm"
-          className={cn("hidden", variant === "compact" && "sm:inline-flex")}
+          // compact: top-bar action, hidden on mobile (the bottom bar carries
+          // Add there). inline: always visible, for the Queue page header.
+          className={cn(variant === "compact" && "hidden sm:inline-flex")}
           onClick={() => setOpen(true)}
         >
           <Inbox aria-hidden="true" />

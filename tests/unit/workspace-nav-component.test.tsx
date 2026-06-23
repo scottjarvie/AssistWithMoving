@@ -16,12 +16,12 @@ describe("WorkspaceNav", () => {
     mockState.pathname = "/app/moves";
   });
 
-  it("renders exactly the three global destinations", () => {
+  it("renders exactly the four global destinations", () => {
     render(<WorkspaceNav />);
 
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const links = within(nav).getAllByRole("link");
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
 
     expect(within(nav).getByRole("link", { name: "Moves" })).toHaveAttribute(
       "href",
@@ -33,6 +33,10 @@ describe("WorkspaceNav", () => {
     expect(within(nav).getByRole("link", { name: "Items" })).toHaveAttribute(
       "href",
       "/app/items",
+    );
+    expect(within(nav).getByRole("link", { name: "Queue" })).toHaveAttribute(
+      "href",
+      "/app/queue",
     );
   });
 
@@ -97,16 +101,23 @@ describe("WorkspaceNav", () => {
     );
   });
 
-  it("renders the same three links in a mobile grid", () => {
+  it("renders the same four links in a mobile grid with the short Units label", () => {
     mockState.pathname = "/app/movable-units";
 
     render(<WorkspaceNav variant="mobile" />);
 
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(nav).toHaveClass("grid", "grid-cols-3");
-    expect(within(nav).getAllByRole("link")).toHaveLength(3);
+    expect(nav).toHaveClass("grid", "grid-cols-4");
+    expect(within(nav).getAllByRole("link")).toHaveLength(4);
 
-    const unitsLink = within(nav).getByRole("link", { name: "Movable Units" });
+    expect(within(nav).getByRole("link", { name: "Queue" })).toHaveAttribute(
+      "href",
+      "/app/queue",
+    );
+
+    // The cramped bottom bar uses the shorter "Units" label for Movable Units.
+    const unitsLink = within(nav).getByRole("link", { name: "Units" });
+    expect(unitsLink).toHaveAttribute("href", "/app/movable-units");
     expect(unitsLink).toHaveAttribute("aria-current", "page");
     // Mobile active styling swaps to a foreground tint instead of the sidebar
     // accent background used by the desktop rail.
