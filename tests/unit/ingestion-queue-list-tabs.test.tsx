@@ -147,6 +147,36 @@ describe("IngestionQueueList task tabs", () => {
       screen.queryByText("Holiday bins need inventory."),
     ).not.toBeInTheDocument();
   });
+
+  it("collapses to a To do / Done toggle in todo-done view", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+        view="todo-done"
+      />,
+    );
+
+    // "To do" is the default and holds the four not-done captures (needsInput,
+    // processed, queued, claimed); "Done" holds resolved + discarded.
+    expect(screen.getByRole("tab", { name: /To do/ })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.getByText("Holiday bins need inventory.")).toBeInTheDocument();
+    expect(screen.queryByText("Resolved capture.")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /Done/ }));
+    expect(screen.getByText("Resolved capture.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Discarded duplicate capture."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Holiday bins need inventory."),
+    ).not.toBeInTheDocument();
+  });
 });
 
 function queueEntry(value: Partial<Doc<"ingestionQueueEntries">>) {
