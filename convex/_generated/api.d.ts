@@ -67,6 +67,7 @@ import type * as lib_householdMembers from "../lib/householdMembers.js";
 import type * as lib_imageDerivatives from "../lib/imageDerivatives.js";
 import type * as lib_ingestionQueue from "../lib/ingestionQueue.js";
 import type * as lib_inventoryDuplicates from "../lib/inventoryDuplicates.js";
+import type * as lib_mcpIdentity from "../lib/mcpIdentity.js";
 import type * as lib_mediaStorage from "../lib/mediaStorage.js";
 import type * as lib_moveDayChecklist from "../lib/moveDayChecklist.js";
 import type * as lib_moveFields from "../lib/moveFields.js";
@@ -95,6 +96,11 @@ import type * as lib_shareLinks from "../lib/shareLinks.js";
 import type * as lib_subManifest from "../lib/subManifest.js";
 import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
+import type * as mcp from "../mcp.js";
+import type * as mcpSetup from "../mcpSetup.js";
+import type * as mcpTools from "../mcpTools.js";
+import type * as mcpToolsImages from "../mcpToolsImages.js";
+import type * as mcpToolsWrite from "../mcpToolsWrite.js";
 import type * as movableUnits from "../movableUnits.js";
 import type * as movePeople from "../movePeople.js";
 import type * as movePlanningDefaults from "../movePlanningDefaults.js";
@@ -188,6 +194,7 @@ declare const fullApi: ApiFromModules<{
   "lib/imageDerivatives": typeof lib_imageDerivatives;
   "lib/ingestionQueue": typeof lib_ingestionQueue;
   "lib/inventoryDuplicates": typeof lib_inventoryDuplicates;
+  "lib/mcpIdentity": typeof lib_mcpIdentity;
   "lib/mediaStorage": typeof lib_mediaStorage;
   "lib/moveDayChecklist": typeof lib_moveDayChecklist;
   "lib/moveFields": typeof lib_moveFields;
@@ -216,6 +223,11 @@ declare const fullApi: ApiFromModules<{
   "lib/subManifest": typeof lib_subManifest;
   "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;
+  mcp: typeof mcp;
+  mcpSetup: typeof mcpSetup;
+  mcpTools: typeof mcpTools;
+  mcpToolsImages: typeof mcpToolsImages;
+  mcpToolsWrite: typeof mcpToolsWrite;
   movableUnits: typeof movableUnits;
   movePeople: typeof movePeople;
   movePlanningDefaults: typeof movePlanningDefaults;
@@ -270,4 +282,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  mcpGateway: import("convex-mcp-gateway/_generated/component.js").ComponentApi<"mcpGateway">;
+};

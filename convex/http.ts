@@ -15,6 +15,13 @@ import {
   parseRestApiBody,
   RestApiBodyParseError,
 } from "./lib/restUploadBody";
+import {
+  McpGateway,
+  type McpAuthorizerHandler,
+  type McpIdentityResolver,
+} from "convex-mcp-gateway";
+import { components } from "./_generated/api";
+import { tools as mcpTools } from "./mcp";
 
 const http = httpRouter();
 
@@ -932,5 +939,76 @@ function readUint32BE(bytes: Uint8Array, offset: number) {
       (bytes[offset + 3] ?? 0))
   );
 }
+
+// --- Remote MCP gateway (OAuth 2.1; Clerk is the authorization server) ------
+// The user's own AI agent connects here over Streamable HTTP. resolveIdentity
+// validates the Clerk OAuth access token — Convex's local JWT validation can't
+// verify it (its audience is the MCP resource, not "convex"), so we ask Clerk's
+// userinfo endpoint. That resolved identity drives both the authorize gate and
+// the `caller` injected into each tool. See convex/mcp.ts + convex/mcpTools.ts.
+const mcpGatewayClient = new McpGateway(components.mcpGateway);
+
+const resolveMcpIdentity: McpIdentityResolver = async (token) => {
+  const issuer = process.env.CLERK_JWT_ISSUER_DOMAIN?.trim();
+  if (!issuer) {
+    return null;
+  }
+  try {
+    const response = await fetch(
+      `${issuer.replace(/\/+$/, "")}/oauth/userinfo`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const info = (await response.json()) as {
+      sub?: string;
+      user_id?: string;
+    } & Record<string, unknown>;
+    const subject = info.sub ?? info.user_id;
+    return subject ? { subject, claims: info } : null;
+  } catch {
+    return null;
+  }
+};
+
+const authorizeMcp: McpAuthorizerHandler = (_ctx, args) =>
+  args.identity?.subject
+    ? { allowed: true }
+    : {
+        allowed: false,
+        reason: "Sign in with your MovingManifest account to use these tools.",
+      };
+
+const mcpHttpAction = httpAction((ctx, request) =>
+  mcpGatewayClient.handleMcpRequest(ctx, request, {
+    authorize: authorizeMcp,
+    resolveIdentity: resolveMcpIdentity,
+    tools: mcpTools,
+    requireAuth: true,
+    cors: true,
+    serverInfo: { name: "movingmanifest", version: "0.2.0" },
+  }),
+);
+
+for (const path of ["/mcp", "/mcp/"]) {
+  for (const method of ["POST", "GET", "DELETE"] as const) {
+    http.route({ path, method, handler: mcpHttpAction });
+  }
+}
+
+const mcpMetadataAction = httpAction((ctx, request) =>
+  mcpGatewayClient.serveProtectedResourceMetadata(ctx, request),
+);
+http.route({
+  path: "/.well-known/oauth-protected-resource/mcp",
+  method: "GET",
+  handler: mcpMetadataAction,
+});
+http.route({
+  pathPrefix: "/.well-known/oauth-protected-resource/",
+  method: "GET",
+  handler: mcpMetadataAction,
+});
 
 export default http;
