@@ -121,3 +121,105 @@ export const getMoveSummary = query({
     };
   },
 });
+
+const READ_LIMIT = 200;
+
+// Rooms / spaces in a move. Read-only; non-sensitive fields only.
+export const listMoveSpaces = query({
+  args: {
+    caller: mcpCallerValidator,
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "household:read",
+    );
+    const spaces = await ctx.db
+      .query("moveSpaces")
+      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+      .take(READ_LIMIT);
+    return spaces
+      .filter((space) => space.archivedAt === undefined)
+      .map((space) => ({
+        spaceId: space._id,
+        name: space.name,
+        kind: space.kind,
+        status: space.status,
+        floorLevel: space.floorLevel ?? null,
+      }));
+  },
+});
+
+// Inventory items in a move. Read-only; sensitive fields (value, serial,
+// private notes) are intentionally omitted regardless of role.
+export const listItems = query({
+  args: {
+    caller: mcpCallerValidator,
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+    const items = await ctx.db
+      .query("items")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+      .order("desc")
+      .take(READ_LIMIT);
+    return items
+      .filter((item) => item.deletedAt === undefined)
+      .map((item) => ({
+        itemId: item._id,
+        name: item.name,
+        room: item.room ?? null,
+        category: item.category ?? null,
+        quantity: item.quantity,
+        disposition: item.disposition,
+        status: item.status,
+        needsReview: item.needsReview,
+      }));
+  },
+});
+
+// Boxes / containers in a move. Read-only.
+export const listBoxes = query({
+  args: {
+    caller: mcpCallerValidator,
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+    const boxes = await ctx.db
+      .query("boxes")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
+      .order("desc")
+      .take(READ_LIMIT);
+    return boxes
+      .filter((box) => box.archivedAt === undefined)
+      .map((box) => ({
+        boxId: box._id,
+        code: box.code,
+        label: box.label ?? null,
+        room: box.room ?? null,
+        destinationRoom: box.destinationRoom ?? null,
+        status: box.status,
+      }));
+  },
+});

@@ -40,4 +40,38 @@ export const tools: McpToolRegistration[] = [
     },
     identityArg: "caller",
   }),
+  defineMcpQuery({
+    name: "list_move_spaces",
+    description: "List the rooms / spaces in a move.",
+    fn: api.mcpTools.listMoveSpaces,
+    args: {
+      caller: mcpCallerValidator,
+      householdId: v.id("households"),
+      moveId: v.id("moves"),
+    },
+    identityArg: "caller",
+  }),
+  defineMcpQuery({
+    name: "list_items",
+    description:
+      "List inventory items in a move (name, room, category, quantity, disposition). Sensitive fields are omitted.",
+    fn: api.mcpTools.listItems,
+    args: {
+      caller: mcpCallerValidator,
+      householdId: v.id("households"),
+      moveId: v.id("moves"),
+    },
+    identityArg: "caller",
+  }),
+  defineMcpQuery({
+    name: "list_boxes",
+    description: "List boxes / containers in a move (code, label, room, status).",
+    fn: api.mcpTools.listBoxes,
+    args: {
+      caller: mcpCallerValidator,
+      householdId: v.id("households"),
+      moveId: v.id("moves"),
+    },
+    identityArg: "caller",
+  }),
 ];
