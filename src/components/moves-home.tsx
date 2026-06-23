@@ -3,11 +3,16 @@
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { ArrowRight, Home, Plus } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import {
+  ActiveMoveMenu,
+  ArchivedMovesSection,
+  type ManagedMove,
+} from "@/components/move-management";
 import {
   type MoveWorkspaceValue,
   useMoveWorkspace,
@@ -76,6 +81,19 @@ export function MovesHome() {
   } = useMoveWorkspace();
 
   const [createOpen, setCreateOpen] = useState(false);
+
+  // Archived moves stay out of the active grid but remain restorable; owners can
+  // also permanently delete them.
+  const allMoves = useQuery(
+    api.moves.listForHousehold,
+    householdId ? { householdId, includeArchived: true } : "skip",
+  );
+  const archivedMoves: ManagedMove[] = (
+    Array.isArray(allMoves) ? allMoves : []
+  ).filter((move) => move.status === "archived");
+  const canPurge =
+    households?.find((entry) => entry.household._id === householdId)?.role ===
+    "owner";
 
   const identityResolving = loadingIdentity || loadingHouseholds;
   const hasHousehold = Boolean(householdId);
@@ -156,6 +174,7 @@ export function MovesHome() {
             <MoveCard
               key={move._id}
               move={move}
+              householdId={householdId}
               selected={move._id === moveId}
               onSelect={selectMove}
             />
@@ -179,6 +198,14 @@ export function MovesHome() {
         </div>
       )}
 
+      {householdId && archivedMoves.length ? (
+        <ArchivedMovesSection
+          householdId={householdId}
+          moves={archivedMoves}
+          canPurge={canPurge}
+        />
+      ) : null}
+
       <CreateMoveSheet open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
@@ -186,14 +213,16 @@ export function MovesHome() {
 
 function MoveCard({
   move,
+  householdId,
   selected,
   onSelect,
 }: {
   move: HomeMove;
+  householdId: Id<"households"> | null;
   selected: boolean;
   onSelect: (moveId: Id<"moves">) => void;
 }) {
-  const route = [move.origin, move.destination].filter(Boolean).join(" -> ");
+  const route = [move.origin, move.destination].filter(Boolean).join(" → ");
 
   return (
     <Card role="listitem" className="flex flex-col">
@@ -205,9 +234,12 @@ function MoveCard({
               {route || "Route not set"}
             </CardDescription>
           </div>
-          <div className="flex flex-wrap justify-end gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {selected ? <Badge variant="secondary">selected</Badge> : null}
             <Badge variant="outline">{move.status}</Badge>
+            {householdId ? (
+              <ActiveMoveMenu householdId={householdId} move={move} />
+            ) : null}
           </div>
         </div>
       </CardHeader>
