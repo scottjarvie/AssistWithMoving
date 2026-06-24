@@ -215,6 +215,36 @@ describe("BoxLookup", () => {
     ).toBeInTheDocument();
   });
 
+  it("reveals the placement editor only after clicking, then saves", async () => {
+    const user = userEvent.setup();
+    lookupData.mutations.updateBox.mockResolvedValue(undefined);
+    renderBoxLookup();
+
+    // Read-only by default — no editor fields.
+    expect(screen.queryByLabelText("Origination")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Origination/ }));
+
+    const origination = screen.getByLabelText("Origination");
+    await user.clear(origination);
+    await user.type(origination, "Kitchen");
+    expect(screen.getByLabelText("Present location")).toBeInTheDocument();
+    expect(screen.getByLabelText("Transport")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save placement" }));
+
+    await waitFor(() => {
+      expect(lookupData.mutations.updateBox).toHaveBeenCalledWith(
+        expect.objectContaining({
+          boxId: "box_12",
+          room: "Kitchen",
+          destinationRoom: "Workshop",
+          clearAssignedResource: true,
+        }),
+      );
+    });
+  });
+
   it("shows a compact empty state when the unit has no items", () => {
     const originalContents = lookupData.boxRecord.contents;
     const originalCount = lookupData.boxRecord.itemCount;
