@@ -13,6 +13,11 @@ import {
 } from "./lib/apiKeys";
 import { requireHouseholdPermission } from "./lib/permissions";
 
+// Default cap on active connections (API keys) per household, so the "active
+// connections" count stays legible to a non-technical user (MOVE-279). Revoke
+// one to free a slot.
+const MAX_ACTIVE_API_KEYS = 3;
+
 const apiKeyScopeValidator = v.union(
   v.literal("moves/read"),
   v.literal("moves/write"),
@@ -80,6 +85,18 @@ export const create = mutation({
       householdId: args.householdId,
       dimension: "activeApiKeys",
     });
+
+    const activeKeys = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_household_status", (q) =>
+        q.eq("householdId", args.householdId).eq("status", "active"),
+      )
+      .collect();
+    if (activeKeys.length >= MAX_ACTIVE_API_KEYS) {
+      throw new Error(
+        `You can have up to ${MAX_ACTIVE_API_KEYS} active connections. Revoke one before adding another.`,
+      );
+    }
 
     await assertMoveRestriction(ctx, args);
     const scopes = normalizeApiKeyScopes(args.scopes);
