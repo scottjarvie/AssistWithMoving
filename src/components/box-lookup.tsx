@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,7 @@ export function BoxLookup({
 
   const [editingSize, setEditingSize] = useState(false);
   const [savingSize, setSavingSize] = useState(false);
+  const [editingPlacement, setEditingPlacement] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -363,30 +364,57 @@ export function BoxLookup({
         </div>
       </section>
 
-      {/* Placement (essential 5). Read-only labels by default. */}
+      {/* Placement (essential 5). Quiet labels by default; the whole line is
+          editable on click, mirroring the size affordance above. */}
       <section className="mt-3 rounded-lg border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          <PlacementField
-            icon={MapPin}
-            label="Origination"
-            value={unit?.roomLabel ?? "origin unset"}
+        {editingPlacement ? (
+          <PlacementEditor
+            box={box}
+            spaces={spaces ?? []}
+            resources={resourcesWithZones ?? []}
+            householdId={resolvedHouseholdId!}
+            moveId={resolvedMoveId!}
+            onSaved={(saved) => {
+              setEditingPlacement(false);
+              setMessage(saved);
+            }}
+            onCancel={() => setEditingPlacement(false)}
+            onMessage={setMessage}
           />
-          <PlacementField
-            icon={MapPin}
-            label="Destination"
-            value={unit?.destinationLabel ?? "destination unset"}
-          />
-          <PlacementField
-            icon={MapPin}
-            label="Present location"
-            value={presentLocation}
-          />
-          <PlacementField
-            icon={Truck}
-            label="Transport"
-            value={unit?.assignmentLabel ?? "Needs load assignment"}
-          />
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingPlacement(true)}
+            className="flex w-full items-start gap-2 rounded-md text-left transition-colors hover:bg-muted/40"
+          >
+            <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+              <PlacementField
+                icon={MapPin}
+                label="Origination"
+                value={unit?.roomLabel ?? "origin unset"}
+              />
+              <PlacementField
+                icon={MapPin}
+                label="Destination"
+                value={unit?.destinationLabel ?? "destination unset"}
+              />
+              <PlacementField
+                icon={MapPin}
+                label="Present location"
+                value={presentLocation}
+              />
+              <PlacementField
+                icon={Truck}
+                label="Transport"
+                value={unit?.assignmentLabel ?? "Needs load assignment"}
+              />
+            </div>
+            <Pencil
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+          </button>
+        )}
       </section>
 
       {/* Items (essential 6). Empty stays compact; only grows with contents. */}
@@ -485,6 +513,191 @@ function PlacementField({
       </div>
       <div className="mt-0.5 truncate text-sm">{value}</div>
     </div>
+  );
+}
+
+function PlacementEditor({
+  box,
+  spaces,
+  resources,
+  householdId,
+  moveId,
+  onSaved,
+  onCancel,
+  onMessage,
+}: {
+  box: Doc<"boxes">;
+  spaces: ReadonlyArray<{ _id: Id<"moveSpaces">; name: string }>;
+  resources: ReadonlyArray<{
+    resource: { _id: Id<"transportResources">; name: string };
+    zones: ReadonlyArray<{ _id: Id<"transportZones">; name: string }>;
+  }>;
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  onSaved: (message: string) => void;
+  onCancel: () => void;
+  onMessage: (message: string | null) => void;
+}) {
+  const updateBox = useMutation(api.boxes.update);
+  const [room, setRoom] = useState(box.room ?? "");
+  const [destinationRoom, setDestinationRoom] = useState(
+    box.destinationRoom ?? "",
+  );
+  const [spaceId, setSpaceId] = useState<string>(box.currentSpaceId ?? "");
+  const [resourceId, setResourceId] = useState<string>(
+    box.assignedResourceId ?? "",
+  );
+  const [zoneId, setZoneId] = useState<string>(box.assignedZoneId ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const selectClass =
+    "h-9 w-full rounded-md border border-border bg-background px-2 text-sm";
+  const zonesForResource =
+    resources.find((entry) => String(entry.resource._id) === resourceId)
+      ?.zones ?? [];
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    onMessage(null);
+    try {
+      await updateBox({
+        householdId,
+        moveId,
+        boxId: box._id,
+        room,
+        destinationRoom,
+        ...(spaceId ? { currentSpaceId: spaceId as Id<"moveSpaces"> } : {}),
+        ...(resourceId
+          ? {
+              assignedResourceId: resourceId as Id<"transportResources">,
+              ...(zoneId
+                ? { assignedZoneId: zoneId as Id<"transportZones"> }
+                : { clearAssignedZone: true }),
+            }
+          : { clearAssignedResource: true }),
+      });
+      onSaved(`${box.code} placement updated.`);
+    } catch (error) {
+      onMessage(
+        error instanceof Error
+          ? error.message
+          : `Could not update placement for ${box.code}.`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(event) => void handleSubmit(event)}
+      className="rounded-md border border-border bg-background/60 p-3"
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
+            Origination
+          </span>
+          <Input
+            value={room}
+            onChange={(event) => setRoom(event.target.value)}
+            list="placement-rooms"
+            className="h-9"
+            aria-label="Origination"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
+            Destination
+          </span>
+          <Input
+            value={destinationRoom}
+            onChange={(event) => setDestinationRoom(event.target.value)}
+            list="placement-rooms"
+            className="h-9"
+            aria-label="Destination"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
+            Present location
+          </span>
+          <select
+            className={selectClass}
+            value={spaceId}
+            onChange={(event) => setSpaceId(event.target.value)}
+            aria-label="Present location"
+          >
+            <option value="">Not set</option>
+            {spaces.map((space) => (
+              <option key={space._id} value={space._id}>
+                {space.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
+            Transport
+          </span>
+          <select
+            className={selectClass}
+            value={resourceId}
+            onChange={(event) => {
+              setResourceId(event.target.value);
+              setZoneId("");
+            }}
+            aria-label="Transport"
+          >
+            <option value="">Unassigned</option>
+            {resources.map((entry) => (
+              <option key={entry.resource._id} value={entry.resource._id}>
+                {entry.resource.name}
+              </option>
+            ))}
+          </select>
+          {resourceId && zonesForResource.length ? (
+            <select
+              className={`${selectClass} mt-2`}
+              value={zoneId}
+              onChange={(event) => setZoneId(event.target.value)}
+              aria-label="Transport zone"
+            >
+              <option value="">No specific zone</option>
+              {zonesForResource.map((zone) => (
+                <option key={zone._id} value={zone._id}>
+                  {zone.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </label>
+      </div>
+      <datalist id="placement-rooms">
+        {spaces.map((space) => (
+          <option key={space._id} value={space.name} />
+        ))}
+      </datalist>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Origination and destination are free text; present location and
+        transport pull from this move&apos;s spaces and load resources.
+      </p>
+      <div className="mt-3 flex gap-2">
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? "Saving…" : "Save placement"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={saving}
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
