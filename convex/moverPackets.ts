@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import type { Doc } from "./_generated/dataModel";
 import { query } from "./_generated/server";
+import { boxVolumeCuFt } from "./lib/estimateEngine";
 import {
   buildMoverReadinessChecklist,
   moverBoxExceptionLevel,
@@ -92,7 +93,7 @@ export const getForMove = query({
         assignedZone,
         itemCount: memberships.reduce((total, entry) => total + entry.quantity, 0),
         estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
-        estimatedVolumeCuFt: box.estimatedVolumeCuFt,
+        estimatedVolumeCuFt: boxVolumeCuFt(box),
         flags,
         warnings,
         exceptionLevel: moverBoxExceptionLevel({
