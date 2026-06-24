@@ -127,6 +127,15 @@
   html {
     @apply font-sans;
   }
+  /* Mobile-friendly full height: prefer dynamic viewport units so the
+     browser URL bar showing/hiding doesn't cause layout jumps. The
+     `h-full` / `min-h-full` utilities resolve to 100% of these. */
+  html.h-full {
+    height: 100dvh;
+  }
+  body.min-h-full {
+    min-height: 100dvh;
+  }
 }
 
 ::selection {
