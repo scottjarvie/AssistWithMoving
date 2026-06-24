@@ -838,7 +838,7 @@ export const facetedListForMove = query({
   },
 });
 
-async function generateItemCode(ctx: MutationCtx, moveId: Id<"moves">) {
+export async function generateItemCode(ctx: MutationCtx, moveId: Id<"moves">) {
   const items = await ctx.db
     .query("items")
     .withIndex("by_move_code", (q) => q.eq("moveId", moveId))

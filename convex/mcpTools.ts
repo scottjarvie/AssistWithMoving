@@ -54,6 +54,8 @@ export const getAgentContext = query({
   },
 });
 
+const READ_LIMIT = 200;
+
 // List the active (non-archived) moves in a household the caller can read.
 export const listMovesForHousehold = query({
   args: {
@@ -73,7 +75,7 @@ export const listMovesForHousehold = query({
       .withIndex("by_household_status", (q) =>
         q.eq("householdId", args.householdId),
       )
-      .collect();
+      .take(READ_LIMIT);
 
     return moves
       .filter((move) => move.status !== "archived")
@@ -122,8 +124,6 @@ export const getMoveSummary = query({
   },
 });
 
-const READ_LIMIT = 200;
-
 // Rooms / spaces in a move. Read-only; non-sensitive fields only.
 export const listMoveSpaces = query({
   args: {
@@ -139,19 +139,24 @@ export const listMoveSpaces = query({
       args.moveId,
       "household:read",
     );
+    // Filter tombstones at the DB level so archived rows don't eat the budget,
+    // and over-fetch by one to detect truncation.
     const spaces = await ctx.db
       .query("moveSpaces")
       .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-      .take(READ_LIMIT);
-    return spaces
-      .filter((space) => space.archivedAt === undefined)
-      .map((space) => ({
+      .filter((q) => q.eq(q.field("archivedAt"), undefined))
+      .take(READ_LIMIT + 1);
+    const truncated = spaces.length > READ_LIMIT;
+    return {
+      truncated,
+      spaces: spaces.slice(0, READ_LIMIT).map((space) => ({
         spaceId: space._id,
         name: space.name,
         kind: space.kind,
         status: space.status,
         floorLevel: space.floorLevel ?? null,
-      }));
+      })),
+    };
   },
 });
 
@@ -171,14 +176,18 @@ export const listItems = query({
       args.moveId,
       "inventory:read",
     );
+    // Filter tombstones at the DB level so deleted rows don't eat the budget,
+    // and over-fetch by one to detect truncation.
     const items = await ctx.db
       .query("items")
       .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
       .order("desc")
-      .take(READ_LIMIT);
-    return items
-      .filter((item) => item.deletedAt === undefined)
-      .map((item) => ({
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .take(READ_LIMIT + 1);
+    const truncated = items.length > READ_LIMIT;
+    return {
+      truncated,
+      items: items.slice(0, READ_LIMIT).map((item) => ({
         itemId: item._id,
         name: item.name,
         room: item.room ?? null,
@@ -187,7 +196,8 @@ export const listItems = query({
         disposition: item.disposition,
         status: item.status,
         needsReview: item.needsReview,
-      }));
+      })),
+    };
   },
 });
 
@@ -206,20 +216,25 @@ export const listBoxes = query({
       args.moveId,
       "inventory:read",
     );
+    // Filter tombstones at the DB level so archived rows don't eat the budget,
+    // and over-fetch by one to detect truncation.
     const boxes = await ctx.db
       .query("boxes")
       .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
       .order("desc")
-      .take(READ_LIMIT);
-    return boxes
-      .filter((box) => box.archivedAt === undefined)
-      .map((box) => ({
+      .filter((q) => q.eq(q.field("archivedAt"), undefined))
+      .take(READ_LIMIT + 1);
+    const truncated = boxes.length > READ_LIMIT;
+    return {
+      truncated,
+      boxes: boxes.slice(0, READ_LIMIT).map((box) => ({
         boxId: box._id,
         code: box.code,
         label: box.label ?? null,
         room: box.room ?? null,
         destinationRoom: box.destinationRoom ?? null,
         status: box.status,
-      }));
+      })),
+    };
   },
 });
