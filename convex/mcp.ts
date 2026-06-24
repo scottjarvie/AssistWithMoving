@@ -15,6 +15,11 @@ import {
 import { api } from "./_generated/api";
 import { addImagesArgs, getImagesArgs } from "./mcpToolsImages";
 import {
+  claimQueueArgs,
+  listQueueArgs,
+  submitQueueResultArgs,
+} from "./mcpToolsQueue";
+import {
   captureToQueueArgs,
   getItemArgs,
   getMoveOverviewArgs,
@@ -133,6 +138,30 @@ export const tools: McpToolRegistration[] = [
       "Drop many capture notes (and references to already-uploaded photo ids) into the move's queue for later processing.",
     fn: api.mcpToolsWrite.captureToQueue,
     args: captureToQueueArgs,
+    identityArg: "caller",
+  }),
+  defineMcpQuery({
+    name: "list_queue",
+    description:
+      "List capture-queue entries for a move — the work waiting to become inventory. Each entry has instructions, room/disposition hints, attached photo ids, status, and any agent question/summary/result items. Pass status to filter (queued|claimed|processed|needsInput|resolved|discarded); omit it for the newest entries.",
+    fn: api.mcpToolsQueue.listQueue,
+    args: listQueueArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "claim_queue",
+    description:
+      "Claim the oldest queued capture entries so two agent runs never process the same one. Returns the claimed entries; a claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry, then call submit_queue_result.",
+    fn: api.mcpToolsQueue.claimQueue,
+    args: claimQueueArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "submit_queue_result",
+    description:
+      "Report what a claimed entry produced: link the inventory items you created (resultItemIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items, which creates the items.",
+    fn: api.mcpToolsQueue.submitQueueResult,
+    args: submitQueueResultArgs,
     identityArg: "caller",
   }),
   defineMcpMutation({

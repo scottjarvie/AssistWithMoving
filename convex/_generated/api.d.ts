@@ -100,6 +100,7 @@ import type * as mcp from "../mcp.js";
 import type * as mcpSetup from "../mcpSetup.js";
 import type * as mcpTools from "../mcpTools.js";
 import type * as mcpToolsImages from "../mcpToolsImages.js";
+import type * as mcpToolsQueue from "../mcpToolsQueue.js";
 import type * as mcpToolsWrite from "../mcpToolsWrite.js";
 import type * as movableUnits from "../movableUnits.js";
 import type * as movePeople from "../movePeople.js";
@@ -227,6 +228,7 @@ declare const fullApi: ApiFromModules<{
   mcpSetup: typeof mcpSetup;
   mcpTools: typeof mcpTools;
   mcpToolsImages: typeof mcpToolsImages;
+  mcpToolsQueue: typeof mcpToolsQueue;
   mcpToolsWrite: typeof mcpToolsWrite;
   movableUnits: typeof movableUnits;
   movePeople: typeof movePeople;
