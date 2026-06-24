@@ -210,7 +210,7 @@ function provenanceEntry({
   };
 }
 
-function inferredMeasurementProvenanceForUser({
+export function inferredMeasurementProvenanceForUser({
   args,
   existing,
   userId,
@@ -456,7 +456,7 @@ function minOptional(first?: number, second?: number) {
   return Math.min(first, second);
 }
 
-async function loadItemAssignmentValidation(
+export async function loadItemAssignmentValidation(
   ctx: MutationCtx,
   args: {
     moveId: Id<"moves">;
