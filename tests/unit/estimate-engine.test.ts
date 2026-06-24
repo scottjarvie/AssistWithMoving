@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  boxVolumeCuFt,
   estimateItem,
   sumEstimateValues,
   volumeFromDimensions,
@@ -60,6 +61,36 @@ describe("estimate engine", () => {
       confidence: "high",
       source: "dimensions",
     });
+  });
+
+  it("resolves box volume with stored-over-dimensions precedence", () => {
+    // Stored value wins even when dimensions would imply a different number.
+    expect(
+      boxVolumeCuFt({
+        estimatedVolumeCuFt: 9,
+        dimensionsIn: { lengthIn: 24, widthIn: 18, heightIn: 16 },
+      })
+    ).toBe(9);
+
+    // Falls back to L x W x H / 1728 when stored volume is absent or zero.
+    expect(
+      boxVolumeCuFt({
+        estimatedVolumeCuFt: 0,
+        dimensionsIn: { lengthIn: 24, widthIn: 18, heightIn: 16 },
+      })
+    ).toBe(4);
+    expect(
+      boxVolumeCuFt({
+        dimensionsIn: { lengthIn: 24, widthIn: 18, heightIn: 16 },
+      })
+    ).toBe(4);
+    expect(boxVolumeCuFt({ estimatedVolumeCuFt: null })).toBe(undefined);
+
+    // No stored value and no usable dimensions: undefined (truly unknown).
+    expect(boxVolumeCuFt({})).toBe(undefined);
+    expect(
+      boxVolumeCuFt({ dimensionsIn: { lengthIn: 24, widthIn: 18 } })
+    ).toBe(undefined);
   });
 
   it("uses name and category baselines deterministically", () => {

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { query } from "./_generated/server";
-import { estimateItem, roundEstimate } from "./lib/estimateEngine";
+import { boxVolumeCuFt, estimateItem, roundEstimate } from "./lib/estimateEngine";
 import {
   buildEmployerReadinessChecklist,
   employerItemWeight,
@@ -157,7 +157,7 @@ export const getForMove = query({
         ),
         estimatedVolumeCuFt: roundEstimate(
           assignedBoxes.reduce(
-            (total, box) => total + (box.estimatedVolumeCuFt ?? 0),
+            (total, box) => total + (boxVolumeCuFt(box) ?? 0),
             0
           )
         ),

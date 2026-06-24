@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalQuery, query } from "./_generated/server";
-import { estimateItem, roundEstimate } from "./lib/estimateEngine";
+import { boxVolumeCuFt, estimateItem, roundEstimate } from "./lib/estimateEngine";
 import { requireMovePermission } from "./lib/permissions";
 import {
   isSubManifestItem,
@@ -290,7 +290,7 @@ export async function buildSubManifest(
         ? zoneNameById.get(box.assignedZoneId)
         : undefined,
       estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
-      estimatedVolumeCuFt: box.estimatedVolumeCuFt,
+      estimatedVolumeCuFt: boxVolumeCuFt(box),
     }));
 
   return {

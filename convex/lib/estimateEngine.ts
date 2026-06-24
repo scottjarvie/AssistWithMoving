@@ -145,6 +145,22 @@ export function volumeFromDimensions(dimensions: DimensionsIn | undefined) {
   return (lengthIn * widthIn * heightIn) / 1728;
 }
 
+// Resolve a box/item volume in cubic feet: prefer an explicit stored value,
+// otherwise derive it from dimensions (L x W x H / 1728). Returns undefined when
+// neither a stored value nor usable dimensions are available. Single source of
+// truth so read/display callers stop hand-rolling `estimatedVolumeCuFt ?? 0`,
+// which silently zeroes out a dims-only box.
+export function boxVolumeCuFt(box: {
+  estimatedVolumeCuFt?: number | null;
+  dimensionsIn?: DimensionsIn;
+}): number | undefined {
+  const stored = positiveNumber(box.estimatedVolumeCuFt ?? undefined);
+  if (stored) {
+    return stored;
+  }
+  return volumeFromDimensions(box.dimensionsIn);
+}
+
 function baselineForItem(item: Pick<EstimableItem, "name" | "category">) {
   const category = item.category?.toLowerCase().trim();
   if (category) {

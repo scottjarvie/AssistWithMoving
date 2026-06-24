@@ -54,6 +54,7 @@ import {
   formatOptionalNumber,
   parseOptionalNumber,
 } from "@/lib/inventory-detail";
+import { calculateMovableUnitVolumeCuFt } from "@/lib/movable-units";
 
 type InventoryItem = Doc<"items">;
 type TransportResourceWithZones = {
@@ -160,6 +161,23 @@ function boxTaskIcon(task: BoxCardTask) {
     case "load":
       return <Truck aria-hidden="true" />;
   }
+}
+
+// Display volume for a box badge: prefer the stored estimatedVolumeCuFt, else
+// derive it from dimensions (matching the movable-units view) so a dims-only box
+// shows its real volume instead of a misleading "0 cu ft".
+function boxBadgeVolumeCuFt(box: {
+  estimatedVolumeCuFt?: number | null;
+  dimensionsIn?: Doc<"boxes">["dimensionsIn"];
+}): number {
+  if (
+    typeof box.estimatedVolumeCuFt === "number" &&
+    Number.isFinite(box.estimatedVolumeCuFt) &&
+    box.estimatedVolumeCuFt > 0
+  ) {
+    return box.estimatedVolumeCuFt;
+  }
+  return calculateMovableUnitVolumeCuFt(box.dimensionsIn) ?? 0;
 }
 
 function BoxCard({
@@ -584,7 +602,7 @@ function BoxCard({
           <Badge variant="outline">
             {formatBoxWeightSource(weightSummary)}
           </Badge>
-          <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
+          <Badge variant="outline">{boxBadgeVolumeCuFt(box)} cu ft</Badge>
         </div>
         {task === "details" || task === "load" ? (
           <Button
@@ -667,7 +685,7 @@ function BoxOverviewCard({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
+        <Badge variant="outline">{boxBadgeVolumeCuFt(box)} cu ft</Badge>
         <Badge
           variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}
         >
@@ -806,7 +824,7 @@ function BoxTaskPickerCard({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <Badge variant="outline">{box.estimatedVolumeCuFt ?? 0} cu ft</Badge>
+        <Badge variant="outline">{boxBadgeVolumeCuFt(box)} cu ft</Badge>
         <Badge
           variant={isMissingBoxWeight(weightSummary) ? "secondary" : "outline"}
         >

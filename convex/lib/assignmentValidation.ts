@@ -1,4 +1,4 @@
-import { roundEstimate } from "./estimateEngine";
+import { roundEstimate, volumeFromDimensions } from "./estimateEngine";
 
 export type Capacity = {
   maxWeightLb?: number;
@@ -68,9 +68,12 @@ export function validateAssignment({
     capacity.maxWeightLb && !capacity.weightIsUnlimited
       ? roundEstimate((box.estimatedWeightLb / capacity.maxWeightLb) * 100)
       : undefined;
+  const resolvedVolumeCuFt = resolveVolumeCuFt(box);
   const volumePercent =
-    capacity.maxVolumeCuFt && !capacity.volumeIsUnlimited
-      ? roundEstimate((box.estimatedVolumeCuFt / capacity.maxVolumeCuFt) * 100)
+    capacity.maxVolumeCuFt &&
+    !capacity.volumeIsUnlimited &&
+    typeof resolvedVolumeCuFt === "number"
+      ? roundEstimate((resolvedVolumeCuFt / capacity.maxVolumeCuFt) * 100)
       : undefined;
 
   if (typeof weightPercent === "number" && weightPercent > 100) {
@@ -152,6 +155,24 @@ function resolveFootprintSqFt(box: LoadableBox): number | undefined {
   const sorted = [...values].sort((a, b) => b - a);
   const [longest, second] = sorted;
   return (longest * second) / 144;
+}
+
+// Resolve a box/item volume in cubic feet for the capacity check: prefer the
+// stored estimatedVolumeCuFt (which always wins so a real measured/packed value
+// is never overridden), otherwise derive it from dimensionsIn (L x W x H / 1728)
+// so a dims-only box still counts toward the volume soft warning. Returns
+// undefined when neither is usable, leaving volumePercent undefined as before.
+// Derivation is delegated to volumeFromDimensions in ./estimateEngine (no
+// circular import — estimateEngine imports nothing from this module).
+function resolveVolumeCuFt(box: LoadableBox): number | undefined {
+  if (
+    typeof box.estimatedVolumeCuFt === "number" &&
+    Number.isFinite(box.estimatedVolumeCuFt) &&
+    box.estimatedVolumeCuFt > 0
+  ) {
+    return box.estimatedVolumeCuFt;
+  }
+  return volumeFromDimensions(box.dimensionsIn);
 }
 
 function boxExceedsDimensions(

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
-import { estimateItem, roundEstimate } from "./lib/estimateEngine";
+import { boxVolumeCuFt, estimateItem, roundEstimate } from "./lib/estimateEngine";
 import {
   buildPcsReadinessChecklist,
   classifyPcsItem,
@@ -161,7 +161,7 @@ export const getForMove = query({
         assignedZone: box.assignedZoneId ? zoneNameById.get(box.assignedZoneId) : undefined,
         itemCount: boxItemsForSummary.reduce((total, entry) => total + entry.quantity, 0),
         estimatedWeightLb,
-        estimatedVolumeCuFt: box.estimatedVolumeCuFt,
+        estimatedVolumeCuFt: boxVolumeCuFt(box),
         photoCount: photosByBoxId.get(box._id) ?? 0,
         warnings: [...(box.assignmentWarnings ?? []), ...(box.assignmentHardBlocks ?? [])],
       };
