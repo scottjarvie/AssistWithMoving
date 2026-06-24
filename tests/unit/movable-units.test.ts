@@ -4,6 +4,7 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import {
   buildMovableUnits,
   isLooseMovableUnitItem,
+  movableUnitDensityLbPerCuFt,
   summarizeMovableUnits,
 } from "@/lib/movable-units";
 import type { InventoryItem } from "@/lib/inventory-types";
@@ -76,6 +77,8 @@ describe("movable units", () => {
       "add volume",
       "add contents later",
     ]);
+    expect(units[0].densityLbPerCuFt).toBeUndefined();
+    expect(units[0].densityLabel).toBe("—");
 
     expect(units[1]).toMatchObject({
       kind: "looseItem",
@@ -87,6 +90,12 @@ describe("movable units", () => {
       assignmentLabel: "Needs load assignment",
       missingFields: [],
     });
+    const treadmillVolume = units[1].estimatedVolumeCuFt ?? 0;
+    expect(treadmillVolume).toBeGreaterThan(0);
+    expect(units[1].densityLbPerCuFt).toBeCloseTo(220 / treadmillVolume, 5);
+    expect(units[1].densityLabel).toBe(
+      `${(220 / treadmillVolume).toFixed(1)} lb/ft³`,
+    );
 
     const summary = summarizeMovableUnits(units);
     expect(summary).toMatchObject({
@@ -249,6 +258,40 @@ describe("movable units", () => {
       assignmentLabel: "Workshop trailer / Rear wall",
       assignmentState: "assigned",
     });
+  });
+
+  it("leaves density blank when weight is present but volume is missing", () => {
+    const [unit] = buildMovableUnits({
+      looseItems: [
+        itemRecord({
+          name: "Mystery crate",
+          estimatedWeightLb: 40,
+        }),
+      ],
+    });
+
+    expect(unit.estimatedWeightLb).toBe(40);
+    expect(unit.densityLbPerCuFt).toBeUndefined();
+    expect(unit.densityLabel).toBe("—");
+  });
+});
+
+describe("movableUnitDensityLbPerCuFt", () => {
+  it("computes pounds per cubic foot when weight and volume are present", () => {
+    expect(movableUnitDensityLbPerCuFt(24, 1.6)).toBeCloseTo(15, 5);
+  });
+
+  it("returns undefined when weight is missing", () => {
+    expect(movableUnitDensityLbPerCuFt(undefined, 1.6)).toBeUndefined();
+  });
+
+  it("returns undefined when volume is missing", () => {
+    expect(movableUnitDensityLbPerCuFt(24, undefined)).toBeUndefined();
+  });
+
+  it("returns undefined when volume is zero or negative", () => {
+    expect(movableUnitDensityLbPerCuFt(24, 0)).toBeUndefined();
+    expect(movableUnitDensityLbPerCuFt(24, -2)).toBeUndefined();
   });
 });
 
