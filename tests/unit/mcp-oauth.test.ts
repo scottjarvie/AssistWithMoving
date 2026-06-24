@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   mcpBearerChallenge,
+  mcpOAuthConnectUrl,
   mcpProtectedResourceMetadata,
   mcpProtectedResourceMetadataUrl,
   mcpResourceUrl,
@@ -16,8 +17,10 @@ afterEach(() => {
 });
 
 describe("MCP OAuth helpers", () => {
-  it("builds protected-resource metadata for the MCP endpoint", () => {
+  it("builds KEY-ONLY protected-resource metadata for /api/mcp (no OAuth advertised)", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
+    // Even if a Clerk issuer is configured, /api/mcp must NOT advertise it — it
+    // is the API-key door and cannot consume OAuth tokens. See mcp-oauth.ts.
     process.env.CLERK_JWT_ISSUER_DOMAIN = "https://clerk.example.test/";
     const request = new Request("https://ignored.example/api/mcp");
 
@@ -27,22 +30,34 @@ describe("MCP OAuth helpers", () => {
     );
     expect(mcpProtectedResourceMetadata(request)).toEqual({
       resource: "https://movingmanifest.test/api/mcp",
-      authorization_servers: ["https://clerk.example.test"],
-      scopes_supported: ["openid", "profile", "email"],
+      authorization_servers: [],
       bearer_methods_supported: ["header"],
-      resource_signing_alg_values_supported: ["RS256"],
       resource_name: "MovingManifest",
       resource_documentation: "https://movingmanifest.test/mcp",
     });
   });
 
-  it("returns an MCP Bearer challenge with resource metadata and scopes", () => {
+  it("points OAuth clients at the /mcp/connect door", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
+    const request = new Request("https://ignored.example/api/mcp");
+
+    expect(mcpOAuthConnectUrl(request)).toBe(
+      "https://movingmanifest.test/mcp/connect"
+    );
+  });
+
+  it("returns a KEY-ONLY Bearer challenge that routes OAuth clients to /mcp/connect", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
     const request = new Request("https://movingmanifest.test/api/mcp");
 
-    expect(mcpBearerChallenge(request)).toBe(
-      'Bearer realm="MovingManifest MCP", resource_metadata="https://movingmanifest.test/.well-known/oauth-protected-resource/api/mcp", scope="openid profile email"'
+    const challenge = mcpBearerChallenge(request);
+
+    expect(challenge).toBe(
+      'Bearer realm="MovingManifest MCP API key", error="invalid_token", error_description="This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp/connect."'
     );
+    // The /api/mcp challenge must never lure OAuth clients into a dead-end flow.
+    expect(challenge).not.toContain("resource_metadata");
+    expect(challenge.toLowerCase()).not.toContain("clerk");
   });
 
   it("uses the request origin for Vercel preview and deployment hosts", () => {

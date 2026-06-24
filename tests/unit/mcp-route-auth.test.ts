@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("remote MCP OAuth discovery route behavior", () => {
-  it("returns an OAuth protected-resource challenge before tool access", async () => {
+  it("returns a KEY-ONLY challenge before tool access (no OAuth lure)", async () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
 
     const response = await getMcpEndpoint(
@@ -26,15 +26,18 @@ describe("remote MCP OAuth discovery route behavior", () => {
       error: {
         code: "unauthorized",
         message:
-          "Connect with OAuth or provide a MovingManifest API key via 'Authorization: Bearer mmk_...'.",
+          "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp/connect.",
       },
     });
-    expect(response.headers.get("WWW-Authenticate")).toBe(
-      'Bearer realm="MovingManifest MCP", resource_metadata="https://movingmanifest.test/.well-known/oauth-protected-resource/api/mcp", scope="openid profile email"'
+    const challenge = response.headers.get("WWW-Authenticate");
+    expect(challenge).toBe(
+      'Bearer realm="MovingManifest MCP API key", error="invalid_token", error_description="This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp/connect."'
     );
+    // /api/mcp must not advertise OAuth — that is what dead-ends OAuth clients.
+    expect(challenge).not.toContain("resource_metadata");
   });
 
-  it("protects POST tool calls the same way when no OAuth token or API key is present", async () => {
+  it("protects POST tool calls the same way when no API key is present", async () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
 
     const response = await postMcpEndpoint(
@@ -45,13 +48,14 @@ describe("remote MCP OAuth discovery route behavior", () => {
     );
 
     expect(response.status).toBe(401);
-    expect(response.headers.get("WWW-Authenticate")).toContain(
-      'resource_metadata="https://movingmanifest.test/.well-known/oauth-protected-resource/api/mcp"'
-    );
+    const challenge = response.headers.get("WWW-Authenticate");
+    expect(challenge).toContain("https://movingmanifest.test/mcp/connect");
+    expect(challenge).not.toContain("resource_metadata");
   });
 
-  it("serves protected-resource metadata for the branded MCP resource", async () => {
+  it("serves KEY-ONLY protected-resource metadata for /api/mcp (no auth server)", async () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
+    // A configured Clerk issuer must NOT leak into the /api/mcp metadata.
     process.env.CLERK_JWT_ISSUER_DOMAIN = "https://clerk.example.test/";
 
     const response = await getProtectedResourceMetadata(
@@ -62,10 +66,8 @@ describe("remote MCP OAuth discovery route behavior", () => {
 
     await expect(response.json()).resolves.toEqual({
       resource: "https://movingmanifest.test/api/mcp",
-      authorization_servers: ["https://clerk.example.test"],
-      scopes_supported: ["openid", "profile", "email"],
+      authorization_servers: [],
       bearer_methods_supported: ["header"],
-      resource_signing_alg_values_supported: ["RS256"],
       resource_name: "MovingManifest",
       resource_documentation: "https://movingmanifest.test/mcp",
     });

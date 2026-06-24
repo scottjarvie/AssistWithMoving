@@ -69,9 +69,12 @@ If a user says: "Go to movingmanifest.com and help me use it"
    them to `https://movingmanifest.com/ai/start`.
 4. After account creation, guide them to create or select a move.
 5. If their hosted assistant supports OAuth MCP, give it only
-   `https://movingmanifest.com/api/mcp` and follow browser sign-in/consent.
+   `https://movingmanifest.com/mcp/connect` and follow browser sign-in/consent.
+   (Do NOT use `https://movingmanifest.com/api/mcp` for OAuth — that is the
+   API-key endpoint and rejects OAuth tokens.)
 6. If OAuth MCP is not available, have them choose a helper preset, create the
-   fallback key, and copy the one-time secret only into an assistant they trust.
+   fallback key, and give it `https://movingmanifest.com/api/mcp` with the
+   one-time secret as the bearer token — only into an assistant they trust.
 7. Use `get_api_context` for MCP or `GET /api/v1/me` for REST to verify the
    connection and scopes.
 8. Use `list_moves` or `GET /api/v1/moves` to find or create the move.
@@ -305,15 +308,18 @@ Remote MCP (claude.ai custom connectors, Claude Cowork, any Streamable HTTP
 client — no install needed):
 
 ```
-Endpoint: https://movingmanifest.com/api/mcp
-Auth:     OAuth via browser sign-in, or Authorization: Bearer mmk_replace_with_a_scoped_api_key when OAuth is unavailable
+OAuth door (recommended): https://movingmanifest.com/mcp/connect
+  Auth: OAuth browser sign-in (Clerk) — no key to paste.
+API-key door:             https://movingmanifest.com/api/mcp
+  Auth: Authorization: Bearer mmk_replace_with_a_scoped_api_key
+  (rejects OAuth tokens — use the OAuth door above for sign-in)
 ```
 
-OAuth-capable clients should connect by endpoint URL and follow the
-protected-resource login flow. API-key fallback is for clients that cannot use
-remote MCP OAuth. Clients that cannot set custom headers may append
-`?key=mmk_...` to the endpoint URL, but header auth is recommended because URLs
-can be logged.
+OAuth-capable clients should connect to `/mcp/connect` and follow the
+protected-resource login flow. The `/api/mcp` API-key door is for clients that
+cannot use remote MCP OAuth (local/headless, CI). Clients that cannot set custom
+headers may append `?key=mmk_...` to the `/api/mcp` URL, but header auth is
+recommended because URLs can be logged.
 
 Local MCP via npx — Codex setup when the user has local shell access:
 

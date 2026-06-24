@@ -2,9 +2,12 @@
 import { pathToFileURL } from "node:url";
 
 const requiredScopes = ["openid", "profile", "email"];
+// The OAuth door — /mcp/connect, NOT /api/mcp. /api/mcp is the API-key door and
+// advertises no OAuth, so this proof targets the endpoint that actually runs the
+// OAuth flow. See src/lib/mcp-oauth.ts.
 const defaultEndpoint =
   process.env.MOVINGMANIFEST_MCP_ENDPOINT ??
-  "https://movingmanifest.com/api/mcp";
+  "https://movingmanifest.com/mcp/connect";
 
 function record(results, status, label, detail) {
   results.push({ status, label, detail });
@@ -179,8 +182,28 @@ export async function runOauthDiscoveryProbe({
   endpointUrl = defaultEndpoint,
   fetchFn = fetch,
 } = {}) {
+  // The OAuth gateway speaks Streamable HTTP: it answers a POST `initialize`
+  // (with an Accept header listing both application/json and text/event-stream)
+  // and returns 401 + WWW-Authenticate before running anything when
+  // unauthenticated. A bare GET returns 405. This unauthenticated initialize is
+  // rejected at the auth gate — no OAuth registration, token exchange, MCP tool
+  // call, or move-data access occurs.
   const response = await fetchFn(endpointUrl, {
-    headers: { Accept: "application/json" },
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "mcp-oauth-discovery-proof", version: "0" },
+      },
+    }),
     signal: AbortSignal.timeout(15_000),
   });
   const challenge = bearerChallengeParams(response.headers.get("www-authenticate"));
@@ -206,7 +229,7 @@ export async function runOauthDiscoveryProbe({
     resourceMetadata,
     authMetadata,
     probe: {
-      calledMethods: ["GET"],
+      calledMethods: ["POST initialize (unauthenticated, rejected at auth gate)", "GET"],
       noMutation:
         "No OAuth registration, authorization, token exchange, MCP tool call, or move-data access was performed.",
     },
@@ -238,11 +261,12 @@ function parseArgs(args) {
 function usage() {
   console.log(`Usage:
   node scripts/mcp-oauth-discovery-proof.mjs
-  node scripts/mcp-oauth-discovery-proof.mjs --endpoint https://movingmanifest.com/api/mcp
+  node scripts/mcp-oauth-discovery-proof.mjs --endpoint https://movingmanifest.com/mcp/connect
 
-This proof is read-only. It uses HTTP GET discovery only and never performs OAuth
-dynamic client registration, authorization, token exchange, authenticated MCP
-tool calls, or move-data access.`);
+This proof is read-only. It sends one unauthenticated MCP initialize (rejected at
+the auth gate) plus HTTP GET discovery, and never performs OAuth dynamic client
+registration, authorization, token exchange, authenticated MCP tool calls, or
+move-data access.`);
 }
 
 function formatResult(result) {

@@ -32,7 +32,12 @@ import { cn } from "@/lib/utils";
 // is the single source of truth for "an agent is connected". When it is > 0 the
 // banner collapses to a thin "Agent connected" badge. When it is 0 we show the
 // full teaching card, which the user can also dismiss for the session.
-const MCP_CONNECTOR_URL = "https://movingmanifest.com/api/mcp";
+//
+// This is the OAUTH connector URL (sign in, no key needed) — /mcp/connect, NOT
+// /api/mcp. /api/mcp is the API-KEY door and 401s OAuth sign-ins. See
+// src/lib/mcp-oauth.ts. Surfacing /api/mcp here is the bug that keeps breaking
+// agent connections — keep it pointed at /mcp/connect.
+const MCP_CONNECTOR_URL = "https://movingmanifest.com/mcp/connect";
 
 type SummaryStats = {
   activeApiKeyCount: number;
@@ -231,7 +236,7 @@ export function ConnectAgentOnboarding({
           <Link href="/ai">How it works</Link>
         </Button>
         <span className="text-xs text-muted-foreground">
-          MCP connector:{" "}
+          MCP connector (OAuth sign-in, no key):{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono">
             {MCP_CONNECTOR_URL}
           </code>

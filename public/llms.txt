@@ -10,7 +10,8 @@ Primary site: https://movingmanifest.com
 - https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to sign in, connect hosted MCP OAuth, or make a fallback helper key.
 - https://movingmanifest.com/api - public REST API overview, scopes, and assistant workflow.
 - https://movingmanifest.com/mcp - public MCP setup overview (remote endpoint for hosted assistants, npx server for local agents).
-- https://movingmanifest.com/api/mcp - remote MCP endpoint (Streamable HTTP). OAuth-capable hosted clients should connect by URL and follow browser sign-in; API keys are fallback auth.
+- https://movingmanifest.com/mcp/connect - OAuth MCP endpoint (Streamable HTTP). OAuth-capable hosted clients (claude.ai, Cowork) connect by URL and sign in with their MovingManifest account — no key needed. Recommended hosted connection.
+- https://movingmanifest.com/api/mcp - API-key MCP endpoint (Streamable HTTP). For local/headless or non-OAuth clients only; authenticate with a scoped mmk_ key. Does NOT accept OAuth tokens — OAuth clients must use /mcp/connect.
 - https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
 - https://movingmanifest.com/llms-full.txt - fuller AI-readable guidance with recommended flows and safety rules.
 
@@ -43,10 +44,12 @@ Primary site: https://movingmanifest.com
   follow browser sign-in. Create and paste a fallback helper key only when OAuth
   MCP is not available.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
-- Hosted MCP clients (claude.ai custom connectors, Claude Cowork) should use the
-  remote endpoint `https://movingmanifest.com/api/mcp`. OAuth-capable clients
-  should connect by URL and follow browser sign-in. If OAuth MCP is unavailable,
-  use a scoped helper key as the bearer token. No local install is needed.
+- Hosted MCP clients (claude.ai custom connectors, Claude Cowork) should connect
+  to the OAuth endpoint `https://movingmanifest.com/mcp/connect` and sign in with
+  the user's MovingManifest account — no key needed. The separate API-key
+  endpoint `https://movingmanifest.com/api/mcp` is for non-OAuth/local clients
+  only and rejects OAuth tokens; supply a scoped mmk_ key there as the bearer
+  token. No local install is needed.
 - For Codex users with local shell access, configure MCP with:
   `codex mcp add movingmanifest --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- npx -y movingmanifest-mcp`.
   Restart Codex or start a fresh session, verify `movingmanifest` appears in
