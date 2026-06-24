@@ -28,7 +28,7 @@ export function MovesStatsStrip({ activeMoves }: { activeMoves: ActiveMoves }) {
   ).length;
 
   const chips: Array<{ label: string; value: number; icon: LucideIcon }> = [
-    { label: "Active moves", value: activeMoves.length, icon: Truck },
+    { label: "Open moves", value: activeMoves.length, icon: Truck },
     { label: "In planning", value: planning, icon: ListTodo },
     { label: "Completed", value: completed, icon: CheckCircle2 },
   ];

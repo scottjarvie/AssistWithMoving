@@ -85,7 +85,7 @@ export function MoveWorkspaceHeader({
             </select>
           ) : selectedMove ? (
             <Badge variant="secondary" className="max-w-full truncate">
-              active move
+              current move
             </Badge>
           ) : null}
         </div>
