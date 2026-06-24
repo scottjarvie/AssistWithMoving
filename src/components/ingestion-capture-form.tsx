@@ -55,12 +55,19 @@ export function IngestionCaptureForm({
   householdId,
   moveId,
   onCreated,
+  targetBoxCode,
+  boxContextInstructions,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   // Fired after at least one queue entry is successfully created — lets a host
   // surface (e.g. the capture Sheet) refresh a count or close.
   onCreated?: (created: { entryCount: number }) => void;
+  // When the capture is launched from a specific movable unit, the unit code is
+  // shown as a target badge and boxContextInstructions is merged into every
+  // queued entry so the agent packs the results into that existing box.
+  targetBoxCode?: string;
+  boxContextInstructions?: string;
 }) {
   const initUpload = useAction(api.photos.initUpload);
   const finalizeUpload = useAction(api.photos.finalizeUpload);
@@ -174,6 +181,11 @@ export function IngestionCaptureForm({
 
     try {
       const trimmedInstructions = instructions.trim() || undefined;
+      // When launched from a movable unit, fold the box handoff context into
+      // every entry so the agent packs results into that existing box.
+      const effectiveInstructions = boxContextInstructions
+        ? [boxContextInstructions, trimmedInstructions].filter(Boolean).join("\n\n")
+        : trimmedInstructions;
 
       // Upload every attachment first so a failure never leaves a half-created
       // batch of entries. We capture which uploaded ids are images so the
@@ -210,7 +222,7 @@ export function IngestionCaptureForm({
           await createEntry({
             householdId,
             moveId,
-            instructions: trimmedInstructions,
+            instructions: effectiveInstructions,
             scopeHint: "singleItem",
             mediaPhotoIds:
               index === 0 ? [photoId, ...extraMediaIds] : [photoId],
@@ -279,6 +291,11 @@ export function IngestionCaptureForm({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {targetBoxCode ? (
+          <Badge variant="secondary" className="w-fit gap-1.5">
+            Adding to {targetBoxCode}
+          </Badge>
+        ) : null}
         <div className="rounded-md border border-dashed border-border bg-muted/20 p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
