@@ -53,7 +53,7 @@ const boxWriteArgs = {
   clearAssignedZone: v.optional(v.boolean()),
 };
 
-async function assertResourceAndZone(
+export async function assertResourceAndZone(
   ctx: MutationCtx,
   args: {
     moveId: Id<"moves">;
@@ -146,7 +146,7 @@ function contentsEstimatedWeight(
   );
 }
 
-async function loadAssignmentValidation(
+export async function loadAssignmentValidation(
   ctx: MutationCtx,
   args: {
     moveId: Id<"moves">;

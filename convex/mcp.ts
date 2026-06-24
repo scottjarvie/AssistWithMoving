@@ -26,6 +26,7 @@ import {
 import {
   listTransportArgs,
   placeBoxArgs,
+  updateBoxArgs,
   updateMoveArgs,
   upsertTransportArgs,
 } from "./mcpToolsSetup";
@@ -219,9 +220,17 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "place_box",
     description:
-      "Set where a box is and where it's going. Identify it by boxId or code (e.g. B-001). Present location is a ROOM (presentRoom/presentRoomId) OR a TRANSPORT (transport/transportId) — rooms/transport may be given by name or id and must already exist. Also sets destinationRoom. Use clearPresentRoom/clearTransport to remove one.",
+      "Set where a box is and where it's going. Identify it by boxId or code (e.g. B-001). Present location is a ROOM (presentRoom/presentRoomId) OR a TRANSPORT (transport/transportId) — rooms/transport may be given by name or id and must already exist. Also sets destinationRoom. Use clearPresentRoom/clearTransport to remove one. For weight, dimensions, volume, the starting room, or zone assignment, use update_box.",
     fn: api.mcpToolsSetup.placeBox,
     args: placeBoxArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "update_box",
+    description:
+      "Edit one box / movable unit (by boxId or code). Set physical attributes — estimatedWeightLb (planning estimate) and/or actualWeightLb (measured on a scale), estimatedVolumeCuFt, dimensionsIn { lengthIn, widthIn, heightIn } — and/or its three locations: present room (presentRoom/presentRoomId = where the box physically is right now), starting room (startingRoom = its origin/home room, stored and read back as `room`), destination room (destinationRoom/destinationRoomId = where it should end up), plus transport (transport/transportId) and load zone (zone/zoneId) — rooms/transport/zone may be given by name or id. Use clearTransport/clearZone/clearPresentRoom/clearStartingRoom/clearDestinationRoom to unset. Assigning to a transport runs load/capacity validation and returns assignmentWarnings/assignmentHardBlocks. If the assignment trips a soft warning (e.g. heavy box / over capacity), the call fails asking for assignmentOverrideReason — pass a short reason to proceed; hard blocks always fail. Pass dryRun:true to preview without saving (a dry run never throws on warnings — it returns assignmentWarnings/assignmentHardBlocks so you can see if a reason is needed first).",
+    fn: api.mcpToolsSetup.updateBox,
+    args: updateBoxArgs,
     identityArg: "caller",
   }),
   defineMcpAction({
