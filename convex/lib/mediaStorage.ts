@@ -219,3 +219,140 @@ function isAllowedVideoMimeType(
 function isPositiveFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
+
+// --- Pure image-dimension parsers -------------------------------------------
+// Byte-level width/height readers for the supported image types. Duplicated
+// verbatim from convex/http.ts (the REST direct-upload path keeps its own
+// private copy) so the OAuth MCP gateway action can compute dimensions before
+// finalizing an upload. These are pure functions — no ctx, Web-API only.
+export function imageDimensions(
+  bytes: Uint8Array,
+  mimeType: string,
+): { width: number; height: number } | null {
+  switch (mimeType) {
+    case "image/png":
+      return pngDimensions(bytes);
+    case "image/jpeg":
+      return jpegDimensions(bytes);
+    case "image/webp":
+      return webpDimensions(bytes);
+    default:
+      return null;
+  }
+}
+
+function pngDimensions(bytes: Uint8Array) {
+  if (
+    bytes.length < 24 ||
+    bytes[0] !== 0x89 ||
+    bytes[1] !== 0x50 ||
+    bytes[2] !== 0x4e ||
+    bytes[3] !== 0x47
+  ) {
+    return null;
+  }
+  return {
+    width: readUint32BE(bytes, 16),
+    height: readUint32BE(bytes, 20),
+  };
+}
+
+function jpegDimensions(bytes: Uint8Array) {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    return null;
+  }
+
+  let offset = 2;
+  while (offset < bytes.length) {
+    while (bytes[offset] === 0xff) offset += 1;
+    const marker = bytes[offset];
+    offset += 1;
+    if (marker === 0xd9 || marker === 0xda) break;
+    if (offset + 2 > bytes.length) return null;
+    const length = readUint16BE(bytes, offset);
+    if (length < 2 || offset + length > bytes.length) return null;
+    if (isJpegStartOfFrame(marker)) {
+      return {
+        height: readUint16BE(bytes, offset + 3),
+        width: readUint16BE(bytes, offset + 5),
+      };
+    }
+    offset += length;
+  }
+
+  return null;
+}
+
+function webpDimensions(bytes: Uint8Array) {
+  if (
+    bytes.length < 30 ||
+    ascii(bytes, 0, 4) !== "RIFF" ||
+    ascii(bytes, 8, 12) !== "WEBP"
+  ) {
+    return null;
+  }
+
+  const chunk = ascii(bytes, 12, 16);
+  if (chunk === "VP8X") {
+    return {
+      width: 1 + readUint24LE(bytes, 24),
+      height: 1 + readUint24LE(bytes, 27),
+    };
+  }
+  if (chunk === "VP8 " && bytes.length >= 30) {
+    return {
+      width: readUint16LE(bytes, 26) & 0x3fff,
+      height: readUint16LE(bytes, 28) & 0x3fff,
+    };
+  }
+  if (chunk === "VP8L" && bytes.length >= 25 && bytes[20] === 0x2f) {
+    const b1 = bytes[21];
+    const b2 = bytes[22];
+    const b3 = bytes[23];
+    const b4 = bytes[24];
+    return {
+      width: 1 + (((b2 & 0x3f) << 8) | b1),
+      height: 1 + (((b4 & 0x0f) << 10) | (b3 << 2) | ((b2 & 0xc0) >> 6)),
+    };
+  }
+
+  return null;
+}
+
+function isJpegStartOfFrame(marker: number | undefined) {
+  return (
+    marker !== undefined &&
+    marker >= 0xc0 &&
+    marker <= 0xcf &&
+    ![0xc4, 0xc8, 0xcc].includes(marker)
+  );
+}
+
+function ascii(bytes: Uint8Array, start: number, end: number) {
+  return String.fromCharCode(...bytes.slice(start, end));
+}
+
+function readUint16BE(bytes: Uint8Array, offset: number) {
+  return ((bytes[offset] ?? 0) << 8) | (bytes[offset + 1] ?? 0);
+}
+
+function readUint16LE(bytes: Uint8Array, offset: number) {
+  return (bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8);
+}
+
+function readUint24LE(bytes: Uint8Array, offset: number) {
+  return (
+    (bytes[offset] ?? 0) |
+    ((bytes[offset + 1] ?? 0) << 8) |
+    ((bytes[offset + 2] ?? 0) << 16)
+  );
+}
+
+function readUint32BE(bytes: Uint8Array, offset: number) {
+  return (
+    (bytes[offset] ?? 0) * 0x1000000 +
+    (((bytes[offset + 1] ?? 0) << 16) |
+      ((bytes[offset + 2] ?? 0) << 8) |
+      (bytes[offset + 3] ?? 0))
+  );
+}
