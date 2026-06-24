@@ -11,6 +11,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
+  type ActionCtx,
   action,
   internalAction,
   internalMutation,
@@ -470,46 +471,83 @@ export const evidenceSummary = query({
   },
 });
 
-export const initUpload = action({
-  args: {
-    householdId: v.id("households"),
-    moveId: v.id("moves"),
-    itemId: v.optional(v.id("items")),
-    boxId: v.optional(v.id("boxes")),
-    spaceId: v.optional(v.id("moveSpaces")),
-    transportResourceId: v.optional(v.id("transportResources")),
-    transportZoneId: v.optional(v.id("transportZones")),
-    room: v.optional(v.string()),
-    mimeType: v.string(),
-    sizeBytes: v.number(),
-    derivatives: v.optional(
-      v.array(
-        v.object({
-          variant: photoDerivativeVariantValidator,
-          mimeType: v.string(),
-          sizeBytes: v.number(),
-          width: v.number(),
-          height: v.number(),
-        }),
-      ),
+// Validator + type for the optional API-key actor that lets the REST/API-key
+// and OAuth-MCP paths upload without ctx.auth (they authorize before calling in
+// and pass createdByUserId). When omitted, the internal upload functions run the
+// usual ctx.auth permission check.
+type ApiPhotoActor = {
+  apiKeyId: string;
+  createdByUserId: Doc<"users">["_id"];
+};
+
+const initUploadArgs = {
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  itemId: v.optional(v.id("items")),
+  boxId: v.optional(v.id("boxes")),
+  spaceId: v.optional(v.id("moveSpaces")),
+  transportResourceId: v.optional(v.id("transportResources")),
+  transportZoneId: v.optional(v.id("transportZones")),
+  room: v.optional(v.string()),
+  mimeType: v.string(),
+  sizeBytes: v.number(),
+  derivatives: v.optional(
+    v.array(
+      v.object({
+        variant: photoDerivativeVariantValidator,
+        mimeType: v.string(),
+        sizeBytes: v.number(),
+        width: v.number(),
+        height: v.number(),
+      }),
     ),
-  },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    uploadSessionId: string;
+  ),
+};
+
+type InitUploadArgs = {
+  householdId: Doc<"households">["_id"];
+  moveId: Doc<"moves">["_id"];
+  itemId?: Doc<"items">["_id"];
+  boxId?: Doc<"boxes">["_id"];
+  spaceId?: Doc<"moveSpaces">["_id"];
+  transportResourceId?: Doc<"transportResources">["_id"];
+  transportZoneId?: Doc<"transportZones">["_id"];
+  room?: string;
+  mimeType: string;
+  sizeBytes: number;
+  derivatives?: Array<{
+    variant: "thumb" | "card" | "detail" | "full";
+    mimeType: string;
+    sizeBytes: number;
+    width: number;
+    height: number;
+  }>;
+};
+
+type InitUploadResult = {
+  uploadSessionId: string;
+  uploadUrl: string;
+  method: "PUT";
+  headers: { "Content-Type": string };
+  derivativeUploads: Array<{
+    variant: "thumb" | "card" | "detail" | "full";
     uploadUrl: string;
     method: "PUT";
     headers: { "Content-Type": string };
-    derivativeUploads: Array<{
-      variant: "thumb" | "card" | "detail" | "full";
-      uploadUrl: string;
-      method: "PUT";
-      headers: { "Content-Type": string };
-    }>;
-    expiresAt: number;
-  }> => {
+  }>;
+  expiresAt: number;
+};
+
+// Extracted body of initUpload. When `apiActor` is undefined this behaves
+// EXACTLY as the public action did (ctx.auth permission path); when provided it
+// forwards the actor into createUploadSession so callers that authorize outside
+// ctx.auth (REST API key, OAuth MCP bridge) can upload.
+async function runInitUpload(
+  ctx: ActionCtx,
+  args: InitUploadArgs,
+  apiActor?: ApiPhotoActor,
+): Promise<InitUploadResult> {
+  {
     const original = assertOriginalUploadFileShape(args);
     const normalizedDerivatives = (args.derivatives ?? []).map((derivative) => {
       const normalized = assertImageDerivativeUploadFileShape({
@@ -568,6 +606,7 @@ export const initUpload = action({
           height: derivative.height,
         })),
         expiresAt,
+        apiActor,
       },
     );
 
@@ -607,42 +646,89 @@ export const initUpload = action({
       derivativeUploads: signedDerivativeUploads,
       expiresAt,
     };
+  }
+}
+
+export const initUpload = action({
+  args: initUploadArgs,
+  handler: async (ctx, args): Promise<InitUploadResult> => {
+    return runInitUpload(ctx, args);
   },
 });
 
-export const finalizeUpload = action({
+// Internal-only bridge entry point for callers that authorize OUTSIDE ctx.auth
+// (REST API key, OAuth MCP gateway). NOT client-callable: the apiActor path skips
+// the permission check, so a client must never be able to supply createdByUserId.
+export const initUploadForActor = internalAction({
   args: {
-    householdId: v.id("households"),
-    moveId: v.id("moves"),
-    uploadSessionId: uploadSessionIdValidator,
-    width: v.optional(v.number()),
-    height: v.optional(v.number()),
-    originalHash: v.optional(v.string()),
-    caption: v.optional(v.string()),
-    photoType: v.optional(photoTypeValidator),
-    privacyLevel: v.optional(photoPrivacyLevelValidator),
-    visibilityScope: v.optional(photoVisibilityScopeValidator),
-    source: v.optional(photoSourceValidator),
-    exifHandlingStatus: v.optional(exifHandlingStatusValidator),
-    confidence: v.optional(estimateConfidenceValidator),
-    notes: v.optional(v.string()),
-    verificationStatus: v.optional(photoVerificationStatusValidator),
-    capturedAt: v.optional(v.number()),
+    ...initUploadArgs,
+    apiActor: apiPhotoActorValidator,
   },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    photoId: string;
-    derivativeStatus?: "pending" | "ready" | "failed";
-    derivativeError?: string;
-    derivativeNote: string;
-  }> => {
+  handler: async (ctx, args): Promise<InitUploadResult> => {
+    return runInitUpload(ctx, args, args.apiActor);
+  },
+});
+
+const finalizeUploadArgs = {
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  uploadSessionId: uploadSessionIdValidator,
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  originalHash: v.optional(v.string()),
+  caption: v.optional(v.string()),
+  photoType: v.optional(photoTypeValidator),
+  privacyLevel: v.optional(photoPrivacyLevelValidator),
+  visibilityScope: v.optional(photoVisibilityScopeValidator),
+  source: v.optional(photoSourceValidator),
+  exifHandlingStatus: v.optional(exifHandlingStatusValidator),
+  confidence: v.optional(estimateConfidenceValidator),
+  notes: v.optional(v.string()),
+  verificationStatus: v.optional(photoVerificationStatusValidator),
+  capturedAt: v.optional(v.number()),
+};
+
+type FinalizeUploadArgs = {
+  householdId: Doc<"households">["_id"];
+  moveId: Doc<"moves">["_id"];
+  uploadSessionId: Doc<"photoUploadSessions">["_id"];
+  width?: number;
+  height?: number;
+  originalHash?: string;
+  caption?: string;
+  photoType?: Doc<"itemPhotos">["photoType"];
+  privacyLevel?: Doc<"itemPhotos">["privacyLevel"];
+  visibilityScope?: Doc<"itemPhotos">["visibilityScope"];
+  source?: Doc<"itemPhotos">["source"];
+  exifHandlingStatus?: Doc<"itemPhotos">["exifHandlingStatus"];
+  confidence?: Doc<"itemPhotos">["confidence"];
+  notes?: string;
+  verificationStatus?: Doc<"itemPhotos">["verificationStatus"];
+  capturedAt?: number;
+};
+
+type FinalizeUploadResult = {
+  photoId: string;
+  derivativeStatus?: "pending" | "ready" | "failed";
+  derivativeError?: string;
+  derivativeNote: string;
+};
+
+// Extracted body of finalizeUpload. When `apiActor` is undefined this behaves
+// EXACTLY as the public action did (ctx.auth permission path); when provided it
+// forwards the actor into every internal call that accepts it.
+async function runFinalizeUpload(
+  ctx: ActionCtx,
+  args: FinalizeUploadArgs,
+  apiActor?: ApiPhotoActor,
+): Promise<FinalizeUploadResult> {
+  {
     const config = requireB2Config();
     const session = await ctx.runQuery(internal.photos.getUploadSession, {
       householdId: args.householdId,
       moveId: args.moveId,
       uploadSessionId: args.uploadSessionId,
+      apiActor,
     });
 
     try {
@@ -684,6 +770,7 @@ export const finalizeUpload = action({
         householdId: args.householdId,
         moveId: args.moveId,
         uploadSessionId: args.uploadSessionId,
+        apiActor,
       });
       throw error;
     }
@@ -705,6 +792,7 @@ export const finalizeUpload = action({
       notes: args.notes,
       verificationStatus: args.verificationStatus,
       capturedAt: args.capturedAt,
+      apiActor,
     });
 
     let derivativeStatus = imageDerivativeStatusForSession(session);
@@ -724,6 +812,7 @@ export const finalizeUpload = action({
           moveId: args.moveId,
           photoId,
           derivativeRefs: generated.derivativeRefs,
+          apiActor,
         });
         derivativeStatus = "ready";
       } catch (error) {
@@ -734,6 +823,7 @@ export const finalizeUpload = action({
           moveId: args.moveId,
           photoId,
           derivativeError,
+          apiActor,
         });
       }
     }
@@ -744,6 +834,25 @@ export const finalizeUpload = action({
       derivativeError,
       derivativeNote: derivativeNoteForStatus(derivativeStatus),
     };
+  }
+}
+
+export const finalizeUpload = action({
+  args: finalizeUploadArgs,
+  handler: async (ctx, args): Promise<FinalizeUploadResult> => {
+    return runFinalizeUpload(ctx, args);
+  },
+});
+
+// Internal-only bridge entry point — see initUploadForActor for the security
+// rationale (apiActor path skips the permission check; must not be client-callable).
+export const finalizeUploadForActor = internalAction({
+  args: {
+    ...finalizeUploadArgs,
+    apiActor: apiPhotoActorValidator,
+  },
+  handler: async (ctx, args): Promise<FinalizeUploadResult> => {
+    return runFinalizeUpload(ctx, args, args.apiActor);
   },
 });
 
