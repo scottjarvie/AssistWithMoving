@@ -12,6 +12,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -19,6 +20,7 @@ import {
   query,
 } from "./_generated/server";
 import { requireAppAdmin } from "./lib/admin";
+import { requireMoveForSubject } from "./lib/mcpIdentity";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
@@ -795,6 +797,87 @@ function derivativeNoteForStatus(
   }
 }
 
+// Build the short-lived display URL for an ALREADY-AUTHORIZED photo (Cloudflare
+// Images if configured, else a signed B2 URL). Shared by getDisplayUrl (web,
+// ctx.auth) and getDisplayUrlForSubject (MCP gateway, subject bridge) so the
+// two URL paths never drift.
+async function buildDisplayUrlResult(
+  photo: Doc<"itemPhotos">,
+  variant: PhotoDisplayVariant,
+): Promise<{
+  url: string;
+  expiresAt: number;
+  requestedVariant: PhotoDisplayVariant;
+  servedVariant: PhotoDisplayVariant;
+  deliveryProvider: PhotoDeliveryProvider;
+  derivativeStatus?: "pending" | "ready" | "failed";
+  width?: number;
+  height?: number;
+  mimeType: string;
+}> {
+  const mediaKind =
+    photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
+  if (mediaKind !== "image") {
+    throw new Error("Display derivatives are only available for image evidence.");
+  }
+
+  const selected =
+    variant === "original"
+      ? null
+      : selectDerivativeRef(photo.derivativeRefs, variant);
+
+  if (variant === "original") {
+    throw new Error("Use the audited original download action.");
+  }
+
+  if (!selected) {
+    throw new Error("Photo variant is not available for this role.");
+  }
+
+  const cloudflareUrl = cloudflareImageDeliveryUrl({
+    accountHash: process.env.CLOUDFLARE_IMAGES_ACCOUNT_HASH,
+    deliveryBaseUrl: process.env.CLOUDFLARE_IMAGE_DELIVERY_URL,
+    deliveryDomain: process.env.CLOUDFLARE_IMAGE_DELIVERY_DOMAIN,
+    imageId: photo.cloudflareImageId,
+    variant: selected.variant,
+  });
+  if (cloudflareUrl) {
+    return {
+      url: cloudflareUrl,
+      expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+      requestedVariant: variant,
+      servedVariant: selected.variant,
+      deliveryProvider: "cloudflareImages",
+      derivativeStatus: photo.derivativeStatus,
+      width: photo.width,
+      height: photo.height,
+      mimeType: photo.mimeType,
+    };
+  }
+
+  const config = requireB2Config();
+  const url = await getSignedUrl(
+    b2Client(),
+    new GetObjectCommand({
+      Bucket: config.bucketName,
+      Key: selected.ref,
+    }),
+    { expiresIn: displayUrlTtlSeconds },
+  );
+
+  return {
+    url,
+    expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
+    requestedVariant: variant,
+    servedVariant: selected.variant,
+    deliveryProvider: "b2SignedUrl",
+    derivativeStatus: photo.derivativeStatus,
+    width: photo.width,
+    height: photo.height,
+    mimeType: photo.mimeType,
+  };
+}
+
 export const getDisplayUrl = action({
   args: {
     householdId: v.id("households"),
@@ -821,67 +904,74 @@ export const getDisplayUrl = action({
       moveId: args.moveId,
       photoId: args.photoId,
     });
-    const mediaKind =
-      photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
-    if (mediaKind !== "image") {
-      throw new Error("Display derivatives are only available for image evidence.");
-    }
+    return buildDisplayUrlResult(photo, args.variant);
+  },
+});
 
-    const selected =
-      args.variant === "original"
-        ? null
-        : selectDerivativeRef(photo.derivativeRefs, args.variant);
-
-    if (args.variant === "original") {
-      throw new Error("Use the audited original download action.");
-    }
-
-    if (!selected) {
-      throw new Error("Photo variant is not available for this role.");
-    }
-
-    const cloudflareUrl = cloudflareImageDeliveryUrl({
-      accountHash: process.env.CLOUDFLARE_IMAGES_ACCOUNT_HASH,
-      deliveryBaseUrl: process.env.CLOUDFLARE_IMAGE_DELIVERY_URL,
-      deliveryDomain: process.env.CLOUDFLARE_IMAGE_DELIVERY_DOMAIN,
-      imageId: photo.cloudflareImageId,
-      variant: selected.variant,
-    });
-    if (cloudflareUrl) {
-      return {
-        url: cloudflareUrl,
-        expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
-        requestedVariant: args.variant,
-        servedVariant: selected.variant,
-        deliveryProvider: "cloudflareImages",
-        derivativeStatus: photo.derivativeStatus,
-        width: photo.width,
-        height: photo.height,
-        mimeType: photo.mimeType,
-      };
-    }
-
-    const config = requireB2Config();
-    const url = await getSignedUrl(
-      b2Client(),
-      new GetObjectCommand({
-        Bucket: config.bucketName,
-        Key: selected.ref,
-      }),
-      { expiresIn: displayUrlTtlSeconds },
+// Bridge-authed variants of the delivery query + display-url action for the
+// OAuth MCP gateway: ctx.auth is null inside a gateway tool, so these authorize
+// from the injected caller subject (requireMoveForSubject) instead of the web
+// session. Internal-only — never client-callable. Same URL output as above.
+export const getPhotoForDeliveryForSubject = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+    subject: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const policy = await requireMoveForSubject(
+      ctx,
+      args.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
     );
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      throw new Error("Photo not found.");
+    }
+    return { photo, visibility: policy.visibility };
+  },
+});
 
-    return {
-      url,
-      expiresAt: Date.now() + displayUrlTtlSeconds * 1000,
-      requestedVariant: args.variant,
-      servedVariant: selected.variant,
-      deliveryProvider: "b2SignedUrl",
-      derivativeStatus: photo.derivativeStatus,
-      width: photo.width,
-      height: photo.height,
-      mimeType: photo.mimeType,
-    };
+export const getDisplayUrlForSubject = internalAction({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+    variant: photoDisplayVariantValidator,
+    subject: v.string(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    url: string;
+    expiresAt: number;
+    requestedVariant: PhotoDisplayVariant;
+    servedVariant: PhotoDisplayVariant;
+    deliveryProvider: PhotoDeliveryProvider;
+    derivativeStatus?: "pending" | "ready" | "failed";
+    width?: number;
+    height?: number;
+    mimeType: string;
+  }> => {
+    const { photo } = await ctx.runQuery(
+      internal.photos.getPhotoForDeliveryForSubject,
+      {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        photoId: args.photoId,
+        subject: args.subject,
+      },
+    );
+    return buildDisplayUrlResult(photo, args.variant);
   },
 });
 

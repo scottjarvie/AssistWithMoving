@@ -10,7 +10,7 @@
 import { v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, mutation, query } from "./_generated/server";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
@@ -148,12 +148,19 @@ export const getImages = action({
       photos.map(async (p) => {
         let displayUrl: string | null = null;
         try {
-          const result = await ctx.runAction(api.photos.getDisplayUrl, {
-            householdId: args.householdId,
-            moveId: args.moveId,
-            photoId: p.photoId as Id<"itemPhotos">,
-            variant: "card",
-          });
+          // Bridge-authed: ctx.auth is null in the gateway, so use the
+          // subject-authorized delivery path (not api.photos.getDisplayUrl,
+          // which requires the web session and returns null here).
+          const result = await ctx.runAction(
+            internal.photos.getDisplayUrlForSubject,
+            {
+              householdId: args.householdId,
+              moveId: args.moveId,
+              photoId: p.photoId as Id<"itemPhotos">,
+              variant: "card",
+              subject: args.caller.subject,
+            },
+          );
           displayUrl = result.url;
         } catch {
           displayUrl = null;
