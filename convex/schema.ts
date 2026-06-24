@@ -1373,12 +1373,14 @@ export default defineSchema({
     moveId: v.id("moves"),
     code: v.string(),
     label: v.optional(v.string()),
+    nickname: v.optional(v.string()),
     room: v.optional(v.string()),
     destinationRoom: v.optional(v.string()),
     description: v.optional(v.string()),
     moveDayNote: v.optional(v.string()),
     containerType: v.optional(boxContainerType),
     destinationSpaceId: v.optional(v.id("moveSpaces")),
+    currentSpaceId: v.optional(v.id("moveSpaces")),
     agentLabel: v.optional(v.string()),
     aiConfidenceScore: v.optional(v.number()),
     status: boxStatus,
@@ -1406,6 +1408,7 @@ export default defineSchema({
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_assigned_resource", ["assignedResourceId"])
     .index("by_assigned_trip", ["assignedTripId"])
+    .index("by_current_space", ["currentSpaceId"])
     .index("by_household", ["householdId"]),
 
   boxItems: defineTable({
@@ -1796,6 +1799,8 @@ export default defineSchema({
     moveId: v.id("moves"),
     name: v.string(),
     normalizedName: v.string(),
+    code: v.optional(v.string()),
+    nickname: v.optional(v.string()),
     externalSource: v.optional(v.string()),
     externalId: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -1875,6 +1880,7 @@ export default defineSchema({
     .index("by_assigned_trip", ["assignedTripId"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
+    .index("by_move_code", ["moveId", "code"])
     .index("by_household", ["householdId"]),
 
   saleListings: defineTable({

@@ -778,6 +778,18 @@ export function normalizeBoxCode(code: string) {
     .slice(0, 24);
 }
 
+// Items use a full-word "item-0000" denotation, distinct from the letter-prefixed
+// unit codes (B = box, T = tote, …). Zero-padded to 4 digits.
+export function formatItemCode(sequence: number) {
+  return `item-${String(Math.max(1, Math.trunc(sequence))).padStart(4, "0")}`;
+}
+
+// A unit (box/tote/…) code may never start with the letter "I": that prefix is
+// reserved so a unit code can't be mistaken for an item code (item-0001).
+export function isReservedUnitCode(code: string) {
+  return code.trim().toUpperCase().startsWith("I");
+}
+
 export const movePersonRoleValidator = v.union(
   v.literal("owner"),
   v.literal("householdMember"),
