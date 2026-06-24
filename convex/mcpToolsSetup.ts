@@ -25,9 +25,11 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { assertResourceAndZone, loadAssignmentValidation } from "./boxes";
 import { recordAuditEvent } from "./lib/audit";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
 import {
+  boxStatusValidator,
   capacityValidator,
   moveStatusValidator,
   normalizeBoxCode,
@@ -102,6 +104,56 @@ async function resolveTransportId(
     const available = resources.map((r) => r.name).join(", ") || "none yet";
     throw new Error(
       `No transport named "${name}" in this move. Existing transports: ${available}. Create it with upsert_transport first.`,
+    );
+  }
+  return match._id;
+}
+
+// Resolve a transport zone within a move by id (preferred) or name. A zone only
+// makes sense within a specific transport, so resolving by name requires the
+// resourceId; by id we also verify the zone belongs to that resource (when
+// known). Never creates.
+async function resolveTransportZoneId(
+  ctx: Ctx,
+  moveId: Id<"moves">,
+  resourceId: Id<"transportResources"> | undefined,
+  ref: { id?: Id<"transportZones">; name?: string },
+): Promise<Id<"transportZones"> | undefined> {
+  if (ref.id) {
+    const zone = await ctx.db.get(ref.id);
+    if (!zone || zone.moveId !== moveId) {
+      throw new Error("That zone is not part of this move.");
+    }
+    if (zone.archivedAt) {
+      throw new Error("That zone is archived.");
+    }
+    if (resourceId && zone.resourceId !== resourceId) {
+      throw new Error("That zone does not belong to the assigned transport.");
+    }
+    return ref.id;
+  }
+  const name = ref.name?.trim();
+  if (!name) return undefined;
+  if (!resourceId) {
+    throw new Error(
+      "A zone only makes sense within a transport — set the transport first (transport/transportId) or pass a zoneId.",
+    );
+  }
+  const zones = await ctx.db
+    .query("transportZones")
+    .withIndex("by_resource_sort", (q) => q.eq("resourceId", resourceId))
+    .collect();
+  const match = zones.find(
+    (z) => !z.archivedAt && normName(z.name) === normName(name),
+  );
+  if (!match) {
+    const available =
+      zones
+        .filter((z) => !z.archivedAt)
+        .map((z) => z.name)
+        .join(", ") || "none yet";
+    throw new Error(
+      `No zone named "${name}" on this transport. Existing zones: ${available}. Create it with upsert_transport first.`,
     );
   }
   return match._id;
@@ -627,6 +679,333 @@ export const placeBox = mutation({
         assignedResourceId: updated?.assignedResourceId ?? null,
         destinationSpaceId: updated?.destinationSpaceId ?? null,
         destinationRoom: updated?.destinationRoom ?? null,
+      },
+    };
+  },
+});
+
+// ---- update_box ------------------------------------------------------------
+// Gateway-native mirror of boxes.update for the FULL editable field set. The
+// canonical boxes.update rejects API-key callers (actor.type must be "user"),
+// so this rebuilds the same field handling + load/capacity validation over the
+// subject bridge (requireMoveForSubject + policy.actor.userId). Reuses the
+// exported loadAssignmentValidation/assertResourceAndZone so that logic stays
+// single-sourced.
+export const updateBoxArgs = {
+  caller: mcpCallerValidator,
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  // Identify the box by id or by its code (e.g. "B-001").
+  boxId: v.optional(v.id("boxes")),
+  code: v.optional(v.string()),
+  // Descriptive.
+  label: v.optional(v.string()),
+  nickname: v.optional(v.string()),
+  description: v.optional(v.string()),
+  moveDayNote: v.optional(v.string()),
+  status: v.optional(boxStatusValidator),
+  // Physical attributes.
+  estimatedWeightLb: v.optional(v.number()),
+  actualWeightLb: v.optional(v.number()),
+  estimatedVolumeCuFt: v.optional(v.number()),
+  dimensionsIn: v.optional(
+    v.object({
+      lengthIn: v.optional(v.number()),
+      widthIn: v.optional(v.number()),
+      heightIn: v.optional(v.number()),
+    }),
+  ),
+  // Present location (room) — name or id.
+  presentRoom: v.optional(v.string()),
+  presentRoomId: v.optional(v.id("moveSpaces")),
+  clearPresentRoom: v.optional(v.boolean()),
+  // Starting / origin room — free-text label stored in the box.room string.
+  startingRoom: v.optional(v.string()),
+  clearStartingRoom: v.optional(v.boolean()),
+  // Destination location (room) — name or id.
+  destinationRoom: v.optional(v.string()),
+  destinationRoomId: v.optional(v.id("moveSpaces")),
+  clearDestinationRoom: v.optional(v.boolean()),
+  // Transport + zone — name or id.
+  transport: v.optional(v.string()),
+  transportId: v.optional(v.id("transportResources")),
+  clearTransport: v.optional(v.boolean()),
+  zone: v.optional(v.string()),
+  zoneId: v.optional(v.id("transportZones")),
+  clearZone: v.optional(v.boolean()),
+  assignmentLocked: v.optional(v.boolean()),
+  assignmentOverrideReason: v.optional(v.string()),
+  dryRun: v.optional(v.boolean()),
+};
+export const updateBox = mutation({
+  args: updateBoxArgs,
+  handler: async (ctx, args) => {
+    const policy = await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const userId = policy.actor.userId;
+
+    let box: Doc<"boxes"> | null = null;
+    if (args.boxId) {
+      box = await ctx.db.get(args.boxId);
+    } else if (args.code) {
+      const code = normalizeBoxCode(args.code);
+      box = await ctx.db
+        .query("boxes")
+        .withIndex("by_move_code", (q) =>
+          q.eq("moveId", args.moveId).eq("code", code),
+        )
+        .unique();
+    }
+    if (
+      !box ||
+      box.moveId !== args.moveId ||
+      box.householdId !== args.householdId
+    ) {
+      throw new Error(
+        "Box not found — pass a valid boxId or code (see list_boxes).",
+      );
+    }
+
+    const now = Date.now();
+    const patch: Partial<Doc<"boxes">> = { updatedAt: now };
+
+    // Descriptive fields.
+    if (args.label !== undefined) {
+      patch.label = normalizeOptionalText(args.label);
+    }
+    if (args.nickname !== undefined) {
+      patch.nickname = normalizeOptionalText(args.nickname);
+    }
+    if (args.description !== undefined) {
+      patch.description = normalizeOptionalText(args.description);
+    }
+    if (args.moveDayNote !== undefined) {
+      patch.moveDayNote = normalizeOptionalText(args.moveDayNote);
+    }
+    if (args.status !== undefined) {
+      patch.status = args.status;
+      patch.archivedAt = args.status === "archived" ? now : undefined;
+      patch.sealedAt =
+        args.status === "sealed" ? (box.sealedAt ?? now) : box.sealedAt;
+    }
+
+    // Physical attributes.
+    if (args.estimatedWeightLb !== undefined) {
+      patch.estimatedWeightLb = args.estimatedWeightLb;
+    }
+    if (args.actualWeightLb !== undefined) {
+      patch.actualWeightLb = args.actualWeightLb;
+    }
+    if (args.estimatedVolumeCuFt !== undefined) {
+      patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
+    }
+    if (args.dimensionsIn !== undefined) {
+      patch.dimensionsIn = args.dimensionsIn;
+    }
+
+    // Present location — room.
+    if (args.clearPresentRoom) {
+      patch.currentSpaceId = undefined;
+    } else if (args.presentRoomId || args.presentRoom) {
+      patch.currentSpaceId = await resolveSpaceId(ctx, args.moveId, {
+        id: args.presentRoomId,
+        name: args.presentRoom,
+      });
+    }
+
+    // Starting / origin room — free-text label in box.room.
+    if (args.clearStartingRoom) {
+      patch.room = undefined;
+    } else if (args.startingRoom !== undefined) {
+      patch.room = normalizeOptionalText(args.startingRoom);
+    }
+
+    // Destination room.
+    if (args.clearDestinationRoom) {
+      patch.destinationSpaceId = undefined;
+      patch.destinationRoom = undefined;
+    } else if (args.destinationRoomId || args.destinationRoom) {
+      const destSpaceId = await resolveSpaceId(ctx, args.moveId, {
+        id: args.destinationRoomId,
+        name: args.destinationRoom,
+      });
+      patch.destinationSpaceId = destSpaceId;
+      if (destSpaceId) {
+        const space = await ctx.db.get(destSpaceId);
+        if (space?.name) {
+          patch.destinationRoom = normalizeOptionalText(space.name);
+        }
+      }
+    }
+
+    // Transport + zone. Determine the effective resource first; a zone only
+    // makes sense within a transport. Clearing the transport also clears the
+    // zone. Mirrors boxes.update's resource/zone + clear semantics.
+    const effectiveResourceId = args.clearTransport
+      ? undefined
+      : args.transportId || args.transport
+        ? await resolveTransportId(ctx, args.moveId, {
+            id: args.transportId,
+            name: args.transport,
+          })
+        : box.assignedResourceId;
+
+    if (args.clearTransport) {
+      patch.assignedResourceId = undefined;
+      patch.assignedZoneId = undefined;
+    } else if (args.transportId || args.transport) {
+      patch.assignedResourceId = effectiveResourceId;
+      // Changing the resource invalidates any prior zone unless a new one is
+      // given below.
+      patch.assignedZoneId = undefined;
+    }
+
+    if (args.clearTransport || args.clearZone) {
+      patch.assignedZoneId = undefined;
+    } else if (args.zoneId || args.zone) {
+      patch.assignedZoneId = await resolveTransportZoneId(
+        ctx,
+        args.moveId,
+        effectiveResourceId,
+        { id: args.zoneId, name: args.zone },
+      );
+    }
+
+    if (args.assignmentLocked !== undefined) {
+      patch.assignmentLocked = args.assignmentLocked;
+    }
+    if (args.assignmentOverrideReason !== undefined) {
+      patch.assignmentOverrideReason = normalizeOptionalText(
+        args.assignmentOverrideReason,
+      );
+    }
+
+    // Capacity / load validation — mirror boxes.update. When a transport is (or
+    // remains) assigned, run validation over the post-patch field values. When
+    // clearing the transport, clear warnings/blocks and stamp validatedAt.
+    const nextAssignedResourceId = args.clearTransport
+      ? undefined
+      : (patch.assignedResourceId ?? box.assignedResourceId);
+    // Use `'assignedZoneId' in patch` rather than a nullish fallback: when the
+    // transport changes we set patch.assignedZoneId = undefined (line above) to
+    // drop the now-invalid prior zone, and `?? box.assignedZoneId` would
+    // resurrect that stale zone — making loadAssignmentValidation /
+    // assertResourceAndZone throw "Invalid transport zone." So the patched value
+    // (including an explicit undefined) must win over the box's stored zone.
+    const nextAssignedZoneId =
+      args.clearTransport || args.clearZone
+        ? undefined
+        : "assignedZoneId" in patch
+          ? patch.assignedZoneId
+          : box.assignedZoneId;
+
+    if (nextAssignedResourceId) {
+      const validation = await loadAssignmentValidation(ctx, {
+        moveId: args.moveId,
+        boxId: box._id,
+        assignedResourceId: nextAssignedResourceId,
+        assignedZoneId: nextAssignedZoneId,
+        dimensionsIn: patch.dimensionsIn ?? box.dimensionsIn,
+        estimatedWeightLb: patch.estimatedWeightLb ?? box.estimatedWeightLb,
+        actualWeightLb: patch.actualWeightLb ?? box.actualWeightLb,
+        estimatedVolumeCuFt:
+          patch.estimatedVolumeCuFt ?? box.estimatedVolumeCuFt,
+        assignmentOverrideReason:
+          patch.assignmentOverrideReason ?? box.assignmentOverrideReason,
+        // On a real write, enforce (hard blocks throw, soft warnings require an
+        // override reason) — mirrors boxes.update. On dryRun, don't enforce so a
+        // preview always returns warnings/hardBlocks as DATA instead of throwing,
+        // letting an agent probe whether an override reason is needed before
+        // committing.
+        enforce: !args.dryRun,
+      });
+      patch.assignmentWarnings = validation.assignmentWarnings;
+      patch.assignmentHardBlocks = validation.assignmentHardBlocks;
+      patch.assignmentValidatedAt = validation.assignmentValidatedAt;
+    } else if (args.clearTransport) {
+      patch.assignmentWarnings = [];
+      patch.assignmentHardBlocks = [];
+      patch.assignmentValidatedAt = now;
+    }
+
+    // Validate resource + zone belong to the move (throws on invalid).
+    await assertResourceAndZone(ctx, {
+      moveId: args.moveId,
+      assignedResourceId: nextAssignedResourceId,
+      assignedZoneId: nextAssignedZoneId,
+    });
+
+    if (args.dryRun) {
+      // Merge the patch over the current box so explicit clears (fields set to
+      // undefined in the patch) preview as cleared rather than falling back to
+      // the stored value.
+      const preview = { ...box, ...patch };
+      return {
+        dryRun: true as const,
+        box: {
+          boxId: box._id,
+          code: preview.code,
+          label: preview.label ?? null,
+          room: preview.room ?? null,
+          currentSpaceId: preview.currentSpaceId ?? null,
+          destinationSpaceId: preview.destinationSpaceId ?? null,
+          destinationRoom: preview.destinationRoom ?? null,
+          estimatedWeightLb: preview.estimatedWeightLb ?? null,
+          actualWeightLb: preview.actualWeightLb ?? null,
+          estimatedVolumeCuFt: preview.estimatedVolumeCuFt ?? null,
+          dimensionsIn: preview.dimensionsIn ?? null,
+          assignedResourceId: nextAssignedResourceId ?? null,
+          assignedZoneId: nextAssignedZoneId ?? null,
+        },
+        assignmentWarnings: patch.assignmentWarnings ?? box.assignmentWarnings ?? [],
+        assignmentHardBlocks:
+          patch.assignmentHardBlocks ?? box.assignmentHardBlocks ?? [],
+      };
+    }
+
+    await ctx.db.patch(box._id, patch);
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: userId,
+      category: "inventory",
+      action: "mcp.box_updated",
+      objectTable: "boxes",
+      objectId: box._id,
+      // Mirror boxes.update's audit metadata so the gateway path is as
+      // traceable as the UI path.
+      metadata: {
+        changedKeys: Object.keys(patch),
+        ...(patch.status && patch.status !== box.status
+          ? { statusFrom: box.status, statusTo: patch.status }
+          : {}),
+      },
+    });
+
+    const updated = await ctx.db.get(box._id);
+    return {
+      box: {
+        boxId: box._id,
+        code: updated?.code ?? null,
+        label: updated?.label ?? null,
+        room: updated?.room ?? null,
+        currentSpaceId: updated?.currentSpaceId ?? null,
+        destinationSpaceId: updated?.destinationSpaceId ?? null,
+        destinationRoom: updated?.destinationRoom ?? null,
+        estimatedWeightLb: updated?.estimatedWeightLb ?? null,
+        actualWeightLb: updated?.actualWeightLb ?? null,
+        estimatedVolumeCuFt: updated?.estimatedVolumeCuFt ?? null,
+        dimensionsIn: updated?.dimensionsIn ?? null,
+        assignedResourceId: updated?.assignedResourceId ?? null,
+        assignedZoneId: updated?.assignedZoneId ?? null,
+        assignmentWarnings: updated?.assignmentWarnings ?? [],
+        assignmentHardBlocks: updated?.assignmentHardBlocks ?? [],
       },
     };
   },
