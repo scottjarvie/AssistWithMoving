@@ -26,11 +26,16 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { assertResourceAndZone, loadAssignmentValidation } from "./boxes";
+import {
+  inferredMeasurementProvenanceForUser,
+  loadItemAssignmentValidation,
+} from "./items";
 import { recordAuditEvent } from "./lib/audit";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
 import {
   boxStatusValidator,
   capacityValidator,
+  estimateConfidenceValidator,
   moveStatusValidator,
   normalizeBoxCode,
   normalizeOptionalText,
@@ -1002,6 +1007,346 @@ export const updateBox = mutation({
         actualWeightLb: updated?.actualWeightLb ?? null,
         estimatedVolumeCuFt: updated?.estimatedVolumeCuFt ?? null,
         dimensionsIn: updated?.dimensionsIn ?? null,
+        assignedResourceId: updated?.assignedResourceId ?? null,
+        assignedZoneId: updated?.assignedZoneId ?? null,
+        assignmentWarnings: updated?.assignmentWarnings ?? [],
+        assignmentHardBlocks: updated?.assignmentHardBlocks ?? [],
+      },
+    };
+  },
+});
+
+// ---- update_item -----------------------------------------------------------
+// Gateway-native mirror of items.update for the physical/measurement +
+// location + transport field set. Loose items are movable units just like
+// boxes, but the canonical items.update rejects API-key callers (actor.type
+// must be "user"), so this rebuilds the same per-field patch + measurement
+// provenance + load/capacity validation over the subject bridge
+// (requireMoveForSubject + policy.actor.userId). Reuses the EXPORTED
+// inferredMeasurementProvenanceForUser/loadItemAssignmentValidation so that
+// logic stays single-sourced with the UI editor. Items have no unique code —
+// identify the item by itemId only (agents get itemIds from list_items,
+// search_inventory, or get_item).
+export const updateItemArgs = {
+  caller: mcpCallerValidator,
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  itemId: v.id("items"),
+  // Physical / measurements (mirror items.ts itemWriteArgs validators).
+  estimatedWeightLb: v.optional(v.number()),
+  estimatedWeightLowLb: v.optional(v.number()),
+  estimatedWeightHighLb: v.optional(v.number()),
+  actualWeightLb: v.optional(v.number()),
+  estimatedVolumeCuFt: v.optional(v.number()),
+  estimatedPackedVolumeCuFt: v.optional(v.number()),
+  dimensionsIn: v.optional(
+    v.object({
+      lengthIn: v.optional(v.number()),
+      widthIn: v.optional(v.number()),
+      heightIn: v.optional(v.number()),
+    }),
+  ),
+  weightConfidence: v.optional(estimateConfidenceValidator),
+  volumeConfidence: v.optional(estimateConfidenceValidator),
+  dimensionsConfidence: v.optional(estimateConfidenceValidator),
+  // Present location (room) — where the item physically is now. Name or id.
+  presentRoom: v.optional(v.string()),
+  presentRoomId: v.optional(v.id("moveSpaces")),
+  clearPresentRoom: v.optional(v.boolean()),
+  // Starting / origin room — free-text label stored in item.room.
+  startingRoom: v.optional(v.string()),
+  clearStartingRoom: v.optional(v.boolean()),
+  // Destination location (room) — name or id.
+  destinationRoom: v.optional(v.string()),
+  destinationRoomId: v.optional(v.id("moveSpaces")),
+  clearDestinationRoom: v.optional(v.boolean()),
+  // Transport + zone — name or id.
+  transport: v.optional(v.string()),
+  transportId: v.optional(v.id("transportResources")),
+  clearTransport: v.optional(v.boolean()),
+  zone: v.optional(v.string()),
+  zoneId: v.optional(v.id("transportZones")),
+  clearZone: v.optional(v.boolean()),
+  assignmentLocked: v.optional(v.boolean()),
+  assignmentOverrideReason: v.optional(v.string()),
+  dryRun: v.optional(v.boolean()),
+};
+export const updateItem = mutation({
+  args: updateItemArgs,
+  handler: async (ctx, args) => {
+    const policy = await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const userId = policy.actor.userId;
+
+    const item = await ctx.db.get(args.itemId);
+    if (
+      !item ||
+      item.moveId !== args.moveId ||
+      item.householdId !== args.householdId ||
+      item.deletedAt
+    ) {
+      throw new Error(
+        "Item not found — pass a valid itemId (see list_items, search_inventory, or get_item).",
+      );
+    }
+
+    const now = Date.now();
+    const patch: Partial<Doc<"items">> = {
+      updatedAt: now,
+      updatedByUserId: userId,
+    };
+
+    // Physical / measurements — mirror items.update's per-field handling
+    // (no normalization/clamping is applied to these in items.update).
+    if (args.estimatedWeightLb !== undefined) {
+      patch.estimatedWeightLb = args.estimatedWeightLb;
+    }
+    if (args.estimatedWeightLowLb !== undefined) {
+      patch.estimatedWeightLowLb = args.estimatedWeightLowLb;
+    }
+    if (args.estimatedWeightHighLb !== undefined) {
+      patch.estimatedWeightHighLb = args.estimatedWeightHighLb;
+    }
+    if (args.actualWeightLb !== undefined) {
+      patch.actualWeightLb = args.actualWeightLb;
+    }
+    if (args.estimatedVolumeCuFt !== undefined) {
+      patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
+    }
+    if (args.estimatedPackedVolumeCuFt !== undefined) {
+      patch.estimatedPackedVolumeCuFt = args.estimatedPackedVolumeCuFt;
+    }
+    if (args.dimensionsIn !== undefined) {
+      patch.dimensionsIn = args.dimensionsIn;
+    }
+    if (args.weightConfidence !== undefined) {
+      patch.weightConfidence = args.weightConfidence;
+    }
+    if (args.volumeConfidence !== undefined) {
+      patch.volumeConfidence = args.volumeConfidence;
+    }
+    if (args.dimensionsConfidence !== undefined) {
+      patch.dimensionsConfidence = args.dimensionsConfidence;
+    }
+
+    // Present location — room (item.currentSpaceId).
+    if (args.clearPresentRoom) {
+      patch.currentSpaceId = undefined;
+    } else if (args.presentRoomId || args.presentRoom) {
+      patch.currentSpaceId = await resolveSpaceId(ctx, args.moveId, {
+        id: args.presentRoomId,
+        name: args.presentRoom,
+      });
+    }
+
+    // Starting / origin room — free-text label in item.room.
+    if (args.clearStartingRoom) {
+      patch.room = undefined;
+    } else if (args.startingRoom !== undefined) {
+      patch.room = normalizeOptionalText(args.startingRoom);
+    }
+
+    // Destination room.
+    if (args.clearDestinationRoom) {
+      patch.destinationSpaceId = undefined;
+      patch.destinationRoom = undefined;
+    } else if (args.destinationRoomId || args.destinationRoom) {
+      const destSpaceId = await resolveSpaceId(ctx, args.moveId, {
+        id: args.destinationRoomId,
+        name: args.destinationRoom,
+      });
+      patch.destinationSpaceId = destSpaceId;
+      if (destSpaceId) {
+        const space = await ctx.db.get(destSpaceId);
+        if (space?.name) {
+          patch.destinationRoom = normalizeOptionalText(space.name);
+        }
+      }
+    }
+
+    // Transport + zone. Determine the effective resource first; a zone only
+    // makes sense within a transport. Clearing the transport also clears the
+    // zone. Copies updateBox's resource/zone + clear semantics verbatim.
+    const effectiveResourceId = args.clearTransport
+      ? undefined
+      : args.transportId || args.transport
+        ? await resolveTransportId(ctx, args.moveId, {
+            id: args.transportId,
+            name: args.transport,
+          })
+        : item.assignedResourceId;
+
+    if (args.clearTransport) {
+      patch.assignedResourceId = undefined;
+      patch.assignedZoneId = undefined;
+    } else if (args.transportId || args.transport) {
+      patch.assignedResourceId = effectiveResourceId;
+      // Changing the resource invalidates any prior zone unless a new one is
+      // given below.
+      patch.assignedZoneId = undefined;
+    }
+
+    if (args.clearTransport || args.clearZone) {
+      patch.assignedZoneId = undefined;
+    } else if (args.zoneId || args.zone) {
+      patch.assignedZoneId = await resolveTransportZoneId(
+        ctx,
+        args.moveId,
+        effectiveResourceId,
+        { id: args.zoneId, name: args.zone },
+      );
+    }
+
+    if (args.assignmentLocked !== undefined) {
+      patch.assignmentLocked = args.assignmentLocked;
+    }
+    if (args.assignmentOverrideReason !== undefined) {
+      patch.assignmentOverrideReason = normalizeOptionalText(
+        args.assignmentOverrideReason,
+      );
+    }
+
+    // Capacity / load validation — mirror items.update. When a transport is (or
+    // remains) assigned, run validation over the post-patch field values. When
+    // clearing the transport, clear warnings/blocks and stamp validatedAt.
+    const nextAssignedResourceId = args.clearTransport
+      ? undefined
+      : (patch.assignedResourceId ?? item.assignedResourceId);
+    // Use `'assignedZoneId' in patch` rather than a nullish fallback: when the
+    // transport changes we set patch.assignedZoneId = undefined above to drop
+    // the now-invalid prior zone, and `?? item.assignedZoneId` would resurrect
+    // that stale zone — making loadItemAssignmentValidation throw "Invalid
+    // transport zone." So the patched value (including an explicit undefined)
+    // must win over the item's stored zone.
+    const nextAssignedZoneId =
+      args.clearTransport || args.clearZone
+        ? undefined
+        : "assignedZoneId" in patch
+          ? patch.assignedZoneId
+          : item.assignedZoneId;
+
+    if (nextAssignedResourceId) {
+      const validation = await loadItemAssignmentValidation(ctx, {
+        moveId: args.moveId,
+        item: {
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          dimensionsIn: patch.dimensionsIn ?? item.dimensionsIn,
+          estimatedWeightLb: patch.estimatedWeightLb ?? item.estimatedWeightLb,
+          estimatedWeightLowLb:
+            patch.estimatedWeightLowLb ?? item.estimatedWeightLowLb,
+          estimatedWeightHighLb:
+            patch.estimatedWeightHighLb ?? item.estimatedWeightHighLb,
+          actualWeightLb: patch.actualWeightLb ?? item.actualWeightLb,
+          estimatedVolumeCuFt:
+            patch.estimatedVolumeCuFt ?? item.estimatedVolumeCuFt,
+          estimatedPackedVolumeCuFt:
+            patch.estimatedPackedVolumeCuFt ?? item.estimatedPackedVolumeCuFt,
+          weightConfidence: patch.weightConfidence ?? item.weightConfidence,
+          volumeConfidence: patch.volumeConfidence ?? item.volumeConfidence,
+          fragility: item.fragility,
+          highValue: item.highValue,
+          planningDefaultKeys: item.planningDefaultKeys,
+          requiresPersonalTransport: item.requiresPersonalTransport,
+          hazardousFlag: item.hazardousFlag,
+        },
+        assignedResourceId: nextAssignedResourceId,
+        assignedZoneId: nextAssignedZoneId,
+        assignmentOverrideReason:
+          patch.assignmentOverrideReason ?? item.assignmentOverrideReason,
+        // On a real write, enforce (hard blocks throw, soft warnings require an
+        // override reason) — mirrors items.update. On dryRun, don't enforce so a
+        // preview returns warnings/hardBlocks as DATA instead of throwing.
+        enforce: !args.dryRun,
+      });
+      patch.assignmentWarnings = validation.assignmentWarnings;
+      patch.assignmentHardBlocks = validation.assignmentHardBlocks;
+      patch.assignmentValidatedAt = validation.assignmentValidatedAt;
+    } else if (args.clearTransport) {
+      patch.assignmentWarnings = [];
+      patch.assignmentHardBlocks = [];
+      patch.assignmentValidatedAt = now;
+    }
+
+    // Measurement provenance: replicate items.update — when dimensions/weight/
+    // volume changed (and no explicit provenance is passed; the gateway never
+    // accepts one), auto-build the provenance entry for the signed-in user.
+    const inferredProvenance = inferredMeasurementProvenanceForUser({
+      args: patch,
+      existing: item,
+      userId,
+      now,
+    });
+    if (inferredProvenance) {
+      patch.measurementProvenance = inferredProvenance;
+    }
+
+    if (args.dryRun) {
+      // Merge the patch over the current item so explicit clears (fields set to
+      // undefined in the patch) preview as cleared rather than falling back to
+      // the stored value.
+      const preview = { ...item, ...patch };
+      return {
+        dryRun: true as const,
+        item: {
+          itemId: item._id,
+          name: preview.name,
+          room: preview.room ?? null,
+          currentSpaceId: preview.currentSpaceId ?? null,
+          destinationSpaceId: preview.destinationSpaceId ?? null,
+          destinationRoom: preview.destinationRoom ?? null,
+          estimatedWeightLb: preview.estimatedWeightLb ?? null,
+          actualWeightLb: preview.actualWeightLb ?? null,
+          estimatedVolumeCuFt: preview.estimatedVolumeCuFt ?? null,
+          dimensionsIn: preview.dimensionsIn ?? null,
+          weightConfidence: preview.weightConfidence ?? null,
+          volumeConfidence: preview.volumeConfidence ?? null,
+          assignedResourceId: nextAssignedResourceId ?? null,
+          assignedZoneId: nextAssignedZoneId ?? null,
+        },
+        assignmentWarnings:
+          patch.assignmentWarnings ?? item.assignmentWarnings ?? [],
+        assignmentHardBlocks:
+          patch.assignmentHardBlocks ?? item.assignmentHardBlocks ?? [],
+      };
+    }
+
+    await ctx.db.patch(item._id, patch);
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: userId,
+      category: "inventory",
+      action: "mcp.item_updated",
+      objectTable: "items",
+      objectId: item._id,
+      metadata: {
+        changedKeys: Object.keys(patch),
+      },
+    });
+
+    const updated = await ctx.db.get(item._id);
+    return {
+      item: {
+        itemId: item._id,
+        name: updated?.name ?? null,
+        room: updated?.room ?? null,
+        currentSpaceId: updated?.currentSpaceId ?? null,
+        destinationSpaceId: updated?.destinationSpaceId ?? null,
+        destinationRoom: updated?.destinationRoom ?? null,
+        estimatedWeightLb: updated?.estimatedWeightLb ?? null,
+        actualWeightLb: updated?.actualWeightLb ?? null,
+        estimatedVolumeCuFt: updated?.estimatedVolumeCuFt ?? null,
+        dimensionsIn: updated?.dimensionsIn ?? null,
+        weightConfidence: updated?.weightConfidence ?? null,
+        volumeConfidence: updated?.volumeConfidence ?? null,
         assignedResourceId: updated?.assignedResourceId ?? null,
         assignedZoneId: updated?.assignedZoneId ?? null,
         assignmentWarnings: updated?.assignmentWarnings ?? [],

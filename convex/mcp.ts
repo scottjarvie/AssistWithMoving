@@ -27,6 +27,7 @@ import {
   listTransportArgs,
   placeBoxArgs,
   updateBoxArgs,
+  updateItemArgs,
   updateMoveArgs,
   upsertTransportArgs,
 } from "./mcpToolsSetup";
@@ -132,7 +133,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "upsert_items",
     description:
-      "Add OR update many inventory items in one call (pass itemId to update, omit to create). Supports dryRun to preview. The workhorse for capturing inventory.",
+      "Add OR update many inventory items in one call (pass itemId to update, omit to create). Supports dryRun to preview. The workhorse for capturing inventory. For an item's weight, dimensions, volume, present location, or transport/zone assignment, use update_item.",
     fn: api.mcpToolsWrite.upsertItems,
     args: upsertItemsArgs,
     identityArg: "caller",
@@ -231,6 +232,14 @@ export const tools: McpToolRegistration[] = [
       "Edit one box / movable unit (by boxId or code). Set physical attributes — estimatedWeightLb (planning estimate) and/or actualWeightLb (measured on a scale), estimatedVolumeCuFt, dimensionsIn { lengthIn, widthIn, heightIn } — and/or its three locations: present room (presentRoom/presentRoomId = where the box physically is right now), starting room (startingRoom = its origin/home room, stored and read back as `room`), destination room (destinationRoom/destinationRoomId = where it should end up), plus transport (transport/transportId) and load zone (zone/zoneId) — rooms/transport/zone may be given by name or id. Use clearTransport/clearZone/clearPresentRoom/clearStartingRoom/clearDestinationRoom to unset. Assigning to a transport runs load/capacity validation and returns assignmentWarnings/assignmentHardBlocks. If the assignment trips a soft warning (e.g. heavy box / over capacity), the call fails asking for assignmentOverrideReason — pass a short reason to proceed; hard blocks always fail. Pass dryRun:true to preview without saving (a dry run never throws on warnings — it returns assignmentWarnings/assignmentHardBlocks so you can see if a reason is needed first).",
     fn: api.mcpToolsSetup.updateBox,
     args: updateBoxArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "update_item",
+    description:
+      "Edit one loose item / movable unit (by itemId — get it from list_items, search_inventory, or get_item). Set physical attributes — estimatedWeightLb / actualWeightLb, estimatedWeightLowLb / estimatedWeightHighLb, estimatedVolumeCuFt, dimensionsIn { lengthIn, widthIn, heightIn }, with optional weightConfidence / volumeConfidence / dimensionsConfidence — and/or its three locations: present room (presentRoom/presentRoomId = where it physically is now), starting room (startingRoom = its origin/home room, stored as room), destination room (destinationRoom/destinationRoomId), plus transport (transport/transportId) and load zone (zone/zoneId) — rooms/transport/zone by name or id. presentRoom and destinationRoom must name a room/space that already exists in the move (create it with upsert_spaces first, or pass its id); only startingRoom is free text. Unlike upsert_items, destinationRoom here assigns the item to an existing destination room/space (and the item's destinationRoom is set to that space's canonical name) rather than storing arbitrary destination text. Use clearTransport/clearZone/clearPresentRoom/clearStartingRoom/clearDestinationRoom to unset. Assigning to a transport runs load/capacity validation and returns assignmentWarnings/assignmentHardBlocks; a soft warning (e.g. over capacity) fails the call asking for assignmentOverrideReason — pass a short reason to proceed; hard blocks always fail. dryRun:true previews without saving and never throws on warnings.",
+    fn: api.mcpToolsSetup.updateItem,
+    args: updateItemArgs,
     identityArg: "caller",
   }),
   defineMcpAction({
