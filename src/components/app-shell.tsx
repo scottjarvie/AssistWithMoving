@@ -74,7 +74,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <AddToQueueButton variant="compact" />
               <AccountMenu />
             </div>
           </div>
