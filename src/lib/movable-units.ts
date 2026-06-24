@@ -288,7 +288,7 @@ function movableUnitFromBox(
     kind: "box",
     recordId: box._id,
     label: box.code,
-    name: box.label ?? box.description ?? "Box",
+    name: box.nickname ?? box.label ?? box.description ?? "Box",
     status: box.status,
     roomLabel: box.room ?? "origin unset",
     destinationLabel: box.destinationRoom ?? "destination unset",
@@ -316,6 +316,7 @@ function movableUnitFromBox(
     followUps,
     searchText: searchableText([
       box.code,
+      box.nickname,
       box.label,
       box.description,
       box.room,
@@ -364,8 +365,8 @@ function movableUnitFromLooseItem(
     id: `looseItem:${item._id}`,
     kind: "looseItem",
     recordId: item._id,
-    label: "Loose item",
-    name: item.name,
+    label: item.code ?? "Loose item",
+    name: item.nickname ?? item.name,
     status: item.status,
     roomLabel: item.room ?? "origin unset",
     destinationLabel:
@@ -398,6 +399,8 @@ function movableUnitFromLooseItem(
     missingFields,
     followUps,
     searchText: searchableText([
+      item.code,
+      item.nickname,
       item.name,
       item.description,
       item.room,

@@ -534,7 +534,8 @@ export function ItemDetailSheet({
               <Badge variant="outline">{item.disposition}</Badge>
             </div>
             <SheetDescription>
-              Last updated {new Date(item.updatedAt).toLocaleDateString()}
+              {item.code ? `${item.code} · ` : ""}Last updated{" "}
+              {new Date(item.updatedAt).toLocaleDateString()}
             </SheetDescription>
           </SheetHeader>
 

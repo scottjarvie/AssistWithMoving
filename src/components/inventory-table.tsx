@@ -374,6 +374,11 @@ function InventoryItemCard({
       </div>
 
       <div className="mt-3 min-w-0">
+        {item.code ? (
+          <p className="font-mono text-[0.7rem] tracking-wide text-muted-foreground">
+            {item.code}
+          </p>
+        ) : null}
         <h3 className="break-words text-base font-medium">{item.name}</h3>
         <p className="mt-1 line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
           {item.description ?? "No description"}
@@ -774,6 +779,11 @@ export function InventoryTable({
         ),
         cell: ({ row }) => (
           <div className="min-w-0">
+            {row.original.code ? (
+              <p className="font-mono text-[0.7rem] tracking-wide text-muted-foreground">
+                {row.original.code}
+              </p>
+            ) : null}
             <p className="font-medium">{row.original.name}</p>
             <p className="mt-1 line-clamp-2 max-w-[30rem] whitespace-normal break-words text-xs leading-5 text-muted-foreground">
               {row.original.description ?? "No description"}
