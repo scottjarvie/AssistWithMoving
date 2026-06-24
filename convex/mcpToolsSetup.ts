@@ -33,6 +33,7 @@ import {
   normalizeBoxCode,
   normalizeOptionalText,
   normalizeRuleList,
+  normalizeSortOrder,
   normalizeStructuredLocation,
   structuredLocationToDisplay,
   structuredLocationValidator,
@@ -267,7 +268,15 @@ export const listTransport = query({
             rules: resource.rules ?? [],
             zones: zones
               .filter((zone) => !zone.archivedAt)
-              .map((zone) => ({ zoneId: zone._id, name: zone.name })),
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map((zone) => ({
+                zoneId: zone._id,
+                name: zone.name,
+                description: zone.description ?? null,
+                capacity: zone.capacity ?? {},
+                preferredTags: zone.preferredTags ?? [],
+                sortOrder: zone.sortOrder,
+              })),
           };
         }),
     );
@@ -277,6 +286,15 @@ export const listTransport = query({
 });
 
 // ---- upsert_transport ------------------------------------------------------
+const transportZoneDraftValidator = v.object({
+  zoneId: v.optional(v.id("transportZones")), // present → update/archive an existing zone
+  name: v.optional(v.string()), // required to create; without zoneId, matches an existing zone by exact name OR creates a new one — to RENAME a zone you must pass its zoneId plus the new name
+  description: v.optional(v.string()),
+  capacity: v.optional(capacityValidator),
+  preferredTags: v.optional(v.array(v.string())),
+  sortOrder: v.optional(v.number()),
+  archive: v.optional(v.boolean()), // soft-delete the matched zone (sets archivedAt)
+});
 const transportDraftValidator = v.object({
   transportId: v.optional(v.id("transportResources")), // present → update
   type: v.optional(transportResourceTypeValidator), // required to create
@@ -284,6 +302,7 @@ const transportDraftValidator = v.object({
   description: v.optional(v.string()),
   capacity: v.optional(capacityValidator),
   rules: v.optional(v.array(v.string())),
+  zones: v.optional(v.array(transportZoneDraftValidator)),
 });
 export const upsertTransportArgs = {
   caller: mcpCallerValidator,
@@ -303,10 +322,20 @@ export const upsertTransport = mutation({
     );
     const userId = policy.actor.userId;
     const now = Date.now();
-    const results: Array<{ transportId: Id<"transportResources">; created: boolean }> =
-      [];
+    const results: Array<{
+      transportId: Id<"transportResources">;
+      created: boolean;
+      zones?: Array<{
+        zoneId: Id<"transportZones">;
+        name: string;
+        created: boolean;
+        archived?: boolean;
+      }>;
+    }> = [];
 
     for (const draft of args.transports) {
+      let resourceId: Id<"transportResources">;
+      let created: boolean;
       if (draft.transportId) {
         const resource = await ctx.db.get(draft.transportId);
         if (!resource || resource.moveId !== args.moveId) {
@@ -327,7 +356,8 @@ export const upsertTransport = mutation({
         }
         if (draft.rules !== undefined) patch.rules = normalizeRuleList(draft.rules);
         await ctx.db.patch(draft.transportId, patch);
-        results.push({ transportId: draft.transportId, created: false });
+        resourceId = draft.transportId;
+        created = false;
       } else {
         const name = draft.name?.trim();
         if (!name) throw new Error("A new transport needs a name.");
@@ -336,7 +366,7 @@ export const upsertTransport = mutation({
             "A new transport needs a type (e.g. truck, trailer, personalVehicle, professionalMovers, storage).",
           );
         }
-        const resourceId = await ctx.db.insert("transportResources", {
+        resourceId = await ctx.db.insert("transportResources", {
           householdId: args.householdId,
           moveId: args.moveId,
           type: draft.type,
@@ -350,10 +380,115 @@ export const upsertTransport = mutation({
           createdAt: now,
           updatedAt: now,
         });
-        results.push({ transportId: resourceId, created: true });
+        created = true;
       }
+
+      // Shared zones block — runs for both the create and the edit branch so load
+      // zones can be set when creating a brand-new truck AND when editing one.
+      const zoneResults: Array<{
+        zoneId: Id<"transportZones">;
+        name: string;
+        created: boolean;
+        archived?: boolean;
+      }> = [];
+      if (draft.zones && draft.zones.length > 0) {
+        const existingZones = await ctx.db
+          .query("transportZones")
+          .withIndex("by_resource_sort", (q) => q.eq("resourceId", resourceId))
+          .collect();
+        for (const z of draft.zones) {
+          // resolve target zone
+          let target: Doc<"transportZones"> | null = null;
+          if (z.zoneId) {
+            const existing = await ctx.db.get(z.zoneId);
+            if (
+              !existing ||
+              existing.resourceId !== resourceId ||
+              existing.moveId !== args.moveId
+            ) {
+              throw new Error("Zone not found for this transport.");
+            }
+            target = existing;
+          } else if (z.name && z.name.trim()) {
+            const wanted = z.name.trim().toLowerCase();
+            target =
+              existingZones.find(
+                (e) => !e.archivedAt && e.name.trim().toLowerCase() === wanted,
+              ) ?? null;
+          }
+
+          if (z.archive) {
+            if (!target) {
+              throw new Error(
+                "Cannot archive a transport zone that does not exist (pass zoneId or an existing zone name).",
+              );
+            }
+            await ctx.db.patch(target._id, { archivedAt: now, updatedAt: now });
+            zoneResults.push({
+              zoneId: target._id,
+              name: target.name,
+              created: false,
+              archived: true,
+            });
+            continue;
+          }
+
+          if (target) {
+            const zonePatch: Partial<Doc<"transportZones">> = { updatedAt: now };
+            if (z.name !== undefined) zonePatch.name = z.name.trim() || target.name;
+            if (z.description !== undefined) {
+              zonePatch.description = normalizeOptionalText(z.description);
+            }
+            if (z.capacity !== undefined) zonePatch.capacity = z.capacity;
+            if (z.preferredTags !== undefined) {
+              zonePatch.preferredTags = normalizeRuleList(z.preferredTags);
+            }
+            if (z.sortOrder !== undefined) {
+              zonePatch.sortOrder = normalizeSortOrder(z.sortOrder);
+            }
+            if (target.archivedAt) zonePatch.archivedAt = undefined; // explicit upsert un-archives
+            await ctx.db.patch(target._id, zonePatch);
+            zoneResults.push({
+              zoneId: target._id,
+              name: zonePatch.name ?? target.name,
+              created: false,
+            });
+          } else {
+            const zoneName = z.name?.trim();
+            if (!zoneName) throw new Error("A new transport zone needs a name.");
+            const zoneId = await ctx.db.insert("transportZones", {
+              householdId: args.householdId,
+              moveId: args.moveId,
+              resourceId,
+              name: zoneName,
+              description: normalizeOptionalText(z.description),
+              capacity: z.capacity ?? {},
+              preferredTags: normalizeRuleList(z.preferredTags ?? []),
+              // When no explicit sortOrder is given, offset by the number of zones
+              // already present so multiple zones created in one call get distinct,
+              // insertion-ordered keys (Date.now() is fixed across the whole mutation,
+              // mirroring the `now + results.length` pattern used for transports above).
+              sortOrder:
+                z.sortOrder !== undefined
+                  ? normalizeSortOrder(z.sortOrder)
+                  : now + existingZones.length,
+              createdByUserId: userId,
+              createdAt: now,
+              updatedAt: now,
+            });
+            zoneResults.push({ zoneId, name: zoneName, created: true });
+            existingZones.push((await ctx.db.get(zoneId))!); // so later drafts in the same call can match by name
+          }
+        }
+      }
+
+      results.push({ transportId: resourceId, created, zones: zoneResults });
     }
 
+    const zoneCount = results.reduce(
+      (sum, r) => sum + (r.zones?.length ?? 0),
+      0,
+    );
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -362,7 +497,7 @@ export const upsertTransport = mutation({
       category: "household",
       action: "mcp.transport_upserted",
       objectTable: "transportResources",
-      metadata: { count: results.length },
+      metadata: { count: results.length, zoneCount },
     });
 
     return { results };
