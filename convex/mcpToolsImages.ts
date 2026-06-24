@@ -210,14 +210,14 @@ export const mcpAssertMoveEditableArgs = {
 export const mcpAssertMoveEditable = query({
   args: mcpAssertMoveEditableArgs,
   handler: async (ctx, args) => {
-    await requireMoveForSubject(
+    const policy = await requireMoveForSubject(
       ctx,
       args.caller.subject,
       args.householdId,
       args.moveId,
       "inventory:edit",
     );
-    return { ok: true };
+    return { ok: true, userId: policy.actor.userId };
   },
 });
 
@@ -241,11 +241,19 @@ export const addImages = action({
       error?: string;
     }>;
   }> => {
-    await ctx.runQuery(api.mcpToolsImages.mcpAssertMoveEditable, {
-      caller: args.caller,
-      householdId: args.householdId,
-      moveId: args.moveId,
-    });
+    const { userId } = await ctx.runQuery(
+      api.mcpToolsImages.mcpAssertMoveEditable,
+      {
+        caller: args.caller,
+        householdId: args.householdId,
+        moveId: args.moveId,
+      },
+    );
+    // Bridge-authed: ctx.auth is null in the gateway, so the upload pipeline
+    // can't run its ctx.auth permission check. We already authorized via the
+    // subject bridge above, so pass the resolved user as the API actor to the
+    // internal-only *ForActor entry points (these skip the ctx.auth check).
+    const apiActor = { apiKeyId: "mcp-oauth", createdByUserId: userId };
 
     const results: Array<{ photoId: string | null; ok: boolean; error?: string }> =
       [];
@@ -265,7 +273,7 @@ export const addImages = action({
           throw new Error("Provide url or base64.");
         }
 
-        const init = await ctx.runAction(api.photos.initUpload, {
+        const init = await ctx.runAction(internal.photos.initUploadForActor, {
           householdId: args.householdId,
           moveId: args.moveId,
           itemId: image.attachTo?.itemId,
@@ -276,6 +284,7 @@ export const addImages = action({
           room: image.attachTo?.room,
           mimeType,
           sizeBytes: bytes.byteLength,
+          apiActor,
         });
 
         const put = await fetch(init.uploadUrl, {
@@ -285,13 +294,17 @@ export const addImages = action({
         });
         if (!put.ok) throw new Error(`upload PUT failed (${put.status})`);
 
-        const finalized = await ctx.runAction(api.photos.finalizeUpload, {
-          householdId: args.householdId,
-          moveId: args.moveId,
-          uploadSessionId: init.uploadSessionId as Id<"photoUploadSessions">,
-          caption: image.caption,
-          source: "mcp",
-        });
+        const finalized = await ctx.runAction(
+          internal.photos.finalizeUploadForActor,
+          {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            uploadSessionId: init.uploadSessionId as Id<"photoUploadSessions">,
+            caption: image.caption,
+            source: "mcp",
+            apiActor,
+          },
+        );
         results.push({ photoId: String(finalized.photoId), ok: true });
       } catch (error) {
         results.push({
