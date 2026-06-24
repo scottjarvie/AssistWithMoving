@@ -94,7 +94,12 @@ export const mcpResolvePhotos = query({
     }
     return rows
       .filter(
-        (p) => p.householdId === args.householdId && p.archivedAt === undefined,
+        (p) =>
+          p.householdId === args.householdId &&
+          // Scope to THIS move — an itemId/boxId/spaceId/transportId from another
+          // move in the same household must not leak its photos across moves.
+          p.moveId === args.moveId &&
+          p.archivedAt === undefined,
       )
       .map((p) => ({
         photoId: p._id,
@@ -123,6 +128,16 @@ export const getImagesArgs = {
   moveId: v.id("moves"),
   filter: imageFilterValidator,
   limit: v.optional(v.number()),
+  // Display resolution: thumb 200px, card 600px (default), detail 1200px,
+  // full 2400px. Use detail/full when the agent needs to read fine print.
+  variant: v.optional(
+    v.union(
+      v.literal("thumb"),
+      v.literal("card"),
+      v.literal("detail"),
+      v.literal("full"),
+    ),
+  ),
 };
 export const getImages = action({
   args: getImagesArgs,
@@ -157,7 +172,7 @@ export const getImages = action({
               householdId: args.householdId,
               moveId: args.moveId,
               photoId: p.photoId as Id<"itemPhotos">,
-              variant: "card",
+              variant: args.variant ?? "card",
               subject: args.caller.subject,
             },
           );

@@ -225,7 +225,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpAction({
     name: "get_images",
     description:
-      "Pull MANY photos at once with short-lived display URLs. filter is one of { itemId } | { boxId } | { spaceId } (room) | { transportId } | { transportZoneId } | { room } | { all: true }, plus optional limit (default 50). Returns images: [{ photoId, displayUrl, caption, attachedTo }].",
+      "Pull MANY photos at once with short-lived display URLs. filter is one of { itemId } | { boxId } | { spaceId } (room) | { transportId } | { transportZoneId } | { room } | { all: true }, plus optional limit (default 50) and variant (thumb|card|detail|full, default card — use detail/full to read fine print). Returns images: [{ photoId, displayUrl, caption, attachedTo }].",
     fn: api.mcpToolsImages.getImages,
     args: getImagesArgs,
     identityArg: "caller",
