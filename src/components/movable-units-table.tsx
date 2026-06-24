@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   type ColumnDef,
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import { PackageOpen, PackagePlus, Truck } from "lucide-react";
+import { ImageOff, PackageOpen, PackagePlus, Truck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -102,6 +102,10 @@ export function MovableUnitsTable({
     api.transportTrips.listForMoveWithSpaces,
     householdId && moveId ? { householdId, moveId } : "skip",
   );
+  const movePhotos = useQuery(
+    api.photos.listForMove,
+    householdId && moveId ? { householdId, moveId, limit: 250 } : "skip",
+  );
   const batchAssign = useMutation(api.movableUnits.batchAssign);
   const updateItem = useMutation(api.items.update);
   const router = useRouter();
@@ -169,6 +173,23 @@ export function MovableUnitsTable({
     [boxes, looseItems, resourceNamesById, zoneNamesById],
   );
   const summary = useMemo(() => summarizeMovableUnits(units), [units]);
+  // Most-recent photo per box / loose item, keyed by MovableUnit.id, for the
+  // leading thumbnail column. listForMove returns newest-first, so the first
+  // photo seen per unit is its most recent — a reasonable default "cover".
+  const primaryPhotoByUnit = useMemo(() => {
+    const map = new Map<string, Id<"itemPhotos">>();
+    for (const photo of movePhotos ?? []) {
+      if (photo.boxId) {
+        const key = `box:${photo.boxId}`;
+        if (!map.has(key)) map.set(key, photo._id);
+      }
+      if (photo.itemId) {
+        const key = `looseItem:${photo.itemId}`;
+        if (!map.has(key)) map.set(key, photo._id);
+      }
+    }
+    return map;
+  }, [movePhotos]);
   const selectedLooseItem = useMemo(
     () => items?.find((item) => item._id === selectedLooseItemId) ?? null,
     [items, selectedLooseItemId],
@@ -302,6 +323,19 @@ export function MovableUnitsTable({
 
   const columns = useMemo<ColumnDef<MovableUnit, unknown>[]>(
     () => [
+      {
+        id: "thumbnail",
+        meta: { label: "Photo", mobile: "primary", headClassName: "w-14" },
+        header: "",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <UnitThumbnail
+            householdId={householdId}
+            moveId={moveId}
+            photoId={primaryPhotoByUnit.get(row.original.id)}
+          />
+        ),
+      },
       {
         accessorKey: "name",
         meta: {
@@ -447,7 +481,7 @@ export function MovableUnitsTable({
         },
       },
     ],
-    [householdId, moveId],
+    [householdId, moveId, primaryPhotoByUnit],
   );
 
   return (
@@ -517,6 +551,7 @@ export function MovableUnitsTable({
             onSelectedChange={onSelectedChange}
             householdId={householdId}
             moveId={moveId}
+            photoId={primaryPhotoByUnit.get(row.id)}
           />
         )}
         batchActions={({ selectedRows, clearSelection }) => (
@@ -804,18 +839,65 @@ function MovableUnitBatchActions({
   );
 }
 
+function UnitThumbnail({
+  householdId,
+  moveId,
+  photoId,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  photoId?: Id<"itemPhotos">;
+}) {
+  const getDisplayUrl = useAction(api.photos.getDisplayUrl);
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!householdId || !moveId || !photoId) {
+      return;
+    }
+    let cancelled = false;
+    void getDisplayUrl({ householdId, moveId, photoId, variant: "card" })
+      .then((display) => {
+        if (!cancelled) setUrl(display.url);
+      })
+      .catch(() => {
+        if (!cancelled) setUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getDisplayUrl, householdId, moveId, photoId]);
+
+  return (
+    <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+      {photoId && url ? (
+        // B2/edge delivery URLs are short-lived and provider-controlled, so
+        // Next image optimization is intentionally bypassed.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="size-full object-cover" />
+      ) : (
+        <div className="flex size-full items-center justify-center text-muted-foreground">
+          <ImageOff className="size-4" aria-hidden="true" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MovableUnitCard({
   unit,
   selected,
   onSelectedChange,
   householdId,
   moveId,
+  photoId,
 }: {
   unit: MovableUnit;
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
+  photoId?: Id<"itemPhotos">;
 }) {
   const followUps = visibleFollowUps(unit);
   const openBoxHref =
@@ -852,17 +934,24 @@ function MovableUnitCard({
         ) : null}
       </div>
 
-      <div className="mt-2 min-w-0">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant={unit.kind === "box" ? "outline" : "secondary"}>
-            {unit.label}
-          </Badge>
-          <Badge variant="outline">{unit.status}</Badge>
+      <div className="mt-2 flex min-w-0 gap-3">
+        <UnitThumbnail
+          householdId={householdId}
+          moveId={moveId}
+          photoId={photoId}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={unit.kind === "box" ? "outline" : "secondary"}>
+              {unit.label}
+            </Badge>
+            <Badge variant="outline">{unit.status}</Badge>
+          </div>
+          <p className="mt-1 truncate text-sm font-medium">{unit.name}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {unit.roomLabel} to {unit.destinationLabel}
+          </p>
         </div>
-        <p className="mt-1 truncate text-sm font-medium">{unit.name}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {unit.roomLabel} to {unit.destinationLabel}
-        </p>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
