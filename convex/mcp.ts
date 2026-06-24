@@ -141,7 +141,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "capture_to_queue",
     description:
-      "Drop many capture notes (and references to already-uploaded photo ids) into the move's queue for later processing.",
+      "Drop many capture notes (and references to already-uploaded photo ids) into the move's queue for later processing. Optionally aim a capture at a room (targetSpaceId) or a transport (targetTransportId) so the agent knows where it belongs.",
     fn: api.mcpToolsWrite.captureToQueue,
     args: captureToQueueArgs,
     identityArg: "caller",
@@ -221,7 +221,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpAction({
     name: "get_images",
     description:
-      "Pull MANY photos at once with short-lived display URLs. filter is one of { itemId } | { boxId } | { spaceId } | { room } | { all: true }, plus optional limit (default 50). Returns images: [{ photoId, displayUrl, caption, attachedTo }].",
+      "Pull MANY photos at once with short-lived display URLs. filter is one of { itemId } | { boxId } | { spaceId } (room) | { transportId } | { transportZoneId } | { room } | { all: true }, plus optional limit (default 50). Returns images: [{ photoId, displayUrl, caption, attachedTo }].",
     fn: api.mcpToolsImages.getImages,
     args: getImagesArgs,
     identityArg: "caller",
@@ -229,7 +229,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpAction({
     name: "add_images",
     description:
-      "Upload MANY photos at once, each from a url OR base64, and attach it to an item/box/space/room via attachTo. Returns results: [{ photoId, ok, error? }].",
+      "Upload MANY photos at once, each from a url OR base64, and attach each via attachTo to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId or transportZoneId), or room name. Returns results: [{ photoId, ok, error? }].",
     fn: api.mcpToolsImages.addImages,
     args: addImagesArgs,
     identityArg: "caller",

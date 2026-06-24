@@ -19,6 +19,8 @@ const imageFilterValidator = v.object({
   itemId: v.optional(v.id("items")),
   boxId: v.optional(v.id("boxes")),
   spaceId: v.optional(v.id("moveSpaces")),
+  transportId: v.optional(v.id("transportResources")),
+  transportZoneId: v.optional(v.id("transportZones")),
   room: v.optional(v.string()),
   all: v.optional(v.boolean()),
 });
@@ -64,6 +66,21 @@ export const mcpResolvePhotos = query({
         )
         .order("desc")
         .take(limit);
+    } else if (args.filter.transportId || args.filter.transportZoneId) {
+      // No by-transport photo index; scan the move and filter (photo counts per
+      // move are small).
+      const scanned = await ctx.db
+        .query("itemPhotos")
+        .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+        .order("desc")
+        .take(500);
+      rows = scanned
+        .filter((p) =>
+          args.filter.transportZoneId
+            ? p.transportZoneId === args.filter.transportZoneId
+            : p.transportResourceId === args.filter.transportId,
+        )
+        .slice(0, limit);
     } else {
       rows = await ctx.db
         .query("itemPhotos")
@@ -87,9 +104,11 @@ export const mcpResolvePhotos = query({
             ? { kind: "box" as const, id: String(p.boxId) }
             : p.spaceId
               ? { kind: "space" as const, id: String(p.spaceId) }
-              : p.room
-                ? { kind: "room" as const, id: p.room }
-                : { kind: "move" as const, id: String(args.moveId) },
+              : p.transportResourceId
+                ? { kind: "transport" as const, id: String(p.transportResourceId) }
+                : p.room
+                  ? { kind: "room" as const, id: p.room }
+                  : { kind: "move" as const, id: String(args.moveId) },
       }));
   },
 });
@@ -159,6 +178,8 @@ const imageInputValidator = v.object({
       itemId: v.optional(v.id("items")),
       boxId: v.optional(v.id("boxes")),
       spaceId: v.optional(v.id("moveSpaces")),
+      transportResourceId: v.optional(v.id("transportResources")),
+      transportZoneId: v.optional(v.id("transportZones")),
       room: v.optional(v.string()),
     }),
   ),
@@ -240,6 +261,8 @@ export const addImages = action({
           itemId: image.attachTo?.itemId,
           boxId: image.attachTo?.boxId,
           spaceId: image.attachTo?.spaceId,
+          transportResourceId: image.attachTo?.transportResourceId,
+          transportZoneId: image.attachTo?.transportZoneId,
           room: image.attachTo?.room,
           mimeType,
           sizeBytes: bytes.byteLength,
