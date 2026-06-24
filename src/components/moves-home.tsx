@@ -4,7 +4,7 @@ import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowRight, Home, Plus } from "lucide-react";
+import { Check, Home, Plus } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -39,6 +39,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   defaultDocumentationProfilesForMoveType,
   documentationProfileOptions,
   moveTypeOptions,
@@ -52,6 +57,7 @@ import {
   type PcsShipmentType,
 } from "@/lib/move-presets";
 import { moveWorkspacePath } from "@/lib/move-links";
+import { cn } from "@/lib/utils";
 
 const DEFAULT_MOVE_TYPE: MoveType = "local";
 type HomeMove = MoveWorkspaceValue["activeMoves"][number];
@@ -62,6 +68,23 @@ const createMoveTasks: Array<{ value: CreateMoveTask; label: string }> = [
   { value: "pcs", label: "PCS details" },
   { value: "packets", label: "Packets" },
 ];
+
+// Plain-language status copy. The lifecycle enum stays planning -> active ->
+// completed (see MOVE-306); this only controls how each status reads on a card.
+const moveStatusMeta: Record<string, { label: string; hint: string }> = {
+  planning: {
+    label: "Planning",
+    hint: "Planning — this move is being set up. It becomes Active once you start working it, and Completed when it's done.",
+  },
+  active: {
+    label: "Active",
+    hint: "Active — you're actively working this move.",
+  },
+  completed: {
+    label: "Completed",
+    hint: "Completed — this move is finished.",
+  },
+};
 
 // The new product home. Replaces the old /app/dashboard surface: a header, a
 // New move action, an optional (non-load-bearing) stats strip, and a responsive
@@ -223,64 +246,76 @@ function MoveCard({
   onSelect: (moveId: Id<"moves">) => void;
 }) {
   const route = [move.origin, move.destination].filter(Boolean).join(" → ");
+  const status = moveStatusMeta[move.status] ?? {
+    label: move.status.charAt(0).toUpperCase() + move.status.slice(1),
+    hint: `Status: ${move.status}.`,
+  };
 
   return (
-    <Card role="listitem" className="flex flex-col">
+    <Card
+      role="listitem"
+      className={cn(
+        "relative transition-colors hover:border-primary/60",
+        selected && "border-primary ring-1 ring-primary/40",
+      )}
+    >
+      {/*
+        The whole card opens the move. Opening also marks it the current move:
+        the workspace derives the active move from the URL, and onSelect persists
+        the choice for off-route surfaces — so no separate "Select" button is
+        needed. The status badge and kebab menu sit above this link overlay via
+        z-10 so they stay interactive without triggering navigation.
+      */}
+      <Link
+        href={moveWorkspacePath(move._id)}
+        onClick={() => onSelect(move._id)}
+        aria-label={`Open ${move.title}`}
+        className="absolute inset-0 z-0 rounded-[inherit] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <CardTitle className="truncate text-base">{move.title}</CardTitle>
-            <CardDescription className="mt-1">
-              {route || "Route not set"}
-            </CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-2">
+            {selected ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="relative z-10 mt-1 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"
+                    aria-label="Current move"
+                  >
+                    <Check className="size-3.5" aria-hidden="true" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  This is your current move — actions like Add to Queue target
+                  it.
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+            <div className="min-w-0">
+              <CardTitle className="truncate text-lg font-semibold sm:text-xl">
+                {move.title}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {route || "Route not set"}
+              </CardDescription>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {selected ? <Badge variant="secondary">selected</Badge> : null}
-            <Badge variant="outline">{move.status}</Badge>
+          <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-default">
+                  <Badge variant="outline">{status.label}</Badge>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{status.hint}</TooltipContent>
+            </Tooltip>
             {householdId ? (
               <ActiveMoveMenu householdId={householdId} move={move} />
             ) : null}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="mt-auto space-y-3">
-        <div className="grid grid-cols-3 gap-2 text-sm">
-          <MoveField label="Type" value={move.type} />
-          <MoveField
-            label="Packets"
-            value={String(move.documentationProfileTypes?.length ?? 0)}
-          />
-          <MoveField label="System" value={move.unitSystem} />
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          {!selected ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => onSelect(move._id)}
-            >
-              Select
-            </Button>
-          ) : null}
-          <Button asChild size="sm">
-            <Link href={moveWorkspacePath(move._id)}>
-              Open
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
     </Card>
-  );
-}
-
-function MoveField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-md border border-border/70 px-2 py-1.5">
-      <p className="text-[0.68rem] uppercase text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate font-medium">{value}</p>
-    </div>
   );
 }
 
