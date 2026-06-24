@@ -70,7 +70,8 @@ export const tools: McpToolRegistration[] = [
   }),
   defineMcpQuery({
     name: "list_move_spaces",
-    description: "List the rooms / spaces in a move.",
+    description:
+      "List the rooms / spaces in a move. Returns { truncated, spaces }; truncated=true means there are more than 200.",
     fn: api.mcpTools.listMoveSpaces,
     args: {
       caller: mcpCallerValidator,
@@ -82,7 +83,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "list_items",
     description:
-      "List inventory items in a move (name, room, category, quantity, disposition). Sensitive fields are omitted.",
+      "List inventory items in a move (name, room, category, quantity, disposition). Sensitive fields are omitted. Returns { truncated, items }; truncated=true means more than 200 — narrow with search_inventory.",
     fn: api.mcpTools.listItems,
     args: {
       caller: mcpCallerValidator,
@@ -93,7 +94,8 @@ export const tools: McpToolRegistration[] = [
   }),
   defineMcpQuery({
     name: "list_boxes",
-    description: "List boxes / containers in a move (code, label, room, status).",
+    description:
+      "List boxes / containers in a move (code, label, room, status). Returns { truncated, boxes }; truncated=true means there are more than 200.",
     fn: api.mcpTools.listBoxes,
     args: {
       caller: mcpCallerValidator,

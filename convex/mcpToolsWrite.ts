@@ -33,6 +33,7 @@ import {
   requireHouseholdForSubject,
   requireMoveForSubject,
 } from "./lib/mcpIdentity";
+import { generateItemCode } from "./items";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import { insertTransportResourceFromPreset } from "./transportResources";
 import { transportPresetsForMoveType } from "./lib/transportPresets";
@@ -286,12 +287,14 @@ export const upsertItems = mutation({
         const name = normalizeItemName(draft.name);
         let itemId = "(dry-run)";
         if (!dryRun) {
+          const code = await generateItemCode(ctx, args.moveId);
           itemId = String(
             await ctx.db.insert("items", {
               householdId: args.householdId,
               moveId: args.moveId,
               name,
               normalizedName: normalizedSearchName(name),
+              code,
               description: normalizeOptionalText(draft.description),
               room: draft.room,
               destinationRoom: draft.destinationRoom,
@@ -711,7 +714,21 @@ export const packBoxes = mutation({
             updatedAt: now,
           });
         }
+        // Mirror boxes.addItem: an active item becomes "packed" once boxed.
+        await ctx.db.patch(entry.itemId, {
+          status: item.status === "active" ? "packed" : item.status,
+          updatedByUserId: userId,
+          updatedAt: now,
+        });
         itemsAdded += 1;
+      }
+
+      // Mirror boxes.addItem: packing items moves the box into "packing".
+      if (itemsAdded > 0) {
+        await ctx.db.patch(boxId, {
+          status: "packing",
+          updatedAt: now,
+        });
       }
 
       results.push({ boxId: String(boxId), code, itemsAdded });

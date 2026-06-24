@@ -85,6 +85,9 @@ async function resolveTransportId(
     if (!resource || resource.moveId !== moveId) {
       throw new Error("That transport is not part of this move.");
     }
+    if (resource.archivedAt) {
+      throw new Error("That transport is archived.");
+    }
     return ref.id;
   }
   const name = ref.name?.trim();
@@ -132,6 +135,19 @@ export const updateMove = mutation({
     const move = await ctx.db.get(args.moveId);
     if (!move || move.householdId !== args.householdId) {
       throw new Error("Move not found in this household.");
+    }
+
+    // Archiving/unarchiving a move requires household:manage_settings in the
+    // canonical moves.archive mutation, but this tool only checks household:edit
+    // and never sets/clears archivedAt. Block status transitions through the
+    // archive state here so they go through the app's gated flow instead.
+    if (
+      args.status === "archived" ||
+      (move.status === "archived" && args.status !== undefined)
+    ) {
+      throw new Error(
+        "Archiving a move isn't supported here — do it in the app.",
+      );
     }
 
     const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
@@ -418,8 +434,8 @@ export const placeBox = mutation({
     }
 
     // Present location — transport. Changing the resource invalidates any prior
-    // zone/trip placement and capacity validation, so clear them. Capacity is
-    // (re)checked by suggest_assignments, not here.
+    // zone/trip placement and capacity validation, so clear them. Capacity/load
+    // validation is not performed here.
     if (args.clearTransport) {
       patch.assignedResourceId = undefined;
       patch.assignedZoneId = undefined;

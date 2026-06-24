@@ -249,7 +249,12 @@ export const submitQueueResult = mutation({
       status: nextStatus,
       agentSummary: args.agentSummary?.trim() || undefined,
       agentQuestion: question || undefined,
-      resultItemIds: args.resultItemIds,
+      // Only overwrite the stored links when the caller actually provided them.
+      // Omitting resultItemIds (e.g. on a needsInput question) must not wipe
+      // links recorded by a prior submission.
+      ...(args.resultItemIds !== undefined
+        ? { resultItemIds: args.resultItemIds }
+        : {}),
       processedAt: nextStatus === "processed" ? now : undefined,
       updatedAt: now,
     });

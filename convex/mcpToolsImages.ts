@@ -386,27 +386,48 @@ export const attachPhotos = mutation({
       "inventory:edit",
     );
 
-    // Validate any provided target belongs to this move (no cross-tenant refs).
+    // Validate any provided target belongs to this move AND isn't
+    // archived/deleted (no cross-tenant refs, no re-filing onto dead targets).
+    // Mirrors photos.assertPhotoTargets' per-type guards.
     const t = args.attachTo;
-    const ownsMove = async (
-      id:
-        | Id<"items">
-        | Id<"boxes">
-        | Id<"moveSpaces">
-        | Id<"transportResources">
-        | Id<"transportZones">,
-      label: string,
-    ) => {
-      const doc = await ctx.db.get(id);
-      if (!doc || (doc as { moveId?: Id<"moves"> }).moveId !== args.moveId) {
-        throw new Error(`Target ${label} is not part of this move.`);
+    if (t.itemId) {
+      const item = await ctx.db.get(t.itemId);
+      if (!item || item.moveId !== args.moveId || item.deletedAt) {
+        throw new Error("Target item is not part of this move.");
       }
-    };
-    if (t.itemId) await ownsMove(t.itemId, "item");
-    if (t.boxId) await ownsMove(t.boxId, "box");
-    if (t.spaceId) await ownsMove(t.spaceId, "room");
-    if (t.transportResourceId) await ownsMove(t.transportResourceId, "transport");
-    if (t.transportZoneId) await ownsMove(t.transportZoneId, "transport zone");
+    }
+    if (t.boxId) {
+      const box = await ctx.db.get(t.boxId);
+      if (!box || box.moveId !== args.moveId || box.archivedAt) {
+        throw new Error("Target box is not part of this move.");
+      }
+    }
+    if (t.spaceId) {
+      const space = await ctx.db.get(t.spaceId);
+      if (
+        !space ||
+        space.moveId !== args.moveId ||
+        space.status === "archived"
+      ) {
+        throw new Error("Target room is not part of this move.");
+      }
+    }
+    if (t.transportResourceId) {
+      const resource = await ctx.db.get(t.transportResourceId);
+      if (
+        !resource ||
+        resource.moveId !== args.moveId ||
+        resource.archivedAt
+      ) {
+        throw new Error("Target transport is not part of this move.");
+      }
+    }
+    if (t.transportZoneId) {
+      const zone = await ctx.db.get(t.transportZoneId);
+      if (!zone || zone.moveId !== args.moveId || zone.archivedAt) {
+        throw new Error("Target transport zone is not part of this move.");
+      }
+    }
 
     const now = Date.now();
     const results: Array<{ photoId: string; ok: boolean; error?: string }> = [];

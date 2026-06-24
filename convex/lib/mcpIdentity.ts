@@ -95,6 +95,15 @@ export async function requireMoveForSubject(
     "household:read",
   );
 
+  // Confirm the move actually belongs to this household before granting any
+  // access. Without this, passing a foreign moveId alongside your own
+  // householdId would read another household's data. Centralizing the guard
+  // here means every move-scoped gateway tool inherits it.
+  const move = await ctx.db.get(moveId);
+  if (!move || move.householdId !== householdId) {
+    throw new AuthorizationError("Move not found in this household.");
+  }
+
   const moveGrant = await ctx.db
     .query("moveRoleGrants")
     .withIndex("by_move_user", (q) =>
