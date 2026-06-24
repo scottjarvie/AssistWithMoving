@@ -14,6 +14,7 @@ import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, mutation, query } from "./_generated/server";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
+import { imageDimensions } from "./lib/mediaStorage";
 
 const imageFilterValidator = v.object({
   itemId: v.optional(v.id("items")),
@@ -288,6 +289,24 @@ export const addImages = action({
           throw new Error("Provide url or base64.");
         }
 
+        // completeUploadSession requires positive width/height for images, but
+        // the gateway has no Sharp/Node runtime. Read the dimensions from the
+        // raw bytes (same pure parser the REST upload path uses) before init.
+        // Normalize the mime type first ("image/JPEG", "image/png; charset=..")
+        // so the parser's exact switch still matches.
+        const dims = imageDimensions(
+          bytes,
+          mimeType.toLowerCase().split(";")[0].trim(),
+        );
+        if (!dims) {
+          results.push({
+            photoId: null,
+            ok: false,
+            error: "Could not read image dimensions.",
+          });
+          continue;
+        }
+
         const init = await ctx.runAction(internal.photos.initUploadForActor, {
           householdId: args.householdId,
           moveId: args.moveId,
@@ -315,6 +334,8 @@ export const addImages = action({
             householdId: args.householdId,
             moveId: args.moveId,
             uploadSessionId: init.uploadSessionId as Id<"photoUploadSessions">,
+            width: dims.width,
+            height: dims.height,
             caption: image.caption,
             source: "mcp",
             apiActor,
