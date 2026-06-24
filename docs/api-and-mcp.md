@@ -1714,12 +1714,30 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 
 ## MCP Server
 
-The MCP tools are available over two transports that share one tool registry
-(`mcp-server/movingmanifest-mcp.mjs`), so they cannot drift:
+Hosted assistants reach MovingManifest through **two separate doors — do not
+confuse them** (crossing them is the recurring "Invalid API key format" 401):
 
-- **Remote (Streamable HTTP)** at `https://movingmanifest.com/api/mcp` — for
-  hosted assistants such as claude.ai custom connectors and Claude Cowork.
-  Served by `src/app/api/mcp/route.ts` in the Next.js app.
+- **OAuth door (recommended for claude.ai / Cowork):**
+  `https://movingmanifest.com/mcp/connect` — sign in with your MovingManifest
+  account, no key to copy. This is the OAuth 2.1 flow (Clerk) via the
+  convex-mcp-gateway. **Use this URL for any client that supports browser
+  sign-in.** Discovery: `/.well-known/oauth-protected-resource/mcp/connect`.
+- **API-key door:** `https://movingmanifest.com/api/mcp` — accepts `mmk_` API
+  keys ONLY (forwarded to REST as a key). It **cannot** consume an OAuth/JWT
+  token, so do not point an OAuth sign-in at it. For local/headless tools, CI,
+  or clients that can't OAuth.
+
+> ⚠️ `/api/mcp` does NOT do OAuth. If you paste it into an OAuth client, the
+> sign-in completes but every tool call 401s ("Invalid API key format"). Use
+> `/mcp/connect` for OAuth. See `src/lib/mcp-oauth.ts` for the full rationale.
+
+The tool implementations are available over transports that share one tool
+registry (`mcp-server/movingmanifest-mcp.mjs`), so they cannot drift:
+
+- **Remote (Streamable HTTP)** at `https://movingmanifest.com/api/mcp` (API key)
+  or `https://movingmanifest.com/mcp/connect` (OAuth) — for hosted assistants
+  such as claude.ai custom connectors and Claude Cowork. Served by
+  `src/app/api/mcp/route.ts` and `src/app/mcp/connect/route.ts`.
 - **Local (stdio)** via the published `movingmanifest-mcp` npm package — for
   Claude Desktop, Claude Code, Codex, and other clients that run local
   processes.
@@ -1732,20 +1750,30 @@ REST endpoints, MCP tool names, and known launch blockers. This keeps agents
 from guessing from a long tool list and makes operational gaps explicit without
 treating verified storage/upload support as unavailable.
 
-### Remote MCP
+### Remote MCP — OAuth door (recommended)
+
+```
+Endpoint: https://movingmanifest.com/mcp/connect
+Auth:     OAuth 2.1 sign-in (Clerk) — no key to paste
+```
+
+In claude.ai or Claude Cowork: Settings → Connectors → Add custom connector →
+paste `https://movingmanifest.com/mcp/connect`. The client opens MovingManifest
+sign-in and consent; on approval it can call the tools. No `mmk_` key needed.
+
+### Remote MCP — API-key door
 
 ```
 Endpoint: https://movingmanifest.com/api/mcp
 Auth:     Authorization: Bearer mmk_replace_with_a_scoped_api_key
 ```
 
-`x-api-key` headers and a `?key=mmk_...` query parameter are accepted as
-fallbacks for clients that cannot set custom headers; prefer the bearer header
-because URLs can end up in logs. Requests without a key get a 401 with a
-pointer to `https://movingmanifest.com/settings/ai-connections`.
-
-In claude.ai or Claude Cowork: Settings → Connectors → Add custom connector →
-paste the endpoint URL and supply the API key as the bearer token.
+For clients that can't OAuth (local/headless, CI). `x-api-key` headers and a
+`?key=mmk_...` query parameter are accepted as fallbacks for clients that cannot
+set custom headers; prefer the bearer header because URLs can end up in logs.
+Requests without a key get a 401 pointing to the OAuth endpoint. **This endpoint
+rejects OAuth/JWT tokens** — if your client signs in with OAuth, use
+`/mcp/connect` above instead.
 
 ### Local MCP
 

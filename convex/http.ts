@@ -20,6 +20,7 @@ import {
   type McpAuthorizerHandler,
   type McpIdentityResolver,
 } from "convex-mcp-gateway";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { components } from "./_generated/api";
 import { tools as mcpTools } from "./mcp";
 
@@ -941,24 +942,101 @@ function readUint32BE(bytes: Uint8Array, offset: number) {
 }
 
 // --- Remote MCP gateway (OAuth 2.1; Clerk is the authorization server) ------
-// The user's own AI agent connects here over Streamable HTTP. resolveIdentity
-// validates the Clerk OAuth access token — Convex's local JWT validation can't
-// verify it (its audience is the MCP resource, not "convex"), so we ask Clerk's
-// userinfo endpoint. That resolved identity drives both the authorize gate and
-// the `caller` injected into each tool. See convex/mcp.ts + convex/mcpTools.ts.
+// The user's own AI agent connects here over Streamable HTTP. resolveMcpIdentity
+// validates the Clerk OAuth access token and returns the user's subject, which
+// drives both the authorize gate and the `caller` injected into each tool.
+// See convex/mcp.ts + convex/mcpTools.ts.
+//
+// Convex's own ctx.auth can't validate this token: its audience is the MCP
+// resource (https://movingmanifest.com/mcp/connect), not "convex". So we verify
+// it ourselves. Two strategies, primary + fallback, because each fails on a
+// different token shape:
+//   1. JWKS verify (primary) — Clerk OAuth access tokens are RS256 JWTs. We
+//      verify the signature against Clerk's JWKS + the issuer and read `sub`.
+//      This is SCOPE-INDEPENDENT, which matters: Clerk's /oauth/userinfo 403s a
+//      token that lacks the `openid` scope, and the OAuth flow does not always
+//      request it (the resource's scopes_supported drives that). JWKS sidesteps
+//      the scope problem entirely.
+//   2. userinfo (fallback) — handles opaque (non-JWT) access tokens.
+// We log every rejection so a future "authorized but won't connect" failure is
+// diagnosable in `npx convex logs --prod` instead of silent. We intentionally
+// do NOT pin `aud` (the OAuth audience is the resource, not "convex"); this
+// matches the prior userinfo-only behavior's security posture. Tightening to a
+// resource-pinned `aud` check is a tracked follow-up once logs confirm the
+// exact audience Clerk stamps.
 const mcpGatewayClient = new McpGateway(components.mcpGateway);
 
+function clerkMcpIssuer(): string | null {
+  const raw = (
+    process.env.CLERK_JWT_ISSUER_DOMAIN ?? process.env.CLERK_FRONTEND_API_URL
+  )?.trim();
+  return raw ? raw.replace(/\/+$/, "") : null;
+}
+
+// createRemoteJWKSet memoizes its own key fetches; cache the instance per issuer
+// so repeated requests reuse it across this module's lifetime.
+let cachedClerkJwks: {
+  issuer: string;
+  jwks: ReturnType<typeof createRemoteJWKSet>;
+} | null = null;
+function clerkMcpJwks(issuer: string) {
+  if (!cachedClerkJwks || cachedClerkJwks.issuer !== issuer) {
+    cachedClerkJwks = {
+      issuer,
+      jwks: createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`)),
+    };
+  }
+  return cachedClerkJwks.jwks;
+}
+
 const resolveMcpIdentity: McpIdentityResolver = async (token) => {
-  const issuer = process.env.CLERK_JWT_ISSUER_DOMAIN?.trim();
+  const issuer = clerkMcpIssuer();
   if (!issuer) {
+    console.error(
+      "[mcp-auth] No Clerk issuer configured (CLERK_JWT_ISSUER_DOMAIN / CLERK_FRONTEND_API_URL).",
+    );
     return null;
   }
+
+  // 1) Primary: verify the bearer as a Clerk-signed JWT (scope-independent).
   try {
-    const response = await fetch(
-      `${issuer.replace(/\/+$/, "")}/oauth/userinfo`,
-      { headers: { Authorization: `Bearer ${token}` } },
+    const { payload } = await jwtVerify(token, clerkMcpJwks(issuer), {
+      issuer,
+    });
+    const subject =
+      (typeof payload.sub === "string" && payload.sub) ||
+      (typeof payload.user_id === "string" && payload.user_id) ||
+      null;
+    if (subject) {
+      // One-line, non-secret claim summary so we can tighten the aud check
+      // later with real data (sub is the Clerk user id; aud/scope are public).
+      console.log(
+        `[mcp-auth] jwt verified sub=${subject} aud=${JSON.stringify(
+          payload.aud ?? null,
+        )} scope=${JSON.stringify(
+          (payload as Record<string, unknown>).scope ?? null,
+        )}`,
+      );
+      return { subject, claims: payload as Record<string, unknown> };
+    }
+    console.warn("[mcp-auth] jwt verified but carried no sub/user_id claim.");
+  } catch (error) {
+    console.warn(
+      `[mcp-auth] jwt verify failed (${
+        error instanceof Error ? error.message : "unknown"
+      }); falling back to userinfo.`,
     );
+  }
+
+  // 2) Fallback: Clerk userinfo (opaque / non-JWT access tokens).
+  try {
+    const response = await fetch(`${issuer}/oauth/userinfo`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!response.ok) {
+      console.warn(
+        `[mcp-auth] userinfo rejected the token: HTTP ${response.status}.`,
+      );
       return null;
     }
     const info = (await response.json()) as {
@@ -966,8 +1044,17 @@ const resolveMcpIdentity: McpIdentityResolver = async (token) => {
       user_id?: string;
     } & Record<string, unknown>;
     const subject = info.sub ?? info.user_id;
-    return subject ? { subject, claims: info } : null;
-  } catch {
+    if (!subject) {
+      console.warn("[mcp-auth] userinfo returned no sub/user_id.");
+      return null;
+    }
+    return { subject, claims: info };
+  } catch (error) {
+    console.error(
+      `[mcp-auth] userinfo call threw: ${
+        error instanceof Error ? error.message : "unknown"
+      }.`,
+    );
     return null;
   }
 };

@@ -1,10 +1,15 @@
-// Remote MCP endpoint (Streamable HTTP) for hosted agents — claude.ai,
-// Claude Cowork, and any MCP client that can't run a local process.
+// Remote MCP endpoint (Streamable HTTP) — the API-KEY door.
 //
-// Auth: the same mmk_ API keys used by the REST API. Preferred transport is
-// the Authorization header; `x-api-key` and a `?key=` query parameter are
-// accepted as fallbacks for clients that cannot set custom headers (note:
-// query-string keys can end up in request logs — header auth is recommended).
+// Auth: mmk_ API keys ONLY (same keys as the REST API). This endpoint forwards
+// the Bearer token to REST as an mmk_ key, so it CANNOT accept an OAuth/JWT
+// token. OAuth-capable clients (claude.ai) must use the OAuth door instead:
+// https://<site>/mcp/connect. See src/lib/mcp-oauth.ts for the full two-door
+// explanation — do not make this endpoint advertise OAuth.
+//
+// Preferred transport is the Authorization header; `x-api-key` and a `?key=`
+// query parameter are accepted as fallbacks for clients that cannot set custom
+// headers (note: query-string keys can end up in request logs — header auth is
+// recommended).
 //
 // Tool definitions are shared with the local stdio server in
 // mcp-server/movingmanifest-mcp.mjs so the two transports cannot drift.
@@ -72,7 +77,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   if (!apiKey) {
     return unauthorized(
       request,
-      "Connect with OAuth or provide a MovingManifest API key via 'Authorization: Bearer mmk_...'."
+      "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp/connect."
     );
   }
 

@@ -33,7 +33,7 @@ const mcpCards = [
   },
   {
     title: "Hosted or local",
-    copy: "Hosted assistants connect to https://movingmanifest.com/api/mcp and sign in with MovingManifest OAuth when the client supports it. Desktop agents can instead run the local server via npx movingmanifest-mcp with a scoped key.",
+    copy: "Hosted assistants connect to https://movingmanifest.com/mcp/connect and sign in with MovingManifest OAuth — no key to copy. Desktop or non-OAuth agents can instead use the API-key endpoint (https://movingmanifest.com/api/mcp) or run the local server via npx movingmanifest-mcp with a scoped key.",
     icon: Laptop,
   },
   {
@@ -78,13 +78,15 @@ const localExtendedToolGroups = [
   "Raw upload sessions for clients that cannot use workflow photo tools",
 ];
 
-const remoteEndpointUrl = "https://movingmanifest.com/api/mcp";
+// OAuth (sign-in) door. The API-key door is /api/mcp (used only in the fallback
+// example below). These are different endpoints — see src/lib/mcp-oauth.ts.
+const remoteEndpointUrl = "https://movingmanifest.com/mcp/connect";
 
 const remoteOAuthExample = `Paste this MCP URL into an OAuth-capable hosted client:
-https://movingmanifest.com/api/mcp
+https://movingmanifest.com/mcp/connect
 
 The client discovers Clerk auth from:
-/.well-known/oauth-protected-resource/api/mcp`;
+/.well-known/oauth-protected-resource/mcp/connect`;
 
 const remoteApiKeyFallbackExample = `POST https://movingmanifest.com/api/mcp
 Authorization: Bearer mmk_replace_with_a_scoped_api_key`;
