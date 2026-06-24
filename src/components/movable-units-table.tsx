@@ -424,6 +424,25 @@ export function MovableUnitsTable({
         ),
       },
       {
+        id: "density",
+        accessorFn: (unit) => unit.densityLbPerCuFt ?? -1,
+        meta: { label: "Density", mobile: "primary", align: "start" },
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} label="Density" />
+        ),
+        cell: ({ row }) => (
+          <span
+            className={
+              row.original.densityLbPerCuFt === undefined
+                ? "text-muted-foreground"
+                : "font-medium"
+            }
+          >
+            {row.original.densityLabel}
+          </span>
+        ),
+      },
+      {
         id: "size",
         meta: {
           label: "Size / volume",
@@ -958,6 +977,9 @@ function MovableUnitCard({
         <div className="rounded-md border border-border bg-muted/20 p-2">
           <p className="text-muted-foreground">Weight</p>
           <p className="mt-1 font-medium">{unit.weightLabel}</p>
+          {unit.densityLbPerCuFt === undefined ? null : (
+            <p className="mt-1 text-muted-foreground">{unit.densityLabel}</p>
+          )}
         </div>
         <div className="rounded-md border border-border bg-muted/20 p-2">
           <p className="text-muted-foreground">Size</p>

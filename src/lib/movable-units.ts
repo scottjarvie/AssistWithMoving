@@ -91,6 +91,8 @@ export type MovableUnit = {
   itemCountLabel: string;
   estimatedWeightLb?: number;
   estimatedVolumeCuFt?: number;
+  densityLbPerCuFt?: number;
+  densityLabel: string;
   editableWeightLb?: number;
   editableVolumeCuFt?: number;
   dimensionsIn?: DimensionsLike;
@@ -282,6 +284,7 @@ function movableUnitFromBox(
     ...followUpsForMissingFields(missingFields),
     ...(record.itemCount ? [] : ["add contents later"]),
   ];
+  const density = movableUnitDensityLbPerCuFt(weight, volume.valueCuFt);
 
   return {
     id: `box:${box._id}`,
@@ -295,6 +298,10 @@ function movableUnitFromBox(
     itemCountLabel: `${record.itemCount ?? 0} item${record.itemCount === 1 ? "" : "s"}`,
     estimatedWeightLb: weight,
     estimatedVolumeCuFt: volume.valueCuFt,
+    densityLbPerCuFt: density,
+    densityLabel: isFiniteNumber(density)
+      ? `${density.toFixed(1)} lb/ft³`
+      : "—",
     editableWeightLb:
       box.estimatedWeightLb ??
       box.actualWeightLb ??
@@ -360,6 +367,7 @@ function movableUnitFromLooseItem(
     ...(item.needsReview ? ["review assumptions"] : []),
     ...(item.signals?.photoCount ? [] : ["add photo when convenient"]),
   ];
+  const density = movableUnitDensityLbPerCuFt(weight, totalVolume);
 
   return {
     id: `looseItem:${item._id}`,
@@ -375,6 +383,10 @@ function movableUnitFromLooseItem(
     itemCountLabel: `${item.quantity ?? 1} qty`,
     estimatedWeightLb: weight,
     estimatedVolumeCuFt: totalVolume,
+    densityLbPerCuFt: density,
+    densityLabel: isFiniteNumber(density)
+      ? `${density.toFixed(1)} lb/ft³`
+      : "—",
     editableWeightLb: item.estimatedWeightLb ?? item.actualWeightLb,
     editableVolumeCuFt:
       item.estimatedVolumeCuFt ?? item.estimatedPackedVolumeCuFt,
@@ -572,6 +584,20 @@ function describeWeightRange(item: InventoryItem) {
     return `${formatNumber(item.estimatedWeightLowLb)}-${formatNumber(item.estimatedWeightHighLb)} lb est.`;
   }
   return "Missing weight";
+}
+
+export function movableUnitDensityLbPerCuFt(
+  weightLb: number | undefined,
+  volumeCuFt: number | undefined,
+): number | undefined {
+  if (
+    !isFiniteNumber(weightLb) ||
+    !isFiniteNumber(volumeCuFt) ||
+    volumeCuFt <= 0
+  ) {
+    return undefined;
+  }
+  return weightLb / volumeCuFt;
 }
 
 export function calculateMovableUnitVolumeCuFt(
