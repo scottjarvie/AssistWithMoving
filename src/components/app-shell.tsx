@@ -29,7 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-border bg-sidebar/75 px-4 py-5 backdrop-blur xl:flex">
         <Link
-          href="/"
+          href="/app"
           aria-label="MovingManifest home"
           className="inline-block rounded-md focus-visible:outline-2 focus-visible:outline-ring"
         >
@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex h-16 items-center justify-between gap-2 px-4 sm:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <div className="xl:hidden">
-                <Link href="/" aria-label="MovingManifest home">
+                <Link href="/app" aria-label="MovingManifest home">
                   <BrandMark />
                 </Link>
               </div>

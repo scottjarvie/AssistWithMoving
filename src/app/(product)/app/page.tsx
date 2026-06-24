@@ -1,6 +1,8 @@
-import { redirect } from "next/navigation";
+import { HomeLaunchpad } from "@/components/home-launchpad";
 
-// /app is the bare product entry point; the home surface is the moves list.
+// The logged-in home is a focused launchpad: the four main destinations
+// (Moves, Movable Units, Items, Queue) plus a standing entry point to connect
+// an AI assistant. The full moves list lives under the Moves destination.
 export default function AppIndexPage() {
-  redirect("/app/moves");
+  return <HomeLaunchpad />;
 }
