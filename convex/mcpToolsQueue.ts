@@ -50,6 +50,8 @@ function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
     dispositionHint: entry.dispositionHint ?? null,
     scopeHint: entry.scopeHint ?? null,
     intent: entry.intent ?? null,
+    targetSpaceId: entry.targetSpaceId ?? null,
+    targetTransportId: entry.targetTransportId ?? null,
     mediaPhotoIds: entry.mediaPhotoIds ?? [],
     agentQuestion: entry.agentQuestion ?? null,
     agentSummary: entry.agentSummary ?? null,

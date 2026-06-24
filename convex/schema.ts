@@ -1549,6 +1549,10 @@ export default defineSchema({
     targetBoxCode: v.optional(v.string()),
     targetLabel: v.optional(v.string()),
     targetPlanId: v.optional(v.id("floorPlans")),
+    // A capture can also be aimed at a room (space) or a transport resource so
+    // the agent knows to attach its photos / work there (MCP capture_to_queue).
+    targetSpaceId: v.optional(v.id("moveSpaces")),
+    targetTransportId: v.optional(v.id("transportResources")),
     resultSuggestionIds: v.optional(v.array(v.id("aiTextSuggestions"))),
     resultRefs: v.optional(
       v.array(

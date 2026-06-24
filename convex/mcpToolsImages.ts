@@ -11,14 +11,16 @@ import { v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import { api } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { action, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, mutation, query } from "./_generated/server";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
 
 const imageFilterValidator = v.object({
   itemId: v.optional(v.id("items")),
   boxId: v.optional(v.id("boxes")),
   spaceId: v.optional(v.id("moveSpaces")),
+  transportId: v.optional(v.id("transportResources")),
+  transportZoneId: v.optional(v.id("transportZones")),
   room: v.optional(v.string()),
   all: v.optional(v.boolean()),
 });
@@ -64,6 +66,22 @@ export const mcpResolvePhotos = query({
         )
         .order("desc")
         .take(limit);
+    } else if (args.filter.transportZoneId) {
+      rows = await ctx.db
+        .query("itemPhotos")
+        .withIndex("by_transport_zone_created", (q) =>
+          q.eq("transportZoneId", args.filter.transportZoneId),
+        )
+        .order("desc")
+        .take(limit);
+    } else if (args.filter.transportId) {
+      rows = await ctx.db
+        .query("itemPhotos")
+        .withIndex("by_transport_resource_created", (q) =>
+          q.eq("transportResourceId", args.filter.transportId),
+        )
+        .order("desc")
+        .take(limit);
     } else {
       rows = await ctx.db
         .query("itemPhotos")
@@ -87,9 +105,13 @@ export const mcpResolvePhotos = query({
             ? { kind: "box" as const, id: String(p.boxId) }
             : p.spaceId
               ? { kind: "space" as const, id: String(p.spaceId) }
-              : p.room
-                ? { kind: "room" as const, id: p.room }
-                : { kind: "move" as const, id: String(args.moveId) },
+              : p.transportResourceId
+                ? { kind: "transport" as const, id: String(p.transportResourceId) }
+                : p.transportZoneId
+                  ? { kind: "transportZone" as const, id: String(p.transportZoneId) }
+                  : p.room
+                    ? { kind: "room" as const, id: p.room }
+                    : { kind: "move" as const, id: String(args.moveId) },
       }));
   },
 });
@@ -159,6 +181,8 @@ const imageInputValidator = v.object({
       itemId: v.optional(v.id("items")),
       boxId: v.optional(v.id("boxes")),
       spaceId: v.optional(v.id("moveSpaces")),
+      transportResourceId: v.optional(v.id("transportResources")),
+      transportZoneId: v.optional(v.id("transportZones")),
       room: v.optional(v.string()),
     }),
   ),
@@ -240,6 +264,8 @@ export const addImages = action({
           itemId: image.attachTo?.itemId,
           boxId: image.attachTo?.boxId,
           spaceId: image.attachTo?.spaceId,
+          transportResourceId: image.attachTo?.transportResourceId,
+          transportZoneId: image.attachTo?.transportZoneId,
           room: image.attachTo?.room,
           mimeType,
           sizeBytes: bytes.byteLength,
@@ -269,6 +295,94 @@ export const addImages = action({
       }
     }
 
+    return { results };
+  },
+});
+
+// ---- attach_photos ---------------------------------------------------------
+// Re-attach EXISTING photos (by id) to an item / box / room / transport. Lets an
+// agent file a queued capture's already-uploaded photos onto the room or
+// transport its queue entry targets. Mirrors photos.updateEvidence's
+// target-setting over the subject bridge.
+const photoTargetValidator = v.object({
+  itemId: v.optional(v.id("items")),
+  boxId: v.optional(v.id("boxes")),
+  spaceId: v.optional(v.id("moveSpaces")),
+  transportResourceId: v.optional(v.id("transportResources")),
+  transportZoneId: v.optional(v.id("transportZones")),
+  room: v.optional(v.string()),
+});
+export const attachPhotosArgs = {
+  caller: mcpCallerValidator,
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  photoIds: v.array(v.id("itemPhotos")),
+  attachTo: photoTargetValidator,
+};
+export const attachPhotos = mutation({
+  args: attachPhotosArgs,
+  handler: async (ctx, args) => {
+    await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+
+    // Validate any provided target belongs to this move (no cross-tenant refs).
+    const t = args.attachTo;
+    const ownsMove = async (
+      id:
+        | Id<"items">
+        | Id<"boxes">
+        | Id<"moveSpaces">
+        | Id<"transportResources">
+        | Id<"transportZones">,
+      label: string,
+    ) => {
+      const doc = await ctx.db.get(id);
+      if (!doc || (doc as { moveId?: Id<"moves"> }).moveId !== args.moveId) {
+        throw new Error(`Target ${label} is not part of this move.`);
+      }
+    };
+    if (t.itemId) await ownsMove(t.itemId, "item");
+    if (t.boxId) await ownsMove(t.boxId, "box");
+    if (t.spaceId) await ownsMove(t.spaceId, "room");
+    if (t.transportResourceId) await ownsMove(t.transportResourceId, "transport");
+    if (t.transportZoneId) await ownsMove(t.transportZoneId, "transport zone");
+
+    const now = Date.now();
+    const results: Array<{ photoId: string; ok: boolean; error?: string }> = [];
+    for (const photoId of args.photoIds) {
+      const photo = await ctx.db.get(photoId);
+      if (
+        !photo ||
+        photo.householdId !== args.householdId ||
+        photo.moveId !== args.moveId ||
+        photo.archivedAt
+      ) {
+        results.push({
+          photoId: String(photoId),
+          ok: false,
+          error: "Photo not found in this move.",
+        });
+        continue;
+      }
+      const patch: Partial<Doc<"itemPhotos">> = { updatedAt: now };
+      if (t.itemId !== undefined) patch.itemId = t.itemId;
+      if (t.boxId !== undefined) patch.boxId = t.boxId;
+      if (t.spaceId !== undefined) patch.spaceId = t.spaceId;
+      if (t.transportResourceId !== undefined) {
+        patch.transportResourceId = t.transportResourceId;
+      }
+      if (t.transportZoneId !== undefined) {
+        patch.transportZoneId = t.transportZoneId;
+      }
+      if (t.room !== undefined) patch.room = t.room.trim() || undefined;
+      await ctx.db.patch(photoId, patch);
+      results.push({ photoId: String(photoId), ok: true });
+    }
     return { results };
   },
 });

@@ -434,6 +434,10 @@ const queueDraftValidator = v.object({
   instructions: v.optional(v.string()),
   roomHint: v.optional(v.string()),
   intent: v.optional(ingestionQueueIntentValidator),
+  // Aim the capture at a room (space) or a transport so the agent knows where
+  // its photos/work belong. Both must already exist in this move.
+  targetSpaceId: v.optional(v.id("moveSpaces")),
+  targetTransportId: v.optional(v.id("transportResources")),
   mediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
 });
 export const captureToQueueArgs = {
@@ -465,6 +469,19 @@ export const captureToQueue = mutation({
           throw new Error(`Photo ${photoId} is not part of this move.`);
         }
       }
+      // Confirm any room/transport target belongs to this move.
+      if (draft.targetSpaceId) {
+        const space = await ctx.db.get(draft.targetSpaceId);
+        if (!space || space.moveId !== args.moveId) {
+          throw new Error("Target room is not part of this move.");
+        }
+      }
+      if (draft.targetTransportId) {
+        const transport = await ctx.db.get(draft.targetTransportId);
+        if (!transport || transport.moveId !== args.moveId) {
+          throw new Error("Target transport is not part of this move.");
+        }
+      }
       const entryId = await ctx.db.insert("ingestionQueueEntries", {
         householdId: args.householdId,
         moveId: args.moveId,
@@ -472,6 +489,8 @@ export const captureToQueue = mutation({
         instructions: normalizeOptionalText(draft.instructions),
         roomHint: normalizeOptionalText(draft.roomHint),
         intent: draft.intent,
+        targetSpaceId: draft.targetSpaceId,
+        targetTransportId: draft.targetTransportId,
         mediaPhotoIds,
         sortOrder: now,
         createdByUserId: userId,
