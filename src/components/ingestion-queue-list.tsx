@@ -8,7 +8,9 @@ import {
   Bot,
   CheckCircle2,
   ImageOff,
+  Info,
   RotateCcw,
+  Settings,
   Trash2,
 } from "lucide-react";
 
@@ -19,22 +21,32 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { moveWorkspacePath } from "@/lib/move-links";
+import { cn } from "@/lib/utils";
 
 type QueueTask = "needsAction" | "working" | "archive";
+type QueueFilter = "todo" | "working" | "review" | "done" | "all";
 
-const scopeHintLabels: Record<string, string> = {
-  singleItem: "Single item",
-  multipleItems: "Multiple items",
-  scene: "Scene",
-};
+// The top-level Queue page filters by lifecycle bucket; each filter doubles as
+// a live stat. queued -> To do, claimed -> Working, processed/needsInput ->
+// Review, resolved/discarded -> Done.
+function queueFilterForStatus(status: string): Exclude<QueueFilter, "all"> {
+  if (status === "queued") return "todo";
+  if (status === "claimed") return "working";
+  if (status === "processed" || status === "needsInput") return "review";
+  return "done";
+}
 
 // Renders thumbnails for an entry's media. getDisplayUrl is an action returning
 // a short-lived signed/edge URL per photo, so we resolve them on mount the same
@@ -133,15 +145,6 @@ function QueueMediaThumbnails({
   );
 }
 
-const statusLabels: Record<string, string> = {
-  queued: "Queued",
-  claimed: "Agent working",
-  processed: "Processed — review",
-  needsInput: "Needs your answer",
-  resolved: "Resolved",
-  discarded: "Discarded",
-};
-
 const statusOrder = [
   "needsInput",
   "processed",
@@ -214,7 +217,7 @@ export function IngestionQueueList({
     useState<Id<"ingestionQueueEntries"> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<QueueTask>("needsAction");
-  const [binaryTab, setBinaryTab] = useState<"todo" | "done">("todo");
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("todo");
 
   const loading = Boolean(householdId && moveId) && entries === undefined;
   const sorted = [...(entries ?? [])].sort(
@@ -298,46 +301,27 @@ export function IngestionQueueList({
 
     return (
       <ul className="space-y-3" aria-label={ariaLabel}>
-        {visibleEntries.map((entry) => {
+        {visibleEntries.map((entry, index) => {
           const editable =
             entry.status === "queued" || entry.status === "needsInput";
           const busy = busyEntryId === entry._id;
           return (
             <li key={entry._id} className="rounded-md border border-border p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Badge
-                    variant={
-                      entry.status === "needsInput"
-                        ? "destructive"
-                        : entry.status === "processed"
-                          ? "default"
-                          : "outline"
-                    }
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold tabular-nums text-muted-foreground"
+                    aria-hidden="true"
                   >
-                    {statusLabels[entry.status] ?? entry.status}
-                  </Badge>
-                  {entry.roomHint ? (
-                    <Badge variant="secondary">{entry.roomHint}</Badge>
-                  ) : null}
-                  {entry.scopeHint ? (
-                    <Badge variant="outline">
-                      {scopeHintLabels[entry.scopeHint] ?? entry.scopeHint}
-                    </Badge>
-                  ) : null}
-                  {entry.dispositionHint ? (
-                    <Badge variant="outline">{entry.dispositionHint}</Badge>
-                  ) : null}
-                  <Badge variant="outline">
-                    {entry.mediaPhotoIds.length} media
-                  </Badge>
+                    {index + 1}
+                  </span>
                   {entry.claimedByAgentLabel ? (
                     <Badge variant="secondary">
                       <Bot className="size-3" aria-hidden="true" />
                       {entry.claimedByAgentLabel}
                     </Badge>
                   ) : null}
-                </span>
+                </div>
                 <span className="text-xs text-muted-foreground">
                   {new Date(entry.createdAt).toLocaleString()}
                 </span>
@@ -422,20 +406,34 @@ export function IngestionQueueList({
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {editable && editingEntryId !== entry._id ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => {
-                      setEditingEntryId(entry._id);
-                      setEditingText(entry.instructions ?? "");
-                    }}
-                  >
-                    {entry.status === "needsInput"
-                      ? "Answer & requeue"
-                      : "Edit directions"}
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          aria-label={
+                            entry.status === "needsInput"
+                              ? "Answer & requeue"
+                              : "Edit directions"
+                          }
+                          onClick={() => {
+                            setEditingEntryId(entry._id);
+                            setEditingText(entry.instructions ?? "");
+                          }}
+                        >
+                          <Settings aria-hidden="true" />
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {entry.status === "needsInput"
+                        ? "Answer & requeue"
+                        : "Edit directions"}
+                    </TooltipContent>
+                  </Tooltip>
                 ) : null}
                 {entry.status === "processed" ? (
                   <>
@@ -473,16 +471,25 @@ export function IngestionQueueList({
                   </Button>
                 ) : null}
                 {entry.status === "queued" || entry.status === "needsInput" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => void changeStatus(entry._id, "discarded")}
-                  >
-                    <Trash2 aria-hidden="true" />
-                    Discard
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          aria-label="Discard"
+                          onClick={() =>
+                            void changeStatus(entry._id, "discarded")
+                          }
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Discard</TooltipContent>
+                  </Tooltip>
                 ) : null}
               </div>
             </li>
@@ -509,46 +516,51 @@ export function IngestionQueueList({
     );
   }
 
-  // The top-level Queue page collapses the three task views into a simple
-  // To do (not done) vs Done (resolved/discarded) switch.
-  const todoEntries = sorted.filter(
-    (entry) => queueTaskForStatus(entry.status) !== "archive",
-  );
-  const doneEntries = sorted.filter(
-    (entry) => queueTaskForStatus(entry.status) === "archive",
-  );
-  const todoCount = taskCounts.needsAction + taskCounts.working;
+  // The top-level Queue page filters by lifecycle bucket. Each filter chip
+  // doubles as a live stat, so the separate header count pills are gone.
   const doneCount = taskCounts.archive;
+  const queueFilters: Array<{
+    value: QueueFilter;
+    label: string;
+    count: number;
+  }> = [
+    { value: "todo", label: "To do", count: queuedCount },
+    { value: "working", label: "Working", count: agentWorkingCount },
+    { value: "review", label: "Review", count: needsReviewCount },
+    { value: "done", label: "Done", count: doneCount },
+    { value: "all", label: "All", count: sorted.length },
+  ];
+  const filteredEntries =
+    queueFilter === "all"
+      ? sorted
+      : sorted.filter(
+          (entry) => queueFilterForStatus(entry.status) === queueFilter,
+        );
+  const activeQueueFilter =
+    queueFilters.find((filter) => filter.value === queueFilter) ??
+    queueFilters[0];
 
   return (
     <Card id="ingestion-queue">
       <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="size-4 text-primary" aria-hidden="true" />
-              Agent queue
-            </CardTitle>
-            <CardDescription>
-              Captures waiting for your AI agent, plus what it produced. Connect
-              an agent with an API key from Settings.
-            </CardDescription>
-          </div>
-          {entries !== undefined ? (
-            <div
-              className="flex flex-wrap items-center gap-1.5"
-              aria-label="Queue counts"
-            >
-              <Badge variant="outline">{queuedCount} queued</Badge>
-              <Badge variant={agentWorkingCount ? "secondary" : "outline"}>
-                {agentWorkingCount} agent-working
-              </Badge>
-              <Badge variant={needsReviewCount ? "secondary" : "outline"}>
-                {needsReviewCount} need review
-              </Badge>
-            </div>
-          ) : null}
-        </div>
+        <CardTitle className="flex items-center gap-2">
+          <Bot className="size-4 text-primary" aria-hidden="true" />
+          Agent queue
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="text-muted-foreground"
+                aria-label="About the agent queue"
+              >
+                <Info className="size-3.5" aria-hidden="true" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              Captures wait here for your connected AI agent, alongside what it
+              produced. Connect an agent with an API key in Settings.
+            </TooltipContent>
+          </Tooltip>
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {loading ? (
@@ -558,53 +570,46 @@ export function IngestionQueueList({
           </div>
         ) : sorted.length ? (
           view === "todo-done" ? (
-            <Tabs
-              value={binaryTab}
-              onValueChange={(value) =>
-                setBinaryTab(value as "todo" | "done")
-              }
-              className="gap-3"
-            >
-              <TabsList aria-label="Queue views">
-                <TabsTrigger value="todo" className="gap-2">
-                  To do
-                  <Badge
-                    variant={binaryTab === "todo" ? "secondary" : "outline"}
-                    className="h-5 min-w-5 px-1"
-                  >
-                    {todoCount}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="done" className="gap-2">
-                  Done
-                  <Badge
-                    variant={binaryTab === "done" ? "secondary" : "outline"}
-                    className="h-5 min-w-5 px-1"
-                  >
-                    {doneCount}
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-              <p className="text-sm text-muted-foreground">
-                {binaryTab === "todo"
-                  ? "Captures still being processed or waiting for your review."
-                  : "Resolved or discarded captures kept out of the active queue."}
-              </p>
-              <TabsContent value="todo">
-                {renderEntryList(
-                  todoEntries,
-                  "Nothing to do — captures you add show up here until they're resolved.",
-                  "to-do ingestion queue entries",
-                )}
-              </TabsContent>
-              <TabsContent value="done">
-                {renderEntryList(
-                  doneEntries,
-                  "No resolved or discarded captures yet.",
-                  "done ingestion queue entries",
-                )}
-              </TabsContent>
-            </Tabs>
+            <div className="space-y-3">
+              <div
+                className="flex flex-wrap gap-1.5"
+                role="tablist"
+                aria-label="Queue filters"
+              >
+                {queueFilters.map((filter) => {
+                  const active = queueFilter === filter.value;
+                  return (
+                    <button
+                      key={filter.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setQueueFilter(filter.value)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
+                        active
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      {filter.label}
+                      <span className="rounded bg-background/70 px-1 text-xs font-semibold tabular-nums">
+                        {filter.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {renderEntryList(
+                filteredEntries,
+                activeQueueFilter.value === "done"
+                  ? "No resolved or discarded captures yet."
+                  : activeQueueFilter.value === "all"
+                    ? "The queue is empty."
+                    : `Nothing in ${activeQueueFilter.label.toLowerCase()} right now.`,
+                `${activeQueueFilter.value} ingestion queue entries`,
+              )}
+            </div>
           ) : (
           <Tabs
             value={activeTask}
