@@ -45,6 +45,18 @@ async function proxy(request: Request): Promise<Response> {
 
   const responseHeaders = new Headers(upstream.headers);
 
+  // Node's fetch (undici) transparently decompresses the upstream body but
+  // leaves the upstream's content-encoding/content-length headers untouched.
+  // Relaying those with the already-decompressed body makes the MCP client try
+  // to gunzip plain JSON (and read a wrong length), which silently corrupts the
+  // response. This bites only LARGE responses — the gateway sits behind Caddy,
+  // which gzips above a size threshold, so the full initialize / tools-list
+  // (16 tool schemas) breaks while the small 401 challenge slips through. That
+  // asymmetry is exactly the "OAuth succeeds, then 'couldn't connect'" symptom.
+  // Strip both so the decompressed body is served verbatim.
+  responseHeaders.delete("content-encoding");
+  responseHeaders.delete("content-length");
+
   // Repoint the gateway's self-referential discovery URL at our branded domain.
   const challenge = responseHeaders.get("www-authenticate");
   if (challenge) {
