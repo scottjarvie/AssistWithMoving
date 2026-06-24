@@ -203,7 +203,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "list_transport",
     description:
-      "List the move's transportation (trucks, trailers, PODs, movers, storage) with type, capacity, rules, and any load zones. Use the returned transportId (or the name) with place_box.",
+      "List the move's transportation (trucks, trailers, PODs, movers, storage) with type, capacity, rules, and any load zones (each with zoneId, name, capacity, preferredTags, and sortOrder). Use the returned transportId (or the name) with place_box.",
     fn: api.mcpToolsSetup.listTransport,
     args: listTransportArgs,
     identityArg: "caller",
@@ -211,7 +211,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "upsert_transport",
     description:
-      "Add or edit transportation in one call. For each: pass transportId to update, or a new type (truck|trailer|personalVehicle|professionalMovers|militaryMovers|storage|...) + name to create. Optional capacity { maxWeightLb, maxVolumeCuFt, dimensions } and rules.",
+      "Add or edit transportation in one call. For each: pass transportId to update, or a new type (truck|trailer|personalVehicle|professionalMovers|militaryMovers|storage|...) + name to create. Optional capacity { maxWeightLb, maxVolumeCuFt, dimensions } and rules. Optional zones: [{ name, capacity, preferredTags }] adds/edits load zones on a truck (e.g. Cab, Bed) — pass an existing zoneId to edit a specific zone, or archive: true (with zoneId or the zone's name) to remove one. To RENAME a zone you must pass its zoneId plus the new name; passing only a name (no zoneId) matches an existing zone by that exact name or creates a new one. The result returns each zone's zoneId (no need to re-list); list_transport shows full zone details.",
     fn: api.mcpToolsSetup.upsertTransport,
     args: upsertTransportArgs,
     identityArg: "caller",
