@@ -16,6 +16,7 @@ import { estimateItem } from "./lib/estimateEngine";
 import {
   dimensionsValidator,
   estimateConfidenceValidator,
+  formatItemCode,
   itemConditionValidator,
   itemCreatedViaValidator,
   itemDispositionValidator,
@@ -33,6 +34,7 @@ import {
 } from "./lib/permissions";
 
 const itemWriteArgs = {
+  nickname: v.optional(v.string()),
   description: v.optional(v.string()),
   room: v.optional(v.string()),
   destinationRoom: v.optional(v.string()),
@@ -836,6 +838,25 @@ export const facetedListForMove = query({
   },
 });
 
+async function generateItemCode(ctx: MutationCtx, moveId: Id<"moves">) {
+  const items = await ctx.db
+    .query("items")
+    .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
+    .collect();
+  const existing = new Set(
+    items
+      .map((item) => item.code)
+      .filter((code): code is string => Boolean(code)),
+  );
+  for (let index = items.length + 1; index < items.length + 2000; index += 1) {
+    const code = formatItemCode(index);
+    if (!existing.has(code)) {
+      return code;
+    }
+  }
+  throw new Error("Could not generate a unique item code.");
+}
+
 export const create = mutation({
   args: {
     householdId: v.id("households"),
@@ -892,11 +913,14 @@ export const create = mutation({
 
     const now = Date.now();
     const name = normalizeItemName(args.name);
+    const code = await generateItemCode(ctx, args.moveId);
     const itemId = await ctx.db.insert("items", {
       householdId: args.householdId,
       moveId: args.moveId,
       name,
       normalizedName: normalizedSearchName(name),
+      code,
+      nickname: normalizeOptionalText(args.nickname),
       description: normalizeOptionalText(args.description),
       room: normalizeOptionalText(args.room),
       destinationRoom: normalizeOptionalText(args.destinationRoom),
@@ -1026,6 +1050,9 @@ export const update = mutation({
     if (args.name !== undefined) {
       patch.name = normalizeItemName(args.name);
       patch.normalizedName = normalizedSearchName(args.name);
+    }
+    if (args.nickname !== undefined) {
+      patch.nickname = normalizeOptionalText(args.nickname);
     }
     if (args.description !== undefined) {
       patch.description = normalizeOptionalText(args.description);

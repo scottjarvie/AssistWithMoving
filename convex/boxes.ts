@@ -22,6 +22,7 @@ import { estimateItem, sumEstimateValues } from "./lib/estimateEngine";
 import {
   boxStatusValidator,
   dimensionsValidator,
+  isReservedUnitCode,
   normalizeBoxCode,
   normalizeOptionalText,
 } from "./lib/moveFields";
@@ -33,6 +34,8 @@ import {
 const boxWriteArgs = {
   code: v.optional(v.string()),
   label: v.optional(v.string()),
+  nickname: v.optional(v.string()),
+  currentSpaceId: v.optional(v.id("moveSpaces")),
   room: v.optional(v.string()),
   destinationRoom: v.optional(v.string()),
   description: v.optional(v.string()),
@@ -429,6 +432,11 @@ export const create = mutation({
     if (!code) {
       throw new Error("Box code is required.");
     }
+    if (args.code && isReservedUnitCode(code)) {
+      throw new Error(
+        'Unit codes can\'t start with "I" — that prefix is reserved for items (item-0001). Try another letter such as B (box) or T (tote).',
+      );
+    }
     await ensureUniqueBoxCode(ctx, args.moveId, code);
 
     const assignmentValidation = await loadAssignmentValidation(ctx, {
@@ -447,6 +455,8 @@ export const create = mutation({
       moveId: args.moveId,
       code,
       label: normalizeOptionalText(args.label),
+      nickname: normalizeOptionalText(args.nickname),
+      currentSpaceId: args.currentSpaceId,
       room: normalizeOptionalText(args.room),
       destinationRoom: normalizeOptionalText(args.destinationRoom),
       description: normalizeOptionalText(args.description),
@@ -519,11 +529,20 @@ export const update = mutation({
       if (!code) {
         throw new Error("Box code is required.");
       }
+      if (isReservedUnitCode(code)) {
+        throw new Error(
+          'Unit codes can\'t start with "I" — that prefix is reserved for items (item-0001). Try another letter such as B (box) or T (tote).',
+        );
+      }
       await ensureUniqueBoxCode(ctx, args.moveId, code, args.boxId);
       patch.code = code;
     }
     if (args.label !== undefined)
       patch.label = normalizeOptionalText(args.label);
+    if (args.nickname !== undefined)
+      patch.nickname = normalizeOptionalText(args.nickname);
+    if (args.currentSpaceId !== undefined)
+      patch.currentSpaceId = args.currentSpaceId;
     if (args.room !== undefined) patch.room = normalizeOptionalText(args.room);
     if (args.destinationRoom !== undefined) {
       patch.destinationRoom = normalizeOptionalText(args.destinationRoom);
