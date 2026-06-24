@@ -13,7 +13,11 @@ import {
 } from "convex-mcp-gateway";
 
 import { api } from "./_generated/api";
-import { addImagesArgs, getImagesArgs } from "./mcpToolsImages";
+import {
+  addImagesArgs,
+  attachPhotosArgs,
+  getImagesArgs,
+} from "./mcpToolsImages";
 import {
   claimQueueArgs,
   listQueueArgs,
@@ -232,6 +236,14 @@ export const tools: McpToolRegistration[] = [
       "Upload MANY photos at once, each from a url OR base64, and attach each via attachTo to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId or transportZoneId), or room name. Returns results: [{ photoId, ok, error? }].",
     fn: api.mcpToolsImages.addImages,
     args: addImagesArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "attach_photos",
+    description:
+      "Attach EXISTING photos (by photoId) to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId/transportZoneId), or room name — via attachTo. Use this to file a queued capture's already-uploaded photos onto the room or transport its entry targets. Pass photoIds + attachTo.",
+    fn: api.mcpToolsImages.attachPhotos,
+    args: attachPhotosArgs,
     identityArg: "caller",
   }),
 ];
