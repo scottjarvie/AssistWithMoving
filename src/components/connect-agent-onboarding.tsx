@@ -7,6 +7,7 @@ import {
   Bot,
   CheckCircle2,
   ChevronDown,
+  Info,
   Sparkles,
   X,
 } from "lucide-react";
@@ -15,6 +16,11 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 // The "connect your own AI agent" educational push. This is the star pitch for
@@ -82,10 +88,25 @@ export function ConnectAgentOnboarding({
         <span className="font-medium">Agent connected</span>
         <span className="text-muted-foreground">
           {stats.activeApiKeyCount === 1
-            ? "1 active connection"
-            : `${stats.activeApiKeyCount} active connections`}{" "}
-          can work this queue.
+            ? "1 AI assistant is connected and can work this queue."
+            : `${stats.activeApiKeyCount} AI assistants are connected and can work this queue.`}
         </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className="text-muted-foreground"
+              aria-label="What is a connection?"
+            >
+              <Info className="size-3.5" aria-hidden="true" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            A &ldquo;connection&rdquo; is an API key you created so your own AI
+            assistant (Claude, Codex, Cursor, …) can work this move&rsquo;s
+            queue. You can keep up to 3 active at once — manage or revoke them in
+            Settings.
+          </TooltipContent>
+        </Tooltip>
         <Button asChild size="sm" variant="ghost" className="ml-auto">
           <Link href="/settings/ai-connections">Manage</Link>
         </Button>
