@@ -20,6 +20,12 @@ import {
   submitQueueResultArgs,
 } from "./mcpToolsQueue";
 import {
+  listTransportArgs,
+  placeBoxArgs,
+  updateMoveArgs,
+  upsertTransportArgs,
+} from "./mcpToolsSetup";
+import {
   captureToQueueArgs,
   getItemArgs,
   getMoveOverviewArgs,
@@ -178,6 +184,38 @@ export const tools: McpToolRegistration[] = [
       "Create boxes and/or pack items into them in one batch. For each box pass an existing boxId, or a new code+label+room; include items: [{ itemId, quantity }] to pack.",
     fn: api.mcpToolsWrite.packBoxes,
     args: packBoxesArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "update_move",
+    description:
+      "Configure the move: set start/end dates (dateStart/dateEnd), origin/destination, structured start/end locations, distanceMiles, travelMinutes, status (planning|...), or title. Only the fields you pass change.",
+    fn: api.mcpToolsSetup.updateMove,
+    args: updateMoveArgs,
+    identityArg: "caller",
+  }),
+  defineMcpQuery({
+    name: "list_transport",
+    description:
+      "List the move's transportation (trucks, trailers, PODs, movers, storage) with type, capacity, rules, and any load zones. Use the returned transportId (or the name) with place_box.",
+    fn: api.mcpToolsSetup.listTransport,
+    args: listTransportArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "upsert_transport",
+    description:
+      "Add or edit transportation in one call. For each: pass transportId to update, or a new type (truck|trailer|personalVehicle|professionalMovers|militaryMovers|storage|...) + name to create. Optional capacity { maxWeightLb, maxVolumeCuFt, dimensions } and rules.",
+    fn: api.mcpToolsSetup.upsertTransport,
+    args: upsertTransportArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "place_box",
+    description:
+      "Set where a box is and where it's going. Identify it by boxId or code (e.g. B-001). Present location is a ROOM (presentRoom/presentRoomId) OR a TRANSPORT (transport/transportId) — rooms/transport may be given by name or id and must already exist. Also sets destinationRoom. Use clearPresentRoom/clearTransport to remove one.",
+    fn: api.mcpToolsSetup.placeBox,
+    args: placeBoxArgs,
     identityArg: "caller",
   }),
   defineMcpAction({
