@@ -17,6 +17,10 @@ import { requireMoveForSubject } from "./lib/mcpIdentity";
 import { imageDimensions } from "./lib/mediaStorage";
 
 const imageFilterValidator = v.object({
+  // Pull specific photos by id — e.g. the mediaPhotoIds on a queue capture that
+  // isn't an item/box/room yet (the only way to view an unprocessed capture's
+  // photos). Takes precedence over the other filters when present.
+  photoIds: v.optional(v.array(v.id("itemPhotos"))),
   itemId: v.optional(v.id("items")),
   boxId: v.optional(v.id("boxes")),
   spaceId: v.optional(v.id("moveSpaces")),
@@ -47,7 +51,16 @@ export const mcpResolvePhotos = query({
     );
     const limit = Math.min(args.limit ?? 50, 100);
     let rows;
-    if (args.filter.itemId) {
+    if (args.filter.photoIds && args.filter.photoIds.length > 0) {
+      const fetched = await Promise.all(
+        args.filter.photoIds.slice(0, 100).map((id) => ctx.db.get(id)),
+      );
+      // The shared post-filter below enforces householdId/moveId/not-archived,
+      // so an id from another move can't leak its photo.
+      rows = fetched.filter(
+        (p): p is NonNullable<typeof p> => p !== null,
+      );
+    } else if (args.filter.itemId) {
       rows = await ctx.db
         .query("itemPhotos")
         .withIndex("by_item_created", (q) => q.eq("itemId", args.filter.itemId))
@@ -140,56 +153,108 @@ export const getImagesArgs = {
     ),
   ),
 };
+// Encode bytes to base64 in the Convex runtime (chunked so a large buffer
+// doesn't blow the argument spread). btoa is available in the default runtime.
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+// get_images returns photos as NATIVE inline MCP image blocks — the gateway is
+// patched (patches/convex-mcp-gateway+0.4.0.patch) to ship a tool's
+// `__mcpContent` array verbatim, so the model SEES the picture in the tool
+// result. The server fetches the bytes itself, so it works even when the
+// caller's sandbox can't reach the image host (the original failure: a B2 URL
+// the agent couldn't fetch). Inline payloads are large, so cap the count and
+// fold metadata into a leading text block. See MOVE-326.
+const MAX_INLINE_IMAGES = 8;
 export const getImages = action({
   args: getImagesArgs,
   handler: async (
     ctx,
     args,
   ): Promise<{
-    images: Array<{
-      photoId: string;
-      displayUrl: string | null;
-      caption: string | null;
-      attachedTo: { kind: string; id: string };
-    }>;
+    __mcpContent: Array<Record<string, unknown>>;
   }> => {
+    const variant = args.variant ?? "card";
+    const cap = Math.min(args.limit ?? 6, MAX_INLINE_IMAGES);
     const photos = await ctx.runQuery(api.mcpToolsImages.mcpResolvePhotos, {
       caller: args.caller,
       householdId: args.householdId,
       moveId: args.moveId,
       filter: args.filter,
-      limit: args.limit,
+      limit: cap,
     });
-    const images = await Promise.all(
-      photos.map(async (p) => {
-        let displayUrl: string | null = null;
-        try {
-          // Bridge-authed: ctx.auth is null in the gateway, so use the
-          // subject-authorized delivery path (not api.photos.getDisplayUrl,
-          // which requires the web session and returns null here).
-          const result = await ctx.runAction(
-            internal.photos.getDisplayUrlForSubject,
-            {
-              householdId: args.householdId,
-              moveId: args.moveId,
-              photoId: p.photoId as Id<"itemPhotos">,
-              variant: args.variant ?? "card",
-              subject: args.caller.subject,
-            },
-          );
-          displayUrl = result.url;
-        } catch {
-          displayUrl = null;
+
+    const imageBlocks: Array<Record<string, unknown>> = [];
+    const summary: Array<{
+      photoId: string;
+      caption: string | null;
+      attachedTo: { kind: string; id: string };
+      viewable: boolean;
+    }> = [];
+
+    for (const p of photos) {
+      let viewable = false;
+      try {
+        // Bridge-authed: ctx.auth is null in the gateway, so use the
+        // subject-authorized delivery path; then fetch the bytes server-side.
+        const result = await ctx.runAction(
+          internal.photos.getDisplayUrlForSubject,
+          {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            photoId: p.photoId as Id<"itemPhotos">,
+            variant,
+            subject: args.caller.subject,
+          },
+        );
+        const res = await fetch(result.url);
+        if (res.ok) {
+          const bytes = new Uint8Array(await res.arrayBuffer());
+          const mimeType =
+            res.headers.get("content-type")?.split(";")[0]?.trim() ||
+            result.mimeType ||
+            "image/webp";
+          imageBlocks.push({
+            type: "image",
+            data: bytesToBase64(bytes),
+            mimeType,
+          });
+          viewable = true;
         }
-        return {
-          photoId: String(p.photoId),
-          displayUrl,
-          caption: p.caption,
-          attachedTo: p.attachedTo,
-        };
-      }),
-    );
-    return { images };
+      } catch {
+        viewable = false;
+      }
+      summary.push({
+        photoId: String(p.photoId),
+        caption: p.caption,
+        attachedTo: p.attachedTo,
+        viewable,
+      });
+    }
+
+    const text = {
+      moveId: String(args.moveId),
+      variant,
+      returned: imageBlocks.length,
+      note:
+        imageBlocks.length === 0
+          ? "No viewable photos for this filter."
+          : "Photos are attached below as inline images.",
+      images: summary,
+    };
+
+    return {
+      __mcpContent: [
+        { type: "text", text: JSON.stringify(text, null, 2) },
+        ...imageBlocks,
+      ],
+    };
   },
 });
 
