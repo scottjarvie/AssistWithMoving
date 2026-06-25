@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  AlertTriangle,
   ArrowUpRight,
   Bot,
   CheckCircle2,
   ImageOff,
+  ImagePlus,
   Info,
+  Loader2,
   RotateCcw,
   Settings,
   Trash2,
@@ -32,7 +35,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type UploadJob,
+  useMediaUpload,
+} from "@/components/media-upload-provider";
 import { moveWorkspacePath } from "@/lib/move-links";
+import {
+  mediaKindForMimeType,
+  validateMediaUploadFile,
+} from "@/lib/photo-upload";
 import { cn } from "@/lib/utils";
 
 type QueueTask = "needsAction" | "working" | "archive";
@@ -51,15 +62,21 @@ function queueFilterForStatus(status: string): Exclude<QueueFilter, "all"> {
 // Renders thumbnails for an entry's media. getDisplayUrl is an action returning
 // a short-lived signed/edge URL per photo, so we resolve them on mount the same
 // way PhotoEvidenceStrip does. Only images resolve; audio/video and unresolved
-// photos fall back to a count chip rendered by the caller.
+// photos fall back to a count chip rendered by the caller. In-flight and failed
+// background-upload jobs from this client render as spinner / failed tiles so the
+// user watches photos arrive.
 function QueueMediaThumbnails({
   householdId,
   moveId,
   mediaPhotoIds,
+  jobs = [],
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   mediaPhotoIds: Id<"itemPhotos">[];
+  // Live background-upload jobs for this entry, still in flight or failed (done
+  // jobs already show up as resolved thumbnails via mediaPhotoIds).
+  jobs?: UploadJob[];
 }) {
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -104,7 +121,18 @@ function QueueMediaThumbnails({
     };
   }, [getDisplayUrl, householdId, moveId, visibleIds]);
 
-  if (visibleIds.length === 0) {
+  // Pending (queued/uploading/finalizing) and failed jobs get their own tiles so
+  // the user sees photos still arriving; done jobs are already attached and show
+  // as resolved thumbnails above.
+  const pendingJobs = jobs.filter(
+    (job) =>
+      job.status === "queued" ||
+      job.status === "uploading" ||
+      job.status === "finalizing",
+  );
+  const failedJobs = jobs.filter((job) => job.status === "error");
+
+  if (visibleIds.length === 0 && pendingJobs.length === 0 && failedJobs.length === 0) {
     return null;
   }
 
@@ -136,6 +164,26 @@ function QueueMediaThumbnails({
           </div>
         );
       })}
+      {pendingJobs.map((job) => (
+        <div
+          key={job.id}
+          className="flex size-14 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground"
+          aria-label={`Uploading ${job.file.name}`}
+          title={job.file.name}
+        >
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        </div>
+      ))}
+      {failedJobs.map((job) => (
+        <div
+          key={job.id}
+          className="flex size-14 items-center justify-center rounded-md border border-destructive/40 bg-destructive/10 text-destructive"
+          aria-label={`Upload failed for ${job.file.name}`}
+          title={job.error ?? job.file.name}
+        >
+          <AlertTriangle className="size-4" aria-hidden="true" />
+        </div>
+      ))}
       {remaining > 0 ? (
         <div className="flex size-14 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
           +{remaining}
@@ -209,6 +257,11 @@ export function IngestionQueueList({
   );
   const updateEntry = useMutation(api.ingestionQueue.updateEntry);
   const setEntryStatus = useMutation(api.ingestionQueue.setEntryStatus);
+  const setMediaUploadState = useMutation(
+    api.ingestionQueue.setMediaUploadState,
+  );
+  const { enqueue, retry, jobsForEntry, pendingCountForEntry } =
+    useMediaUpload();
 
   const [editingEntryId, setEditingEntryId] =
     useState<Id<"ingestionQueueEntries"> | null>(null);
@@ -216,6 +269,11 @@ export function IngestionQueueList({
   const [busyEntryId, setBusyEntryId] =
     useState<Id<"ingestionQueueEntries"> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // One hidden file input per entry, lazily keyed so the F3 "Add images" button
+  // can open the native picker for the entry it belongs to.
+  const addImagesInputRefs = useRef<
+    Map<string, HTMLInputElement | null>
+  >(new Map());
   const [activeTask, setActiveTask] = useState<QueueTask>("needsAction");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("todo");
 
@@ -286,6 +344,63 @@ export function IngestionQueueList({
     }
   }
 
+  // F3: add images to an EXISTING queued/needs-input entry. We never call
+  // updateEntry here — that would wholesale-replace media and (for needsInput)
+  // auto-requeue, which adding a photo must not do. Instead we kick the files
+  // through the background uploader, which appendMedia's them and bumps the
+  // entry's expectedMediaCount-driven rollup so the uploading status shows.
+  function handleAddImages(
+    entry: (typeof sorted)[number],
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!householdId || !moveId || files.length === 0) return;
+    setMessage(null);
+
+    const accepted: { file: File; kind: "image" | "audio" | "video" }[] = [];
+    for (const file of files) {
+      const validation = validateMediaUploadFile(file);
+      const kind = mediaKindForMimeType(file.type);
+      if (!validation.ok || !kind) {
+        setMessage(
+          validation.message ?? `${file.name} is not a supported file.`,
+        );
+        continue;
+      }
+      accepted.push({ file, kind });
+    }
+    if (accepted.length === 0) return;
+
+    // Hand the files to the background uploader. It appendMedia's each finished
+    // photo onto this entry (never replacing, never requeuing needsInput). We do
+    // NOT raise expectedMediaCount here — there's no mutation for that and the
+    // live per-file spinners come from jobsForEntry, so the uploading status is
+    // surfaced regardless of the coarse server rollup.
+    enqueue({ entryId: entry._id, householdId, moveId }, accepted);
+  }
+
+  async function dismissPendingUpload(
+    entryId: Id<"ingestionQueueEntries">,
+  ) {
+    if (!householdId || !moveId) return;
+    setBusyEntryId(entryId);
+    setMessage(null);
+    try {
+      await setMediaUploadState({
+        householdId,
+        moveId,
+        entryId,
+        state: "complete",
+        finalizeCount: true,
+      });
+    } catch {
+      setMessage("Could not clear that upload state yet.");
+    } finally {
+      setBusyEntryId(null);
+    }
+  }
+
   function renderEntryList(
     visibleEntries: typeof sorted,
     emptyMessage: string,
@@ -305,10 +420,45 @@ export function IngestionQueueList({
           const editable =
             entry.status === "queued" || entry.status === "needsInput";
           const busy = busyEntryId === entry._id;
+
+          // Combine the server rollup (mediaUploadState, which survives reload)
+          // with this client's live background jobs (which hold per-file
+          // progress only while THIS tab is uploading).
+          const entryJobs = jobsForEntry(entry._id);
+          const livePending = pendingCountForEntry(entry._id);
+          const liveFailed = entryJobs.some((job) => job.status === "error");
+          const serverFailed = entry.mediaUploadState === "failed";
+          // Server says still uploading when it flagged "uploading", or when it
+          // expects more photos than have attached so far — but a "failed"
+          // rollup takes priority (an incomplete count is exactly the failed
+          // case, so it must not read as still-pending).
+          const serverPending =
+            !serverFailed &&
+            (entry.mediaUploadState === "uploading" ||
+              (entry.expectedMediaCount != null &&
+                entry.mediaPhotoIds.length < entry.expectedMediaCount));
+
+          // Live in-flight jobs always win (this tab is actively uploading);
+          // otherwise fall back to the server rollup. Failed only when nothing
+          // is currently in flight.
+          const uploading = livePending > 0 || (serverPending && !liveFailed);
+          const failed =
+            !uploading && (liveFailed || serverFailed) && livePending === 0;
+          // Server says pending but this session has no live job (e.g. a full
+          // page reload dropped the in-memory upload). The user can't retry a
+          // job that no longer exists, so offer the same recovery affordances as
+          // the failed case: add the missing photos, or dismiss the stuck state.
+          const orphanedPending = uploading && livePending === 0;
+          // After a reload there are no in-session jobs to re-run, so retry has
+          // nothing to act on — offer "Add the missing photos" + "Dismiss".
+          const retryableJobs = entryJobs.filter(
+            (job) => job.status === "error",
+          );
+
           return (
             <li key={entry._id} className="rounded-md border border-border p-3">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span
                     className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold tabular-nums text-muted-foreground"
                     aria-hidden="true"
@@ -321,18 +471,81 @@ export function IngestionQueueList({
                       {entry.claimedByAgentLabel}
                     </Badge>
                   ) : null}
+                  {uploading ? (
+                    <Badge
+                      variant="secondary"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <Loader2
+                        className="size-3 animate-spin"
+                        aria-hidden="true"
+                      />
+                      {livePending > 0
+                        ? `Uploading ${livePending}…`
+                        : "Uploading…"}
+                    </Badge>
+                  ) : failed ? (
+                    <Badge variant="destructive" aria-label="Upload failed">
+                      <AlertTriangle className="size-3" aria-hidden="true" />
+                      Upload failed
+                    </Badge>
+                  ) : null}
                 </div>
                 <span className="text-xs text-muted-foreground">
                   {new Date(entry.createdAt).toLocaleString()}
                 </span>
               </div>
 
-              {entry.mediaPhotoIds.length ? (
+              {entry.mediaPhotoIds.length || entryJobs.length ? (
                 <QueueMediaThumbnails
                   householdId={householdId}
                   moveId={moveId}
                   mediaPhotoIds={entry.mediaPhotoIds}
+                  jobs={entryJobs}
                 />
+              ) : null}
+
+              {failed || orphanedPending ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {retryableJobs.length > 0 ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        for (const job of retryableJobs) {
+                          retry(job.id);
+                        }
+                      }}
+                    >
+                      <RotateCcw aria-hidden="true" />
+                      Retry upload
+                    </Button>
+                  ) : editable ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() =>
+                        addImagesInputRefs.current.get(entry._id)?.click()
+                      }
+                    >
+                      <ImagePlus aria-hidden="true" />
+                      Add the missing photos
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void dismissPendingUpload(entry._id)}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
               ) : null}
 
               {entry.agentQuestion ? (
@@ -435,6 +648,29 @@ export function IngestionQueueList({
                     </TooltipContent>
                   </Tooltip>
                 ) : null}
+                {editable && editingEntryId !== entry._id ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          aria-label="Add images"
+                          onClick={() =>
+                            addImagesInputRefs.current
+                              .get(entry._id)
+                              ?.click()
+                          }
+                        >
+                          <ImagePlus aria-hidden="true" />
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Add images</TooltipContent>
+                  </Tooltip>
+                ) : null}
                 {entry.status === "processed" ? (
                   <>
                     <Button
@@ -492,6 +728,23 @@ export function IngestionQueueList({
                   </Tooltip>
                 ) : null}
               </div>
+
+              {/* F3: hidden picker for "Add images" — only mounted when the
+                  entry is editable (queued/needsInput). */}
+              {editable ? (
+                <input
+                  ref={(node) => {
+                    addImagesInputRefs.current.set(entry._id, node);
+                  }}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onChange={(event) => handleAddImages(entry, event)}
+                />
+              ) : null}
             </li>
           );
         })}

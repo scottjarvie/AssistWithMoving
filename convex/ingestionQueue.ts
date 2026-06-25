@@ -15,6 +15,8 @@ import {
   ingestionEntryIsEditable,
   ingestionQueueStatusValidator,
   ingestionScopeHintValidator,
+  isMediaUploadPending,
+  resolveAppendedMediaState,
   type IngestionQueueStatus,
 } from "./lib/ingestionQueue";
 import {
@@ -107,6 +109,10 @@ export const createEntry = mutation({
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
     mediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
+    // How many photos the client will upload in the background AFTER this entry
+    // is saved. When it exceeds what is already attached, the entry is created
+    // in the "uploading" rollup state until appendMedia catches up.
+    expectedMediaCount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireUserActor(
@@ -118,7 +124,12 @@ export const createEntry = mutation({
 
     const instructions = args.instructions?.trim() || undefined;
     const mediaPhotoIds = args.mediaPhotoIds ?? [];
-    if (!instructions && mediaPhotoIds.length === 0) {
+    const expectedMediaCount = args.expectedMediaCount;
+    if (
+      !instructions &&
+      mediaPhotoIds.length === 0 &&
+      !(expectedMediaCount && expectedMediaCount > 0)
+    ) {
       throw new Error(
         "A queue entry needs instructions, media, or both — an empty entry gives an agent nothing to work on.",
       );
@@ -126,6 +137,10 @@ export const createEntry = mutation({
     await validateMediaIds(ctx, { ...args, mediaPhotoIds });
 
     const now = Date.now();
+    const mediaUploadState =
+      expectedMediaCount && mediaPhotoIds.length < expectedMediaCount
+        ? ("uploading" as const)
+        : undefined;
     const entryId = await ctx.db.insert("ingestionQueueEntries", {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -135,6 +150,8 @@ export const createEntry = mutation({
       dispositionHint: args.dispositionHint?.trim() || undefined,
       scopeHint: args.scopeHint,
       mediaPhotoIds,
+      expectedMediaCount,
+      mediaUploadState,
       sortOrder: now,
       createdByUserId: actor.userId,
       createdAt: now,
@@ -223,6 +240,122 @@ export const updateEntry = mutation({
       action: "ingestion.entry_updated",
       objectTable: "ingestionQueueEntries",
       objectId: args.entryId,
+    });
+  },
+});
+
+// Background upload: attach photos to an already-saved entry as they finish
+// uploading. Unlike updateEntry this APPENDS (never replaces) media and must NOT
+// answer an agent's question — adding a photo to a needsInput entry must leave it
+// in needsInput with its agentQuestion intact.
+export const appendMedia = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    entryId: v.id("ingestionQueueEntries"),
+    mediaPhotoIds: v.array(v.id("itemPhotos")),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireUserActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const entry = await requireEntry(ctx, args);
+    const now = Date.now();
+    if (!ingestionEntryIsEditable(effectiveStatus(entry, now))) {
+      throw new Error(
+        "Photos can only be added to queued or needs-input entries.",
+      );
+    }
+
+    await validateMediaIds(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      mediaPhotoIds: args.mediaPhotoIds,
+    });
+
+    const existing = new Set(entry.mediaPhotoIds);
+    const mediaPhotoIds = [
+      ...entry.mediaPhotoIds,
+      ...args.mediaPhotoIds.filter((id) => !existing.has(id)),
+    ];
+
+    // Recompute the rollup (see resolveAppendedMediaState for the why): a missing
+    // expectedMediaCount resolves to "complete" so F3/MCP/old entries don't strand
+    // un-claimable, and a prior "failed" stays sticky until the count is reached.
+    const mediaUploadState = resolveAppendedMediaState({
+      expectedMediaCount: entry.expectedMediaCount,
+      priorState: entry.mediaUploadState,
+      attachedCount: mediaPhotoIds.length,
+    });
+
+    await ctx.db.patch(args.entryId, {
+      mediaPhotoIds,
+      mediaUploadState,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "inventory",
+      action: "ingestion.media_appended",
+      objectTable: "ingestionQueueEntries",
+      objectId: args.entryId,
+      metadata: {
+        added: mediaPhotoIds.length - entry.mediaPhotoIds.length,
+        total: mediaPhotoIds.length,
+      },
+    });
+  },
+});
+
+// Background upload: let the client mark a permanently-failed upload ("failed",
+// surfaced as a retry affordance — the entry stays saved, never auto-discarded)
+// or DISMISS a stuck pending state ("complete", which also pins expectedMediaCount
+// down to what actually attached so isMediaUploadPending stops flagging it).
+export const setMediaUploadState = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    entryId: v.id("ingestionQueueEntries"),
+    state: v.union(v.literal("failed"), v.literal("complete")),
+    // When dismissing to "complete", also lower expectedMediaCount to the number
+    // of photos already attached so nothing reads as still-pending.
+    finalizeCount: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireUserActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const entry = await requireEntry(ctx, args);
+    const now = Date.now();
+
+    await ctx.db.patch(args.entryId, {
+      mediaUploadState: args.state,
+      ...(args.finalizeCount
+        ? { expectedMediaCount: entry.mediaPhotoIds.length }
+        : {}),
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "inventory",
+      action: "ingestion.media_upload_state",
+      objectTable: "ingestionQueueEntries",
+      objectId: args.entryId,
+      metadata: { state: args.state },
     });
   },
 });
@@ -336,12 +469,18 @@ export const claimNext = mutation({
     const batchSize = Math.min(Math.max(args.batchSize ?? 1, 1), maxClaimBatch);
     const now = Date.now();
 
-    const queued = await ctx.db
-      .query("ingestionQueueEntries")
-      .withIndex("by_move_status_order", (q) =>
-        q.eq("moveId", args.moveId).eq("status", "queued"),
-      )
-      .take(batchSize);
+    // An entry whose media is still uploading isn't ready for an agent — skip it
+    // so a half-uploaded capture is never claimed mid-flight.
+    const queued = (
+      await ctx.db
+        .query("ingestionQueueEntries")
+        .withIndex("by_move_status_order", (q) =>
+          q.eq("moveId", args.moveId).eq("status", "queued"),
+        )
+        .take(maxListLimit)
+    )
+      .filter((entry) => !isMediaUploadPending(entry))
+      .slice(0, batchSize);
 
     // Reclaim expired claims if the queued pool came up short.
     let candidates = queued;
@@ -352,8 +491,9 @@ export const claimNext = mutation({
           q.eq("moveId", args.moveId).eq("status", "claimed"),
         )
         .take(maxListLimit);
-      const expired = claimed.filter((entry) =>
-        ingestionClaimIsExpired(entry, now),
+      const expired = claimed.filter(
+        (entry) =>
+          ingestionClaimIsExpired(entry, now) && !isMediaUploadPending(entry),
       );
       candidates = [...queued, ...expired].slice(0, batchSize);
     }

@@ -8,15 +8,10 @@ const apiMock = vi.hoisted(() => ({
   ingestionQueue: {
     createEntry: "ingestionQueue.createEntry",
   },
-  photos: {
-    cancelUploadSession: "photos.cancelUploadSession",
-    finalizeUpload: "photos.finalizeUpload",
-    initUpload: "photos.initUpload",
-  },
 }));
 
 const captureData = vi.hoisted(() => {
-  let uploadIndex = 0;
+  let entryIndex = 0;
 
   function mediaKindForMimeType(mimeType: string) {
     if (mimeType.startsWith("image/")) {
@@ -33,28 +28,16 @@ const captureData = vi.hoisted(() => {
 
   return {
     reset() {
-      uploadIndex = 0;
+      entryIndex = 0;
     },
-    initUpload: vi.fn(async (...args: Record<string, unknown>[]) => {
-      void args;
-      uploadIndex += 1;
-      return {
-        uploadSessionId: `session_${uploadIndex}`,
-        uploadUrl: `https://uploads.example.com/original-${uploadIndex}`,
-        headers: { "Content-Type": "application/octet-stream" },
-        derivativeUploads: [],
-      };
+    // F1: createEntry runs FIRST and returns the new entry id; photos upload in
+    // the background afterward, so the form never awaits an upload.
+    createEntry: vi.fn(async () => {
+      entryIndex += 1;
+      return `entry_${entryIndex}` as Id<"ingestionQueueEntries">;
     }),
-    finalizeUpload: vi.fn(async () => ({
-      photoId: `photo_${uploadIndex}`,
-      derivativeStatus: "ready",
-    })),
-    cancelUploadSession: vi.fn(),
-    createEntry: vi.fn(),
-    fileSha256Hex: vi.fn(async (file: File) => `hash-${file.name}`),
-    imageDimensions: vi.fn(async () => ({ width: 1600, height: 1200 })),
+    enqueue: vi.fn(),
     mediaKindForMimeType: vi.fn(mediaKindForMimeType),
-    uploadFileWithProgress: vi.fn(),
     validateMediaUploadFile: vi.fn((file: File) => ({
       ok: mediaKindForMimeType(file.type) !== null,
       message:
@@ -70,19 +53,7 @@ vi.mock("../../convex/_generated/api", () => ({
 }));
 
 vi.mock("convex/react", () => ({
-  useAction: (action: string) => {
-    if (action === apiMock.photos.initUpload) {
-      return captureData.initUpload;
-    }
-    if (action === apiMock.photos.finalizeUpload) {
-      return captureData.finalizeUpload;
-    }
-    throw new Error(`Unexpected action ${action}`);
-  },
   useMutation: (mutation: string) => {
-    if (mutation === apiMock.photos.cancelUploadSession) {
-      return captureData.cancelUploadSession;
-    }
     if (mutation === apiMock.ingestionQueue.createEntry) {
       return captureData.createEntry;
     }
@@ -90,15 +61,26 @@ vi.mock("convex/react", () => ({
   },
 }));
 
+// F1 background upload: the form hands files to the media-upload provider's
+// enqueue() instead of awaiting the upload itself. Stub the hook so we can
+// assert enqueue is called with the saved entry id + the picked files.
+vi.mock("@/components/media-upload-provider", () => ({
+  useMediaUpload: () => ({ enqueue: captureData.enqueue }),
+}));
+
 vi.mock("@/lib/photo-upload", () => ({
-  fileSha256Hex: captureData.fileSha256Hex,
-  imageDimensions: captureData.imageDimensions,
   mediaKindForMimeType: captureData.mediaKindForMimeType,
-  uploadFileWithProgress: captureData.uploadFileWithProgress,
   validateMediaUploadFile: captureData.validateMediaUploadFile,
 }));
 
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
+
+const household = "household_123" as Id<"households">;
+const move = "move_123" as Id<"moves">;
+
+function imageFile(name: string) {
+  return new File(["front"], name, { type: "image/jpeg" });
+}
 
 describe("IngestionCaptureForm", () => {
   beforeEach(() => {
@@ -109,18 +91,15 @@ describe("IngestionCaptureForm", () => {
   it("keeps the quick note path available without requiring media", async () => {
     const user = userEvent.setup();
 
-    render(
-      <IngestionCaptureForm
-        householdId={"household_123" as Id<"households">}
-        moveId={"move_123" as Id<"moves">}
-      />,
-    );
+    render(<IngestionCaptureForm householdId={household} moveId={move} />);
 
     expect(screen.getByText("Media")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Choose files" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add note to queue" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Add note to queue" }),
+    ).toBeDisabled();
     expect(screen.getByText("Add a note or media first.")).toBeInTheDocument();
 
     await user.type(
@@ -130,39 +109,39 @@ describe("IngestionCaptureForm", () => {
     await user.click(screen.getByRole("button", { name: "Add note to queue" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Added to the queue. Ready for the next capture.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Added to the queue. Ready for the next capture."),
+      ).toBeInTheDocument();
     });
 
+    // A text-only entry saves with empty media and nothing to upload.
+    expect(captureData.createEntry).toHaveBeenCalledTimes(1);
     expect(captureData.createEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         instructions: "Sell the lamp and keep the blue bin together.",
         mediaPhotoIds: [],
+        expectedMediaCount: 0,
       }),
     );
-    expect(captureData.initUpload).not.toHaveBeenCalled();
+    expect(captureData.enqueue).not.toHaveBeenCalled();
   });
 
-  it("shows selected media and saves uploaded attachments to the queue", async () => {
+  it("saves the entry FIRST with empty media and hands files to the background uploader", async () => {
     const user = userEvent.setup();
 
-    render(
-      <IngestionCaptureForm
-        householdId={"household_123" as Id<"households">}
-        moveId={"move_123" as Id<"moves">}
-      />,
-    );
+    render(<IngestionCaptureForm householdId={household} moveId={move} />);
 
     await user.upload(screen.getByLabelText("Choose media files"), [
-      new File(["front"], "front.jpg", { type: "image/jpeg" }),
+      imageFile("front.jpg"),
       new File(["voice memo"], "voice.m4a", { type: "audio/mp4" }),
     ]);
 
     const attachments = screen.getByLabelText("Pending attachments");
     expect(within(attachments).getByText("front.jpg")).toBeInTheDocument();
-    expect(within(attachments).getByText("5 B")).toBeInTheDocument();
     expect(within(attachments).getByText("voice.m4a")).toBeInTheDocument();
-    expect(within(attachments).getByText("10 B")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add 2 files to queue" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Add 2 files to queue" }),
+    ).toBeEnabled();
 
     await user.type(
       screen.getByLabelText("Directions/Requests"),
@@ -171,33 +150,92 @@ describe("IngestionCaptureForm", () => {
     await user.click(screen.getByRole("button", { name: "Add 2 files to queue" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Added to the queue. Ready for the next capture.")).toBeInTheDocument();
+      expect(
+        screen.getByText(/photos uploading in the background/i),
+      ).toBeInTheDocument();
     });
 
-    expect(captureData.initUpload).toHaveBeenCalledTimes(2);
-    expect(captureData.uploadFileWithProgress).toHaveBeenCalledTimes(2);
-    expect(captureData.finalizeUpload).toHaveBeenCalledTimes(2);
-    expect(captureData.cancelUploadSession).not.toHaveBeenCalled();
-    expect(captureData.initUpload.mock.calls[0]?.[0]).not.toHaveProperty(
-      "derivatives",
-    );
-    expect(captureData.initUpload).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        mimeType: "image/jpeg",
-      }),
-    );
-    expect(captureData.initUpload).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        mimeType: "audio/mp4",
-      }),
-    );
+    // F1: the entry is created up front with NO media attached and an
+    // expectedMediaCount the background rollup will count down to.
+    expect(captureData.createEntry).toHaveBeenCalledTimes(1);
     expect(captureData.createEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         instructions: "These are garage items for later sorting.",
-        mediaPhotoIds: ["photo_1", "photo_2"],
+        mediaPhotoIds: [],
+        expectedMediaCount: 2,
       }),
     );
+
+    // The picked files are handed to the background uploader for the saved
+    // entry rather than uploaded synchronously during submit.
+    expect(captureData.enqueue).toHaveBeenCalledTimes(1);
+    const [enqueueTarget, enqueueFiles] = captureData.enqueue.mock.calls[0]!;
+    expect(enqueueTarget).toEqual(
+      expect.objectContaining({
+        entryId: "entry_1",
+        householdId: household,
+        moveId: move,
+      }),
+    );
+    expect(enqueueFiles).toHaveLength(2);
+    expect(enqueueFiles.map((f: { file: File }) => f.file.name)).toEqual([
+      "front.jpg",
+      "voice.m4a",
+    ]);
+  });
+
+  it("defaults multiple photos to ONE combined entry (F2 default)", async () => {
+    const user = userEvent.setup();
+
+    render(<IngestionCaptureForm householdId={household} moveId={move} />);
+
+    await user.upload(screen.getByLabelText("Choose media files"), [
+      imageFile("a.jpg"),
+      imageFile("b.jpg"),
+      imageFile("c.jpg"),
+    ]);
+
+    // The combined option is the default selection.
+    expect(
+      screen.getByRole("button", { name: "One combined entry" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "Add 3 files to queue" }));
+
+    await waitFor(() => {
+      expect(captureData.createEntry).toHaveBeenCalledTimes(1);
+    });
+    // One entry, all three photos enqueued onto it.
+    expect(captureData.createEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaPhotoIds: [], expectedMediaCount: 3 }),
+    );
+    expect(captureData.enqueue).toHaveBeenCalledTimes(1);
+    expect(captureData.enqueue.mock.calls[0]![1]).toHaveLength(3);
+  });
+
+  it("opts IN to splitting into one entry per photo", async () => {
+    const user = userEvent.setup();
+
+    render(<IngestionCaptureForm householdId={household} moveId={move} />);
+
+    await user.upload(screen.getByLabelText("Choose media files"), [
+      imageFile("a.jpg"),
+      imageFile("b.jpg"),
+    ]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Split into separate entries" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Add 2 entries to queue" }),
+    );
+
+    await waitFor(() => {
+      expect(captureData.createEntry).toHaveBeenCalledTimes(2);
+    });
+    // Two entries, each gets one photo enqueued.
+    expect(captureData.enqueue).toHaveBeenCalledTimes(2);
+    expect(captureData.enqueue.mock.calls[0]![1]).toHaveLength(1);
+    expect(captureData.enqueue.mock.calls[1]![1]).toHaveLength(1);
   });
 });
