@@ -5,6 +5,7 @@ import {
   ingestionQueueIntentValidator,
   ingestionQueueStatusValidator,
   ingestionScopeHintValidator,
+  mediaUploadStateValidator,
 } from "./lib/ingestionQueue";
 import {
   floorPlanKindValidator,
@@ -1568,6 +1569,12 @@ export default defineSchema({
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
     mediaPhotoIds: v.array(v.id("itemPhotos")),
+    // Background-upload bookkeeping. Both optional → old rows (undefined) read as
+    // "media is fully attached / complete". expectedMediaCount is how many photos
+    // the client promised to upload after the entry was saved; mediaUploadState is
+    // the coarse entry-level rollup (per-file progress/retry lives client-side).
+    expectedMediaCount: v.optional(v.number()),
+    mediaUploadState: v.optional(mediaUploadStateValidator),
     sortOrder: v.number(),
     claimedByUserId: v.optional(v.id("users")),
     claimedByApiKeyId: v.optional(v.id("apiKeys")),

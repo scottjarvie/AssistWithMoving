@@ -1,6 +1,7 @@
 import { ServerOff } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { MediaUploadProvider } from "@/components/media-upload-provider";
 import { MoveWorkspaceProvider } from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,7 +33,11 @@ export default function ProductLayout({
 
   return (
     <MoveWorkspaceProvider>
-      <AppShell>{children}</AppShell>
+      {/* Background photo uploads live here, above the AppShell and both capture
+          Sheets, so jobs survive a Sheet closing and any in-app navigation. */}
+      <MediaUploadProvider>
+        <AppShell>{children}</AppShell>
+      </MediaUploadProvider>
     </MoveWorkspaceProvider>
   );
 }

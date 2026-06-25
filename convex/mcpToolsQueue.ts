@@ -24,6 +24,7 @@ import {
   ingestionClaimDurationMs,
   ingestionClaimIsExpired,
   ingestionQueueStatusValidator,
+  isMediaUploadPending,
   type IngestionQueueStatus,
 } from "./lib/ingestionQueue";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
@@ -49,6 +50,7 @@ function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
     roomHint: entry.roomHint ?? null,
     dispositionHint: entry.dispositionHint ?? null,
     scopeHint: entry.scopeHint ?? null,
+    mediaUploadState: entry.mediaUploadState ?? null,
     intent: entry.intent ?? null,
     targetSpaceId: entry.targetSpaceId ?? null,
     targetTransportId: entry.targetTransportId ?? null,
@@ -125,12 +127,18 @@ export const claimQueue = mutation({
     const batchSize = Math.min(Math.max(args.batchSize ?? 1, 1), MAX_CLAIM_BATCH);
     const now = Date.now();
 
-    const queued = await ctx.db
-      .query("ingestionQueueEntries")
-      .withIndex("by_move_status_order", (q) =>
-        q.eq("moveId", args.moveId).eq("status", "queued"),
-      )
-      .take(batchSize);
+    // An entry whose media is still uploading isn't ready for an agent — skip it
+    // so a half-uploaded capture is never claimed mid-flight.
+    const queued = (
+      await ctx.db
+        .query("ingestionQueueEntries")
+        .withIndex("by_move_status_order", (q) =>
+          q.eq("moveId", args.moveId).eq("status", "queued"),
+        )
+        .take(QUEUE_LIMIT)
+    )
+      .filter((entry) => !isMediaUploadPending(entry))
+      .slice(0, batchSize);
 
     // Reclaim expired claims if the queued pool came up short.
     let candidates = queued;
@@ -141,8 +149,9 @@ export const claimQueue = mutation({
           q.eq("moveId", args.moveId).eq("status", "claimed"),
         )
         .take(QUEUE_LIMIT);
-      const expired = claimed.filter((entry) =>
-        ingestionClaimIsExpired(entry, now),
+      const expired = claimed.filter(
+        (entry) =>
+          ingestionClaimIsExpired(entry, now) && !isMediaUploadPending(entry),
       );
       candidates = [...queued, ...expired].slice(0, batchSize);
     }

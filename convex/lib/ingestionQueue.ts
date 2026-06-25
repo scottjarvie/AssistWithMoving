@@ -39,6 +39,57 @@ export const ingestionScopeHintValidator = v.union(
   v.literal("scene"),
 );
 
+// Coarse, entry-level rollup of background photo uploads. Optional on the row:
+// undefined means there is nothing pending (old rows, or media attached up front).
+//   "uploading" — photos are still arriving from the client upload manager
+//   "failed"    — an upload permanently failed; the entry stays saved, retryable
+//   "complete"  — all promised photos are attached
+export const mediaUploadStates = ["uploading", "failed", "complete"] as const;
+
+export type MediaUploadState = (typeof mediaUploadStates)[number];
+
+export const mediaUploadStateValidator = v.union(
+  v.literal("uploading"),
+  v.literal("failed"),
+  v.literal("complete"),
+);
+
+// Recompute the entry-level rollup after a background photo lands (appendMedia).
+//   - With a known expectation (combined/per-image capture set expectedMediaCount
+//     up front), we are "complete" once the attached count reaches it.
+//   - With NO expectation (undefined: F3 add-images, MCP captures, pre-feature
+//     rows), there is no outstanding promise the server tracks — this append IS
+//     the photo landing, so it resolves to "complete". Defaulting to "uploading"
+//     here would strand such entries permanently un-claimable.
+//   - A prior "failed" sibling stays sticky until the full count actually lands,
+//     so a slow sibling completing does not silently clear the failure badge.
+export function resolveAppendedMediaState(args: {
+  expectedMediaCount?: number;
+  priorState?: MediaUploadState;
+  attachedCount: number;
+}): MediaUploadState {
+  const reachedExpected =
+    args.expectedMediaCount == null ||
+    args.attachedCount >= args.expectedMediaCount;
+  if (reachedExpected) return "complete";
+  return args.priorState === "failed" ? "failed" : "uploading";
+}
+
+// True while an entry's background photo upload is still in flight. Composable
+// with effectiveStatus (status governs the lifecycle; this gates claimability).
+// An agent must never claim an entry whose media is still uploading.
+export function isMediaUploadPending(entry: {
+  mediaUploadState?: MediaUploadState;
+  expectedMediaCount?: number;
+  mediaPhotoIds: unknown[];
+}) {
+  if (entry.mediaUploadState === "uploading") return true;
+  return (
+    entry.expectedMediaCount != null &&
+    entry.mediaPhotoIds.length < entry.expectedMediaCount
+  );
+}
+
 // What the captured entry is intended to become / target (agent ingestion).
 export const ingestionQueueIntentValidator = v.union(
   v.literal("general"),

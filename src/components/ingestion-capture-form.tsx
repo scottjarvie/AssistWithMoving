@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useRef, useState } from "react";
-import { useAction, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import {
   Camera,
   FileAudio,
@@ -30,12 +30,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  fileSha256Hex,
-  imageDimensions,
   mediaKindForMimeType,
-  uploadFileWithProgress,
   validateMediaUploadFile,
 } from "@/lib/photo-upload";
+import { useMediaUpload } from "@/components/media-upload-provider";
 
 type PendingAttachment = {
   file: File;
@@ -43,14 +41,15 @@ type PendingAttachment = {
 };
 
 // Whether a batch of media becomes one entry per image (the agent treats each
-// photo as its own item) or a single combined scene entry.
+// photo as its own item) or a single combined entry holding the whole batch.
 type CaptureScope = "perImage" | "combined";
 
 // Mobile-first capture: photos/voice notes/clips plus typed (or dictated)
 // directions become ingestion-queue entries for the user's AI agent. With
-// multiple images the user picks whether each photo is its own item (the
-// default — this is the fix for the old collapse-everything-into-one behavior)
-// or whether the whole batch is one combined scene.
+// multiple images the user defaults to ONE combined entry and can opt IN to
+// splitting into one entry per photo. Submitting saves the entry immediately and
+// uploads the photos in the BACKGROUND, so the form is free for the next capture
+// right away (see media-upload-provider).
 export function IngestionCaptureForm({
   householdId,
   moveId,
@@ -69,16 +68,14 @@ export function IngestionCaptureForm({
   targetBoxCode?: string;
   boxContextInstructions?: string;
 }) {
-  const initUpload = useAction(api.photos.initUpload);
-  const finalizeUpload = useAction(api.photos.finalizeUpload);
-  const cancelUploadSession = useMutation(api.photos.cancelUploadSession);
   const createEntry = useMutation(api.ingestionQueue.createEntry);
+  const { enqueue } = useMediaUpload();
 
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [instructions, setInstructions] = useState("");
-  const [scope, setScope] = useState<CaptureScope>("perImage");
+  // Default to one combined entry; the user opts IN to splitting per photo.
+  const [scope, setScope] = useState<CaptureScope>("combined");
   const [saving, setSaving] = useState(false);
-  const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -111,62 +108,6 @@ export function IngestionCaptureForm({
     setAttachments((current) => [...current, ...accepted]);
   }
 
-  async function uploadAttachment(attachment: PendingAttachment) {
-    if (!householdId || !moveId) {
-      throw new Error("Missing move context.");
-    }
-
-    const { file, kind } = attachment;
-    const isImage = kind === "image";
-    const [dimensions, originalHash] = await Promise.all([
-      isImage ? imageDimensions(file) : Promise.resolve(undefined),
-      fileSha256Hex(file),
-    ]);
-
-    const session = await initUpload({
-      householdId,
-      moveId,
-      mimeType: file.type,
-      sizeBytes: file.size,
-    });
-    const uploadSessionId =
-      session.uploadSessionId as Id<"photoUploadSessions">;
-
-    try {
-      const abortController = new AbortController();
-      await uploadFileWithProgress({
-        file,
-        uploadUrl: session.uploadUrl,
-        contentType: session.headers["Content-Type"],
-        onProgress: () => {},
-        signal: abortController.signal,
-      });
-
-      const finalizeResult = normalizeFinalizeUploadResult(await finalizeUpload({
-        householdId,
-        moveId,
-        uploadSessionId,
-        width: dimensions?.width,
-        height: dimensions?.height,
-        originalHash,
-        photoType: isImage ? "item" : "other",
-        privacyLevel: "normal",
-        visibilityScope: "moveCollaborators",
-        exifHandlingStatus: "pending",
-        confidence: "manual",
-        verificationStatus: "unreviewed",
-      }));
-      return finalizeResult.photoId;
-    } catch (error) {
-      await cancelUploadSession({
-        householdId,
-        moveId,
-        uploadSessionId,
-      }).catch(() => {});
-      throw error;
-    }
-  }
-
   async function handleAddToQueue() {
     if (!householdId || !moveId || saving) {
       return;
@@ -187,82 +128,87 @@ export function IngestionCaptureForm({
         ? [boxContextInstructions, trimmedInstructions].filter(Boolean).join("\n\n")
         : trimmedInstructions;
 
-      // Upload every attachment first so a failure never leaves a half-created
-      // batch of entries. We capture which uploaded ids are images so the
-      // per-image split only fans out over photos (audio/video always ride
-      // along on a single entry).
-      const uploaded: Array<{ photoId: Id<"itemPhotos">; isImage: boolean }> =
-        [];
-      for (const [index, attachment] of attachments.entries()) {
-        setProgressLabel(
-          `Uploading ${index + 1} of ${attachments.length} (${attachment.file.name})`
-        );
-        uploaded.push({
-          photoId: await uploadAttachment(attachment),
-          isImage: attachment.kind === "image",
-        });
-      }
+      // Split images out so the per-image fan-out only covers photos; audio/video
+      // always ride along on a single entry (index 0 in the split path).
+      const imageAttachments = attachments.filter(
+        (attachment) => attachment.kind === "image",
+      );
+      const nonImageAttachments = attachments.filter(
+        (attachment) => attachment.kind !== "image",
+      );
 
       let entryCount = 0;
       if (perImage) {
-        // One queued entry per image. Non-image media is attached to the first
-        // entry so nothing is dropped. Shared instructions/room hint travel with
-        // every entry; scopeHint:"singleItem" tells the agent each is one item.
-        const imageIds = uploaded
-          .filter((media) => media.isImage)
-          .map((media) => media.photoId);
-        const extraMediaIds = uploaded
-          .filter((media) => !media.isImage)
-          .map((media) => media.photoId);
-
-        for (const [index, photoId] of imageIds.entries()) {
-          setProgressLabel(
-            `Creating queue entry ${index + 1} of ${imageIds.length}`
-          );
-          await createEntry({
+        // One queued entry per image. createEntry runs FIRST (empty media,
+        // expectedMediaCount = how many files we will upload for it); the
+        // background uploader then attaches each photo as it finishes. Non-image
+        // media folds into the first entry so nothing is dropped.
+        for (const [index, attachment] of imageAttachments.entries()) {
+          const extras = index === 0 ? nonImageAttachments : [];
+          const entryId = await createEntry({
             householdId,
             moveId,
             instructions: effectiveInstructions,
             scopeHint: "singleItem",
-            mediaPhotoIds:
-              index === 0 ? [photoId, ...extraMediaIds] : [photoId],
+            mediaPhotoIds: [],
+            expectedMediaCount: 1 + extras.length,
           });
+          enqueue(
+            { entryId, householdId, moveId },
+            [attachment, ...extras].map((item) => ({
+              file: item.file,
+              kind: item.kind,
+            })),
+          );
           entryCount += 1;
         }
       } else {
-        // One combined entry holding all media. With multiple images the user
-        // chose "one combined entry" (a scene); otherwise it is the natural
-        // single-capture path.
-        setProgressLabel("Saving queue entry");
-        await createEntry({
+        // One combined entry holding all media. createEntry first (empty media,
+        // expectedMediaCount = total attachments), then every file uploads in
+        // the background and attaches to that entry.
+        const entryId = await createEntry({
           householdId,
           moveId,
-          instructions: trimmedInstructions,
+          instructions: effectiveInstructions,
           scopeHint:
             scopeChoiceVisible && scope === "combined" ? "scene" : undefined,
-          mediaPhotoIds: uploaded.map((media) => media.photoId),
+          mediaPhotoIds: [],
+          expectedMediaCount: attachments.length,
         });
+        if (attachments.length > 0) {
+          enqueue(
+            { entryId, householdId, moveId },
+            attachments.map((attachment) => ({
+              file: attachment.file,
+              kind: attachment.kind,
+            })),
+          );
+        }
         entryCount = 1;
       }
 
+      // Free the form immediately — uploads continue in the background.
       setAttachments([]);
       setInstructions("");
-      setScope("perImage");
+      setScope("combined");
       // Room hint intentionally kept: capture sessions usually walk one room.
+      const hadMedia = attachments.length > 0;
       setStatus(
-        entryCount > 1
-          ? `Added ${entryCount} captures to the queue. Ready for the next.`
-          : "Added to the queue. Ready for the next capture."
+        hadMedia
+          ? entryCount > 1
+            ? `Added ${entryCount} captures — photos uploading in the background. Ready for the next.`
+            : "Added to the queue — photos uploading in the background. Ready for the next capture."
+          : "Added to the queue. Ready for the next capture.",
       );
       onCreated?.({ entryCount });
     } catch (error) {
+      // createEntry failed — keep the form intact so the user can retry.
       setStatus(
         error instanceof Error && error.message
           ? error.message
           : "Could not save this capture. Check your connection and retry."
       );
     } finally {
-      setProgressLabel(null);
       setSaving(false);
     }
   }
@@ -417,16 +363,6 @@ export function IngestionCaptureForm({
               <Button
                 type="button"
                 size="sm"
-                variant={scope === "perImage" ? "default" : "outline"}
-                aria-pressed={scope === "perImage"}
-                disabled={saving}
-                onClick={() => setScope("perImage")}
-              >
-                One entry per photo
-              </Button>
-              <Button
-                type="button"
-                size="sm"
                 variant={scope === "combined" ? "default" : "outline"}
                 aria-pressed={scope === "combined"}
                 disabled={saving}
@@ -434,10 +370,20 @@ export function IngestionCaptureForm({
               >
                 One combined entry
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={scope === "perImage" ? "default" : "outline"}
+                aria-pressed={scope === "perImage"}
+                disabled={saving}
+                onClick={() => setScope("perImage")}
+              >
+                Split into separate entries
+              </Button>
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               {scope === "perImage"
-                ? "Each photo becomes its own queued capture — best when every photo is a separate item."
+                ? "Each photo becomes its own queued capture (one entry per photo) — best when every photo is a separate item."
                 : "All photos stay in a single capture — best for one scene, room, or box shot from several angles."}
             </p>
           </div>
@@ -487,11 +433,6 @@ export function IngestionCaptureForm({
           ) : null}
         </div>
 
-        {progressLabel ? (
-          <p className="text-xs text-muted-foreground" role="status">
-            {progressLabel}
-          </p>
-        ) : null}
         {status ? (
           <p
             className="text-xs text-muted-foreground"
@@ -504,21 +445,6 @@ export function IngestionCaptureForm({
       </CardContent>
     </Card>
   );
-}
-
-function normalizeFinalizeUploadResult(value: unknown): {
-  photoId: Id<"itemPhotos">;
-} {
-  if (typeof value === "string") {
-    return { photoId: value as Id<"itemPhotos"> };
-  }
-  if (value && typeof value === "object") {
-    const result = value as { photoId?: string };
-    if (result.photoId) {
-      return { photoId: result.photoId as Id<"itemPhotos"> };
-    }
-  }
-  throw new Error("Upload finalization did not return a photo id.");
 }
 
 function attachmentIcon(kind: PendingAttachment["kind"]) {
