@@ -34,6 +34,7 @@ import {
   getAiProviderStatus,
   getApiContext,
   getCapacityReport,
+  getInlineImages,
   getMoveDayChecklist,
   getMoveQuestions,
   getMoveSummary,
@@ -2983,5 +2984,114 @@ describe("MovingManifest MCP API client", () => {
       request: { method: "POST", path: "/moves/move1/share-links" },
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("get_images returns inline image bytes filtered by item", async () => {
+    const imageBytes = new Uint8Array([1, 2, 3, 4]);
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/photos/photo1/display-url")) {
+        expect(url).toContain("variant=detail");
+        return {
+          ok: true,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({
+            data: {
+              url: "https://img.example/photo1.webp",
+              mimeType: "image/webp",
+              servedVariant: "detail",
+              width: 1200,
+              height: 900,
+            },
+          }),
+        };
+      }
+      if (url.includes("img.example")) {
+        return {
+          ok: true,
+          headers: new Headers({ "content-type": "image/webp" }),
+          arrayBuffer: async () => imageBytes.buffer,
+        };
+      }
+      // photos listing
+      return {
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: [
+            { photoId: "photo1", itemId: "item1", caption: "front" },
+            { photoId: "photo2", itemId: "other", caption: "skip" },
+          ],
+          page: { limit: 250, nextCursor: null, total: 2 },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const config = createApiConfig({
+      MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1",
+      MOVINGMANIFEST_API_KEY: "mmk_test_secret",
+    } as unknown as NodeJS.ProcessEnv);
+
+    const result = await getInlineImages(config, {
+      moveId: "move1",
+      itemId: "item1",
+      variant: "detail",
+      limit: 4,
+    });
+
+    // Filtered to item1 only, fetched and base64-encoded server-side.
+    expect(result.images).toHaveLength(1);
+    const [img] = result.images;
+    expect(img.photoId).toBe("photo1");
+    expect(img.mimeType).toBe("image/webp");
+    expect(img.attachedTo).toEqual({ kind: "item", id: "item1" });
+    expect(img.base64).toBe(Buffer.from(imageBytes).toString("base64"));
+  });
+
+  it("get_images requires a moveId", async () => {
+    const config = createApiConfig({
+      MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1",
+      MOVINGMANIFEST_API_KEY: "mmk_test_secret",
+    } as unknown as NodeJS.ProcessEnv);
+    await expect(
+      getInlineImages(config, {} as Record<string, unknown>)
+    ).rejects.toThrow("moveId is required.");
+  });
+
+  it("get_images records a per-image error instead of failing the whole call", async () => {
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/photos/photo1/display-url")) {
+        return {
+          ok: false,
+          status: 404,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ error: { message: "gone" } }),
+        };
+      }
+      return {
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          data: [{ photoId: "photo1", boxId: "box1", caption: null }],
+          page: { limit: 250, nextCursor: null, total: 1 },
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const config = createApiConfig({
+      MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1",
+      MOVINGMANIFEST_API_KEY: "mmk_test_secret",
+    } as unknown as NodeJS.ProcessEnv);
+
+    const result = await getInlineImages(config, {
+      moveId: "move1",
+      boxId: "box1",
+    });
+    expect(result.images).toHaveLength(1);
+    expect(result.images[0].error).toBeTruthy();
+    expect(result.images[0].base64).toBeUndefined();
   });
 });

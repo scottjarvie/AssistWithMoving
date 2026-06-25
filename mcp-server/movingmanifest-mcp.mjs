@@ -39,6 +39,7 @@ import {
   getApiContext,
   getAgentContext,
   getCapacityReport,
+  getInlineImages,
   getMoveDayChecklist,
   getMoveQuestions,
   getMoveSummary,
@@ -1315,7 +1316,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "create_move_space", {
     title: "Create move space",
     description:
-      "Create a first-class room/space target for inventory, photos, transport planning, selling context, and Layout Studio.",
+      "Create a first-class room/space target for inventory, photos, transport planning, selling context, and Layout Studio. (OAuth gateway equivalent: upsert_spaces, which is rooms-only.) To add TRANSPORTATION that appears in transport lists and can be assigned to boxes/items, use create_transport_resource instead — a 'transportResource'/'transportZone' kind here is a Layout Studio placement and should reference an existing transportResourceId/transportZoneId, not a way to create the transport itself.",
     inputSchema: {
       moveId: z.string(),
       kind: moveSpaceKindSchema,
@@ -1773,6 +1774,59 @@ export function registerTools(target, apiConfig, options = {}) {
     handler: (input) => rejectPlanningSuggestions(apiConfig, input),
   });
 
+  registerTool(target, "get_images", {
+    title: "View household photos inline",
+    description:
+      "Fetch household photos and return them as INLINE viewable images (not just links) so you can read labels, model/serial numbers, and condition directly from the picture. Filter by exactly one of itemId | boxId | spaceId | transportResourceId | transportZoneId | room | all:true, or pass photoIds:[...] to fetch specific photos. variant thumb|card|detail|full (default detail — best for reading fine print). limit default 4, max 8; image payloads are large, so narrow the filter when you want specific photos. The MCP server fetches the bytes itself, so this works even when your own sandbox cannot reach the image host. (OAuth gateway equivalent get_images returns short-lived URLs instead of inline images.)",
+    inputSchema: {
+      moveId: z.string(),
+      itemId: z.string().optional(),
+      boxId: z.string().optional(),
+      spaceId: z.string().optional(),
+      transportResourceId: z.string().optional(),
+      transportZoneId: z.string().optional(),
+      room: z.string().optional(),
+      photoIds: z.array(z.string()).max(8).optional(),
+      all: z.boolean().optional(),
+      variant: z.enum(["thumb", "card", "detail", "full"]).optional(),
+      limit: z.number().int().positive().max(8).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    rawResult: true,
+    handler: async (input) => {
+      const result = await getInlineImages(apiConfig, input);
+      const summary = {
+        moveId: result.moveId,
+        variant: result.variant,
+        requested: result.requested,
+        returned: result.images.filter((img) => img.base64).length,
+        images: result.images.map((img) => ({
+          photoId: img.photoId,
+          caption: img.caption ?? null,
+          attachedTo: img.attachedTo ?? null,
+          servedVariant: img.servedVariant ?? null,
+          width: img.width ?? null,
+          height: img.height ?? null,
+          bytes: img.bytes ?? null,
+          error: img.error ?? null,
+        })),
+      };
+      const content = [{ type: "text", text: JSON.stringify(summary, null, 2) }];
+      for (const img of result.images) {
+        if (img.base64) {
+          content.push({ type: "image", data: img.base64, mimeType: img.mimeType });
+        }
+      }
+      if (content.length === 1) {
+        content.push({
+          type: "text",
+          text: "No viewable images were returned for this filter.",
+        });
+      }
+      return { content };
+    },
+  });
+
   registerTool(target, "start_photo_upload", {
     title: "Start media evidence upload",
     description:
@@ -2189,7 +2243,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "create_transport_resource", {
     title: "Create transport resource",
     description:
-      "Create a truck, trailer, mover channel, storage unit, disposal, sale, donation, or custom transport resource. Use presetKey for built-in resource templates.",
+      "Create a truck, trailer, personal vehicle, professional or military movers (type 'militaryMovers'), POD/storage unit, disposal, sale, donation, or custom transport resource. Use presetKey for built-in resource templates. This is the ONLY way to create transportation that shows up in transport lists and can be assigned to boxes/items. (OAuth gateway equivalent: upsert_transport.)",
     inputSchema: {
       moveId: z.string(),
       presetKey: z.string().optional(),
@@ -2466,7 +2520,11 @@ function registerTool(target, name, config) {
     },
     async (input) => {
       try {
-        return textResult(await config.handler(input));
+        const result = await config.handler(input);
+        // Most tools return plain data we wrap as a text block. Tools that need
+        // to emit native content blocks (e.g. inline images) set rawResult and
+        // return a ready { content: [...] } result we pass through untouched.
+        return config.rawResult ? result : textResult(result);
       } catch (error) {
         return toolErrorResult(error);
       }

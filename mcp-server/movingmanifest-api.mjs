@@ -138,6 +138,112 @@ export async function movingManifestBinaryRequest(
   return payload;
 }
 
+// ---- inline image reading --------------------------------------------------
+// Sign a short-lived display URL for one photo (MOVE-317 REST endpoint).
+export async function getPhotoDisplayUrl(config, { moveId, photoId, variant }) {
+  return movingManifestRequest(config, {
+    method: "GET",
+    path: `moves/${moveId}/photos/${photoId}/display-url`,
+    query: { variant },
+  });
+}
+
+// Fetch image bytes server-side and return them base64-encoded. The MCP SERVER
+// reaches the image host (B2/Cloudflare) here, so the model never has to — the
+// bytes ride the MCP transport as a native image, sidestepping any client-side
+// egress allowlist.
+export async function fetchImageAsBase64(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Image fetch failed (${response.status}).`);
+  }
+  const mimeType =
+    response.headers.get("content-type")?.split(";")[0]?.trim() || "image/webp";
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return { base64: buffer.toString("base64"), mimeType, bytes: buffer.byteLength };
+}
+
+function describePhotoAttachment(photo) {
+  if (!photo) return null;
+  if (photo.itemId) return { kind: "item", id: photo.itemId };
+  if (photo.boxId) return { kind: "box", id: photo.boxId };
+  if (photo.spaceId) return { kind: "space", id: photo.spaceId };
+  if (photo.transportResourceId)
+    return { kind: "transport", id: photo.transportResourceId };
+  if (photo.transportZoneId)
+    return { kind: "transportZone", id: photo.transportZoneId };
+  if (photo.room) return { kind: "room", id: photo.room };
+  return null;
+}
+
+const inlineImageVariants = ["thumb", "card", "detail", "full"];
+
+// Resolve a photo set (by filter or explicit photoIds), then fetch each as
+// base64. Returns pure data; the tool layer turns it into MCP image blocks.
+export async function getInlineImages(config, input) {
+  const moveId = input?.moveId;
+  if (!moveId) throw new Error("moveId is required.");
+  const variant = inlineImageVariants.includes(input?.variant)
+    ? input.variant
+    : "detail";
+  const limit = Math.min(Math.max(Number(input?.limit) || 4, 1), 8);
+
+  let selected = [];
+  if (Array.isArray(input?.photoIds) && input.photoIds.length > 0) {
+    selected = input.photoIds.slice(0, limit).map((photoId) => ({ photoId }));
+  } else {
+    const listing = await movingManifestRequest(config, {
+      method: "GET",
+      path: `moves/${moveId}/photos`,
+      query: { limit: "250" },
+    });
+    const all = Array.isArray(listing?.data) ? listing.data : [];
+    const match = (photo) => {
+      if (input?.itemId) return photo.itemId === input.itemId;
+      if (input?.boxId) return photo.boxId === input.boxId;
+      if (input?.spaceId) return photo.spaceId === input.spaceId;
+      if (input?.transportResourceId)
+        return photo.transportResourceId === input.transportResourceId;
+      if (input?.transportZoneId)
+        return photo.transportZoneId === input.transportZoneId;
+      if (input?.room) return photo.room === input.room;
+      return true; // all
+    };
+    selected = all.filter(match).slice(0, limit);
+  }
+
+  const images = [];
+  for (const photo of selected) {
+    try {
+      const urlResponse = await getPhotoDisplayUrl(config, {
+        moveId,
+        photoId: photo.photoId,
+        variant,
+      });
+      const info = urlResponse?.data ?? urlResponse ?? {};
+      if (!info.url) throw new Error("No display URL returned.");
+      const fetched = await fetchImageAsBase64(info.url);
+      images.push({
+        photoId: photo.photoId,
+        caption: photo.caption ?? null,
+        attachedTo: describePhotoAttachment(photo),
+        mimeType: fetched.mimeType || info.mimeType || "image/webp",
+        servedVariant: info.servedVariant ?? variant,
+        width: info.width ?? null,
+        height: info.height ?? null,
+        bytes: fetched.bytes,
+        base64: fetched.base64,
+      });
+    } catch (error) {
+      images.push({
+        photoId: photo.photoId,
+        error: error instanceof Error ? error.message : "Failed to load image.",
+      });
+    }
+  }
+  return { moveId, variant, requested: selected.length, images };
+}
+
 export function textResult(data) {
   return {
     content: [
