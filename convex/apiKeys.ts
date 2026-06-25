@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
@@ -78,7 +78,7 @@ export const create = mutation({
       "api_keys:manage"
     );
     if (actor.type !== "user") {
-      throw new Error("API-key management requires a user actor.");
+      throw new ConvexError("API-key management requires a signed-in user.");
     }
 
     await assertHouseholdEntitlement(ctx, {
@@ -93,7 +93,7 @@ export const create = mutation({
       )
       .collect();
     if (activeKeys.length >= MAX_ACTIVE_API_KEYS) {
-      throw new Error(
+      throw new ConvexError(
         `You can have up to ${MAX_ACTIVE_API_KEYS} active connections. Revoke one before adding another.`,
       );
     }
@@ -101,7 +101,7 @@ export const create = mutation({
     await assertMoveRestriction(ctx, args);
     const scopes = normalizeApiKeyScopes(args.scopes);
     if (!scopes.length) {
-      throw new Error("Select at least one API scope.");
+      throw new ConvexError("Select at least one thing this connection can do.");
     }
     const rawKey = generateApiKeySecret();
     const prefix = apiKeyPrefix(rawKey);
@@ -110,7 +110,7 @@ export const create = mutation({
       .withIndex("by_prefix", (q) => q.eq("prefix", prefix))
       .unique();
     if (existing) {
-      throw new Error("Could not create a unique API key. Try again.");
+      throw new ConvexError("Could not create a unique API key. Please try again.");
     }
 
     const now = Date.now();
@@ -259,8 +259,18 @@ async function assertMoveRestriction(
 ) {
   if (!args.moveId) return;
   const move = await ctx.db.get(args.moveId);
-  if (!move || move.householdId !== args.householdId || move.archivedAt) {
-    throw new Error("Move restriction is invalid.");
+  if (!move || move.householdId !== args.householdId) {
+    throw new ConvexError(
+      "That move isn't part of the selected household. Pick a move that belongs to this household, or choose “All moves in this household”.",
+    );
+  }
+  // A move can read as archived via either signal; check both so the dropdown
+  // (which filters on status) and this guard (which used to check only
+  // archivedAt) can never disagree and produce an opaque failure.
+  if (move.archivedAt !== undefined || move.status === "archived") {
+    throw new ConvexError(
+      "That move is archived, so a key can't be scoped to it. Restore the move first, or choose “All moves in this household”.",
+    );
   }
 }
 
@@ -273,7 +283,7 @@ async function getMutableKey(
 ) {
   const key = await ctx.db.get(args.apiKeyId);
   if (!key || key.householdId !== args.householdId) {
-    throw new Error("API key not found.");
+    throw new ConvexError("That connection could not be found.");
   }
   return key;
 }
@@ -281,7 +291,7 @@ async function getMutableKey(
 function normalizeKeyName(name: string) {
   const trimmed = name.trim();
   if (!trimmed) {
-    throw new Error("API key name is required.");
+    throw new ConvexError("Give this connection a name.");
   }
   return trimmed.slice(0, 120);
 }
@@ -289,7 +299,7 @@ function normalizeKeyName(name: string) {
 function normalizeExpiration(expiresAt: number | undefined) {
   if (expiresAt === undefined) return undefined;
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    throw new Error("Expiration must be in the future.");
+    throw new ConvexError("Expiration must be in the future.");
   }
   return expiresAt;
 }

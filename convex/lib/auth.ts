@@ -1,3 +1,5 @@
+import { ConvexError } from "convex/values";
+
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { HouseholdRole } from "./roles";
@@ -5,14 +7,18 @@ import { householdRoleAtLeast } from "./roles";
 
 type Reader = QueryCtx["db"] | MutationCtx["db"];
 
-export class AuthenticationRequiredError extends Error {
+// Auth/permission failures extend ConvexError (not a plain Error) so their
+// message reaches the client. A plain Error is redacted to an opaque "Server
+// Error" in production — which is why, e.g., a blocked API-key creation gave the
+// user no idea why it failed. instanceof still holds for existing callers/tests.
+export class AuthenticationRequiredError extends ConvexError<string> {
   constructor() {
     super("Authentication required.");
     this.name = "AuthenticationRequiredError";
   }
 }
 
-export class AuthorizationError extends Error {
+export class AuthorizationError extends ConvexError<string> {
   constructor(message = "Not authorized.") {
     super(message);
     this.name = "AuthorizationError";

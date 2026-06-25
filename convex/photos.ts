@@ -1112,11 +1112,14 @@ export const getDisplayUrlForApiActor = internalAction({
     height?: number;
     mimeType: string;
   }> => {
-    const { photo } = await ctx.runQuery(internal.photos.getPhotoForDelivery, {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      photoId: args.photoId,
-    });
+    const { photo } = await ctx.runQuery(
+      internal.photos.getPhotoForDeliveryForApiActor,
+      {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        photoId: args.photoId,
+      },
+    );
     return buildDisplayUrlResult(photo, args.variant);
   },
 });
@@ -1540,6 +1543,32 @@ export const getPhotoForDelivery = internalQuery({
       photo,
       visibility: policy.visibility,
     };
+  },
+});
+
+// API-key (REST) variant of getPhotoForDelivery. The REST action layer already
+// authorized the move via authenticateAction (API-key scope + household/move),
+// and there is NO ctx.auth in that path — so this must NOT call
+// requireMovePermission (which resolves a Clerk session and throws
+// AuthenticationRequiredError for API-key callers). It only re-validates that
+// the photo belongs to the authorized move. See MOVE-317.
+export const getPhotoForDeliveryForApiActor = internalQuery({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+  },
+  handler: async (ctx, args) => {
+    const photo = await ctx.db.get(args.photoId);
+    if (
+      !photo ||
+      photo.householdId !== args.householdId ||
+      photo.moveId !== args.moveId ||
+      photo.archivedAt
+    ) {
+      throw new Error("Photo not found.");
+    }
+    return { photo };
   },
 });
 

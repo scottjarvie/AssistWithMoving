@@ -3,6 +3,17 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { ConvexError } from "convex/values";
+
+// Convex carries a thrown ConvexError's payload in `.data` (a plain Error is
+// redacted to "Server Error" server-side). Prefer the data message so the user
+// sees the real reason a connection couldn't be created/revoked/rotated.
+function readErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ConvexError) {
+    return typeof error.data === "string" && error.data ? error.data : fallback;
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 import {
   Activity,
   Bot,
@@ -338,9 +349,7 @@ export function ApiKeyManager({
         );
       }
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not create API key.",
-      );
+      setMessage(readErrorMessage(error, "Could not create the connection."));
     } finally {
       setBusy(null);
     }
@@ -354,9 +363,7 @@ export function ApiKeyManager({
       await revokeKey({ householdId: effectiveHouseholdId, apiKeyId });
       setMessage("AI connection revoked.");
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not revoke API key.",
-      );
+      setMessage(readErrorMessage(error, "Could not revoke the connection."));
     } finally {
       setBusy(null);
     }
@@ -375,9 +382,7 @@ export function ApiKeyManager({
       setOneTimeSecret(result.rawKey);
       setMessage("AI connection rotated. The previous key was revoked.");
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not rotate API key.",
-      );
+      setMessage(readErrorMessage(error, "Could not rotate the connection."));
     } finally {
       setBusy(null);
     }
