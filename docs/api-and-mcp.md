@@ -1889,6 +1889,7 @@ Available MCP tools:
 | `generate_planning_suggestions` | Create deterministic estimate/load suggestions in the review queue, with `dryRun` support. |
 | `approve_planning_suggestions` | Approve exact pending planning suggestion IDs, with optional edited estimate drafts or assignment override reasons. |
 | `reject_planning_suggestions` | Reject exact pending planning suggestion IDs. |
+| `get_images` | View existing photos as INLINE viewable images (not just links) so the agent can read model/serial numbers, write descriptions, and judge condition. Filter by `itemId`/`boxId`/`spaceId`/`transportResourceId`/`transportZoneId`/`room`/`all` or pass `photoIds`; `variant` `thumb`/`card`/`detail`/`full` (default `detail`); small `limit`. The MCP server fetches the bytes server-side, so it works even when the agent's own sandbox cannot reach the image host. |
 | `upload_photo` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload for ordinary household photos. |
 | `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos or several new photos attached to one existing item. |
 | `upload_image` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload when the user or agent says image instead of photo. |

@@ -1084,6 +1084,43 @@ export const getDisplayUrlForSubject = internalAction({
   },
 });
 
+// REST API (api-key actor) variant. The REST action layer already authorized
+// the move via authenticateAction, so this only re-validates that the photo
+// belongs to the move (getPhotoForDelivery) before signing. Internal-only —
+// never client-callable. Same URL output as getDisplayUrl / *ForSubject. Lets
+// the stdio/HTTP MCP server fetch real image bytes server-side and hand the
+// model a native image (it never needs to reach Backblaze itself). See
+// MOVE-317.
+export const getDisplayUrlForApiActor = internalAction({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    photoId: v.id("itemPhotos"),
+    variant: photoDisplayVariantValidator,
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    url: string;
+    expiresAt: number;
+    requestedVariant: PhotoDisplayVariant;
+    servedVariant: PhotoDisplayVariant;
+    deliveryProvider: PhotoDeliveryProvider;
+    derivativeStatus?: "pending" | "ready" | "failed";
+    width?: number;
+    height?: number;
+    mimeType: string;
+  }> => {
+    const { photo } = await ctx.runQuery(internal.photos.getPhotoForDelivery, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      photoId: args.photoId,
+    });
+    return buildDisplayUrlResult(photo, args.variant);
+  },
+});
+
 export const getOriginalDownloadUrl = action({
   args: {
     householdId: v.id("households"),

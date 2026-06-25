@@ -350,7 +350,19 @@ const spaceDraftValidator = v.object({
   kind: v.optional(moveSpaceKindValidator),
   floorLevel: v.optional(v.string()),
   notes: v.optional(v.string()),
+  // Soft-delete the space (sets status "archived"). Requires spaceId. Mirrors
+  // the per-zone `archive` flag on upsert_transport — keeps the tool surface
+  // lean instead of adding a separate archive_space tool.
+  archive: v.optional(v.boolean()),
 });
+
+// moveSpaceKind includes "transportResource"/"transportZone" because the floor-
+// plan layer mirrors transports as placeable spaces — but those rows live in a
+// DIFFERENT table (transportResources/transportZones) and NEVER show up in
+// list_transport. An agent reaching for upsert_spaces to "make a transport"
+// would silently create an orphan ghost room, so reject those kinds here and
+// point at the real tool. (See MOVE-318.)
+const transportLikeSpaceKinds = new Set(["transportResource", "transportZone"]);
 export const upsertSpacesArgs = {
   caller: mcpCallerValidator,
   householdId: v.id("households"),
@@ -369,10 +381,44 @@ export const upsertSpaces = mutation({
     );
     const userId = policy.actor.userId;
     const now = Date.now();
-    const results: Array<{ spaceId: string; action: "created" | "updated" }> =
-      [];
+    const results: Array<{
+      spaceId: string;
+      action: "created" | "updated" | "archived";
+    }> = [];
 
     for (const draft of args.spaces) {
+      // Footgun guard: a transport is NOT a space (different table, never in
+      // list_transport). Redirect instead of silently creating a ghost room.
+      if (draft.kind && transportLikeSpaceKinds.has(draft.kind)) {
+        throw new Error(
+          `"${draft.kind}" is not a room kind — transports live in a separate system. Use upsert_transport (it has a militaryMovers type, trucks, trailers, PODs, storage, movers) so it shows up in list_transport. A space with that kind would be invisible to every transport tool.`,
+        );
+      }
+
+      // Archive path — mirrors upsert_transport's zone `archive` flag.
+      if (draft.archive) {
+        if (!draft.spaceId) {
+          throw new Error(
+            "To archive a space, pass its spaceId together with archive: true.",
+          );
+        }
+        const existing = await ctx.db.get(draft.spaceId);
+        if (
+          !existing ||
+          existing.householdId !== args.householdId ||
+          existing.moveId !== args.moveId
+        ) {
+          throw new Error(`Space ${draft.spaceId} not found in this move.`);
+        }
+        await ctx.db.patch(draft.spaceId, {
+          status: "archived",
+          updatedByUserId: userId,
+          updatedAt: now,
+        });
+        results.push({ spaceId: String(draft.spaceId), action: "archived" });
+        continue;
+      }
+
       if (draft.spaceId) {
         const existing = await ctx.db.get(draft.spaceId);
         if (
@@ -393,6 +439,9 @@ export const upsertSpaces = mutation({
             draft.notes !== undefined
               ? normalizeOptionalText(draft.notes)
               : existing.notes,
+          // Explicit upsert un-archives a previously archived room, mirroring
+          // the un-archive-on-edit behavior of transport zones.
+          status: existing.status === "archived" ? "active" : existing.status,
           updatedByUserId: userId,
           updatedAt: now,
         });

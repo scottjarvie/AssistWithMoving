@@ -360,6 +360,10 @@ const transportDraftValidator = v.object({
   capacity: v.optional(capacityValidator),
   rules: v.optional(v.array(v.string())),
   zones: v.optional(v.array(transportZoneDraftValidator)),
+  // Soft-delete the whole transport (sets archivedAt) — requires transportId.
+  // Mirrors the per-zone `archive` flag below; list_transport already hides
+  // archived resources. An explicit edit (any other field) un-archives.
+  archive: v.optional(v.boolean()),
 });
 export const upsertTransportArgs = {
   caller: mcpCallerValidator,
@@ -382,6 +386,7 @@ export const upsertTransport = mutation({
     const results: Array<{
       transportId: Id<"transportResources">;
       created: boolean;
+      archived?: boolean;
       zones?: Array<{
         zoneId: Id<"transportZones">;
         name: string;
@@ -391,6 +396,30 @@ export const upsertTransport = mutation({
     }> = [];
 
     for (const draft of args.transports) {
+      // Archive path — soft-delete the whole transport. Requires transportId;
+      // list_transport already filters out archived resources.
+      if (draft.archive) {
+        if (!draft.transportId) {
+          throw new Error(
+            "To archive a transport, pass its transportId together with archive: true.",
+          );
+        }
+        const resource = await ctx.db.get(draft.transportId);
+        if (!resource || resource.moveId !== args.moveId) {
+          throw new Error("Transport not found for this move.");
+        }
+        await ctx.db.patch(draft.transportId, {
+          archivedAt: now,
+          updatedAt: now,
+        });
+        results.push({
+          transportId: draft.transportId,
+          created: false,
+          archived: true,
+        });
+        continue;
+      }
+
       let resourceId: Id<"transportResources">;
       let created: boolean;
       if (draft.transportId) {
@@ -399,6 +428,9 @@ export const upsertTransport = mutation({
           throw new Error("Transport not found for this move.");
         }
         const patch: Partial<Doc<"transportResources">> = { updatedAt: now };
+        // Explicit edit un-archives a previously archived transport, mirroring
+        // the un-archive-on-edit behavior of zones and spaces.
+        if (resource.archivedAt) patch.archivedAt = undefined;
         if (draft.name !== undefined) {
           patch.name = draft.name.trim() || resource.name;
         }

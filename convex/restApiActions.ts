@@ -125,10 +125,72 @@ export const handle = internalAction({
     if (segments[0] === "photos" && segments[1] === "finalize" && args.method === "POST") {
       return (await handlePhotoFinalize(ctx, args)) as RestResponse;
     }
+    // GET /moves/{moveId}/photos/{photoId}/display-url?variant=detail — sign a
+    // short-lived display URL for an already-authorized photo. Lives here (not
+    // the query router) because signing B2/Cloudflare URLs needs an action. The
+    // stdio/HTTP MCP server fetches these bytes server-side to return a native
+    // inline image to the model (MOVE-317).
+    if (
+      segments[0] === "moves" &&
+      segments[2] === "photos" &&
+      segments[4] === "display-url" &&
+      args.method === "GET"
+    ) {
+      return (await handlePhotoDisplayUrl(
+        ctx,
+        args,
+        segments[1],
+        segments[3],
+      )) as RestResponse;
+    }
 
     return (await ctx.runMutation(internal.restApi.handle, args)) as RestResponse;
   },
 });
+
+// Display variants the inline-image path may request. Excludes "original"
+// (buildDisplayUrlResult rejects it — originals go through the audited download
+// action). Default is "detail" (1200px) so agents can read fine print / model
+// numbers off the photo.
+const displayUrlVariants = new Set(["thumb", "card", "detail", "full"] as const);
+type DisplayUrlVariant = "thumb" | "card" | "detail" | "full";
+
+async function handlePhotoDisplayUrl(
+  ctx: ActionCtx,
+  args: RestRequestInput,
+  moveIdRaw: string | undefined,
+  photoIdRaw: string | undefined
+) {
+  if (!hasBearer(args.authorization)) return unknownAuthError();
+  const moveId = requiredId<"moves">(moveIdRaw, "moveId is required.");
+  const photoId = requiredId<"itemPhotos">(photoIdRaw, "photoId is required.");
+  const authResult = await authenticateAction(ctx, args, moveId);
+  if (!authResult.ok || !authResult.auth) {
+    return authResult.response ?? unknownAuthError();
+  }
+  const auth = {
+    ...(authResult.auth as ApiActionAuth),
+    moveId: (authResult.auth as ApiActionAuth).moveId ?? moveId,
+  };
+
+  return await withActionRateLimit(ctx, args, auth, async () => {
+    const requested = optionalString(args.query.variant);
+    const variant: DisplayUrlVariant =
+      requested && displayUrlVariants.has(requested as DisplayUrlVariant)
+        ? (requested as DisplayUrlVariant)
+        : "detail";
+    const result = await ctx.runAction(
+      internal.photos.getDisplayUrlForApiActor,
+      {
+        householdId: auth.householdId,
+        moveId,
+        photoId,
+        variant,
+      }
+    );
+    return restOk({ data: result });
+  });
+}
 
 async function handleUploadInit(ctx: ActionCtx, args: RestRequestInput) {
   if (!hasBearer(args.authorization)) return unknownAuthError();

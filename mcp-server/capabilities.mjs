@@ -371,9 +371,11 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     title: "Evidence media intake",
     status: "available",
     purpose:
-      "Upload image evidence through a one-call agent path, or use lower-level upload sessions for audio, video, progress bars, and custom clients.",
+      "View existing photos as inline images, upload image evidence through a one-call agent path, or use lower-level upload sessions for audio, video, progress bars, and custom clients.",
     requiredScopes: ["moves/read", "inventory/read", "inventory/write", "photos/write"],
     restEndpoints: [
+      "GET /api/v1/moves/:moveId/photos",
+      "GET /api/v1/moves/:moveId/photos/:photoId/display-url",
       "POST /api/v1/photos/upload",
       "POST /api/v1/images/upload",
       "POST /api/v1/uploads/init",
@@ -381,6 +383,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "POST /api/v1/photos/:photoId/attach",
     ],
     mcpTools: [
+      "get_images",
       "add_item_from_photo",
       "create_item_with_images",
       "upload_evidence_image",
@@ -395,6 +398,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "attach_photo",
     ],
     agentWorkflows: [
+      "To LOOK AT existing photos (read a model/serial number, write a description, judge condition), call get_images with a filter (itemId/boxId/spaceId/room or photoIds) — it returns the pictures as inline viewable images, not just links, and the server fetches the bytes so it works even when your own sandbox cannot reach the image host. Use variant 'detail' for fine print; keep limit small.",
       "When the user provides one picture plus a few short words for one household item, use add_item_from_photo. Set quantity only when the user says it or the photo clearly shows a count; otherwise omit quantity so it defaults to 1. Unknown weight/size/disposition/condition can stay blank. The tool uploads the original image, creates web-ready derivatives, attaches the photo, and returns item/photo IDs plus agentReview.",
       "Use create_item_with_images when the same new item has several photos or when the agent already has an images array.",
       "For ordinary images, use upload_image, upload_photo, or upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
