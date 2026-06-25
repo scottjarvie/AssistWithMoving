@@ -1,0 +1,35 @@
+diff --git a/node_modules/convex-mcp-gateway/dist/client/mcp-handler.js b/node_modules/convex-mcp-gateway/dist/client/mcp-handler.js
+index 35d214b..c9daf71 100644
+--- a/node_modules/convex-mcp-gateway/dist/client/mcp-handler.js
++++ b/node_modules/convex-mcp-gateway/dist/client/mcp-handler.js
+@@ -576,14 +576,28 @@ async function handlePost(ctx, request, component, options) {
+             // 2025-06-18 §tools/call mandates ALSO sending the typed value
+             // as `structuredContent`. Spec-compliant clients (claude.ai,
+             // recent Inspector) prefer the structured form when present.
++            // PATCH (MovingManifest, MOVE-326): a tool may return
++            // { __mcpContent: [<content blocks>] } to emit native MCP content
++            // (e.g. inline { type: "image" } blocks) instead of the default
++            // text-JSON wrap. The gateway otherwise only ships text, which makes
++            // it impossible to return a viewable photo from a tool. When the
++            // marker is present we pass those blocks through verbatim and skip
++            // structuredContent (the base64 payload shouldn't be duplicated).
++            // See patches/convex-mcp-gateway+0.4.0.patch.
++            const __mmInlineContent =
++                dispatched.data &&
++                typeof dispatched.data === "object" &&
++                Array.isArray(dispatched.data.__mcpContent)
++                    ? dispatched.data.__mcpContent
++                    : null;
+             body = jsonResultEnvelope(message.id, {
+-                content: [
++                content: __mmInlineContent ?? [
+                     {
+                         type: "text",
+                         text: JSON.stringify(dispatched.data, null, 2),
+                     },
+                 ],
+-                ...(tool.outputSchema !== undefined
++                ...(tool.outputSchema !== undefined && !__mmInlineContent
+                     ? { structuredContent: dispatched.data }
+                     : {}),
+                 isError: false,

@@ -245,7 +245,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpAction({
     name: "get_images",
     description:
-      "Pull MANY photos at once with short-lived display URLs. filter is one of { itemId } | { boxId } | { spaceId } (room) | { transportId } | { transportZoneId } | { room } | { all: true }, plus optional limit (default 50) and variant (thumb|card|detail|full, default card — use detail/full to read fine print). Returns images: [{ photoId, displayUrl, caption, attachedTo }].",
+      "VIEW photos as inline images you can actually see (read labels, model/serial numbers, condition) — the server fetches them for you, so you never need to fetch a URL yourself. filter is one of { photoIds: [...] } (e.g. a queue capture's photo ids) | { itemId } | { boxId } | { spaceId } (room) | { transportId } | { transportZoneId } | { room } | { all: true }, plus optional limit (default 6, max 8 — image payloads are large, so narrow the filter for specific photos) and variant (thumb|card|detail|full, default card — use detail/full to read fine print). Returns a short text summary (photoId, caption, attachedTo per photo) followed by the photos themselves as inline image blocks.",
     fn: api.mcpToolsImages.getImages,
     args: getImagesArgs,
     identityArg: "caller",
