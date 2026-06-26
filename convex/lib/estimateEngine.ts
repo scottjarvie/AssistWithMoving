@@ -295,6 +295,31 @@ export function roundEstimate(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+// A finite number or undefined — never NaN/Infinity (Convex rejects those when
+// they're stored or returned from a query, which is how a null weight/volume
+// turns a capacity recompute into a 500).
+export function finiteOrUndefined(value: number | undefined | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+// Capacity usage percent that can NEVER be NaN/Infinity. Returns undefined
+// unless the used amount is a finite number and there is a real positive,
+// non-unlimited max to divide by. Use everywhere weight/volume usage % is
+// computed so a missing weight/volume (or a zero/unset capacity) can't crash.
+export function finitePercent(
+  used: number | undefined | null,
+  max: number | undefined | null,
+  unlimited?: boolean,
+): number | undefined {
+  if (unlimited) return undefined;
+  const usedNum = finiteOrUndefined(used);
+  const maxNum = finiteOrUndefined(max);
+  if (usedNum === undefined || maxNum === undefined || maxNum <= 0) {
+    return undefined;
+  }
+  return roundEstimate((usedNum / maxNum) * 100);
+}
+
 export function sumEstimateValues(values: Array<EstimateValue | undefined>) {
   return roundEstimate(
     values.reduce((sum, value) => sum + (value?.value ?? 0), 0)

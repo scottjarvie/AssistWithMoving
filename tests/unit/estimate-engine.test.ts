@@ -3,11 +3,25 @@ import { describe, expect, it } from "vitest";
 import {
   boxVolumeCuFt,
   estimateItem,
+  finitePercent,
   resolveStoredVolumeCuFt,
   sumEstimateValues,
   volumeCuFtForUpdate,
   volumeFromDimensions,
 } from "../../convex/lib/estimateEngine";
+
+describe("finitePercent (never NaN/Infinity)", () => {
+  it("computes a normal percent", () => {
+    expect(finitePercent(50, 200)).toBe(25);
+  });
+  it("returns undefined for missing/NaN used or zero/unset/unlimited max", () => {
+    expect(finitePercent(undefined, 200)).toBeUndefined();
+    expect(finitePercent(NaN, 200)).toBeUndefined();
+    expect(finitePercent(50, 0)).toBeUndefined();
+    expect(finitePercent(50, undefined)).toBeUndefined();
+    expect(finitePercent(50, 200, true)).toBeUndefined();
+  });
+});
 
 describe("resolveStoredVolumeCuFt (volume to persist on write)", () => {
   it("prefers an explicit volume", () => {

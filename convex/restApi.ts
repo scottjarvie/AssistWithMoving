@@ -38,6 +38,7 @@ import {
 import {
   boxVolumeCuFt,
   estimateItem,
+  finitePercent,
   roundEstimate,
   sumEstimateValues,
 } from "./lib/estimateEngine";
@@ -9430,7 +9431,9 @@ function capacityPercent({
   max?: number;
   unlimited?: boolean;
 }) {
-  return max && !unlimited ? roundEstimate((used / max) * 100) : undefined;
+  // finitePercent guards against a NaN/Infinity `used` (missing weight/volume)
+  // or a zero/unset max — never returns a non-finite value a query would 500 on.
+  return finitePercent(used, max, unlimited);
 }
 
 function mergeCapacity(

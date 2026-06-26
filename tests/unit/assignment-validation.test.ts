@@ -17,6 +17,44 @@ const baseBox = {
   hasHazardous: false,
 };
 
+describe("assignment validation — robust to missing/NaN weight (no 500)", () => {
+  it("does not crash or emit a non-finite percent when weight is missing", () => {
+    const validation = validateAssignment({
+      // A real-world dims-only / no-weight unit reaching the recompute.
+      box: {
+        ...baseBox,
+        estimatedWeightLb: undefined as unknown as number,
+        estimatedVolumeCuFt: undefined as unknown as number,
+        dimensionsIn: undefined,
+      },
+      target: {
+        resourceType: "truck",
+        capacity: { maxWeightLb: 1000, maxVolumeCuFt: 200 },
+      },
+    });
+    // weightPercent must be a finite number or undefined — never NaN/Infinity
+    // (Convex rejects those on store/return, which is the 500).
+    expect(
+      validation.weightPercent === undefined ||
+        Number.isFinite(validation.weightPercent),
+    ).toBe(true);
+    expect(
+      validation.volumePercent === undefined ||
+        Number.isFinite(validation.volumePercent),
+    ).toBe(true);
+    expect(validation.weightPercent).toBe(0); // missing weight -> 0% of capacity
+    expect(validation.softWarnings).not.toContain("heavyBox");
+  });
+
+  it("does not divide by a zero/unset capacity", () => {
+    const validation = validateAssignment({
+      box: { ...baseBox, estimatedWeightLb: 50 },
+      target: { resourceType: "truck", capacity: { maxWeightLb: 0 } },
+    });
+    expect(validation.weightPercent).toBeUndefined();
+  });
+});
+
 describe("assignment validation", () => {
   it("warns when resource capacity is exceeded", () => {
     const validation = validateAssignment({

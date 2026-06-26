@@ -6,6 +6,7 @@ import { resolveBoxWeight } from "./lib/boxWeight";
 import {
   boxVolumeCuFt,
   estimateItem,
+  finitePercent,
   roundEstimate,
   sumEstimateValues,
   type EstimateValue,
@@ -269,19 +270,16 @@ export const reportForMove = query({
         assignedUnitCount: assignedBoxes.length + assignedLooseItems.length,
         maxWeightLb: resource.capacity.maxWeightLb,
         maxVolumeCuFt: resource.capacity.maxVolumeCuFt,
-        weightPercent:
-          resource.capacity.maxWeightLb && !resource.capacity.weightIsUnlimited
-            ? roundEstimate(
-                (estimatedWeightLb / resource.capacity.maxWeightLb) * 100,
-              )
-            : undefined,
-        volumePercent:
-          resource.capacity.maxVolumeCuFt &&
-          !resource.capacity.volumeIsUnlimited
-            ? roundEstimate(
-                (estimatedVolumeCuFt / resource.capacity.maxVolumeCuFt) * 100,
-              )
-            : undefined,
+        weightPercent: finitePercent(
+          estimatedWeightLb,
+          resource.capacity.maxWeightLb,
+          resource.capacity.weightIsUnlimited,
+        ),
+        volumePercent: finitePercent(
+          estimatedVolumeCuFt,
+          resource.capacity.maxVolumeCuFt,
+          resource.capacity.volumeIsUnlimited,
+        ),
       };
     });
 
