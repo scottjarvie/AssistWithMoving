@@ -4,7 +4,9 @@ import { type FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Bot,
+  Home,
   Mail,
+  Phone,
   ShieldCheck,
   UserRoundPlus,
   Users,
@@ -50,22 +52,22 @@ const accessGrantingTypes: {
   {
     value: "householdMember",
     label: "Household member (family)",
-    hint: "Full access to your whole household.",
+    hint: "Full access to your whole household — every move, not just this one.",
   },
   {
     value: "helper",
     label: "Move helper (a friend)",
-    hint: "This move only. Can add and pack.",
+    hint: "This move only. Can add and pack items.",
   },
   {
     value: "mover",
     label: "Moving company crew",
-    hint: "This move only. Values & serials hidden.",
+    hint: "This move only. Item values & serial numbers stay hidden.",
   },
   {
     value: "company",
     label: "Moving company",
-    hint: "This move only. Values & serials hidden.",
+    hint: "This move only. Item values & serial numbers stay hidden.",
   },
 ];
 
@@ -100,7 +102,6 @@ export function MoveParticipantsManager({
 
   const canManage = data?.canManage ?? false;
 
-  // Picking a type pre-selects its recommended role + access.
   const accessKindForType: AccessKind = useMemo(
     () => (participantType === "householdMember" ? "householdBacked" : "moveOnly"),
     [participantType],
@@ -141,6 +142,7 @@ export function MoveParticipantsManager({
 
   const loading = householdId && moveId && data === undefined;
   const people = data?.people ?? [];
+  const contacts = data?.contacts ?? [];
 
   return (
     <Card id="move-participants">
@@ -149,18 +151,18 @@ export function MoveParticipantsManager({
           <div>
             <CardTitle className="flex items-center gap-2">
               <Users className="size-4 text-primary" aria-hidden="true" />
-              People &amp; access
+              Participants
             </CardTitle>
             <CardDescription>
-              Add people to this move and choose what they can do — family,
-              helpers, or a moving company. Outsiders only ever see this one
-              move.
+              Everyone on this move and what they can do — household members
+              (family, full access), helpers and movers (this move only), and
+              plain contacts. Outsiders never see your other moves or item values.
             </CardDescription>
           </div>
           <Badge variant="secondary">{people.length} with access</Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
         {message ? (
           <p
             className="rounded-md border border-border p-3 text-sm text-muted-foreground"
@@ -264,10 +266,7 @@ export function MoveParticipantsManager({
             <Skeleton className="h-14 w-4/5" />
           </div>
         ) : people.length ? (
-          <ul
-            className="grid gap-2"
-            aria-label="People with access to this move"
-          >
+          <ul className="grid gap-2" aria-label="People with access to this move">
             {people.map((person) => (
               <ParticipantRow
                 key={person.key}
@@ -284,14 +283,25 @@ export function MoveParticipantsManager({
             No one else has access to this move yet. Add a person above.
           </div>
         )}
+
+        {canManage ? (
+          <ContactsSection
+            householdId={householdId}
+            moveId={moveId}
+            contacts={contacts}
+            onMessage={setMessage}
+          />
+        ) : null}
       </CardContent>
     </Card>
   );
 }
 
-type PersonRow = NonNullable<
+type ListResult = NonNullable<
   ReturnType<typeof useQuery<typeof api.moveParticipants.listForMove>>
->["people"][number];
+>;
+type PersonRow = ListResult["people"][number];
+type ContactRow = ListResult["contacts"][number];
 
 function ParticipantRow({
   householdId,
@@ -306,25 +316,23 @@ function ParticipantRow({
   canManage: boolean;
   onMessage: (message: string) => void;
 }) {
-  const update = useMutation(api.moveParticipants.update);
-  const setStatus = useMutation(api.moveParticipants.setStatus);
+  const updateParticipant = useMutation(api.moveParticipants.update);
+  const setParticipantStatus = useMutation(api.moveParticipants.setStatus);
+  const updateMemberRole = useMutation(api.households.updateMemberRole);
+  const disableMember = useMutation(api.households.disableMember);
   const [busy, setBusy] = useState(false);
 
   const pending = person.status === "invited";
   const agentOff = person.agentAccessStatus === "disabled";
+  const isMember = person.accessKind === "householdBacked";
+  const isOwner = person.role === "owner";
   const displayName = person.name ?? person.email ?? "Pending invite";
 
-  async function changeRole(role: GrantableRole) {
-    if (!person.participantId) return;
+  async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(true);
     try {
-      await update({
-        householdId,
-        moveId,
-        participantId: person.participantId,
-        role,
-      });
-      onMessage(`${displayName}'s access updated.`);
+      await fn();
+      onMessage(label);
     } catch (error) {
       onMessage(error instanceof Error ? error.message : "Could not update.");
     } finally {
@@ -332,45 +340,74 @@ function ParticipantRow({
     }
   }
 
-  async function toggleAgent() {
-    if (!person.participantId) return;
-    setBusy(true);
-    try {
-      await update({
-        householdId,
-        moveId,
-        participantId: person.participantId,
-        agentAccessStatus: agentOff ? "enabled" : "disabled",
-      });
-      onMessage(
-        agentOff
-          ? `Agent access turned on for ${displayName}.`
-          : `Agent access turned off for ${displayName}.`,
+  // A household member's access IS their household role — changing it here
+  // changes it on every move. A move-only participant's role is scoped to this
+  // move. We pick the right mutation per kind so the unified list stays honest.
+  function changeRole(nextRole: GrantableRole) {
+    if (isMember && person.membershipId) {
+      void run(`${displayName}'s household access updated.`, () =>
+        updateMemberRole({
+          householdId,
+          membershipId: person.membershipId!,
+          role: nextRole,
+        }),
       );
-    } catch (error) {
-      onMessage(error instanceof Error ? error.message : "Could not update.");
-    } finally {
-      setBusy(false);
+    } else if (person.participantId) {
+      void run(`${displayName}'s access updated.`, () =>
+        updateParticipant({
+          householdId,
+          moveId,
+          participantId: person.participantId!,
+          role: nextRole,
+        }),
+      );
     }
   }
 
-  async function disable() {
+  function toggleAgent() {
     if (!person.participantId) return;
-    setBusy(true);
-    try {
-      await setStatus({
-        householdId,
-        moveId,
-        participantId: person.participantId,
-        status: "disabled",
-      });
-      onMessage(`${displayName} removed from this move.`);
-    } catch (error) {
-      onMessage(error instanceof Error ? error.message : "Could not remove.");
-    } finally {
-      setBusy(false);
+    void run(
+      agentOff
+        ? `Agent access turned on for ${displayName}.`
+        : `Agent access turned off for ${displayName}.`,
+      () =>
+        updateParticipant({
+          householdId,
+          moveId,
+          participantId: person.participantId!,
+          agentAccessStatus: agentOff ? "enabled" : "disabled",
+        }),
+    );
+  }
+
+  function remove() {
+    if (isMember && person.membershipId) {
+      // Household members have access to EVERY move, so "removing" them is a
+      // household-level action — be explicit about that.
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(
+          `${displayName} is a household member with access to all your moves. Remove them from the whole household?`,
+        )
+      ) {
+        return;
+      }
+      void run(`${displayName} removed from the household.`, () =>
+        disableMember({ householdId, membershipId: person.membershipId! }),
+      );
+    } else if (person.participantId) {
+      void run(`${displayName} removed from this move.`, () =>
+        setParticipantStatus({
+          householdId,
+          moveId,
+          participantId: person.participantId!,
+          status: "disabled",
+        }),
+      );
     }
   }
+
+  const showControls = canManage && !person.isSelf && !isOwner;
 
   return (
     <li className="rounded-md border border-border bg-card p-3">
@@ -393,12 +430,17 @@ function ParticipantRow({
           <Badge variant="outline">
             {roleLabels[person.role] ?? person.role}
           </Badge>
-          {person.accessKind === "moveOnly" ? (
+          {isMember ? (
+            <Badge variant="secondary" className="gap-1">
+              <Home className="size-3" aria-hidden="true" />
+              Household · all moves
+            </Badge>
+          ) : (
             <Badge variant="secondary" className="gap-1">
               <ShieldCheck className="size-3" aria-hidden="true" />
               This move only
             </Badge>
-          ) : null}
+          )}
           {pending ? <Badge variant="secondary">Invited</Badge> : null}
           {agentOff ? <Badge variant="destructive">Agent off</Badge> : null}
           {(person.canRunQueueForUserIds?.length ?? 0) > 0 ? (
@@ -416,46 +458,194 @@ function ParticipantRow({
         </p>
       ) : null}
 
-      {canManage && person.participantId && !person.isSelf ? (
+      {showControls ? (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-            value={
-              roleOptions.some((r) => r.value === person.role)
-                ? person.role
-                : "viewer"
-            }
-            aria-label={`Access level for ${displayName}`}
-            disabled={busy}
-            onChange={(event) => void changeRole(event.target.value as GrantableRole)}
-          >
-            {roleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void toggleAgent()}
-          >
-            <Bot aria-hidden="true" />
-            {agentOff ? "Allow agent" : "Block agent"}
-          </Button>
+          {isMember || person.participantId ? (
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+              value={
+                roleOptions.some((r) => r.value === person.role)
+                  ? person.role
+                  : "viewer"
+              }
+              aria-label={`Access level for ${displayName}`}
+              disabled={busy}
+              onChange={(event) =>
+                changeRole(event.target.value as GrantableRole)
+              }
+            >
+              {roleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {person.participantId ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={toggleAgent}
+            >
+              <Bot aria-hidden="true" />
+              {agentOff ? "Allow agent" : "Block agent"}
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
             variant="ghost"
             disabled={busy}
-            onClick={() => void disable()}
+            onClick={remove}
           >
-            Remove
+            {isMember ? "Remove from household" : "Remove"}
           </Button>
         </div>
       ) : null}
     </li>
+  );
+}
+
+function ContactsSection({
+  householdId,
+  moveId,
+  contacts,
+  onMessage,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  contacts: ContactRow[];
+  onMessage: (message: string) => void;
+}) {
+  const createContact = useMutation(api.movePeople.create);
+  const archiveContact = useMutation(api.movePeople.archive);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function addContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!householdId || !moveId || !name.trim()) return;
+    setBusy(true);
+    try {
+      await createContact({
+        householdId,
+        moveId,
+        name: name.trim(),
+        role: "contact",
+        email: contactEmail.trim() || undefined,
+        phone: phone.trim() || undefined,
+      });
+      setName("");
+      setPhone("");
+      setContactEmail("");
+      onMessage("Contact added.");
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "Could not add contact.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t border-border pt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium">Contacts (no app access)</h3>
+        <span className="text-xs text-muted-foreground">
+          Offices, adjusters, storage — people you note but don&apos;t give access.
+        </span>
+      </div>
+
+      {contacts.length ? (
+        <ul className="grid gap-2" aria-label="Move contacts">
+          {contacts.map((contact) => (
+            <li
+              key={contact.contactId}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-card p-2.5"
+            >
+              <div className="min-w-0">
+                <p className="break-words text-sm font-medium">{contact.name}</p>
+                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  {contact.email ? (
+                    <span className="flex items-center gap-1 break-all">
+                      <Mail className="size-3" aria-hidden="true" />
+                      {contact.email}
+                    </span>
+                  ) : null}
+                  {contact.phone ? (
+                    <span className="flex items-center gap-1">
+                      <Phone className="size-3" aria-hidden="true" />
+                      {contact.phone}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() =>
+                  void (async () => {
+                    setBusy(true);
+                    try {
+                      await archiveContact({
+                        householdId: householdId!,
+                        moveId: moveId!,
+                        personId: contact.contactId,
+                      });
+                      onMessage(`${contact.name} removed.`);
+                    } catch (error) {
+                      onMessage(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not remove contact.",
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  })()
+                }
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <form
+        className="grid gap-2 rounded-md border border-dashed border-border p-2.5 sm:grid-cols-[minmax(140px,1fr)_minmax(140px,1fr)_140px_auto]"
+        onSubmit={addContact}
+      >
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Name or office"
+          aria-label="Contact name"
+          disabled={!moveId}
+        />
+        <Input
+          value={contactEmail}
+          onChange={(event) => setContactEmail(event.target.value)}
+          placeholder="Email (optional)"
+          aria-label="Contact email"
+          disabled={!moveId}
+        />
+        <Input
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="Phone (optional)"
+          aria-label="Contact phone"
+          disabled={!moveId}
+        />
+        <Button type="submit" size="sm" variant="outline" disabled={busy || !name.trim()}>
+          Add contact
+        </Button>
+      </form>
+    </div>
   );
 }

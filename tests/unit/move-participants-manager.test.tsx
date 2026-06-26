@@ -10,6 +10,14 @@ const apiMock = vi.hoisted(() => ({
     update: "moveParticipants.update",
     setStatus: "moveParticipants.setStatus",
   },
+  households: {
+    updateMemberRole: "households.updateMemberRole",
+    disableMember: "households.disableMember",
+  },
+  movePeople: {
+    create: "movePeople.create",
+    archive: "movePeople.archive",
+  },
 }));
 
 const data = vi.hoisted(() => ({
@@ -86,9 +94,11 @@ describe("MoveParticipantsManager", () => {
       screen.getByRole("button", { name: /add person/i }),
     ).toBeInTheDocument();
 
-    // The roster shows a household member and a walled-off pending mover.
+    // The roster shows a household member (all-moves access) and a walled-off
+    // pending mover (this move only).
     expect(screen.getByText("Erin Jarvie")).toBeInTheDocument();
     expect(screen.getByText("ACME Movers")).toBeInTheDocument();
+    expect(screen.getByText("Household · all moves")).toBeInTheDocument();
     expect(screen.getByText("This move only")).toBeInTheDocument();
     expect(screen.getByText("Invited")).toBeInTheDocument();
   });
