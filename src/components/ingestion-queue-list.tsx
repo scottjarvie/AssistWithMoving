@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   Bot,
   CheckCircle2,
+  ChevronDown,
   ImageOff,
   ImagePlus,
   Info,
@@ -835,26 +836,32 @@ export function IngestionQueueList({
             <label htmlFor="queue-scope" className="text-muted-foreground">
               Showing
             </label>
-            <select
-              id="queue-scope"
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground"
-              value={effectiveScope}
-              onChange={(event) =>
-                setOwnerScope(
-                  event.target.value as "mine" | "all" | Id<"users">,
-                )
-              }
-            >
-              <option value="mine">My captures</option>
-              {scopes.delegatedOwners.map((owner) => (
-                <option key={owner.userId} value={owner.userId}>
-                  {owner.name}&apos;s queue
-                </option>
-              ))}
-              {scopes.canManage ? (
-                <option value="all">Everyone&apos;s captures</option>
-              ) : null}
-            </select>
+            <div className="relative inline-flex items-center">
+              <select
+                id="queue-scope"
+                className="h-8 appearance-none rounded-md border border-input bg-background pl-2 pr-8 text-sm font-medium text-foreground"
+                value={effectiveScope}
+                onChange={(event) =>
+                  setOwnerScope(
+                    event.target.value as "mine" | "all" | Id<"users">,
+                  )
+                }
+              >
+                <option value="mine">My Queue</option>
+                {scopes.delegatedOwners.map((owner) => (
+                  <option key={owner.userId} value={owner.userId}>
+                    {owner.name}&apos;s Queue
+                  </option>
+                ))}
+                {scopes.canManage ? (
+                  <option value="all">Everyone&apos;s Queue</option>
+                ) : null}
+              </select>
+              <ChevronDown
+                className="pointer-events-none absolute right-2 size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+            </div>
           </div>
         ) : null}
         {loading ? (
