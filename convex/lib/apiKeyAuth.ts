@@ -7,6 +7,8 @@ import {
   verifyApiKeyHash,
   type ApiKeyScope,
 } from "./apiKeys";
+import { resolveMoveAccess } from "./moveAccess";
+import { visibilityForHouseholdRole, type HouseholdRole } from "./roles";
 
 export async function authenticateApiKey(
   ctx: MutationCtx,
@@ -102,6 +104,29 @@ export async function authenticateApiKey(
     );
   }
 
+  // Compute the key creator's effective visibility so REST item reads redact the
+  // same sensitive fields (values, serials) the web/gateway do. Defense-in-depth:
+  // today all keys are admin-created (api_keys:manage → admin) so this resolves
+  // to full visibility, but if key creation is ever opened below admin (e.g. a
+  // move-only participant connecting their own agent), the wall already holds.
+  let effectiveRole: HouseholdRole = creatorMembership?.role ?? "guest";
+  if (key.moveId) {
+    try {
+      effectiveRole = (
+        await resolveMoveAccess(
+          ctx,
+          key.createdByUserId,
+          key.householdId,
+          key.moveId,
+        )
+      ).role;
+    } catch {
+      effectiveRole =
+        key.participantMoveRole ?? creatorMembership?.role ?? "guest";
+    }
+  }
+  const visibility = visibilityForHouseholdRole(effectiveRole);
+
   const now = Date.now();
   await ctx.db.patch(key._id, {
     lastUsedAt: now,
@@ -122,5 +147,7 @@ export async function authenticateApiKey(
     householdId: key.householdId,
     moveId: key.moveId,
     scopes: key.scopes,
+    effectiveRole,
+    visibility,
   };
 }

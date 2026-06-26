@@ -1221,7 +1221,7 @@ async function routeMoveSummary(
       resources: activeResources.map((resource) => safeTransportResource(resource)),
       zones: activeZones.map((zone) => safeTransportZone(zone)),
       people: activePeople.map((person) => safeMovePerson(person)),
-      items: activeItems.map((item) => safeItem(item)),
+      items: activeItems.map((item) => safeItem(item, auth.visibility)),
       boxes: activeBoxes.map((box) => safeBox(box)),
       assignments: visibleAssignments.map((assignment) =>
         safeAssignment(assignment)
@@ -1809,14 +1809,14 @@ async function routeAgentContext(
         .filter((zone) => zone.householdId === auth.householdId && !zone.archivedAt)
         .map((zone) => safeTransportZone(zone)),
       items: activeItems.map((item) => ({
-        ...safeItem(item),
+        ...safeItem(item, auth.visibility),
         photoCount: photosByItemId.get(String(item._id)) ?? 0,
         saleListingId: listingByItemId.get(String(item._id))?._id,
       })),
       salePipeline: sellItems.map((item) => {
         const listing = listingByItemId.get(String(item._id));
         return {
-          item: safeItem(item),
+          item: safeItem(item, auth.visibility),
           photoCount: photosByItemId.get(String(item._id)) ?? 0,
           listing: listing ? safeSaleListing(listing) : undefined,
           needsListing: !listing,
@@ -1985,7 +1985,7 @@ async function routeSaleListings(
         items
           .filter((item) => item.householdId === auth.householdId && !item.deletedAt)
           .map((item) => ({
-            item: safeItem(item),
+            item: safeItem(item, auth.visibility),
             photoCount: photoCounts.get(String(item._id)) ?? 0,
             listing: listingByItemId.get(String(item._id))
               ? safeSaleListing(listingByItemId.get(String(item._id))!)
@@ -2668,7 +2668,7 @@ async function routeItems(
               ? item.disposition === args.query.disposition
               : true
           )
-          .map((item) => safeItem(item)),
+          .map((item) => safeItem(item, auth.visibility)),
         args.query
       )
     );
@@ -2676,7 +2676,7 @@ async function routeItems(
 
   if (args.method === "GET" && itemIdSegment) {
     const item = await requireApiItem(ctx, auth.householdId, moveId, itemIdSegment);
-    return restOk({ data: safeItem(item) });
+    return restOk({ data: safeItem(item, auth.visibility) });
   }
 
   if (args.method === "POST" && itemIdSegment === "batch-upsert") {
@@ -5855,7 +5855,7 @@ async function routeTopLevelItem(
   assertRequestedMoveMatches(args, item.moveId, "Item not found.");
 
   if (args.method === "GET") {
-    return restOk({ data: safeItem(item) });
+    return restOk({ data: safeItem(item, auth.visibility) });
   }
 
   if (args.method === "PATCH") {
@@ -5871,7 +5871,7 @@ async function routeTopLevelItem(
       item._id,
       { route: "top_level", changedKeys: Object.keys(patch) }
     );
-    return restOk({ data: updated ? safeItem(updated) : { itemId: item._id } });
+    return restOk({ data: updated ? safeItem(updated, auth.visibility) : { itemId: item._id } });
   }
 
   if (args.method === "DELETE") {
@@ -6597,7 +6597,9 @@ function safeMove(move: Doc<"moves">) {
   };
 }
 
-function safeItem(item: Doc<"items">) {
+type ApiVisibility = Awaited<ReturnType<typeof authenticateApiKey>>["visibility"];
+
+function safeItem(item: Doc<"items">, visibility: ApiVisibility) {
   return {
     itemId: item._id,
     name: item.name,
@@ -6613,10 +6615,13 @@ function safeItem(item: Doc<"items">) {
     status: item.status,
     quantity: item.quantity,
     condition: item.condition,
-    valueCents: item.valueCents,
-    replacementValueCents: item.replacementValueCents,
-    serialNumber: item.serialNumber,
-    modelNumber: item.modelNumber,
+    // Gate value/serial behind the key creator's role (same as the web/gateway).
+    valueCents: visibility.estimatedValue ? item.valueCents : undefined,
+    replacementValueCents: visibility.estimatedValue
+      ? item.replacementValueCents
+      : undefined,
+    serialNumber: visibility.serialNumber ? item.serialNumber : undefined,
+    modelNumber: visibility.serialNumber ? item.modelNumber : undefined,
     dimensionsIn: item.dimensionsIn,
     measurementProvenance: item.measurementProvenance,
     dimensionsConfidence: itemDimensionsConfidenceForRead({
