@@ -8677,7 +8677,11 @@ async function auditApiWrite(
   await recordAuditEvent(ctx, {
     householdId: auth.householdId,
     moveId,
-    actorType: "apiKey",
+    // "agent" + BOTH ids: the API key (which agent) AND the human who owns it
+    // (whose agent) — so "who did what / whose agent did what" is answerable
+    // from the audit row itself, not a later join.
+    actorType: "agent",
+    actorUserId: auth.createdByUserId,
     actorApiKeyId: auth.actor.apiKeyId,
     category: "apiKey",
     action,
@@ -8698,7 +8702,8 @@ async function auditApiMovePerson(
   await recordAuditEvent(ctx, {
     householdId: auth.householdId,
     moveId,
-    actorType: "apiKey",
+    actorType: "agent",
+    actorUserId: auth.createdByUserId,
     actorApiKeyId: auth.actor.apiKeyId,
     category: "household",
     action,

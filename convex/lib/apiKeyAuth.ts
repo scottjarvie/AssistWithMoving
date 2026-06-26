@@ -86,6 +86,22 @@ export async function authenticateApiKey(
     throw new Error("API key is not allowed for this operation.");
   }
 
+  // Owner kill-switch: if an owner has turned off the key creator's agent access
+  // (householdMemberships.apiAccessStatus), the key stops working immediately —
+  // without needing to revoke each key. Enforced here so every REST endpoint
+  // inherits it.
+  const creatorMembership = await ctx.db
+    .query("householdMemberships")
+    .withIndex("by_household_user", (q) =>
+      q.eq("householdId", key.householdId).eq("userId", key.createdByUserId),
+    )
+    .unique();
+  if (creatorMembership?.apiAccessStatus === "disabled") {
+    throw new Error(
+      "Agent access for this connection has been turned off by an owner.",
+    );
+  }
+
   const now = Date.now();
   await ctx.db.patch(key._id, {
     lastUsedAt: now,

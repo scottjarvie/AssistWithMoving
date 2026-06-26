@@ -8,8 +8,7 @@ import { LocationConfigCard } from "@/components/configure/location-config-card"
 import { MoveAreasPanel } from "@/components/configure/move-areas-panel";
 import { MoveDetailsPanel } from "@/components/configure/move-details-panel";
 import { TransportMethodsPanel } from "@/components/configure/transport-methods-panel";
-import { HouseholdMemberManager } from "@/components/household-member-manager";
-import { MovePeopleManager } from "@/components/move-people-manager";
+import { MoveParticipantsManager } from "@/components/move-participants-manager";
 import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
@@ -28,7 +27,7 @@ const configureTabHashes = {
 type ConfigureTab = (typeof configureTabHashes)[keyof typeof configureTabHashes];
 
 export function MoveConfigurePage() {
-  const { householdId, moveId, selectedMove, households } = useMoveWorkspace();
+  const { householdId, moveId, selectedMove } = useMoveWorkspace();
   const [activeTab, setActiveTab] = useHashTab<ConfigureTab>(
     "start",
     configureTabHashes,
@@ -102,8 +101,9 @@ export function MoveConfigurePage() {
     },
     {
       value: "household",
-      label: "Household",
-      description: "Who shares this move and the contacts tied to it.",
+      label: "Participants",
+      description:
+        "Everyone on this move — household members, helpers, movers, and contacts.",
       count: counts.household,
       countLabel:
         counts.household !== undefined
@@ -180,13 +180,7 @@ export function MoveConfigurePage() {
         </TabsContent>
 
         <TabsContent value="household">
-          <div className="space-y-6">
-            <HouseholdMemberManager
-              households={households}
-              enabled={Boolean(householdId)}
-            />
-            <MovePeopleManager householdId={householdId} moveId={moveId} />
-          </div>
+          <MoveParticipantsManager householdId={householdId} moveId={moveId} />
         </TabsContent>
       </Tabs>
     </div>

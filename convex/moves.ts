@@ -434,6 +434,7 @@ export const unarchive = mutation({
 // Tables addressed by a moveId-first index (eq on moveId).
 const MOVE_INDEXED_PURGE_TABLES: Array<{ table: string; index: string }> = [
   { table: "moveRoleGrants", index: "by_move_user" },
+  { table: "moveParticipants", index: "by_move_user" },
   { table: "documentationProfiles", index: "by_move_status" },
   { table: "exportJobs", index: "by_move_created" },
   { table: "apiKeys", index: "by_move_status" },

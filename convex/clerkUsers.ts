@@ -4,6 +4,7 @@ import { internalMutation } from "./_generated/server";
 import { appRoleForEmail } from "./lib/admin";
 import { recordAuditEvent } from "./lib/audit";
 import { claimPendingHouseholdInvitationsForUser } from "./lib/householdInvitations";
+import { claimPendingMoveParticipantsForUser } from "./lib/moveParticipantClaim";
 
 export const upsertFromWebhook = internalMutation({
   args: {
@@ -44,6 +45,11 @@ export const upsertFromWebhook = internalMutation({
         email: args.email,
         actorType: "webhook",
       });
+      await claimPendingMoveParticipantsForUser(ctx, {
+        userId: existing._id,
+        email: args.email,
+        actorType: "webhook",
+      });
 
       return existing._id;
     }
@@ -70,6 +76,11 @@ export const upsertFromWebhook = internalMutation({
     });
 
     await claimPendingHouseholdInvitationsForUser(ctx, {
+      userId,
+      email: args.email,
+      actorType: "webhook",
+    });
+    await claimPendingMoveParticipantsForUser(ctx, {
       userId,
       email: args.email,
       actorType: "webhook",

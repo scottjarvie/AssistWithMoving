@@ -191,7 +191,15 @@ export const getItem = query({
       fragility: item.fragility,
       highValue: item.highValue,
       needsReview: item.needsReview,
-      aiSummary: item.aiSummary ?? null,
+      // AI/research prose can restate value/serial — gate it like values so a
+      // walled-off moveOnly guest (mover/helper) can't read it.
+      aiSummary: policy.visibility.research ? (item.aiSummary ?? null) : undefined,
+      researchSummary: policy.visibility.research
+        ? (item.researchSummary ?? null)
+        : undefined,
+      researchNotes: policy.visibility.research
+        ? (item.researchNotes ?? null)
+        : undefined,
       // Sensitive fields only when the resolved role may see them.
       estimatedValueCents: policy.visibility.estimatedValue
         ? (item.valueCents ?? null)
@@ -331,7 +339,7 @@ export const upsertItems = mutation({
       await recordAuditEvent(ctx, {
         householdId: args.householdId,
         moveId: args.moveId,
-        actorType: "user",
+        actorType: "agent",
         actorUserId: userId,
         category: "inventory",
         action: "mcp.items_upserted",
@@ -470,7 +478,7 @@ export const upsertSpaces = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: userId,
       category: "inventory",
       action: "mcp.spaces_upserted",
@@ -545,6 +553,8 @@ export const captureToQueue = mutation({
         targetTransportId: draft.targetTransportId,
         mediaPhotoIds,
         sortOrder: now,
+        // The capture belongs to this user's personal queue.
+        ownerUserId: userId,
         createdByUserId: userId,
         createdAt: now,
         updatedAt: now,
@@ -555,7 +565,8 @@ export const captureToQueue = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      // An agent captured this on the user's behalf.
+      actorType: "agent",
       actorUserId: userId,
       category: "inventory",
       action: "mcp.captured_to_queue",
@@ -639,7 +650,7 @@ export const setupMove = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: userId,
       category: "household",
       action: "move.created",
@@ -786,7 +797,7 @@ export const packBoxes = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: userId,
       category: "inventory",
       action: "mcp.boxes_packed",

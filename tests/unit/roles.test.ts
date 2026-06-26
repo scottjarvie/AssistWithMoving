@@ -55,9 +55,11 @@ describe("household role helpers", () => {
       serialNumber: false,
       privateNotes: false,
       sensitivePhotos: false,
+      research: false,
       apiKeys: false,
     });
     expect(visibilityForHouseholdRole("editor").serialNumber).toBe(true);
+    expect(visibilityForHouseholdRole("editor").research).toBe(true);
     expect(visibilityForHouseholdRole("editor").apiKeys).toBe(false);
   });
 

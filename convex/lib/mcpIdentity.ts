@@ -10,9 +10,13 @@ import { AuthorizationError, getActiveHouseholdMembership } from "./auth";
 import type { PermissionAction, HouseholdRole } from "./roles";
 import {
   canPerformHouseholdAction,
-  strongerHouseholdRole,
   visibilityForHouseholdRole,
 } from "./roles";
+import {
+  agentAccessDisabled,
+  resolveMoveAccess,
+  type MoveAccessKind,
+} from "./moveAccess";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -87,45 +91,35 @@ export async function requireMoveForSubject(
   householdId: Id<"households">,
   moveId: Id<"moves">,
   action: PermissionAction,
-): Promise<McpPermissionPolicy & { moveId: Id<"moves"> }> {
-  const base = await requireHouseholdForSubject(
-    ctx,
-    subject,
-    householdId,
-    "household:read",
-  );
+): Promise<McpPermissionPolicy & { moveId: Id<"moves">; accessKind: MoveAccessKind }> {
+  // Resolve the user from the injected Clerk subject, then defer ALL access
+  // logic (move-belongs check, household-vs-moveOnly resolution, role merge) to
+  // the shared resolver so this gateway path can never drift from the web path.
+  const user = await requireUserBySubject(ctx, subject);
+  const access = await resolveMoveAccess(ctx, user._id, householdId, moveId);
 
-  // Confirm the move actually belongs to this household before granting any
-  // access. Without this, passing a foreign moveId alongside your own
-  // householdId would read another household's data. Centralizing the guard
-  // here means every move-scoped gateway tool inherits it.
-  const move = await ctx.db.get(moveId);
-  if (!move || move.householdId !== householdId) {
-    throw new AuthorizationError("Move not found in this household.");
+  // Owner kill-switch for connected agents. This path IS an agent acting on the
+  // user's behalf, so an owner who disabled this participant's agent access cuts
+  // the gateway off here. (The human web path is unaffected — it's not an agent.)
+  if (agentAccessDisabled(access)) {
+    throw new AuthorizationError(
+      "An owner has turned off agent access for this participant.",
+    );
   }
 
-  const moveGrant = await ctx.db
-    .query("moveRoleGrants")
-    .withIndex("by_move_user", (q) =>
-      q.eq("moveId", moveId).eq("userId", base.actor.userId),
-    )
-    .unique();
-
-  const effectiveRole =
-    moveGrant?.status === "active"
-      ? strongerHouseholdRole(base.role, moveGrant.role)
-      : base.role;
-
-  if (!canPerformHouseholdAction(effectiveRole, action)) {
+  if (!canPerformHouseholdAction(access.role, action)) {
     throw new AuthorizationError(
       `Requires ${action} permission for this move.`,
     );
   }
 
   return {
-    ...base,
-    role: effectiveRole,
-    visibility: visibilityForHouseholdRole(effectiveRole),
+    actor: { type: "user", userId: user._id, clerkUserId: user.clerkUserId },
+    user: { _id: user._id, clerkUserId: user.clerkUserId },
+    householdId,
+    role: access.role,
+    visibility: visibilityForHouseholdRole(access.role),
     moveId,
+    accessKind: access.accessKind,
   };
 }

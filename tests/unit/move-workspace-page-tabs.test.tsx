@@ -52,6 +52,7 @@ vi.mock("@/components/move-operations-nav", () => ({
 // undefined keeps the tab badges off and exercises the loading-tolerant path.
 vi.mock("convex/react", () => ({
   useQuery: () => undefined,
+  useMutation: () => async () => undefined,
 }));
 
 // Configure page child surfaces — stubbed so the tab/hash routing is what is
@@ -239,7 +240,7 @@ describe("move workspace task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Details" })).toBeInTheDocument();
     expect(
-      screen.getByRole("tab", { name: /Household/ }),
+      screen.getByRole("tab", { name: /Participants/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -303,18 +304,18 @@ describe("move workspace task tabs", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the household tab when routed to the household hash", async () => {
+  it("opens the participants tab when routed to the household hash", async () => {
     window.history.replaceState(null, "", "/app/moves/move_123#household");
 
     render(<MoveConfigurePage />);
 
     await waitFor(() =>
       expect(
-        screen.getByRole("tab", { name: /Household/ }),
+        screen.getByRole("tab", { name: /Participants/ }),
       ).toHaveAttribute("data-state", "active"),
     );
-    expect(screen.getByText("Household member surface")).toBeInTheDocument();
-    expect(screen.getByText("People manager surface")).toBeInTheDocument();
+    // The unified participants surface is the lone card in this tab now.
+    expect(screen.getByText(/what they can do/)).toBeInTheDocument();
     expect(
       screen.queryByText("start location config surface"),
     ).not.toBeInTheDocument();

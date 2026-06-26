@@ -225,11 +225,13 @@ export const completeAccountDeletion = mutation({
       revokedShareLinkCount,
       disabledMembershipCount,
       disabledMoveGrantCount,
+      disabledMoveParticipantCount,
     ] = await Promise.all([
       revokeUserApiKeys(ctx, user._id, now),
       revokeUserShareLinks(ctx, user._id, now),
       disableUserMemberships(ctx, user._id, now),
       disableUserMoveGrants(ctx, user._id, now),
+      disableUserMoveParticipants(ctx, user._id, now),
     ]);
 
     const completedSummary = {
@@ -237,6 +239,7 @@ export const completeAccountDeletion = mutation({
       revokedShareLinkCount,
       disabledMembershipCount,
       disabledMoveGrantCount,
+      disabledMoveParticipantCount,
     };
 
     await ctx.db.patch(user._id, anonymizedUserPatch(now));
@@ -622,4 +625,37 @@ async function disableUserMoveGrants(
     )
   );
   return grants.length;
+}
+
+// Mirror disableUserMoveGrants for the unified moveParticipants table so a
+// purged/anonymized account loses its move-only (and household-backed) move
+// access too. Without this, a moveOnly guest's access would survive an account
+// disable because it lives only here, not in householdMemberships/moveRoleGrants.
+async function disableUserMoveParticipants(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  now: number
+) {
+  const statuses: Doc<"moveParticipants">["status"][] = ["active", "invited"];
+  const participants = (
+    await Promise.all(
+      statuses.map((status) =>
+        ctx.db
+          .query("moveParticipants")
+          .withIndex("by_user_status", (q) =>
+            q.eq("userId", userId).eq("status", status)
+          )
+          .collect()
+      )
+    )
+  ).flat();
+  await Promise.all(
+    participants.map((participant) =>
+      ctx.db.patch(participant._id, {
+        status: "disabled",
+        updatedAt: now,
+      })
+    )
+  );
+  return participants.length;
 }

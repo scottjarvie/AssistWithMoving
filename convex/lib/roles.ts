@@ -65,6 +65,10 @@ export type SensitiveField =
   | "serialNumber"
   | "privateNotes"
   | "sensitivePhotos"
+  // AI/research-generated prose (market value, purchase price, serial/model
+  // research scraped from the web). Gated like estimatedValue so a moveOnly
+  // mover/helper at viewer/packer can't read item values via the research text.
+  | "research"
   | "apiKeys";
 
 const sensitiveFieldMinimumRole: Record<SensitiveField, HouseholdRole> = {
@@ -73,6 +77,7 @@ const sensitiveFieldMinimumRole: Record<SensitiveField, HouseholdRole> = {
   serialNumber: "editor",
   privateNotes: "editor",
   sensitivePhotos: "editor",
+  research: "editor",
   apiKeys: "admin",
 };
 
@@ -111,6 +116,7 @@ export function visibilityForHouseholdRole(role: HouseholdRole) {
     serialNumber: canViewSensitiveField(role, "serialNumber"),
     privateNotes: canViewSensitiveField(role, "privateNotes"),
     sensitivePhotos: canViewSensitiveField(role, "sensitivePhotos"),
+    research: canViewSensitiveField(role, "research"),
     apiKeys: canViewSensitiveField(role, "apiKeys"),
   };
 }
