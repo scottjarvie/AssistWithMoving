@@ -8,7 +8,19 @@ import {
   sumEstimateValues,
   volumeCuFtForUpdate,
   volumeFromDimensions,
+  weightBoundsFromEstimate,
 } from "../../convex/lib/estimateEngine";
+
+describe("weightBoundsFromEstimate (range from a point estimate)", () => {
+  it("derives low=75% and high=135% of the estimate", () => {
+    expect(weightBoundsFromEstimate(100)).toEqual({ low: 75, high: 135 });
+  });
+  it("is undefined for a missing or non-positive estimate", () => {
+    expect(weightBoundsFromEstimate(undefined)).toBeUndefined();
+    expect(weightBoundsFromEstimate(0)).toBeUndefined();
+    expect(weightBoundsFromEstimate(NaN)).toBeUndefined();
+  });
+});
 
 describe("finitePercent (never NaN/Infinity)", () => {
   it("computes a normal percent", () => {

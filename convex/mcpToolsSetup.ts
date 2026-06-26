@@ -26,7 +26,10 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { assertResourceAndZone, loadAssignmentValidation } from "./boxes";
-import { volumeCuFtForUpdate } from "./lib/estimateEngine";
+import {
+  volumeCuFtForUpdate,
+  weightBoundsFromEstimate,
+} from "./lib/estimateEngine";
 import {
   inferredMeasurementProvenanceForUser,
   loadItemAssignmentValidation,
@@ -1147,6 +1150,15 @@ export const updateItem = mutation({
     // (no normalization/clamping is applied to these in items.update).
     if (args.estimatedWeightLb !== undefined) {
       patch.estimatedWeightLb = args.estimatedWeightLb;
+      // Fill the weight range from the new point estimate when the agent didn't
+      // send explicit bounds (low 75%, high 135%); explicit bounds below win.
+      const bounds = weightBoundsFromEstimate(args.estimatedWeightLb);
+      if (args.estimatedWeightLowLb === undefined && bounds) {
+        patch.estimatedWeightLowLb = bounds.low;
+      }
+      if (args.estimatedWeightHighLb === undefined && bounds) {
+        patch.estimatedWeightHighLb = bounds.high;
+      }
     }
     if (args.estimatedWeightLowLb !== undefined) {
       patch.estimatedWeightLowLb = args.estimatedWeightLowLb;

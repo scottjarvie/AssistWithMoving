@@ -197,6 +197,27 @@ export function volumeCuFtForUpdate(input: {
   return { set: false };
 }
 
+// Default weight confidence bounds derived from a single point estimate
+// (low = 75%, high = 135%), matching the planning suggester. Lets the AI/API
+// send just estimatedWeightLb and have the range filled in on write. Returns
+// undefined when there's no usable positive estimate. Explicit bounds always win
+// (callers only use this to fill in omitted bounds).
+export const WEIGHT_LOW_MULTIPLIER = 0.75;
+export const WEIGHT_HIGH_MULTIPLIER = 1.35;
+
+export function weightBoundsFromEstimate(
+  estimatedWeightLb: number | undefined | null,
+): { low: number; high: number } | undefined {
+  const base = positiveNumber(estimatedWeightLb ?? undefined);
+  if (base === undefined) {
+    return undefined;
+  }
+  return {
+    low: roundEstimate(base * WEIGHT_LOW_MULTIPLIER),
+    high: roundEstimate(base * WEIGHT_HIGH_MULTIPLIER),
+  };
+}
+
 function baselineForItem(item: Pick<EstimableItem, "name" | "category">) {
   const category = item.category?.toLowerCase().trim();
   if (category) {

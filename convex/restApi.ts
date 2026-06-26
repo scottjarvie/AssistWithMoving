@@ -41,6 +41,7 @@ import {
   finitePercent,
   roundEstimate,
   sumEstimateValues,
+  weightBoundsFromEstimate,
 } from "./lib/estimateEngine";
 import { itemDimensionsConfidenceForRead } from "../src/lib/inventory-measurements";
 import { summarizeMoveQuestionsFromDocs } from "./lib/moveQuestionDocuments";
@@ -3527,6 +3528,29 @@ async function findApiBoxByCode(
     boxes.find((box) => box.householdId === householdId && !box.archivedAt) ??
     null
   );
+}
+
+// Fill the weight range (low 75% / high 135%) from the point estimate when the
+// caller didn't send explicit bounds — so the REST/MCP AI can send just
+// estimatedWeightLb. Mirrors items.ts. Explicit bounds are never overwritten.
+function addRestDerivedWeightBounds(body: Record<string, unknown>) {
+  const bounds = weightBoundsFromEstimate(optionalNumber(body.estimatedWeightLb));
+  if (!bounds) {
+    return body;
+  }
+  if (
+    body.estimatedWeightLowLb === undefined ||
+    body.estimatedWeightLowLb === null
+  ) {
+    body.estimatedWeightLowLb = bounds.low;
+  }
+  if (
+    body.estimatedWeightHighLb === undefined ||
+    body.estimatedWeightHighLb === null
+  ) {
+    body.estimatedWeightHighLb = bounds.high;
+  }
+  return body;
 }
 
 function addRestDerivedEstimatedVolume(body: Record<string, unknown>) {
@@ -7625,8 +7649,10 @@ async function createApiItem(
   body: Record<string, unknown>
 ) {
   const now = Date.now();
-  // Persist volume from dimensions when no explicit volume was sent.
+  // Persist volume from dimensions + weight range from the point estimate when
+  // not explicitly sent.
   addRestDerivedEstimatedVolume(body);
+  addRestDerivedWeightBounds(body);
   const name = normalizeItemName(String(body.name ?? ""));
   const externalKey = externalItemKeyFromInput(body);
   const itemId = await ctx.db.insert("items", {
@@ -8294,8 +8320,10 @@ function itemPatch(
   existing?: Doc<"items">,
 ): Partial<Doc<"items">> {
   const input = bodyObject(body);
-  // Recompute volume from dimensions when dims change without an explicit volume.
+  // Recompute volume from dimensions + weight range from the point estimate when
+  // those change without explicit values.
   addRestDerivedEstimatedVolume(input);
+  addRestDerivedWeightBounds(input);
   const now = Date.now();
   const patch: Partial<Doc<"items">> = {
     updatedByUserId: auth.createdByUserId,

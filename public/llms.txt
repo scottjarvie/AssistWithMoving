@@ -130,6 +130,13 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
   condition are missing. Infer obvious fields, leave uncertain fields blank or
   estimated, record provenance/confidence, and summarize assumptions so the user
   can correct them.
+- Some fields are auto-derived on write, so send the simple inputs and let the
+  system compute the rest (or pass explicit values to override): an item/box
+  `estimatedVolumeCuFt` is computed from `dimensionsIn` as L×W×H/1728, and an
+  item's weight range (`estimatedWeightLowLb`/`estimatedWeightHighLb`) from
+  `estimatedWeightLb` as 75%/135%, whenever you omit them. Prefer sending plain
+  dimensions and a single `estimatedWeightLb` rather than computing cubic feet or
+  ranges yourself.
 - Choose estimate confidence from the evidence. Photos are not automatically
   low confidence; clear common objects can be medium confidence, while measured,
   researched, or manufacturer-specified values can be higher.

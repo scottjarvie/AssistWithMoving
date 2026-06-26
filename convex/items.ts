@@ -16,6 +16,7 @@ import {
   estimateItem,
   resolveStoredVolumeCuFt,
   volumeCuFtForUpdate,
+  weightBoundsFromEstimate,
 } from "./lib/estimateEngine";
 import {
   dimensionsValidator,
@@ -958,9 +959,15 @@ export const create = mutation({
         }),
       dimensionsConfidence: args.dimensionsConfidence ?? "none",
       estimatedWeightLb: args.estimatedWeightLb,
-      estimatedWeightLowLb: args.estimatedWeightLowLb,
-      estimatedWeightHighLb: args.estimatedWeightHighLb,
       actualWeightLb: args.actualWeightLb,
+      // Fill the weight range from the point estimate when not given (low 75%,
+      // high 135%), so the AI can send just estimatedWeightLb.
+      estimatedWeightLowLb:
+        args.estimatedWeightLowLb ??
+        weightBoundsFromEstimate(args.estimatedWeightLb)?.low,
+      estimatedWeightHighLb:
+        args.estimatedWeightHighLb ??
+        weightBoundsFromEstimate(args.estimatedWeightLb)?.high,
       // Persist volume from dimensions when no explicit volume was given, so a
       // dims-only create doesn't leave estimatedVolumeCuFt null for the rollups.
       estimatedVolumeCuFt: resolveStoredVolumeCuFt(args),
@@ -1128,6 +1135,15 @@ export const update = mutation({
     }
     if (args.estimatedWeightLb !== undefined) {
       patch.estimatedWeightLb = args.estimatedWeightLb;
+      // Refill the range from the new point estimate when the caller didn't send
+      // explicit bounds (low 75%, high 135%); explicit bounds below still win.
+      const bounds = weightBoundsFromEstimate(args.estimatedWeightLb);
+      if (args.estimatedWeightLowLb === undefined && bounds) {
+        patch.estimatedWeightLowLb = bounds.low;
+      }
+      if (args.estimatedWeightHighLb === undefined && bounds) {
+        patch.estimatedWeightHighLb = bounds.high;
+      }
     }
     if (args.estimatedWeightLowLb !== undefined) {
       patch.estimatedWeightLowLb = args.estimatedWeightLowLb;
