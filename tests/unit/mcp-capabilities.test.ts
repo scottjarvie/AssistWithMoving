@@ -595,7 +595,8 @@ describe("MovingManifest MCP capability discovery", () => {
     const start = docs.indexOf("## Floor Plans");
     const end = docs.indexOf("## Evidence Media", start);
     const section = docs.slice(start, end);
-    const blocks = [...section.matchAll(/```json\n([\s\S]*?)\n```/g)].map(
+    // Tolerate CRLF (Windows checkouts) as well as LF line endings.
+    const blocks = [...section.matchAll(/```json\r?\n([\s\S]*?)\r?\n```/g)].map(
       (match) => JSON.parse(match[1])
     );
 
