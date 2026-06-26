@@ -220,6 +220,60 @@ export const listForMove = query({
 });
 
 /**
+ * The queue "scopes" the current user can view on this move: their own queue
+ * always, the queues a move owner delegated them to run, and (for managers) the
+ * whole move. Powers the queue owner-picker on the web.
+ */
+export const queueScopes = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+    const canManage = canPerformHouseholdAction(
+      policy.role,
+      "household:manage_members",
+    );
+    const userId =
+      policy.actor.type === "user" ? policy.actor.userId : null;
+
+    let delegatedOwners: { userId: Id<"users">; name: string }[] = [];
+    if (userId) {
+      const participant = await ctx.db
+        .query("moveParticipants")
+        .withIndex("by_move_user", (q) =>
+          q.eq("moveId", args.moveId).eq("userId", userId),
+        )
+        .unique();
+      const ownerIds =
+        participant?.status === "active"
+          ? (participant.canRunQueueForUserIds ?? [])
+          : [];
+      delegatedOwners = await Promise.all(
+        ownerIds.map(async (id) => {
+          const owner = await ctx.db.get(id);
+          return {
+            userId: id,
+            name:
+              (owner && "name" in owner
+                ? (owner as { name?: string | null }).name
+                : null) ?? "Someone",
+          };
+        }),
+      );
+    }
+
+    return { canManage, delegatedOwners };
+  },
+});
+
+/**
  * Add a participant to a move and choose their access (up to the actor's own
  * level). If their email already has an account they're activated immediately;
  * otherwise a pending invite is stored (name + email) and auto-activates on a

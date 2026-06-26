@@ -15,6 +15,11 @@ const apiMock = vi.hoisted(() => ({
   photos: {
     getDisplayUrl: "photos.getDisplayUrl",
   },
+  // The queue owner-picker reads available scopes; the mock returns undefined
+  // for it so the picker stays hidden and the lane assertions are unaffected.
+  moveParticipants: {
+    queueScopes: "moveParticipants.queueScopes",
+  },
 }));
 
 const queueData = vi.hoisted(() => ({

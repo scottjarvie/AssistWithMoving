@@ -251,9 +251,23 @@ export function IngestionQueueList({
   // "todo-done" = a simple To do / Done toggle for the top-level Queue page.
   view?: "tabs" | "todo-done";
 }) {
+  // Which person's queue we're viewing. Default follows the backend: managers
+  // see the whole move, everyone else sees their own. A delegated runner can
+  // switch to a queue a move owner let them run.
+  const scopes = useQuery(
+    api.moveParticipants.queueScopes,
+    householdId && moveId ? { householdId, moveId } : "skip",
+  );
+  const [ownerScope, setOwnerScope] = useState<
+    "mine" | "all" | Id<"users"> | undefined
+  >(undefined);
+  const effectiveScope: "mine" | "all" | Id<"users"> =
+    ownerScope ?? (scopes?.canManage ? "all" : "mine");
   const entries = useQuery(
     api.ingestionQueue.listForMove,
-    householdId && moveId ? { householdId, moveId } : "skip",
+    householdId && moveId
+      ? { householdId, moveId, ownerScope: effectiveScope }
+      : "skip",
   );
   const updateEntry = useMutation(api.ingestionQueue.updateEntry);
   const setEntryStatus = useMutation(api.ingestionQueue.setEntryStatus);
@@ -816,6 +830,33 @@ export function IngestionQueueList({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {scopes && (scopes.canManage || scopes.delegatedOwners.length > 0) ? (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <label htmlFor="queue-scope" className="text-muted-foreground">
+              Showing
+            </label>
+            <select
+              id="queue-scope"
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              value={effectiveScope}
+              onChange={(event) =>
+                setOwnerScope(
+                  event.target.value as "mine" | "all" | Id<"users">,
+                )
+              }
+            >
+              <option value="mine">My captures</option>
+              {scopes.delegatedOwners.map((owner) => (
+                <option key={owner.userId} value={owner.userId}>
+                  {owner.name}&apos;s queue
+                </option>
+              ))}
+              {scopes.canManage ? (
+                <option value="all">Everyone&apos;s captures</option>
+              ) : null}
+            </select>
+          </div>
+        ) : null}
         {loading ? (
           <div className="space-y-2">
             <Skeleton className="h-16 w-full" />
