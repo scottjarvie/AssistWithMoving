@@ -18,6 +18,30 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 
+// Disable a single household membership (e.g. remove someone from a stale,
+// duplicate-named household so it stops cluttering their workspace switcher).
+export const disableMembership = internalMutation({
+  args: { membershipId: v.id("householdMemberships") },
+  handler: async (ctx, { membershipId }) => {
+    const m = await ctx.db.get(membershipId);
+    if (!m) throw new ConvexError("Membership not found.");
+    await ctx.db.patch(membershipId, { status: "disabled", updatedAt: Date.now() });
+    return { householdId: m.householdId, userId: m.userId, status: "disabled" };
+  },
+});
+
+// Archive a move (e.g. an emptied-out legacy duplicate). Hides it from move
+// lists without deleting anything.
+export const archiveMove = internalMutation({
+  args: { moveId: v.id("moves") },
+  handler: async (ctx, { moveId }) => {
+    const move = await ctx.db.get(moveId);
+    if (!move) throw new ConvexError("Move not found.");
+    await ctx.db.patch(moveId, { status: "archived", updatedAt: Date.now() });
+    return { moveId, title: move.title, status: "archived" };
+  },
+});
+
 export const mergeDuplicateUser = internalMutation({
   args: {
     staleUserId: v.id("users"),
