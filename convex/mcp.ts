@@ -158,7 +158,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "list_queue",
     description:
-      "List capture-queue entries for a move — the work waiting to become inventory. Each entry has instructions, room/disposition hints, attached photo ids, status, and any agent question/summary/result items. Pass status to filter (queued|claimed|processed|needsInput|resolved|discarded); omit it for the newest entries.",
+      "List capture-queue entries for a move — the work waiting to become inventory. Each entry has an ownerUserId (whose personal queue it belongs to), instructions, room/disposition hints, attached photo ids, status, and any agent question/summary/result items. Also returns runnableOwners: the queues you may run — your own plus any a move owner delegated to you (each with name + queuedCount). To help run someone else's shared queue, take their ownerUserId from runnableOwners and pass it to claim_queue. Pass status to filter (queued|claimed|processed|needsInput|resolved|discarded); omit it for the newest entries.",
     fn: api.mcpToolsQueue.listQueue,
     args: listQueueArgs,
     identityArg: "caller",
@@ -166,7 +166,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "claim_queue",
     description:
-      "Claim the oldest queued capture entries so two agent runs never process the same one. Returns the claimed entries; a claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry, then call submit_queue_result.",
+      "Claim the oldest queued capture entries so two agent runs never process the same one. Defaults to YOUR own queue; to help run a queue a move owner delegated to you (share a subscription), pass ownerUserId from list_queue's runnableOwners. Returns the claimed entries; a claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry, then call submit_queue_result.",
     fn: api.mcpToolsQueue.claimQueue,
     args: claimQueueArgs,
     identityArg: "caller",

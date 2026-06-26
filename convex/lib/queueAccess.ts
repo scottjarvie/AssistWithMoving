@@ -11,6 +11,20 @@
 // gateway twin) both call them so the two surfaces can't drift.
 import type { Id } from "../_generated/dataModel";
 
+// A friendly label for a queue owner shown in the picker / agent list. Prefers
+// the real display name; falls back to the email's capitalized local part (so it
+// reads "Scott's queue", not "Someone's queue", when a user hasn't set a name).
+export function queueOwnerDisplayName(owner: {
+  name?: string | null;
+  email?: string | null;
+}): string {
+  const name = owner.name?.trim();
+  if (name) return name;
+  const local = owner.email?.split("@")[0]?.trim();
+  if (local) return local.charAt(0).toUpperCase() + local.slice(1);
+  return "Someone";
+}
+
 export function queueEntryOwnerUserId(entry: {
   ownerUserId?: Id<"users">;
   createdByUserId: Id<"users">;

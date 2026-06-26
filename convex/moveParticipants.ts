@@ -22,6 +22,7 @@ import {
   type MoveParticipantType,
 } from "./lib/participants";
 import { requireMovePermission } from "./lib/permissions";
+import { queueOwnerDisplayName } from "./lib/queueAccess";
 import {
   canPerformHouseholdAction,
   householdRoleAtLeast,
@@ -290,13 +291,7 @@ export const queueScopes = query({
       delegatedOwners = await Promise.all(
         ownerIds.map(async (id) => {
           const owner = await ctx.db.get(id);
-          return {
-            userId: id,
-            name:
-              (owner && "name" in owner
-                ? (owner as { name?: string | null }).name
-                : null) ?? "Someone",
-          };
+          return { userId: id, name: queueOwnerDisplayName(owner ?? {}) };
         }),
       );
     }
