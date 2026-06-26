@@ -103,7 +103,7 @@ export function MoveConfigurePage() {
       value: "household",
       label: "Participants",
       description:
-        "Everyone on this move — household members, helpers, movers, and contacts.",
+        "Everyone on this move — family, helpers, movers, and contacts.",
       count: counts.household,
       countLabel:
         counts.household !== undefined

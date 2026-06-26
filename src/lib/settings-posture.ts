@@ -80,14 +80,16 @@ export function buildSettingsPosture({
     },
     {
       key: "households",
-      label: "Households",
-      value: !authReady ? "Checking" : String(householdCount),
+      label: "Workspace",
+      value: !authReady ? "Checking" : signedIn ? "Active" : "—",
       detail: !authReady
-        ? "Memberships load after authentication."
+        ? "Loads after authentication."
         : householdCount
           ? roleSummary(households)
-          : "Create or join a household before creating API keys or moves.",
-      tone: !authReady ? "muted" : householdCount ? "ready" : "attention",
+          : "Your moves and the people on them — set up automatically.",
+      // A user with move access via participation may legitimately have no
+      // workspace of their own, so this is never an "attention" state.
+      tone: !authReady ? "muted" : signedIn ? "ready" : "muted",
     },
     {
       key: "apiMcp",

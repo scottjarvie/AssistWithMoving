@@ -101,6 +101,7 @@ export function MovesHome() {
     loadingIdentity,
     loadingHouseholds,
     loadingMoves,
+    loadingParticipantMoves,
   } = useMoveWorkspace();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -120,7 +121,11 @@ export function MovesHome() {
 
   const identityResolving = loadingIdentity || loadingHouseholds;
   const hasHousehold = Boolean(householdId);
-  const needsHousehold = !identityResolving && !hasHousehold;
+  // Wait for participant moves before concluding the user has no access — a
+  // participant-only user (no household of their own) gets their householdId
+  // from their participant moves, which load a beat later than households.
+  const needsHousehold =
+    !identityResolving && !loadingParticipantMoves && !hasHousehold;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -133,8 +138,8 @@ export function MovesHome() {
             Your moves
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Open a move to capture, plan, and document. Every move belongs to a
-            household permission boundary.
+            Open a move to capture, plan, and document. Add people to a move and
+            choose what they can do from its Participants tab.
           </p>
         </div>
         <Button
@@ -154,7 +159,7 @@ export function MovesHome() {
             htmlFor="household-switcher"
             className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
           >
-            Household
+            Workspace
           </label>
           <select
             id="household-switcher"
@@ -172,7 +177,7 @@ export function MovesHome() {
             ))}
           </select>
           <span className="text-xs text-muted-foreground">
-            Switch to see moves in another household.
+            Switch to see moves in another workspace.
           </span>
         </div>
       ) : null}

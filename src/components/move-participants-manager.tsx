@@ -51,8 +51,8 @@ const accessGrantingTypes: {
 }[] = [
   {
     value: "householdMember",
-    label: "Household member (family)",
-    hint: "Full access to your whole household — every move, not just this one.",
+    label: "Family (all your moves)",
+    hint: "Full access to all your moves, not just this one.",
   },
   {
     value: "helper",
@@ -154,9 +154,9 @@ export function MoveParticipantsManager({
               Participants
             </CardTitle>
             <CardDescription>
-              Everyone on this move and what they can do — household members
-              (family, full access), helpers and movers (this move only), and
-              plain contacts. Outsiders never see your other moves or item values.
+              Everyone on this move and what they can do — family (access to all
+              your moves), helpers and movers (this move only), and plain
+              contacts. Outsiders never see your other moves or item values.
             </CardDescription>
           </div>
           <Badge variant="secondary">{people.length} with access</Badge>
@@ -382,17 +382,17 @@ function ParticipantRow({
 
   function remove() {
     if (isMember && person.membershipId) {
-      // Household members have access to EVERY move, so "removing" them is a
-      // household-level action — be explicit about that.
+      // Family members have access to EVERY one of your moves, so "removing"
+      // them takes their access away from all of them — be explicit about that.
       if (
         typeof window !== "undefined" &&
         !window.confirm(
-          `${displayName} is a household member with access to all your moves. Remove them from the whole household?`,
+          `${displayName} has access to all your moves. Remove their access from all of them?`,
         )
       ) {
         return;
       }
-      void run(`${displayName} removed from the household.`, () =>
+      void run(`${displayName} removed from all your moves.`, () =>
         disableMember({ householdId, membershipId: person.membershipId! }),
       );
     } else if (person.participantId) {
@@ -433,7 +433,7 @@ function ParticipantRow({
           {isMember ? (
             <Badge variant="secondary" className="gap-1">
               <Home className="size-3" aria-hidden="true" />
-              Household · all moves
+              All your moves
             </Badge>
           ) : (
             <Badge variant="secondary" className="gap-1">
@@ -500,7 +500,7 @@ function ParticipantRow({
             disabled={busy}
             onClick={remove}
           >
-            {isMember ? "Remove from household" : "Remove"}
+            {isMember ? "Remove from all moves" : "Remove"}
           </Button>
         </div>
       ) : null}

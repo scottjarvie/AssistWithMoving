@@ -9,6 +9,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useUser } from "@clerk/nextjs";
@@ -36,6 +37,10 @@ export type MoveWorkspaceValue = {
   loadingIdentity: boolean;
   loadingHouseholds: boolean;
   loadingMoves: boolean;
+  // True while the user's participant moves are still loading. The dashboard
+  // must wait for this before deciding a user has "no access" — otherwise a
+  // participant-only user (no household membership) flashes the setup card.
+  loadingParticipantMoves: boolean;
   moveLinkMessage: string | null;
 };
 
@@ -96,18 +101,24 @@ export function MoveWorkspaceProvider({
     initialMoveId ? (initialMoveId as Id<"moves">) : null
   );
 
-  // Keep the Convex user record in sync with the Clerk identity.
+  // Sync the Convex user record with the Clerk identity once per load. This also
+  // drives the server-side invite-claim + membership self-heal, so an invited
+  // person picks up their access. It must run even for users who ALREADY have a
+  // Convex record (not just on first creation) — otherwise a half-claimed
+  // invitee (active participant but missing membership) never gets repaired.
+  const didSyncIdentity = useRef(false);
   useEffect(() => {
-    if (currentUser || !user) {
+    if (!user || didSyncIdentity.current) {
       return;
     }
+    didSyncIdentity.current = true;
 
     void upsertCurrentUser({
       email: user.primaryEmailAddress?.emailAddress,
       name: user.fullName ?? user.username ?? undefined,
       imageUrl: user.imageUrl,
     });
-  }, [currentUser, upsertCurrentUser, user]);
+  }, [upsertCurrentUser, user]);
 
   // A deep-linked move determines its own household — never assume the
   // user's first household owns it.
@@ -218,7 +229,10 @@ export function MoveWorkspaceProvider({
       loadingIdentity: currentUser === undefined,
       loadingHouseholds: Boolean(currentUser) && households === undefined,
       loadingMoves:
-        resolvingLink || (Boolean(householdId) && moves === undefined),
+        resolvingLink ||
+        participantMovesLoading ||
+        (Boolean(householdId) && moves === undefined),
+      loadingParticipantMoves: participantMovesLoading,
       moveLinkMessage,
     }),
     [
@@ -232,6 +246,7 @@ export function MoveWorkspaceProvider({
       currentUser,
       moveLinkMessage,
       resolvingLink,
+      participantMovesLoading,
     ]
   );
 
