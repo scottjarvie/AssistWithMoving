@@ -33,11 +33,11 @@ import { cn } from "@/lib/utils";
 // banner collapses to a thin "Agent connected" badge. When it is 0 we show the
 // full teaching card, which the user can also dismiss for the session.
 //
-// This is the OAUTH connector URL (sign in, no key needed) — /mcp/connect, NOT
-// /api/mcp. /api/mcp is the API-KEY door and 401s OAuth sign-ins. See
-// src/lib/mcp-oauth.ts. Surfacing /api/mcp here is the bug that keeps breaking
-// agent connections — keep it pointed at /mcp/connect.
-const MCP_CONNECTOR_URL = "https://movingmanifest.com/mcp/connect";
+// This is the OAUTH connector URL (sign in, no key needed) — the bare /mcp front
+// door, NOT /api/mcp. /api/mcp is the API-KEY door and 401s OAuth sign-ins. See
+// src/lib/mcp-oauth.ts. Surfacing the key door here is the bug that keeps
+// breaking agent connections — keep it pointed at /mcp.
+const MCP_CONNECTOR_URL = "https://movingmanifest.com/mcp";
 
 type SummaryStats = {
   activeApiKeyCount: number;

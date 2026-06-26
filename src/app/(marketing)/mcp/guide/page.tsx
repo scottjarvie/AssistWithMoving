@@ -32,8 +32,8 @@ const mcpCards = [
     icon: Bot,
   },
   {
-    title: "Hosted or local",
-    copy: "Hosted assistants connect to https://movingmanifest.com/mcp/connect and sign in with MovingManifest OAuth — no key to copy. Desktop or non-OAuth agents can instead use the API-key endpoint (https://movingmanifest.com/api/mcp) or run the local server via npx movingmanifest-mcp with a scoped key.",
+    title: "MCP first, API only if you must",
+    copy: "Recommended: hosted assistants connect to https://movingmanifest.com/mcp and sign in with your MovingManifest account — no key to copy, works with your subscription. Advanced only: local/headless or non-OAuth agents use a scoped API key, either at https://movingmanifest.com/api/mcp (key-only, NOT for OAuth sign-in) or the local npx movingmanifest-mcp server.",
     icon: Laptop,
   },
   {
@@ -78,17 +78,21 @@ const localExtendedToolGroups = [
   "Raw upload sessions for clients that cannot use workflow photo tools",
 ];
 
-// OAuth (sign-in) door. The API-key door is /api/mcp (used only in the fallback
-// example below). These are different endpoints — see src/lib/mcp-oauth.ts.
-const remoteEndpointUrl = "https://movingmanifest.com/mcp/connect";
+// THE front door (OAuth sign-in): https://movingmanifest.com/mcp. /mcp/connect
+// is a still-working alias. The API-key door is /api/mcp — a DIFFERENT, advanced
+// endpoint for local/non-OAuth clients only (see src/lib/mcp-oauth.ts).
+const remoteEndpointUrl = "https://movingmanifest.com/mcp";
 
-const remoteOAuthExample = `Paste this MCP URL into an OAuth-capable hosted client:
-https://movingmanifest.com/mcp/connect
+const remoteOAuthExample = `Paste this MCP URL into an OAuth-capable hosted client (recommended):
+https://movingmanifest.com/mcp
 
+Then sign in with your MovingManifest account — no key needed.
 The client discovers Clerk auth from:
-/.well-known/oauth-protected-resource/mcp/connect`;
+/.well-known/oauth-protected-resource/mcp`;
 
-const remoteApiKeyFallbackExample = `POST https://movingmanifest.com/api/mcp
+const remoteApiKeyFallbackExample = `Advanced — local / headless / non-OAuth clients ONLY.
+This door is key-only and rejects OAuth sign-in; do not use it for hosted clients.
+POST https://movingmanifest.com/api/mcp
 Authorization: Bearer mmk_replace_with_a_scoped_api_key`;
 
 const codexCliCommand = `codex mcp add movingmanifest \\
@@ -171,7 +175,7 @@ export default function McpPage() {
           </div>
           <div className="rounded-md border border-border bg-card p-4">
             <SnippetBlock
-              title="Remote MCP endpoint"
+              title="MCP endpoint (recommended)"
               text={remoteEndpointUrl}
               buttonLabel="Copy endpoint"
             />
@@ -181,9 +185,9 @@ export default function McpPage() {
               buttonLabel="Copy OAuth setup"
             />
             <SnippetBlock
-              title="API-key fallback"
+              title="Advanced: API-key door (local / non-OAuth only)"
               text={remoteApiKeyFallbackExample}
-              buttonLabel="Copy fallback"
+              buttonLabel="Copy advanced"
             />
             <p className="mt-4 text-xs leading-5 text-muted-foreground">
               In claude.ai or Claude Cowork: Settings → Connectors → Add custom

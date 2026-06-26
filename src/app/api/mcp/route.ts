@@ -77,7 +77,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
   if (!apiKey) {
     return unauthorized(
       request,
-      "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp/connect."
+      "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp."
     );
   }
 
