@@ -42,6 +42,27 @@ export const archiveMove = internalMutation({
   },
 });
 
+// Re-code a box (e.g. renumber an off-scheme "BOX-001" to the next "B-###").
+// Enforces uniqueness within the move.
+export const setBoxCode = internalMutation({
+  args: { boxId: v.id("boxes"), code: v.string() },
+  handler: async (ctx, { boxId, code }) => {
+    const box = await ctx.db.get(boxId);
+    if (!box) throw new ConvexError("Box not found.");
+    const clash = await ctx.db
+      .query("boxes")
+      .withIndex("by_move_code", (q) =>
+        q.eq("moveId", box.moveId).eq("code", code),
+      )
+      .unique();
+    if (clash && clash._id !== boxId) {
+      throw new ConvexError(`Code ${code} is already used on this move.`);
+    }
+    await ctx.db.patch(boxId, { code, updatedAt: Date.now() });
+    return { boxId, from: box.code, to: code };
+  },
+});
+
 export const mergeDuplicateUser = internalMutation({
   args: {
     staleUserId: v.id("users"),
