@@ -4,7 +4,7 @@ import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { Check, Home, Plus } from "lucide-react";
+import { Check, Home, Info, Plus } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -306,6 +306,7 @@ function MoveCard({
             </div>
           </div>
           <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+            <MoveIdTooltip moveId={move._id} />
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="cursor-default">
@@ -321,6 +322,40 @@ function MoveCard({
         </div>
       </CardHeader>
     </Card>
+  );
+}
+
+// A small info affordance on each move card: hover to see the move's id, click
+// to copy it. Handy for testing and for quoting an exact move to support. Sits
+// in the card's z-10 control row so clicking it copies without opening the move.
+function MoveIdTooltip({ moveId }: { moveId: Id<"moves"> }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Move ID ${moveId} — click to copy`}
+          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void navigator.clipboard?.writeText(moveId).then(() => {
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 1500);
+            });
+          }}
+        >
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="flex flex-col gap-0.5">
+        <span className="font-mono text-xs select-all">{moveId}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {copied ? "Copied!" : "Move ID — click to copy"}
+        </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
