@@ -135,6 +135,7 @@ import type * as testSupport from "../testSupport.js";
 import type * as transportResources from "../transportResources.js";
 import type * as transportTrips from "../transportTrips.js";
 import type * as transportZones from "../transportZones.js";
+import type * as userReconcile from "../userReconcile.js";
 import type * as users from "../users.js";
 
 import type {
@@ -271,6 +272,7 @@ declare const fullApi: ApiFromModules<{
   transportResources: typeof transportResources;
   transportTrips: typeof transportTrips;
   transportZones: typeof transportZones;
+  userReconcile: typeof userReconcile;
   users: typeof users;
 }>;
 
