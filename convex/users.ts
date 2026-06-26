@@ -42,17 +42,26 @@ export const upsertCurrent = mutation({
     // store (other users' invite-matching keys off it) or to claim invites with.
     // If the JWT doesn't attest a verified email, the Clerk webhook
     // (upsertFromWebhook) will fill it in from the verified primary address.
-    const verifiedEmail =
-      identity.emailVerified === true && typeof identity.email === "string"
+    // The email from the SIGNED Clerk token (identity). Trusted because it's in
+    // the JWT Clerk signed, NOT the client-passed args.email (which is spoofable
+    // — that was the invite-theft vector). Accept it unless the token explicitly
+    // marks it unverified; many JWT templates carry `email` but omit
+    // `email_verified`, so requiring emailVerified===true silently dropped every
+    // claim (the bug that left invited people unable to see their move).
+    const tokenEmail =
+      typeof identity.email === "string" && identity.emailVerified !== false
         ? identity.email
         : undefined;
     const name = args.name ?? identity.name;
     const imageUrl = args.imageUrl ?? identity.pictureUrl;
 
     if (existing) {
-      // Never downgrade a previously-verified email to undefined just because
-      // this particular token lacked the claim.
-      const email = verifiedEmail ?? existing.email;
+      // Self-healing: claim against the token email if present, else the email
+      // already stored from a trusted source (the Clerk webhook). So even if a
+      // given token lacks an email claim, the pending invite is picked up on the
+      // next load once any trusted source has populated the address.
+      const claimEmail = tokenEmail ?? existing.email ?? undefined;
+      const email = tokenEmail ?? existing.email;
       await ctx.db.patch(existing._id, {
         email,
         name,
@@ -64,12 +73,12 @@ export const upsertCurrent = mutation({
 
       await claimPendingHouseholdInvitationsForUser(ctx, {
         userId: existing._id,
-        email: verifiedEmail,
+        email: claimEmail,
         actorType: "user",
       });
       await claimPendingMoveParticipantsForUser(ctx, {
         userId: existing._id,
-        email: verifiedEmail,
+        email: claimEmail,
         actorType: "user",
       });
 
@@ -78,10 +87,10 @@ export const upsertCurrent = mutation({
 
     const userId = await ctx.db.insert("users", {
       clerkUserId: identity.subject,
-      email: verifiedEmail,
+      email: tokenEmail,
       name,
       imageUrl,
-      appRole: appRoleForEmail(verifiedEmail),
+      appRole: appRoleForEmail(tokenEmail),
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -90,12 +99,12 @@ export const upsertCurrent = mutation({
 
     await claimPendingHouseholdInvitationsForUser(ctx, {
       userId,
-      email: verifiedEmail,
+      email: tokenEmail,
       actorType: "user",
     });
     await claimPendingMoveParticipantsForUser(ctx, {
       userId,
-      email: verifiedEmail,
+      email: tokenEmail,
       actorType: "user",
     });
 

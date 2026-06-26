@@ -66,6 +66,12 @@ export function MoveWorkspaceProvider({
   const currentUser = useQuery(api.users.current);
   const upsertCurrentUser = useMutation(api.users.upsertCurrent);
   const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
+  // Moves the user reaches as a participant (esp. move-only outsiders with no
+  // household membership, who never show up in listMine / listForHousehold).
+  const participantMoves = useQuery(
+    api.moveParticipants.listMyMoves,
+    currentUser ? {} : "skip",
+  );
   const featureFlagEnvironment =
     process.env.NODE_ENV === "development" ||
     process.env.NEXT_PUBLIC_LAYOUT_STUDIO_CURRENT_DB_QA === "true"
@@ -112,14 +118,52 @@ export function MoveWorkspaceProvider({
   const resolvingLink = Boolean(routeMoveId) && linkedMove === undefined;
 
   const firstHousehold = households?.[0]?.household;
+  const firstParticipantHouseholdId = participantMoves?.[0]?.householdId ?? null;
   const householdId =
     selectedHouseholdId ??
     linkedMove?.householdId ??
-    (resolvingLink ? null : firstHousehold?._id ?? null);
-  const moves = useQuery(
-    api.moves.listForHousehold,
-    householdId ? { householdId } : "skip"
+    (resolvingLink
+      ? null
+      : firstHousehold?._id ?? firstParticipantHouseholdId ?? null);
+
+  // listForHousehold requires household membership — calling it for a household
+  // the user only participates in (move-only) would throw. So only call it for
+  // member households; move-only moves come from participantMoves instead.
+  const memberHouseholdIds = useMemo(
+    () => new Set((households ?? []).map((entry) => entry.household._id)),
+    [households]
   );
+  const isMemberHousehold = householdId
+    ? memberHouseholdIds.has(householdId)
+    : false;
+  const householdMoves = useQuery(
+    api.moves.listForHousehold,
+    householdId && isMemberHousehold ? { householdId } : "skip"
+  );
+
+  const householdMovesLoading =
+    Boolean(householdId) && isMemberHousehold && householdMoves === undefined;
+  const participantMovesLoading =
+    Boolean(currentUser) && participantMoves === undefined;
+
+  // Merge member-household moves with the user's participant moves for the
+  // resolved household (deduped). undefined while the relevant sources load so
+  // the loading affordances still work.
+  const moves = useMemo<MoveEntries | undefined>(() => {
+    if (householdMovesLoading || participantMovesLoading) return undefined;
+    const byId = new Map<Id<"moves">, MoveEntries[number]>();
+    for (const move of householdMoves ?? []) byId.set(move._id, move);
+    for (const move of participantMoves ?? []) {
+      if (move.householdId === householdId) byId.set(move._id, move);
+    }
+    return Array.from(byId.values());
+  }, [
+    householdMoves,
+    participantMoves,
+    householdId,
+    householdMovesLoading,
+    participantMovesLoading,
+  ]);
 
   const activeMoves = useMemo(
     () => moves?.filter((move) => move.status !== "archived") ?? [],
