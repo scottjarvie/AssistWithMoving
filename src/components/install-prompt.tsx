@@ -12,8 +12,10 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-const DISMISS_KEY = "mm-a2hs-dismissed-at";
-const DISMISS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+const PROMPT_KEY = "mm-a2hs-prompted-at";
+// Surface the prompt at most once a week (until installed), whether the user
+// dismissed it or just ignored it.
+const PROMPT_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 const SHOW_DELAY_MS = 2500;
 
 function isStandalone(): boolean {
@@ -21,6 +23,17 @@ function isStandalone(): boolean {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
     (navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+}
+
+// Only phones and tablets — desktop Chrome also fires `beforeinstallprompt`, but
+// "add to home screen" is a mobile/tablet affordance. A coarse primary pointer
+// (touchscreen) distinguishes phones/tablets from mouse-driven desktops.
+function isMobileOrTablet(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(pointer: coarse)").matches &&
+    (navigator.maxTouchPoints ?? 0) > 0
   );
 }
 
@@ -38,21 +51,21 @@ function isIOSSafari(): boolean {
   return iOS && isSafari;
 }
 
-function wasRecentlyDismissed(): boolean {
+function promptedWithinTheWeek(): boolean {
   try {
-    const raw = window.localStorage.getItem(DISMISS_KEY);
+    const raw = window.localStorage.getItem(PROMPT_KEY);
     if (!raw) return false;
     const at = Number.parseInt(raw, 10);
     if (Number.isNaN(at)) return false;
-    return Date.now() - at < DISMISS_WINDOW_MS;
+    return Date.now() - at < PROMPT_INTERVAL_MS;
   } catch {
     return false;
   }
 }
 
-function recordDismissal() {
+function recordPrompted() {
   try {
-    window.localStorage.setItem(DISMISS_KEY, String(Date.now()));
+    window.localStorage.setItem(PROMPT_KEY, String(Date.now()));
   } catch {
     // Ignore storage failures (private mode, etc.).
   }
@@ -69,7 +82,14 @@ export function InstallPrompt() {
     useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    if (isStandalone() || wasRecentlyDismissed()) return;
+    // Phones/tablets only, not yet installed, and not already shown this week.
+    if (
+      isStandalone() ||
+      promptedWithinTheWeek() ||
+      !isMobileOrTablet()
+    ) {
+      return;
+    }
 
     let showTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -79,13 +99,15 @@ export function InstallPrompt() {
       showTimer = setTimeout(() => {
         setMode("android");
         setVisible(true);
+        // Showing counts as this week's prompt — don't reappear until next week.
+        recordPrompted();
       }, SHOW_DELAY_MS);
     };
 
     const onAppInstalled = () => {
       setVisible(false);
       setStashedEvent(null);
-      recordDismissal();
+      recordPrompted();
     };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
@@ -96,6 +118,7 @@ export function InstallPrompt() {
       showTimer = setTimeout(() => {
         setMode("ios");
         setVisible(true);
+        recordPrompted();
       }, SHOW_DELAY_MS);
     }
 
@@ -107,7 +130,7 @@ export function InstallPrompt() {
   }, []);
 
   const dismiss = useCallback(() => {
-    recordDismissal();
+    recordPrompted();
     setVisible(false);
   }, []);
 
@@ -130,7 +153,7 @@ export function InstallPrompt() {
       // Prompt can throw if already consumed; fall through to cleanup.
     }
     setStashedEvent(null);
-    recordDismissal();
+    recordPrompted();
     setVisible(false);
   }, [stashedEvent]);
 
