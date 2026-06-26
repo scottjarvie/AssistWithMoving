@@ -12,6 +12,7 @@ import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
+import { getCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
 import { activateHouseholdMemberForUser } from "./lib/householdInvitations";
 import type { ManagedHouseholdMemberRole } from "./lib/householdMembers";
@@ -216,6 +217,37 @@ export const listForMove = query({
       contacts: canManage ? contactList : [],
       presets: Object.values(PARTICIPANT_TYPE_PRESETS),
     };
+  },
+});
+
+/**
+ * The active (non-archived) moves the current user can reach as a PARTICIPANT —
+ * including move-only outsiders who have no household membership and therefore
+ * never appear in households.listMine / moves.listForHousehold. The workspace
+ * merges these so an invited mover/helper actually sees their move. Returns full
+ * move docs to match moves.listForHousehold's shape. Signed-in users only.
+ */
+export const listMyMoves = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+
+    const participations = await ctx.db
+      .query("moveParticipants")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", user._id).eq("status", "active"),
+      )
+      .collect();
+
+    const moves = await Promise.all(
+      participations.map(async (p) => {
+        const move = await ctx.db.get(p.moveId);
+        if (!move || move.status === "archived") return null;
+        return move;
+      }),
+    );
+    return moves.filter((move): move is Doc<"moves"> => move !== null);
   },
 });
 
