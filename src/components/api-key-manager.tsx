@@ -873,7 +873,7 @@ export function ApiKeyManager({
             <Link href="/api">API docs</Link>
           </Button>
           <Button asChild size="sm" variant="outline">
-            <Link href="/mcp">MCP docs</Link>
+            <Link href="/mcp/guide">MCP docs</Link>
           </Button>
         </div>
       </div>

@@ -3,9 +3,88 @@ import { describe, expect, it } from "vitest";
 import {
   boxVolumeCuFt,
   estimateItem,
+  finitePercent,
+  resolveStoredVolumeCuFt,
   sumEstimateValues,
+  volumeCuFtForUpdate,
   volumeFromDimensions,
+  weightBoundsFromEstimate,
 } from "../../convex/lib/estimateEngine";
+
+describe("weightBoundsFromEstimate (range from a point estimate)", () => {
+  it("derives low=75% and high=135% of the estimate", () => {
+    expect(weightBoundsFromEstimate(100)).toEqual({ low: 75, high: 135 });
+  });
+  it("is undefined for a missing or non-positive estimate", () => {
+    expect(weightBoundsFromEstimate(undefined)).toBeUndefined();
+    expect(weightBoundsFromEstimate(0)).toBeUndefined();
+    expect(weightBoundsFromEstimate(NaN)).toBeUndefined();
+  });
+});
+
+describe("finitePercent (never NaN/Infinity)", () => {
+  it("computes a normal percent", () => {
+    expect(finitePercent(50, 200)).toBe(25);
+  });
+  it("returns undefined for missing/NaN used or zero/unset/unlimited max", () => {
+    expect(finitePercent(undefined, 200)).toBeUndefined();
+    expect(finitePercent(NaN, 200)).toBeUndefined();
+    expect(finitePercent(50, 0)).toBeUndefined();
+    expect(finitePercent(50, undefined)).toBeUndefined();
+    expect(finitePercent(50, 200, true)).toBeUndefined();
+  });
+});
+
+describe("resolveStoredVolumeCuFt (volume to persist on write)", () => {
+  it("prefers an explicit volume", () => {
+    expect(
+      resolveStoredVolumeCuFt({
+        estimatedVolumeCuFt: 12,
+        dimensionsIn: { lengthIn: 12, widthIn: 12, heightIn: 12 },
+      }),
+    ).toBe(12);
+  });
+  it("derives from dimensions when no explicit volume (1 cu ft = 12x12x12)", () => {
+    expect(
+      resolveStoredVolumeCuFt({
+        dimensionsIn: { lengthIn: 12, widthIn: 12, heightIn: 12 },
+      }),
+    ).toBe(1);
+  });
+  it("is undefined when neither is usable", () => {
+    expect(resolveStoredVolumeCuFt({})).toBeUndefined();
+    expect(
+      resolveStoredVolumeCuFt({ dimensionsIn: { lengthIn: 12 } }),
+    ).toBeUndefined();
+  });
+});
+
+describe("volumeCuFtForUpdate (volume for an update patch)", () => {
+  it("uses an explicit volume when provided", () => {
+    expect(
+      volumeCuFtForUpdate({
+        volumeProvided: true,
+        estimatedVolumeCuFt: 9,
+        dimensionsProvided: true,
+        dimensionsIn: { lengthIn: 24, widthIn: 24, heightIn: 24 },
+      }),
+    ).toEqual({ set: true, value: 9 });
+  });
+  it("recomputes from dimensions when only dims change", () => {
+    expect(
+      volumeCuFtForUpdate({
+        volumeProvided: false,
+        dimensionsProvided: true,
+        dimensionsIn: { lengthIn: 24, widthIn: 12, heightIn: 12 },
+      }),
+    ).toEqual({ set: true, value: 2 });
+  });
+  it("leaves volume untouched when neither volume nor dims change", () => {
+    expect(
+      volumeCuFtForUpdate({ volumeProvided: false, dimensionsProvided: false }),
+    ).toEqual({ set: false });
+  });
+});
 
 describe("estimate engine", () => {
   it("uses actual weight before manual or baseline values", () => {

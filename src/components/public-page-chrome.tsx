@@ -28,7 +28,7 @@ const publicNavPrimary = [
 // Secondary links: surfaced in the footer and the mobile "more" group.
 const publicNavSecondary = [
   { href: "/api", label: "API" },
-  { href: "/mcp", label: "MCP" },
+  { href: "/mcp/guide", label: "MCP" },
   { href: "/pcs-moving", label: "PCS moving" },
   { href: "/claims-inventory", label: "Claims inventory" },
   { href: "/privacy", label: "Privacy" },

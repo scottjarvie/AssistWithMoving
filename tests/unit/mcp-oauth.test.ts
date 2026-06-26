@@ -33,27 +33,27 @@ describe("MCP OAuth helpers", () => {
       authorization_servers: [],
       bearer_methods_supported: ["header"],
       resource_name: "MovingManifest",
-      resource_documentation: "https://movingmanifest.test/mcp",
+      resource_documentation: "https://movingmanifest.test/mcp/guide",
     });
   });
 
-  it("points OAuth clients at the /mcp/connect door", () => {
+  it("points OAuth clients at the /mcp front door", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
     const request = new Request("https://ignored.example/api/mcp");
 
     expect(mcpOAuthConnectUrl(request)).toBe(
-      "https://movingmanifest.test/mcp/connect"
+      "https://movingmanifest.test/mcp"
     );
   });
 
-  it("returns a KEY-ONLY Bearer challenge that routes OAuth clients to /mcp/connect", () => {
+  it("returns a KEY-ONLY Bearer challenge that routes OAuth clients to the /mcp front door", () => {
     process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
     const request = new Request("https://movingmanifest.test/api/mcp");
 
     const challenge = mcpBearerChallenge(request);
 
     expect(challenge).toBe(
-      'Bearer realm="MovingManifest MCP API key", error="invalid_token", error_description="This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp/connect."'
+      'Bearer realm="MovingManifest MCP API key", error="invalid_token", error_description="This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp."'
     );
     // The /api/mcp challenge must never lure OAuth clients into a dead-end flow.
     expect(challenge).not.toContain("resource_metadata");

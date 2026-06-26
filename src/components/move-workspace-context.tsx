@@ -13,7 +13,7 @@ import {
   useState,
 } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 
 import { api } from "../../convex/_generated/api";
@@ -70,6 +70,10 @@ export function MoveWorkspaceProvider({
   const { user } = useUser();
   const currentUser = useQuery(api.users.current);
   const upsertCurrentUser = useMutation(api.users.upsertCurrent);
+  // Durable invite-claim (MOVE-352): pulls the server-attested verified email
+  // from Clerk and claims pending invites when the JWT carries no email and the
+  // webhook is unconfigured. Graceful no-op without CLERK_SECRET_KEY.
+  const syncEmailAndClaim = useAction(api.clerkIdentity.syncEmailAndClaim);
   const households = useQuery(api.households.listMine, currentUser ? {} : "skip");
   // Moves the user reaches as a participant (esp. move-only outsiders with no
   // household membership, who never show up in listMine / listForHousehold).
@@ -119,6 +123,25 @@ export function MoveWorkspaceProvider({
       imageUrl: user.imageUrl,
     });
   }, [upsertCurrentUser, user]);
+
+  // Durable invite-claim fallback (MOVE-352). Fires ONLY when Convex still has
+  // no trusted email for this user — i.e. the Clerk JWT carried no `email` claim
+  // and the webhook hasn't populated it. It then pulls the server-attested email
+  // from the Clerk Backend API and claims any pending invites. Gated on the
+  // missing email so it costs at most ONE Clerk API call per user (ever, until
+  // their email is captured) — no per-load tax at scale; once any path populates
+  // users.email this short-circuits forever. Whole thing no-ops without
+  // CLERK_SECRET_KEY, so the preferred zero-cost path is to put `email` in the
+  // Clerk "convex" JWT template instead and never reach here.
+  const didSyncEmail = useRef(false);
+  useEffect(() => {
+    if (didSyncEmail.current) return;
+    if (!currentUser || currentUser.email) return;
+    didSyncEmail.current = true;
+    void syncEmailAndClaim({}).catch(() => {
+      // Best-effort; the JWT/webhook claim paths still apply.
+    });
+  }, [currentUser, syncEmailAndClaim]);
 
   // A deep-linked move determines its own household — never assume the
   // user's first household owns it.

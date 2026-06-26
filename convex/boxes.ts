@@ -18,7 +18,12 @@ import {
   type BatchAssignTarget,
 } from "./lib/batchAssign";
 import { resolveBoxWeight } from "./lib/boxWeight";
-import { estimateItem, sumEstimateValues } from "./lib/estimateEngine";
+import {
+  estimateItem,
+  resolveStoredVolumeCuFt,
+  sumEstimateValues,
+  volumeCuFtForUpdate,
+} from "./lib/estimateEngine";
 import {
   boxStatusValidator,
   dimensionsValidator,
@@ -30,9 +35,11 @@ import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
+import { boxContainerType } from "./schema";
 
 const boxWriteArgs = {
   code: v.optional(v.string()),
+  containerType: v.optional(boxContainerType),
   label: v.optional(v.string()),
   nickname: v.optional(v.string()),
   currentSpaceId: v.optional(v.id("moveSpaces")),
@@ -82,21 +89,43 @@ export async function assertResourceAndZone(
   }
 }
 
-async function generateBoxCode(ctx: MutationCtx, moveId: Id<"moves">) {
+// Codes are prefixed by container kind: totes get T-###, everything else B-###.
+// Each prefix has its OWN sequence (continue from the highest existing number of
+// that prefix), so totes and boxes don't share or collide on numbers.
+function codePrefixForContainerType(
+  containerType?: Doc<"boxes">["containerType"],
+): "B" | "T" {
+  return containerType === "plasticTote" ? "T" : "B";
+}
+
+async function generateBoxCode(
+  ctx: MutationCtx,
+  moveId: Id<"moves">,
+  containerType?: Doc<"boxes">["containerType"],
+) {
+  const prefix = codePrefixForContainerType(containerType);
   const boxes = await ctx.db
     .query("boxes")
     .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
     .collect();
   const existingCodes = new Set(boxes.map((box) => box.code));
 
-  for (let index = boxes.length + 1; index < boxes.length + 1000; index += 1) {
-    const code = `B-${String(index).padStart(3, "0")}`;
+  // Continue the sequence from the highest existing number for THIS prefix.
+  const pattern = new RegExp(`^${prefix}-(\\d+)$`);
+  let maxIndex = 0;
+  for (const box of boxes) {
+    const match = pattern.exec(box.code);
+    if (match) maxIndex = Math.max(maxIndex, Number(match[1]));
+  }
+
+  for (let index = maxIndex + 1; index < maxIndex + 1001; index += 1) {
+    const code = `${prefix}-${String(index).padStart(3, "0")}`;
     if (!existingCodes.has(code)) {
       return code;
     }
   }
 
-  throw new Error("Could not generate a unique box code.");
+  throw new Error("Could not generate a unique unit code.");
 }
 
 async function ensureUniqueBoxCode(
@@ -428,7 +457,7 @@ export const create = mutation({
     const now = Date.now();
     const code = args.code
       ? normalizeBoxCode(args.code)
-      : await generateBoxCode(ctx, args.moveId);
+      : await generateBoxCode(ctx, args.moveId, args.containerType);
     if (!code) {
       throw new Error("Box code is required.");
     }
@@ -454,6 +483,7 @@ export const create = mutation({
       householdId: args.householdId,
       moveId: args.moveId,
       code,
+      containerType: args.containerType,
       label: normalizeOptionalText(args.label),
       nickname: normalizeOptionalText(args.nickname),
       currentSpaceId: args.currentSpaceId,
@@ -465,7 +495,8 @@ export const create = mutation({
       dimensionsIn: args.dimensionsIn,
       estimatedWeightLb: args.estimatedWeightLb,
       actualWeightLb: args.actualWeightLb,
-      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      // Persist volume from dimensions when no explicit volume was given.
+      estimatedVolumeCuFt: resolveStoredVolumeCuFt(args),
       assignedResourceId: args.assignedResourceId,
       assignedZoneId: args.assignedZoneId,
       assignmentLocked: args.assignmentLocked ?? false,
@@ -537,6 +568,7 @@ export const update = mutation({
       await ensureUniqueBoxCode(ctx, args.moveId, code, args.boxId);
       patch.code = code;
     }
+    if (args.containerType !== undefined) patch.containerType = args.containerType;
     if (args.label !== undefined)
       patch.label = normalizeOptionalText(args.label);
     if (args.nickname !== undefined)
@@ -565,8 +597,16 @@ export const update = mutation({
     }
     if (args.actualWeightLb !== undefined)
       patch.actualWeightLb = args.actualWeightLb;
-    if (args.estimatedVolumeCuFt !== undefined) {
-      patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
+    // Recompute volume from dimensions when dims change without an explicit
+    // volume, so editing a box's dims via API/MCP keeps its volume in sync.
+    const boxVolumeUpdate = volumeCuFtForUpdate({
+      volumeProvided: args.estimatedVolumeCuFt !== undefined,
+      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      dimensionsProvided: args.dimensionsIn !== undefined,
+      dimensionsIn: args.dimensionsIn,
+    });
+    if (boxVolumeUpdate.set) {
+      patch.estimatedVolumeCuFt = boxVolumeUpdate.value;
     }
     if (args.assignedResourceId !== undefined) {
       patch.assignedResourceId = args.assignedResourceId;

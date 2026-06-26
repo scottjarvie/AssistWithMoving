@@ -47,11 +47,12 @@ export function mcpResourceUrl(request: Request) {
   return `${siteOriginFromRequest(request)}/api/mcp`;
 }
 
-// The OAuth door. This is the URL OAuth-capable clients (claude.ai, Cowork)
-// should connect to — NOT /api/mcp. Surface this anywhere a user is told to
-// "connect with sign-in / OAuth".
+// The OAuth front door. This is the URL OAuth-capable clients (claude.ai,
+// Cowork) should connect to — NOT /api/mcp. The canonical URL is the bare /mcp
+// (see src/app/mcp/route.ts); /mcp/connect remains a working alias. Surface this
+// anywhere a user is told to "connect with sign-in / OAuth".
 export function mcpOAuthConnectUrl(request: Request) {
-  return `${siteOriginFromRequest(request)}/mcp/connect`;
+  return `${siteOriginFromRequest(request)}/mcp`;
 }
 
 export function mcpProtectedResourceMetadataUrl(request: Request) {
@@ -80,7 +81,7 @@ export function mcpProtectedResourceMetadata(request: Request) {
     authorization_servers: [],
     bearer_methods_supported: ["header"],
     resource_name: product.name,
-    resource_documentation: `${siteOriginFromRequest(request)}/mcp`,
+    resource_documentation: `${siteOriginFromRequest(request)}/mcp/guide`,
   };
 }
 

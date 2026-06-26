@@ -36,9 +36,12 @@ import {
   type ShareLinkAction,
 } from "./lib/documentation";
 import {
+  boxVolumeCuFt,
   estimateItem,
+  finitePercent,
   roundEstimate,
   sumEstimateValues,
+  weightBoundsFromEstimate,
 } from "./lib/estimateEngine";
 import { itemDimensionsConfidenceForRead } from "../src/lib/inventory-measurements";
 import { summarizeMoveQuestionsFromDocs } from "./lib/moveQuestionDocuments";
@@ -2189,12 +2192,12 @@ async function routeCapacityReport(
       contentsEstimatedWeightLb: contentsWeight,
     });
     const estimatedWeightLb = weightSummary.valueLb ?? 0;
-    const estimatedVolumeCuFt = box.estimatedVolumeCuFt ?? contentsVolume;
+    const estimatedVolumeCuFt = boxVolumeCuFt(box) ?? contentsVolume;
     const warnings: string[] = [];
     if (weightSummary.source === "missing") {
       warnings.push("missingBoxWeightEstimate");
     }
-    if (!box.estimatedVolumeCuFt && contentsVolume === 0) {
+    if (boxVolumeCuFt(box) === undefined && contentsVolume === 0) {
       warnings.push("missingBoxVolumeEstimate");
     }
     if (estimatedWeightLb > 65) {
@@ -3525,6 +3528,29 @@ async function findApiBoxByCode(
     boxes.find((box) => box.householdId === householdId && !box.archivedAt) ??
     null
   );
+}
+
+// Fill the weight range (low 75% / high 135%) from the point estimate when the
+// caller didn't send explicit bounds — so the REST/MCP AI can send just
+// estimatedWeightLb. Mirrors items.ts. Explicit bounds are never overwritten.
+function addRestDerivedWeightBounds(body: Record<string, unknown>) {
+  const bounds = weightBoundsFromEstimate(optionalNumber(body.estimatedWeightLb));
+  if (!bounds) {
+    return body;
+  }
+  if (
+    body.estimatedWeightLowLb === undefined ||
+    body.estimatedWeightLowLb === null
+  ) {
+    body.estimatedWeightLowLb = bounds.low;
+  }
+  if (
+    body.estimatedWeightHighLb === undefined ||
+    body.estimatedWeightHighLb === null
+  ) {
+    body.estimatedWeightHighLb = bounds.high;
+  }
+  return body;
 }
 
 function addRestDerivedEstimatedVolume(body: Record<string, unknown>) {
@@ -7553,7 +7579,7 @@ async function loadableApiBoxFor(ctx: MutationCtx, box: Doc<"boxes">) {
 
   return {
     estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight,
-    estimatedVolumeCuFt: box.estimatedVolumeCuFt ?? contentsVolume,
+    estimatedVolumeCuFt: boxVolumeCuFt(box) ?? contentsVolume,
     dimensionsIn: box.dimensionsIn,
     itemCount: activeContents.reduce(
       (sum, entry) => sum + entry.membership.quantity,
@@ -7623,6 +7649,10 @@ async function createApiItem(
   body: Record<string, unknown>
 ) {
   const now = Date.now();
+  // Persist volume from dimensions + weight range from the point estimate when
+  // not explicitly sent.
+  addRestDerivedEstimatedVolume(body);
+  addRestDerivedWeightBounds(body);
   const name = normalizeItemName(String(body.name ?? ""));
   const externalKey = externalItemKeyFromInput(body);
   const itemId = await ctx.db.insert("items", {
@@ -8290,6 +8320,10 @@ function itemPatch(
   existing?: Doc<"items">,
 ): Partial<Doc<"items">> {
   const input = bodyObject(body);
+  // Recompute volume from dimensions + weight range from the point estimate when
+  // those change without explicit values.
+  addRestDerivedEstimatedVolume(input);
+  addRestDerivedWeightBounds(input);
   const now = Date.now();
   const patch: Partial<Doc<"items">> = {
     updatedByUserId: auth.createdByUserId,
@@ -8484,6 +8518,8 @@ function parseDimensionsIn(
 
 function boxPatch(body: unknown): Partial<Doc<"boxes">> {
   const input = bodyObject(body);
+  // Recompute volume from dimensions when dims change without an explicit volume.
+  addRestDerivedEstimatedVolume(input);
   const patch: Partial<Doc<"boxes">> = { updatedAt: Date.now() };
   if (input.code !== undefined) patch.code = normalizeBoxCode(String(input.code));
   if (input.label !== undefined) patch.label = normalizeOptionalText(asString(input.label));
@@ -9423,7 +9459,9 @@ function capacityPercent({
   max?: number;
   unlimited?: boolean;
 }) {
-  return max && !unlimited ? roundEstimate((used / max) * 100) : undefined;
+  // finitePercent guards against a NaN/Infinity `used` (missing weight/volume)
+  // or a zero/unset max — never returns a non-finite value a query would 500 on.
+  return finitePercent(used, max, unlimited);
 }
 
 function mergeCapacity(

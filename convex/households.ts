@@ -10,6 +10,7 @@ import {
   parseManagedHouseholdMemberRole,
 } from "./lib/householdMembers";
 import { requireHouseholdPermission } from "./lib/permissions";
+import { canPerformHouseholdAction } from "./lib/roles";
 
 const managedHouseholdMemberRoleValidator = v.union(
   v.literal("admin"),
@@ -224,11 +225,17 @@ export const listMembers = query({
     householdId: v.id("households"),
   },
   handler: async (ctx, args) => {
+    // Any household member can READ this (so non-manager members reaching a move
+    // don't crash a page that uses it). The member roster carries emails, so
+    // only managers get the actual rows — everyone else gets an empty list.
     const policy = await requireHouseholdPermission(
       ctx,
       args.householdId,
-      "household:manage_members",
+      "household:read",
     );
+    if (!canPerformHouseholdAction(policy.role, "household:manage_members")) {
+      return [];
+    }
     const memberships = await ctx.db
       .query("householdMemberships")
       .withIndex("by_household", (q) => q.eq("householdId", args.householdId))

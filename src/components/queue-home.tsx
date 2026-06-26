@@ -68,7 +68,12 @@ export function QueueHome() {
             ) : null}
           </h1>
         </div>
-        <AddToQueueButton variant="inline" />
+        {/* On mobile the bottom-bar "+ Add" (MobileCaptureAction) is the single
+            Add-to-Queue entry point, so hide this in-page button there to avoid
+            two queue buttons. Desktop has no bottom bar, so keep it on xl+. */}
+        <div className="hidden xl:block">
+          <AddToQueueButton variant="inline" />
+        </div>
       </header>
 
       <ConnectAgentOnboarding householdId={householdId} />

@@ -21,7 +21,9 @@ import type * as billing from "../billing.js";
 import type * as boxes from "../boxes.js";
 import type * as claimCenter from "../claimCenter.js";
 import type * as claimPackets from "../claimPackets.js";
+import type * as clerkIdentity from "../clerkIdentity.js";
 import type * as clerkUsers from "../clerkUsers.js";
+import type * as consolidateMove from "../consolidateMove.js";
 import type * as dispositionPipelines from "../dispositionPipelines.js";
 import type * as documentationProfiles from "../documentationProfiles.js";
 import type * as employerPackets from "../employerPackets.js";
@@ -123,9 +125,9 @@ import type * as photos from "../photos.js";
 import type * as planOps from "../planOps.js";
 import type * as plannedItems from "../plannedItems.js";
 import type * as publicPackets from "../publicPackets.js";
-import type * as rest_documentationProfiles from "../rest/documentationProfiles.js";
 import type * as restApi from "../restApi.js";
 import type * as restApiActions from "../restApiActions.js";
+import type * as rest_documentationProfiles from "../rest/documentationProfiles.js";
 import type * as saleListings from "../saleListings.js";
 import type * as seed from "../seed.js";
 import type * as shareLinks from "../shareLinks.js";
@@ -134,6 +136,7 @@ import type * as testSupport from "../testSupport.js";
 import type * as transportResources from "../transportResources.js";
 import type * as transportTrips from "../transportTrips.js";
 import type * as transportZones from "../transportZones.js";
+import type * as userReconcile from "../userReconcile.js";
 import type * as users from "../users.js";
 
 import type {
@@ -156,7 +159,9 @@ declare const fullApi: ApiFromModules<{
   boxes: typeof boxes;
   claimCenter: typeof claimCenter;
   claimPackets: typeof claimPackets;
+  clerkIdentity: typeof clerkIdentity;
   clerkUsers: typeof clerkUsers;
+  consolidateMove: typeof consolidateMove;
   dispositionPipelines: typeof dispositionPipelines;
   documentationProfiles: typeof documentationProfiles;
   employerPackets: typeof employerPackets;
@@ -258,9 +263,9 @@ declare const fullApi: ApiFromModules<{
   planOps: typeof planOps;
   plannedItems: typeof plannedItems;
   publicPackets: typeof publicPackets;
-  "rest/documentationProfiles": typeof rest_documentationProfiles;
   restApi: typeof restApi;
   restApiActions: typeof restApiActions;
+  "rest/documentationProfiles": typeof rest_documentationProfiles;
   saleListings: typeof saleListings;
   seed: typeof seed;
   shareLinks: typeof shareLinks;
@@ -269,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   transportResources: typeof transportResources;
   transportTrips: typeof transportTrips;
   transportZones: typeof transportZones;
+  userReconcile: typeof userReconcile;
   users: typeof users;
 }>;
 

@@ -161,6 +161,63 @@ export function boxVolumeCuFt(box: {
   return volumeFromDimensions(box.dimensionsIn);
 }
 
+// The volume to STORE when writing an item/box. An explicit value always wins;
+// otherwise derive it from dimensions (L x W x H / 1728) so a dims-only write
+// (the common case from MCP/REST tools) persists a real estimatedVolumeCuFt
+// instead of leaving it null. Returns undefined when neither is usable, which
+// leaves the field unset — read-side rollups stay null-safe via boxVolumeCuFt.
+export function resolveStoredVolumeCuFt(input: {
+  estimatedVolumeCuFt?: number | null;
+  dimensionsIn?: DimensionsIn;
+}): number | undefined {
+  const explicit = positiveNumber(input.estimatedVolumeCuFt ?? undefined);
+  if (explicit) {
+    return explicit;
+  }
+  return volumeFromDimensions(input.dimensionsIn);
+}
+
+// The new estimatedVolumeCuFt for an UPDATE patch, given which fields the caller
+// supplied. An explicit volume wins; otherwise, if dimensions are being changed,
+// recompute volume from the new dimensions ("set dims -> volume computed right
+// then"). Returns `{ set: false }` to leave the stored volume untouched (neither
+// volume nor dimensions changed).
+export function volumeCuFtForUpdate(input: {
+  volumeProvided: boolean;
+  estimatedVolumeCuFt?: number | null;
+  dimensionsProvided: boolean;
+  dimensionsIn?: DimensionsIn;
+}): { set: true; value: number | undefined } | { set: false } {
+  if (input.volumeProvided) {
+    return { set: true, value: input.estimatedVolumeCuFt ?? undefined };
+  }
+  if (input.dimensionsProvided) {
+    return { set: true, value: volumeFromDimensions(input.dimensionsIn) };
+  }
+  return { set: false };
+}
+
+// Default weight confidence bounds derived from a single point estimate
+// (low = 75%, high = 135%), matching the planning suggester. Lets the AI/API
+// send just estimatedWeightLb and have the range filled in on write. Returns
+// undefined when there's no usable positive estimate. Explicit bounds always win
+// (callers only use this to fill in omitted bounds).
+export const WEIGHT_LOW_MULTIPLIER = 0.75;
+export const WEIGHT_HIGH_MULTIPLIER = 1.35;
+
+export function weightBoundsFromEstimate(
+  estimatedWeightLb: number | undefined | null,
+): { low: number; high: number } | undefined {
+  const base = positiveNumber(estimatedWeightLb ?? undefined);
+  if (base === undefined) {
+    return undefined;
+  }
+  return {
+    low: roundEstimate(base * WEIGHT_LOW_MULTIPLIER),
+    high: roundEstimate(base * WEIGHT_HIGH_MULTIPLIER),
+  };
+}
+
 function baselineForItem(item: Pick<EstimableItem, "name" | "category">) {
   const category = item.category?.toLowerCase().trim();
   if (category) {
@@ -257,6 +314,31 @@ export function estimateItem(item: EstimableItem): ItemEstimate {
 
 export function roundEstimate(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+// A finite number or undefined — never NaN/Infinity (Convex rejects those when
+// they're stored or returned from a query, which is how a null weight/volume
+// turns a capacity recompute into a 500).
+export function finiteOrUndefined(value: number | undefined | null) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+// Capacity usage percent that can NEVER be NaN/Infinity. Returns undefined
+// unless the used amount is a finite number and there is a real positive,
+// non-unlimited max to divide by. Use everywhere weight/volume usage % is
+// computed so a missing weight/volume (or a zero/unset capacity) can't crash.
+export function finitePercent(
+  used: number | undefined | null,
+  max: number | undefined | null,
+  unlimited?: boolean,
+): number | undefined {
+  if (unlimited) return undefined;
+  const usedNum = finiteOrUndefined(used);
+  const maxNum = finiteOrUndefined(max);
+  if (usedNum === undefined || maxNum === undefined || maxNum <= 0) {
+    return undefined;
+  }
+  return roundEstimate((usedNum / maxNum) * 100);
 }
 
 export function sumEstimateValues(values: Array<EstimateValue | undefined>) {

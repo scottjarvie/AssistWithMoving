@@ -6,11 +6,31 @@ import {
   canRunQueueForOwner,
   canViewQueueEntry,
   queueEntryOwnerUserId,
+  queueOwnerDisplayName,
 } from "../../convex/lib/queueAccess";
 
 const scott = "user_scott" as Id<"users">;
 const erin = "user_erin" as Id<"users">;
 const mover = "user_mover" as Id<"users">;
+
+describe("queueOwnerDisplayName", () => {
+  it("prefers a real name", () => {
+    expect(
+      queueOwnerDisplayName({ name: "Scott Jarvie", email: "scott@x.com" }),
+    ).toBe("Scott Jarvie");
+  });
+  it("falls back to a capitalized email local part (not 'Someone')", () => {
+    expect(queueOwnerDisplayName({ name: "", email: "scott@thejarvie.com" })).toBe(
+      "Scott",
+    );
+    expect(queueOwnerDisplayName({ name: null, email: "erin@x.com" })).toBe(
+      "Erin",
+    );
+  });
+  it("uses 'Someone' only when there's nothing to show", () => {
+    expect(queueOwnerDisplayName({})).toBe("Someone");
+  });
+});
 
 describe("per-user queue ownership + delegation (requirement 5)", () => {
   it("coalesces ownerUserId to the creator for legacy rows", () => {

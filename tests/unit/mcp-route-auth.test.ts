@@ -26,12 +26,12 @@ describe("remote MCP OAuth discovery route behavior", () => {
       error: {
         code: "unauthorized",
         message:
-          "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp/connect.",
+          "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp.",
       },
     });
     const challenge = response.headers.get("WWW-Authenticate");
     expect(challenge).toBe(
-      'Bearer realm="MovingManifest MCP API key", error="invalid_token", error_description="This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp/connect."'
+      'Bearer realm="MovingManifest MCP API key", error="invalid_token", error_description="This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp."'
     );
     // /api/mcp must not advertise OAuth — that is what dead-ends OAuth clients.
     expect(challenge).not.toContain("resource_metadata");
@@ -49,7 +49,8 @@ describe("remote MCP OAuth discovery route behavior", () => {
 
     expect(response.status).toBe(401);
     const challenge = response.headers.get("WWW-Authenticate");
-    expect(challenge).toContain("https://movingmanifest.test/mcp/connect");
+    expect(challenge).toContain("https://movingmanifest.test/mcp");
+    expect(challenge).not.toContain("https://movingmanifest.test/api/mcp");
     expect(challenge).not.toContain("resource_metadata");
   });
 
@@ -69,7 +70,7 @@ describe("remote MCP OAuth discovery route behavior", () => {
       authorization_servers: [],
       bearer_methods_supported: ["header"],
       resource_name: "MovingManifest",
-      resource_documentation: "https://movingmanifest.test/mcp",
+      resource_documentation: "https://movingmanifest.test/mcp/guide",
     });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });

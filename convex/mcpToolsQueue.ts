@@ -34,6 +34,7 @@ import {
   canRunQueueForOwner,
   canViewQueueEntry,
   queueEntryOwnerUserId,
+  queueOwnerDisplayName,
 } from "./lib/queueAccess";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -92,6 +93,9 @@ function effectiveStatus(
 function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
   return {
     entryId: entry._id,
+    // Whose personal queue this belongs to — pass it as claim_queue.ownerUserId
+    // to run a queue a move owner delegated to you (share a subscription).
+    ownerUserId: queueEntryOwnerUserId(entry),
     status: effectiveStatus(entry, now),
     instructions: entry.instructions ?? null,
     roomHint: entry.roomHint ?? null,
@@ -158,8 +162,34 @@ export const listQueue = query({
       }),
     );
 
+    // The owners whose queues this agent may actually CLAIM/RUN — its own plus
+    // any a move owner delegated to it. Surfaced so the agent can discover a
+    // shared queue (e.g. the move owner's) and target it with
+    // claim_queue.ownerUserId, instead of only ever running its own.
+    const runnableOwnerIds = Array.from(
+      new Set<Id<"users">>([actor.userId, ...actor.delegatedOwnerIds]),
+    );
+    const runnableOwners = await Promise.all(
+      runnableOwnerIds.map(async (id) => {
+        const owner = await ctx.db.get(id);
+        const queuedCount = raw.filter(
+          (entry) =>
+            queueEntryOwnerUserId(entry) === id &&
+            effectiveStatus(entry, now) === "queued",
+        ).length;
+        return {
+          ownerUserId: id,
+          name: queueOwnerDisplayName(owner ?? {}),
+          isSelf: id === actor.userId,
+          queuedCount,
+        };
+      }),
+    );
+
     return {
       entries: visible.slice(0, limit).map((entry) => shapeQueueEntry(entry, now)),
+      // Pass one of these ownerUserIds to claim_queue to run that person's queue.
+      runnableOwners,
     };
   },
 });

@@ -44,9 +44,12 @@ export function MoveConfigurePage() {
     api.transportResources.listForMoveWithZones,
     householdId && moveId ? { householdId, moveId } : "skip",
   );
-  const members = useQuery(
-    api.households.listMembers,
-    householdId ? { householdId } : "skip",
+  // Count people with access to THIS move (matches the Participants tab). Uses
+  // the read-allowed roster query, not households.listMembers (manager-only —
+  // calling it as a non-manager editor/viewer threw and crashed the page).
+  const participants = useQuery(
+    api.moveParticipants.listForMove,
+    householdId && moveId ? { householdId, moveId } : "skip",
   );
 
   const counts = useMemo(() => {
@@ -61,9 +64,9 @@ export function MoveConfigurePage() {
       start: spaces ? originCount : undefined,
       end: spaces ? endCount : undefined,
       transport: resources ? resources.length : undefined,
-      household: members ? members.length : undefined,
+      household: participants ? participants.people.length : undefined,
     };
-  }, [spaces, resources, members]);
+  }, [spaces, resources, participants]);
 
   const tabs = [
     {

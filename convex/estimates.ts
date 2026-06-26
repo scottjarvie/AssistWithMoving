@@ -4,7 +4,9 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { resolveBoxWeight } from "./lib/boxWeight";
 import {
+  boxVolumeCuFt,
   estimateItem,
+  finitePercent,
   roundEstimate,
   sumEstimateValues,
   type EstimateValue,
@@ -196,12 +198,15 @@ export const reportForMove = query({
           contentsEstimatedWeightLb: contentsWeight,
         });
         const estimatedWeightLb = weightSummary.valueLb ?? 0;
-        const estimatedVolumeCuFt = box.estimatedVolumeCuFt ?? contentsVolume;
+        // Honor the box's own dimensions (boxVolumeCuFt derives L x W x H / 1728
+        // when no stored volume) before falling back to its contents, and never
+        // crash on a null — a dims-only box now counts toward the rollup.
+        const estimatedVolumeCuFt = boxVolumeCuFt(box) ?? contentsVolume;
         const warnings: string[] = [];
         if (weightSummary.source === "missing") {
           warnings.push("missingBoxWeightEstimate");
         }
-        if (!box.estimatedVolumeCuFt && contentsVolume === 0) {
+        if (boxVolumeCuFt(box) === undefined && contentsVolume === 0) {
           warnings.push("missingBoxVolumeEstimate");
         }
         if (estimatedWeightLb > 65) {
@@ -265,19 +270,16 @@ export const reportForMove = query({
         assignedUnitCount: assignedBoxes.length + assignedLooseItems.length,
         maxWeightLb: resource.capacity.maxWeightLb,
         maxVolumeCuFt: resource.capacity.maxVolumeCuFt,
-        weightPercent:
-          resource.capacity.maxWeightLb && !resource.capacity.weightIsUnlimited
-            ? roundEstimate(
-                (estimatedWeightLb / resource.capacity.maxWeightLb) * 100,
-              )
-            : undefined,
-        volumePercent:
-          resource.capacity.maxVolumeCuFt &&
-          !resource.capacity.volumeIsUnlimited
-            ? roundEstimate(
-                (estimatedVolumeCuFt / resource.capacity.maxVolumeCuFt) * 100,
-              )
-            : undefined,
+        weightPercent: finitePercent(
+          estimatedWeightLb,
+          resource.capacity.maxWeightLb,
+          resource.capacity.weightIsUnlimited,
+        ),
+        volumePercent: finitePercent(
+          estimatedVolumeCuFt,
+          resource.capacity.maxVolumeCuFt,
+          resource.capacity.volumeIsUnlimited,
+        ),
       };
     });
 

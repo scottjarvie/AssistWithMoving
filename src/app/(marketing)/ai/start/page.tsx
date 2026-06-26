@@ -25,9 +25,9 @@ const keyOptions = [
   "Read-only fallback",
 ];
 
-// OAuth (sign-in) connector URL. NOT /api/mcp — that is the API-key door and
-// rejects OAuth sign-ins. See src/lib/mcp-oauth.ts.
-const remoteMcpEndpoint = "https://movingmanifest.com/mcp/connect";
+// OAuth (sign-in) connector URL — the bare /mcp front door. NOT /api/mcp, which
+// is the API-key door and rejects OAuth sign-ins. See src/lib/mcp-oauth.ts.
+const remoteMcpEndpoint = "https://movingmanifest.com/mcp";
 
 export default function AiStartPage() {
   return (

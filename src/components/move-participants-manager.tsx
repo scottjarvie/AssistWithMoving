@@ -143,6 +143,9 @@ export function MoveParticipantsManager({
   const loading = householdId && moveId && data === undefined;
   const people = data?.people ?? [];
   const contacts = data?.contacts ?? [];
+  // The viewer's own user id — used to grant "let them run MY queue" on an
+  // existing participant (the self row carries it; isSelf is set server-side).
+  const currentUserId = people.find((person) => person.isSelf)?.userId ?? null;
 
   return (
     <Card id="move-participants">
@@ -274,6 +277,7 @@ export function MoveParticipantsManager({
                 moveId={moveId!}
                 person={person}
                 canManage={canManage}
+                currentUserId={currentUserId}
                 onMessage={setMessage}
               />
             ))}
@@ -308,12 +312,14 @@ function ParticipantRow({
   moveId,
   person,
   canManage,
+  currentUserId,
   onMessage,
 }: {
   householdId: Id<"households">;
   moveId: Id<"moves">;
   person: PersonRow;
   canManage: boolean;
+  currentUserId: Id<"users"> | null;
   onMessage: (message: string) => void;
 }) {
   const updateParticipant = useMutation(api.moveParticipants.update);
@@ -327,6 +333,12 @@ function ParticipantRow({
   const isMember = person.accessKind === "householdBacked";
   const isOwner = person.role === "owner";
   const displayName = person.name ?? person.email ?? "Pending invite";
+  // Whether this person may run the VIEWER's own capture queue (share the
+  // viewer's AI subscription). Stored on the person's row as the set of queue
+  // owners they may run; we toggle the viewer's own id in/out of it.
+  const runsMyQueue =
+    !!currentUserId &&
+    (person.canRunQueueForUserIds ?? []).includes(currentUserId);
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(true);
@@ -376,6 +388,29 @@ function ParticipantRow({
           moveId,
           participantId: person.participantId!,
           agentAccessStatus: agentOff ? "enabled" : "disabled",
+        }),
+    );
+  }
+
+  // Grant/revoke "let them run MY queue": add or remove the viewer's own user id
+  // from this person's canRunQueueForUserIds. Once granted, the person sees the
+  // viewer's queue in the Queue page's owner picker and can help run it.
+  function toggleQueueDelegation() {
+    if (!person.participantId || !currentUserId) return;
+    const existing = person.canRunQueueForUserIds ?? [];
+    const next = runsMyQueue
+      ? existing.filter((id) => id !== currentUserId)
+      : Array.from(new Set([...existing, currentUserId]));
+    void run(
+      runsMyQueue
+        ? `${displayName} can no longer run your queue.`
+        : `${displayName} can now run your capture queue with their own AI agent.`,
+      () =>
+        updateParticipant({
+          householdId,
+          moveId,
+          participantId: person.participantId!,
+          canRunQueueForUserIds: next,
         }),
     );
   }
@@ -491,6 +526,19 @@ function ParticipantRow({
             >
               <Bot aria-hidden="true" />
               {agentOff ? "Allow agent" : "Block agent"}
+            </Button>
+          ) : null}
+          {person.participantId && currentUserId ? (
+            <Button
+              type="button"
+              size="sm"
+              variant={runsMyQueue ? "secondary" : "outline"}
+              disabled={busy}
+              onClick={toggleQueueDelegation}
+              title="Let this person run your capture queue with their own AI agent"
+            >
+              <Bot aria-hidden="true" />
+              {runsMyQueue ? "Stop sharing my queue" : "Let them run my queue"}
             </Button>
           ) : null}
           <Button

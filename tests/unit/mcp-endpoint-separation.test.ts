@@ -29,7 +29,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const OAUTH_DOOR = "https://movingmanifest.com/mcp/connect";
+// The canonical OAuth front door is the bare /mcp (/mcp/connect is a working
+// alias). The API-key door is /api/mcp and must never advertise OAuth.
+const OAUTH_DOOR = "https://movingmanifest.com/mcp";
 const API_KEY_DOOR = "https://movingmanifest.com/api/mcp";
 
 describe("MCP two-door separation (API key vs OAuth)", () => {
@@ -44,12 +46,13 @@ describe("MCP two-door separation (API key vs OAuth)", () => {
       expect(JSON.stringify(meta).toLowerCase()).not.toContain("clerk");
     });
 
-    it("emits a key-only 401 challenge that routes OAuth clients to /mcp/connect", () => {
+    it("emits a key-only 401 challenge that routes OAuth clients to the /mcp front door", () => {
       process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
       const challenge = mcpBearerChallenge(
         new Request("https://movingmanifest.test/api/mcp"),
       );
-      expect(challenge).toContain("https://movingmanifest.test/mcp/connect");
+      expect(challenge).toContain("https://movingmanifest.test/mcp");
+      expect(challenge).not.toContain("https://movingmanifest.test/api/mcp");
       expect(challenge).not.toContain("resource_metadata");
       expect(challenge.toLowerCase()).not.toContain("clerk");
       // Defense-in-depth: re-adding an OAuth `scope=` (even without
@@ -98,11 +101,11 @@ describe("MCP two-door separation (API key vs OAuth)", () => {
       expect(body.scopes_supported).toEqual(["openid", "profile", "email"]);
     });
 
-    it("mcpOAuthConnectUrl resolves to the /mcp/connect door", () => {
+    it("mcpOAuthConnectUrl resolves to the /mcp front door", () => {
       process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
       expect(
         mcpOAuthConnectUrl(new Request("https://movingmanifest.test/api/mcp")),
-      ).toBe("https://movingmanifest.test/mcp/connect");
+      ).toBe("https://movingmanifest.test/mcp");
     });
   });
 
@@ -123,15 +126,16 @@ describe("MCP two-door separation (API key vs OAuth)", () => {
       expect(src).toContain(`remoteMcpEndpoint = "${OAUTH_DOOR}"`);
     });
 
-    it("the /mcp marketing page sends OAuth clients to /mcp/connect", () => {
-      const src = readFileSync("src/app/(marketing)/mcp/page.tsx", "utf8");
-      // OAuth endpoint + its discovery doc must be the connect door...
-      expect(src).toContain(`remoteEndpointUrl = "${OAUTH_DOOR}"`);
-      expect(src).toContain(
-        "/.well-known/oauth-protected-resource/mcp/connect",
+    it("the /mcp/guide page sends OAuth clients to the /mcp front door", () => {
+      const src = readFileSync(
+        "src/app/(marketing)/mcp/guide/page.tsx",
+        "utf8",
       );
-      // ...and /api/mcp may appear ONLY as the labelled API-key fallback.
-      expect(src).toContain("API-key fallback");
+      // OAuth endpoint + its discovery doc must be the /mcp front door...
+      expect(src).toContain(`remoteEndpointUrl = "${OAUTH_DOOR}"`);
+      expect(src).toContain("/.well-known/oauth-protected-resource/mcp");
+      // ...and /api/mcp may appear ONLY as the labelled, advanced key-only door.
+      expect(src).toContain("API-key door");
     });
   });
 });

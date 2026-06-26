@@ -1,4 +1,8 @@
-import { roundEstimate, volumeFromDimensions } from "./estimateEngine";
+import {
+  finiteOrUndefined,
+  finitePercent,
+  volumeFromDimensions,
+} from "./estimateEngine";
 
 export type Capacity = {
   maxWeightLb?: number;
@@ -64,17 +68,21 @@ export function validateAssignment({
     return { hardBlocks, softWarnings: ["unassigned"] };
   }
 
-  const weightPercent =
-    capacity.maxWeightLb && !capacity.weightIsUnlimited
-      ? roundEstimate((box.estimatedWeightLb / capacity.maxWeightLb) * 100)
-      : undefined;
+  // Coalesce a missing/NaN weight to 0 so the recompute is robust: a box/item
+  // with no weight must not turn the capacity math into NaN (which 500s on
+  // store/return). finitePercent then guards the division itself.
+  const weightLb = finiteOrUndefined(box.estimatedWeightLb) ?? 0;
   const resolvedVolumeCuFt = resolveVolumeCuFt(box);
-  const volumePercent =
-    capacity.maxVolumeCuFt &&
-    !capacity.volumeIsUnlimited &&
-    typeof resolvedVolumeCuFt === "number"
-      ? roundEstimate((resolvedVolumeCuFt / capacity.maxVolumeCuFt) * 100)
-      : undefined;
+  const weightPercent = finitePercent(
+    weightLb,
+    capacity.maxWeightLb,
+    capacity.weightIsUnlimited,
+  );
+  const volumePercent = finitePercent(
+    resolvedVolumeCuFt,
+    capacity.maxVolumeCuFt,
+    capacity.volumeIsUnlimited,
+  );
 
   if (typeof weightPercent === "number" && weightPercent > 100) {
     softWarnings.push("resourceOverWeightCapacity");
@@ -100,7 +108,7 @@ export function validateAssignment({
   if (boxExceedsDimensions(box.dimensionsIn, capacity.dimensions)) {
     softWarnings.push("boxExceedsResourceDimensions");
   }
-  if (box.estimatedWeightLb > 65) {
+  if (weightLb > 65) {
     softWarnings.push("heavyBox");
   }
   if (box.hasFragile) {
