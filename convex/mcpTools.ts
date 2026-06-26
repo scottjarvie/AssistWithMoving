@@ -43,13 +43,41 @@ export const getAgentContext = query({
       )
     ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
+    // Move-only participations (outsiders walled to a single move have no
+    // household membership, so they'd otherwise be unable to discover their
+    // move). Surface those moves directly so their agent can act on them.
+    const moveOnlyParticipations = (
+      await Promise.all(
+        (
+          await ctx.db
+            .query("moveParticipants")
+            .withIndex("by_user_status", (q) =>
+              q.eq("userId", user._id).eq("status", "active"),
+            )
+            .collect()
+        )
+          .filter((p) => p.accessKind === "moveOnly")
+          .map(async (p) => {
+            const move = await ctx.db.get(p.moveId);
+            if (!move || move.archivedAt !== undefined) return null;
+            return {
+              householdId: p.householdId,
+              moveId: p.moveId,
+              moveTitle: move.title,
+              role: p.role,
+            };
+          }),
+      )
+    ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
     return {
       clerkUserId: user.clerkUserId,
       households,
+      moveOnlyMoves: moveOnlyParticipations,
       hint:
-        households.length === 0
-          ? "No households yet — create one in the app first."
-          : "Use a householdId from this list when calling other tools.",
+        households.length === 0 && moveOnlyParticipations.length === 0
+          ? "No households or moves yet — ask the move owner to add you, or create a household in the app."
+          : "Use a householdId (and moveId) from these lists when calling other tools.",
     };
   },
 });

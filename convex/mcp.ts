@@ -28,6 +28,7 @@ import {
   placeBoxArgs,
   updateBoxArgs,
   updateItemArgs,
+  addMoveParticipantArgs,
   updateMoveArgs,
   upsertTransportArgs,
 } from "./mcpToolsSetup";
@@ -200,6 +201,14 @@ export const tools: McpToolRegistration[] = [
       "Configure the move: set start/end dates (dateStart/dateEnd), origin/destination, structured start/end locations, distanceMiles, travelMinutes, status (planning|...), or title. Only the fields you pass change.",
     fn: api.mcpToolsSetup.updateMove,
     args: updateMoveArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "add_move_participant",
+    description:
+      "Add a person to this move and choose their access. Pass email + optional name (the name is remembered even before they have an account). participantType picks a preset: householdMember (family — full household-backed access), helper (a friend, this move only), mover or company (a moving company, this move only — item values & serials stay hidden). Optionally override role (admin|editor|packer|viewer|guest) and accessKind (householdBacked|moveOnly). You can only grant a role up to your own. canRunMyQueue:true also lets them run YOUR capture queue with their own agent (share an AI subscription). If the email has no account yet the invite is saved and auto-activates when they sign up.",
+    fn: api.mcpToolsSetup.addMoveParticipant,
+    args: addMoveParticipantArgs,
     identityArg: "caller",
   }),
   defineMcpQuery({

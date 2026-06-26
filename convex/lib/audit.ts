@@ -10,7 +10,11 @@ export type AuditMetadata = Record<string, unknown>;
 export type AuditEventInput = {
   householdId?: Id<"households">;
   moveId?: Id<"moves">;
-  actorType: "user" | "apiKey" | "system" | "webhook";
+  // "agent" = a connected AI/automation acting on behalf of a real human; the
+  // event still carries actorUserId (the human) so we can answer both "who did
+  // this" and "whose agent did this". Keep in lockstep with the auditActorType
+  // union in convex/schema.ts and the record validator in convex/audit.ts.
+  actorType: "user" | "apiKey" | "agent" | "system" | "webhook";
   actorUserId?: Id<"users">;
   actorApiKeyId?: string;
   category:

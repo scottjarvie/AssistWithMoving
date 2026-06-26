@@ -75,8 +75,34 @@ export const moveRole = v.union(
 export const auditActorType = v.union(
   v.literal("user"),
   v.literal("apiKey"),
+  // "agent" = a write made by a connected AI/automation acting on behalf of a
+  // real human. The event still carries actorUserId (the human) so provenance
+  // can answer both "who" and "whose agent". Kept in lockstep with the same
+  // union in convex/lib/audit.ts and the convex/audit.ts record validator.
+  v.literal("agent"),
   v.literal("system"),
   v.literal("webhook")
+);
+
+// A move participant's "type" — a label that drives a preset authority bundle
+// in the UI. "contact" = address-book only (no access); the rest can carry real
+// move access. Mirrors the long-standing movePersonRole vocabulary but is the
+// access-granting surface, not the cosmetic contact list.
+export const moveParticipantType = v.union(
+  v.literal("householdMember"),
+  v.literal("helper"),
+  v.literal("mover"),
+  v.literal("company"),
+  v.literal("contact")
+);
+
+// How far a participant's access reaches. "householdBacked" = also a household
+// member (sees every move in the household at their role) — for family.
+// "moveOnly" = walled to exactly this one move, no household visibility, sensitive
+// fields hidden by role — for outsiders (movers, helpers, companies).
+export const moveParticipantAccessKind = v.union(
+  v.literal("householdBacked"),
+  v.literal("moveOnly")
 );
 
 export const auditCategory = v.union(
@@ -847,6 +873,8 @@ export default defineSchema({
   householdInvitations: defineTable({
     householdId: v.id("households"),
     invitedEmail: v.string(),
+    // So the owner remembers whose email this is before they have an account.
+    invitedName: v.optional(v.string()),
     role: householdRole,
     status: householdInvitationStatus,
     createdByUserId: v.optional(v.id("users")),
@@ -875,6 +903,50 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_move_user", ["moveId", "userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_household_move", ["householdId", "moveId"]),
+
+  // The unified per-move participant + access record. This is the front door for
+  // "add a person to my move and choose their access". A row can be:
+  //  - pending (userId undefined, keyed by invitedEmail) until a VERIFIED email
+  //    claims it on sign-up;
+  //  - householdBacked (the claim also makes them a household member) for family;
+  //  - moveOnly (no household membership ever) for walled-off outsiders.
+  // resolveMoveAccess (convex/lib/moveAccess.ts) reads this alongside
+  // householdMemberships to compute a user's effective role for a move.
+  moveParticipants: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    // Undefined until a verified-email sign-up claims the invite.
+    userId: v.optional(v.id("users")),
+    // Normalized lowercase email — the pending-invite key + claim-on-signup key.
+    invitedEmail: v.optional(v.string()),
+    // So the owner remembers whose email this is before they have an account.
+    invitedName: v.optional(v.string()),
+    role: householdRole,
+    accessKind: moveParticipantAccessKind,
+    participantType: moveParticipantType,
+    status: membershipStatus, // active | invited | disabled
+    // Owner kill-switch for THIS participant's connected agents (moveOnly guests
+    // have no householdMemberships row, so the kill-switch lives here).
+    agentAccessStatus: v.optional(memberApiAccessStatus),
+    // Queue-run delegation: the userIds whose per-user queue THIS participant may
+    // run (share an AI subscription). Empty/undefined = may only run their own.
+    canRunQueueForUserIds: v.optional(v.array(v.id("users"))),
+    invitedByUserId: v.optional(v.id("users")),
+    createdByUserId: v.optional(v.id("users")),
+    createdByApiKeyId: v.optional(v.id("apiKeys")),
+    updatedByUserId: v.optional(v.id("users")),
+    updatedByApiKeyId: v.optional(v.id("apiKeys")),
+    claimedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    // Gate resolution: concrete userId only (pending rows have undefined userId
+    // and must NOT be looked up here — use by_move_email for those).
+    .index("by_move_user", ["moveId", "userId"])
+    .index("by_move_email", ["moveId", "invitedEmail"])
+    .index("by_email_status", ["invitedEmail", "status"])
     .index("by_user_status", ["userId", "status"])
     .index("by_household_move", ["householdId", "moveId"]),
 
@@ -946,6 +1018,11 @@ export default defineSchema({
     lastUsedAt: v.optional(v.number()),
     lastUsedAction: v.optional(v.string()),
     lastUsedIpHash: v.optional(v.string()),
+    // Snapshot of the creating participant's effective move role at mint time, so
+    // a move-only guest's key can be clamped to <= their role on the REST path
+    // (which otherwise authorizes by scope alone). Re-checked live per request
+    // against the participant row; this is only the fast-path/default.
+    participantMoveRole: v.optional(householdRole),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -954,6 +1031,7 @@ export default defineSchema({
     .index("by_household_status", ["householdId", "status"])
     .index("by_move_status", ["moveId", "status"])
     .index("by_created_by", ["createdByUserId"])
+    .index("by_household_creator", ["householdId", "createdByUserId", "status"])
     .index("by_expires", ["expiresAt"]),
 
   apiIdempotencyKeys: defineTable({
@@ -1049,6 +1127,8 @@ export default defineSchema({
     .index("by_move_time", ["moveId", "createdAt"])
     .index("by_object_time", ["objectTable", "objectId", "createdAt"])
     .index("by_actor_user_time", ["actorUserId", "createdAt"])
+    // Answer "what did THIS agent (api key) do" efficiently — previously a scan.
+    .index("by_actor_apikey_time", ["actorApiKeyId", "createdAt"])
     .index("by_category_time", ["category", "createdAt"]),
 
   moves: defineTable({
@@ -1586,11 +1666,18 @@ export default defineSchema({
     resultItemIds: v.optional(v.array(v.id("items"))),
     processedAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
+    // The user whose PERSONAL queue this entry belongs to. Authoritative for
+    // per-user queue isolation + run-delegation. Optional for back-compat;
+    // readers coalesce undefined -> createdByUserId (backfilled to match).
+    // (Executor identity at claim time reuses the existing claimedByApiKeyId /
+    // claimedByUserId / claimedByAgentLabel fields above.)
+    ownerUserId: v.optional(v.id("users")),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_move_status_order", ["moveId", "status", "sortOrder"])
+    .index("by_move_owner_status", ["moveId", "ownerUserId", "status", "sortOrder"])
     .index("by_move_created", ["moveId", "createdAt"])
     .index("by_household_status", ["householdId", "status"]),
 

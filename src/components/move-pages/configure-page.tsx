@@ -9,6 +9,7 @@ import { MoveAreasPanel } from "@/components/configure/move-areas-panel";
 import { MoveDetailsPanel } from "@/components/configure/move-details-panel";
 import { TransportMethodsPanel } from "@/components/configure/transport-methods-panel";
 import { HouseholdMemberManager } from "@/components/household-member-manager";
+import { MoveParticipantsManager } from "@/components/move-participants-manager";
 import { MovePeopleManager } from "@/components/move-people-manager";
 import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
@@ -181,6 +182,7 @@ export function MoveConfigurePage() {
 
         <TabsContent value="household">
           <div className="space-y-6">
+            <MoveParticipantsManager householdId={householdId} moveId={moveId} />
             <HouseholdMemberManager
               households={households}
               enabled={Boolean(householdId)}

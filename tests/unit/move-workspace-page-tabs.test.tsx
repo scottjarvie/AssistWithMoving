@@ -52,6 +52,7 @@ vi.mock("@/components/move-operations-nav", () => ({
 // undefined keeps the tab badges off and exercises the loading-tolerant path.
 vi.mock("convex/react", () => ({
   useQuery: () => undefined,
+  useMutation: () => async () => undefined,
 }));
 
 // Configure page child surfaces — stubbed so the tab/hash routing is what is

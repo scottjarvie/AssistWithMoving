@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalMutation,
   mutation,
   query,
   type MutationCtx,
@@ -23,6 +24,13 @@ import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
+import { canPerformHouseholdAction } from "./lib/roles";
+import {
+  canActOnQueueEntry,
+  canRunQueueForOwner,
+  canViewQueueEntry,
+  queueEntryOwnerUserId,
+} from "./lib/queueAccess";
 
 const maxListLimit = 200;
 const maxClaimBatch = 10;
@@ -38,6 +46,62 @@ async function requireUserActor(
     throw new Error(directConvexUserContextRequiredMessage);
   }
   return actor;
+}
+
+// Like requireUserActor, but also resolves the per-user queue context: whether
+// the actor manages the move (sees all queues) and which other users' queues
+// they've been delegated to run (canRunQueueForUserIds on their participant row).
+async function resolveQueueActor(
+  ctx: QueryCtx | MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  action: "inventory:read" | "inventory:edit",
+) {
+  const policy = await requireMovePermission(ctx, householdId, moveId, action);
+  if (policy.actor.type !== "user") {
+    throw new Error(directConvexUserContextRequiredMessage);
+  }
+  const userId = policy.actor.userId;
+  const participant = await ctx.db
+    .query("moveParticipants")
+    .withIndex("by_move_user", (q) =>
+      q.eq("moveId", moveId).eq("userId", userId),
+    )
+    .unique();
+  const delegatedOwnerIds =
+    participant?.status === "active"
+      ? (participant.canRunQueueForUserIds ?? [])
+      : [];
+  return {
+    userId,
+    isManager: canPerformHouseholdAction(policy.role, "household:manage_members"),
+    delegatedOwnerIds,
+  };
+}
+
+type QueueActor = Awaited<ReturnType<typeof resolveQueueActor>>;
+
+// Guard the "act on an existing entry" mutations (submit / requeue / discard /
+// edit): only the entry owner, the current claim holder, a delegated runner, or
+// a move manager may touch it — closes the hole where any inventory:edit user
+// could overwrite another person's in-flight queue work.
+function requireCanActOnEntry(
+  actor: QueueActor,
+  entry: Doc<"ingestionQueueEntries">,
+) {
+  if (
+    !canActOnQueueEntry({
+      actorUserId: actor.userId,
+      entryOwnerUserId: queueEntryOwnerUserId(entry),
+      claimedByUserId: entry.claimedByUserId,
+      isManager: actor.isManager,
+      delegatedOwnerIds: actor.delegatedOwnerIds,
+    })
+  ) {
+    throw new Error(
+      "You can only act on your own queue entries (or ones you've been delegated to run).",
+    );
+  }
 }
 
 async function requireEntry(
@@ -100,6 +164,32 @@ async function transitionEntry(
   }
 }
 
+// One-time backfill: stamp ownerUserId (from createdByUserId) onto queue rows
+// created before per-user queues existed. Paginated so a large queue won't blow
+// the mutation budget — call repeatedly with the returned cursor until isDone.
+// Readers already coalesce undefined -> createdByUserId, so this is hygiene that
+// makes the by_move_owner_status index complete, not a correctness gate.
+export const backfillQueueOwnerUserId = internalMutation({
+  args: { cursor: v.optional(v.string()), batch: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("ingestionQueueEntries")
+      .paginate({ cursor: args.cursor ?? null, numItems: args.batch ?? 200 });
+    let patched = 0;
+    for (const entry of page.page) {
+      if (entry.ownerUserId === undefined) {
+        await ctx.db.patch(entry._id, { ownerUserId: entry.createdByUserId });
+        patched += 1;
+      }
+    }
+    return {
+      patched,
+      isDone: page.isDone,
+      cursor: page.continueCursor,
+    };
+  },
+});
+
 export const createEntry = mutation({
   args: {
     householdId: v.id("households"),
@@ -153,6 +243,8 @@ export const createEntry = mutation({
       expectedMediaCount,
       mediaUploadState,
       sortOrder: now,
+      // This capture belongs to the creator's PERSONAL queue.
+      ownerUserId: actor.userId,
       createdByUserId: actor.userId,
       createdAt: now,
       updatedAt: now,
@@ -187,13 +279,14 @@ export const updateEntry = mutation({
     sortOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const actor = await requireUserActor(
+    const actor = await resolveQueueActor(
       ctx,
       args.householdId,
       args.moveId,
       "inventory:edit",
     );
     const entry = await requireEntry(ctx, args);
+    requireCanActOnEntry(actor, entry);
     const now = Date.now();
     if (!ingestionEntryIsEditable(effectiveStatus(entry, now))) {
       throw new Error(
@@ -368,13 +461,14 @@ export const setEntryStatus = mutation({
     status: ingestionQueueStatusValidator,
   },
   handler: async (ctx, args) => {
-    const actor = await requireUserActor(
+    const actor = await resolveQueueActor(
       ctx,
       args.householdId,
       args.moveId,
       "inventory:edit",
     );
     const entry = await requireEntry(ctx, args);
+    requireCanActOnEntry(actor, entry);
     const now = Date.now();
     await transitionEntry(ctx, entry, args.status, now);
 
@@ -412,9 +506,14 @@ export const listForMove = query({
     moveId: v.id("moves"),
     status: v.optional(ingestionQueueStatusValidator),
     limit: v.optional(v.number()),
+    // "mine" (default, private) | "all" (managers only) | a specific user's queue
+    // you've been delegated to run.
+    ownerScope: v.optional(
+      v.union(v.literal("mine"), v.literal("all"), v.id("users")),
+    ),
   },
   handler: async (ctx, args) => {
-    await requireMovePermission(
+    const actor = await resolveQueueActor(
       ctx,
       args.householdId,
       args.moveId,
@@ -423,26 +522,45 @@ export const listForMove = query({
 
     const limit = Math.min(args.limit ?? maxListLimit, maxListLimit);
     const now = Date.now();
+    // Managers (owner/admin) keep the whole-move view they had before per-user
+    // queues; regular members default to their own private queue. Either can be
+    // overridden with an explicit ownerScope.
+    const ownerScope =
+      args.ownerScope ?? (actor.isManager ? "all" : "mine");
 
-    if (args.status) {
-      const entries = await ctx.db
-        .query("ingestionQueueEntries")
-        .withIndex("by_move_status_order", (q) =>
-          q.eq("moveId", args.moveId).eq("status", args.status!),
-        )
-        .take(limit);
-      return entries.map((entry) => ({
-        ...entry,
-        status: effectiveStatus(entry, now),
-      }));
-    }
+    const raw = args.status
+      ? await ctx.db
+          .query("ingestionQueueEntries")
+          .withIndex("by_move_status_order", (q) =>
+            q.eq("moveId", args.moveId).eq("status", args.status!),
+          )
+          .take(maxListLimit)
+      : await ctx.db
+          .query("ingestionQueueEntries")
+          .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+          .order("desc")
+          .take(maxListLimit);
 
-    const entries = await ctx.db
-      .query("ingestionQueueEntries")
-      .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-      .order("desc")
-      .take(limit);
-    return entries.map((entry) => ({
+    const visible = raw.filter((entry) => {
+      const ownerUserId = queueEntryOwnerUserId(entry);
+      // Hard visibility gate: never show a queue the actor can't see.
+      if (
+        !canViewQueueEntry({
+          actorUserId: actor.userId,
+          ownerUserId,
+          isManager: actor.isManager,
+          delegatedOwnerIds: actor.delegatedOwnerIds,
+        })
+      ) {
+        return false;
+      }
+      // Soft scope filter on top of the gate.
+      if (ownerScope === "mine") return ownerUserId === actor.userId;
+      if (ownerScope === "all") return true; // already gated above
+      return ownerUserId === ownerScope; // a specific delegated owner
+    });
+
+    return visible.slice(0, limit).map((entry) => ({
       ...entry,
       status: effectiveStatus(entry, now),
     }));
@@ -457,20 +575,38 @@ export const claimNext = mutation({
     moveId: v.id("moves"),
     batchSize: v.optional(v.number()),
     agentLabel: v.optional(v.string()),
+    // Whose personal queue to claim from. Defaults to your own. Claiming another
+    // user's queue requires a run-delegation from a move owner (requirement 5).
+    ownerUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const actor = await requireUserActor(
+    const actor = await resolveQueueActor(
       ctx,
       args.householdId,
       args.moveId,
       "inventory:edit",
     );
+    const targetOwnerId = args.ownerUserId ?? actor.userId;
+    if (
+      !canRunQueueForOwner({
+        actorUserId: actor.userId,
+        ownerUserId: targetOwnerId,
+        delegatedOwnerIds: actor.delegatedOwnerIds,
+      })
+    ) {
+      throw new Error(
+        "You don't have permission to run that person's queue. Ask a move owner to grant it.",
+      );
+    }
 
     const batchSize = Math.min(Math.max(args.batchSize ?? 1, 1), maxClaimBatch);
     const now = Date.now();
+    const ownedByTarget = (entry: Doc<"ingestionQueueEntries">) =>
+      queueEntryOwnerUserId(entry) === targetOwnerId;
 
     // An entry whose media is still uploading isn't ready for an agent — skip it
-    // so a half-uploaded capture is never claimed mid-flight.
+    // so a half-uploaded capture is never claimed mid-flight. Only the target
+    // owner's entries are eligible.
     const queued = (
       await ctx.db
         .query("ingestionQueueEntries")
@@ -479,7 +615,7 @@ export const claimNext = mutation({
         )
         .take(maxListLimit)
     )
-      .filter((entry) => !isMediaUploadPending(entry))
+      .filter((entry) => ownedByTarget(entry) && !isMediaUploadPending(entry))
       .slice(0, batchSize);
 
     // Reclaim expired claims if the queued pool came up short.
@@ -493,7 +629,9 @@ export const claimNext = mutation({
         .take(maxListLimit);
       const expired = claimed.filter(
         (entry) =>
-          ingestionClaimIsExpired(entry, now) && !isMediaUploadPending(entry),
+          ownedByTarget(entry) &&
+          ingestionClaimIsExpired(entry, now) &&
+          !isMediaUploadPending(entry),
       );
       candidates = [...queued, ...expired].slice(0, batchSize);
     }
@@ -516,7 +654,8 @@ export const claimNext = mutation({
       await recordAuditEvent(ctx, {
         householdId: args.householdId,
         moveId: args.moveId,
-        actorType: "user",
+        // A delegated run (executor != owner) is an agent acting for the owner.
+        actorType: targetOwnerId === actor.userId ? "user" : "agent",
         actorUserId: actor.userId,
         category: "inventory",
         action: "ingestion.entries_claimed",
@@ -524,6 +663,8 @@ export const claimNext = mutation({
         metadata: {
           count: claimedIds.length,
           agentLabel: args.agentLabel ?? null,
+          queueOwnerUserId: targetOwnerId,
+          delegated: targetOwnerId !== actor.userId,
         },
       });
     }
@@ -548,13 +689,14 @@ export const submitResult = mutation({
     needsInputQuestion: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const actor = await requireUserActor(
+    const actor = await resolveQueueActor(
       ctx,
       args.householdId,
       args.moveId,
       "inventory:edit",
     );
     const entry = await requireEntry(ctx, args);
+    requireCanActOnEntry(actor, entry);
     const now = Date.now();
 
     const question = args.needsInputQuestion?.trim();

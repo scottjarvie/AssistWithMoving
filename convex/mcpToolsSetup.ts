@@ -32,6 +32,7 @@ import {
 } from "./items";
 import { recordAuditEvent } from "./lib/audit";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
+import { addMoveParticipant as addMoveParticipantCore } from "./lib/moveParticipantWrite";
 import {
   boxStatusValidator,
   capacityValidator,
@@ -259,7 +260,7 @@ export const updateMove = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: policy.actor.userId,
       category: "household",
       action: "mcp.move_updated",
@@ -581,7 +582,7 @@ export const upsertTransport = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: userId,
       category: "household",
       action: "mcp.transport_upserted",
@@ -698,7 +699,7 @@ export const placeBox = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: policy.actor.userId,
       category: "inventory",
       action: "mcp.box_placed",
@@ -1009,7 +1010,7 @@ export const updateBox = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: userId,
       category: "inventory",
       action: "mcp.box_updated",
@@ -1353,7 +1354,7 @@ export const updateItem = mutation({
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
-      actorType: "user",
+      actorType: "agent",
       actorUserId: userId,
       category: "inventory",
       action: "mcp.item_updated",
@@ -1384,6 +1385,71 @@ export const updateItem = mutation({
         assignmentWarnings: updated?.assignmentWarnings ?? [],
         assignmentHardBlocks: updated?.assignmentHardBlocks ?? [],
       },
+    };
+  },
+});
+
+// ---- add_move_participant --------------------------------------------------
+// Add a person to the move and choose their access (requirement 6's tool). The
+// actor (the user the agent acts as) must be able to manage this move's members,
+// and can only grant a role up to their own — no privilege escalation via the
+// agent. Pending email invites auto-activate when the invitee signs up.
+export const addMoveParticipantArgs = {
+  caller: mcpCallerValidator,
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  email: v.string(),
+  name: v.optional(v.string()),
+  participantType: v.union(
+    v.literal("householdMember"),
+    v.literal("helper"),
+    v.literal("mover"),
+    v.literal("company"),
+  ),
+  role: v.optional(
+    v.union(
+      v.literal("admin"),
+      v.literal("editor"),
+      v.literal("packer"),
+      v.literal("viewer"),
+      v.literal("guest"),
+    ),
+  ),
+  accessKind: v.optional(
+    v.union(v.literal("householdBacked"), v.literal("moveOnly")),
+  ),
+  canRunMyQueue: v.optional(v.boolean()),
+};
+export const addMoveParticipant = mutation({
+  args: addMoveParticipantArgs,
+  handler: async (ctx, args) => {
+    const policy = await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "household:manage_members",
+    );
+    const result = await addMoveParticipantCore(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorUserId: policy.actor.userId,
+      actorRole: policy.role,
+      actorKind: "agent",
+      email: args.email,
+      name: args.name,
+      participantType: args.participantType,
+      role: args.role,
+      accessKind: args.accessKind,
+      canRunMyQueue: args.canRunMyQueue,
+    });
+    return {
+      participantId: result.participantId,
+      status: result.status,
+      message:
+        result.status === "active"
+          ? "Participant added — they already have an account and now have access."
+          : "Invite saved — they'll get access automatically when they sign up with that email.",
     };
   },
 });

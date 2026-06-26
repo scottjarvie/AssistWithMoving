@@ -296,6 +296,13 @@ function redactItemForVisibility(
     serialNumber: visibility.serialNumber ? item.serialNumber : undefined,
     modelNumber: visibility.serialNumber ? item.modelNumber : undefined,
     privateNotes: visibility.privateNotes ? item.privateNotes : undefined,
+    // AI/research prose frequently restates market value, purchase price, and
+    // researched serials — gate it like values so a walled-off mover/helper
+    // can't read what the value/serial redaction above is hiding.
+    aiSummary: visibility.research ? item.aiSummary : undefined,
+    researchSummary: visibility.research ? item.researchSummary : undefined,
+    researchSources: visibility.research ? item.researchSources : undefined,
+    researchNotes: visibility.research ? item.researchNotes : undefined,
   };
 }
 

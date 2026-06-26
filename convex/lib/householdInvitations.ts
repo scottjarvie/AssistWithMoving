@@ -36,6 +36,8 @@ export type AddOrInviteHouseholdMemberResult =
       alreadyInvited: boolean;
     };
 
+export type { HouseholdAccessActor };
+
 function actorAuditFields(actor: HouseholdAccessActor) {
   return {
     actorType: actor.type,
@@ -44,7 +46,10 @@ function actorAuditFields(actor: HouseholdAccessActor) {
   };
 }
 
-async function findActiveUserByEmail(ctx: MutationCtx, normalizedEmail: string) {
+export async function findActiveUserByEmail(
+  ctx: MutationCtx,
+  normalizedEmail: string,
+) {
   const user = await ctx.db
     .query("users")
     .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
@@ -53,7 +58,7 @@ async function findActiveUserByEmail(ctx: MutationCtx, normalizedEmail: string) 
   return user?.status === "active" ? user : null;
 }
 
-async function activateHouseholdMemberForUser(
+export async function activateHouseholdMemberForUser(
   ctx: MutationCtx,
   {
     householdId,

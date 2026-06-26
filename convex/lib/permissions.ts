@@ -8,9 +8,9 @@ import {
 import type { HouseholdRole, PermissionAction } from "./roles";
 import {
   canPerformHouseholdAction,
-  strongerHouseholdRole,
   visibilityForHouseholdRole,
 } from "./roles";
+import { resolveMoveAccess, type MoveAccessKind } from "./moveAccess";
 
 export type UserActor = {
   type: "user";
@@ -87,36 +87,26 @@ export async function requireMovePermission(
   householdId: Id<"households">,
   moveId: MoveId,
   action: PermissionAction,
-): Promise<PermissionPolicy & { moveId: MoveId }> {
-  const basePolicy = await requireHouseholdPermission(
-    ctx,
-    householdId,
-    "household:read",
-  );
+): Promise<PermissionPolicy & { moveId: MoveId; accessKind: MoveAccessKind }> {
+  // Resolve a signed-in user (web/direct-Convex is always user-actor; API-key
+  // automation uses the REST surface). Unlike the old flow this does NOT require
+  // household membership first — a moveOnly participant is a signed-in user with
+  // no membership, and resolveMoveAccess grants them exactly this one move.
+  const actor = await resolveUserActor(ctx);
+  const access = await resolveMoveAccess(ctx, actor.userId, householdId, moveId);
 
-  const userActor = requireSignedInUserActor(basePolicy.actor);
-  const moveGrant = await ctx.db
-    .query("moveRoleGrants")
-    .withIndex("by_move_user", (q) =>
-      q.eq("moveId", moveId).eq("userId", userActor.userId),
-    )
-    .unique();
-
-  const effectiveRole =
-    moveGrant?.status === "active"
-      ? strongerHouseholdRole(basePolicy.role, moveGrant.role)
-      : basePolicy.role;
-
-  if (!canPerformHouseholdAction(effectiveRole, action)) {
+  if (!canPerformHouseholdAction(access.role, action)) {
     throw new AuthorizationError(
       `Requires ${action} permission for this move.`,
     );
   }
 
   return {
-    ...basePolicy,
+    actor,
+    householdId,
+    role: access.role,
+    visibility: visibilityForHouseholdRole(access.role),
     moveId,
-    role: effectiveRole,
-    visibility: visibilityForHouseholdRole(effectiveRole),
+    accessKind: access.accessKind,
   };
 }
