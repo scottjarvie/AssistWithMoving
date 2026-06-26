@@ -44,9 +44,9 @@ export function SettingsFeatureSections() {
     },
     {
       value: "household",
-      label: "Household",
+      label: "People",
       description:
-        "Invite or review the people who can work with this household and its moves.",
+        "Invite or review the people who can work across all your moves.",
     },
     {
       value: "ai",

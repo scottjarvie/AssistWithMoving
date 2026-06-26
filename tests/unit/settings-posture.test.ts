@@ -51,7 +51,7 @@ describe("settings posture summary", () => {
       expect.objectContaining({
         key: "households",
         value: "Checking",
-        detail: "Memberships load after authentication.",
+        detail: "Loads after authentication.",
         tone: "muted",
       })
     );
@@ -104,7 +104,7 @@ describe("settings posture summary", () => {
     expect(posture).toContainEqual(
       expect.objectContaining({
         key: "households",
-        value: "3",
+        value: "Active",
         detail: "1 editor, 2 owner",
       })
     );

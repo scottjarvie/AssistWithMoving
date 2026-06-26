@@ -98,7 +98,7 @@ describe("MoveParticipantsManager", () => {
     // pending mover (this move only).
     expect(screen.getByText("Erin Jarvie")).toBeInTheDocument();
     expect(screen.getByText("ACME Movers")).toBeInTheDocument();
-    expect(screen.getByText("Household · all moves")).toBeInTheDocument();
+    expect(screen.getByText("All your moves")).toBeInTheDocument();
     expect(screen.getByText("This move only")).toBeInTheDocument();
     expect(screen.getByText("Invited")).toBeInTheDocument();
   });

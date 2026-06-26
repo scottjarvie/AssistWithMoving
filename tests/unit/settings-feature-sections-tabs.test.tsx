@@ -90,7 +90,7 @@ describe("SettingsFeatureSections", () => {
       "data-state",
       "active",
     );
-    expect(screen.getByRole("tab", { name: "Household" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "People" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "AI access" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Privacy" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Billing" })).toBeInTheDocument();
@@ -105,10 +105,10 @@ describe("SettingsFeatureSections", () => {
     expect(screen.queryByText("Privacy controls surface")).not.toBeInTheDocument();
     expect(screen.queryByText("Billing readiness surface")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Household" }));
+    await user.click(screen.getByRole("tab", { name: "People" }));
     expect(
       screen.getByText(
-        "Invite or review the people who can work with this household and its moves.",
+        "Invite or review the people who can work across all your moves.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Household members surface")).toBeInTheDocument();

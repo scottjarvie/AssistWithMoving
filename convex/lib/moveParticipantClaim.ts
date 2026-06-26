@@ -30,6 +30,31 @@ export async function claimPendingMoveParticipantsForUser(
     actorType: "user" | "webhook";
   },
 ) {
+  // Self-heal (runs even without an email, keyed by userId): ensure any
+  // ALREADY-active householdBacked participation has its household membership.
+  // A half-applied historical claim could leave the participant row active but
+  // the membership missing, which makes the person see only that one move and
+  // get nagged to "set up a household". Re-running activateHouseholdMemberForUser
+  // is idempotent.
+  const activeRows = await ctx.db
+    .query("moveParticipants")
+    .withIndex("by_user_status", (q) =>
+      q.eq("userId", userId).eq("status", "active"),
+    )
+    .collect();
+  for (const row of activeRows) {
+    if (row.accessKind === "householdBacked" && row.role !== "owner") {
+      await activateHouseholdMemberForUser(ctx, {
+        householdId: row.householdId,
+        userId,
+        email: row.invitedEmail ?? "",
+        role: row.role as ManagedHouseholdMemberRole,
+        actor:
+          actorType === "user" ? { type: "user", userId } : { type: "webhook" },
+      });
+    }
+  }
+
   if (!email) return [];
   const normalized = normalizeCollaboratorEmail(email);
   if (!normalized) return [];

@@ -30,6 +30,7 @@ vi.mock("@/components/move-workspace-context", () => ({
       loadingIdentity: false,
       loadingHouseholds: false,
       loadingMoves: false,
+      loadingParticipantMoves: false,
       moveLinkMessage: null,
     }) satisfies MoveWorkspaceValue,
 }));
