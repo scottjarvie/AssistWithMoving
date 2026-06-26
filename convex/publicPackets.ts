@@ -6,7 +6,11 @@ import { internalQuery } from "./_generated/server";
 import { buildSubManifest } from "./subManifests";
 import { claimEvidenceScore, claimEvidenceWarnings, claimRelevanceReasons, isClaimRelevantItem } from "./lib/claimPacket";
 import { employerRelocationCategory } from "./lib/employerPacket";
-import { estimateItem, roundEstimate } from "./lib/estimateEngine";
+import {
+  boxVolumeCuFt,
+  estimateItem,
+  roundEstimate,
+} from "./lib/estimateEngine";
 import { moverFlagsForItem } from "./lib/moverPacket";
 import { classifyPcsItem } from "./lib/pcsPacket";
 import {
@@ -233,7 +237,7 @@ async function buildPublicDocumentationPacket(
         packetItemIds.has(itemId)
       ).length,
       estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb,
-      estimatedVolumeCuFt: box.estimatedVolumeCuFt,
+      estimatedVolumeCuFt: boxVolumeCuFt(box),
       warnings: [...(box.assignmentWarnings ?? []), ...(box.assignmentHardBlocks ?? [])],
     }));
   const disclosure = publicPacketDisclosure(args.profile.type);

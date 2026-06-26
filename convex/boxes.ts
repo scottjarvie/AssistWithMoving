@@ -18,7 +18,12 @@ import {
   type BatchAssignTarget,
 } from "./lib/batchAssign";
 import { resolveBoxWeight } from "./lib/boxWeight";
-import { estimateItem, sumEstimateValues } from "./lib/estimateEngine";
+import {
+  estimateItem,
+  resolveStoredVolumeCuFt,
+  sumEstimateValues,
+  volumeCuFtForUpdate,
+} from "./lib/estimateEngine";
 import {
   boxStatusValidator,
   dimensionsValidator,
@@ -490,7 +495,8 @@ export const create = mutation({
       dimensionsIn: args.dimensionsIn,
       estimatedWeightLb: args.estimatedWeightLb,
       actualWeightLb: args.actualWeightLb,
-      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      // Persist volume from dimensions when no explicit volume was given.
+      estimatedVolumeCuFt: resolveStoredVolumeCuFt(args),
       assignedResourceId: args.assignedResourceId,
       assignedZoneId: args.assignedZoneId,
       assignmentLocked: args.assignmentLocked ?? false,
@@ -591,8 +597,16 @@ export const update = mutation({
     }
     if (args.actualWeightLb !== undefined)
       patch.actualWeightLb = args.actualWeightLb;
-    if (args.estimatedVolumeCuFt !== undefined) {
-      patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
+    // Recompute volume from dimensions when dims change without an explicit
+    // volume, so editing a box's dims via API/MCP keeps its volume in sync.
+    const boxVolumeUpdate = volumeCuFtForUpdate({
+      volumeProvided: args.estimatedVolumeCuFt !== undefined,
+      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      dimensionsProvided: args.dimensionsIn !== undefined,
+      dimensionsIn: args.dimensionsIn,
+    });
+    if (boxVolumeUpdate.set) {
+      patch.estimatedVolumeCuFt = boxVolumeUpdate.value;
     }
     if (args.assignedResourceId !== undefined) {
       patch.assignedResourceId = args.assignedResourceId;

@@ -161,6 +161,42 @@ export function boxVolumeCuFt(box: {
   return volumeFromDimensions(box.dimensionsIn);
 }
 
+// The volume to STORE when writing an item/box. An explicit value always wins;
+// otherwise derive it from dimensions (L x W x H / 1728) so a dims-only write
+// (the common case from MCP/REST tools) persists a real estimatedVolumeCuFt
+// instead of leaving it null. Returns undefined when neither is usable, which
+// leaves the field unset — read-side rollups stay null-safe via boxVolumeCuFt.
+export function resolveStoredVolumeCuFt(input: {
+  estimatedVolumeCuFt?: number | null;
+  dimensionsIn?: DimensionsIn;
+}): number | undefined {
+  const explicit = positiveNumber(input.estimatedVolumeCuFt ?? undefined);
+  if (explicit) {
+    return explicit;
+  }
+  return volumeFromDimensions(input.dimensionsIn);
+}
+
+// The new estimatedVolumeCuFt for an UPDATE patch, given which fields the caller
+// supplied. An explicit volume wins; otherwise, if dimensions are being changed,
+// recompute volume from the new dimensions ("set dims -> volume computed right
+// then"). Returns `{ set: false }` to leave the stored volume untouched (neither
+// volume nor dimensions changed).
+export function volumeCuFtForUpdate(input: {
+  volumeProvided: boolean;
+  estimatedVolumeCuFt?: number | null;
+  dimensionsProvided: boolean;
+  dimensionsIn?: DimensionsIn;
+}): { set: true; value: number | undefined } | { set: false } {
+  if (input.volumeProvided) {
+    return { set: true, value: input.estimatedVolumeCuFt ?? undefined };
+  }
+  if (input.dimensionsProvided) {
+    return { set: true, value: volumeFromDimensions(input.dimensionsIn) };
+  }
+  return { set: false };
+}
+
 function baselineForItem(item: Pick<EstimableItem, "name" | "category">) {
   const category = item.category?.toLowerCase().trim();
   if (category) {

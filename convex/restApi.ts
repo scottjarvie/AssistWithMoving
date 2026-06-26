@@ -36,6 +36,7 @@ import {
   type ShareLinkAction,
 } from "./lib/documentation";
 import {
+  boxVolumeCuFt,
   estimateItem,
   roundEstimate,
   sumEstimateValues,
@@ -2189,12 +2190,12 @@ async function routeCapacityReport(
       contentsEstimatedWeightLb: contentsWeight,
     });
     const estimatedWeightLb = weightSummary.valueLb ?? 0;
-    const estimatedVolumeCuFt = box.estimatedVolumeCuFt ?? contentsVolume;
+    const estimatedVolumeCuFt = boxVolumeCuFt(box) ?? contentsVolume;
     const warnings: string[] = [];
     if (weightSummary.source === "missing") {
       warnings.push("missingBoxWeightEstimate");
     }
-    if (!box.estimatedVolumeCuFt && contentsVolume === 0) {
+    if (boxVolumeCuFt(box) === undefined && contentsVolume === 0) {
       warnings.push("missingBoxVolumeEstimate");
     }
     if (estimatedWeightLb > 65) {
@@ -7553,7 +7554,7 @@ async function loadableApiBoxFor(ctx: MutationCtx, box: Doc<"boxes">) {
 
   return {
     estimatedWeightLb: box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight,
-    estimatedVolumeCuFt: box.estimatedVolumeCuFt ?? contentsVolume,
+    estimatedVolumeCuFt: boxVolumeCuFt(box) ?? contentsVolume,
     dimensionsIn: box.dimensionsIn,
     itemCount: activeContents.reduce(
       (sum, entry) => sum + entry.membership.quantity,
@@ -7623,6 +7624,8 @@ async function createApiItem(
   body: Record<string, unknown>
 ) {
   const now = Date.now();
+  // Persist volume from dimensions when no explicit volume was sent.
+  addRestDerivedEstimatedVolume(body);
   const name = normalizeItemName(String(body.name ?? ""));
   const externalKey = externalItemKeyFromInput(body);
   const itemId = await ctx.db.insert("items", {
@@ -8290,6 +8293,8 @@ function itemPatch(
   existing?: Doc<"items">,
 ): Partial<Doc<"items">> {
   const input = bodyObject(body);
+  // Recompute volume from dimensions when dims change without an explicit volume.
+  addRestDerivedEstimatedVolume(input);
   const now = Date.now();
   const patch: Partial<Doc<"items">> = {
     updatedByUserId: auth.createdByUserId,
@@ -8484,6 +8489,8 @@ function parseDimensionsIn(
 
 function boxPatch(body: unknown): Partial<Doc<"boxes">> {
   const input = bodyObject(body);
+  // Recompute volume from dimensions when dims change without an explicit volume.
+  addRestDerivedEstimatedVolume(input);
   const patch: Partial<Doc<"boxes">> = { updatedAt: Date.now() };
   if (input.code !== undefined) patch.code = normalizeBoxCode(String(input.code));
   if (input.label !== undefined) patch.label = normalizeOptionalText(asString(input.label));

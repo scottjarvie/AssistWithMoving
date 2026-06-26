@@ -3,9 +3,62 @@ import { describe, expect, it } from "vitest";
 import {
   boxVolumeCuFt,
   estimateItem,
+  resolveStoredVolumeCuFt,
   sumEstimateValues,
+  volumeCuFtForUpdate,
   volumeFromDimensions,
 } from "../../convex/lib/estimateEngine";
+
+describe("resolveStoredVolumeCuFt (volume to persist on write)", () => {
+  it("prefers an explicit volume", () => {
+    expect(
+      resolveStoredVolumeCuFt({
+        estimatedVolumeCuFt: 12,
+        dimensionsIn: { lengthIn: 12, widthIn: 12, heightIn: 12 },
+      }),
+    ).toBe(12);
+  });
+  it("derives from dimensions when no explicit volume (1 cu ft = 12x12x12)", () => {
+    expect(
+      resolveStoredVolumeCuFt({
+        dimensionsIn: { lengthIn: 12, widthIn: 12, heightIn: 12 },
+      }),
+    ).toBe(1);
+  });
+  it("is undefined when neither is usable", () => {
+    expect(resolveStoredVolumeCuFt({})).toBeUndefined();
+    expect(
+      resolveStoredVolumeCuFt({ dimensionsIn: { lengthIn: 12 } }),
+    ).toBeUndefined();
+  });
+});
+
+describe("volumeCuFtForUpdate (volume for an update patch)", () => {
+  it("uses an explicit volume when provided", () => {
+    expect(
+      volumeCuFtForUpdate({
+        volumeProvided: true,
+        estimatedVolumeCuFt: 9,
+        dimensionsProvided: true,
+        dimensionsIn: { lengthIn: 24, widthIn: 24, heightIn: 24 },
+      }),
+    ).toEqual({ set: true, value: 9 });
+  });
+  it("recomputes from dimensions when only dims change", () => {
+    expect(
+      volumeCuFtForUpdate({
+        volumeProvided: false,
+        dimensionsProvided: true,
+        dimensionsIn: { lengthIn: 24, widthIn: 12, heightIn: 12 },
+      }),
+    ).toEqual({ set: true, value: 2 });
+  });
+  it("leaves volume untouched when neither volume nor dims change", () => {
+    expect(
+      volumeCuFtForUpdate({ volumeProvided: false, dimensionsProvided: false }),
+    ).toEqual({ set: false });
+  });
+});
 
 describe("estimate engine", () => {
   it("uses actual weight before manual or baseline values", () => {

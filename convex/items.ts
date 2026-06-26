@@ -12,7 +12,11 @@ import {
   runBatchAssign,
   type BatchAssignTarget,
 } from "./lib/batchAssign";
-import { estimateItem } from "./lib/estimateEngine";
+import {
+  estimateItem,
+  resolveStoredVolumeCuFt,
+  volumeCuFtForUpdate,
+} from "./lib/estimateEngine";
 import {
   dimensionsValidator,
   estimateConfidenceValidator,
@@ -957,7 +961,9 @@ export const create = mutation({
       estimatedWeightLowLb: args.estimatedWeightLowLb,
       estimatedWeightHighLb: args.estimatedWeightHighLb,
       actualWeightLb: args.actualWeightLb,
-      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      // Persist volume from dimensions when no explicit volume was given, so a
+      // dims-only create doesn't leave estimatedVolumeCuFt null for the rollups.
+      estimatedVolumeCuFt: resolveStoredVolumeCuFt(args),
       estimatedPackedVolumeCuFt: args.estimatedPackedVolumeCuFt,
       weightConfidence: args.weightConfidence ?? "none",
       volumeConfidence: args.volumeConfidence ?? "none",
@@ -1132,8 +1138,16 @@ export const update = mutation({
     if (args.actualWeightLb !== undefined) {
       patch.actualWeightLb = args.actualWeightLb;
     }
-    if (args.estimatedVolumeCuFt !== undefined) {
-      patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
+    // Recompute volume from dimensions when dims change and no explicit volume
+    // was given, so updating dims via API/MCP keeps estimatedVolumeCuFt in sync.
+    const itemVolumeUpdate = volumeCuFtForUpdate({
+      volumeProvided: args.estimatedVolumeCuFt !== undefined,
+      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      dimensionsProvided: args.dimensionsIn !== undefined,
+      dimensionsIn: args.dimensionsIn,
+    });
+    if (itemVolumeUpdate.set) {
+      patch.estimatedVolumeCuFt = itemVolumeUpdate.value;
     }
     if (args.estimatedPackedVolumeCuFt !== undefined) {
       patch.estimatedPackedVolumeCuFt = args.estimatedPackedVolumeCuFt;

@@ -26,6 +26,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { assertResourceAndZone, loadAssignmentValidation } from "./boxes";
+import { volumeCuFtForUpdate } from "./lib/estimateEngine";
 import {
   inferredMeasurementProvenanceForUser,
   loadItemAssignmentValidation,
@@ -839,11 +840,19 @@ export const updateBox = mutation({
     if (args.actualWeightLb !== undefined) {
       patch.actualWeightLb = args.actualWeightLb;
     }
-    if (args.estimatedVolumeCuFt !== undefined) {
-      patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
-    }
     if (args.dimensionsIn !== undefined) {
       patch.dimensionsIn = args.dimensionsIn;
+    }
+    // Recompute volume from dimensions when dims change without an explicit
+    // volume, so an MCP update_box with just dimensions persists a real volume.
+    const boxVolumeUpdate = volumeCuFtForUpdate({
+      volumeProvided: args.estimatedVolumeCuFt !== undefined,
+      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      dimensionsProvided: args.dimensionsIn !== undefined,
+      dimensionsIn: args.dimensionsIn,
+    });
+    if (boxVolumeUpdate.set) {
+      patch.estimatedVolumeCuFt = boxVolumeUpdate.value;
     }
 
     // Present location — room.
@@ -1148,14 +1157,22 @@ export const updateItem = mutation({
     if (args.actualWeightLb !== undefined) {
       patch.actualWeightLb = args.actualWeightLb;
     }
-    if (args.estimatedVolumeCuFt !== undefined) {
-      patch.estimatedVolumeCuFt = args.estimatedVolumeCuFt;
-    }
     if (args.estimatedPackedVolumeCuFt !== undefined) {
       patch.estimatedPackedVolumeCuFt = args.estimatedPackedVolumeCuFt;
     }
     if (args.dimensionsIn !== undefined) {
       patch.dimensionsIn = args.dimensionsIn;
+    }
+    // Recompute volume from dimensions when dims change without an explicit
+    // volume, so an MCP update_item with just dimensions persists a real volume.
+    const itemVolumeUpdate = volumeCuFtForUpdate({
+      volumeProvided: args.estimatedVolumeCuFt !== undefined,
+      estimatedVolumeCuFt: args.estimatedVolumeCuFt,
+      dimensionsProvided: args.dimensionsIn !== undefined,
+      dimensionsIn: args.dimensionsIn,
+    });
+    if (itemVolumeUpdate.set) {
+      patch.estimatedVolumeCuFt = itemVolumeUpdate.value;
     }
     if (args.weightConfidence !== undefined) {
       patch.weightConfidence = args.weightConfidence;

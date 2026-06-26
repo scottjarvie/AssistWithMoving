@@ -21,7 +21,11 @@ import {
   validateAssignment,
   type Capacity,
 } from "./assignmentValidation";
-import { estimateItem, sumEstimateValues } from "./estimateEngine";
+import {
+  boxVolumeCuFt,
+  estimateItem,
+  sumEstimateValues,
+} from "./estimateEngine";
 import { normalizeOptionalText } from "./moveFields";
 
 export type BatchAssignTarget = {
@@ -241,7 +245,7 @@ async function loadBoxLoadable(
   return {
     estimatedWeightLb:
       box.actualWeightLb ?? box.estimatedWeightLb ?? contentsWeight,
-    estimatedVolumeCuFt: box.estimatedVolumeCuFt ?? contentsVolume,
+    estimatedVolumeCuFt: boxVolumeCuFt(box) ?? contentsVolume,
     footprintSqFt: boxFootprintSqFt(box),
     dimensionsIn: box.dimensionsIn,
     itemCount: activeContents.reduce(
