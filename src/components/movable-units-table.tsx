@@ -16,7 +16,7 @@ import {
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import { ImageOff, PackageOpen, PackagePlus, Truck } from "lucide-react";
+import { ImageOff, PackageOpen, PackagePlus, Search, Truck } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -137,6 +137,7 @@ export function MovableUnitsTable({
   // A single active stat filter (click a stat chip to filter the list, click it
   // again to clear). Counts stay full-move accurate; only the rows are filtered.
   const [statFilter, setStatFilter] = useState<StatFilter>(null);
+  const [search, setSearch] = useState("");
 
   const resourceNamesById = useMemo(
     () =>
@@ -186,11 +187,16 @@ export function MovableUnitsTable({
     [boxes, looseItems, resourceNamesById, zoneNamesById],
   );
   const summary = useMemo(() => summarizeMovableUnits(units), [units]);
-  // Rows actually shown — the full set, or just those matching the active stat.
-  const visibleUnits = useMemo(
-    () => (statFilter ? units.filter(matchesStatFilter(statFilter)) : units),
-    [units, statFilter],
-  );
+  // Rows actually shown — the full set, narrowed by the active stat chip and the
+  // search box (each unit's prebuilt searchText covers name/code/nickname/room/
+  // category/assignment/tags).
+  const visibleUnits = useMemo(() => {
+    const byStat = statFilter
+      ? units.filter(matchesStatFilter(statFilter))
+      : units;
+    const q = search.trim().toLowerCase();
+    return q ? byStat.filter((unit) => unit.searchText.includes(q)) : byStat;
+  }, [units, statFilter, search]);
   function toggleStatFilter(next: StatFilter) {
     setStatFilter((current) => (current === next ? null : next));
   }
@@ -492,6 +498,7 @@ export function MovableUnitsTable({
           <AssignmentBadge
             state={row.original.assignmentState}
             label={row.original.assignmentLabel}
+            className="h-auto max-w-full whitespace-normal break-words text-left"
           />
         ),
       },
@@ -525,7 +532,17 @@ export function MovableUnitsTable({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search units by name, code, room…"
+          className="pl-8"
+          aria-label="Search movable units"
+        />
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Truck className="size-4 text-primary" aria-hidden="true" />
@@ -1069,6 +1086,7 @@ function MovableUnitCard({
             <AssignmentBadge
               state={unit.assignmentState}
               label={unit.assignmentLabel}
+              className="h-auto max-w-full whitespace-normal break-words text-left"
             />
           </div>
         </div>
