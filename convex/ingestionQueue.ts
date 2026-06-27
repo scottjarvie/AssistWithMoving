@@ -278,6 +278,84 @@ export const backfillQueueEntryPhotos = internalMutation({
   },
 });
 
+// Read-only x-ray of the queue, so we can tell the AI's already-done-but-never-
+// closed entries from genuinely new ones before cleaning up. Returns counts by
+// status plus every still-open entry (oldest first) with the signals that hint
+// at "was this actually worked on" (claimed agent, summary, result items).
+export const censusQueueState = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("ingestionQueueEntries").collect();
+    const byStatus: Record<string, number> = {};
+    const open: Array<Record<string, unknown>> = [];
+    for (const e of all) {
+      byStatus[e.status] = (byStatus[e.status] ?? 0) + 1;
+      if (
+        e.status === "processed" ||
+        e.status === "resolved" ||
+        e.status === "discarded"
+      ) {
+        continue;
+      }
+      open.push({
+        id: String(e._id),
+        status: e.status,
+        createdAt: e._creationTime,
+        claimedAt: e.claimedAt ?? null,
+        agent: e.claimedByAgentLabel ?? null,
+        summary: e.agentSummary ? e.agentSummary.slice(0, 90) : null,
+        label: (e.targetLabel ?? e.instructions ?? "").slice(0, 90),
+        photos: e.mediaPhotoIds.length,
+        results: e.resultItemIds?.length ?? 0,
+        intent: e.intent ?? null,
+      });
+    }
+    open.sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
+    return { total: all.length, byStatus, openCount: open.length, open };
+  },
+});
+
+// Admin/CLI cleanup: close out queue entries the AI processed into the database
+// but never marked done (so the queue stays clear). Pass the explicit ids chosen
+// from the census — never a blanket close, so genuinely-new unprocessed entries
+// are never touched. Skips ids that are already in a terminal state.
+export const closeQueueEntriesById = internalMutation({
+  args: {
+    entryIds: v.array(v.id("ingestionQueueEntries")),
+    status: v.union(
+      v.literal("processed"),
+      v.literal("resolved"),
+      v.literal("discarded"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    let closed = 0;
+    const skipped: string[] = [];
+    for (const entryId of args.entryIds) {
+      const entry = await ctx.db.get(entryId);
+      if (
+        !entry ||
+        entry.status === "processed" ||
+        entry.status === "resolved" ||
+        entry.status === "discarded"
+      ) {
+        skipped.push(String(entryId));
+        continue;
+      }
+      await ctx.db.patch(entryId, {
+        status: args.status,
+        resolvedAt: now,
+        processedAt:
+          args.status === "processed" ? (entry.processedAt ?? now) : entry.processedAt,
+        updatedAt: now,
+      });
+      closed += 1;
+    }
+    return { closed, skipped };
+  },
+});
+
 export const createEntry = mutation({
   args: {
     householdId: v.id("households"),

@@ -1,7 +1,12 @@
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import {
   requiresOverrideReason,
@@ -1550,6 +1555,33 @@ export const setDisposition = mutation({
         dispositionTo: args.disposition,
       },
     });
+  },
+});
+
+// Read-only dump of active items (id, code, name, room, disposition) so we can
+// eyeball which "items" are really physical containers (totes/bins/crates) that
+// should become boxes. Paginated.
+export const censusActiveItems = internalQuery({
+  args: { cursor: v.optional(v.string()), batch: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("items")
+      .paginate({ cursor: args.cursor ?? null, numItems: args.batch ?? 500 });
+    const items = page.page
+      .filter((item) => !item.deletedAt)
+      .map((item) => ({
+        id: String(item._id),
+        code: item.code,
+        name: item.name,
+        room: item.room ?? null,
+        disposition: item.disposition,
+      }));
+    return {
+      count: items.length,
+      items,
+      isDone: page.isDone,
+      cursor: page.continueCursor,
+    };
   },
 });
 
