@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalMutation,
   internalQuery,
   mutation,
   query,
@@ -1582,6 +1583,32 @@ export const censusActiveItems = internalQuery({
       isDone: page.isDone,
       cursor: page.continueCursor,
     };
+  },
+});
+
+// Admin/CLI cleanup: soft-delete (archive) a list of items by id — used to clear
+// out test-junk that leaked into a real move. Reversible (deletedAt + status
+// archived). Skips ids already deleted. Pass an explicit, reviewed list only.
+export const adminArchiveItems = internalMutation({
+  args: { itemIds: v.array(v.id("items")) },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    let archived = 0;
+    const skipped: string[] = [];
+    for (const itemId of args.itemIds) {
+      const item = await ctx.db.get(itemId);
+      if (!item || item.deletedAt) {
+        skipped.push(String(itemId));
+        continue;
+      }
+      await ctx.db.patch(itemId, {
+        status: "archived",
+        deletedAt: now,
+        updatedAt: now,
+      });
+      archived += 1;
+    }
+    return { archived, skipped };
   },
 });
 
