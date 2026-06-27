@@ -51,7 +51,7 @@ export function MobileCaptureAction() {
         type="button"
         aria-label="Add"
         onClick={() => setMenuOpen(true)}
-        className="flex h-14 w-[4.5rem] shrink-0 flex-col items-center justify-center gap-0.5 bg-primary text-[11px] font-semibold text-primary-foreground"
+        className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 bg-primary text-[10px] font-semibold text-primary-foreground"
       >
         <Plus className="size-7" strokeWidth={2.75} aria-hidden="true" />
         Add

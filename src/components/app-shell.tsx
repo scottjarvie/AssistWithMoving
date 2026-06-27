@@ -89,8 +89,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Mobile bottom bar: 3 nav tabs + a big "+" add button, pinned to the
-          very bottom (hidden on xl+). The "+" is a real cell, not a floating FAB. */}
+      {/* Mobile bottom bar: the 5 global nav tabs + a compact "+" add button,
+          pinned to the very bottom (hidden on xl+). The "+" is a real cell, not
+          a floating FAB. */}
       <div className="fixed inset-x-0 bottom-0 z-20 flex items-stretch border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur xl:hidden">
         <WorkspaceNav variant="mobile" />
         <MobileCaptureAction />
