@@ -120,6 +120,8 @@ const itemWriteArgs = {
   assignmentOverrideReason: v.optional(v.string()),
   clearAssignedResource: v.optional(v.boolean()),
   clearAssignedZone: v.optional(v.boolean()),
+  // Clear the present-location room when present location switches to transport.
+  clearCurrentSpace: v.optional(v.boolean()),
   planningDefaultKeys: v.optional(v.array(planningDefaultKeyValidator)),
   needsReview: v.optional(v.boolean()),
   reviewFlags: v.optional(v.array(v.string())),
@@ -1085,7 +1087,9 @@ export const update = mutation({
     if (args.destinationRoom !== undefined) {
       patch.destinationRoom = normalizeOptionalText(args.destinationRoom);
     }
-    if (args.currentSpaceId !== undefined) {
+    if (args.clearCurrentSpace) {
+      patch.currentSpaceId = undefined;
+    } else if (args.currentSpaceId !== undefined) {
       patch.currentSpaceId = args.currentSpaceId;
     }
     if (args.destinationSpaceId !== undefined) {

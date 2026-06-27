@@ -73,8 +73,11 @@ import { DispositionBadge, StatusBadge } from "@/components/ui/status-badges";
 // --- types & small label maps -------------------------------------------
 
 type SpaceDoc = Doc<"moveSpaces"> & { photoCount?: number };
-type ResourceDoc = Doc<"transportResources"> & {
-  zones?: Doc<"transportZones">[];
+type ResourceDoc = Doc<"transportResources">;
+// transportResources.listForMoveWithZones returns { resource, zones } entries.
+type ResourceEntry = {
+  resource: ResourceDoc;
+  zones: Doc<"transportZones">[];
 };
 
 type ResourceReport = {
@@ -99,6 +102,7 @@ type Container = {
   spaceId?: Id<"moveSpaces">;
   resourceId?: Id<"transportResources">;
   report?: ResourceReport;
+  capacity?: ResourceDoc["capacity"];
 };
 
 type PhotoMap = ReadonlyMap<string, Id<"itemPhotos">>;
@@ -196,7 +200,7 @@ function SpacesTransportWorkspace({
   const transportData = useQuery(api.transportResources.listForMoveWithZones, {
     householdId,
     moveId,
-  }) as ResourceDoc[] | undefined;
+  }) as ResourceEntry[] | undefined;
   const reportData = useQuery(api.estimates.reportForMove, {
     householdId,
     moveId,
@@ -285,7 +289,7 @@ function SpacesTransportWorkspace({
         spaceId: space._id,
       });
     }
-    for (const resource of transportData ?? []) {
+    for (const { resource } of transportData ?? []) {
       result.push({
         id: `transport:${resource._id}`,
         kind: "transport",
@@ -295,6 +299,7 @@ function SpacesTransportWorkspace({
         entries: entriesOnResource(entries, resource._id),
         resourceId: resource._id,
         report: reportByResource.get(String(resource._id)),
+        capacity: resource.capacity,
       });
     }
     result.push({
@@ -876,6 +881,14 @@ function ContainerDetail({
             percent={container.report.volumePercent}
             unit="cu ft"
           />
+          {container.resourceId ? (
+            <TransportCapacityEditor
+              householdId={householdId}
+              moveId={moveId}
+              resourceId={container.resourceId}
+              capacity={container.capacity}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1092,7 +1105,7 @@ function BulkActionBar({
 }: {
   count: number;
   spaces: SpaceDoc[];
-  resources: ResourceDoc[];
+  resources: ResourceEntry[];
   overrideWarnings: boolean;
   onOverrideWarningsChange: (value: boolean) => void;
   busy: boolean;
@@ -1146,7 +1159,7 @@ function BulkActionBar({
             {resources.length === 0 ? (
               <DropdownMenuItem disabled>No transport yet</DropdownMenuItem>
             ) : (
-              resources.map((resource) => (
+              resources.map(({ resource }) => (
                 <DropdownMenuItem
                   key={resource._id}
                   onSelect={() => onAssignTransport(resource._id)}
@@ -1213,6 +1226,123 @@ function StatPill({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       <p className="truncate text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+// Set a transport's max weight / volume (MOVE-350). The capacity gauge above
+// reads from estimates.reportForMove, so it re-drives as soon as this saves.
+function TransportCapacityEditor({
+  householdId,
+  moveId,
+  resourceId,
+  capacity,
+}: {
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  resourceId: Id<"transportResources">;
+  capacity?: ResourceDoc["capacity"];
+}) {
+  const updateResource = useMutation(api.transportResources.update);
+  const [open, setOpen] = useState(false);
+  const [maxWeight, setMaxWeight] = useState(
+    capacity?.maxWeightLb != null ? String(capacity.maxWeightLb) : "",
+  );
+  const [maxVolume, setMaxVolume] = useState(
+    capacity?.maxVolumeCuFt != null ? String(capacity.maxVolumeCuFt) : "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function save() {
+    const weight = maxWeight.trim() === "" ? undefined : Number(maxWeight);
+    const volume = maxVolume.trim() === "" ? undefined : Number(maxVolume);
+    if (
+      (weight !== undefined && !Number.isFinite(weight)) ||
+      (volume !== undefined && !Number.isFinite(volume))
+    ) {
+      setMessage("Enter a number for each limit (or leave it blank).");
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      // Spread the existing capacity so other fields (area, item count, flags)
+      // survive — the mutation replaces the whole capacity object.
+      await updateResource({
+        householdId,
+        moveId,
+        resourceId,
+        capacity: { ...(capacity ?? {}), maxWeightLb: weight, maxVolumeCuFt: volume },
+      });
+      setMessage("Capacity saved.");
+      setOpen(false);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not save capacity.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground"
+      >
+        Set max capacity
+        <ChevronDown
+          className={cn("size-4 transition-transform", open && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="mt-2 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs">
+              <span className="mb-1 block text-muted-foreground">
+                Max weight (lb)
+              </span>
+              <Input
+                inputMode="decimal"
+                value={maxWeight}
+                onChange={(event) => setMaxWeight(event.target.value)}
+                className="h-9"
+                aria-label="Max weight in pounds"
+              />
+            </label>
+            <label className="text-xs">
+              <span className="mb-1 block text-muted-foreground">
+                Max volume (cu ft)
+              </span>
+              <Input
+                inputMode="decimal"
+                value={maxVolume}
+                onChange={(event) => setMaxVolume(event.target.value)}
+                className="h-9"
+                aria-label="Max volume in cubic feet"
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void save()}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save capacity"}
+            </Button>
+            {message ? (
+              <span className="text-xs text-muted-foreground">{message}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

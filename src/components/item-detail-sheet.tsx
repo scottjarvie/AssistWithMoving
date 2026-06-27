@@ -231,6 +231,16 @@ export function ItemDetailSheet({
   const [destinationRoom, setDestinationRoom] = useState(
     item?.destinationRoom ?? ""
   );
+  // Present location is a SINGLE value — a space OR a transport (MOVE-349 ph.7).
+  const [presentSpaceId, setPresentSpaceId] = useState<string>(
+    item?.currentSpaceId ?? ""
+  );
+  const [presentResourceId, setPresentResourceId] = useState<string>(
+    item?.assignedResourceId ?? ""
+  );
+  const [presentZoneId, setPresentZoneId] = useState<string>(
+    item?.assignedZoneId ?? ""
+  );
   const [category, setCategory] = useState(item?.category ?? "");
   const [subcategory, setSubcategory] = useState(item?.subcategory ?? "");
   const [ownerPersonId, setOwnerPersonId] = useState<Id<"movePeople"> | "">(
@@ -334,11 +344,45 @@ export function ItemDetailSheet({
     api.movePeople.listForMove,
     householdId && moveId ? { householdId, moveId } : "skip"
   );
+  const presentSpaces = useQuery(
+    api.moveSpaces.listForMove,
+    householdId && moveId ? { householdId, moveId } : "skip"
+  );
+  const presentTransport = useQuery(
+    api.transportResources.listForMoveWithZones,
+    householdId && moveId ? { householdId, moveId } : "skip"
+  );
 
   if (!item) {
     return null;
   }
   const currentItem = item;
+
+  // One present-location value, encoded as "space:<id>" | "transport:<id>".
+  const presentValue = presentResourceId
+    ? `transport:${presentResourceId}`
+    : presentSpaceId
+      ? `space:${presentSpaceId}`
+      : "";
+  const presentZones =
+    presentTransport?.find(
+      (entry) => String(entry.resource._id) === presentResourceId
+    )?.zones ?? [];
+  function onPresentLocationChange(value: string) {
+    if (value.startsWith("space:")) {
+      setPresentSpaceId(value.slice("space:".length));
+      setPresentResourceId("");
+      setPresentZoneId("");
+    } else if (value.startsWith("transport:")) {
+      setPresentResourceId(value.slice("transport:".length));
+      setPresentSpaceId("");
+      setPresentZoneId("");
+    } else {
+      setPresentSpaceId("");
+      setPresentResourceId("");
+      setPresentZoneId("");
+    }
+  }
 
   const selectedOwner =
     people?.find((person) => person._id === ownerPersonId) ?? null;
@@ -407,6 +451,23 @@ export function ItemDetailSheet({
         description,
         room,
         destinationRoom,
+        // Present location is mutually exclusive: a transport clears the room,
+        // a room clears the transport (MOVE-349). Origination/destination stand.
+        ...(presentResourceId
+          ? {
+              assignedResourceId: presentResourceId as Id<"transportResources">,
+              ...(presentZoneId
+                ? { assignedZoneId: presentZoneId as Id<"transportZones"> }
+                : { clearAssignedZone: true }),
+              clearCurrentSpace: true,
+            }
+          : {
+              clearAssignedResource: true,
+              clearAssignedZone: true,
+              ...(presentSpaceId
+                ? { currentSpaceId: presentSpaceId as Id<"moveSpaces"> }
+                : { clearCurrentSpace: true }),
+            }),
         category,
         subcategory,
         status,
@@ -679,6 +740,60 @@ export function ItemDetailSheet({
                       }
                     />
                   </Field>
+                  <div className="md:col-span-2">
+                    <Field label="Present location — a space or a transport">
+                      <select
+                        className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
+                        value={presentValue}
+                        onChange={(event) =>
+                          onPresentLocationChange(event.target.value)
+                        }
+                        aria-label="Present location"
+                      >
+                        <option value="">Not set</option>
+                        <optgroup label="Spaces">
+                          {(presentSpaces ?? []).map((space) => (
+                            <option key={space._id} value={`space:${space._id}`}>
+                              {space.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Transportation">
+                          {(presentTransport ?? []).length === 0 ? (
+                            <option value="" disabled>
+                              Add a truck or trailer first
+                            </option>
+                          ) : (
+                            (presentTransport ?? []).map((entry) => (
+                              <option
+                                key={entry.resource._id}
+                                value={`transport:${entry.resource._id}`}
+                              >
+                                {entry.resource.name}
+                              </option>
+                            ))
+                          )}
+                        </optgroup>
+                      </select>
+                      {presentResourceId && presentZones.length ? (
+                        <select
+                          className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
+                          value={presentZoneId}
+                          onChange={(event) =>
+                            setPresentZoneId(event.target.value)
+                          }
+                          aria-label="Transport zone"
+                        >
+                          <option value="">No specific zone</option>
+                          {presentZones.map((zone) => (
+                            <option key={zone._id} value={zone._id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </Field>
+                  </div>
                   <Field label="Category">
                     <Input
                       value={category}

@@ -16,13 +16,16 @@ const apiMock = vi.hoisted(() => ({
   transportResources: {
     listForMoveWithZones: "transportResources.listForMoveWithZones",
   },
-  // Referenced by the always-mounted ItemDetailSheet; both resolve to undefined
+  // Referenced by the always-mounted ItemDetailSheet; these resolve to undefined
   // through the useQuery mock and the sheet tolerates that.
   audit: {
     listForObject: "audit.listForObject",
   },
   movePeople: {
     listForMove: "movePeople.listForMove",
+  },
+  moveSpaces: {
+    listForMove: "moveSpaces.listForMove",
   },
 }));
 
