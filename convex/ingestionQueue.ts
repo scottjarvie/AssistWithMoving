@@ -9,6 +9,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { autoAttachEntryPhotos } from "./lib/queuePhotoAttach";
 import {
   canTransitionIngestionStatus,
   ingestionClaimDurationMs,
@@ -718,6 +719,13 @@ export const submitResult = mutation({
       }
     }
 
+    // Mirror the agent (MCP) path: a resolved capture's uploaded photos should
+    // follow the inventory it produced. See convex/lib/queuePhotoAttach.ts.
+    const attachedPhotoCount =
+      nextStatus === "processed"
+        ? await autoAttachEntryPhotos(ctx, entry, args.resultItemIds, now)
+        : 0;
+
     await ctx.db.patch(args.entryId, {
       status: nextStatus,
       agentSummary: args.agentSummary?.trim() || undefined,
@@ -739,7 +747,10 @@ export const submitResult = mutation({
           : "ingestion.entry_needs_input",
       objectTable: "ingestionQueueEntries",
       objectId: args.entryId,
-      metadata: { resultItemCount: args.resultItemIds?.length ?? 0 },
+      metadata: {
+        resultItemCount: args.resultItemIds?.length ?? 0,
+        attachedPhotoCount,
+      },
     });
   },
 });

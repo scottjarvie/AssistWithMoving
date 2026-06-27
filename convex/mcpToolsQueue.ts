@@ -19,6 +19,7 @@ import { mcpCallerValidator } from "convex-mcp-gateway";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
+import { autoAttachEntryPhotos } from "./lib/queuePhotoAttach";
 import {
   canTransitionIngestionStatus,
   ingestionClaimDurationMs,
@@ -383,6 +384,15 @@ export const submitQueueResult = mutation({
       }
     }
 
+    // The whole point of queuing photos is that they end up on the thing the
+    // capture produced — so on a processed entry, file its uploaded photos onto
+    // the created item (or the box/room/transport it targeted) automatically,
+    // rather than relying on the agent to remember a separate attach step.
+    const attachedPhotoCount =
+      nextStatus === "processed"
+        ? await autoAttachEntryPhotos(ctx, entry, args.resultItemIds, now)
+        : 0;
+
     await ctx.db.patch(args.entryId, {
       status: nextStatus,
       agentSummary: args.agentSummary?.trim() || undefined,
@@ -409,9 +419,12 @@ export const submitQueueResult = mutation({
           : "mcp.queue_needs_input",
       objectTable: "ingestionQueueEntries",
       objectId: args.entryId,
-      metadata: { resultItemCount: args.resultItemIds?.length ?? 0 },
+      metadata: {
+        resultItemCount: args.resultItemIds?.length ?? 0,
+        attachedPhotoCount,
+      },
     });
 
-    return { entryId: args.entryId, status: nextStatus };
+    return { entryId: args.entryId, status: nextStatus, attachedPhotoCount };
   },
 });

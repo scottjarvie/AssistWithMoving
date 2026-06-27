@@ -1773,6 +1773,8 @@ async function routeAgentContext(
         ],
         roomCompatibility:
           "Use currentSpaceId/destinationSpaceId when available; keep room/destinationRoom names for readable fallback.",
+        photoAttachmentRule:
+          "Photos are the proof behind every item — never leave them orphaned. When you create an item or box from a photo, attach that photo to it (attach_photo / create_item_with_images / save_box_intake). A photo only shows on an item once its itemId/boxId is set; a photo with no item/box is invisible on the inventory it documents.",
         saleWorkflow:
           "Items with disposition=sell should have a linked saleListing for pricing, marketplace draft, research, and status.",
         measurementRule:

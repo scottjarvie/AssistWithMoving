@@ -134,7 +134,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "upsert_items",
     description:
-      "Add OR update many inventory items in one call (pass itemId to update, omit to create). Supports dryRun to preview. The workhorse for capturing inventory. For an item's weight, dimensions, volume, present location, or transport/zone assignment, use update_item.",
+      "Add OR update many inventory items in one call (pass itemId to update, omit to create). Supports dryRun to preview. The workhorse for capturing inventory. For an item's weight, dimensions, volume, present location, or transport/zone assignment, use update_item. If you create an item from a photo (or a queue capture) its photos belong ON that item — attach them with attach_photos (attachTo.itemId); when you finish a queue entry via submit_queue_result that happens automatically.",
     fn: api.mcpToolsWrite.upsertItems,
     args: upsertItemsArgs,
     identityArg: "caller",
@@ -166,7 +166,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "claim_queue",
     description:
-      "Claim the oldest queued capture entries so two agent runs never process the same one. Defaults to YOUR own queue; to help run a queue a move owner delegated to you (share a subscription), pass ownerUserId from list_queue's runnableOwners. Returns the claimed entries; a claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry, then call submit_queue_result.",
+      "Claim the oldest queued capture entries so two agent runs never process the same one. Defaults to YOUR own queue; to help run a queue a move owner delegated to you (share a subscription), pass ownerUserId from list_queue's runnableOwners. Returns the claimed entries — each includes mediaPhotoIds, the already-uploaded photos for that capture. A claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry: turn it into inventory (upsert_items / pack_boxes), then call submit_queue_result — which files the entry's photos onto what you created. For a capture that becomes SEVERAL items, attach each photo to the right one with attach_photos first.",
     fn: api.mcpToolsQueue.claimQueue,
     args: claimQueueArgs,
     identityArg: "caller",
@@ -174,7 +174,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "submit_queue_result",
     description:
-      "Report what a claimed entry produced: link the inventory items you created (resultItemIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items, which creates the items.",
+      "Report what a claimed entry produced: link the inventory items you created (resultItemIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items, which creates the items. The capture's uploaded photos are AUTOMATICALLY attached to what you made — to the single item in resultItemIds, or (if you didn't create exactly one item) to the box/room/transport the entry targeted — so a capture's photos never get left behind. The result returns attachedPhotoCount. Exception: a capture that became MULTIPLE items can't be auto-split — attach each photo to the right item yourself with attach_photos (using the entry's mediaPhotoIds) before submitting.",
     fn: api.mcpToolsQueue.submitQueueResult,
     args: submitQueueResultArgs,
     identityArg: "caller",
@@ -270,7 +270,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "attach_photos",
     description:
-      "Attach EXISTING photos (by photoId) to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId/transportZoneId), or room name — via attachTo. Use this to file a queued capture's already-uploaded photos onto the room or transport its entry targets. Pass photoIds + attachTo.",
+      "Attach EXISTING photos (by photoId) to an item (itemId — the usual case, e.g. filing a queue capture's photos onto the inventory you created from it), box (boxId), room (spaceId), transport (transportResourceId/transportZoneId), or room name — via attachTo. Pass photoIds + attachTo (the photoIds are a queue entry's mediaPhotoIds, or ids from get_images). Note: submit_queue_result already auto-attaches a processed entry's photos to a single created item — reach for this tool for captures that became multiple items, or photos uploaded outside the queue.",
     fn: api.mcpToolsImages.attachPhotos,
     args: attachPhotosArgs,
     identityArg: "caller",

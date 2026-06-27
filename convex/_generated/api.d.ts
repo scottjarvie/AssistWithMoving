@@ -96,6 +96,7 @@ import type * as lib_publicPlanView from "../lib/publicPlanView.js";
 import type * as lib_publicShareComments from "../lib/publicShareComments.js";
 import type * as lib_publicShareStatus from "../lib/publicShareStatus.js";
 import type * as lib_queueAccess from "../lib/queueAccess.js";
+import type * as lib_queuePhotoAttach from "../lib/queuePhotoAttach.js";
 import type * as lib_restApi from "../lib/restApi.js";
 import type * as lib_restUploadBody from "../lib/restUploadBody.js";
 import type * as lib_roles from "../lib/roles.js";
@@ -234,6 +235,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicShareComments": typeof lib_publicShareComments;
   "lib/publicShareStatus": typeof lib_publicShareStatus;
   "lib/queueAccess": typeof lib_queueAccess;
+  "lib/queuePhotoAttach": typeof lib_queuePhotoAttach;
   "lib/restApi": typeof lib_restApi;
   "lib/restUploadBody": typeof lib_restUploadBody;
   "lib/roles": typeof lib_roles;
