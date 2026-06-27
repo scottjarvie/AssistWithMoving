@@ -23,6 +23,7 @@ import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -96,6 +97,8 @@ export function BoxLookup({
 
   // Deep-linked from the list's "missing weight/size" indicators (MOVE-343).
   const [editingSize, setEditingSize] = useState(edit === "size");
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
   const [uploaderOpen, setUploaderOpen] = useState(false);
   const [savingSize, setSavingSize] = useState(false);
   const [editingPlacement, setEditingPlacement] = useState(false);
@@ -262,6 +265,38 @@ export function BoxLookup({
     }
   }
 
+  // Rename the unit (its display name = nickname) and edit its description.
+  async function handleSaveDetails(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!resolvedHouseholdId || !resolvedMoveId) {
+      return;
+    }
+    const formData = new FormData(event.currentTarget);
+    const nickname = String(formData.get("nickname") ?? "").trim();
+    const description = String(formData.get("description") ?? "").trim();
+    setSavingDetails(true);
+    setMessage(null);
+    try {
+      await updateBox({
+        householdId: resolvedHouseholdId,
+        moveId: resolvedMoveId,
+        boxId: box._id,
+        nickname,
+        description,
+      });
+      setEditingDetails(false);
+      setMessage(`${box.code} updated.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : `Could not update ${box.code}.`,
+      );
+    } finally {
+      setSavingDetails(false);
+    }
+  }
+
   return (
     <Shell>
       {backRow}
@@ -311,6 +346,67 @@ export function BoxLookup({
             <span className="hidden sm:inline">Add AI instructions</span>
             <span className="sm:hidden">AI</span>
           </Button>
+        </div>
+
+        <div className="mt-3">
+          {editingDetails ? (
+            <form
+              onSubmit={(event) => void handleSaveDetails(event)}
+              className="space-y-2 rounded-md border border-border bg-background/60 p-3"
+            >
+              <label className="block text-xs">
+                <span className="mb-1 block text-muted-foreground">Name</span>
+                <Input
+                  name="nickname"
+                  defaultValue={box.nickname ?? ""}
+                  placeholder="e.g. Kitchen pots & pans"
+                  aria-label="Unit name"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="mb-1 block text-muted-foreground">
+                  Description
+                </span>
+                <Textarea
+                  name="description"
+                  defaultValue={box.description ?? ""}
+                  placeholder="What's inside or any notes"
+                  aria-label="Unit description"
+                  rows={2}
+                />
+              </label>
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={savingDetails}>
+                  {savingDetails ? "Saving…" : "Save name & description"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={savingDetails}
+                  onClick={() => setEditingDetails(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+                {box.description || "No description yet."}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => setEditingDetails(true)}
+              >
+                <Pencil className="size-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">Rename / edit</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="mt-4">
