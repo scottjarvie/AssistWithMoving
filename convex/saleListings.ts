@@ -507,3 +507,124 @@ export const upsertForItem = mutation({
     return listingId;
   },
 });
+
+// Lightweight read of a single item's active sale listing (price + status), for
+// the inline asking-price control in the item detail. Null when there's none yet.
+export const getForItem = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+    const listing = (
+      await ctx.db
+        .query("saleListings")
+        .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+        .collect()
+    ).find((entry) => !entry.archivedAt);
+    if (!listing) return null;
+    return {
+      officialPriceCents: listing.officialPriceCents ?? null,
+      soldPriceCents: listing.soldPriceCents ?? null,
+      status: listing.status,
+    };
+  },
+});
+
+// Mark a sell item SOLD: record the sale on its listing (status sold + soldAt +
+// soldPriceCents, defaulting to the asking price) and ARCHIVE the item — once
+// it's sold we don't own it anymore, so it leaves the active inventory.
+export const markSold = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+    soldPriceCents: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    if (actor.type !== "user") {
+      throw new Error(directConvexUserContextRequiredMessage);
+    }
+    const item = await ctx.db.get(args.itemId);
+    if (
+      !item ||
+      item.householdId !== args.householdId ||
+      item.moveId !== args.moveId ||
+      item.deletedAt
+    ) {
+      throw new Error("Item not found.");
+    }
+    const now = Date.now();
+    const existing = (
+      await ctx.db
+        .query("saleListings")
+        .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+        .collect()
+    ).find((listing) => !listing.archivedAt);
+    // The asking price is the default sale amount unless an actual amount is given.
+    const soldPriceCents =
+      args.soldPriceCents ?? existing?.officialPriceCents ?? undefined;
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        status: "sold",
+        soldAt: now,
+        ...(soldPriceCents !== undefined ? { soldPriceCents } : {}),
+        updatedByUserId: actor.userId,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("saleListings", {
+        ...defaultListingForItem({
+          householdId: args.householdId,
+          moveId: args.moveId,
+          item,
+          userId: actor.userId,
+          now,
+        }),
+        status: "sold",
+        soldAt: now,
+        ...(soldPriceCents !== undefined
+          ? { officialPriceCents: soldPriceCents, soldPriceCents }
+          : {}),
+        createdByUserId: actor.userId,
+        updatedByUserId: actor.userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.patch(args.itemId, {
+      disposition: "sell",
+      status: "archived",
+      deletedAt: now,
+      updatedByUserId: actor.userId,
+      updatedAt: now,
+    });
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "inventory",
+      action: "item.sold",
+      objectTable: "items",
+      objectId: args.itemId,
+      metadata: { soldPriceCents: soldPriceCents ?? null },
+    });
+    return { soldPriceCents: soldPriceCents ?? null };
+  },
+});

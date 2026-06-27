@@ -364,6 +364,73 @@ export function ItemDetailSheet({
     }
   }
 
+  // Sell / trash end-states + pricing. The asking price lives on the item's sale
+  // listing; "sold"/"trashed" archive the item (we don't own it anymore).
+  const sellListing = useQuery(
+    api.saleListings.getForItem,
+    householdId && moveId && item
+      ? { householdId, moveId, itemId: item._id }
+      : "skip",
+  );
+  const upsertListing = useMutation(api.saleListings.upsertForItem);
+  const markSoldMutation = useMutation(api.saleListings.markSold);
+  const markTrashedMutation = useMutation(api.items.markTrashed);
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [confirmSell, setConfirmSell] = useState(false);
+  const [soldPriceDraft, setSoldPriceDraft] = useState("");
+
+  async function handleSaveAskingPrice(value: string) {
+    if (!householdId || !moveId || !item) return;
+    const cents = parseOptionalCurrencyCents(value);
+    if (cents === (sellListing?.officialPriceCents ?? undefined)) return;
+    try {
+      await upsertListing({
+        householdId,
+        moveId,
+        itemId: item._id,
+        officialPriceCents: cents,
+      });
+    } catch {
+      setMessage("Could not save the asking price.");
+    }
+  }
+
+  async function handleMarkSold(finalPrice: string) {
+    if (!householdId || !moveId || !item) return;
+    setLifecycleBusy(true);
+    setMessage(null);
+    try {
+      await markSoldMutation({
+        householdId,
+        moveId,
+        itemId: item._id,
+        soldPriceCents: parseOptionalCurrencyCents(finalPrice),
+      });
+      onOpenChange(false);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not mark it sold.",
+      );
+      setLifecycleBusy(false);
+      setConfirmSell(false);
+    }
+  }
+
+  async function handleMarkTrashed() {
+    if (!householdId || !moveId || !item) return;
+    setLifecycleBusy(true);
+    setMessage(null);
+    try {
+      await markTrashedMutation({ householdId, moveId, itemId: item._id });
+      onOpenChange(false);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not mark it trashed.",
+      );
+      setLifecycleBusy(false);
+    }
+  }
+
   const activity = useQuery(
     api.audit.listForObject,
     householdId && moveId && item
@@ -693,6 +760,107 @@ export function ItemDetailSheet({
                       ))}
                     </select>
                   </Field>
+                  {disposition === "sell" ? (
+                    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3 md:col-span-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Sell
+                      </p>
+                      <div className="flex flex-wrap items-end gap-3">
+                        <label className="text-xs">
+                          <span className="mb-1 block text-muted-foreground">
+                            Asking price ($)
+                          </span>
+                          <Input
+                            key={`ask-${sellListing?.officialPriceCents ?? "none"}`}
+                            inputMode="decimal"
+                            defaultValue={formatOptionalCurrencyCents(
+                              sellListing?.officialPriceCents ?? undefined,
+                            )}
+                            onBlur={(event) =>
+                              void handleSaveAskingPrice(event.target.value)
+                            }
+                            className="h-9 w-32"
+                            aria-label="Asking price in dollars"
+                          />
+                        </label>
+                        {!confirmSell ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={lifecycleBusy}
+                            onClick={() => {
+                              setSoldPriceDraft(
+                                formatOptionalCurrencyCents(
+                                  sellListing?.officialPriceCents ?? undefined,
+                                ),
+                              );
+                              setConfirmSell(true);
+                            }}
+                          >
+                            Mark sold
+                          </Button>
+                        ) : null}
+                      </div>
+                      {confirmSell ? (
+                        <div className="flex flex-wrap items-end gap-2 rounded-md bg-background p-2">
+                          <label className="text-xs">
+                            <span className="mb-1 block text-muted-foreground">
+                              Sold for ($)
+                            </span>
+                            <Input
+                              inputMode="decimal"
+                              value={soldPriceDraft}
+                              onChange={(event) =>
+                                setSoldPriceDraft(event.target.value)
+                              }
+                              className="h-9 w-32"
+                              aria-label="Sold price in dollars"
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={lifecycleBusy}
+                            onClick={() => void handleMarkSold(soldPriceDraft)}
+                          >
+                            {lifecycleBusy ? "Saving…" : "Confirm sold — archive"}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={lifecycleBusy}
+                            onClick={() => setConfirmSell(false)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : null}
+                      <p className="text-[0.68rem] text-muted-foreground">
+                        Marking sold records the amount and archives the item —
+                        you no longer own it.
+                      </p>
+                    </div>
+                  ) : null}
+                  {disposition === "dump" ? (
+                    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3 md:col-span-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Trash
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={lifecycleBusy}
+                        onClick={() => void handleMarkTrashed()}
+                      >
+                        {lifecycleBusy ? "Saving…" : "Mark trashed — archive"}
+                      </Button>
+                      <p className="text-[0.68rem] text-muted-foreground">
+                        Marking trashed archives the item — you no longer own it.
+                      </p>
+                    </div>
+                  ) : null}
                   <Field label="Quantity">
                     <Input
                       inputMode="decimal"
