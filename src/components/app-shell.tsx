@@ -7,12 +7,13 @@ import { MoveSwitcher } from "@/components/move-switcher";
 import { ShellSectionEyebrow } from "@/components/shell-section-eyebrow";
 import { WorkspaceNav } from "@/components/workspace-nav";
 
-// Single consistent frame at every screen size: a sticky top bar (brand,
-// section, move switcher, account) and ONE bottom nav bar carrying the same
-// destinations — Moves, Units, Items, Spaces, Queue, and Add — on phone, tablet,
-// and desktop alike. On large screens the bar's content is centered to a sensible
-// width so it doesn't stretch edge to edge. The single MoveWorkspaceProvider
-// lives one level up, in (product)/layout.tsx, so every region can read the move.
+// Consistent frame at every size: a sticky top bar (brand, section, move
+// switcher, account) plus the same destinations — Moves, Units, Items, Spaces,
+// Queue, Add — surfaced as a LEFT SIDEBAR on desktop (lg+) and a BOTTOM BAR on
+// phone/tablet (< lg). The single MoveWorkspaceProvider lives one level up, in
+// (product)/layout.tsx, so every region can read the move.
+const SIDEBAR_WIDTH = "lg:w-56";
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
@@ -23,8 +24,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         Skip to main content
       </a>
 
-      <header className="sticky top-0 z-20 border-b border-border bg-background/88 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4 sm:px-6">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/88 backdrop-blur">
+        <div className="flex h-16 w-full items-center justify-between gap-2 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Link
               href="/app"
@@ -44,20 +45,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
+      {/* Desktop left sidebar — fixed below the header, hidden on phone/tablet. */}
+      <aside
+        className={`fixed bottom-0 left-0 top-16 z-20 hidden flex-col border-r border-border bg-background px-3 py-4 lg:flex ${SIDEBAR_WIDTH}`}
+      >
+        <WorkspaceNav variant="sidebar" />
+        <div className="mt-auto">
+          <MobileCaptureAction variant="sidebar" />
+        </div>
+      </aside>
+
       <main
         id="main-content"
         tabIndex={-1}
         aria-label="Workspace content"
-        className="mx-auto max-w-5xl overflow-x-clip pb-[calc(3.75rem+env(safe-area-inset-bottom))]"
+        className="overflow-x-clip pb-[calc(3.75rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-56"
       >
-        {children}
+        <div className="mx-auto max-w-5xl">{children}</div>
       </main>
 
-      {/* The one and only nav bar — pinned to the bottom at every size. The bar
-          background spans full width; its content (5 tabs + the "+" add) is
-          centered to a comfortable width so it never stretches across a wide
-          monitor. WorkspaceNav supplies the <nav> landmark. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+      {/* Mobile/tablet bottom bar — hidden on desktop (the sidebar takes over).
+          Background spans full width; the 5 tabs + "+" add are centered to a
+          comfortable width. WorkspaceNav supplies the <nav> landmark. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-xl items-stretch">
           <WorkspaceNav variant="mobile" />
           <MobileCaptureAction />
