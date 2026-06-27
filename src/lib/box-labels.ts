@@ -10,6 +10,8 @@ type BoxLabelPathInput = {
   moveId: string;
   boxId: string;
   returnTo?: BoxLookupReturnTo;
+  /** Open a specific editor on load (e.g. the weight & size editor). */
+  edit?: "size";
 };
 
 type BoxLabelSheetPathInput = {
@@ -23,10 +25,14 @@ export function buildBoxLookupPath({
   moveId,
   boxId,
   returnTo,
+  edit,
 }: BoxLabelPathInput) {
   const params = new URLSearchParams({ householdId, moveId });
   if (returnTo) {
     params.set("returnTo", returnTo);
+  }
+  if (edit) {
+    params.set("edit", edit);
   }
   return `/app/boxes/${encodeURIComponent(boxId)}?${params.toString()}`;
 }

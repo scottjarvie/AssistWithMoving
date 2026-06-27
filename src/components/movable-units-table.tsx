@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -243,6 +244,29 @@ export function MovableUnitsTable({
     [householdId, moveId, router],
   );
 
+  // Jump straight to the weight & size editor (MOVE-343): boxes deep-link to the
+  // detail page with the editor open; loose items open the in-page detail sheet.
+  const handleEditSize = useCallback(
+    (unit: MovableUnit) => {
+      if (unit.kind === "box") {
+        if (!householdId || !moveId) return;
+        router.push(
+          buildBoxLookupPath({
+            boxId: unit.recordId as Id<"boxes">,
+            householdId,
+            moveId,
+            returnTo: "movable-units",
+            edit: "size",
+          }),
+        );
+        return;
+      }
+      setSelectedLooseItemId(unit.recordId as Id<"items">);
+      setDetailOpen(true);
+    },
+    [householdId, moveId, router],
+  );
+
   const loading =
     boxes === undefined ||
     items === undefined ||
@@ -438,17 +462,18 @@ export function MovableUnitsTable({
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Weight" />
         ),
-        cell: ({ row }) => (
-          <span
-            className={
-              row.original.missingFields.includes("weight")
-                ? "text-muted-foreground"
-                : "font-medium"
-            }
-          >
-            {row.original.weightLabel}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.missingFields.includes("weight") ? (
+            <EditSizeButton
+              unit={row.original}
+              onEditSize={handleEditSize}
+              className="text-sm text-muted-foreground"
+            >
+              {row.original.weightLabel}
+            </EditSizeButton>
+          ) : (
+            <span className="font-medium">{row.original.weightLabel}</span>
+          ),
       },
       {
         id: "density",
@@ -480,7 +505,13 @@ export function MovableUnitsTable({
         enableSorting: false,
         cell: ({ row }) => (
           <div className="text-sm">
-            <p>{row.original.dimensionsLabel}</p>
+            {row.original.missingFields.includes("dimensions") ? (
+              <EditSizeButton unit={row.original} onEditSize={handleEditSize}>
+                {row.original.dimensionsLabel}
+              </EditSizeButton>
+            ) : (
+              <p>{row.original.dimensionsLabel}</p>
+            )}
             <p className="text-xs text-muted-foreground">
               {row.original.volumeLabel}
             </p>
@@ -518,17 +549,28 @@ export function MovableUnitsTable({
           }
           return (
             <div className="flex flex-wrap gap-1">
-              {followUps.map((followUp) => (
-                <Badge key={followUp} variant="outline">
-                  {followUp}
-                </Badge>
-              ))}
+              {followUps.map((followUp) =>
+                isSizeFollowUp(followUp) ? (
+                  <EditSizeButton
+                    key={followUp}
+                    unit={row.original}
+                    onEditSize={handleEditSize}
+                    className="no-underline"
+                  >
+                    <Badge variant="outline">{followUp}</Badge>
+                  </EditSizeButton>
+                ) : (
+                  <Badge key={followUp} variant="outline">
+                    {followUp}
+                  </Badge>
+                ),
+              )}
             </div>
           );
         },
       },
     ],
-    [householdId, moveId, photosByUnit],
+    [householdId, moveId, photosByUnit, handleEditSize],
   );
 
   return (
@@ -630,6 +672,7 @@ export function MovableUnitsTable({
             selected={selected}
             onSelectedChange={onSelectedChange}
             onOpen={onOpen}
+            onEditSize={handleEditSize}
             householdId={householdId}
             moveId={moveId}
             photoIds={photosByUnit.get(row.id) ?? []}
@@ -993,6 +1036,7 @@ function MovableUnitCard({
   selected,
   onSelectedChange,
   onOpen,
+  onEditSize,
   householdId,
   moveId,
   photoIds,
@@ -1001,6 +1045,7 @@ function MovableUnitCard({
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
   onOpen?: () => void;
+  onEditSize: (unit: MovableUnit) => void;
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   photoIds?: readonly Id<"itemPhotos">[];
@@ -1094,11 +1139,22 @@ function MovableUnitCard({
 
       {followUps.length ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {followUps.map((followUp) => (
-            <Badge key={followUp} variant="outline">
-              {followUp}
-            </Badge>
-          ))}
+          {followUps.map((followUp) =>
+            isSizeFollowUp(followUp) ? (
+              <EditSizeButton
+                key={followUp}
+                unit={unit}
+                onEditSize={onEditSize}
+                className="no-underline"
+              >
+                <Badge variant="outline">{followUp}</Badge>
+              </EditSizeButton>
+            ) : (
+              <Badge key={followUp} variant="outline">
+                {followUp}
+              </Badge>
+            ),
+          )}
         </div>
       ) : null}
     </div>
@@ -1107,6 +1163,15 @@ function MovableUnitCard({
 
 function visibleFollowUps(unit: MovableUnit, limit = 3) {
   return unit.followUps.slice(0, limit);
+}
+
+// Follow-up chips that should deep-link to the weight & size editor (MOVE-343).
+function isSizeFollowUp(followUp: string): boolean {
+  return (
+    followUp === "add weight" ||
+    followUp === "add dimensions" ||
+    followUp === "add volume"
+  );
 }
 
 // --- clickable stat filters (MOVE-348) ----------------------------------
@@ -1131,6 +1196,37 @@ function matchesStatFilter(
     case "missingWeight":
       return (unit) => unit.missingFields.includes("weight");
   }
+}
+
+// Wraps a "missing weight/size" indicator so clicking it jumps to the editor
+// (MOVE-343). stopPropagation keeps it from also triggering the row-open.
+function EditSizeButton({
+  unit,
+  onEditSize,
+  children,
+  className,
+}: {
+  unit: MovableUnit;
+  onEditSize: (unit: MovableUnit) => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Add weight or size"
+      onClick={(event) => {
+        event.stopPropagation();
+        onEditSize(unit);
+      }}
+      className={cn(
+        "text-left underline decoration-dotted underline-offset-2 transition-colors hover:decoration-solid hover:text-foreground",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 // A stat chip that doubles as a filter toggle — pressed = primary fill.

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Bot,
   ImageOff,
+  ImagePlus,
   MapPin,
   Pencil,
   Plus,
@@ -17,6 +18,8 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
+import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
+import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,11 +54,13 @@ export function BoxLookup({
   moveId,
   boxId,
   returnTo,
+  edit,
 }: {
   householdId?: string;
   moveId?: string;
   boxId: string;
   returnTo?: string;
+  edit?: string;
 }) {
   const resolvedHouseholdId = householdId as Id<"households"> | undefined;
   const resolvedMoveId = moveId as Id<"moves"> | undefined;
@@ -89,7 +94,9 @@ export function BoxLookup({
   );
   const updateBox = useMutation(api.boxes.update);
 
-  const [editingSize, setEditingSize] = useState(false);
+  // Deep-linked from the list's "missing weight/size" indicators (MOVE-343).
+  const [editingSize, setEditingSize] = useState(edit === "size");
+  const [uploaderOpen, setUploaderOpen] = useState(false);
   const [savingSize, setSavingSize] = useState(false);
   const [editingPlacement, setEditingPlacement] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -197,7 +204,9 @@ export function BoxLookup({
     unit?.missingFields.includes("dimensions") ? null : unit?.dimensionsLabel,
     unit?.missingFields.includes("volume") ? null : unit?.volumeLabel,
   ].filter(Boolean) as string[];
-  const sizeLabel = sizeParts.length ? sizeParts.join(" · ") : "Add size";
+  // One editor covers BOTH weight and dimensions, so name it that way (MOVE-341).
+  const hasSize = sizeParts.length > 0;
+  const sizeLabel = hasSize ? sizeParts.join(" · ") : "Add weight & size";
 
   const boxContextInstructions = buildBoxPhotoQueueInstructions({
     boxCode: box.code,
@@ -266,11 +275,21 @@ export function BoxLookup({
       {/* Identity + size (essentials 1-4). */}
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-start gap-4">
-          <BoxThumbnail
-            householdId={resolvedHouseholdId ?? null}
-            moveId={resolvedMoveId ?? null}
-            photoId={thumbnailPhotoId}
-          />
+          <button
+            type="button"
+            onClick={() => setUploaderOpen(true)}
+            aria-label="Add photos to this unit"
+            className="group relative shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <BoxThumbnail
+              householdId={resolvedHouseholdId ?? null}
+              moveId={resolvedMoveId ?? null}
+              photoId={thumbnailPhotoId}
+            />
+            <span className="absolute inset-0 flex items-center justify-center rounded-md bg-black/0 text-white opacity-0 transition-opacity group-hover:bg-black/40 group-hover:opacity-100">
+              <ImagePlus className="size-5" aria-hidden="true" />
+            </span>
+          </button>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="font-mono">{box.code}</Badge>
@@ -333,7 +352,7 @@ export function BoxLookup({
               </p>
               <div className="mt-3 flex gap-2">
                 <Button type="submit" size="sm" disabled={savingSize}>
-                  {savingSize ? "Saving…" : "Save size"}
+                  {savingSize ? "Saving…" : "Save weight & size"}
                 </Button>
                 <Button
                   type="button"
@@ -356,17 +375,13 @@ export function BoxLookup({
                 className="size-4 shrink-0 text-muted-foreground"
                 aria-hidden="true"
               />
-              <span
-                className={
-                  sizeParts.length ? "" : "text-muted-foreground"
-                }
-              >
+              <span className={hasSize ? "" : "text-muted-foreground"}>
                 {sizeLabel}
               </span>
-              <Pencil
-                className="ml-auto size-3.5 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
+              <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                {hasSize ? "Edit weight & size" : null}
+                <Pencil className="size-3.5" aria-hidden="true" />
+              </span>
             </button>
           )}
         </div>
@@ -441,30 +456,18 @@ export function BoxLookup({
         </div>
 
         {items.length ? (
-          <div className="mt-3 overflow-hidden rounded-md border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Code</th>
-                  <th className="px-3 py-2 text-left font-medium">Item</th>
-                  <th className="px-3 py-2 text-right font-medium">Qty</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {items.map(({ membership, item }) => (
-                  <tr key={membership._id}>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                      {item.code ?? "—"}
-                    </td>
-                    <td className="px-3 py-2">{item.name}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {membership.quantity}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="mt-3 divide-y divide-border overflow-hidden rounded-md border border-border">
+            {items.map(({ membership, item }) => (
+              <BoxItemRow
+                key={membership._id}
+                item={item}
+                quantity={membership.quantity}
+                householdId={resolvedHouseholdId ?? null}
+                moveId={resolvedMoveId ?? null}
+                onMessage={setMessage}
+              />
+            ))}
+          </ul>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
             No items yet — use Add to capture items into {box.code}.
@@ -490,6 +493,34 @@ export function BoxLookup({
                 setCaptureOpen(false);
                 setMessage(`Sent to the queue for ${box.code}.`);
               }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Click the thumbnail to add photos straight to this unit (MOVE-342). */}
+      <Sheet open={uploaderOpen} onOpenChange={setUploaderOpen}>
+        <SheetContent
+          side="right"
+          className="w-full overflow-y-auto sm:max-w-md"
+        >
+          <SheetHeader>
+            <SheetTitle>Photos for {box.code}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-4 px-4 pb-4">
+            <PhotoUploadControl
+              householdId={resolvedHouseholdId ?? null}
+              moveId={resolvedMoveId ?? null}
+              boxId={box._id}
+              room={box.room}
+              label="Add photos"
+              multiple
+              onUploaded={() => setMessage(`Photo added to ${box.code}.`)}
+            />
+            <PhotoEvidenceStrip
+              householdId={resolvedHouseholdId ?? null}
+              moveId={resolvedMoveId ?? null}
+              boxId={box._id}
             />
           </div>
         </SheetContent>
@@ -792,6 +823,86 @@ function SizeField({
         aria-label={label}
       />
     </label>
+  );
+}
+
+// One item inside the box. The name gets its own full-width line (it used to be
+// squeezed in a narrow table column) and is inline-editable (MOVE-340).
+function BoxItemRow({
+  item,
+  quantity,
+  householdId,
+  moveId,
+  onMessage,
+}: {
+  item: { _id: Id<"items">; name: string; code?: string };
+  quantity: number;
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  onMessage: (message: string | null) => void;
+}) {
+  const updateItem = useMutation(api.items.update);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(item.name);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const trimmed = name.trim();
+    if (!householdId || !moveId || !trimmed || trimmed === item.name) {
+      setName(item.name);
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateItem({ householdId, moveId, itemId: item._id, name: trimmed });
+      onMessage(`Renamed to “${trimmed}”.`);
+    } catch (error) {
+      onMessage(
+        error instanceof Error ? error.message : "Couldn't rename that item.",
+      );
+      setName(item.name);
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  }
+
+  return (
+    <li className="px-3 py-2.5">
+      {editing ? (
+        <Input
+          value={name}
+          autoFocus
+          disabled={saving}
+          onChange={(event) => setName(event.target.value)}
+          onBlur={() => void save()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void save();
+            } else if (event.key === "Escape") {
+              setName(item.name);
+              setEditing(false);
+            }
+          }}
+          aria-label="Item name"
+          className="h-9"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label={`Edit name: ${item.name}`}
+          className="block w-full break-words text-left text-sm font-medium hover:underline"
+        >
+          {item.name}
+        </button>
+      )}
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        {item.code ?? "no code"} · {quantity} qty
+      </p>
+    </li>
   );
 }
 
