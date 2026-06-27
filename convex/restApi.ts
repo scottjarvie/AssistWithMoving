@@ -1776,6 +1776,10 @@ async function routeAgentContext(
           "Use currentSpaceId/destinationSpaceId when available; keep room/destinationRoom names for readable fallback.",
         photoAttachmentRule:
           "Photos are the proof behind every item — never leave them orphaned. When you create an item or box from a photo, attach that photo to it (attach_photo / create_item_with_images / save_box_intake). A photo only shows on an item once its itemId/boxId is set; a photo with no item/box is invisible on the inventory it documents.",
+        queueClosingRule:
+          "ALWAYS close a capture-queue entry when you finish it: call submit_queue_result with the created item/box ids so its status becomes 'processed' and it leaves the queue. An entry you processed but never closed still looks unprocessed and will be re-worked, and it clutters the queue. Only leave an entry open if it genuinely still needs work or you asked the user a question (needsInput). Claiming an entry and creating its inventory is NOT done until you submit the result.",
+        containerRule:
+          "A physical container — a tote, bin, crate, or box — is a BOX (pack_boxes / save_box_intake), not an item. Items are the things that go INSIDE boxes. Never create a tote/bin/crate as an item: it should get a B-### box number and be able to hold items. If you find one entered as an item, it can be converted (convert_item_to_box).",
         saleWorkflow:
           "Items with disposition=sell should have a linked saleListing for pricing, marketplace draft, research, and status.",
         measurementRule:
