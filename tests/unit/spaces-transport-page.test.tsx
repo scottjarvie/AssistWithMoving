@@ -157,4 +157,25 @@ describe("SpacesTransportPageContent (mobile-first)", () => {
     expect(arg.units).toEqual([{ kind: "box", recordId: "box_1" }]);
     expect(arg.target).toEqual({ currentSpaceId: "space_1" });
   });
+
+  it("exposes the max-capacity editor on a room, not just transport (MOVE-350)", () => {
+    render(<SpacesTransportPageContent />);
+    // Kitchen (a space) is the default container; it now gets a capacity editor.
+    expect(
+      screen.getByRole("button", { name: "Set max capacity" }),
+    ).toBeInTheDocument();
+  });
+
+  it("the 'need a weight' chip filters the list to entries missing a weight", async () => {
+    const user = userEvent.setup();
+    render(<SpacesTransportPageContent />);
+    // Kitchen holds B-1 (40 lb), B-2 (no weight), Broken chair (no weight).
+    expect(screen.getByText("B-1 · 2 items · 40 lb")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /need a weight/ }));
+    // B-1 has a weight, so it drops out; the weightless rows stay.
+    expect(
+      screen.queryByText("B-1 · 2 items · 40 lb"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Broken chair")).toBeInTheDocument();
+  });
 });

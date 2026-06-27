@@ -52,6 +52,7 @@ import {
   orphanEntries,
   summarizeEntries,
   type OrganizerEntry,
+  type OrganizerSummary,
 } from "@/lib/space-organizer";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -225,6 +226,8 @@ function SpacesTransportWorkspace({
   const [selectMode, setSelectMode] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // Narrow the entry list to things still missing a weight / a size (MOVE-350).
+  const [needsFilter, setNeedsFilter] = useState<"weight" | "size" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [overrideWarnings, setOverrideWarnings] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -287,6 +290,7 @@ function SpacesTransportWorkspace({
         icon: space.kind === "yardOutdoor" ? MapPin : Home,
         entries: entriesInSpace(entries, space._id),
         spaceId: space._id,
+        capacity: space.capacity,
       });
     }
     for (const { resource } of transportData ?? []) {
@@ -359,6 +363,7 @@ function SpacesTransportWorkspace({
     setSelectedContainerId(id);
     setSelectedEntryIds(new Set());
     setSearch("");
+    setNeedsFilter(null);
     setPickerOpen(false); // collapse the mobile picker on choose
   }
 
@@ -371,11 +376,16 @@ function SpacesTransportWorkspace({
   const visibleEntries = useMemo(() => {
     if (!selectedContainer) return [];
     const q = search.trim().toLowerCase();
-    const list = q
+    let list = q
       ? selectedContainer.entries.filter((e) => e.searchText.includes(q))
       : selectedContainer.entries;
+    if (needsFilter === "weight") {
+      list = list.filter((e) => e.estimatedWeightLb == null);
+    } else if (needsFilter === "size") {
+      list = list.filter((e) => e.estimatedVolumeCuFt == null);
+    }
     return list;
-  }, [selectedContainer, search]);
+  }, [selectedContainer, search, needsFilter]);
 
   const selectedEntries = useMemo(
     () => entries.filter((e) => selectedEntryIds.has(e.id)),
@@ -632,6 +642,8 @@ function SpacesTransportWorkspace({
               onSelectAll={selectAllVisible}
               search={search}
               onSearch={setSearch}
+              needsFilter={needsFilter}
+              onNeedsFilterChange={setNeedsFilter}
             />
           ) : (
             <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -804,6 +816,8 @@ function ContainerDetail({
   onSelectAll,
   search,
   onSearch,
+  needsFilter,
+  onNeedsFilterChange,
 }: {
   householdId: Id<"households">;
   moveId: Id<"moves">;
@@ -818,9 +832,20 @@ function ContainerDetail({
   onSelectAll: () => void;
   search: string;
   onSearch: (value: string) => void;
+  needsFilter: "weight" | "size" | null;
+  onNeedsFilterChange: (value: "weight" | "size" | null) => void;
 }) {
   const summary = useMemo(
     () => summarizeEntries(container.entries),
+    [container.entries],
+  );
+  // Counts for the "needs a weight / needs a size" quick filters (MOVE-350).
+  const needsWeight = useMemo(
+    () => container.entries.filter((e) => e.estimatedWeightLb == null).length,
+    [container.entries],
+  );
+  const needsSize = useMemo(
+    () => container.entries.filter((e) => e.estimatedVolumeCuFt == null).length,
     [container.entries],
   );
   const Icon = container.icon;
@@ -865,29 +890,50 @@ function ContainerDetail({
         </div>
       ) : null}
 
-      {container.kind === "transport" && container.report ? (
-        <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
-          <CapacityBar
-            label="Weight"
-            value={container.report.estimatedWeightLb}
-            max={container.report.maxWeightLb}
-            percent={container.report.weightPercent}
-            unit="lb"
-          />
-          <CapacityBar
-            label="Volume"
-            value={container.report.estimatedVolumeCuFt}
-            max={container.report.maxVolumeCuFt}
-            percent={container.report.volumePercent}
-            unit="cu ft"
-          />
-          {container.resourceId ? (
-            <TransportCapacityEditor
-              householdId={householdId}
-              moveId={moveId}
-              resourceId={container.resourceId}
-              capacity={container.capacity}
-            />
+      {container.kind === "transport" || container.kind === "space" ? (
+        <CapacityPanel
+          householdId={householdId}
+          moveId={moveId}
+          container={container}
+          summary={summary}
+        />
+      ) : null}
+
+      {needsWeight > 0 || needsSize > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {needsWeight > 0 ? (
+            <button
+              type="button"
+              onClick={() =>
+                onNeedsFilterChange(needsFilter === "weight" ? null : "weight")
+              }
+              aria-pressed={needsFilter === "weight"}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                needsFilter === "weight"
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {needsWeight} need a weight
+            </button>
+          ) : null}
+          {needsSize > 0 ? (
+            <button
+              type="button"
+              onClick={() =>
+                onNeedsFilterChange(needsFilter === "size" ? null : "size")
+              }
+              aria-pressed={needsFilter === "size"}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                needsFilter === "size"
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {needsSize} need a size
+            </button>
           ) : null}
         </div>
       ) : null}
@@ -1230,20 +1276,88 @@ function StatPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-// Set a transport's max weight / volume (MOVE-350). The capacity gauge above
-// reads from estimates.reportForMove, so it re-drives as soon as this saves.
-function TransportCapacityEditor({
+// The capacity block under a container's stats: a weight + a volume gauge plus
+// the editor. Transport prefers the server rollup (estimates.reportForMove,
+// which de-dups box + item weight); a room uses the client-side entry totals.
+function CapacityPanel({
   householdId,
   moveId,
-  resourceId,
+  container,
+  summary,
+}: {
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  container: Container;
+  summary: OrganizerSummary;
+}) {
+  const report = container.kind === "transport" ? container.report : undefined;
+  const cap = container.capacity;
+  const weightValue = report ? report.estimatedWeightLb : summary.knownWeightLb;
+  const volumeValue = report
+    ? report.estimatedVolumeCuFt
+    : summary.knownVolumeCuFt;
+  const maxWeight = report ? report.maxWeightLb : cap?.maxWeightLb;
+  const maxVolume = report ? report.maxVolumeCuFt : cap?.maxVolumeCuFt;
+  const weightPercent = report
+    ? report.weightPercent
+    : percentOf(weightValue, maxWeight);
+  const volumePercent = report
+    ? report.volumePercent
+    : percentOf(volumeValue, maxVolume);
+  const target: CapacityTarget | null = container.resourceId
+    ? { kind: "transport", resourceId: container.resourceId }
+    : container.spaceId
+      ? { kind: "space", spaceId: container.spaceId }
+      : null;
+
+  return (
+    <div className="space-y-2 rounded-md bg-muted/30 p-2.5">
+      <CapacityBar
+        label="Weight"
+        value={weightValue}
+        max={maxWeight}
+        percent={weightPercent}
+        unit="lb"
+      />
+      <CapacityBar
+        label="Volume"
+        value={volumeValue}
+        max={maxVolume}
+        percent={volumePercent}
+        unit="cu ft"
+      />
+      {target ? (
+        <CapacityEditor
+          householdId={householdId}
+          moveId={moveId}
+          target={target}
+          capacity={cap}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+type CapacityTarget =
+  | { kind: "transport"; resourceId: Id<"transportResources"> }
+  | { kind: "space"; spaceId: Id<"moveSpaces"> };
+
+// Set a container's max weight / volume (MOVE-350). Works for both a transport
+// (→ transportResources.update) and a room (→ moveSpaces.update). The gauge above
+// re-drives reactively as soon as this saves.
+function CapacityEditor({
+  householdId,
+  moveId,
+  target,
   capacity,
 }: {
   householdId: Id<"households">;
   moveId: Id<"moves">;
-  resourceId: Id<"transportResources">;
+  target: CapacityTarget;
   capacity?: ResourceDoc["capacity"];
 }) {
   const updateResource = useMutation(api.transportResources.update);
+  const updateSpace = useMutation(api.moveSpaces.update);
   const [open, setOpen] = useState(false);
   const [maxWeight, setMaxWeight] = useState(
     capacity?.maxWeightLb != null ? String(capacity.maxWeightLb) : "",
@@ -1269,12 +1383,26 @@ function TransportCapacityEditor({
     try {
       // Spread the existing capacity so other fields (area, item count, flags)
       // survive — the mutation replaces the whole capacity object.
-      await updateResource({
-        householdId,
-        moveId,
-        resourceId,
-        capacity: { ...(capacity ?? {}), maxWeightLb: weight, maxVolumeCuFt: volume },
-      });
+      const nextCapacity = {
+        ...(capacity ?? {}),
+        maxWeightLb: weight,
+        maxVolumeCuFt: volume,
+      };
+      if (target.kind === "transport") {
+        await updateResource({
+          householdId,
+          moveId,
+          resourceId: target.resourceId,
+          capacity: nextCapacity,
+        });
+      } else {
+        await updateSpace({
+          householdId,
+          moveId,
+          spaceId: target.spaceId,
+          capacity: nextCapacity,
+        });
+      }
       setMessage("Capacity saved.");
       setOpen(false);
     } catch (error) {
@@ -1387,6 +1515,13 @@ function CapacityBar({
 }
 
 // --- pure utils ----------------------------------------------------------
+
+// % of a known total against a max — undefined when no usable max is set, so the
+// gauge renders "No capacity set" instead of a divide-by-zero bar.
+function percentOf(value: number, max?: number): number | undefined {
+  if (max == null || max <= 0) return undefined;
+  return (value / max) * 100;
+}
 
 type BatchResult = { succeeded: number; failed: number };
 
