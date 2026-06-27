@@ -1396,19 +1396,49 @@ function CapacityEditor({
   const [maxVolume, setMaxVolume] = useState(
     capacity?.maxVolumeCuFt != null ? String(capacity.maxVolumeCuFt) : "",
   );
+  const [dimL, setDimL] = useState(
+    capacity?.dimensions?.lengthIn != null
+      ? String(capacity.dimensions.lengthIn)
+      : "",
+  );
+  const [dimW, setDimW] = useState(
+    capacity?.dimensions?.widthIn != null
+      ? String(capacity.dimensions.widthIn)
+      : "",
+  );
+  const [dimH, setDimH] = useState(
+    capacity?.dimensions?.heightIn != null
+      ? String(capacity.dimensions.heightIn)
+      : "",
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Live "available cubic feet" from cargo dimensions (L×W×H ÷ 1728).
+  const lNum = Number(dimL);
+  const wNum = Number(dimW);
+  const hNum = Number(dimH);
+  const derivedVolume =
+    lNum > 0 && wNum > 0 && hNum > 0
+      ? Math.round(((lNum * wNum * hNum) / 1728) * 10) / 10
+      : null;
+
   async function save() {
     const weight = maxWeight.trim() === "" ? undefined : Number(maxWeight);
-    const volume = maxVolume.trim() === "" ? undefined : Number(maxVolume);
-    if (
-      (weight !== undefined && !Number.isFinite(weight)) ||
-      (volume !== undefined && !Number.isFinite(volume))
-    ) {
-      setMessage("Enter a number for each limit (or leave it blank).");
+    const typedVolume = maxVolume.trim() === "" ? undefined : Number(maxVolume);
+    const parseDim = (value: string) =>
+      value.trim() === "" ? undefined : Number(value);
+    const lengthIn = parseDim(dimL);
+    const widthIn = parseDim(dimW);
+    const heightIn = parseDim(dimH);
+    const numbers = [weight, typedVolume, lengthIn, widthIn, heightIn];
+    if (numbers.some((n) => n !== undefined && !Number.isFinite(n))) {
+      setMessage("Enter a number for each field (or leave it blank).");
       return;
     }
+    // An explicit max volume wins; otherwise fall back to the size-derived value
+    // so the gauge has a ceiling even when the user only entered dimensions.
+    const volume = typedVolume ?? derivedVolume ?? undefined;
     setSaving(true);
     setMessage(null);
     try {
@@ -1418,6 +1448,7 @@ function CapacityEditor({
         ...(capacity ?? {}),
         maxWeightLb: weight,
         maxVolumeCuFt: volume,
+        dimensions: { lengthIn, widthIn, heightIn },
       };
       if (target.kind === "transport") {
         await updateResource({
@@ -1483,9 +1514,48 @@ function CapacityEditor({
                 value={maxVolume}
                 onChange={(event) => setMaxVolume(event.target.value)}
                 className="h-9"
+                placeholder={derivedVolume != null ? String(derivedVolume) : ""}
                 aria-label="Max volume in cubic feet"
               />
             </label>
+          </div>
+          <div className="space-y-1">
+            <span className="block text-[0.68rem] text-muted-foreground">
+              Or enter the cargo size and we&apos;ll work out the cubic feet
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              <Input
+                inputMode="decimal"
+                value={dimL}
+                onChange={(event) => setDimL(event.target.value)}
+                className="h-9"
+                placeholder="Length in"
+                aria-label="Cargo length in inches"
+              />
+              <Input
+                inputMode="decimal"
+                value={dimW}
+                onChange={(event) => setDimW(event.target.value)}
+                className="h-9"
+                placeholder="Width in"
+                aria-label="Cargo width in inches"
+              />
+              <Input
+                inputMode="decimal"
+                value={dimH}
+                onChange={(event) => setDimH(event.target.value)}
+                className="h-9"
+                placeholder="Height in"
+                aria-label="Cargo height in inches"
+              />
+            </div>
+            {derivedVolume != null ? (
+              <p className="text-[0.68rem] text-muted-foreground">
+                ≈ <span className="font-medium text-foreground">{derivedVolume} cu ft</span>{" "}
+                available
+                {maxVolume.trim() === "" ? " — saved as the max volume" : ""}
+              </p>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <Button
