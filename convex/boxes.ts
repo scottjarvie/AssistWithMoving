@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -71,20 +71,20 @@ export async function assertResourceAndZone(
   if (args.assignedResourceId) {
     const resource = await ctx.db.get(args.assignedResourceId);
     if (!resource || resource.moveId !== args.moveId || resource.archivedAt) {
-      throw new Error("Invalid transport resource.");
+      throw new ConvexError("Invalid transport resource.");
     }
   }
 
   if (args.assignedZoneId) {
     const zone = await ctx.db.get(args.assignedZoneId);
     if (!zone || zone.moveId !== args.moveId || zone.archivedAt) {
-      throw new Error("Invalid transport zone.");
+      throw new ConvexError("Invalid transport zone.");
     }
     if (
       args.assignedResourceId &&
       zone.resourceId !== args.assignedResourceId
     ) {
-      throw new Error("Zone does not belong to the assigned resource.");
+      throw new ConvexError("Zone does not belong to the assigned resource.");
     }
   }
 }
@@ -211,7 +211,7 @@ export async function loadAssignmentValidation(
       : Promise.resolve([]),
   ]);
   if (!resource || resource.moveId !== args.moveId || resource.archivedAt) {
-    throw new Error("Invalid transport resource.");
+    throw new ConvexError("Invalid transport resource.");
   }
   if (
     args.assignedZoneId &&
@@ -220,7 +220,7 @@ export async function loadAssignmentValidation(
       zone.resourceId !== args.assignedResourceId ||
       zone.archivedAt)
   ) {
-    throw new Error("Invalid transport zone.");
+    throw new ConvexError("Invalid transport zone.");
   }
 
   const contents = await Promise.all(
@@ -272,15 +272,17 @@ export async function loadAssignmentValidation(
 
   if (args.enforce !== false) {
     if (validation.hardBlocks.length) {
-      throw new Error(
-        `Assignment blocked: ${validation.hardBlocks.join(", ")}`,
+      throw new ConvexError(
+        `Assignment blocked (these are hard blocks and cannot be overridden): ${validation.hardBlocks.join(", ")}.`,
       );
     }
     if (
       requiresOverrideReason(validation) &&
       !normalizeOptionalText(args.assignmentOverrideReason)
     ) {
-      throw new Error("Assignment warnings require an override reason.");
+      throw new ConvexError(
+        `This assignment raises soft warnings (${validation.softWarnings.join(", ")}). Pass assignmentOverrideReason with a short reason to proceed, or use dryRun:true to preview without saving.`,
+      );
     }
   }
 

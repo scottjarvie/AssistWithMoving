@@ -13,7 +13,7 @@
 // convex/ingestionQueue.ts — that copy uses requireMovePermission (ctx.auth),
 // which is null inside a gateway tool, so the logic is duplicated here over the
 // subject bridge.
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import type { Doc } from "./_generated/dataModel";
@@ -224,7 +224,7 @@ export const claimQueue = mutation({
         delegatedOwnerIds: actor.delegatedOwnerIds,
       })
     ) {
-      throw new Error(
+      throw new ConvexError(
         "You don't have permission to run that person's queue. Ask a move owner to grant it.",
       );
     }
@@ -338,7 +338,7 @@ export const submitQueueResult = mutation({
       entry.householdId !== args.householdId ||
       entry.moveId !== args.moveId
     ) {
-      throw new Error("Queue entry not found in this move.");
+      throw new ConvexError("Queue entry not found in this move.");
     }
 
     // Don't let an agent overwrite a queue entry it doesn't own / hold / wasn't
@@ -352,7 +352,7 @@ export const submitQueueResult = mutation({
         delegatedOwnerIds: actor.delegatedOwnerIds,
       })
     ) {
-      throw new Error(
+      throw new ConvexError(
         "You can only submit results for your own queue entries (or ones you've been delegated to run).",
       );
     }
@@ -365,7 +365,7 @@ export const submitQueueResult = mutation({
 
     const from = effectiveStatus(entry, now);
     if (!canTransitionIngestionStatus(from, nextStatus)) {
-      throw new Error(
+      throw new ConvexError(
         `Cannot move a ${from} queue entry to ${nextStatus}. Claim it first with claim_queue.`,
       );
     }
@@ -378,7 +378,7 @@ export const submitQueueResult = mutation({
           item.householdId !== args.householdId ||
           item.moveId !== args.moveId
         ) {
-          throw new Error("Result item does not belong to this move.");
+          throw new ConvexError("Result item does not belong to this move.");
         }
       }
     }

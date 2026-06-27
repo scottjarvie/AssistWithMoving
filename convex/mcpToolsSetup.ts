@@ -15,7 +15,7 @@
 // Rooms/transport can be referenced BY NAME (resolved to the existing record) or
 // BY ID. Resolution never creates — the room/transport must already exist
 // (upsert_spaces / upsert_transport).
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -67,7 +67,7 @@ async function resolveSpaceId(
   if (ref.id) {
     const space = await ctx.db.get(ref.id);
     if (!space || space.moveId !== moveId) {
-      throw new Error("That room is not part of this move.");
+      throw new ConvexError("That room is not part of this move.");
     }
     return ref.id;
   }
@@ -80,7 +80,7 @@ async function resolveSpaceId(
   const match = spaces.find((s) => normName(s.name) === normName(name));
   if (!match) {
     const available = spaces.map((s) => s.name).join(", ") || "none yet";
-    throw new Error(
+    throw new ConvexError(
       `No room named "${name}" in this move. Existing rooms: ${available}. Create it with upsert_spaces first.`,
     );
   }
@@ -96,10 +96,10 @@ async function resolveTransportId(
   if (ref.id) {
     const resource = await ctx.db.get(ref.id);
     if (!resource || resource.moveId !== moveId) {
-      throw new Error("That transport is not part of this move.");
+      throw new ConvexError("That transport is not part of this move.");
     }
     if (resource.archivedAt) {
-      throw new Error("That transport is archived.");
+      throw new ConvexError("That transport is archived.");
     }
     return ref.id;
   }
@@ -112,7 +112,7 @@ async function resolveTransportId(
   const match = resources.find((r) => normName(r.name) === normName(name));
   if (!match) {
     const available = resources.map((r) => r.name).join(", ") || "none yet";
-    throw new Error(
+    throw new ConvexError(
       `No transport named "${name}" in this move. Existing transports: ${available}. Create it with upsert_transport first.`,
     );
   }
@@ -132,20 +132,20 @@ async function resolveTransportZoneId(
   if (ref.id) {
     const zone = await ctx.db.get(ref.id);
     if (!zone || zone.moveId !== moveId) {
-      throw new Error("That zone is not part of this move.");
+      throw new ConvexError("That zone is not part of this move.");
     }
     if (zone.archivedAt) {
-      throw new Error("That zone is archived.");
+      throw new ConvexError("That zone is archived.");
     }
     if (resourceId && zone.resourceId !== resourceId) {
-      throw new Error("That zone does not belong to the assigned transport.");
+      throw new ConvexError("That zone does not belong to the assigned transport.");
     }
     return ref.id;
   }
   const name = ref.name?.trim();
   if (!name) return undefined;
   if (!resourceId) {
-    throw new Error(
+    throw new ConvexError(
       "A zone only makes sense within a transport — set the transport first (transport/transportId) or pass a zoneId.",
     );
   }
@@ -162,7 +162,7 @@ async function resolveTransportZoneId(
         .filter((z) => !z.archivedAt)
         .map((z) => z.name)
         .join(", ") || "none yet";
-    throw new Error(
+    throw new ConvexError(
       `No zone named "${name}" on this transport. Existing zones: ${available}. Create it with upsert_transport first.`,
     );
   }
@@ -197,7 +197,7 @@ export const updateMove = mutation({
     );
     const move = await ctx.db.get(args.moveId);
     if (!move || move.householdId !== args.householdId) {
-      throw new Error("Move not found in this household.");
+      throw new ConvexError("Move not found in this household.");
     }
 
     // Archiving/unarchiving a move requires household:manage_settings in the
@@ -208,7 +208,7 @@ export const updateMove = mutation({
       args.status === "archived" ||
       (move.status === "archived" && args.status !== undefined)
     ) {
-      throw new Error(
+      throw new ConvexError(
         "Archiving a move isn't supported here — do it in the app.",
       );
     }
@@ -405,13 +405,13 @@ export const upsertTransport = mutation({
       // list_transport already filters out archived resources.
       if (draft.archive) {
         if (!draft.transportId) {
-          throw new Error(
+          throw new ConvexError(
             "To archive a transport, pass its transportId together with archive: true.",
           );
         }
         const resource = await ctx.db.get(draft.transportId);
         if (!resource || resource.moveId !== args.moveId) {
-          throw new Error("Transport not found for this move.");
+          throw new ConvexError("Transport not found for this move.");
         }
         await ctx.db.patch(draft.transportId, {
           archivedAt: now,
@@ -430,7 +430,7 @@ export const upsertTransport = mutation({
       if (draft.transportId) {
         const resource = await ctx.db.get(draft.transportId);
         if (!resource || resource.moveId !== args.moveId) {
-          throw new Error("Transport not found for this move.");
+          throw new ConvexError("Transport not found for this move.");
         }
         const patch: Partial<Doc<"transportResources">> = { updatedAt: now };
         // Explicit edit un-archives a previously archived transport, mirroring
@@ -454,9 +454,9 @@ export const upsertTransport = mutation({
         created = false;
       } else {
         const name = draft.name?.trim();
-        if (!name) throw new Error("A new transport needs a name.");
+        if (!name) throw new ConvexError("A new transport needs a name.");
         if (!draft.type) {
-          throw new Error(
+          throw new ConvexError(
             "A new transport needs a type (e.g. truck, trailer, personalVehicle, professionalMovers, storage).",
           );
         }
@@ -500,7 +500,7 @@ export const upsertTransport = mutation({
               existing.resourceId !== resourceId ||
               existing.moveId !== args.moveId
             ) {
-              throw new Error("Zone not found for this transport.");
+              throw new ConvexError("Zone not found for this transport.");
             }
             target = existing;
           } else if (z.name && z.name.trim()) {
@@ -513,7 +513,7 @@ export const upsertTransport = mutation({
 
           if (z.archive) {
             if (!target) {
-              throw new Error(
+              throw new ConvexError(
                 "Cannot archive a transport zone that does not exist (pass zoneId or an existing zone name).",
               );
             }
@@ -549,7 +549,7 @@ export const upsertTransport = mutation({
             });
           } else {
             const zoneName = z.name?.trim();
-            if (!zoneName) throw new Error("A new transport zone needs a name.");
+            if (!zoneName) throw new ConvexError("A new transport zone needs a name.");
             const zoneId = await ctx.db.insert("transportZones", {
               householdId: args.householdId,
               moveId: args.moveId,
@@ -646,7 +646,7 @@ export const placeBox = mutation({
       box.moveId !== args.moveId ||
       box.householdId !== args.householdId
     ) {
-      throw new Error("Box not found — pass a valid boxId or code (see list_boxes).");
+      throw new ConvexError("Box not found — pass a valid boxId or code (see list_boxes).");
     }
 
     const now = Date.now();
@@ -808,7 +808,7 @@ export const updateBox = mutation({
       box.moveId !== args.moveId ||
       box.householdId !== args.householdId
     ) {
-      throw new Error(
+      throw new ConvexError(
         "Box not found — pass a valid boxId or code (see list_boxes).",
       );
     }
@@ -1135,7 +1135,7 @@ export const updateItem = mutation({
       item.householdId !== args.householdId ||
       item.deletedAt
     ) {
-      throw new Error(
+      throw new ConvexError(
         "Item not found — pass a valid itemId (see list_items, search_inventory, or get_item).",
       );
     }

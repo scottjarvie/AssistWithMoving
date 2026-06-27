@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
@@ -413,7 +413,7 @@ async function assertItemSpaceTargets(
       space.moveId !== args.moveId ||
       space.status === "archived"
     ) {
-      throw new Error("Item space is not available for this move.");
+      throw new ConvexError("Item space is not available for this move.");
     }
   }
 }
@@ -512,7 +512,7 @@ export async function loadItemAssignmentValidation(
       : Promise.resolve(null),
   ]);
   if (!resource || resource.moveId !== args.moveId || resource.archivedAt) {
-    throw new Error("Invalid transport resource.");
+    throw new ConvexError("Invalid transport resource.");
   }
   if (
     args.assignedZoneId &&
@@ -521,7 +521,7 @@ export async function loadItemAssignmentValidation(
       zone.resourceId !== args.assignedResourceId ||
       zone.archivedAt)
   ) {
-    throw new Error("Invalid transport zone.");
+    throw new ConvexError("Invalid transport zone.");
   }
 
   const estimate = estimateItem(args.item);
@@ -547,15 +547,17 @@ export async function loadItemAssignmentValidation(
 
   if (args.enforce !== false) {
     if (validation.hardBlocks.length) {
-      throw new Error(
-        `Assignment blocked: ${validation.hardBlocks.join(", ")}`,
+      throw new ConvexError(
+        `Assignment blocked (these are hard blocks and cannot be overridden): ${validation.hardBlocks.join(", ")}.`,
       );
     }
     if (
       requiresOverrideReason(validation) &&
       !normalizeOptionalText(args.assignmentOverrideReason)
     ) {
-      throw new Error("Assignment warnings require an override reason.");
+      throw new ConvexError(
+        `This assignment raises soft warnings (${validation.softWarnings.join(", ")}). Pass assignmentOverrideReason with a short reason to proceed, or use dryRun:true to preview without saving.`,
+      );
     }
   }
 

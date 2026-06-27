@@ -4,7 +4,7 @@
 // exported as `<name>Args` and reused in convex/mcp.ts so the gateway's strict
 // arg-validator check matches exactly. createdVia is "mcp" for everything an
 // agent creates here.
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import { mutation, query } from "./_generated/server";
@@ -58,7 +58,7 @@ export const getMoveOverview = query({
     );
     const move = await ctx.db.get(args.moveId);
     if (!move || move.householdId !== args.householdId) {
-      throw new Error("Move not found in this household.");
+      throw new ConvexError("Move not found in this household.");
     }
     const [items, boxes, spaces] = await Promise.all([
       ctx.db
@@ -170,7 +170,7 @@ export const getItem = query({
       item.moveId !== args.moveId ||
       item.deletedAt !== undefined
     ) {
-      throw new Error("Item not found in this move.");
+      throw new ConvexError("Item not found in this move.");
     }
     const photos = await ctx.db
       .query("itemPhotos")
@@ -265,7 +265,7 @@ export const upsertItems = mutation({
           existing.moveId !== args.moveId ||
           existing.deletedAt !== undefined
         ) {
-          throw new Error(`Item ${draft.itemId} not found in this move.`);
+          throw new ConvexError(`Item ${draft.itemId} not found in this move.`);
         }
         if (!dryRun) {
           const name = normalizeItemName(draft.name);
@@ -398,7 +398,7 @@ export const upsertSpaces = mutation({
       // Footgun guard: a transport is NOT a space (different table, never in
       // list_transport). Redirect instead of silently creating a ghost room.
       if (draft.kind && transportLikeSpaceKinds.has(draft.kind)) {
-        throw new Error(
+        throw new ConvexError(
           `"${draft.kind}" is not a room kind — transports live in a separate system. Use upsert_transport (it has a militaryMovers type, trucks, trailers, PODs, storage, movers) so it shows up in list_transport. A space with that kind would be invisible to every transport tool.`,
         );
       }
@@ -406,7 +406,7 @@ export const upsertSpaces = mutation({
       // Archive path — mirrors upsert_transport's zone `archive` flag.
       if (draft.archive) {
         if (!draft.spaceId) {
-          throw new Error(
+          throw new ConvexError(
             "To archive a space, pass its spaceId together with archive: true.",
           );
         }
@@ -416,7 +416,7 @@ export const upsertSpaces = mutation({
           existing.householdId !== args.householdId ||
           existing.moveId !== args.moveId
         ) {
-          throw new Error(`Space ${draft.spaceId} not found in this move.`);
+          throw new ConvexError(`Space ${draft.spaceId} not found in this move.`);
         }
         await ctx.db.patch(draft.spaceId, {
           status: "archived",
@@ -434,7 +434,7 @@ export const upsertSpaces = mutation({
           existing.householdId !== args.householdId ||
           existing.moveId !== args.moveId
         ) {
-          throw new Error(`Space ${draft.spaceId} not found in this move.`);
+          throw new ConvexError(`Space ${draft.spaceId} not found in this move.`);
         }
         await ctx.db.patch(draft.spaceId, {
           name: draft.name.trim() || existing.name,
@@ -526,20 +526,20 @@ export const captureToQueue = mutation({
       for (const photoId of mediaPhotoIds) {
         const photo = await ctx.db.get(photoId);
         if (!photo || photo.moveId !== args.moveId) {
-          throw new Error(`Photo ${photoId} is not part of this move.`);
+          throw new ConvexError(`Photo ${photoId} is not part of this move.`);
         }
       }
       // Confirm any room/transport target belongs to this move.
       if (draft.targetSpaceId) {
         const space = await ctx.db.get(draft.targetSpaceId);
         if (!space || space.moveId !== args.moveId) {
-          throw new Error("Target room is not part of this move.");
+          throw new ConvexError("Target room is not part of this move.");
         }
       }
       if (draft.targetTransportId) {
         const transport = await ctx.db.get(draft.targetTransportId);
         if (!transport || transport.moveId !== args.moveId) {
-          throw new Error("Target transport is not part of this move.");
+          throw new ConvexError("Target transport is not part of this move.");
         }
       }
       const entryId = await ctx.db.insert("ingestionQueueEntries", {
@@ -709,13 +709,13 @@ export const packBoxes = mutation({
       if (boxId) {
         const box = await ctx.db.get(boxId);
         if (!box || box.moveId !== args.moveId || box.archivedAt) {
-          throw new Error(`Box ${boxId} not found in this move.`);
+          throw new ConvexError(`Box ${boxId} not found in this move.`);
         }
         code = box.code;
       } else {
         const rawCode = draft.code ? normalizeBoxCode(draft.code) : "";
         if (!rawCode) {
-          throw new Error("A code is required to create a new box.");
+          throw new ConvexError("A code is required to create a new box.");
         }
         const clash = await ctx.db
           .query("boxes")
@@ -724,7 +724,7 @@ export const packBoxes = mutation({
           )
           .first();
         if (clash) {
-          throw new Error(`Box code "${rawCode}" already exists in this move.`);
+          throw new ConvexError(`Box code "${rawCode}" already exists in this move.`);
         }
         code = rawCode;
         boxId = await ctx.db.insert("boxes", {
@@ -745,7 +745,7 @@ export const packBoxes = mutation({
       for (const entry of draft.items ?? []) {
         const item = await ctx.db.get(entry.itemId);
         if (!item || item.moveId !== args.moveId || item.deletedAt) {
-          throw new Error(`Item ${entry.itemId} not found in this move.`);
+          throw new ConvexError(`Item ${entry.itemId} not found in this move.`);
         }
         const quantity =
           entry.quantity && entry.quantity > 0 ? entry.quantity : 1;

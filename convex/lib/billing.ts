@@ -1,3 +1,5 @@
+import { ConvexError } from "convex/values";
+
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { applyFlagOverrides, featureEnvironment } from "./featureFlags";
@@ -211,7 +213,7 @@ export async function assertHouseholdEntitlement(
     args.increment ?? 1
   );
   if (!result.allowed) {
-    throw new Error(result.reason);
+    throw new ConvexError(result.reason ?? "Plan limit reached.");
   }
 }
 
