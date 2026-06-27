@@ -626,6 +626,119 @@ export const create = mutation({
   },
 });
 
+// Turn a misclassified item (a physical tote/box that was entered as an item, so
+// it has an item-#### code) into a real container with a B-### number. Copies the
+// item's name/room/size/placement onto a new box, moves its photos across, then
+// retires the item. The new box starts empty and can hold items.
+export const convertItemToBox = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+    containerType: v.optional(boxContainerType),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    if (actor.type !== "user") {
+      throw new ConvexError(directConvexUserContextRequiredMessage);
+    }
+    const item = await ctx.db.get(args.itemId);
+    if (!item || item.moveId !== args.moveId || item.deletedAt) {
+      throw new ConvexError("Item not found for this move.");
+    }
+    const now = Date.now();
+
+    // A container can't also be packed inside another container — drop any
+    // membership this item had before it becomes a box.
+    const memberships = await ctx.db
+      .query("boxItems")
+      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+      .collect();
+    for (const membership of memberships) {
+      await ctx.db.delete(membership._id);
+    }
+
+    const code = await generateBoxCode(ctx, args.moveId);
+    const assignmentValidation = await loadAssignmentValidation(ctx, {
+      moveId: args.moveId,
+      assignedResourceId: item.assignedResourceId,
+      assignedZoneId: item.assignedZoneId,
+      dimensionsIn: item.dimensionsIn,
+      estimatedWeightLb: item.estimatedWeightLb,
+      actualWeightLb: item.actualWeightLb,
+      estimatedVolumeCuFt: item.estimatedVolumeCuFt,
+    });
+    const boxId = await ctx.db.insert("boxes", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      code,
+      containerType: args.containerType ?? "plasticTote",
+      label: undefined,
+      nickname: normalizeOptionalText(item.name),
+      currentSpaceId: item.currentSpaceId,
+      room: normalizeOptionalText(item.room),
+      destinationRoom: normalizeOptionalText(item.destinationRoom),
+      description: normalizeOptionalText(item.description),
+      moveDayNote: undefined,
+      status: "open",
+      dimensionsIn: item.dimensionsIn,
+      estimatedWeightLb: item.estimatedWeightLb,
+      actualWeightLb: item.actualWeightLb,
+      estimatedVolumeCuFt: item.estimatedVolumeCuFt,
+      assignedResourceId: item.assignedResourceId,
+      assignedZoneId: item.assignedZoneId,
+      assignmentLocked: false,
+      assignmentOverrideReason: undefined,
+      ...assignmentValidation,
+      sealedAt: undefined,
+      createdByUserId: actor.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Move the item's photos onto the new container so its picture follows.
+    const photos = await ctx.db
+      .query("itemPhotos")
+      .withIndex("by_item_created", (q) => q.eq("itemId", args.itemId))
+      .collect();
+    for (const photo of photos) {
+      if (photo.archivedAt) continue;
+      await ctx.db.patch(photo._id, {
+        itemId: undefined,
+        boxId,
+        updatedAt: now,
+      });
+    }
+
+    // Retire the now-converted item.
+    await ctx.db.patch(args.itemId, {
+      status: "archived",
+      deletedAt: now,
+      updatedByUserId: actor.userId,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "user",
+      actorUserId: actor.userId,
+      category: "inventory",
+      action: "item.converted_to_box",
+      objectTable: "boxes",
+      objectId: boxId,
+      metadata: { code, fromItemId: String(args.itemId) },
+    });
+
+    return { boxId, code };
+  },
+});
+
 export const update = mutation({
   args: {
     householdId: v.id("households"),
