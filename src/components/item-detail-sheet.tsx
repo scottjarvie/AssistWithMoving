@@ -541,7 +541,10 @@ export function ItemDetailSheet({
 
           <div className="flex-1 px-4 pb-4">
             <Tabs defaultValue="details" className="gap-4">
-              <TabsList className="flex w-full flex-wrap justify-start">
+              {/* On a phone six tabs can't share one 32px row — a 3-col grid
+                  with real height beats a clipped flex-wrap. Releases the
+                  primitive's h-8 cap with h-auto and gives each tab a 36px target. */}
+              <TabsList className="grid h-auto w-full grid-cols-3 gap-1 [&>*]:min-h-9 sm:flex sm:flex-wrap sm:justify-start">
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="evidence">Evidence</TabsTrigger>
                 <TabsTrigger value="measurements">Measurements</TabsTrigger>

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -20,8 +27,10 @@ import {
   DataTable,
   DataTableColumnHeader,
   EmptyState,
+  isRowOpenIgnoredTarget,
   type OnBatchAction,
 } from "@/components/ui/data-table";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -563,11 +572,12 @@ export function MovableUnitsTable({
         onSortingChange={setSorting}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
-        renderMobileCard={({ row, selected, onSelectedChange }) => (
+        renderMobileCard={({ row, selected, onSelectedChange, onOpen }) => (
           <MovableUnitCard
             unit={row}
             selected={selected}
             onSelectedChange={onSelectedChange}
+            onOpen={onOpen}
             householdId={householdId}
             moveId={moveId}
             photoId={primaryPhotoByUnit.get(row.id)}
@@ -907,6 +917,7 @@ function MovableUnitCard({
   unit,
   selected,
   onSelectedChange,
+  onOpen,
   householdId,
   moveId,
   photoId,
@@ -914,46 +925,42 @@ function MovableUnitCard({
   unit: MovableUnit;
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
+  onOpen?: () => void;
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   photoId?: Id<"itemPhotos">;
 }) {
   const followUps = visibleFollowUps(unit);
-  const openBoxHref =
-    unit.kind === "box" && householdId && moveId
-      ? buildBoxLookupPath({
-          boxId: unit.recordId as Id<"boxes">,
-          householdId,
-          moveId,
-          returnTo: "load-plan",
-        })
-      : null;
+
+  // The whole card opens detail (box → its page, loose item → the sheet). Taps
+  // that land on the checkbox / a button / link are ignored by the shared guard
+  // so they don't double-fire.
+  function handleCardClick(event: ReactMouseEvent) {
+    if (!onOpen || isRowOpenIgnoredTarget(event.target)) return;
+    onOpen();
+  }
+  function handleCardKeyDown(event: ReactKeyboardEvent) {
+    if (!onOpen) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (isRowOpenIgnoredTarget(event.target)) return;
+    event.preventDefault();
+    onOpen();
+  }
 
   return (
     <div
-      role="listitem"
-      className="rounded-md border border-border bg-background/75 p-3"
+      role={onOpen ? "button" : "listitem"}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? `Open ${unit.name}` : undefined}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      className={cn(
+        "rounded-md border border-border bg-background/75 p-3",
+        onOpen &&
+          "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring",
+      )}
     >
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Checkbox
-            checked={selected}
-            aria-label={`Select ${unit.name}`}
-            onCheckedChange={(checked) => onSelectedChange(checked === true)}
-          />
-          Select
-        </label>
-        {openBoxHref ? (
-          <Button asChild size="sm" variant="outline">
-            <Link href={openBoxHref} aria-label={`Open ${unit.label}`}>
-              <PackageOpen aria-hidden="true" />
-              Open box
-            </Link>
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="mt-2 flex min-w-0 gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         <UnitThumbnail
           householdId={householdId}
           moveId={moveId}
@@ -966,29 +973,41 @@ function MovableUnitCard({
             </Badge>
             <Badge variant="outline">{unit.status}</Badge>
           </div>
-          <p className="mt-1 truncate text-sm font-medium">{unit.name}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          {/* The name is the row's identity — let it wrap instead of truncating. */}
+          <p className="mt-1 text-sm font-medium leading-snug">{unit.name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {unit.roomLabel} to {unit.destinationLabel}
           </p>
         </div>
+        {/* Big, comfortable selection target. */}
+        <label
+          className="-m-1 flex min-h-11 min-w-11 items-center justify-center p-1"
+          aria-label={`Select ${unit.name}`}
+        >
+          <Checkbox
+            checked={selected}
+            onCheckedChange={(checked) => onSelectedChange(checked === true)}
+          />
+        </label>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded-md border border-border bg-muted/20 p-2">
+      {/* One bordered container with dividers instead of three nested boxes. */}
+      <div className="mt-3 grid grid-cols-2 divide-x divide-y divide-border rounded-md border border-border bg-muted/20 text-xs sm:grid-cols-3 sm:divide-y-0">
+        <div className="p-2">
           <p className="text-muted-foreground">Weight</p>
-          <p className="mt-1 font-medium">{unit.weightLabel}</p>
+          <p className="mt-0.5 font-medium">{unit.weightLabel}</p>
           {unit.densityLbPerCuFt === undefined ? null : (
-            <p className="mt-1 text-muted-foreground">{unit.densityLabel}</p>
+            <p className="text-muted-foreground">{unit.densityLabel}</p>
           )}
         </div>
-        <div className="rounded-md border border-border bg-muted/20 p-2">
+        <div className="p-2">
           <p className="text-muted-foreground">Size</p>
-          <p className="mt-1 font-medium">{unit.dimensionsLabel}</p>
-          <p className="mt-1 text-muted-foreground">{unit.volumeLabel}</p>
+          <p className="mt-0.5 font-medium">{unit.dimensionsLabel}</p>
+          <p className="text-muted-foreground">{unit.volumeLabel}</p>
         </div>
-        <div className="rounded-md border border-border bg-muted/20 p-2">
+        <div className="col-span-2 p-2 sm:col-span-1">
           <p className="text-muted-foreground">Load</p>
-          <div className="mt-1">
+          <div className="mt-0.5">
             <AssignmentBadge
               state={unit.assignmentState}
               label={unit.assignmentLabel}
@@ -997,17 +1016,15 @@ function MovableUnitCard({
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {followUps.length ? (
-          followUps.map((followUp) => (
+      {followUps.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {followUps.map((followUp) => (
             <Badge key={followUp} variant="outline">
               {followUp}
             </Badge>
-          ))
-        ) : (
-          <Badge variant="secondary">ready to plan</Badge>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

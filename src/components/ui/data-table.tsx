@@ -224,6 +224,8 @@ export type DataTableProps<TData> = {
     selected: boolean
     onSelectedChange: (checked: boolean) => void
     table: TanstackTable<TData>
+    /** Opens the row's detail (same as a desktop row click); undefined when the table has no onRowOpen. */
+    onOpen?: () => void
   }) => React.ReactNode
   onRowOpen?: (row: TData) => void
   /** Optional accessible label for an openable row; defaults to "Open row details". */
@@ -247,7 +249,7 @@ const SELECT_COLUMN_ID = "__select__"
 const ROW_OPEN_IGNORE_SELECTOR =
   'button, a, input, select, textarea, label, [role="checkbox"], [role="menuitem"], [data-row-open-ignore]'
 
-function isRowOpenIgnoredTarget(target: EventTarget | null): boolean {
+export function isRowOpenIgnoredTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
     target.closest(ROW_OPEN_IGNORE_SELECTOR) !== null
@@ -443,6 +445,9 @@ export function DataTable<TData>({
                     selected: row.getIsSelected(),
                     onSelectedChange: (checked) => row.toggleSelected(checked),
                     table,
+                    onOpen: onRowOpen
+                      ? () => onRowOpen(row.original)
+                      : undefined,
                   })}
                 </React.Fragment>
               ))}

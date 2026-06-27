@@ -809,7 +809,7 @@ export function IngestionQueueList({
     queueFilters[0];
 
   return (
-    <Card id="ingestion-queue">
+    <Card id="ingestion-queue" size="sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="size-4 text-primary" aria-hidden="true" />

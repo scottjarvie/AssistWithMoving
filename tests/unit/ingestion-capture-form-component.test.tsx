@@ -197,7 +197,7 @@ describe("IngestionCaptureForm", () => {
 
     // The combined option is the default selection.
     expect(
-      screen.getByRole("button", { name: "One combined entry" }),
+      screen.getByRole("button", { name: "One entry" }),
     ).toHaveAttribute("aria-pressed", "true");
 
     await user.click(screen.getByRole("button", { name: "Add 3 files to queue" }));
@@ -224,7 +224,7 @@ describe("IngestionCaptureForm", () => {
     ]);
 
     await user.click(
-      screen.getByRole("button", { name: "Split into separate entries" }),
+      screen.getByRole("button", { name: "Separate entries" }),
     );
     await user.click(
       screen.getByRole("button", { name: "Add 2 entries to queue" }),

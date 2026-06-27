@@ -297,24 +297,21 @@ function MoveCard({
               </Tooltip>
             ) : null}
             <div className="min-w-0">
-              <CardTitle className="truncate text-lg font-semibold sm:text-xl">
+              <CardTitle className="break-words text-lg font-semibold sm:text-xl">
                 {move.title}
               </CardTitle>
               <CardDescription className="mt-1">
                 {route || "Route not set"}
               </CardDescription>
+              {/* Status lives in the title block (not the cramped action row) so
+                  it never fights the title for width on a phone. */}
+              <Badge variant="outline" className="mt-2" title={status.hint}>
+                {status.label}
+              </Badge>
             </div>
           </div>
           <div className="relative z-10 flex shrink-0 items-center gap-1.5">
             <MoveIdTooltip moveId={move._id} />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="cursor-default">
-                  <Badge variant="outline">{status.label}</Badge>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{status.hint}</TooltipContent>
-            </Tooltip>
             {householdId ? (
               <ActiveMoveMenu householdId={householdId} move={move} />
             ) : null}
@@ -336,7 +333,9 @@ function MoveIdTooltip({ moveId }: { moveId: Id<"moves"> }) {
         <button
           type="button"
           aria-label={`Move ID ${moveId} — click to copy`}
-          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          // Testing/support affordance with hover-only feedback — hidden on
+          // touch where it can't show its tooltip and only eats header width.
+          className="hidden size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
