@@ -16,12 +16,12 @@ describe("WorkspaceNav", () => {
     mockState.pathname = "/app/moves";
   });
 
-  it("renders exactly the four global destinations", () => {
+  it("renders exactly the five global destinations", () => {
     render(<WorkspaceNav />);
 
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const links = within(nav).getAllByRole("link");
-    expect(links).toHaveLength(4);
+    expect(links).toHaveLength(5);
 
     expect(within(nav).getByRole("link", { name: "Moves" })).toHaveAttribute(
       "href",
@@ -34,6 +34,9 @@ describe("WorkspaceNav", () => {
       "href",
       "/app/items",
     );
+    expect(
+      within(nav).getByRole("link", { name: "Spaces & Transport" }),
+    ).toHaveAttribute("href", "/app/spaces-transport");
     expect(within(nav).getByRole("link", { name: "Queue" })).toHaveAttribute(
       "href",
       "/app/queue",
@@ -101,24 +104,29 @@ describe("WorkspaceNav", () => {
     );
   });
 
-  it("renders the same four links in a mobile grid with the short Units label", () => {
+  it("renders the same five links in a mobile grid with short labels", () => {
     mockState.pathname = "/app/movable-units";
 
     render(<WorkspaceNav variant="mobile" />);
 
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(nav).toHaveClass("grid", "grid-cols-4");
-    expect(within(nav).getAllByRole("link")).toHaveLength(4);
+    expect(nav).toHaveClass("grid", "grid-cols-5");
+    expect(within(nav).getAllByRole("link")).toHaveLength(5);
 
     expect(within(nav).getByRole("link", { name: "Queue" })).toHaveAttribute(
       "href",
       "/app/queue",
     );
 
-    // The cramped bottom bar uses the shorter "Units" label for Movable Units.
+    // The cramped bottom bar uses shorter labels: "Units" for Movable Units and
+    // "Spaces" for Spaces & Transport.
     const unitsLink = within(nav).getByRole("link", { name: "Units" });
     expect(unitsLink).toHaveAttribute("href", "/app/movable-units");
     expect(unitsLink).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Spaces" })).toHaveAttribute(
+      "href",
+      "/app/spaces-transport",
+    );
     // Mobile active styling swaps to a foreground tint instead of the sidebar
     // accent background used by the desktop rail.
     expect(unitsLink).toHaveClass("text-foreground");

@@ -4,24 +4,30 @@ import { isGlobalNavActive } from "../../src/lib/workspace-nav";
 import { globalNavItems } from "../../src/lib/workspace-nav-items";
 
 describe("global nav", () => {
-  it("exposes exactly the four top-level destinations", () => {
+  it("exposes exactly the five top-level destinations", () => {
     expect(globalNavItems.map((item) => item.label)).toEqual([
       "Moves",
       "Movable Units",
       "Items",
+      "Spaces & Transport",
       "Queue",
     ]);
     expect(globalNavItems.map((item) => item.href)).toEqual([
       "/app/moves",
       "/app/movable-units",
       "/app/items",
+      "/app/spaces-transport",
       "/app/queue",
     ]);
-    // Movable Units gets a shorter label for the cramped mobile bottom bar.
+    // The long labels get a shorter form for the cramped mobile bottom bar.
     expect(
       globalNavItems.find((item) => item.href === "/app/movable-units")
         ?.shortLabel
     ).toBe("Units");
+    expect(
+      globalNavItems.find((item) => item.href === "/app/spaces-transport")
+        ?.shortLabel
+    ).toBe("Spaces");
   });
 
   it("lights up the matching section for exact and nested paths", () => {
@@ -31,6 +37,9 @@ describe("global nav", () => {
       isGlobalNavActive("/app/movable-units", "/app/movable-units")
     ).toBe(true);
     expect(isGlobalNavActive("/app/items", "/app/items")).toBe(true);
+    expect(
+      isGlobalNavActive("/app/spaces-transport", "/app/spaces-transport")
+    ).toBe(true);
     expect(isGlobalNavActive("/app/queue", "/app/queue")).toBe(true);
   });
 

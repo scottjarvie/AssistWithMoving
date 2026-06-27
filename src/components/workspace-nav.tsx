@@ -7,6 +7,7 @@ import {
   Inbox,
   PackageCheck,
   Truck,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 
@@ -18,6 +19,7 @@ const navIcons = {
   moves: Truck,
   movableUnits: PackageCheck,
   items: ClipboardList,
+  spacesTransport: Warehouse,
   queue: Inbox,
 } satisfies Record<GlobalNavItem["iconKey"], LucideIcon>;
 
@@ -32,7 +34,7 @@ export function WorkspaceNav({
   return (
     <nav
       aria-label="Primary"
-      className={cn(mobile ? "grid grow grid-cols-4" : "space-y-1")}
+      className={cn(mobile ? "grid grow grid-cols-5" : "space-y-1")}
     >
       {globalNavItems.map((item) => {
         const Icon = navIcons[item.iconKey];

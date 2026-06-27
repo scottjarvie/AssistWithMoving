@@ -9,9 +9,9 @@
 // boxes.update / items.update paths, and the unified per-row results are
 // returned in the original input order.
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation } from "./_generated/server";
 import {
   BATCH_ASSIGN_MAX_ROWS,
@@ -20,6 +20,7 @@ import {
   type BatchAssignRowResult,
   type BatchAssignTarget,
 } from "./lib/batchAssign";
+import { recordAuditEvent } from "./lib/audit";
 import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
@@ -91,5 +92,160 @@ export const batchAssign = mutation({
     // so the unified shape is returned directly.
     const results: BatchAssignRowResult[] = result.results;
     return { ...result, results };
+  },
+});
+
+// UI helper sibling to batchAssign: PLACE a mixed selection of movable units
+// (boxes + loose items) into a physical moveSpace by setting currentSpaceId — or
+// clear it (clearCurrentSpace) to send them back to "Needs a home". This is the
+// "Move to space" bulk action on the Spaces and Transport page. Transport
+// assignment (assignedResourceId/Zone) is a SEPARATE axis handled by batchAssign;
+// placing in a space here does not touch it.
+export const batchPlaceInSpace = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    units: v.array(
+      v.object({
+        kind: v.union(v.literal("box"), v.literal("item")),
+        recordId: v.string(),
+      }),
+    ),
+    target: v.object({
+      currentSpaceId: v.optional(v.id("moveSpaces")),
+      clearCurrentSpace: v.optional(v.boolean()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    if (actor.type !== "user") {
+      throw new ConvexError(directConvexUserContextRequiredMessage);
+    }
+    if (args.units.length > BATCH_ASSIGN_MAX_ROWS) {
+      throw new ConvexError(
+        `Batch space placement is limited to ${BATCH_ASSIGN_MAX_ROWS} units.`,
+      );
+    }
+
+    const clearing = args.target.clearCurrentSpace === true;
+    const targetSpaceId = clearing ? undefined : args.target.currentSpaceId;
+    if (!clearing && !targetSpaceId) {
+      throw new ConvexError(
+        "Choose a space to move these units into, or clear their space.",
+      );
+    }
+
+    // Validate the destination space belongs to this move and is active. Mirrors
+    // assertItemSpaceTargets in items.ts so a stray/foreign/archived space can't
+    // be written onto a box or item.
+    if (targetSpaceId) {
+      const space = await ctx.db.get(targetSpaceId);
+      if (
+        !space ||
+        space.householdId !== args.householdId ||
+        space.moveId !== args.moveId ||
+        space.status === "archived"
+      ) {
+        throw new ConvexError("That space is not available for this move.");
+      }
+    }
+
+    const now = Date.now();
+    const results: Array<{
+      index: number;
+      ok: boolean;
+      recordId?: string;
+      error?: string;
+    }> = [];
+
+    for (const [index, unit] of args.units.entries()) {
+      try {
+        if (unit.kind === "box") {
+          // normalizeId rejects a recordId that isn't actually a boxes id
+          // (Convex ids encode their table), guarding against a mismatched
+          // kind+id writing to the wrong table.
+          const boxId = ctx.db.normalizeId("boxes", unit.recordId);
+          const box = boxId ? await ctx.db.get(boxId) : null;
+          if (
+            !box ||
+            box.householdId !== args.householdId ||
+            box.moveId !== args.moveId ||
+            box.archivedAt
+          ) {
+            throw new ConvexError("Box not found.");
+          }
+          // NOTE: boxes carry only updatedAt (no updatedByUserId column),
+          // unlike items — see schema.ts.
+          const patch: Partial<Doc<"boxes">> = {
+            currentSpaceId: targetSpaceId,
+            updatedAt: now,
+          };
+          await ctx.db.patch(box._id, patch);
+          await recordAuditEvent(ctx, {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            actorType: "user",
+            actorUserId: actor.userId,
+            category: "inventory",
+            action: "box.placed_in_space",
+            objectTable: "boxes",
+            objectId: box._id,
+            metadata: { rowIndex: index, currentSpaceId: targetSpaceId, cleared: clearing },
+          });
+          results.push({ index, ok: true, recordId: String(box._id) });
+        } else {
+          const itemId = ctx.db.normalizeId("items", unit.recordId);
+          const item = itemId ? await ctx.db.get(itemId) : null;
+          if (
+            !item ||
+            item.householdId !== args.householdId ||
+            item.moveId !== args.moveId ||
+            item.deletedAt
+          ) {
+            throw new ConvexError("Item not found.");
+          }
+          const patch: Partial<Doc<"items">> = {
+            currentSpaceId: targetSpaceId,
+            updatedByUserId: actor.userId,
+            updatedAt: now,
+          };
+          await ctx.db.patch(item._id, patch);
+          await recordAuditEvent(ctx, {
+            householdId: args.householdId,
+            moveId: args.moveId,
+            actorType: "user",
+            actorUserId: actor.userId,
+            category: "inventory",
+            action: "item.placed_in_space",
+            objectTable: "items",
+            objectId: item._id,
+            metadata: { rowIndex: index, currentSpaceId: targetSpaceId, cleared: clearing },
+          });
+          results.push({ index, ok: true, recordId: String(item._id) });
+        }
+      } catch (error) {
+        results.push({
+          index,
+          ok: false,
+          recordId: unit.recordId,
+          error:
+            error instanceof ConvexError
+              ? String(error.data)
+              : "Could not move that unit.",
+        });
+      }
+    }
+
+    const succeeded = results.filter((row) => row.ok).length;
+    return {
+      succeeded,
+      failed: results.length - succeeded,
+      results,
+    };
   },
 });
