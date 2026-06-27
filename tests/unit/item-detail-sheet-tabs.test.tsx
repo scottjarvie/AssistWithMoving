@@ -21,11 +21,22 @@ const componentMocks = vi.hoisted(() => ({
   PhotoUploadControl: vi.fn(() => <div>Photo upload control</div>),
 }));
 
+// Sentinel api so useQuery can tell the queries apart (people vs the
+// present-location space/transport lists added in MOVE-349 phase 7).
+vi.mock("../../convex/_generated/api", () => {
+  const makeNs = (ns: string) =>
+    new Proxy({}, { get: (_t, prop) => `${ns}.${String(prop)}` });
+  const api = new Proxy({}, { get: (_t, ns) => makeNs(String(ns)) });
+  return { api };
+});
+
 vi.mock("convex/react", () => ({
-  useQuery: vi.fn((_query, args) => {
+  useQuery: vi.fn((query: string, args) => {
     if (args === "skip") return undefined;
-    if (args?.objectTable === "items") return sheetData.activity;
-    return sheetData.people;
+    if (query === "audit.listForObject") return sheetData.activity;
+    if (query === "movePeople.listForMove") return sheetData.people;
+    // moveSpaces.listForMove + transportResources.listForMoveWithZones — empty here.
+    return [];
   }),
 }));
 

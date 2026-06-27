@@ -76,7 +76,7 @@ function seedData() {
       { _id: "space_1", kind: "originRoom", name: "Kitchen", status: "active" },
     ],
     "transportResources.listForMoveWithZones": [
-      { _id: "res_1", type: "truck", name: "26ft Truck", zones: [] },
+      { resource: { _id: "res_1", type: "truck", name: "26ft Truck" }, zones: [] },
     ],
     "estimates.reportForMove": {
       resourceReports: [

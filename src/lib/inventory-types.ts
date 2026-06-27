@@ -28,6 +28,11 @@ export type InventoryItemPatch = {
   destinationRoom?: string;
   currentSpaceId?: Id<"moveSpaces">;
   destinationSpaceId?: Id<"moveSpaces">;
+  clearCurrentSpace?: boolean;
+  assignedResourceId?: Id<"transportResources">;
+  assignedZoneId?: Id<"transportZones">;
+  clearAssignedResource?: boolean;
+  clearAssignedZone?: boolean;
   category?: string;
   subcategory?: string;
   ownerPersonId?: Id<"movePeople">;
