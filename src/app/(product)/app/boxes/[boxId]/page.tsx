@@ -9,6 +9,7 @@ export default async function BoxLookupPage({
     householdId?: string;
     moveId?: string;
     returnTo?: string;
+    edit?: string;
   }>;
 }) {
   const [{ boxId }, query] = await Promise.all([params, searchParams]);
@@ -19,6 +20,7 @@ export default async function BoxLookupPage({
       householdId={query.householdId}
       moveId={query.moveId}
       returnTo={query.returnTo}
+      edit={query.edit}
     />
   );
 }

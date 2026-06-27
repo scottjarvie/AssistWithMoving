@@ -9,6 +9,9 @@ const apiMock = vi.hoisted(() => ({
     get: "boxes.get",
     update: "boxes.update",
   },
+  items: {
+    update: "items.update",
+  },
   transportResources: {
     listForMoveWithZones: "transportResources.listForMoveWithZones",
   },
@@ -164,8 +167,9 @@ describe("BoxLookup", () => {
     expect(screen.getByText("Present location")).toBeInTheDocument();
     expect(screen.getByText("Not set")).toBeInTheDocument();
     expect(screen.getByText("Needs load assignment")).toBeInTheDocument();
-    expect(screen.getByText("Socket set")).toBeInTheDocument();
-    expect(screen.getByText("item-0001")).toBeInTheDocument();
+    // Item name has its own line; code + qty render together beneath it (MOVE-340).
+    expect(screen.getByRole("button", { name: "Edit name: Socket set" })).toBeInTheDocument();
+    expect(screen.getByText(/item-0001/)).toBeInTheDocument();
 
     // The removed clutter must be gone.
     expect(screen.queryByText("Open-box checklist")).not.toBeInTheDocument();
@@ -188,7 +192,7 @@ describe("BoxLookup", () => {
     const weight = screen.getByLabelText("Weight (lb)");
     await user.clear(weight);
     await user.type(weight, "20");
-    await user.click(screen.getByRole("button", { name: "Save size" }));
+    await user.click(screen.getByRole("button", { name: "Save weight & size" }));
 
     await waitFor(() => {
       expect(lookupData.mutations.updateBox).toHaveBeenCalledWith(
