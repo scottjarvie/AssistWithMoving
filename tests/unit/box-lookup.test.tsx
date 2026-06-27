@@ -228,8 +228,11 @@ describe("BoxLookup", () => {
     const origination = screen.getByLabelText("Origination");
     await user.clear(origination);
     await user.type(origination, "Kitchen");
-    expect(screen.getByLabelText("Present location")).toBeInTheDocument();
-    expect(screen.getByLabelText("Transport")).toBeInTheDocument();
+    // Present location is now a single grouped picker (a space OR a transport);
+    // the separate "Transport" control was merged into it as an optgroup.
+    const presentLocation = screen.getByLabelText("Present location");
+    expect(presentLocation).toBeInTheDocument();
+    expect(presentLocation.querySelector('optgroup[label="Transportation"]')).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Save placement" }));
 

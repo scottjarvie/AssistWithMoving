@@ -95,12 +95,20 @@ export function BoxLookup({
   const [captureOpen, setCaptureOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const openedFromLoadPlan = returnTo === "load-plan";
-  const primaryBackHref =
-    openedFromLoadPlan && moveId
-      ? moveWorkspaceAnchorPath(moveId, "#load-plan")
-      : moveBoxesPath(moveId);
-  const primaryBackLabel = openedFromLoadPlan ? "Load plan" : "Boxes";
+  // Return the user to wherever they opened the unit from.
+  const back =
+    returnTo === "load-plan" && moveId
+      ? {
+          href: moveWorkspaceAnchorPath(moveId, "#load-plan"),
+          label: "Load plan",
+        }
+      : returnTo === "movable-units"
+        ? { href: "/app/movable-units", label: "Movable Units" }
+        : returnTo === "spaces-transport"
+          ? { href: "/app/spaces-transport", label: "Spaces & Transport" }
+          : { href: moveBoxesPath(moveId), label: "Boxes" };
+  const primaryBackHref = back.href;
+  const primaryBackLabel = back.label;
 
   const backRow = (
     <div className="mb-4">
@@ -543,11 +551,14 @@ function PlacementEditor({
   const [destinationRoom, setDestinationRoom] = useState(
     box.destinationRoom ?? "",
   );
+  // Present location is a SINGLE value — a room OR a transport, never both.
   const [spaceId, setSpaceId] = useState<string>(box.currentSpaceId ?? "");
   const [resourceId, setResourceId] = useState<string>(
     box.assignedResourceId ?? "",
   );
   const [zoneId, setZoneId] = useState<string>(box.assignedZoneId ?? "");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [needsOverride, setNeedsOverride] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const selectClass =
@@ -556,10 +567,36 @@ function PlacementEditor({
     resources.find((entry) => String(entry.resource._id) === resourceId)
       ?.zones ?? [];
 
+  // One picker, two groups: pick a Space OR a Transport. Encode as
+  // "space:<id>" / "transport:<id>" so a single <select> drives both axes.
+  const presentValue = resourceId
+    ? `transport:${resourceId}`
+    : spaceId
+      ? `space:${spaceId}`
+      : "";
+  function onPresentChange(value: string) {
+    setNeedsOverride(false);
+    setOverrideReason("");
+    if (value.startsWith("space:")) {
+      setSpaceId(value.slice("space:".length));
+      setResourceId("");
+      setZoneId("");
+    } else if (value.startsWith("transport:")) {
+      setResourceId(value.slice("transport:".length));
+      setSpaceId("");
+      setZoneId("");
+    } else {
+      setSpaceId("");
+      setResourceId("");
+      setZoneId("");
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     onMessage(null);
+    const reason = overrideReason.trim();
     try {
       await updateBox({
         householdId,
@@ -567,23 +604,48 @@ function PlacementEditor({
         boxId: box._id,
         room,
         destinationRoom,
-        ...(spaceId ? { currentSpaceId: spaceId as Id<"moveSpaces"> } : {}),
+        // Present location is mutually exclusive: a transport clears the room,
+        // a room clears the transport. Neither touches origination/destination.
         ...(resourceId
           ? {
               assignedResourceId: resourceId as Id<"transportResources">,
               ...(zoneId
                 ? { assignedZoneId: zoneId as Id<"transportZones"> }
                 : { clearAssignedZone: true }),
+              clearCurrentSpace: true,
+              ...(reason ? { assignmentOverrideReason: reason } : {}),
             }
-          : { clearAssignedResource: true }),
+          : {
+              clearAssignedResource: true,
+              clearAssignedZone: true,
+              ...(spaceId
+                ? { currentSpaceId: spaceId as Id<"moveSpaces"> }
+                : { clearCurrentSpace: true }),
+            }),
+        // Loading onto a transport marks the unit physically loaded; moving it
+        // back to a room reverts a loaded box to staged. Other statuses stand.
+        ...(resourceId
+          ? { status: "loaded" as const }
+          : box.status === "loaded"
+            ? { status: "staged" as const }
+            : {}),
       });
       onSaved(`${box.code} placement updated.`);
     } catch (error) {
-      onMessage(
+      const messageText =
         error instanceof Error
           ? error.message
-          : `Could not update placement for ${box.code}.`,
-      );
+          : `Could not update placement for ${box.code}.`;
+      // A soft capacity warning is overridable — reveal a reason field so the
+      // user can acknowledge it and retry. Hard blocks stay blocked.
+      if (
+        resourceId &&
+        !reason &&
+        /override|warning|capacity|heav|exceed/i.test(messageText)
+      ) {
+        setNeedsOverride(true);
+      }
+      onMessage(messageText);
     } finally {
       setSaving(false);
     }
@@ -619,43 +681,40 @@ function PlacementEditor({
             aria-label="Destination"
           />
         </label>
-        <label className="block">
+        <label className="block sm:col-span-2">
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
-            Present location
+            Present location — a space or a transport
           </span>
           <select
             className={selectClass}
-            value={spaceId}
-            onChange={(event) => setSpaceId(event.target.value)}
+            value={presentValue}
+            onChange={(event) => onPresentChange(event.target.value)}
             aria-label="Present location"
           >
             <option value="">Not set</option>
-            {spaces.map((space) => (
-              <option key={space._id} value={space._id}>
-                {space.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
-            Transport
-          </span>
-          <select
-            className={selectClass}
-            value={resourceId}
-            onChange={(event) => {
-              setResourceId(event.target.value);
-              setZoneId("");
-            }}
-            aria-label="Transport"
-          >
-            <option value="">Unassigned</option>
-            {resources.map((entry) => (
-              <option key={entry.resource._id} value={entry.resource._id}>
-                {entry.resource.name}
-              </option>
-            ))}
+            <optgroup label="Spaces">
+              {spaces.map((space) => (
+                <option key={space._id} value={`space:${space._id}`}>
+                  {space.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Transportation">
+              {resources.length === 0 ? (
+                <option value="" disabled>
+                  Add a truck or trailer first
+                </option>
+              ) : (
+                resources.map((entry) => (
+                  <option
+                    key={entry.resource._id}
+                    value={`transport:${entry.resource._id}`}
+                  >
+                    {entry.resource.name}
+                  </option>
+                ))
+              )}
+            </optgroup>
           </select>
           {resourceId && zonesForResource.length ? (
             <select
@@ -672,6 +731,15 @@ function PlacementEditor({
               ))}
             </select>
           ) : null}
+          {needsOverride ? (
+            <Input
+              value={overrideReason}
+              onChange={(event) => setOverrideReason(event.target.value)}
+              placeholder="Reason to load despite the capacity warning"
+              className="mt-2 h-9"
+              aria-label="Capacity override reason"
+            />
+          ) : null}
         </label>
       </div>
       <datalist id="placement-rooms">
@@ -680,8 +748,9 @@ function PlacementEditor({
         ))}
       </datalist>
       <p className="mt-2 text-xs text-muted-foreground">
-        Origination and destination are free text; present location and
-        transport pull from this move&apos;s spaces and load resources.
+        Origination and destination are free text. Present location is a single
+        choice — a room/space OR a transport (loading it onto a truck marks the
+        unit loaded). Pick a transport with zones to choose a zone.
       </p>
       <div className="mt-3 flex gap-2">
         <Button type="submit" size="sm" disabled={saving}>

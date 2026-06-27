@@ -58,6 +58,9 @@ const boxWriteArgs = {
   assignmentOverrideReason: v.optional(v.string()),
   clearAssignedResource: v.optional(v.boolean()),
   clearAssignedZone: v.optional(v.boolean()),
+  // Clear the present-location room (currentSpaceId). Used when a unit's present
+  // location switches to a transport, which owns the location instead.
+  clearCurrentSpace: v.optional(v.boolean()),
 };
 
 export async function assertResourceAndZone(
@@ -575,7 +578,8 @@ export const update = mutation({
       patch.label = normalizeOptionalText(args.label);
     if (args.nickname !== undefined)
       patch.nickname = normalizeOptionalText(args.nickname);
-    if (args.currentSpaceId !== undefined)
+    if (args.clearCurrentSpace) patch.currentSpaceId = undefined;
+    else if (args.currentSpaceId !== undefined)
       patch.currentSpaceId = args.currentSpaceId;
     if (args.room !== undefined) patch.room = normalizeOptionalText(args.room);
     if (args.destinationRoom !== undefined) {
