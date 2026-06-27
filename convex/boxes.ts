@@ -650,6 +650,12 @@ async function convertItemToBoxCore(
   }
 
   const code = await generateBoxCode(ctx, item.moveId);
+  // The item already carried this assignment, so converting it just preserves
+  // that — pass an override reason so a soft capacity warning doesn't block the
+  // migration (it would otherwise throw for a heavy tote already on a truck).
+  const overrideReason = item.assignedResourceId
+    ? "Converted from item to box (kept its existing transport assignment)"
+    : undefined;
   const assignmentValidation = await loadAssignmentValidation(ctx, {
     moveId: item.moveId,
     assignedResourceId: item.assignedResourceId,
@@ -658,6 +664,7 @@ async function convertItemToBoxCore(
     estimatedWeightLb: item.estimatedWeightLb,
     actualWeightLb: item.actualWeightLb,
     estimatedVolumeCuFt: item.estimatedVolumeCuFt,
+    assignmentOverrideReason: overrideReason,
   });
   const boxId = await ctx.db.insert("boxes", {
     householdId: item.householdId,
@@ -679,7 +686,7 @@ async function convertItemToBoxCore(
     assignedResourceId: item.assignedResourceId,
     assignedZoneId: item.assignedZoneId,
     assignmentLocked: false,
-    assignmentOverrideReason: undefined,
+    assignmentOverrideReason: normalizeOptionalText(overrideReason),
     ...assignmentValidation,
     sealedAt: undefined,
     createdByUserId,
