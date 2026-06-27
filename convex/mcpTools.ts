@@ -3,7 +3,7 @@
 // the gateway-injected `caller` and resolves the user from `caller.subject` via
 // the identity bridge — NEVER ctx.auth, which is null across the component
 // boundary. Phase 1 ships a read-only core; write tools follow the same shape.
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import { query } from "./_generated/server";
@@ -136,7 +136,7 @@ export const getMoveSummary = query({
 
     const move = await ctx.db.get(args.moveId);
     if (!move || move.householdId !== args.householdId) {
-      throw new Error("Move not found in this household.");
+      throw new ConvexError("Move not found in this household.");
     }
 
     return {

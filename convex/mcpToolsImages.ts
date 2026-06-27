@@ -7,7 +7,7 @@
 // (photos.getDisplayUrl / initUpload / finalizeUpload), which trust the
 // household/move ids we pass after that check. Web-API only (fetch + atob), so
 // these actions need no Node runtime.
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import { api, internal } from "./_generated/api";
@@ -345,13 +345,13 @@ export const addImages = action({
         let mimeType = image.mimeType ?? "image/jpeg";
         if (image.url) {
           const res = await fetch(image.url);
-          if (!res.ok) throw new Error(`fetch failed (${res.status})`);
+          if (!res.ok) throw new ConvexError(`fetch failed (${res.status})`);
           mimeType = image.mimeType ?? res.headers.get("content-type") ?? mimeType;
           bytes = new Uint8Array(await res.arrayBuffer());
         } else if (image.base64) {
           bytes = bytesFromBase64(image.base64);
         } else {
-          throw new Error("Provide url or base64.");
+          throw new ConvexError("Provide url or base64.");
         }
 
         // completeUploadSession requires positive width/height for images, but
@@ -391,7 +391,7 @@ export const addImages = action({
           headers: init.headers,
           body: new Blob([bytes.buffer as ArrayBuffer], { type: mimeType }),
         });
-        if (!put.ok) throw new Error(`upload PUT failed (${put.status})`);
+        if (!put.ok) throw new ConvexError(`upload PUT failed (${put.status})`);
 
         const finalized = await ctx.runAction(
           internal.photos.finalizeUploadForActor,
@@ -458,13 +458,13 @@ export const attachPhotos = mutation({
     if (t.itemId) {
       const item = await ctx.db.get(t.itemId);
       if (!item || item.moveId !== args.moveId || item.deletedAt) {
-        throw new Error("Target item is not part of this move.");
+        throw new ConvexError("Target item is not part of this move.");
       }
     }
     if (t.boxId) {
       const box = await ctx.db.get(t.boxId);
       if (!box || box.moveId !== args.moveId || box.archivedAt) {
-        throw new Error("Target box is not part of this move.");
+        throw new ConvexError("Target box is not part of this move.");
       }
     }
     if (t.spaceId) {
@@ -474,7 +474,7 @@ export const attachPhotos = mutation({
         space.moveId !== args.moveId ||
         space.status === "archived"
       ) {
-        throw new Error("Target room is not part of this move.");
+        throw new ConvexError("Target room is not part of this move.");
       }
     }
     if (t.transportResourceId) {
@@ -484,13 +484,13 @@ export const attachPhotos = mutation({
         resource.moveId !== args.moveId ||
         resource.archivedAt
       ) {
-        throw new Error("Target transport is not part of this move.");
+        throw new ConvexError("Target transport is not part of this move.");
       }
     }
     if (t.transportZoneId) {
       const zone = await ctx.db.get(t.transportZoneId);
       if (!zone || zone.moveId !== args.moveId || zone.archivedAt) {
-        throw new Error("Target transport zone is not part of this move.");
+        throw new ConvexError("Target transport zone is not part of this move.");
       }
     }
 
