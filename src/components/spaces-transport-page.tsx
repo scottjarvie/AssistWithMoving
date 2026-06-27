@@ -410,6 +410,7 @@ function SpacesTransportWorkspace({
           householdId,
           moveId,
           boxId: entry.recordId as Id<"boxes">,
+          returnTo: "spaces-transport",
         }),
       );
       return;

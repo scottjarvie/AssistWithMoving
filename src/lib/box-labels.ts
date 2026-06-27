@@ -1,8 +1,15 @@
+// Where the user came from, so the box detail page can offer a "back to …"
+// link that returns to the right place (not always the load plan).
+export type BoxLookupReturnTo =
+  | "load-plan"
+  | "movable-units"
+  | "spaces-transport";
+
 type BoxLabelPathInput = {
   householdId: string;
   moveId: string;
   boxId: string;
-  returnTo?: "load-plan";
+  returnTo?: BoxLookupReturnTo;
 };
 
 type BoxLabelSheetPathInput = {

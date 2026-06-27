@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import { AssignmentBadge } from "@/components/ui/status-badges";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
+import { PhotoLightbox } from "@/components/photo-lightbox";
 import { buildBoxLookupPath } from "@/lib/box-labels";
 import {
   buildMovableUnits,
@@ -133,6 +134,9 @@ export function MovableUnitsTable({
   const [previewNeedsReason, setPreviewNeedsReason] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  // A single active stat filter (click a stat chip to filter the list, click it
+  // again to clear). Counts stay full-move accurate; only the rows are filtered.
+  const [statFilter, setStatFilter] = useState<StatFilter>(null);
 
   const resourceNamesById = useMemo(
     () =>
@@ -182,20 +186,28 @@ export function MovableUnitsTable({
     [boxes, looseItems, resourceNamesById, zoneNamesById],
   );
   const summary = useMemo(() => summarizeMovableUnits(units), [units]);
-  // Most-recent photo per box / loose item, keyed by MovableUnit.id, for the
-  // leading thumbnail column. listForMove returns newest-first, so the first
-  // photo seen per unit is its most recent — a reasonable default "cover".
-  const primaryPhotoByUnit = useMemo(() => {
-    const map = new Map<string, Id<"itemPhotos">>();
+  // Rows actually shown — the full set, or just those matching the active stat.
+  const visibleUnits = useMemo(
+    () => (statFilter ? units.filter(matchesStatFilter(statFilter)) : units),
+    [units, statFilter],
+  );
+  function toggleStatFilter(next: StatFilter) {
+    setStatFilter((current) => (current === next ? null : next));
+  }
+  // All photos per box / loose item, keyed by MovableUnit.id, newest-first
+  // (listForMove returns newest-first). The first is the cover thumbnail; the
+  // full list feeds the lightbox so you can scroll through every photo.
+  const photosByUnit = useMemo(() => {
+    const map = new Map<string, Id<"itemPhotos">[]>();
+    const push = (key: string, photoId: Id<"itemPhotos">) => {
+      const list = map.get(key);
+      if (list) list.push(photoId);
+      else map.set(key, [photoId]);
+    };
     for (const photo of movePhotos ?? []) {
-      if (photo.boxId) {
-        const key = `box:${photo.boxId}`;
-        if (!map.has(key)) map.set(key, photo._id);
-      }
-      if (photo.itemId) {
-        const key = `looseItem:${photo.itemId}`;
-        if (!map.has(key)) map.set(key, photo._id);
-      }
+      if (photo.archivedAt) continue;
+      if (photo.boxId) push(`box:${photo.boxId}`, photo._id);
+      if (photo.itemId) push(`looseItem:${photo.itemId}`, photo._id);
     }
     return map;
   }, [movePhotos]);
@@ -213,7 +225,7 @@ export function MovableUnitsTable({
             boxId: unit.recordId as Id<"boxes">,
             householdId,
             moveId,
-            returnTo: "load-plan",
+            returnTo: "movable-units",
           }),
         );
         return;
@@ -341,7 +353,7 @@ export function MovableUnitsTable({
           <UnitThumbnail
             householdId={householdId}
             moveId={moveId}
-            photoId={primaryPhotoByUnit.get(row.original.id)}
+            photoIds={photosByUnit.get(row.original.id) ?? []}
           />
         ),
       },
@@ -364,7 +376,7 @@ export function MovableUnitsTable({
                   boxId: unit.recordId as Id<"boxes">,
                   householdId,
                   moveId,
-                  returnTo: "load-plan",
+                  returnTo: "movable-units",
                 })
               : null;
           return (
@@ -509,7 +521,7 @@ export function MovableUnitsTable({
         },
       },
     ],
-    [householdId, moveId, primaryPhotoByUnit],
+    [householdId, moveId, photosByUnit],
   );
 
   return (
@@ -521,15 +533,38 @@ export function MovableUnitsTable({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="secondary">{summary.total} units</Badge>
-          <Badge variant="outline">{summary.boxes} boxes</Badge>
-          <Badge variant="outline">{summary.looseItems} loose</Badge>
-          <Badge variant={summary.unassigned ? "destructive" : "outline"}>
-            {summary.unassigned} unassigned
-          </Badge>
+          <StatChip
+            label={`${summary.boxes} boxes`}
+            active={statFilter === "boxes"}
+            onClick={() => toggleStatFilter("boxes")}
+          />
+          <StatChip
+            label={`${summary.looseItems} loose`}
+            active={statFilter === "loose"}
+            onClick={() => toggleStatFilter("loose")}
+          />
+          <StatChip
+            label={`${summary.unassigned} unassigned`}
+            active={statFilter === "unassigned"}
+            tone={summary.unassigned ? "destructive" : "default"}
+            onClick={() => toggleStatFilter("unassigned")}
+          />
           {summary.missingWeight ? (
-            <Badge variant="outline">
-              {summary.missingWeight} missing weight
-            </Badge>
+            <StatChip
+              label={`${summary.missingWeight} missing weight`}
+              active={statFilter === "missingWeight"}
+              onClick={() => toggleStatFilter("missingWeight")}
+            />
+          ) : null}
+          {statFilter ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setStatFilter(null)}
+            >
+              Clear filter
+            </Button>
           ) : null}
           <Button asChild size="sm">
             <Link href={captureHref}>
@@ -555,7 +590,7 @@ export function MovableUnitsTable({
       ) : null}
 
       <DataTable
-        data={units}
+        data={visibleUnits}
         columns={columns}
         getRowId={(unit) => unit.id}
         onRowOpen={handleRowOpen}
@@ -580,7 +615,7 @@ export function MovableUnitsTable({
             onOpen={onOpen}
             householdId={householdId}
             moveId={moveId}
-            photoId={primaryPhotoByUnit.get(row.id)}
+            photoIds={photosByUnit.get(row.id) ?? []}
           />
         )}
         batchActions={({ selectedRows, clearSelection }) => (
@@ -871,21 +906,23 @@ function MovableUnitBatchActions({
 function UnitThumbnail({
   householdId,
   moveId,
-  photoId,
+  photoIds = [],
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
-  photoId?: Id<"itemPhotos">;
+  photoIds?: readonly Id<"itemPhotos">[];
 }) {
+  const coverPhotoId = photoIds[0];
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
   const [url, setUrl] = useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
-    if (!householdId || !moveId || !photoId) {
+    if (!householdId || !moveId || !coverPhotoId) {
       return;
     }
     let cancelled = false;
-    void getDisplayUrl({ householdId, moveId, photoId, variant: "card" })
+    void getDisplayUrl({ householdId, moveId, photoId: coverPhotoId, variant: "card" })
       .then((display) => {
         if (!cancelled) setUrl(display.url);
       })
@@ -895,21 +932,42 @@ function UnitThumbnail({
     return () => {
       cancelled = true;
     };
-  }, [getDisplayUrl, householdId, moveId, photoId]);
+  }, [getDisplayUrl, householdId, moveId, coverPhotoId]);
 
   return (
-    <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
-      {photoId && url ? (
-        // B2/edge delivery URLs are short-lived and provider-controlled, so
-        // Next image optimization is intentionally bypassed.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className="size-full object-cover" />
-      ) : (
-        <div className="flex size-full items-center justify-center text-muted-foreground">
-          <ImageOff className="size-4" aria-hidden="true" />
-        </div>
-      )}
-    </div>
+    <>
+      <button
+        type="button"
+        disabled={!coverPhotoId}
+        aria-label={coverPhotoId ? "View photos" : "No photos"}
+        // stopPropagation so opening the lightbox never also triggers row-open.
+        onClick={(event) => {
+          event.stopPropagation();
+          setLightboxOpen(true);
+        }}
+        className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted disabled:cursor-default"
+      >
+        {coverPhotoId && url ? (
+          // B2/edge delivery URLs are short-lived and provider-controlled, so
+          // Next image optimization is intentionally bypassed.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="" className="size-full object-cover" />
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground">
+            <ImageOff className="size-4" aria-hidden="true" />
+          </div>
+        )}
+      </button>
+      {coverPhotoId ? (
+        <PhotoLightbox
+          householdId={householdId}
+          moveId={moveId}
+          photoIds={photoIds}
+          open={lightboxOpen}
+          onOpenChange={setLightboxOpen}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -920,7 +978,7 @@ function MovableUnitCard({
   onOpen,
   householdId,
   moveId,
-  photoId,
+  photoIds,
 }: {
   unit: MovableUnit;
   selected: boolean;
@@ -928,7 +986,7 @@ function MovableUnitCard({
   onOpen?: () => void;
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
-  photoId?: Id<"itemPhotos">;
+  photoIds?: readonly Id<"itemPhotos">[];
 }) {
   const followUps = visibleFollowUps(unit);
 
@@ -964,7 +1022,7 @@ function MovableUnitCard({
         <UnitThumbnail
           householdId={householdId}
           moveId={moveId}
-          photoId={photoId}
+          photoIds={photoIds}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1031,6 +1089,61 @@ function MovableUnitCard({
 
 function visibleFollowUps(unit: MovableUnit, limit = 3) {
   return unit.followUps.slice(0, limit);
+}
+
+// --- clickable stat filters (MOVE-348) ----------------------------------
+
+type StatFilter =
+  | null
+  | "boxes"
+  | "loose"
+  | "unassigned"
+  | "missingWeight";
+
+function matchesStatFilter(
+  filter: Exclude<StatFilter, null>,
+): (unit: MovableUnit) => boolean {
+  switch (filter) {
+    case "boxes":
+      return (unit) => unit.kind === "box";
+    case "loose":
+      return (unit) => unit.kind === "looseItem";
+    case "unassigned":
+      return (unit) => unit.assignmentState === "unassigned";
+    case "missingWeight":
+      return (unit) => unit.missingFields.includes("weight");
+  }
+}
+
+// A stat chip that doubles as a filter toggle — pressed = primary fill.
+function StatChip({
+  label,
+  active,
+  tone = "default",
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  tone?: "default" | "destructive";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-6 items-center rounded-md border px-2 text-xs font-medium transition-colors",
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : tone === "destructive"
+            ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20"
+            : "border-border bg-background text-foreground hover:bg-muted",
+      )}
+    >
+      {label}
+    </button>
+  );
 }
 
 function unitWord(count: number) {
