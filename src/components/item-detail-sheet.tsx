@@ -23,13 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Tabs,
   TabsContent,
@@ -619,22 +619,22 @@ export function ItemDetailSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-4xl">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="overflow-y-auto sm:max-w-4xl">
         <form className="flex min-h-full flex-col" onSubmit={handleSubmit}>
-          <SheetHeader className="pr-12">
+          <DialogHeader className="pr-12">
             <div className="flex flex-wrap items-center gap-2">
-              <SheetTitle>{item.name}</SheetTitle>
+              <DialogTitle>{item.name}</DialogTitle>
               <Badge variant={item.needsReview ? "destructive" : "secondary"}>
                 {item.needsReview ? "review" : item.status}
               </Badge>
               <Badge variant="outline">{item.disposition}</Badge>
             </div>
-            <SheetDescription>
+            <DialogDescription>
               {item.code ? `${item.code} · ` : ""}Last updated{" "}
               {new Date(item.updatedAt).toLocaleDateString()}
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
 
           <div className="flex-1 px-4 pb-4">
             <Tabs defaultValue="details" className="gap-4">
@@ -1229,7 +1229,7 @@ export function ItemDetailSheet({
             </Tabs>
           </div>
 
-          <SheetFooter className="border-t border-border px-0 pb-0">
+          <DialogFooter className="border-t border-border px-0 pb-0">
             <div className="w-full space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Sparkles className="size-4 text-primary" aria-hidden="true" />
@@ -1288,9 +1288,9 @@ export function ItemDetailSheet({
                 </div>
               </div>
             </div>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
