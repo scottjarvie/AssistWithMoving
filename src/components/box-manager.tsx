@@ -892,9 +892,6 @@ export function BoxManager({
   const createBox = useMutation(api.boxes.create);
 
   const [code, setCode] = useState("");
-  // Box vs Tote drives the auto-generated code prefix (B-### vs T-###), each
-  // with its own running sequence. Only used when no explicit code is typed.
-  const [kind, setKind] = useState<"box" | "tote">("box");
   const [label, setLabel] = useState("");
   const [room, setRoom] = useState("");
   const [destinationRoom, setDestinationRoom] = useState("");
@@ -1161,7 +1158,6 @@ export function BoxManager({
         householdId,
         moveId,
         code: code || undefined,
-        containerType: kind === "tote" ? "plasticTote" : undefined,
         label,
         room,
         destinationRoom,
@@ -1170,7 +1166,7 @@ export function BoxManager({
       setLabel("");
       setRoom("");
       setDestinationRoom("");
-      setMessage(kind === "tote" ? "Tote created." : "Box created.");
+      setMessage("Box created.");
       setActiveTask("boxes");
     } catch {
       setMessage("Could not create that box.");
@@ -1270,25 +1266,13 @@ export function BoxManager({
           <TabsContent value="add" id="add-box" className="space-y-4">
             <form
               aria-label="Create box"
-              className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[110px_120px_minmax(0,1fr)_150px_150px_auto]"
+              className="grid gap-2 rounded-md border border-border p-3 md:grid-cols-[120px_minmax(0,1fr)_150px_150px_auto]"
               onSubmit={handleCreate}
             >
-              <select
-                value={kind}
-                onChange={(event) =>
-                  setKind(event.target.value as "box" | "tote")
-                }
-                aria-label="New unit type"
-                disabled={!moveId}
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="box">Box</option>
-                <option value="tote">Tote</option>
-              </select>
               <Input
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
-                placeholder={kind === "tote" ? "T-001 (auto)" : "B-001 (auto)"}
+                placeholder="B-001 (auto)"
                 aria-label="New unit code"
                 disabled={!moveId}
               />
