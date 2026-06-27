@@ -157,7 +157,7 @@ export function HomeLaunchpad() {
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end">
             <Button asChild>
-              <Link href="/app/settings/ai-connections">
+              <Link href="/settings/ai-connections">
                 Connect an assistant
                 <Sparkles aria-hidden="true" />
               </Link>
