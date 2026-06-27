@@ -26,7 +26,7 @@ export function QueueHome() {
 
   if (loadingMoves) {
     return (
-      <div className="space-y-4 p-4 sm:p-6">
+      <div className="space-y-4 p-3 sm:p-6">
         <Skeleton className="h-44 rounded-md" />
       </div>
     );
@@ -34,7 +34,7 @@ export function QueueHome() {
 
   if (!moveId) {
     return (
-      <div className="space-y-4 p-4 sm:p-6">
+      <div className="space-y-4 p-3 sm:p-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">No active move</CardTitle>
@@ -53,7 +53,7 @@ export function QueueHome() {
   }
 
   return (
-    <div className="space-y-4 p-4 sm:p-6">
+    <div className="space-y-4 p-3 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">

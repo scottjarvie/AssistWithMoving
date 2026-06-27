@@ -1,22 +1,18 @@
 import Link from "next/link";
-import { ShieldCheck } from "lucide-react";
 
 import { AccountMenu } from "@/components/account-menu";
-import {
-  AddToQueueButton,
-  AddToQueueSidebarSecondaryActions,
-} from "@/components/add-to-queue-button";
 import { BrandMark } from "@/components/brand-mark";
 import { MobileCaptureAction } from "@/components/mobile-capture-action";
 import { MoveSwitcher } from "@/components/move-switcher";
 import { ShellSectionEyebrow } from "@/components/shell-section-eyebrow";
-import { Separator } from "@/components/ui/separator";
 import { WorkspaceNav } from "@/components/workspace-nav";
 
-// Three-region product frame: a fixed sidebar (xl+), a sticky top bar, and the
-// main content area. On mobile the sidebar collapses to a bottom tab bar plus a
-// floating capture action. The single MoveWorkspaceProvider lives one level up,
-// in (product)/layout.tsx, so every region here can read the active move.
+// Single consistent frame at every screen size: a sticky top bar (brand,
+// section, move switcher, account) and ONE bottom nav bar carrying the same
+// destinations — Moves, Units, Items, Spaces, Queue, and Add — on phone, tablet,
+// and desktop alike. On large screens the bar's content is centered to a sensible
+// width so it doesn't stretch edge to edge. The single MoveWorkspaceProvider
+// lives one level up, in (product)/layout.tsx, so every region can read the move.
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
@@ -27,74 +23,45 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         Skip to main content
       </a>
 
-      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-border bg-sidebar/75 px-4 py-5 backdrop-blur xl:flex">
-        <Link
-          href="/app"
-          aria-label="MovingManifest home"
-          className="inline-block rounded-md focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          <BrandMark />
-        </Link>
-
-        <div className="mt-8">
-          <WorkspaceNav />
-        </div>
-
-        <div className="mt-6 space-y-2">
-          <AddToQueueButton variant="sidebar" />
-          <AddToQueueSidebarSecondaryActions />
-        </div>
-
-        <Separator className="my-6" />
-
-        <div className="mt-auto rounded-lg border border-border bg-card/60 p-3">
-          <div className="flex items-center gap-2 text-xs font-medium">
-            <ShieldCheck className="size-3.5 text-primary" aria-hidden="true" />
-            Privacy default
+      <header className="sticky top-0 z-20 border-b border-border bg-background/88 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-2 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/app"
+              aria-label="MovingManifest home"
+              className="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <BrandMark />
+            </Link>
+            <span className="hidden sm:inline-flex">
+              <ShellSectionEyebrow />
+            </span>
+            <MoveSwitcher />
           </div>
-          <p className="mt-1 text-[0.7rem] leading-4 text-muted-foreground">
-            Helper and mover views hide values, serials, and private notes unless
-            an owner changes the packet.
-          </p>
-        </div>
-      </aside>
-
-      <div className="xl:pl-64">
-        <header className="sticky top-0 z-20 border-b border-border bg-background/88 backdrop-blur">
-          <div className="flex h-16 items-center justify-between gap-2 px-4 sm:px-6">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="xl:hidden">
-                <Link href="/app" aria-label="MovingManifest home">
-                  <BrandMark />
-                </Link>
-              </div>
-              <div className="hidden min-w-0 items-center gap-3 xl:flex">
-                <ShellSectionEyebrow />
-                <MoveSwitcher />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <AccountMenu />
-            </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <AccountMenu />
           </div>
-        </header>
+        </div>
+      </header>
 
-        <main
-          id="main-content"
-          tabIndex={-1}
-          aria-label="Workspace content"
-          className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] xl:pb-0"
-        >
-          {children}
-        </main>
-      </div>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        aria-label="Workspace content"
+        className="mx-auto max-w-5xl pb-[calc(3.75rem+env(safe-area-inset-bottom))]"
+      >
+        {children}
+      </main>
 
-      {/* Mobile bottom bar: the 5 global nav tabs + a compact "+" add button,
-          pinned to the very bottom (hidden on xl+). The "+" is a real cell, not
-          a floating FAB. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 flex items-stretch border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur xl:hidden">
-        <WorkspaceNav variant="mobile" />
-        <MobileCaptureAction />
+      {/* The one and only nav bar — pinned to the bottom at every size. The bar
+          background spans full width; its content (5 tabs + the "+" add) is
+          centered to a comfortable width so it never stretches across a wide
+          monitor. WorkspaceNav supplies the <nav> landmark. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+        <div className="mx-auto flex max-w-xl items-stretch">
+          <WorkspaceNav variant="mobile" />
+          <MobileCaptureAction />
+        </div>
       </div>
     </div>
   );

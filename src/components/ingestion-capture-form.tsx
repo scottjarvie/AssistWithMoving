@@ -214,7 +214,7 @@ export function IngestionCaptureForm({
   }
 
   return (
-    <Card>
+    <Card size="sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           Add to Queue
@@ -242,7 +242,7 @@ export function IngestionCaptureForm({
             Adding to {targetBoxCode}
           </Badge>
         ) : null}
-        <div className="rounded-md border border-dashed border-border bg-muted/20 p-3">
+        <div className="rounded-md border border-dashed border-border bg-muted/20 p-2 sm:p-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
               Media
@@ -351,34 +351,32 @@ export function IngestionCaptureForm({
         ) : null}
 
         {scopeChoiceVisible ? (
-          <div className="rounded-md border border-border bg-muted/20 p-3">
+          <div className="rounded-md border border-border bg-muted/20 p-2 sm:p-3">
             <p className="text-xs font-medium text-foreground">
               How should your agent treat these {imageCount} photos?
             </p>
             <div
               role="group"
               aria-label="Capture scope"
-              className="mt-2 grid grid-cols-2 gap-2"
+              className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
             >
               <Button
                 type="button"
-                size="sm"
                 variant={scope === "combined" ? "default" : "outline"}
                 aria-pressed={scope === "combined"}
                 disabled={saving}
                 onClick={() => setScope("combined")}
               >
-                One combined entry
+                One entry
               </Button>
               <Button
                 type="button"
-                size="sm"
                 variant={scope === "perImage" ? "default" : "outline"}
                 aria-pressed={scope === "perImage"}
                 disabled={saving}
                 onClick={() => setScope("perImage")}
               >
-                Split into separate entries
+                Separate entries
               </Button>
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">

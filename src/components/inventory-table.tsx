@@ -1,6 +1,13 @@
 "use client";
 
-import { type FormEvent, useCallback, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import {
   type ColumnDef,
   type ColumnFiltersState,
@@ -42,6 +49,7 @@ import {
   EmptyState,
   InlineCheckboxCell,
   InlineSelectCell,
+  isRowOpenIgnoredTarget,
 } from "@/components/ui/data-table";
 import {
   DropdownMenu,
@@ -348,77 +356,88 @@ function InventoryItemCard({
     disposition: InventoryItem["disposition"],
   ) => void;
 }) {
+  // The whole card opens the detail sheet; taps on the checkbox / selects / the
+  // needs-review toggle are ignored by the shared guard so they don't double-fire.
+  function handleCardClick(event: ReactMouseEvent) {
+    if (isRowOpenIgnoredTarget(event.target)) return;
+    onOpenDetails();
+  }
+  function handleCardKeyDown(event: ReactKeyboardEvent) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (isRowOpenIgnoredTarget(event.target)) return;
+    event.preventDefault();
+    onOpenDetails();
+  }
+
   return (
     <div
-      role="listitem"
-      className="rounded-md border border-border bg-card p-3"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${item.name}`}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      className="cursor-pointer rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <div className="flex items-start justify-between gap-3">
-        <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="min-w-0 flex-1">
+          {item.code ? (
+            <p className="font-mono text-[0.7rem] tracking-wide text-muted-foreground">
+              {item.code}
+            </p>
+          ) : null}
+          <h3 className="break-words text-base font-medium leading-snug">
+            {item.name}
+          </h3>
+          <p className="mt-0.5 line-clamp-2 break-words text-xs leading-5 text-muted-foreground">
+            {item.description ?? "No description"}
+          </p>
+        </div>
+        {/* Big, comfortable selection target. */}
+        <label
+          className="-m-1 flex min-h-11 min-w-11 items-center justify-center p-1"
+          aria-label={`Select ${item.name}`}
+        >
           <Checkbox
             checked={selected}
-            aria-label={`Select ${item.name}`}
             onCheckedChange={(checked) => onSelectedChange(checked === true)}
           />
-          Select
         </label>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={onOpenDetails}
-        >
-          <PanelRightOpen aria-hidden="true" />
-          Details
-        </Button>
       </div>
 
-      <div className="mt-3 min-w-0">
-        {item.code ? (
-          <p className="font-mono text-[0.7rem] tracking-wide text-muted-foreground">
-            {item.code}
-          </p>
-        ) : null}
-        <h3 className="break-words text-base font-medium">{item.name}</h3>
-        <p className="mt-1 line-clamp-3 break-words text-xs leading-5 text-muted-foreground">
-          {item.description ?? "No description"}
-        </p>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+      {/* Flat label/value rows — no nested borders, values wrap instead of
+          truncating so the important text is readable. */}
+      <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
         <InventoryCardField label="Room" value={item.room ?? "unassigned"} />
         <InventoryCardField
           label="Category"
           value={item.category ?? "uncategorized"}
         />
-        <div className="min-w-0 rounded-md border border-border/70 p-2">
-          <p className="block text-[0.68rem] uppercase text-muted-foreground">
+        <div className="min-w-0">
+          <p className="mb-1 text-[0.68rem] uppercase text-muted-foreground">
             Status
           </p>
-          <div className="mt-1">
-            <InlineSelectCell
-              value={item.status}
-              options={itemStatusOptions}
-              ariaLabel={`Status for ${item.name}`}
-              onValueChange={(status) => onPatchItem(item, { status })}
-            />
-          </div>
+          <InlineSelectCell
+            value={item.status}
+            options={itemStatusOptions}
+            ariaLabel={`Status for ${item.name}`}
+            onValueChange={(status) => onPatchItem(item, { status })}
+            className="h-9 sm:h-8"
+          />
         </div>
-        <div className="min-w-0 rounded-md border border-border/70 p-2">
-          <p className="block text-[0.68rem] uppercase text-muted-foreground">
+        <div className="min-w-0">
+          <p className="mb-1 text-[0.68rem] uppercase text-muted-foreground">
             Disposition
           </p>
-          <div className="mt-1">
-            <InlineSelectCell
-              value={item.disposition}
-              options={itemDispositionOptions}
-              ariaLabel={`Disposition for ${item.name}`}
-              onValueChange={(disposition) =>
-                onDispositionChange(item, disposition)
-              }
-              renderLabel={dispositionLabel}
-            />
-          </div>
+          <InlineSelectCell
+            value={item.disposition}
+            options={itemDispositionOptions}
+            ariaLabel={`Disposition for ${item.name}`}
+            onValueChange={(disposition) =>
+              onDispositionChange(item, disposition)
+            }
+            renderLabel={dispositionLabel}
+            className="h-9 sm:h-8"
+          />
         </div>
       </div>
 
@@ -426,7 +445,7 @@ function InventoryItemCard({
         <InventoryIndicators item={item} visibleLimit={3} />
       </div>
 
-      <label className="mt-3 flex items-center gap-2 rounded-md border border-border/70 px-2 py-1.5 text-xs">
+      <label className="mt-3 flex min-h-10 items-center gap-2 text-sm">
         <Checkbox
           checked={item.needsReview}
           aria-label={`Needs review for ${item.name}`}
@@ -448,9 +467,9 @@ function InventoryCardField({
   value: string;
 }) {
   return (
-    <div className="min-w-0 rounded-md border border-border/70 p-2">
+    <div className="min-w-0">
       <p className="text-[0.68rem] uppercase text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate font-medium">{value}</p>
+      <p className="break-words font-medium">{value}</p>
     </div>
   );
 }
