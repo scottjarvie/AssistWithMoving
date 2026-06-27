@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -185,6 +186,92 @@ export const backfillQueueOwnerUserId = internalMutation({
     }
     return {
       patched,
+      isDone: page.isDone,
+      cursor: page.continueCursor,
+    };
+  },
+});
+
+// Read-only census of the orphaned-photo problem, so we can report the size of
+// the fix before/after running the backfill below. Counts processed queue
+// entries whose uploaded photos are still unattached (no itemId and no boxId),
+// split by what the backfill would be able to do with them. Paginated.
+export const countOrphanedQueuePhotos = internalQuery({
+  args: { cursor: v.optional(v.string()), batch: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("ingestionQueueEntries")
+      .paginate({ cursor: args.cursor ?? null, numItems: args.batch ?? 200 });
+    let processedWithPhotos = 0;
+    let unattachedPhotos = 0;
+    let recoverableToItem = 0; // capture produced exactly one item
+    let recoverableToLocation = 0; // box / space / transport targeted
+    let ambiguous = 0; // multiple result items, no single target
+    for (const entry of page.page) {
+      if (entry.status !== "processed") continue;
+      const photoIds = entry.mediaPhotoIds ?? [];
+      if (photoIds.length === 0) continue;
+      processedWithPhotos += 1;
+      let entryUnattached = 0;
+      for (const photoId of photoIds) {
+        const photo = await ctx.db.get(photoId);
+        if (!photo || photo.archivedAt) continue;
+        if (!photo.itemId && !photo.boxId) entryUnattached += 1;
+      }
+      if (entryUnattached === 0) continue;
+      unattachedPhotos += entryUnattached;
+      const singleItem = (entry.resultItemIds ?? []).length === 1;
+      const hasLocation =
+        entry.targetBoxId || entry.targetSpaceId || entry.targetTransportId;
+      if (singleItem) recoverableToItem += entryUnattached;
+      else if (hasLocation) recoverableToLocation += entryUnattached;
+      else ambiguous += entryUnattached;
+    }
+    return {
+      processedWithPhotos,
+      unattachedPhotos,
+      recoverableToItem,
+      recoverableToLocation,
+      ambiguous,
+      isDone: page.isDone,
+      cursor: page.continueCursor,
+    };
+  },
+});
+
+// One-time backfill: heal queue captures that were processed BEFORE the
+// auto-attach loop shipped (convex/lib/queuePhotoAttach.ts). For every processed
+// entry it re-runs the SAME conservative auto-attach, so each stranded photo gets
+// filed onto the item (single-item captures) / box / room / transport the capture
+// produced. Idempotent: autoAttachEntryPhotos skips any photo already filed
+// (itemId || boxId), so a second pass relinks zero. Paginated — call repeatedly
+// with the returned cursor until isDone.
+export const backfillQueueEntryPhotos = internalMutation({
+  args: { cursor: v.optional(v.string()), batch: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const page = await ctx.db
+      .query("ingestionQueueEntries")
+      .paginate({ cursor: args.cursor ?? null, numItems: args.batch ?? 200 });
+    let scannedEntries = 0;
+    let eligibleEntries = 0;
+    let relinkedPhotos = 0;
+    for (const entry of page.page) {
+      scannedEntries += 1;
+      if (entry.status !== "processed") continue;
+      if (!entry.mediaPhotoIds || entry.mediaPhotoIds.length === 0) continue;
+      eligibleEntries += 1;
+      relinkedPhotos += await autoAttachEntryPhotos(
+        ctx,
+        entry,
+        entry.resultItemIds,
+        now,
+      );
+    }
+    return {
+      scannedEntries,
+      eligibleEntries,
+      relinkedPhotos,
       isDone: page.isDone,
       cursor: page.continueCursor,
     };
