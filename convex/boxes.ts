@@ -2,6 +2,8 @@ import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalMutation,
+  internalQuery,
   mutation,
   type MutationCtx,
   query,
@@ -92,37 +94,26 @@ export async function assertResourceAndZone(
   }
 }
 
-// Codes are prefixed by container kind: totes get T-###, everything else B-###.
-// Each prefix has its OWN sequence (continue from the highest existing number of
-// that prefix), so totes and boxes don't share or collide on numbers.
-function codePrefixForContainerType(
-  containerType?: Doc<"boxes">["containerType"],
-): "B" | "T" {
-  return containerType === "plasticTote" ? "T" : "B";
-}
-
-async function generateBoxCode(
-  ctx: MutationCtx,
-  moveId: Id<"moves">,
-  containerType?: Doc<"boxes">["containerType"],
-) {
-  const prefix = codePrefixForContainerType(containerType);
+// Every container — box, tote, bin, crate, etc. — draws from ONE shared number
+// pool (B-###). A tote is just a box with a different containerType; it should
+// never get its own number sequence. (Historically totes got T-### — see the
+// renumberTotesIntoBoxPool backfill that merges old T-### codes into this pool.)
+async function generateBoxCode(ctx: MutationCtx, moveId: Id<"moves">) {
   const boxes = await ctx.db
     .query("boxes")
     .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
     .collect();
   const existingCodes = new Set(boxes.map((box) => box.code));
 
-  // Continue the sequence from the highest existing number for THIS prefix.
-  const pattern = new RegExp(`^${prefix}-(\\d+)$`);
+  // Continue from the highest existing B-### number in the move.
   let maxIndex = 0;
   for (const box of boxes) {
-    const match = pattern.exec(box.code);
+    const match = /^B-(\d+)$/.exec(box.code);
     if (match) maxIndex = Math.max(maxIndex, Number(match[1]));
   }
 
   for (let index = maxIndex + 1; index < maxIndex + 1001; index += 1) {
-    const code = `${prefix}-${String(index).padStart(3, "0")}`;
+    const code = `B-${String(index).padStart(3, "0")}`;
     if (!existingCodes.has(code)) {
       return code;
     }
@@ -130,6 +121,110 @@ async function generateBoxCode(
 
   throw new Error("Could not generate a unique unit code.");
 }
+
+// Read-only census of how units are numbered, so we can see the legacy T-###
+// tote situation before/after the renumber backfill below. Paginated.
+export const censusBoxCodes = internalQuery({
+  args: { cursor: v.optional(v.string()), batch: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("boxes")
+      .paginate({ cursor: args.cursor ?? null, numItems: args.batch ?? 500 });
+    let total = 0;
+    let bPrefix = 0;
+    let tPrefix = 0;
+    let otherPrefix = 0;
+    let plasticTotes = 0;
+    let totesWithTCode = 0;
+    const tExamples: { code: string; containerType?: string }[] = [];
+    for (const box of page.page) {
+      if (box.archivedAt) continue;
+      total += 1;
+      const isB = /^B-\d+$/.test(box.code);
+      const isT = /^T-\d+$/.test(box.code);
+      if (isB) bPrefix += 1;
+      else if (isT) tPrefix += 1;
+      else otherPrefix += 1;
+      if (box.containerType === "plasticTote") {
+        plasticTotes += 1;
+        if (isT) totesWithTCode += 1;
+      }
+      if (isT && tExamples.length < 10) {
+        tExamples.push({ code: box.code, containerType: box.containerType });
+      }
+    }
+    return {
+      total,
+      bPrefix,
+      tPrefix,
+      otherPrefix,
+      plasticTotes,
+      totesWithTCode,
+      tExamples,
+      isDone: page.isDone,
+      cursor: page.continueCursor,
+    };
+  },
+});
+
+// One-time backfill: merge legacy T-### tote codes into the shared B-### pool,
+// per move, so totes are numbered like every other box. Idempotent — a second
+// run finds no T-### codes. Pass a moveId to scope it; otherwise it renumbers
+// every move that still has T-### codes. Preserves containerType (the "this was a
+// tote" attribute survives — only the CODE changes). Returns the old->new map.
+export const renumberTotesIntoBoxPool = internalMutation({
+  args: { moveId: v.optional(v.id("moves")) },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const isToteCode = (code: string) => /^T-\d+$/.test(code);
+    const toteNumber = (code: string) => Number(/^T-(\d+)$/.exec(code)![1]);
+
+    let moveIds: Id<"moves">[];
+    if (args.moveId) {
+      moveIds = [args.moveId];
+    } else {
+      const all = await ctx.db.query("boxes").collect();
+      const ids = new Set<string>();
+      for (const box of all) {
+        if (!box.archivedAt && isToteCode(box.code)) ids.add(String(box.moveId));
+      }
+      moveIds = [...ids] as Id<"moves">[];
+    }
+
+    const renamed: { boxId: string; from: string; to: string }[] = [];
+    for (const moveId of moveIds) {
+      const boxes = await ctx.db
+        .query("boxes")
+        .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
+        .collect();
+      const taken = new Set(boxes.map((box) => box.code));
+      let maxB = 0;
+      for (const box of boxes) {
+        const match = /^B-(\d+)$/.exec(box.code);
+        if (match) maxB = Math.max(maxB, Number(match[1]));
+      }
+      // Renumber in original T-order so the relative ordering is stable.
+      const totes = boxes
+        .filter((box) => !box.archivedAt && isToteCode(box.code))
+        .sort((a, b) => toteNumber(a.code) - toteNumber(b.code));
+      for (const tote of totes) {
+        let next = "";
+        do {
+          next = `B-${String(++maxB).padStart(3, "0")}`;
+        } while (taken.has(next));
+        taken.add(next);
+        taken.delete(tote.code);
+        await ctx.db.patch(tote._id, { code: next, updatedAt: now });
+        renamed.push({ boxId: String(tote._id), from: tote.code, to: next });
+      }
+    }
+    return {
+      movesProcessed: moveIds.length,
+      renamedCount: renamed.length,
+      renamed,
+    };
+  },
+});
 
 async function ensureUniqueBoxCode(
   ctx: MutationCtx,
@@ -462,13 +557,13 @@ export const create = mutation({
     const now = Date.now();
     const code = args.code
       ? normalizeBoxCode(args.code)
-      : await generateBoxCode(ctx, args.moveId, args.containerType);
+      : await generateBoxCode(ctx, args.moveId);
     if (!code) {
       throw new Error("Box code is required.");
     }
     if (args.code && isReservedUnitCode(code)) {
       throw new Error(
-        'Unit codes can\'t start with "I" — that prefix is reserved for items (item-0001). Try another letter such as B (box) or T (tote).',
+        'Unit codes can\'t start with "I" — that prefix is reserved for items (item-0001). Try another letter such as B for a box.',
       );
     }
     await ensureUniqueBoxCode(ctx, args.moveId, code);
@@ -567,7 +662,7 @@ export const update = mutation({
       }
       if (isReservedUnitCode(code)) {
         throw new Error(
-          'Unit codes can\'t start with "I" — that prefix is reserved for items (item-0001). Try another letter such as B (box) or T (tote).',
+          'Unit codes can\'t start with "I" — that prefix is reserved for items (item-0001). Try another letter such as B for a box.',
         );
       }
       await ensureUniqueBoxCode(ctx, args.moveId, code, args.boxId);
