@@ -1,7 +1,8 @@
 "use client";
 
 import { type FormEvent, type ReactNode, useState } from "react";
-import { useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
+import { useMutation, useQuery } from "convex/react";
 import {
   Boxes,
   Camera,
@@ -14,6 +15,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { buildBoxLookupPath } from "@/lib/box-labels";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
@@ -327,6 +329,40 @@ export function ItemDetailSheet({
   const [aiTags, setAiTags] = useState((item?.aiTags ?? []).join(", "));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Convert a misclassified item (a real tote/box entered as an item) into a
+  // numbered box (MOVE: "they should have a box number").
+  const router = useRouter();
+  const convertToBox = useMutation(api.boxes.convertItemToBox);
+  const [converting, setConverting] = useState(false);
+  const [confirmConvert, setConfirmConvert] = useState(false);
+
+  async function handleConvertToBox() {
+    if (!householdId || !moveId || !item) return;
+    setConverting(true);
+    setMessage(null);
+    try {
+      const result = await convertToBox({
+        householdId,
+        moveId,
+        itemId: item._id,
+      });
+      onOpenChange(false);
+      router.push(
+        buildBoxLookupPath({
+          householdId,
+          moveId,
+          boxId: result.boxId,
+          returnTo: "movable-units",
+        }),
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not convert to a box.",
+      );
+      setConverting(false);
+      setConfirmConvert(false);
+    }
+  }
 
   const activity = useQuery(
     api.audit.listForObject,
@@ -1194,22 +1230,62 @@ export function ItemDetailSheet({
           </div>
 
           <SheetFooter className="border-t border-border px-0 pb-0">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="w-full space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Sparkles className="size-4 text-primary" aria-hidden="true" />
                 {message ?? "Detailed edits are saved to the item history."}
               </div>
-              <div className="flex items-center gap-2">
+              {/* This is actually a container? Give it a box number. */}
+              {confirmConvert ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-2 text-sm">
+                  <span className="text-muted-foreground">
+                    Turn this into a numbered box/tote? The item entry is replaced
+                    by a box that can hold things.
+                  </span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={converting}
+                      onClick={() => setConfirmConvert(false)}
+                    >
+                      Keep as item
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={converting}
+                      onClick={() => void handleConvertToBox()}
+                    >
+                      {converting ? "Converting…" : "Convert to box"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => onOpenChange(false)}
+                  size="sm"
+                  onClick={() => setConfirmConvert(true)}
+                  disabled={converting}
                 >
-                  Close
+                  <Boxes className="size-4" aria-hidden="true" />
+                  Convert to a box/tote
                 </Button>
-                <Button type="submit" disabled={saving || !name.trim()}>
-                  {saving ? "Saving" : "Save item"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button type="submit" disabled={saving || !name.trim()}>
+                    {saving ? "Saving" : "Save item"}
+                  </Button>
+                </div>
               </div>
             </div>
           </SheetFooter>

@@ -16,6 +16,10 @@ const apiMock = vi.hoisted(() => ({
   transportResources: {
     listForMoveWithZones: "transportResources.listForMoveWithZones",
   },
+  // Used by the always-mounted ItemDetailSheet (convert-to-box action).
+  boxes: {
+    convertItemToBox: "boxes.convertItemToBox",
+  },
   // Cover-photo thumbnails on the compact item rows.
   photos: {
     listForMove: "photos.listForMove",
@@ -70,6 +74,10 @@ function buildFacets(rows: InventoryItem[]) {
     donate: groupCounts.donate ?? 0,
   };
 }
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 vi.mock("../../convex/_generated/api", () => ({
   api: apiMock,

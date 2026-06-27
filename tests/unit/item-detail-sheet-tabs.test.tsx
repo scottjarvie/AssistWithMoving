@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,7 @@ const sheetData = vi.hoisted(() => ({
       role: "owner",
     },
   ],
+  convert: vi.fn(),
 }));
 
 const componentMocks = vi.hoisted(() => ({
@@ -30,6 +31,10 @@ vi.mock("../../convex/_generated/api", () => {
   return { api };
 });
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 vi.mock("convex/react", () => ({
   useQuery: vi.fn((query: string, args) => {
     if (args === "skip") return undefined;
@@ -38,6 +43,7 @@ vi.mock("convex/react", () => ({
     // moveSpaces.listForMove + transportResources.listForMoveWithZones — empty here.
     return [];
   }),
+  useMutation: () => sheetData.convert,
 }));
 
 vi.mock("@/components/photo-upload-control", () => ({
@@ -161,5 +167,25 @@ describe("ItemDetailSheet task tabs", () => {
     expect(screen.getByLabelText("AI tags")).toBeInTheDocument();
     expect(screen.getByLabelText("AI reasoning")).toBeInTheDocument();
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
+  });
+
+  it("converts a misclassified item into a numbered box after confirming", async () => {
+    const user = userEvent.setup();
+    sheetData.convert.mockReset();
+    sheetData.convert.mockResolvedValue({ boxId: "box_new", code: "B-027" });
+    renderSheet();
+
+    await user.click(
+      screen.getByRole("button", { name: /Convert to a box\/tote/ }),
+    );
+    // Requires an explicit confirm before it replaces the item.
+    expect(sheetData.convert).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Convert to box" }));
+
+    await waitFor(() => {
+      expect(sheetData.convert).toHaveBeenCalledWith(
+        expect.objectContaining({ itemId: "item_1" }),
+      );
+    });
   });
 });
