@@ -16,10 +16,29 @@ import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
+import { volumeFromDimensions } from "./lib/estimateEngine";
 import {
   getTransportResourcePreset,
   type TransportResourcePresetKey,
 } from "./lib/transportPresets";
+
+// "Calculate the cubic feet available for a transport": if cargo dimensions are
+// known but the max volume wasn't entered, derive it from L×W×H (the same rule
+// boxes and items use). An explicit maxVolumeCuFt always wins; an unlimited
+// volume is left alone. Centralized here so create, update, and presets all get
+// the same behavior.
+export function deriveTransportCapacity(
+  capacity: Doc<"transportResources">["capacity"] | undefined,
+): NonNullable<Doc<"transportResources">["capacity"]> {
+  const cap = capacity ?? {};
+  if (cap.maxVolumeCuFt == null && !cap.volumeIsUnlimited) {
+    const derived = volumeFromDimensions(cap.dimensions);
+    if (derived != null) {
+      return { ...cap, maxVolumeCuFt: derived };
+    }
+  }
+  return cap;
+}
 
 // Shared by the createFromPreset mutation and template pre-loading in
 // moves.create. Caller is responsible for permission checks.
@@ -107,7 +126,7 @@ export const update = mutation({
       patch.description = normalizeOptionalText(args.description);
     }
     if (args.capacity !== undefined) {
-      patch.capacity = args.capacity;
+      patch.capacity = deriveTransportCapacity(args.capacity);
       // A manual capacity edit means the user has reviewed it; lift it out of
       // the "unreviewed" default so capacity rollups treat it as a real value.
       if (resource.capacityReviewStatus === "unreviewed") {
@@ -223,7 +242,7 @@ export const create = mutation({
       type: args.type,
       name: args.name.trim(),
       description: normalizeOptionalText(args.description),
-      capacity: args.capacity ?? {},
+      capacity: deriveTransportCapacity(args.capacity),
       capacityReviewStatus: "unreviewed",
       rules: normalizeRuleList(args.rules ?? []),
       sortOrder: normalizeSortOrder(args.sortOrder),

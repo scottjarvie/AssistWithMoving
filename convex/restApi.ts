@@ -101,6 +101,7 @@ import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { parseTextIntakeSuggestions } from "./lib/textIntakeParser";
 import { getTransportResourcePreset } from "./lib/transportPresets";
+import { deriveTransportCapacity } from "./transportResources";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import {
   describePlanDocument,
@@ -9422,7 +9423,10 @@ function parseCapacity(value: unknown):
     }
   }
 
-  return capacity;
+  // Same rule as the web editors / boxes / items: when cargo dimensions are
+  // given but no max volume, the available cubic feet is derived from L×W×H so
+  // agent-created transports get a usable volume ceiling too.
+  return deriveTransportCapacity(capacity);
 }
 
 function parseStringArray(value: unknown) {

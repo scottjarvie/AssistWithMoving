@@ -166,6 +166,17 @@ describe("SpacesTransportPageContent (mobile-first)", () => {
     ).toBeInTheDocument();
   });
 
+  it("derives available cubic feet from cargo dimensions in the capacity editor", async () => {
+    const user = userEvent.setup();
+    render(<SpacesTransportPageContent />);
+    await user.click(screen.getByRole("button", { name: "Set max capacity" }));
+    await user.type(screen.getByLabelText("Cargo length in inches"), "120");
+    await user.type(screen.getByLabelText("Cargo width in inches"), "96");
+    await user.type(screen.getByLabelText("Cargo height in inches"), "84");
+    // 120 × 96 × 84 / 1728 = 560 cu ft.
+    expect(screen.getByText(/560 cu ft/)).toBeInTheDocument();
+  });
+
   it("the 'need a weight' chip filters the list to entries missing a weight", async () => {
     const user = userEvent.setup();
     render(<SpacesTransportPageContent />);
