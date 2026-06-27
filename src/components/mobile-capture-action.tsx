@@ -16,10 +16,15 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
-// Mobile add entry point. Rendered as the last cell of the bottom bar (a big
-// green "+", not a floating FAB), it opens a bottom sheet with the three add
-// choices. "Add to Queue" is the highlighted default for the active move.
-export function MobileCaptureAction() {
+// Add entry point. In the mobile bottom bar it's the last cell (a big green
+// "+"); in the desktop left sidebar it's a full-width "Add" button. Either way it
+// opens the same sheet with the three add choices ("Add to Queue" is the default
+// for the active move).
+export function MobileCaptureAction({
+  variant = "mobile",
+}: {
+  variant?: "mobile" | "sidebar";
+}) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -47,15 +52,27 @@ export function MobileCaptureAction() {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label="Add"
-        onClick={() => setMenuOpen(true)}
-        className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 bg-primary text-[10px] font-semibold text-primary-foreground"
-      >
-        <Plus className="size-7" strokeWidth={2.75} aria-hidden="true" />
-        Add
-      </button>
+      {variant === "sidebar" ? (
+        <button
+          type="button"
+          aria-label="Add"
+          onClick={() => setMenuOpen(true)}
+          className="flex h-9 w-full items-center gap-3 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          <Plus className="size-4" strokeWidth={2.75} aria-hidden="true" />
+          Add
+        </button>
+      ) : (
+        <button
+          type="button"
+          aria-label="Add"
+          onClick={() => setMenuOpen(true)}
+          className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-0.5 bg-primary text-[10px] font-semibold text-primary-foreground"
+        >
+          <Plus className="size-7" strokeWidth={2.75} aria-hidden="true" />
+          Add
+        </button>
+      )}
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent
