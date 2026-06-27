@@ -11,6 +11,7 @@ import {
   Plus,
   Sparkles,
   Truck,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { globalNavItems, type GlobalNavItem } from "@/lib/workspace-nav-items";
 import { cn } from "@/lib/utils";
 
-// The logged-in home is a focused launchpad: the four main destinations, the
+// The logged-in home is a focused launchpad: the main destinations, the
 // intake Queue, and a standing "connect your AI assistant" entry point for
 // first-timers or anyone who forgot the steps. Deliberately no fabricated
 // stats — only real, in-context data (the active move name).
@@ -33,6 +34,10 @@ const destinationMeta: Record<
     description: "Boxes and units with their contents.",
   },
   items: { icon: ClipboardList, description: "Everything you are tracking." },
+  spacesTransport: {
+    icon: Warehouse,
+    description: "Organize what's in each space and transport.",
+  },
   queue: { icon: Inbox, description: "Review intake waiting for you." },
 };
 
