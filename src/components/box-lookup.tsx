@@ -24,6 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { SpaceSelect } from "@/components/space-select";
+import { physicalSpaceNames } from "@/lib/space-kinds";
 import {
   Sheet,
   SheetContent,
@@ -662,7 +664,7 @@ function PlacementEditor({
   onMessage,
 }: {
   box: Doc<"boxes">;
-  spaces: ReadonlyArray<{ _id: Id<"moveSpaces">; name: string }>;
+  spaces: ReadonlyArray<{ _id: Id<"moveSpaces">; name: string; kind: string }>;
   resources: ReadonlyArray<{
     resource: { _id: Id<"transportResources">; name: string };
     zones: ReadonlyArray<{ _id: Id<"transportZones">; name: string }>;
@@ -674,6 +676,8 @@ function PlacementEditor({
   onMessage: (message: string | null) => void;
 }) {
   const updateBox = useMutation(api.boxes.update);
+  // Origination / Destination are SPACE-only pickers (no transports).
+  const spaceNameOptions = physicalSpaceNames(spaces);
   const [room, setRoom] = useState(box.room ?? "");
   const [destinationRoom, setDestinationRoom] = useState(
     box.destinationRoom ?? "",
@@ -786,26 +790,26 @@ function PlacementEditor({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
-            Origination
+            Origination space
           </span>
-          <Input
+          <SpaceSelect
             value={room}
-            onChange={(event) => setRoom(event.target.value)}
-            list="placement-rooms"
+            onChange={setRoom}
+            spaceNames={spaceNameOptions}
+            ariaLabel="Origination space"
             className="h-9"
-            aria-label="Origination"
           />
         </label>
         <label className="block">
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">
-            Destination
+            Destination space
           </span>
-          <Input
+          <SpaceSelect
             value={destinationRoom}
-            onChange={(event) => setDestinationRoom(event.target.value)}
-            list="placement-rooms"
+            onChange={setDestinationRoom}
+            spaceNames={spaceNameOptions}
+            ariaLabel="Destination space"
             className="h-9"
-            aria-label="Destination"
           />
         </label>
         <label className="block sm:col-span-2">
