@@ -52,6 +52,33 @@ export type UploadJob = {
   error?: string;
 };
 
+// Map a raw upload error (storage/SDK/network) to a short, actionable message
+// for the background queue UI. The detailed cause is already logged; users just
+// need to know whether to retry.
+function friendlyUploadError(error: unknown): string {
+  const raw = error instanceof Error && error.message ? error.message : "";
+  const lower = raw.toLowerCase();
+  if (lower.includes("too large")) return "That file is too large to upload.";
+  if (lower.includes("unsupported") || lower.includes("not allowed")) {
+    return "That file type can't be uploaded.";
+  }
+  if (
+    lower.includes("forbidden") ||
+    lower.includes("signature") ||
+    lower.includes("403")
+  ) {
+    return "Storage rejected the upload. Tap retry.";
+  }
+  if (
+    lower.includes("network") ||
+    lower.includes("failed to fetch") ||
+    raw === ""
+  ) {
+    return "Network problem during upload. Tap retry.";
+  }
+  return "Upload failed. Tap retry.";
+}
+
 export type EnqueueFile = { file: File; kind: MediaKind };
 
 export type MediaUploadContextValue = {
@@ -171,6 +198,15 @@ export function MediaUploadProvider({
               patchJob(job.id, { status: "finalizing" });
             }
           },
+          onRetry: () => {
+            // A transient failure is being retried automatically — reset the
+            // bar and clear the prior error so it doesn't look stuck/failed.
+            patchJob(job.id, {
+              status: "uploading",
+              progress: 0,
+              error: undefined,
+            });
+          },
           signal: controller.signal,
         });
 
@@ -195,11 +231,10 @@ export function MediaUploadProvider({
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : "Upload failed.";
-        patchJob(job.id, { status: "error", error: message });
+        // Only reached after automatic retries are exhausted (uploadMediaFile
+        // retries transient failures itself). Surface a short, actionable message
+        // rather than a raw storage/SDK error string.
+        patchJob(job.id, { status: "error", error: friendlyUploadError(error) });
         // Flag the entry rollup as failed so the queue list can surface retry.
         // The entry itself stays saved — never auto-discarded.
         await deps

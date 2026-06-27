@@ -157,6 +157,15 @@ function requireB2Config() {
   };
 }
 
+// B2 can normalize a stored object's Content-Type (drop/alter parameters, remap
+// an alias), so an exact string compare on finalize would reject a perfectly
+// good upload. Compare only the base type (before any ";" parameters), case-
+// insensitively.
+function contentTypesMatch(actual: string, expected: string): boolean {
+  const base = (value: string) => value.split(";")[0].trim().toLowerCase();
+  return base(actual) === base(expected);
+}
+
 function b2Client() {
   const config = requireB2Config();
 
@@ -164,6 +173,14 @@ function b2Client() {
     region: config.region,
     endpoint: config.endpoint,
     forcePathStyle: true,
+    // Backblaze B2 is S3-compatible but does NOT accept the x-amz-sdk-checksum-*
+    // headers that recent @aws-sdk/client-s3 versions fold into the SigV4
+    // signature of a presigned PUT URL. The browser's raw XHR PUT never sends
+    // those headers, so B2 rejects the upload with SignatureDoesNotMatch / 403 —
+    // a blanket failure for a large share of uploads. Computing checksums only
+    // WHEN_REQUIRED keeps presigned PUT URLs clean so the browser PUT verifies.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
       accessKeyId: config.applicationKeyId,
       secretAccessKey: config.applicationKey,
@@ -741,7 +758,10 @@ async function runFinalizeUpload(
       if (head.ContentLength !== session.expectedSizeBytes) {
         throw new Error("Uploaded object size does not match the session.");
       }
-      if (head.ContentType && head.ContentType !== session.expectedMimeType) {
+      if (
+        head.ContentType &&
+        !contentTypesMatch(head.ContentType, session.expectedMimeType)
+      ) {
         throw new Error("Uploaded object type does not match the session.");
       }
       for (const derivative of session.derivativeUploads ?? []) {
@@ -758,7 +778,10 @@ async function runFinalizeUpload(
         }
         if (
           derivativeHead.ContentType &&
-          derivativeHead.ContentType !== derivative.expectedMimeType
+          !contentTypesMatch(
+            derivativeHead.ContentType,
+            derivative.expectedMimeType,
+          )
         ) {
           throw new Error(
             "Uploaded derivative type does not match the session.",
