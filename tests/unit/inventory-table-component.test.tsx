@@ -16,6 +16,11 @@ const apiMock = vi.hoisted(() => ({
   transportResources: {
     listForMoveWithZones: "transportResources.listForMoveWithZones",
   },
+  // Cover-photo thumbnails on the compact item rows.
+  photos: {
+    listForMove: "photos.listForMove",
+    getDisplayUrl: "photos.getDisplayUrl",
+  },
   // Referenced by the always-mounted ItemDetailSheet; these resolve to undefined
   // through the useQuery mock and the sheet tolerates that.
   audit: {
@@ -79,8 +84,11 @@ vi.mock("convex/react", () => ({
       ? { items: mockItems.rows, facets: buildFacets(mockItems.rows) }
       : query === apiMock.transportResources.listForMoveWithZones
         ? []
-        : undefined,
+        : query === apiMock.photos.listForMove
+          ? []
+          : undefined,
   useMutation: mockItems.useMutation,
+  useAction: () => vi.fn(async () => ({ url: null })),
 }));
 
 import { InventoryTable } from "@/components/inventory-table";
@@ -158,18 +166,15 @@ describe("InventoryTable", () => {
       screen.getByRole("button", { name: "Sort by Room" }),
     ).toBeInTheDocument();
 
-    // The DataTable renders both a mobile card list and the desktop table, so
-    // the item name appears twice and indicator flags surface in both.
+    // Records now render as compact, tappable rows (the whole row opens the
+    // detail sheet, where editing lives). The detail-heavy columns/indicators
+    // moved off the row to keep it short.
     expect(
-      screen.getByRole("table", { name: "Inventory records table" }),
+      screen.getByRole("button", { name: "Open Walnut media console" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Walnut media console")).toHaveLength(2);
-    expect(screen.getAllByText("review").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("value").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("personal").length).toBeGreaterThan(0);
-    // The card shows 3 indicators (+4 overflow); the table shows 2 (+5).
-    expect(screen.getByText("+4")).toBeInTheDocument();
-    expect(screen.getByText("+5")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Walnut media console").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("uses browse action shortcuts to switch into intake workflows", async () => {

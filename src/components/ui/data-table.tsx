@@ -227,6 +227,9 @@ export type DataTableProps<TData> = {
     /** Opens the row's detail (same as a desktop row click); undefined when the table has no onRowOpen. */
     onOpen?: () => void
   }) => React.ReactNode
+  /** Render the mobile card at ALL breakpoints (and hide the desktop table) —
+   * for compact, tap-to-open list views. Requires renderMobileCard. */
+  cardOnly?: boolean
   onRowOpen?: (row: TData) => void
   /** Optional accessible label for an openable row; defaults to "Open row details". */
   getRowOpenLabel?: (row: TData) => string
@@ -294,6 +297,7 @@ export function DataTable<TData>({
   pageSize = 10,
   loading = false,
   renderMobileCard,
+  cardOnly = false,
   onRowOpen,
   getRowOpenLabel,
   toolbar,
@@ -437,7 +441,10 @@ export function DataTable<TData>({
       {hasRows ? (
         <>
           {renderMobileCard ? (
-            <div role="list" className="grid gap-3 md:hidden">
+            <div
+              role="list"
+              className={cn("grid gap-2", cardOnly ? "" : "gap-3 md:hidden")}
+            >
               {pageRows.map((row) => (
                 <React.Fragment key={row.id}>
                   {renderMobileCard({
@@ -457,7 +464,11 @@ export function DataTable<TData>({
           <div
             className={cn(
               "overflow-x-auto rounded-md border border-border",
-              renderMobileCard ? "hidden md:block" : "block"
+              cardOnly
+                ? "hidden"
+                : renderMobileCard
+                  ? "hidden md:block"
+                  : "block"
             )}
           >
             <Table aria-label={ariaLabel} className={cn(minWidthClassName)}>
