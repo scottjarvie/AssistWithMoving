@@ -13,9 +13,12 @@ import {
   LockKeyhole,
   LogOut,
   Settings,
+  ShieldAlert,
   UserPlus,
 } from "lucide-react";
+import { useQuery } from "convex/react";
 
+import { api } from "../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,6 +52,9 @@ export function AccountMenu() {
 function EnabledAccountMenu() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
+  // Surface the otherwise-unlinked /admin page, but only for app admins.
+  const me = useQuery(api.users.current);
+  const isAdmin = me?.appRole === "admin";
 
   if (!isLoaded) {
     return (
@@ -140,6 +146,14 @@ function EnabledAccountMenu() {
             Settings
           </Link>
         </DropdownMenuItem>
+        {isAdmin ? (
+          <DropdownMenuItem asChild>
+            <Link href="/admin">
+              <ShieldAlert aria-hidden="true" />
+              Admin
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
