@@ -252,6 +252,33 @@ describe("BoxLookup", () => {
     });
   });
 
+  it("renames the unit and edits its description", async () => {
+    const user = userEvent.setup();
+    lookupData.mutations.updateBox.mockResolvedValue(undefined);
+    renderBoxLookup();
+
+    await user.click(screen.getByRole("button", { name: /Rename \/ edit/ }));
+
+    const name = screen.getByLabelText("Unit name");
+    await user.type(name, "Garage tools");
+    const description = screen.getByLabelText("Unit description");
+    await user.clear(description);
+    await user.type(description, "Sockets and wrenches");
+    await user.click(
+      screen.getByRole("button", { name: "Save name & description" }),
+    );
+
+    await waitFor(() => {
+      expect(lookupData.mutations.updateBox).toHaveBeenCalledWith(
+        expect.objectContaining({
+          boxId: "box_12",
+          nickname: "Garage tools",
+          description: "Sockets and wrenches",
+        }),
+      );
+    });
+  });
+
   it("shows a compact empty state when the unit has no items", () => {
     const originalContents = lookupData.boxRecord.contents;
     const originalCount = lookupData.boxRecord.itemCount;
