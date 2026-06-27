@@ -5,6 +5,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -15,11 +16,14 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  ChevronRight,
   ClipboardList,
   Columns3,
+  ImageOff,
   ListFilter,
+  Package,
   PackagePlus,
   PanelRightOpen,
   RotateCcw,
@@ -28,7 +32,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { BulkInventoryIntake } from "@/components/bulk-inventory-intake";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
@@ -338,26 +342,83 @@ function InventoryIndicators({
   );
 }
 
+// A short "code · room · category" line under the item name.
+function itemMetaLine(item: InventoryItem): string {
+  return [item.code, item.room, item.category]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+}
+
+// The item's cover photo (44px), or an icon fallback. Mirrors the Spaces &
+// Transport EntryThumbnail so the two lists look the same. Only the visible page
+// of rows mounts (DataTable paginates), so this fetches few URLs at a time.
+function ItemThumbnail({
+  householdId,
+  moveId,
+  photoId,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  photoId?: Id<"itemPhotos">;
+}) {
+  const getDisplayUrl = useAction(api.photos.getDisplayUrl);
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!photoId || !householdId || !moveId) return;
+    let cancelled = false;
+    void getDisplayUrl({ householdId, moveId, photoId, variant: "card" })
+      .then((display) => {
+        if (!cancelled) setUrl(display.url);
+      })
+      .catch(() => {
+        if (!cancelled) setUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getDisplayUrl, householdId, moveId, photoId]);
+
+  return (
+    <div className="size-11 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+      {photoId && url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="size-full object-cover" />
+      ) : (
+        <div className="flex size-full items-center justify-center text-muted-foreground">
+          {photoId ? (
+            <ImageOff className="size-4" aria-hidden />
+          ) : (
+            <Package className="size-4" aria-hidden />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Compact, tappable item row (mirrors the Spaces & Transport list): thumbnail +
+// name + one meta line + status/disposition badges. The whole row opens the
+// detail sheet, where editing now lives — keeping the list short. A small
+// selection checkbox stays for batch actions.
 function InventoryItemCard({
   item,
   selected,
   onSelectedChange,
   onOpenDetails,
-  onPatchItem,
-  onDispositionChange,
+  photoId,
+  householdId,
+  moveId,
 }: {
   item: InventoryItem;
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
   onOpenDetails: () => void;
-  onPatchItem: (item: InventoryItem, patch: InventoryItemPatch) => void;
-  onDispositionChange: (
-    item: InventoryItem,
-    disposition: InventoryItem["disposition"],
-  ) => void;
+  photoId?: Id<"itemPhotos">;
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
 }) {
-  // The whole card opens the detail sheet; taps on the checkbox / selects / the
-  // needs-review toggle are ignored by the shared guard so they don't double-fire.
   function handleCardClick(event: ReactMouseEvent) {
     if (isRowOpenIgnoredTarget(event.target)) return;
     onOpenDetails();
@@ -368,6 +429,7 @@ function InventoryItemCard({
     event.preventDefault();
     onOpenDetails();
   }
+  const meta = itemMetaLine(item);
 
   return (
     <div
@@ -376,100 +438,41 @@ function InventoryItemCard({
       aria-label={`Open ${item.name}`}
       onClick={handleCardClick}
       onKeyDown={handleCardKeyDown}
-      className="cursor-pointer rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
+      className="flex cursor-pointer items-center gap-2.5 rounded-md border border-border bg-card p-2 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="min-w-0 flex-1">
-          {item.code ? (
-            <p className="font-mono text-[0.7rem] tracking-wide text-muted-foreground">
-              {item.code}
-            </p>
-          ) : null}
-          <h3 className="break-words text-base font-medium leading-snug">
-            {item.name}
-          </h3>
-          <p className="mt-0.5 line-clamp-2 break-words text-xs leading-5 text-muted-foreground">
-            {item.description ?? "No description"}
-          </p>
-        </div>
-        {/* Big, comfortable selection target. */}
-        <label
-          className="-m-1 flex min-h-11 min-w-11 items-center justify-center p-1"
-          aria-label={`Select ${item.name}`}
-        >
-          <Checkbox
-            checked={selected}
-            onCheckedChange={(checked) => onSelectedChange(checked === true)}
-          />
-        </label>
-      </div>
-
-      {/* Flat label/value rows — no nested borders, values wrap instead of
-          truncating so the important text is readable. */}
-      <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-        <InventoryCardField label="Room" value={item.room ?? "unassigned"} />
-        <InventoryCardField
-          label="Category"
-          value={item.category ?? "uncategorized"}
-        />
-        <div className="min-w-0">
-          <p className="mb-1 text-[0.68rem] uppercase text-muted-foreground">
-            Status
-          </p>
-          <InlineSelectCell
-            value={item.status}
-            options={itemStatusOptions}
-            ariaLabel={`Status for ${item.name}`}
-            onValueChange={(status) => onPatchItem(item, { status })}
-            className="h-9 sm:h-8"
-          />
-        </div>
-        <div className="min-w-0">
-          <p className="mb-1 text-[0.68rem] uppercase text-muted-foreground">
-            Disposition
-          </p>
-          <InlineSelectCell
-            value={item.disposition}
-            options={itemDispositionOptions}
-            ariaLabel={`Disposition for ${item.name}`}
-            onValueChange={(disposition) =>
-              onDispositionChange(item, disposition)
-            }
-            renderLabel={dispositionLabel}
-            className="h-9 sm:h-8"
-          />
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <InventoryIndicators item={item} visibleLimit={3} />
-      </div>
-
-      <label className="mt-3 flex min-h-10 items-center gap-2 text-sm">
+      <label
+        className="flex min-h-11 min-w-9 items-center justify-center"
+        aria-label={`Select ${item.name}`}
+      >
         <Checkbox
-          checked={item.needsReview}
-          aria-label={`Needs review for ${item.name}`}
-          onCheckedChange={(checked) =>
-            onPatchItem(item, { needsReview: checked === true })
-          }
+          checked={selected}
+          onCheckedChange={(checked) => onSelectedChange(checked === true)}
         />
-        Needs review
       </label>
-    </div>
-  );
-}
-
-function InventoryCardField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[0.68rem] uppercase text-muted-foreground">{label}</p>
-      <p className="break-words font-medium">{value}</p>
+      <ItemThumbnail householdId={householdId} moveId={moveId} photoId={photoId} />
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-1 break-words text-sm font-medium leading-snug">
+          {item.name}
+        </p>
+        {meta ? (
+          <p className="truncate text-xs text-muted-foreground">{meta}</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <div className="hidden flex-col items-end gap-1 xs:flex sm:flex">
+          <StatusBadge status={item.status} />
+          <DispositionBadge disposition={item.disposition} />
+        </div>
+        {item.needsReview ? (
+          <Badge variant="outline" className="hidden sm:inline-flex">
+            Review
+          </Badge>
+        ) : null}
+        <ChevronRight
+          className="size-4 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      </div>
     </div>
   );
 }
@@ -588,6 +591,21 @@ export function InventoryTable({
   );
   const items = faceted?.items;
   const facets = faceted?.facets;
+  // Cover photos for the compact rows. Newest-first, so the first photo per item
+  // is its most recent — a good default thumbnail.
+  const photosData = useQuery(
+    api.photos.listForMove,
+    householdId && moveId ? { householdId, moveId, limit: 250 } : "skip",
+  ) as Array<Doc<"itemPhotos">> | undefined;
+  const photoByItem = useMemo(() => {
+    const map = new Map<string, Id<"itemPhotos">>();
+    for (const photo of photosData ?? []) {
+      if (photo.archivedAt || !photo.itemId) continue;
+      const key = String(photo.itemId);
+      if (!map.has(key)) map.set(key, photo._id);
+    }
+    return map;
+  }, [photosData]);
   const createItem = useMutation(api.items.create);
   const updateItem = useMutation(api.items.update);
   const setItemDisposition = useMutation(api.items.setDisposition);
@@ -1360,6 +1378,7 @@ export function InventoryTable({
                 onColumnVisibilityChange={setColumnVisibility}
                 rowSelection={rowSelection}
                 onRowSelectionChange={setRowSelection}
+                cardOnly
                 renderMobileCard={({ row, selected, onSelectedChange }) => (
                   <InventoryItemCard
                     item={row}
@@ -1369,10 +1388,9 @@ export function InventoryTable({
                       setSelectedItemId(row._id);
                       setDetailOpen(true);
                     }}
-                    onPatchItem={(item, patch) => void patchItem(item, patch)}
-                    onDispositionChange={(item, disposition) =>
-                      void quickClassify(item, disposition)
-                    }
+                    photoId={photoByItem.get(String(row._id))}
+                    householdId={householdId}
+                    moveId={moveId}
                   />
                 )}
                 batchActions={({ selectedRows, clearSelection }) => (
