@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         id="main-content"
         tabIndex={-1}
         aria-label="Workspace content"
-        className="mx-auto max-w-5xl pb-[calc(3.75rem+env(safe-area-inset-bottom))]"
+        className="mx-auto max-w-5xl overflow-x-clip pb-[calc(3.75rem+env(safe-area-inset-bottom))]"
       >
         {children}
       </main>

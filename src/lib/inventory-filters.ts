@@ -14,6 +14,10 @@ export type InventoryOwnerFilter = "all" | "unassigned" | string;
 
 export type InventoryFilterableItem = {
   name: string;
+  code?: string;
+  nickname?: string;
+  description?: string;
+  subcategory?: string;
   ownerPersonId?: string;
   room?: string;
   category?: string;
@@ -110,6 +114,10 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
     const matchesSearch = normalizedSearch
       ? [
           item.name,
+          item.code,
+          item.nickname,
+          item.description,
+          item.subcategory,
           item.room,
           item.category,
           item.disposition,
