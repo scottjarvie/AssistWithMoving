@@ -102,7 +102,10 @@ vi.mock("convex/react", () => ({
       case apiMock.transportResources.listForMoveWithZones:
         return [];
       case apiMock.moveSpaces.listForMove:
-        return [];
+        return [
+          { _id: "space_kitchen", name: "Kitchen", kind: "originRoom" },
+          { _id: "space_workshop", name: "Workshop", kind: "destinationRoom" },
+        ];
       case apiMock.photos.listForMove:
         return [];
       default:
@@ -225,13 +228,13 @@ describe("BoxLookup", () => {
     renderBoxLookup();
 
     // Read-only by default — no editor fields.
-    expect(screen.queryByLabelText("Origination")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Origination space")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Origination/ }));
 
-    const origination = screen.getByLabelText("Origination");
-    await user.clear(origination);
-    await user.type(origination, "Kitchen");
+    // Origination/Destination are now SPACE dropdowns, not free text.
+    const origination = screen.getByLabelText("Origination space");
+    await user.selectOptions(origination, "Kitchen");
     // Present location is now a single grouped picker (a space OR a transport);
     // the separate "Transport" control was merged into it as an optgroup.
     const presentLocation = screen.getByLabelText("Present location");

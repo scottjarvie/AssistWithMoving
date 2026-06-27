@@ -16,6 +16,8 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { buildBoxLookupPath } from "@/lib/box-labels";
+import { physicalSpaceNames } from "@/lib/space-kinds";
+import { SpaceSelect } from "@/components/space-select";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { Badge } from "@/components/ui/badge";
@@ -460,6 +462,9 @@ export function ItemDetailSheet({
     return null;
   }
   const currentItem = item;
+
+  // Origination / Destination are SPACE-only pickers (no transports).
+  const spaceNameOptions = physicalSpaceNames(presentSpaces);
 
   // One present-location value, encoded as "space:<id>" | "transport:<id>".
   const presentValue = presentResourceId
@@ -930,18 +935,20 @@ export function ItemDetailSheet({
                 </Field>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <Field label="Current room">
-                    <Input
+                  <Field label="Origination space">
+                    <SpaceSelect
                       value={room}
-                      onChange={(event) => setRoom(event.target.value)}
+                      onChange={setRoom}
+                      spaceNames={spaceNameOptions}
+                      ariaLabel="Origination space"
                     />
                   </Field>
-                  <Field label="Destination room">
-                    <Input
+                  <Field label="Destination space">
+                    <SpaceSelect
                       value={destinationRoom}
-                      onChange={(event) =>
-                        setDestinationRoom(event.target.value)
-                      }
+                      onChange={setDestinationRoom}
+                      spaceNames={spaceNameOptions}
+                      ariaLabel="Destination space"
                     />
                   </Field>
                   <div className="md:col-span-2">
