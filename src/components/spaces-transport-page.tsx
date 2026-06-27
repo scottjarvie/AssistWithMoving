@@ -11,7 +11,7 @@
 //    "show empty" toggle, and sorts the fullest to the top;
 //  - flat, dense framing instead of nested cards.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -251,9 +251,12 @@ function SpacesTransportWorkspace({
     return map;
   }, [itemsData]);
 
-  // Cover photo per entry: photos.listForMove is newest-first, so the first
-  // photo seen for an item/box is its most recent — a good default thumbnail.
-  // Keyed to match OrganizerEntry.id ("box:<id>" / "item:<id>").
+  // Cover photo lookup: photos.listForMove is newest-first, so the first photo
+  // seen for a key is its most recent — a good default thumbnail. We bucket by
+  // the item/box it's filed on (the OrganizerEntry.id "box:<id>"/"item:<id>") AND
+  // by location (space:<id> / transport:<id>). The location buckets are a FALLBACK
+  // for a capture photo that landed on a room/truck but was never linked to the
+  // item it documents (the historical orphaned-photo case) — see coverPhotoFor.
   const photoByEntry = useMemo<PhotoMap>(() => {
     const map = new Map<string, Id<"itemPhotos">>();
     for (const photo of photosData ?? []) {
@@ -266,9 +269,37 @@ function SpacesTransportWorkspace({
         const key = `item:${photo.itemId}`;
         if (!map.has(key)) map.set(key, photo._id);
       }
+      if (photo.spaceId && !photo.itemId && !photo.boxId) {
+        const key = `space:${photo.spaceId}`;
+        if (!map.has(key)) map.set(key, photo._id);
+      }
+      if (photo.transportResourceId && !photo.itemId && !photo.boxId) {
+        const key = `transport:${photo.transportResourceId}`;
+        if (!map.has(key)) map.set(key, photo._id);
+      }
     }
     return map;
   }, [photosData]);
+
+  // An entry's cover: its own item/box photo first, else a photo filed only on
+  // the room/truck it currently sits in (weak fallback for orphaned captures).
+  const coverPhotoFor = useCallback(
+    (entry: OrganizerEntry): Id<"itemPhotos"> | undefined => {
+      const direct = photoByEntry.get(entry.id);
+      if (direct) return direct;
+      if (entry.assignedResourceId) {
+        const onTransport = photoByEntry.get(
+          `transport:${entry.assignedResourceId}`,
+        );
+        if (onTransport) return onTransport;
+      }
+      if (entry.currentSpaceId) {
+        return photoByEntry.get(`space:${entry.currentSpaceId}`);
+      }
+      return undefined;
+    },
+    [photoByEntry],
+  );
 
   const reportByResource = useMemo(() => {
     const map = new Map<string, ResourceReport>();
@@ -635,7 +666,7 @@ function SpacesTransportWorkspace({
               visibleEntries={visibleEntries}
               selectedEntryIds={selectedEntryIds}
               selectMode={selectMode}
-              photoByEntry={photoByEntry}
+              coverPhotoFor={coverPhotoFor}
               onRowTap={onRowTap}
               onEnterSelect={enterSelectMode}
               onExitSelect={exitSelectMode}
@@ -809,7 +840,7 @@ function ContainerDetail({
   visibleEntries,
   selectedEntryIds,
   selectMode,
-  photoByEntry,
+  coverPhotoFor,
   onRowTap,
   onEnterSelect,
   onExitSelect,
@@ -825,7 +856,7 @@ function ContainerDetail({
   visibleEntries: OrganizerEntry[];
   selectedEntryIds: Set<string>;
   selectMode: boolean;
-  photoByEntry: PhotoMap;
+  coverPhotoFor: (entry: OrganizerEntry) => Id<"itemPhotos"> | undefined;
   onRowTap: (entry: OrganizerEntry) => void;
   onEnterSelect: () => void;
   onExitSelect: () => void;
@@ -992,7 +1023,7 @@ function ContainerDetail({
               householdId={householdId}
               moveId={moveId}
               entry={entry}
-              photoId={photoByEntry.get(entry.id)}
+              photoId={coverPhotoFor(entry)}
               selectMode={selectMode}
               selected={selectedEntryIds.has(entry.id)}
               onTap={() => onRowTap(entry)}
