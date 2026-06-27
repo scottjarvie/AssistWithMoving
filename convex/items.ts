@@ -1619,3 +1619,45 @@ export const archive = mutation({
     });
   },
 });
+
+// Mark a dump item TRASHED: set disposition=dump and ARCHIVE it — once it's
+// trashed we don't own it anymore, so it leaves the active inventory. Distinct
+// audit action ("item.trashed") so it can be told apart from a plain archive.
+export const markTrashed = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const item = await ctx.db.get(args.itemId);
+    if (!item || item.moveId !== args.moveId || item.deletedAt) {
+      throw new ConvexError("Item not found for this move.");
+    }
+    const now = Date.now();
+    await ctx.db.patch(args.itemId, {
+      disposition: "dump",
+      status: "archived",
+      deletedAt: now,
+      updatedByUserId: actor.type === "user" ? actor.userId : undefined,
+      updatedAt: now,
+    });
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: actor.type,
+      actorUserId: actor.type === "user" ? actor.userId : undefined,
+      actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
+      category: "inventory",
+      action: "item.trashed",
+      objectTable: "items",
+      objectId: args.itemId,
+    });
+  },
+});

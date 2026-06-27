@@ -12,6 +12,13 @@ const apiMock = vi.hoisted(() => ({
     update: "items.update",
     setDisposition: "items.setDisposition",
     batchUpdate: "items.batchUpdate",
+    markTrashed: "items.markTrashed",
+  },
+  // Sell/trash lifecycle controls in the always-mounted ItemDetailSheet.
+  saleListings: {
+    getForItem: "saleListings.getForItem",
+    upsertForItem: "saleListings.upsertForItem",
+    markSold: "saleListings.markSold",
   },
   transportResources: {
     listForMoveWithZones: "transportResources.listForMoveWithZones",

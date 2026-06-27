@@ -169,6 +169,28 @@ describe("ItemDetailSheet task tabs", () => {
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
   });
 
+  it("shows sell pricing + mark-sold for sell, and mark-trashed for dump", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    const disposition = screen.getByDisplayValue("mover");
+
+    await user.selectOptions(disposition, "sell");
+    expect(
+      screen.getByLabelText("Asking price in dollars"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Mark sold" }),
+    ).toBeInTheDocument();
+
+    await user.selectOptions(disposition, "dump");
+    expect(
+      screen.getByRole("button", { name: /Mark trashed/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark sold" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("converts a misclassified item into a numbered box after confirming", async () => {
     const user = userEvent.setup();
     sheetData.convert.mockReset();
