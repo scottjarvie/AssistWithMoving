@@ -1075,6 +1075,9 @@ export function registerTools(target, apiConfig, options = {}) {
         .nullable()
         .optional()
         .describe("Driving time in minutes. null clears it."),
+      notes: z.string().optional(),
+      documentationProfileTypes: z.array(z.string()).optional(),
+      moveLevelWeightAllowanceLb: z.number().positive().optional(),
       idempotencyKey: z.string().optional(),
       dryRun: z.boolean().optional(),
     },

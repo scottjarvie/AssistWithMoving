@@ -8054,6 +8054,23 @@ export function movePatch(body: unknown): Partial<Doc<"moves">> {
       patch.travelMinutes = travel;
     }
   }
+  // Notes, documentation profiles, and the official weight allowance round out
+  // agent move-config parity with updateBasics (MOVE-314).
+  if (input.notes !== undefined) {
+    patch.notes = normalizeOptionalText(asString(input.notes));
+  }
+  if (input.documentationProfileTypes !== undefined) {
+    patch.documentationProfileTypes = Array.isArray(
+      input.documentationProfileTypes,
+    )
+      ? parseDocumentationProfileTypes(input.documentationProfileTypes)
+      : undefined;
+  }
+  if (input.moveLevelWeightAllowanceLb !== undefined) {
+    patch.moveLevelWeightAllowanceLb = optionalNumber(
+      input.moveLevelWeightAllowanceLb,
+    );
+  }
   return patch;
 }
 

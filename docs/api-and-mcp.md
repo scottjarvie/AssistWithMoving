@@ -1844,7 +1844,7 @@ Available MCP tools:
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |
-| `update_move` | Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), and travel time (minutes). Wraps `PATCH /api/v1/moves/{moveId}`. |
+| `update_move` | Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), travel time (minutes), notes, documentation profiles, and the official weight allowance. Wraps `PATCH /api/v1/moves/{moveId}`. |
 | `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
 | `get_agent_context` | Fetch one compact structured context payload for AI agents: move, spaces, transport, inventory, photos, sale pipeline, counts, and write guidance. |
 | `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |

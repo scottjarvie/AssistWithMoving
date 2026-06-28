@@ -48,6 +48,24 @@ describe("REST API helpers", () => {
     expect(() => movePatch({ travelMinutes: "soon" })).toThrow(/non-negative/);
   });
 
+  it("patches notes, documentation profiles, and weight allowance (MOVE-314)", () => {
+    expect(
+      movePatch({
+        notes: "Fragile — pack the china first.",
+        moveLevelWeightAllowanceLb: 9000,
+      }),
+    ).toMatchObject({
+      notes: "Fragile — pack the china first.",
+      moveLevelWeightAllowanceLb: 9000,
+    });
+    // Documentation profiles parse the array; unknown entries are dropped.
+    const patch = movePatch({
+      documentationProfileTypes: ["insuranceClaim", "not-a-profile"],
+    });
+    expect(patch.documentationProfileTypes).toContain("insuranceClaim");
+    expect(patch.documentationProfileTypes).not.toContain("not-a-profile");
+  });
+
   it("parses route segments and scopes", () => {
     expect(parseRestPath("/moves/move1/items/")).toEqual([
       "moves",
