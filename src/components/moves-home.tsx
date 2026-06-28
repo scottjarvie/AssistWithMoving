@@ -297,7 +297,7 @@ function MoveCard({
               </Tooltip>
             ) : null}
             <div className="min-w-0">
-              <CardTitle className="break-words text-lg font-semibold sm:text-xl">
+              <CardTitle className="break-words text-xl font-semibold sm:text-2xl">
                 {move.title}
               </CardTitle>
               <CardDescription className="mt-1">
