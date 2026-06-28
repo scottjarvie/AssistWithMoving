@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ClipboardCheck,
+  LayoutDashboard,
   Sparkles,
   Truck,
   CalendarClock,
@@ -20,11 +21,12 @@ type OperationLink = {
   group: "config" | "operations";
 };
 
-// The move detail surface has two groups: Configuration (the config tabs on the
-// move index) and Operations (Load Plan / Move Day / Packets / AI Review — real
-// move-scoped operations that are not part of the 3-item global nav).
+// The move detail surface has two groups: the move's own pages (Summary index +
+// Configure forms) and Operations (Load Plan / Move Day / Packets / AI Review —
+// real move-scoped operations that are not part of the global nav).
 const OPERATION_LINKS: OperationLink[] = [
-  { segment: null, label: "Configure", icon: Settings2, group: "config" },
+  { segment: null, label: "Summary", icon: LayoutDashboard, group: "config" },
+  { segment: "configure", label: "Configure", icon: Settings2, group: "config" },
   { segment: "load-plan", label: "Load Plan", icon: Truck, group: "operations" },
   {
     segment: "move-day",
@@ -56,12 +58,12 @@ export function MoveOperationsNav() {
 
   const base = `/app/moves/${moveId}`;
   const operations = OPERATION_LINKS.filter((l) => l.group === "operations");
-  const configLink = OPERATION_LINKS.find((l) => l.group === "config")!;
+  const configLinks = OPERATION_LINKS.filter((l) => l.group === "config");
 
   const isActive = (segment: string | null) => {
     if (segment === null) {
-      // Config = the move index (and its hash tabs), not an operational route.
-      return !operations.some((op) => pathname.startsWith(`${base}/${op.segment}`));
+      // Summary = the move index exactly (plus its own hash, no sub-route).
+      return pathname === base || pathname === `${base}/`;
     }
     return pathname.startsWith(`${base}/${segment}`);
   };
@@ -93,7 +95,7 @@ export function MoveOperationsNav() {
       aria-label="Move operations"
       className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card/40 p-1.5"
     >
-      {renderLink(configLink)}
+      {configLinks.map(renderLink)}
       <span className="mx-1 hidden h-5 w-px bg-border sm:inline-block" aria-hidden="true" />
       <span className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Operations

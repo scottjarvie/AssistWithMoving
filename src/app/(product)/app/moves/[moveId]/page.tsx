@@ -1,8 +1,9 @@
-import { MoveConfigurePage } from "@/components/move-pages/configure-page";
+import { MoveSummaryPage } from "@/components/move-pages/move-summary-page";
 
-// Opening a move lands on its configuration surface: where it starts/ends, how
-// it travels, its details, and who shares it. The former overview hub still
+// Opening a move lands on a results-first summary of how it's set up (route,
+// distance, dates, transportation, household) — not the empty Configure forms
+// (MOVE-307). Configure lives at /configure; the former overview hub still
 // lives at /app/moves/[moveId]/overview.
-export default function MoveWorkspaceConfigureRoute() {
-  return <MoveConfigurePage />;
+export default function MoveWorkspaceSummaryRoute() {
+  return <MoveSummaryPage />;
 }
