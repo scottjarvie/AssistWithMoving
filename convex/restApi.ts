@@ -8019,7 +8019,7 @@ function rowsForExport({
   }
 }
 
-function movePatch(body: unknown): Partial<Doc<"moves">> {
+export function movePatch(body: unknown): Partial<Doc<"moves">> {
   const input = bodyObject(body);
   const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
   if (input.title !== undefined) patch.title = String(input.title).trim();
@@ -8030,6 +8030,30 @@ function movePatch(body: unknown): Partial<Doc<"moves">> {
   }
   if (input.dateStart !== undefined) patch.dateStart = normalizeOptionalText(asString(input.dateStart));
   if (input.dateEnd !== undefined) patch.dateEnd = normalizeOptionalText(asString(input.dateEnd));
+  // Driving distance + travel time (MOVE-308): user- or agent-entered, no maps
+  // API. null clears the value; a non-negative number sets it.
+  if (input.distanceMiles !== undefined) {
+    if (input.distanceMiles === null) {
+      patch.distanceMiles = undefined;
+    } else {
+      const distance = optionalNumber(input.distanceMiles);
+      if (distance === undefined || distance < 0) {
+        throw new Error("distanceMiles must be a non-negative number.");
+      }
+      patch.distanceMiles = distance;
+    }
+  }
+  if (input.travelMinutes !== undefined) {
+    if (input.travelMinutes === null) {
+      patch.travelMinutes = undefined;
+    } else {
+      const travel = optionalNumber(input.travelMinutes);
+      if (travel === undefined || travel < 0) {
+        throw new Error("travelMinutes must be a non-negative number.");
+      }
+      patch.travelMinutes = travel;
+    }
+  }
   return patch;
 }
 

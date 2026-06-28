@@ -346,6 +346,28 @@ export async function setupMove(config, input) {
   });
 }
 
+// Update an existing move's basics — name, status, route, dates, driving
+// distance + travel time (MOVE-308). Mirrors the OAuth-gateway update_move tool
+// over the REST PATCH /moves/{moveId} endpoint.
+export async function updateMove(config, input) {
+  const { moveId, idempotencyKey, dryRun, ...body } = input;
+  if (!moveId) {
+    throw new Error("moveId is required to update a move.");
+  }
+  if (dryRun) {
+    return {
+      dryRun: true,
+      request: { method: "PATCH", path: `/moves/${moveId}`, body },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "PATCH",
+    path: `/moves/${moveId}`,
+    body,
+    idempotencyKey,
+  });
+}
+
 export async function getMoveSummary(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/summary`,
