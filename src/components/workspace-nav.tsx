@@ -59,7 +59,10 @@ export function WorkspaceNav({
               className={cn(mobile ? "size-5" : "size-4")}
               aria-hidden="true"
             />
-            <span className={cn(mobile && "max-w-full truncate")}>
+            {/* Pass undefined (not cn(false) → "") so the server and client
+                render the same — an empty-string className hydrates as null on
+                the server and "" on the client, which React flags. */}
+            <span className={mobile ? "max-w-full truncate" : undefined}>
               {mobile ? (item.shortLabel ?? item.label) : item.label}
             </span>
           </Link>
