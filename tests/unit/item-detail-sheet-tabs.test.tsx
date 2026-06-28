@@ -23,6 +23,8 @@ const componentMocks = vi.hoisted(() => ({
   // The hero owns its own useAction(getDisplayUrl) + lightbox, so stub it here
   // the same way (the sheet's convex mock intentionally omits useAction).
   ItemHeroImage: vi.fn(() => <div>Item hero</div>),
+  // The "choose existing photo" picker also uses useAction; stub it too.
+  PhotoPickerDialog: vi.fn(() => <div>Photo picker</div>),
 }));
 
 // Sentinel api so useQuery can tell the queries apart (people vs the
@@ -59,6 +61,10 @@ vi.mock("@/components/photo-evidence-strip", () => ({
 
 vi.mock("@/components/item-hero-image", () => ({
   ItemHeroImage: componentMocks.ItemHeroImage,
+}));
+
+vi.mock("@/components/photo-picker-dialog", () => ({
+  PhotoPickerDialog: componentMocks.PhotoPickerDialog,
 }));
 
 import { ItemDetailSheet } from "@/components/item-detail-sheet";

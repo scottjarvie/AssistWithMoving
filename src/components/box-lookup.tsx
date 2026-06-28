@@ -8,6 +8,7 @@ import {
   Bot,
   ImageOff,
   ImagePlus,
+  Images,
   MapPin,
   Pencil,
   Plus,
@@ -20,6 +21,7 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
+import { PhotoPickerDialog } from "@/components/photo-picker-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,6 +104,7 @@ export function BoxLookup({
   const [editingDetails, setEditingDetails] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [uploaderOpen, setUploaderOpen] = useState(false);
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
   const [savingSize, setSavingSize] = useState(false);
   const [editingPlacement, setEditingPlacement] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -615,6 +618,26 @@ export function BoxLookup({
               multiple
               onUploaded={() => setMessage(`Photo added to ${box.code}.`)}
             />
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPhotoPickerOpen(true)}
+              >
+                <Images className="size-4" aria-hidden="true" />
+                Choose from existing photos
+              </Button>
+              <PhotoPickerDialog
+                householdId={resolvedHouseholdId ?? null}
+                moveId={resolvedMoveId ?? null}
+                target={{ kind: "box", boxId: box._id }}
+                targetLabel={box.code}
+                open={photoPickerOpen}
+                onOpenChange={setPhotoPickerOpen}
+                onAttached={() => setMessage(`Photo attached to ${box.code}.`)}
+              />
+            </div>
             <PhotoEvidenceStrip
               householdId={resolvedHouseholdId ?? null}
               moveId={resolvedMoveId ?? null}
