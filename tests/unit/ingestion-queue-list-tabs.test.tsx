@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -343,6 +343,56 @@ describe("IngestionQueueList todo-done view", () => {
     expect(
       screen.queryByText("Holiday bins need inventory."),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("IngestionQueueList detail modal (MOVE-356)", () => {
+  it("opens a capture detail modal when an entry is clicked", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    // No modal until a row is opened.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // The whole entry is a button; capture 1 is the needsInput entry (editable).
+    await user.click(screen.getByRole("button", { name: "Open capture 1" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Capture 1")).toBeInTheDocument();
+    // Editable entries expose the directions textarea seeded from the entry plus
+    // the save/add/discard lifecycle actions in the footer.
+    expect(within(dialog).getByLabelText("Directions")).toHaveValue(
+      "Identify the blue bin.",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Save directions" }),
+    ).toBeInTheDocument();
+
+    // Esc returns to the list with no modal.
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not open the modal when an inline action is clicked (stopPropagation)", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    // Clicking a quick-action button inside the row must not bubble up and open
+    // the row's detail modal.
+    await user.click(screen.getByRole("button", { name: "Add images" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 

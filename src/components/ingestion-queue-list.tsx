@@ -40,6 +40,7 @@ import {
   type UploadJob,
   useMediaUpload,
 } from "@/components/media-upload-provider";
+import { QueueEntryDetailSheet } from "@/components/queue-entry-detail-sheet";
 import { moveWorkspacePath } from "@/lib/move-links";
 import {
   mediaKindForMimeType,
@@ -139,56 +140,86 @@ function QueueMediaThumbnails({
 
   const remaining = mediaPhotoIds.length - visibleIds.length;
 
-  return (
-    <div className="mt-2 flex flex-wrap gap-2" aria-label="Capture media">
-      {visibleIds.map((photoId) => {
-        const url = urls[photoId];
-        return (
-          <div
-            key={photoId}
-            className="size-14 overflow-hidden rounded-md border border-border bg-muted"
-          >
-            {url ? (
-              // B2/edge delivery URLs are short-lived and provider-controlled,
-              // so Next image optimization is intentionally bypassed.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={url}
-                alt="Capture media"
-                className="size-full object-cover"
-              />
-            ) : (
-              <div className="flex size-full items-center justify-center text-muted-foreground">
-                <ImageOff className="size-4" aria-hidden="true" />
-              </div>
-            )}
+  const imageTile = (
+    photoId: Id<"itemPhotos">,
+    sizeClass: string,
+    iconClass: string,
+  ) => {
+    const url = urls[photoId];
+    return (
+      <div
+        key={photoId}
+        className={cn(
+          "overflow-hidden rounded-md border border-border bg-muted",
+          sizeClass,
+        )}
+      >
+        {url ? (
+          // B2/edge delivery URLs are short-lived and provider-controlled,
+          // so Next image optimization is intentionally bypassed.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="Capture media" className="size-full object-cover" />
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground">
+            <ImageOff className={iconClass} aria-hidden="true" />
           </div>
-        );
-      })}
-      {pendingJobs.map((job) => (
-        <div
-          key={job.id}
-          className="flex size-14 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground"
-          aria-label={`Uploading ${job.file.name}`}
-          title={job.file.name}
-        >
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        </div>
-      ))}
-      {failedJobs.map((job) => (
-        <div
-          key={job.id}
-          className="flex size-14 items-center justify-center rounded-md border border-destructive/40 bg-destructive/10 text-destructive"
-          aria-label={`Upload failed for ${job.file.name}`}
-          title={job.error ?? job.file.name}
-        >
-          <AlertTriangle className="size-4" aria-hidden="true" />
-        </div>
-      ))}
-      {remaining > 0 ? (
-        <div className="flex size-14 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
-          +{remaining}
-        </div>
+        )}
+      </div>
+    );
+  };
+
+  const pendingTile = (job: UploadJob) => (
+    <div
+      key={job.id}
+      className="flex size-14 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground"
+      aria-label={`Uploading ${job.file.name}`}
+      title={job.file.name}
+    >
+      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+    </div>
+  );
+
+  const failedTile = (job: UploadJob) => (
+    <div
+      key={job.id}
+      className="flex size-14 items-center justify-center rounded-md border border-destructive/40 bg-destructive/10 text-destructive"
+      aria-label={`Upload failed for ${job.file.name}`}
+      title={job.error ?? job.file.name}
+    >
+      <AlertTriangle className="size-4" aria-hidden="true" />
+    </div>
+  );
+
+  const remainingTile =
+    remaining > 0 ? (
+      <div
+        key="remaining"
+        className="flex size-14 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground"
+      >
+        +{remaining}
+      </div>
+    ) : null;
+
+  // One responsive render (no duplicate DOM): on desktop the primary thumbnail
+  // grows to ~4× (size-56) and stacks above a small strip of the remaining
+  // media + any in-flight/failed upload tiles; on mobile everything stays a
+  // compact wrap of size-14 tiles.
+  const [first, ...rest] = visibleIds;
+  const restTiles = [
+    ...rest.map((photoId) => imageTile(photoId, "size-14", "size-4")),
+    ...pendingJobs.map(pendingTile),
+    ...failedJobs.map(failedTile),
+    ...(remainingTile ? [remainingTile] : []),
+  ];
+
+  return (
+    <div
+      className="flex flex-wrap items-start gap-2 md:flex-col"
+      aria-label="Capture media"
+    >
+      {first ? imageTile(first, "size-14 md:size-56", "size-4 md:size-6") : null}
+      {restTiles.length > 0 ? (
+        <div className="flex flex-wrap gap-2">{restTiles}</div>
       ) : null}
     </div>
   );
@@ -291,6 +322,11 @@ export function IngestionQueueList({
   >(new Map());
   const [activeTask, setActiveTask] = useState<QueueTask>("needsAction");
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("todo");
+  // The entry whose detail modal is open (MOVE-356). detailIndex is the 1-based
+  // position shown in the list at open time, purely for a friendly title.
+  const [detailEntryId, setDetailEntryId] =
+    useState<Id<"ingestionQueueEntries"> | null>(null);
+  const [detailIndex, setDetailIndex] = useState<number | null>(null);
 
   const loading = Boolean(householdId && moveId) && entries === undefined;
   const sorted = [...(entries ?? [])].sort(
@@ -339,7 +375,10 @@ export function IngestionQueueList({
     }
   }
 
-  async function saveInstructions(entryId: Id<"ingestionQueueEntries">) {
+  async function saveInstructions(
+    entryId: Id<"ingestionQueueEntries">,
+    text: string,
+  ) {
     if (!householdId || !moveId) return;
     setBusyEntryId(entryId);
     setMessage(null);
@@ -348,7 +387,7 @@ export function IngestionQueueList({
         householdId,
         moveId,
         entryId,
-        instructions: editingText,
+        instructions: text,
       });
       setEditingEntryId(null);
       setEditingText("");
@@ -416,6 +455,14 @@ export function IngestionQueueList({
     }
   }
 
+  function openDetail(
+    entryId: Id<"ingestionQueueEntries">,
+    position: number,
+  ) {
+    setDetailEntryId(entryId);
+    setDetailIndex(position);
+  }
+
   function renderEntryList(
     visibleEntries: typeof sorted,
     emptyMessage: string,
@@ -470,8 +517,26 @@ export function IngestionQueueList({
             (job) => job.status === "error",
           );
 
+          // Stop a click on any inline control from also opening the detail
+          // modal (the whole <li> is clickable).
+          const stop = (event: { stopPropagation: () => void }) =>
+            event.stopPropagation();
+
           return (
-            <li key={entry._id} className="rounded-md border border-border p-3">
+            <li
+              key={entry._id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open capture ${index + 1}`}
+              onClick={() => openDetail(entry._id, index + 1)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openDetail(entry._id, index + 1);
+                }
+              }}
+              className="cursor-pointer rounded-md border border-border p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
@@ -512,191 +577,221 @@ export function IngestionQueueList({
                 </span>
               </div>
 
-              {entry.mediaPhotoIds.length || entryJobs.length ? (
-                <QueueMediaThumbnails
-                  householdId={householdId}
-                  moveId={moveId}
-                  mediaPhotoIds={entry.mediaPhotoIds}
-                  jobs={entryJobs}
-                />
-              ) : null}
-
-              {failed || orphanedPending ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {retryableJobs.length > 0 ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        for (const job of retryableJobs) {
-                          retry(job.id);
-                        }
-                      }}
-                    >
-                      <RotateCcw aria-hidden="true" />
-                      Retry upload
-                    </Button>
-                  ) : editable ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() =>
-                        addImagesInputRefs.current.get(entry._id)?.click()
-                      }
-                    >
-                      <ImagePlus aria-hidden="true" />
-                      Add the missing photos
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => void dismissPendingUpload(entry._id)}
-                  >
-                    Dismiss
-                  </Button>
-                </div>
-              ) : null}
-
-              {entry.agentQuestion ? (
-                <p className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm">
-                  Agent asks: {entry.agentQuestion}
-                </p>
-              ) : null}
-
-              {editingEntryId === entry._id ? (
-                <div className="mt-2 space-y-2">
-                  <Textarea
-                    value={editingText}
-                    onChange={(event) => setEditingText(event.target.value)}
-                    aria-label="Edit directions"
-                    className="min-h-20"
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void saveInstructions(entry._id)}
-                    >
-                      Save directions
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setEditingEntryId(null)}
-                    >
-                      Cancel
-                    </Button>
+              {/* Desktop (md+): big primary thumbnail · content · a vertical
+                  column of quick actions beside it. Mobile: stacked, with the
+                  small thumbnail strip and a horizontal action row. */}
+              <div className="mt-2 flex flex-col gap-3 md:flex-row md:gap-4">
+                {entry.mediaPhotoIds.length || entryJobs.length ? (
+                  <div className="md:w-56 md:shrink-0">
+                    <QueueMediaThumbnails
+                      householdId={householdId}
+                      moveId={moveId}
+                      mediaPhotoIds={entry.mediaPhotoIds}
+                      jobs={entryJobs}
+                    />
                   </div>
-                </div>
-              ) : entry.instructions ? (
-                <p className="mt-2 text-sm leading-6">{entry.instructions}</p>
-              ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  No written directions — media only.
-                </p>
-              )}
+                ) : null}
 
-              {entry.agentSummary ? (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Agent: {entry.agentSummary}
-                  {entry.resultItemIds?.length
-                    ? ` (${entry.resultItemIds.length} items proposed)`
-                    : ""}
-                </p>
-              ) : null}
-
-              {entry.resultItemIds?.length && moveId ? (
-                <Button
-                  asChild
-                  size="sm"
-                  variant="link"
-                  className="mt-1 h-auto p-0"
-                >
-                  <Link
-                    href={`${moveWorkspacePath(moveId, "inventory")}#inventory-records`}
-                  >
-                    View{" "}
-                    {entry.resultItemIds.length === 1
-                      ? "the produced item"
-                      : `${entry.resultItemIds.length} produced items`}
-                    <ArrowUpRight aria-hidden="true" />
-                  </Link>
-                </Button>
-              ) : null}
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {editable && editingEntryId !== entry._id ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
+                <div className="space-y-2 md:min-w-0 md:flex-1">
+                  {failed || orphanedPending ? (
+                    <div
+                      className="flex flex-wrap items-center gap-2"
+                      onClick={stop}
+                    >
+                      {retryableJobs.length > 0 ? (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={busy}
-                          aria-label={
-                            entry.status === "needsInput"
-                              ? "Answer & requeue"
-                              : "Edit directions"
-                          }
                           onClick={() => {
-                            setEditingEntryId(entry._id);
-                            setEditingText(entry.instructions ?? "");
+                            for (const job of retryableJobs) {
+                              retry(job.id);
+                            }
                           }}
                         >
-                          <Settings aria-hidden="true" />
+                          <RotateCcw aria-hidden="true" />
+                          Retry upload
                         </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {entry.status === "needsInput"
-                        ? "Answer & requeue"
-                        : "Edit directions"}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : null}
-                {editable && editingEntryId !== entry._id ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
+                      ) : editable ? (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
                           disabled={busy}
-                          aria-label="Add images"
                           onClick={() =>
-                            addImagesInputRefs.current
-                              .get(entry._id)
-                              ?.click()
+                            addImagesInputRefs.current.get(entry._id)?.click()
                           }
                         >
                           <ImagePlus aria-hidden="true" />
+                          Add the missing photos
                         </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Add images</TooltipContent>
-                  </Tooltip>
-                ) : null}
-                {entry.status === "processed" ? (
-                  <>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => void dismissPendingUpload(entry._id)}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {entry.agentQuestion ? (
+                    <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm">
+                      Agent asks: {entry.agentQuestion}
+                    </p>
+                  ) : null}
+
+                  {editingEntryId === entry._id ? (
+                    <div className="space-y-2" onClick={stop}>
+                      <Textarea
+                        value={editingText}
+                        onChange={(event) => setEditingText(event.target.value)}
+                        aria-label="Edit directions"
+                        className="min-h-20"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() =>
+                            void saveInstructions(entry._id, editingText)
+                          }
+                        >
+                          Save directions
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingEntryId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : entry.instructions ? (
+                    <p className="text-sm leading-6">{entry.instructions}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No written directions — media only.
+                    </p>
+                  )}
+
+                  {entry.agentSummary ? (
+                    <p className="text-sm text-muted-foreground">
+                      Agent: {entry.agentSummary}
+                      {entry.resultItemIds?.length
+                        ? ` (${entry.resultItemIds.length} items proposed)`
+                        : ""}
+                    </p>
+                  ) : null}
+
+                  {entry.resultItemIds?.length && moveId ? (
                     <Button
-                      type="button"
+                      asChild
                       size="sm"
-                      disabled={busy}
-                      onClick={() => void changeStatus(entry._id, "resolved")}
+                      variant="link"
+                      className="h-auto p-0"
+                      onClick={stop}
                     >
-                      <CheckCircle2 aria-hidden="true" />
-                      Mark resolved
+                      <Link
+                        href={`${moveWorkspacePath(moveId, "inventory")}#inventory-records`}
+                      >
+                        View{" "}
+                        {entry.resultItemIds.length === 1
+                          ? "the produced item"
+                          : `${entry.resultItemIds.length} produced items`}
+                        <ArrowUpRight aria-hidden="true" />
+                      </Link>
                     </Button>
+                  ) : null}
+                </div>
+
+                <div
+                  className="flex flex-wrap gap-2 md:shrink-0 md:flex-col"
+                  onClick={stop}
+                >
+                  {editable && editingEntryId !== entry._id ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            aria-label={
+                              entry.status === "needsInput"
+                                ? "Answer & requeue"
+                                : "Edit directions"
+                            }
+                            onClick={() => {
+                              setEditingEntryId(entry._id);
+                              setEditingText(entry.instructions ?? "");
+                            }}
+                          >
+                            <Settings aria-hidden="true" />
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {entry.status === "needsInput"
+                          ? "Answer & requeue"
+                          : "Edit directions"}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                  {editable && editingEntryId !== entry._id ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            aria-label="Add images"
+                            onClick={() =>
+                              addImagesInputRefs.current
+                                .get(entry._id)
+                                ?.click()
+                            }
+                          >
+                            <ImagePlus aria-hidden="true" />
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Add images</TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                  {entry.status === "processed" ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void changeStatus(entry._id, "resolved")}
+                      >
+                        <CheckCircle2 aria-hidden="true" />
+                        Mark resolved
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => void changeStatus(entry._id, "queued")}
+                      >
+                        <RotateCcw aria-hidden="true" />
+                        Requeue
+                      </Button>
+                    </>
+                  ) : null}
+                  {entry.status === "discarded" ? (
                     <Button
                       type="button"
                       size="sm"
@@ -705,43 +800,32 @@ export function IngestionQueueList({
                       onClick={() => void changeStatus(entry._id, "queued")}
                     >
                       <RotateCcw aria-hidden="true" />
-                      Requeue
+                      Restore
                     </Button>
-                  </>
-                ) : null}
-                {entry.status === "discarded" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void changeStatus(entry._id, "queued")}
-                  >
-                    <RotateCcw aria-hidden="true" />
-                    Restore
-                  </Button>
-                ) : null}
-                {entry.status === "queued" || entry.status === "needsInput" ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy}
-                          aria-label="Discard"
-                          onClick={() =>
-                            void changeStatus(entry._id, "discarded")
-                          }
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Discard</TooltipContent>
-                  </Tooltip>
-                ) : null}
+                  ) : null}
+                  {entry.status === "queued" ||
+                  entry.status === "needsInput" ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            aria-label="Discard"
+                            onClick={() =>
+                              void changeStatus(entry._id, "discarded")
+                            }
+                          >
+                            <Trash2 aria-hidden="true" />
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Discard</TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                </div>
               </div>
 
               {/* F3: hidden picker for "Add images" — only mounted when the
@@ -757,6 +841,10 @@ export function IngestionQueueList({
                   className="hidden"
                   aria-hidden="true"
                   tabIndex={-1}
+                  // The input lives inside the clickable row, so its programmatic
+                  // .click() (fired by the "Add images" buttons) would otherwise
+                  // bubble up and also open the detail modal.
+                  onClick={stop}
                   onChange={(event) => handleAddImages(entry, event)}
                 />
               ) : null}
@@ -807,6 +895,12 @@ export function IngestionQueueList({
   const activeQueueFilter =
     queueFilters.find((filter) => filter.value === queueFilter) ??
     queueFilters[0];
+
+  const detailEntry = detailEntryId
+    ? (sorted.find((entry) => entry._id === detailEntryId) ?? null)
+    : null;
+  const detailEditable =
+    detailEntry?.status === "queued" || detailEntry?.status === "needsInput";
 
   return (
     <Card id="ingestion-queue" size="sm">
@@ -972,6 +1066,33 @@ export function IngestionQueueList({
             {message}
           </p>
         ) : null}
+
+        <QueueEntryDetailSheet
+          householdId={householdId}
+          moveId={moveId}
+          entry={detailEntry}
+          index={detailIndex}
+          open={detailEntry !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDetailEntryId(null);
+              setDetailIndex(null);
+            }
+          }}
+          busy={detailEntryId !== null && busyEntryId === detailEntryId}
+          editable={Boolean(detailEditable)}
+          onChangeStatus={(status) => {
+            if (detailEntryId) void changeStatus(detailEntryId, status);
+          }}
+          onSaveInstructions={(text) => {
+            if (detailEntryId) return saveInstructions(detailEntryId, text);
+          }}
+          onAddImages={() => {
+            if (detailEntryId) {
+              addImagesInputRefs.current.get(detailEntryId)?.click();
+            }
+          }}
+        />
       </CardContent>
     </Card>
   );
