@@ -20,6 +20,7 @@ import { physicalSpaceNames } from "@/lib/space-kinds";
 import { SpaceSelect } from "@/components/space-select";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
+import { ItemHeroImage } from "@/components/item-hero-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -492,6 +493,18 @@ export function ItemDetailSheet({
     }
   }
 
+  // A short, read-only label for the rail's key-facts strip — kept visible while
+  // the form scrolls (MOVE-357).
+  const presentLocationLabel = presentResourceId
+    ? (presentTransport?.find(
+        (entry) => String(entry.resource._id) === presentResourceId,
+      )?.resource.name ?? "Transport")
+    : presentSpaceId
+      ? ((presentSpaces ?? []).find(
+          (space) => String(space._id) === presentSpaceId,
+        )?.name ?? "Space")
+      : "Not set";
+
   const selectedOwner =
     people?.find((person) => person._id === ownerPersonId) ?? null;
   const ownerSummary = selectedOwner
@@ -692,7 +705,7 @@ export function ItemDetailSheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="overflow-y-auto sm:max-w-4xl">
+      <DialogContent className="overflow-y-auto sm:max-w-5xl">
         <form className="flex min-h-full flex-col" onSubmit={handleSubmit}>
           <DialogHeader className="pr-12">
             <div className="flex flex-wrap items-center gap-2">
@@ -708,7 +721,74 @@ export function ItemDetailSheet({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 px-4 pb-4">
+          <div className="flex flex-1 flex-col gap-4 px-4 pb-4 md:flex-row md:gap-6">
+            {/* Left rail — hero + the facts that should stay visible while the
+                form scrolls + the convert-to-box lifecycle. Pinned on desktop
+                across every tab (MOVE-357). */}
+            <aside className="space-y-3 md:sticky md:top-2 md:h-fit md:w-2/5 md:max-w-[20rem] md:shrink-0">
+              <ItemHeroImage
+                householdId={householdId}
+                moveId={moveId}
+                itemId={item._id}
+              />
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 rounded-md border border-border p-3 text-sm">
+                <dt className="text-muted-foreground">Status</dt>
+                <dd className="text-right font-medium capitalize">{status}</dd>
+                <dt className="text-muted-foreground">Disposition</dt>
+                <dd className="text-right font-medium capitalize">
+                  {disposition}
+                </dd>
+                <dt className="text-muted-foreground">Present</dt>
+                <dd className="text-right font-medium">
+                  {presentLocationLabel}
+                </dd>
+                <dt className="text-muted-foreground">Value</dt>
+                <dd className="text-right font-medium">
+                  {valueDollars ? `$${valueDollars}` : "—"}
+                </dd>
+              </dl>
+              {confirmConvert ? (
+                <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
+                  <p className="text-muted-foreground">
+                    Turn this into a numbered box/tote? The item entry is replaced
+                    by a box that can hold things.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={converting}
+                      onClick={() => void handleConvertToBox()}
+                    >
+                      {converting ? "Converting…" : "Convert to box"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={converting}
+                      onClick={() => setConfirmConvert(false)}
+                    >
+                      Keep as item
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setConfirmConvert(true)}
+                  disabled={converting}
+                >
+                  <Boxes className="size-4" aria-hidden="true" />
+                  Convert to a box/tote
+                </Button>
+              )}
+            </aside>
+
+            <div className="md:min-w-0 md:flex-1">
             <Tabs defaultValue="details" className="gap-4">
               {/* On a phone six tabs can't share one 32px row — a 3-col grid
                   with real height beats a clipped flex-wrap. Releases the
@@ -1402,65 +1482,26 @@ export function ItemDetailSheet({
                 )}
               </TabsContent>
             </Tabs>
+            </div>
           </div>
 
-          <DialogFooter className="border-t border-border px-0 pb-0">
+          <DialogFooter className="border-t border-border p-4">
             <div className="w-full space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Sparkles className="size-4 text-primary" aria-hidden="true" />
                 {message ?? "Detailed edits are saved to the item history."}
               </div>
-              {/* This is actually a container? Give it a box number. */}
-              {confirmConvert ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 p-2 text-sm">
-                  <span className="text-muted-foreground">
-                    Turn this into a numbered box/tote? The item entry is replaced
-                    by a box that can hold things.
-                  </span>
-                  <div className="ml-auto flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={converting}
-                      onClick={() => setConfirmConvert(false)}
-                    >
-                      Keep as item
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={converting}
-                      onClick={() => void handleConvertToBox()}
-                    >
-                      {converting ? "Converting…" : "Convert to box"}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  onClick={() => setConfirmConvert(true)}
-                  disabled={converting}
+                  onClick={() => onOpenChange(false)}
                 >
-                  <Boxes className="size-4" aria-hidden="true" />
-                  Convert to a box/tote
+                  Close
                 </Button>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => onOpenChange(false)}
-                  >
-                    Close
-                  </Button>
-                  <Button type="submit" disabled={saving || !name.trim()}>
-                    {saving ? "Saving" : "Save item"}
-                  </Button>
-                </div>
+                <Button type="submit" disabled={saving || !name.trim()}>
+                  {saving ? "Saving" : "Save item"}
+                </Button>
               </div>
             </div>
           </DialogFooter>

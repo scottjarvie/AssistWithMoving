@@ -20,6 +20,9 @@ const sheetData = vi.hoisted(() => ({
 const componentMocks = vi.hoisted(() => ({
   PhotoEvidenceStrip: vi.fn(() => <div>Photo evidence strip</div>),
   PhotoUploadControl: vi.fn(() => <div>Photo upload control</div>),
+  // The hero owns its own useAction(getDisplayUrl) + lightbox, so stub it here
+  // the same way (the sheet's convex mock intentionally omits useAction).
+  ItemHeroImage: vi.fn(() => <div>Item hero</div>),
 }));
 
 // Sentinel api so useQuery can tell the queries apart (people vs the
@@ -52,6 +55,10 @@ vi.mock("@/components/photo-upload-control", () => ({
 
 vi.mock("@/components/photo-evidence-strip", () => ({
   PhotoEvidenceStrip: componentMocks.PhotoEvidenceStrip,
+}));
+
+vi.mock("@/components/item-hero-image", () => ({
+  ItemHeroImage: componentMocks.ItemHeroImage,
 }));
 
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
