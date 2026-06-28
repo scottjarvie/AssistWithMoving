@@ -33,8 +33,12 @@ import { cn } from "@/lib/utils";
 // the user to pick or create one first — queue entries are move-scoped.
 export function AddToQueueButton({
   variant = "sidebar",
+  scopedToCurrentMove = false,
 }: {
   variant?: "sidebar" | "compact" | "inline";
+  // When the button already lives inside a specific move (e.g. the move's Queue
+  // tab), skip the move-switcher — you're adding to THIS move (MOVE-312).
+  scopedToCurrentMove?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { householdId, moveId } = useMoveWorkspace();
@@ -97,7 +101,7 @@ export function AddToQueueButton({
           <div className="space-y-3 px-4 pb-4">
             {hasActiveMove ? (
               <>
-                <CaptureMoveSwitcher />
+                {scopedToCurrentMove ? null : <CaptureMoveSwitcher />}
                 <Button
                   asChild
                   variant="outline"
