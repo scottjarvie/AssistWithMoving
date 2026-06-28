@@ -49,6 +49,31 @@ export const listForHousehold = query({
   },
 });
 
+// Active household-member count for a move's results summary (MOVE-310).
+// Move-scoped (any move viewer can read it) and counts true household
+// membership — NOT movePeople (move contacts) or moveParticipants (per-move
+// access records), which are separate concepts.
+export const householdMemberCount = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "household:read",
+    );
+    const memberships = await ctx.db
+      .query("householdMemberships")
+      .withIndex("by_household", (q) => q.eq("householdId", args.householdId))
+      .collect();
+    return memberships.filter((membership) => membership.status === "active")
+      .length;
+  },
+});
+
 // Resolve a deep-linked move to its household so the workspace can load the
 // right household even when the user belongs to several. Returns null instead
 // of throwing so a stale or foreign link degrades to the dashboard fallback.

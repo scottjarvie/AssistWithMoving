@@ -13,7 +13,7 @@ const removedSectionDestinations: Record<
   string,
   (moveId: string) => string
 > = {
-  spaces: (moveId) => `${moveWorkspacePath(moveId)}#start`,
+  spaces: (moveId) => `${moveWorkspacePath(moveId, "configure")}#start`,
   boxes: () => "/app/movable-units",
   inventory: () => "/app/items",
   photos: () => "/app/items",

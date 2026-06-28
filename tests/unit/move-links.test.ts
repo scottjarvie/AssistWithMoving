@@ -68,9 +68,11 @@ describe("move links", () => {
       );
     }
     // Spaces section -> the per-move Start-location config tab (keeps the id).
+    // Configure moved off the move index to /configure (MOVE-307), so the
+    // Start-location tab now lives at /configure#start.
     for (const anchor of ["#spaces", "#add-space"]) {
       expect(moveWorkspaceAnchorPath("move_123", anchor)).toBe(
-        "/app/moves/move_123#start"
+        "/app/moves/move_123/configure#start"
       );
     }
   });
