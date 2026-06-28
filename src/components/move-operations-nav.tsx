@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ClipboardCheck,
+  Inbox,
   LayoutDashboard,
-  Sparkles,
   Truck,
   CalendarClock,
   Settings2,
@@ -22,8 +22,10 @@ type OperationLink = {
 };
 
 // The move detail surface has two groups: the move's own pages (Summary index +
-// Configure forms) and Operations (Load Plan / Move Day / Packets / AI Review —
-// real move-scoped operations that are not part of the global nav).
+// Configure forms) and Operations (Load Plan / Move Day / Packets / Queue — real
+// move-scoped operations that are not part of the global nav). The "Queue" slot
+// replaced the confusing "AI Review" tab (MOVE-311); the AI-suggestion review is
+// demoted to a secondary link on the queue page.
 const OPERATION_LINKS: OperationLink[] = [
   { segment: null, label: "Summary", icon: LayoutDashboard, group: "config" },
   { segment: "configure", label: "Configure", icon: Settings2, group: "config" },
@@ -41,9 +43,9 @@ const OPERATION_LINKS: OperationLink[] = [
     group: "operations",
   },
   {
-    segment: "ai-review",
-    label: "AI Review",
-    icon: Sparkles,
+    segment: "queue",
+    label: "Queue",
+    icon: Inbox,
     group: "operations",
   },
 ];

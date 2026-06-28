@@ -54,8 +54,8 @@ export function AiReviewWorkspacePage() {
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <MoveWorkspaceHeader
-        title="AI Review"
-        description="AI suggestions stay suggestions until you approve them here — text intake, photo intake, and the review queue."
+        title="AI suggestions"
+        description="The optional deeper review — approve or reject AI suggestions and run text/photo intake. Day-to-day, your captures live on the move's Queue."
       />
       <MoveOperationsNav />
 
