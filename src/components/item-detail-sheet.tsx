@@ -7,6 +7,7 @@ import {
   Boxes,
   Camera,
   ClipboardList,
+  Images,
   Ruler,
   PackageCheck,
   Sparkles,
@@ -21,6 +22,7 @@ import { SpaceSelect } from "@/components/space-select";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
 import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { ItemHeroImage } from "@/components/item-hero-image";
+import { PhotoPickerDialog } from "@/components/photo-picker-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -338,6 +340,9 @@ export function ItemDetailSheet({
   const convertToBox = useMutation(api.boxes.convertItemToBox);
   const [converting, setConverting] = useState(false);
   const [confirmConvert, setConfirmConvert] = useState(false);
+  // "Choose from existing photos" picker (MOVE-354) — reuse a move photo on
+  // this item instead of only uploading new ones.
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
 
   async function handleConvertToBox() {
     if (!householdId || !moveId || !item) return;
@@ -1125,6 +1130,28 @@ export function ItemDetailSheet({
                   label="Other Photos"
                   multiple
                 />
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPhotoPickerOpen(true)}
+                  >
+                    <Images className="size-4" aria-hidden="true" />
+                    Choose from existing photos
+                  </Button>
+                  <PhotoPickerDialog
+                    householdId={householdId}
+                    moveId={moveId}
+                    target={{ kind: "item", itemId: item._id }}
+                    targetLabel={item.name}
+                    open={photoPickerOpen}
+                    onOpenChange={setPhotoPickerOpen}
+                    onAttached={() =>
+                      setMessage("Photo attached to this item.")
+                    }
+                  />
+                </div>
                 <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
                   The main item photo is already used as the thumbnail. Add
                   extra angles, labels, condition shots, and evidence photos
