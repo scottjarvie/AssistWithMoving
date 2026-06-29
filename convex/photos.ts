@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -950,7 +950,9 @@ async function buildDisplayUrlResult(
   const mediaKind =
     photo.mediaKind ?? mediaKindForMimeType(photo.mimeType) ?? "image";
   if (mediaKind !== "image") {
-    throw new Error("Display derivatives are only available for image evidence.");
+    throw new ConvexError(
+      "Display derivatives are only available for image evidence.",
+    );
   }
 
   const selected =
@@ -959,11 +961,18 @@ async function buildDisplayUrlResult(
       : selectDerivativeRef(photo.derivativeRefs, variant);
 
   if (variant === "original") {
-    throw new Error("Use the audited original download action.");
+    throw new ConvexError("Use the audited original download action.");
   }
 
+  // The requested size hasn't been generated yet (derivativeStatus pending) or
+  // its generation failed — there's simply no displayable variant to serve. Use
+  // ConvexError (an EXPECTED application error) rather than a plain throw, so it
+  // reaches the client's graceful placeholder path instead of being logged as an
+  // opaque "Server Error" on every still-processing photo.
   if (!selected) {
-    throw new Error("Photo variant is not available for this role.");
+    throw new ConvexError(
+      `Photo variant "${variant}" is not available yet (derivative ${photo.derivativeStatus ?? "missing"}).`,
+    );
   }
 
   const cloudflareUrl = cloudflareImageDeliveryUrl({

@@ -1696,7 +1696,10 @@ export default defineSchema({
     .index("by_move_status_order", ["moveId", "status", "sortOrder"])
     .index("by_move_owner_status", ["moveId", "ownerUserId", "status", "sortOrder"])
     .index("by_move_created", ["moveId", "createdAt"])
-    .index("by_household_status", ["householdId", "status"]),
+    .index("by_household_status", ["householdId", "status"])
+    // Global sweep for captures stuck mid-upload (cron ages them out to "failed"
+    // so a lost/reloaded upload doesn't strand the capture un-claimable forever).
+    .index("by_media_state_created", ["mediaUploadState", "createdAt"]),
 
   aiJobs: defineTable({
     householdId: v.id("households"),
