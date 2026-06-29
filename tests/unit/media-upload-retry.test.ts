@@ -79,7 +79,7 @@ describe("uploadMediaFile retry", () => {
     expect(deps.initUpload).toHaveBeenCalledTimes(3);
     expect(deps.cancelUploadSession).toHaveBeenCalledTimes(2);
     expect(onRetry).toHaveBeenCalledTimes(2);
-    expect(UPLOAD_MAX_ATTEMPTS).toBe(3);
+    expect(UPLOAD_MAX_ATTEMPTS).toBe(4);
   });
 
   it("does not retry a permanent error and cancels the session once", async () => {
