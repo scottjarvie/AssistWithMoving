@@ -632,7 +632,7 @@ export const create = mutation({
 // retires the item. The new box starts empty and can hold items.
 // Shared conversion: build a box from an item, move its photos across, retire the
 // item. Used by the user-facing mutation AND the admin/CLI bulk cleanup.
-async function convertItemToBoxCore(
+export async function convertItemToBoxCore(
   ctx: MutationCtx,
   item: Doc<"items">,
   containerType: Doc<"boxes">["containerType"] | undefined,
