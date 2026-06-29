@@ -9,6 +9,7 @@ import {
   query,
   type QueryCtx,
 } from "./_generated/server";
+import { AuthorizationError } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
 import {
   requiresOverrideReason,
@@ -496,12 +497,21 @@ export const get = query({
     boxId: v.id("boxes"),
   },
   handler: async (ctx, args) => {
-    await requireMovePermission(
-      ctx,
-      args.householdId,
-      args.moveId,
-      "inventory:read",
-    );
+    try {
+      await requireMovePermission(
+        ctx,
+        args.householdId,
+        args.moveId,
+        "inventory:read",
+      );
+    } catch (error) {
+      // The current session can't see this move (e.g. signed into a different
+      // household/account, or a stale login). Degrade to "not found" so the unit
+      // page shows a friendly empty state instead of throwing from useQuery and
+      // crashing the whole app via the global error boundary.
+      if (error instanceof AuthorizationError) return null;
+      throw error;
+    }
 
     const box = await ctx.db.get(args.boxId);
     if (
