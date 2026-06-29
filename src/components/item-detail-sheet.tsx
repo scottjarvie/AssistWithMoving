@@ -708,6 +708,18 @@ export function ItemDetailSheet({
     setMessage(`${key} marked verified.`);
   }
 
+  // Disposition-driven field gating. An item that is LEAVING the inventory
+  // (sell / donate / free / dump) doesn't need move logistics — where it starts,
+  // ends, rides, or how fragile it is for the haul are all moot. Trash goes one
+  // further: no one owns or grades a discarded item. Gated fields are only
+  // hidden (never reset), so flipping the disposition back restores the values.
+  const isLeavingInventory =
+    disposition === "sell" ||
+    disposition === "donate" ||
+    disposition === "free" ||
+    disposition === "dump";
+  const isDiscarded = disposition === "dump";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="overflow-y-auto sm:max-w-5xl">
@@ -850,107 +862,6 @@ export function ItemDetailSheet({
                       ))}
                     </select>
                   </Field>
-                  {disposition === "sell" ? (
-                    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3 md:col-span-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Sell
-                      </p>
-                      <div className="flex flex-wrap items-end gap-3">
-                        <label className="text-xs">
-                          <span className="mb-1 block text-muted-foreground">
-                            Asking price ($)
-                          </span>
-                          <Input
-                            key={`ask-${sellListing?.officialPriceCents ?? "none"}`}
-                            inputMode="decimal"
-                            defaultValue={formatOptionalCurrencyCents(
-                              sellListing?.officialPriceCents ?? undefined,
-                            )}
-                            onBlur={(event) =>
-                              void handleSaveAskingPrice(event.target.value)
-                            }
-                            className="h-9 w-32"
-                            aria-label="Asking price in dollars"
-                          />
-                        </label>
-                        {!confirmSell ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={lifecycleBusy}
-                            onClick={() => {
-                              setSoldPriceDraft(
-                                formatOptionalCurrencyCents(
-                                  sellListing?.officialPriceCents ?? undefined,
-                                ),
-                              );
-                              setConfirmSell(true);
-                            }}
-                          >
-                            Mark sold
-                          </Button>
-                        ) : null}
-                      </div>
-                      {confirmSell ? (
-                        <div className="flex flex-wrap items-end gap-2 rounded-md bg-background p-2">
-                          <label className="text-xs">
-                            <span className="mb-1 block text-muted-foreground">
-                              Sold for ($)
-                            </span>
-                            <Input
-                              inputMode="decimal"
-                              value={soldPriceDraft}
-                              onChange={(event) =>
-                                setSoldPriceDraft(event.target.value)
-                              }
-                              className="h-9 w-32"
-                              aria-label="Sold price in dollars"
-                            />
-                          </label>
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={lifecycleBusy}
-                            onClick={() => void handleMarkSold(soldPriceDraft)}
-                          >
-                            {lifecycleBusy ? "Saving…" : "Confirm sold — archive"}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            disabled={lifecycleBusy}
-                            onClick={() => setConfirmSell(false)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : null}
-                      <p className="text-[0.68rem] text-muted-foreground">
-                        Marking sold records the amount and archives the item —
-                        you no longer own it.
-                      </p>
-                    </div>
-                  ) : null}
-                  {disposition === "dump" ? (
-                    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3 md:col-span-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Trash
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        disabled={lifecycleBusy}
-                        onClick={() => void handleMarkTrashed()}
-                      >
-                        {lifecycleBusy ? "Saving…" : "Mark trashed — archive"}
-                      </Button>
-                      <p className="text-[0.68rem] text-muted-foreground">
-                        Marking trashed archives the item — you no longer own it.
-                      </p>
-                    </div>
-                  ) : null}
                   <Field label="Quantity">
                     <Input
                       inputMode="decimal"
@@ -958,138 +869,6 @@ export function ItemDetailSheet({
                       onChange={(event) => setQuantity(event.target.value)}
                     />
                   </Field>
-                  <Field label="Owner / contact">
-                    <select
-                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                      value={ownerPersonId}
-                      onChange={(event) =>
-                        setOwnerPersonId(
-                          event.target.value as Id<"movePeople"> | ""
-                        )
-                      }
-                    >
-                      <option value="">Unassigned</option>
-                      {people?.map((person) => (
-                        <option key={person._id} value={person._id}>
-                          {person.name} - {person.role}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Condition">
-                    <select
-                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                      value={condition}
-                      onChange={(event) =>
-                        setCondition(
-                          event.target.value as InventoryItem["condition"]
-                        )
-                      }
-                    >
-                      {itemConditionOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Fragility">
-                    <select
-                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                      value={fragility}
-                      onChange={(event) =>
-                        setFragility(
-                          event.target.value as InventoryItem["fragility"]
-                        )
-                      }
-                    >
-                      {itemFragilityOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-
-                <Field label="Description">
-                  <Textarea
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                  />
-                </Field>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Field label="Origination space">
-                    <SpaceSelect
-                      value={room}
-                      onChange={setRoom}
-                      spaceNames={spaceNameOptions}
-                      ariaLabel="Origination space"
-                    />
-                  </Field>
-                  <Field label="Destination space">
-                    <SpaceSelect
-                      value={destinationRoom}
-                      onChange={setDestinationRoom}
-                      spaceNames={spaceNameOptions}
-                      ariaLabel="Destination space"
-                    />
-                  </Field>
-                  <div className="md:col-span-2">
-                    <Field label="Present location — a space or a transport">
-                      <select
-                        className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
-                        value={presentValue}
-                        onChange={(event) =>
-                          onPresentLocationChange(event.target.value)
-                        }
-                        aria-label="Present location"
-                      >
-                        <option value="">Not set</option>
-                        <optgroup label="Spaces">
-                          {(presentSpaces ?? []).map((space) => (
-                            <option key={space._id} value={`space:${space._id}`}>
-                              {space.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Transportation">
-                          {(presentTransport ?? []).length === 0 ? (
-                            <option value="" disabled>
-                              Add a truck or trailer first
-                            </option>
-                          ) : (
-                            (presentTransport ?? []).map((entry) => (
-                              <option
-                                key={entry.resource._id}
-                                value={`transport:${entry.resource._id}`}
-                              >
-                                {entry.resource.name}
-                              </option>
-                            ))
-                          )}
-                        </optgroup>
-                      </select>
-                      {presentResourceId && presentZones.length ? (
-                        <select
-                          className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
-                          value={presentZoneId}
-                          onChange={(event) =>
-                            setPresentZoneId(event.target.value)
-                          }
-                          aria-label="Transport zone"
-                        >
-                          <option value="">No specific zone</option>
-                          {presentZones.map((zone) => (
-                            <option key={zone._id} value={zone._id}>
-                              {zone.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : null}
-                    </Field>
-                  </div>
                   <Field label="Category">
                     <Input
                       value={category}
@@ -1103,6 +882,257 @@ export function ItemDetailSheet({
                     />
                   </Field>
                 </div>
+
+                <Field label="Description">
+                  <Textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                  />
+                </Field>
+
+                {disposition === "sell" ? (
+                  <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Sell
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="text-xs">
+                        <span className="mb-1 block text-muted-foreground">
+                          Asking price ($)
+                        </span>
+                        <Input
+                          key={`ask-${sellListing?.officialPriceCents ?? "none"}`}
+                          inputMode="decimal"
+                          defaultValue={formatOptionalCurrencyCents(
+                            sellListing?.officialPriceCents ?? undefined,
+                          )}
+                          onBlur={(event) =>
+                            void handleSaveAskingPrice(event.target.value)
+                          }
+                          className="h-9 w-32"
+                          aria-label="Asking price in dollars"
+                        />
+                      </label>
+                      {!confirmSell ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={lifecycleBusy}
+                          onClick={() => {
+                            setSoldPriceDraft(
+                              formatOptionalCurrencyCents(
+                                sellListing?.officialPriceCents ?? undefined,
+                              ),
+                            );
+                            setConfirmSell(true);
+                          }}
+                        >
+                          Mark sold
+                        </Button>
+                      ) : null}
+                    </div>
+                    {confirmSell ? (
+                      <div className="flex flex-wrap items-end gap-2 rounded-md bg-background p-2">
+                        <label className="text-xs">
+                          <span className="mb-1 block text-muted-foreground">
+                            Sold for ($)
+                          </span>
+                          <Input
+                            inputMode="decimal"
+                            value={soldPriceDraft}
+                            onChange={(event) =>
+                              setSoldPriceDraft(event.target.value)
+                            }
+                            className="h-9 w-32"
+                            aria-label="Sold price in dollars"
+                          />
+                        </label>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={lifecycleBusy}
+                          onClick={() => void handleMarkSold(soldPriceDraft)}
+                        >
+                          {lifecycleBusy ? "Saving…" : "Confirm sold — archive"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={lifecycleBusy}
+                          onClick={() => setConfirmSell(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : null}
+                    <p className="text-[0.68rem] text-muted-foreground">
+                      Marking sold records the amount and archives the item — you
+                      no longer own it.
+                    </p>
+                  </div>
+                ) : null}
+                {disposition === "dump" ? (
+                  <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Trash
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      disabled={lifecycleBusy}
+                      onClick={() => void handleMarkTrashed()}
+                    >
+                      {lifecycleBusy ? "Saving…" : "Mark trashed — archive"}
+                    </Button>
+                    <p className="text-[0.68rem] text-muted-foreground">
+                      Marking trashed archives the item — you no longer own it.
+                    </p>
+                  </div>
+                ) : null}
+
+                {!isDiscarded || !isLeavingInventory ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {!isDiscarded ? (
+                      <Field label="Owner / contact">
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                          value={ownerPersonId}
+                          onChange={(event) =>
+                            setOwnerPersonId(
+                              event.target.value as Id<"movePeople"> | ""
+                            )
+                          }
+                        >
+                          <option value="">Unassigned</option>
+                          {people?.map((person) => (
+                            <option key={person._id} value={person._id}>
+                              {person.name} - {person.role}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : null}
+                    {!isDiscarded ? (
+                      <Field label="Condition">
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                          value={condition}
+                          onChange={(event) =>
+                            setCondition(
+                              event.target.value as InventoryItem["condition"]
+                            )
+                          }
+                        >
+                          {itemConditionOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : null}
+                    {!isLeavingInventory ? (
+                      <Field label="Fragility">
+                        <select
+                          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                          value={fragility}
+                          onChange={(event) =>
+                            setFragility(
+                              event.target.value as InventoryItem["fragility"]
+                            )
+                          }
+                        >
+                          {itemFragilityOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : null}
+                    {!isLeavingInventory ? (
+                      <Field label="Origination space">
+                        <SpaceSelect
+                          value={room}
+                          onChange={setRoom}
+                          spaceNames={spaceNameOptions}
+                          ariaLabel="Origination space"
+                        />
+                      </Field>
+                    ) : null}
+                    {!isLeavingInventory ? (
+                      <Field label="Destination space">
+                        <SpaceSelect
+                          value={destinationRoom}
+                          onChange={setDestinationRoom}
+                          spaceNames={spaceNameOptions}
+                          ariaLabel="Destination space"
+                        />
+                      </Field>
+                    ) : null}
+                    {!isLeavingInventory ? (
+                      <div className="md:col-span-2">
+                        <Field label="Present location — a space or a transport">
+                          <select
+                            className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
+                            value={presentValue}
+                            onChange={(event) =>
+                              onPresentLocationChange(event.target.value)
+                            }
+                            aria-label="Present location"
+                          >
+                            <option value="">Not set</option>
+                            <optgroup label="Spaces">
+                              {(presentSpaces ?? []).map((space) => (
+                                <option
+                                  key={space._id}
+                                  value={`space:${space._id}`}
+                                >
+                                  {space.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Transportation">
+                              {(presentTransport ?? []).length === 0 ? (
+                                <option value="" disabled>
+                                  Add a truck or trailer first
+                                </option>
+                              ) : (
+                                (presentTransport ?? []).map((entry) => (
+                                  <option
+                                    key={entry.resource._id}
+                                    value={`transport:${entry.resource._id}`}
+                                  >
+                                    {entry.resource.name}
+                                  </option>
+                                ))
+                              )}
+                            </optgroup>
+                          </select>
+                          {presentResourceId && presentZones.length ? (
+                            <select
+                              className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
+                              value={presentZoneId}
+                              onChange={(event) =>
+                                setPresentZoneId(event.target.value)
+                              }
+                              aria-label="Transport zone"
+                            >
+                              <option value="">No specific zone</option>
+                              {presentZones.map((zone) => (
+                                <option key={zone._id} value={zone._id}>
+                                  {zone.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </Field>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
               </TabsContent>
 
