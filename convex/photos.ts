@@ -1075,7 +1075,7 @@ export const getPhotoForDeliveryForSubject = internalQuery({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
     return { photo, visibility: policy.visibility };
   },
@@ -1568,7 +1568,7 @@ export const getPhotoForDelivery = internalQuery({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
 
     return {
@@ -1598,7 +1598,7 @@ export const getPhotoForDeliveryForApiActor = internalQuery({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
     return { photo };
   },
@@ -1627,7 +1627,7 @@ export const recordOriginalAccess = internalMutation({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
 
     await recordAuditEvent(ctx, {
@@ -1848,7 +1848,7 @@ export const markGeneratedDerivativesReady = internalMutation({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
 
     await ctx.db.patch(args.photoId, {
@@ -1887,7 +1887,7 @@ export const markGeneratedDerivativesFailed = internalMutation({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
 
     await ctx.db.patch(args.photoId, {
@@ -1953,7 +1953,7 @@ export const updateEvidence = mutation({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
     await assertPhotoTargets(ctx, args);
 
@@ -2050,7 +2050,7 @@ export const archive = mutation({
       photo.householdId !== args.householdId ||
       photo.moveId !== args.moveId
     ) {
-      throw new Error("Photo not found.");
+      throw new ConvexError("Photo not found.");
     }
 
     await ctx.db.patch(args.photoId, {
