@@ -8,7 +8,7 @@ const apiMock = vi.hoisted(() => ({
   boxes: {
     get: "boxes.get",
     update: "boxes.update",
-    archive: "boxes.archive",
+    remove: "boxes.remove",
   },
   items: {
     update: "items.update",

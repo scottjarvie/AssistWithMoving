@@ -339,7 +339,7 @@ export function ItemDetailSheet({
   // numbered box (MOVE: "they should have a box number").
   const router = useRouter();
   const convertToBox = useMutation(api.boxes.convertItemToBox);
-  const archiveItem = useMutation(api.items.archive);
+  const removeItem = useMutation(api.items.remove);
   const [converting, setConverting] = useState(false);
   const [confirmConvert, setConfirmConvert] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -381,7 +381,7 @@ export function ItemDetailSheet({
     setRemoving(true);
     setMessage(null);
     try {
-      await archiveItem({ householdId, moveId, itemId: item._id });
+      await removeItem({ householdId, moveId, itemId: item._id });
       onOpenChange(false);
     } catch (error) {
       setMessage(
@@ -827,8 +827,11 @@ export function ItemDetailSheet({
               {confirmRemove ? (
                 <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
                   <p className="text-muted-foreground">
-                    Remove this item from the move? It disappears from your
-                    inventory everywhere. (Recoverable by an admin if needed.)
+                    Permanently delete this item? It&apos;s removed from the move
+                    along with its photos and any sale listing.{" "}
+                    <span className="font-medium text-foreground">
+                      This can&apos;t be undone.
+                    </span>
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
