@@ -24,6 +24,8 @@ import {
   submitQueueResultArgs,
 } from "./mcpToolsQueue";
 import {
+  archiveItemArgs,
+  convertItemToBoxArgs,
   listTransportArgs,
   placeBoxArgs,
   updateBoxArgs,
@@ -166,7 +168,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "claim_queue",
     description:
-      "Claim the oldest queued capture entries so two agent runs never process the same one. Defaults to YOUR own queue; to help run a queue a move owner delegated to you (share a subscription), pass ownerUserId from list_queue's runnableOwners. Returns the claimed entries — each includes mediaPhotoIds, the already-uploaded photos for that capture. A claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry: turn it into inventory (upsert_items / pack_boxes), then call submit_queue_result — which files the entry's photos onto what you created. For a capture that becomes SEVERAL items, attach each photo to the right one with attach_photos first.",
+      "Claim the oldest queued capture entries so two agent runs never process the same one. Defaults to YOUR own queue; to help run a queue a move owner delegated to you (share a subscription), pass ownerUserId from list_queue's runnableOwners. Returns the claimed entries — each includes mediaPhotoIds, the already-uploaded photos for that capture. A claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry: turn it into inventory (upsert_items / pack_boxes / convert_item_to_box), then call submit_queue_result — which files the entry's photos onto what you created. For a capture that becomes SEVERAL items, attach each photo to the right one with attach_photos first. Entries whose photo upload FAILED are still returned here and can be claimed + processed normally (a failed upload may never complete); only entries with an upload still actively in flight are held back.",
     fn: api.mcpToolsQueue.claimQueue,
     args: claimQueueArgs,
     identityArg: "caller",
@@ -174,7 +176,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "submit_queue_result",
     description:
-      "Report what a claimed entry produced: link the inventory items you created (resultItemIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items, which creates the items. The capture's uploaded photos are AUTOMATICALLY attached to what you made — to the single item in resultItemIds, or (if you didn't create exactly one item) to the box/room/transport the entry targeted — so a capture's photos never get left behind. The result returns attachedPhotoCount. Exception: a capture that became MULTIPLE items can't be auto-split — attach each photo to the right item yourself with attach_photos (using the entry's mediaPhotoIds) before submitting.",
+      "Report what a claimed entry produced: link the inventory items you created (resultItemIds) AND/OR the boxes/totes you created (resultBoxIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items / pack_boxes / convert_item_to_box, which create the units. The capture's uploaded photos are AUTOMATICALLY attached to what you made — to the single item in resultItemIds, or (if you didn't create exactly one item) to the box/room/transport the entry targeted — so a capture's photos never get left behind. The result returns attachedPhotoCount. Exception: a capture that became MULTIPLE items can't be auto-split — attach each photo to the right item yourself with attach_photos (using the entry's mediaPhotoIds) before submitting.",
     fn: api.mcpToolsQueue.submitQueueResult,
     args: submitQueueResultArgs,
     identityArg: "caller",
@@ -249,6 +251,22 @@ export const tools: McpToolRegistration[] = [
       "Edit one loose item / movable unit (by itemId — get it from list_items, search_inventory, or get_item). Set physical attributes — estimatedWeightLb / actualWeightLb, estimatedWeightLowLb / estimatedWeightHighLb, estimatedVolumeCuFt, dimensionsIn { lengthIn, widthIn, heightIn }, with optional weightConfidence / volumeConfidence / dimensionsConfidence (the system auto-fills derivable fields when you omit them: estimatedVolumeCuFt from dimensionsIn as L×W×H/1728, and the weight range estimatedWeightLowLb/estimatedWeightHighLb from estimatedWeightLb as 75%/135% — so you can send just dimensions and a single estimatedWeightLb, or pass explicit values to override) — and/or its three locations: present room (presentRoom/presentRoomId = where it physically is now), starting room (startingRoom = its origin/home room, stored as room), destination room (destinationRoom/destinationRoomId), plus transport (transport/transportId) and load zone (zone/zoneId) — rooms/transport/zone by name or id. presentRoom and destinationRoom must name a room/space that already exists in the move (create it with upsert_spaces first, or pass its id); only startingRoom is free text. Unlike upsert_items, destinationRoom here assigns the item to an existing destination room/space (and the item's destinationRoom is set to that space's canonical name) rather than storing arbitrary destination text. Use clearTransport/clearZone/clearPresentRoom/clearStartingRoom/clearDestinationRoom to unset. Assigning to a transport runs load/capacity validation and returns assignmentWarnings/assignmentHardBlocks; a soft warning (e.g. over capacity) fails the call asking for assignmentOverrideReason — pass a short reason to proceed; hard blocks always fail. dryRun:true previews without saving and never throws on warnings.",
     fn: api.mcpToolsSetup.updateItem,
     args: updateItemArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "convert_item_to_box",
+    description:
+      "Convert a misclassified loose item (a tote/box that was captured as an item) into a numbered box/tote (B-### / T-### in the shared pool). Carries over its name, description, photos, dimensions, weight, origin/destination rooms, and any transport assignment, and REMOVES the source item (no duplicate). Optionally pass containerType (carton|plasticTote|bin|wardrobe|dishPack|crate|other). Returns the new boxId + code. Use this instead of leaving a tote as a loose item or creating a separate box and orphaning the item.",
+    fn: api.mcpToolsSetup.convertItemToBox,
+    args: convertItemToBoxArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "archive_item",
+    description:
+      "Soft-delete (archive) a loose item by itemId — use it to clean up duplicates or mistakes. The item leaves the inventory lists (sets status=archived + deletedAt), reversibly. This is the item counterpart to update_box status:'archived'. NOTE: update_item with status:'archived' only changes the status label and does NOT remove the item from lists — use archive_item to actually remove it.",
+    fn: api.mcpToolsSetup.archiveItem,
+    args: archiveItemArgs,
     identityArg: "caller",
   }),
   defineMcpAction({

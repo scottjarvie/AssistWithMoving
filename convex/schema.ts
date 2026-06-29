@@ -1664,6 +1664,9 @@ export default defineSchema({
     agentSummary: v.optional(v.string()),
     agentQuestion: v.optional(v.string()),
     resultItemIds: v.optional(v.array(v.id("items"))),
+    // Boxes/totes the capture produced (a capture can become a box, not just
+    // items) — lets submit_queue_result link the produced unit (MOVE agent gap).
+    resultBoxIds: v.optional(v.array(v.id("boxes"))),
     processedAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
     // The user whose PERSONAL queue this entry belongs to. Authoritative for

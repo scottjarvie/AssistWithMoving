@@ -25,7 +25,12 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { assertResourceAndZone, loadAssignmentValidation } from "./boxes";
+import {
+  assertResourceAndZone,
+  convertItemToBoxCore,
+  loadAssignmentValidation,
+} from "./boxes";
+import { boxContainerType } from "./schema";
 import {
   volumeCuFtForUpdate,
   weightBoundsFromEstimate,
@@ -1502,5 +1507,86 @@ export const addMoveParticipant = mutation({
           ? "Participant added — they already have an account and now have access."
           : "Invite saved — they'll get access automatically when they sign up with that email.",
     };
+  },
+});
+
+// ---- convert_item_to_box ---------------------------------------------------
+export const convertItemToBoxArgs = {
+  caller: mcpCallerValidator,
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  itemId: v.id("items"),
+  containerType: v.optional(boxContainerType),
+};
+export const convertItemToBox = mutation({
+  args: convertItemToBoxArgs,
+  handler: async (ctx, args) => {
+    const policy = await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const item = await ctx.db.get(args.itemId);
+    if (!item || item.moveId !== args.moveId || item.deletedAt) {
+      throw new ConvexError("Item not found for this move.");
+    }
+    // Reuses the same core the app's "Convert to a box/tote" uses: it carries
+    // over name/description/photos/dimensions/weight/rooms/transport and removes
+    // the source item (no duplicate).
+    const result = await convertItemToBoxCore(
+      ctx,
+      item,
+      args.containerType,
+      policy.actor.userId,
+      Date.now(),
+    );
+    return { boxId: result.boxId, code: result.code };
+  },
+});
+
+// ---- archive_item ----------------------------------------------------------
+export const archiveItemArgs = {
+  caller: mcpCallerValidator,
+  householdId: v.id("households"),
+  moveId: v.id("moves"),
+  itemId: v.id("items"),
+};
+export const archiveItem = mutation({
+  args: archiveItemArgs,
+  handler: async (ctx, args) => {
+    const policy = await requireMoveForSubject(
+      ctx,
+      args.caller.subject,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const item = await ctx.db.get(args.itemId);
+    if (!item || item.moveId !== args.moveId || item.deletedAt) {
+      throw new ConvexError("Item not found for this move.");
+    }
+    // Soft-delete (status archived + deletedAt) so it leaves the inventory lists
+    // — mirrors update_box archive. update_item(status:"archived") only sets the
+    // status and would NOT hide it.
+    const now = Date.now();
+    await ctx.db.patch(args.itemId, {
+      status: "archived",
+      deletedAt: now,
+      updatedByUserId: policy.actor.userId,
+      updatedAt: now,
+    });
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: "agent",
+      actorUserId: policy.actor.userId,
+      category: "inventory",
+      action: "item.archived",
+      objectTable: "items",
+      objectId: args.itemId,
+    });
+    return { itemId: args.itemId, archived: true };
   },
 });

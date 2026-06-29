@@ -110,6 +110,7 @@ function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
     agentQuestion: entry.agentQuestion ?? null,
     agentSummary: entry.agentSummary ?? null,
     resultItemIds: entry.resultItemIds ?? [],
+    resultBoxIds: entry.resultBoxIds ?? [],
     claimedByAgentLabel: entry.claimedByAgentLabel ?? null,
     claimExpiresAt: entry.claimExpiresAt ?? null,
     createdAt: entry.createdAt,
@@ -319,6 +320,8 @@ export const submitQueueResultArgs = {
   entryId: v.id("ingestionQueueEntries"),
   agentSummary: v.optional(v.string()),
   resultItemIds: v.optional(v.array(v.id("items"))),
+  // A capture can become a BOX/tote, not just items — link the produced box(es).
+  resultBoxIds: v.optional(v.array(v.id("boxes"))),
   needsInputQuestion: v.optional(v.string()),
 };
 export const submitQueueResult = mutation({
@@ -384,6 +387,19 @@ export const submitQueueResult = mutation({
       }
     }
 
+    if (args.resultBoxIds) {
+      for (const boxId of args.resultBoxIds) {
+        const box = await ctx.db.get(boxId);
+        if (
+          !box ||
+          box.householdId !== args.householdId ||
+          box.moveId !== args.moveId
+        ) {
+          throw new ConvexError("Result box does not belong to this move.");
+        }
+      }
+    }
+
     // The whole point of queuing photos is that they end up on the thing the
     // capture produced — so on a processed entry, file its uploaded photos onto
     // the created item (or the box/room/transport it targeted) automatically,
@@ -403,6 +419,9 @@ export const submitQueueResult = mutation({
       ...(args.resultItemIds !== undefined
         ? { resultItemIds: args.resultItemIds }
         : {}),
+      ...(args.resultBoxIds !== undefined
+        ? { resultBoxIds: args.resultBoxIds }
+        : {}),
       processedAt: nextStatus === "processed" ? now : undefined,
       updatedAt: now,
     });
@@ -421,6 +440,7 @@ export const submitQueueResult = mutation({
       objectId: args.entryId,
       metadata: {
         resultItemCount: args.resultItemIds?.length ?? 0,
+        resultBoxCount: args.resultBoxIds?.length ?? 0,
         attachedPhotoCount,
       },
     });
