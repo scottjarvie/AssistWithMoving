@@ -82,6 +82,13 @@ import {
   itemStatusOptions,
 } from "@/lib/inventory-options";
 import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
+import {
+  compareBy,
+  DEFAULT_SORT_FIELD,
+  type SortableEntry,
+  type SortFieldId,
+} from "@/lib/inventory-sort";
+import { SortMenu } from "@/components/inventory-sort-menu";
 
 type InventoryTaskTab = "browse" | "add" | "bulk";
 
@@ -115,6 +122,23 @@ const dispositionGroupChips: Array<{
 // Stored enum stays `dump`; only the visible label maps to "Trash".
 function dispositionLabel(disposition: InventoryItem["disposition"]) {
   return disposition === "dump" ? "Trash" : disposition;
+}
+
+// Project an item onto the shared sort shape. Weight/volume are totalled across
+// quantity to match how the other inventory surfaces sort.
+function itemToSortable(item: InventoryItem): SortableEntry {
+  const qty = item.quantity && item.quantity > 0 ? item.quantity : 1;
+  const unitWeight = item.actualWeightLb ?? item.estimatedWeightLb;
+  const unitVolume =
+    item.estimatedVolumeCuFt ?? item.estimatedPackedVolumeCuFt;
+  return {
+    kind: "item",
+    createdAt: item._creationTime,
+    name: item.nickname ?? item.name,
+    code: item.code,
+    weightLb: typeof unitWeight === "number" ? unitWeight * qty : undefined,
+    volumeCuFt: typeof unitVolume === "number" ? unitVolume * qty : undefined,
+  };
 }
 
 const inventoryTaskHashes = {
@@ -565,6 +589,7 @@ export function InventoryTable({
     useState<(typeof itemDispositionOptions)[number]>("undecided");
   const [message, setMessage] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [sortField, setSortField] = useState<SortFieldId>(DEFAULT_SORT_FIELD);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
     visibleDefaultColumns,
@@ -632,6 +657,15 @@ export function InventoryTable({
       ),
     [dispositionFilteredItems, ownerFilter, savedFilter, search],
   );
+  // Apply the chosen sort preset. cardOnly DataTable shows no header-sort
+  // affordance, so this manual sort is the effective order (tanstack `sorting`
+  // stays empty here).
+  const sortedItems = useMemo(() => {
+    const compare = compareBy(sortField);
+    return [...filteredItems].sort((a, b) =>
+      compare(itemToSortable(a), itemToSortable(b)),
+    );
+  }, [filteredItems, sortField]);
   const ownerFilterOptions = useMemo(() => {
     const options = new Map<Id<"movePeople">, { name: string; role: string }>();
 
@@ -1356,10 +1390,11 @@ export function InventoryTable({
                     {selectedCount ? ` / ${selectedCount} selected` : ""}
                   </p>
                 </div>
+                <SortMenu value={sortField} onChange={setSortField} />
               </div>
 
               <DataTable
-                data={filteredItems}
+                data={sortedItems}
                 columns={columns}
                 getRowId={(item) => item._id}
                 onRowOpen={(item) => {

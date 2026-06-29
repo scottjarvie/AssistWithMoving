@@ -50,6 +50,13 @@ import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { PhotoLightbox } from "@/components/photo-lightbox";
 import { buildBoxLookupPath } from "@/lib/box-labels";
 import {
+  compareBy,
+  DEFAULT_SORT_FIELD,
+  type SortableEntry,
+  type SortFieldId,
+} from "@/lib/inventory-sort";
+import { SortMenu } from "@/components/inventory-sort-menu";
+import {
   buildMovableUnits,
   summarizeMovableUnits,
   type MovableUnit,
@@ -134,6 +141,7 @@ export function MovableUnitsTable({
   // reveals the override-reason input (the server enforces the same gate).
   const [previewNeedsReason, setPreviewNeedsReason] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [sortField, setSortField] = useState<SortFieldId>(DEFAULT_SORT_FIELD);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   // A single active stat filter (click a stat chip to filter the list, click it
   // again to clear). Counts stay full-move accurate; only the rows are filtered.
@@ -196,8 +204,14 @@ export function MovableUnitsTable({
       ? units.filter(matchesStatFilter(statFilter))
       : units;
     const q = search.trim().toLowerCase();
-    return q ? byStat.filter((unit) => unit.searchText.includes(q)) : byStat;
-  }, [units, statFilter, search]);
+    const filtered = q
+      ? byStat.filter((unit) => unit.searchText.includes(q))
+      : byStat;
+    const compare = compareBy(sortField);
+    return [...filtered].sort((a, b) =>
+      compare(unitToSortable(a), unitToSortable(b)),
+    );
+  }, [units, statFilter, search, sortField]);
   function toggleStatFilter(next: StatFilter) {
     setStatFilter((current) => (current === next ? null : next));
   }
@@ -625,6 +639,14 @@ export function MovableUnitsTable({
               Clear filter
             </Button>
           ) : null}
+          <SortMenu
+            value={sortField}
+            onChange={(field) => {
+              setSortField(field);
+              // Clear any column-header sort so the chosen preset is what shows.
+              setSorting([]);
+            }}
+          />
           <Button asChild size="sm">
             <Link href={captureHref}>
               <PackagePlus aria-hidden="true" />
@@ -1182,6 +1204,19 @@ type StatFilter =
   | "loose"
   | "unassigned"
   | "missingWeight";
+
+// Project a MovableUnit onto the shared sort shape (kind "looseItem" maps to the
+// comparator's "item"; label is the box/item code).
+function unitToSortable(unit: MovableUnit): SortableEntry {
+  return {
+    kind: unit.kind === "box" ? "box" : "item",
+    createdAt: unit.createdAt,
+    name: unit.name,
+    code: unit.label,
+    weightLb: unit.estimatedWeightLb,
+    volumeCuFt: unit.estimatedVolumeCuFt,
+  };
+}
 
 function matchesStatFilter(
   filter: Exclude<StatFilter, null>,
