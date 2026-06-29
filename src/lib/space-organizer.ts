@@ -31,6 +31,8 @@ export type OrganizerEntry = {
   code: string;
   name: string;
   status: string;
+  /** Record creation time (ms) — drives the "Recently added" sort. */
+  createdAt: number;
   /** Items only — boxes have no disposition. */
   disposition?: ItemDisposition;
   /** "N items" for a box, "N qty" for a loose item. */
@@ -61,6 +63,12 @@ export type OrganizerSummary = {
   looseItems: number;
   knownWeightLb: number;
   knownVolumeCuFt: number;
+  /** Weight/volume split by kind, so boxes and loose items can be shown (and
+   * filtered) separately. boxes* + loose* equals the known totals. */
+  boxesWeightLb: number;
+  boxesVolumeCuFt: number;
+  looseWeightLb: number;
+  looseVolumeCuFt: number;
   missingWeight: number;
   inSpace: number;
   onTransport: number;
@@ -119,6 +127,7 @@ function entryFromBox(record: OrganizerBoxRecord): OrganizerEntry {
     code: box.code,
     name,
     status: box.status,
+    createdAt: box._creationTime,
     disposition: undefined,
     countLabel: `${itemCount} item${itemCount === 1 ? "" : "s"}`,
     roomLabel: box.room ?? "Room unset",
@@ -158,6 +167,7 @@ function entryFromItem(item: InventoryItem): OrganizerEntry {
     code: item.code ?? "Item",
     name,
     status: item.status,
+    createdAt: item._creationTime,
     disposition: item.disposition,
     countLabel: `${quantity} qty`,
     roomLabel: item.room ?? "Room unset",
@@ -238,17 +248,22 @@ export function summarizeEntries(
 ): OrganizerSummary {
   return entries.reduce<OrganizerSummary>(
     (summary, entry) => {
+      const isBox = entry.kind === "box";
       summary.total += 1;
-      if (entry.kind === "box") summary.boxes += 1;
+      if (isBox) summary.boxes += 1;
       else summary.looseItems += 1;
 
       if (finite(entry.estimatedWeightLb)) {
         summary.knownWeightLb += entry.estimatedWeightLb;
+        if (isBox) summary.boxesWeightLb += entry.estimatedWeightLb;
+        else summary.looseWeightLb += entry.estimatedWeightLb;
       } else {
         summary.missingWeight += 1;
       }
       if (finite(entry.estimatedVolumeCuFt)) {
         summary.knownVolumeCuFt += entry.estimatedVolumeCuFt;
+        if (isBox) summary.boxesVolumeCuFt += entry.estimatedVolumeCuFt;
+        else summary.looseVolumeCuFt += entry.estimatedVolumeCuFt;
       }
 
       if (entry.currentSpaceId) summary.inSpace += 1;
@@ -270,6 +285,10 @@ export function summarizeEntries(
       looseItems: 0,
       knownWeightLb: 0,
       knownVolumeCuFt: 0,
+      boxesWeightLb: 0,
+      boxesVolumeCuFt: 0,
+      looseWeightLb: 0,
+      looseVolumeCuFt: 0,
       missingWeight: 0,
       inSpace: 0,
       onTransport: 0,
