@@ -72,6 +72,7 @@ import {
   saveBoxIntake,
   searchInventory,
   setupMove,
+  updateMove,
   startPhotoUpload,
   suggestAssignments,
   textResult,
@@ -866,6 +867,7 @@ export const MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS = [
   "get_api_context",
   "list_moves",
   "setup_move",
+  "update_move",
   "get_move_summary",
   "get_agent_context",
   "get_move_questions",
@@ -1047,6 +1049,40 @@ export function registerTools(target, apiConfig, options = {}) {
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (input) => setupMove(apiConfig, input),
+  });
+
+  registerTool(target, "update_move", {
+    title: "Update move",
+    description:
+      "Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), and travel time (minutes). Distance + travel time are user- or agent-entered (no maps integration). Pass null to clear distance/travel. Requires a household-scoped key with moves/write.",
+    inputSchema: {
+      moveId: z.string().describe("MovingManifest move id to update."),
+      title: z.string().optional(),
+      status: z.string().optional(),
+      origin: z.string().optional(),
+      destination: z.string().optional(),
+      dateStart: z.string().optional(),
+      dateEnd: z.string().optional(),
+      distanceMiles: z
+        .number()
+        .min(0)
+        .nullable()
+        .optional()
+        .describe("Driving distance in miles. null clears it."),
+      travelMinutes: z
+        .number()
+        .min(0)
+        .nullable()
+        .optional()
+        .describe("Driving time in minutes. null clears it."),
+      notes: z.string().optional(),
+      documentationProfileTypes: z.array(z.string()).optional(),
+      moveLevelWeightAllowanceLb: z.number().positive().optional(),
+      idempotencyKey: z.string().optional(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => updateMove(apiConfig, input),
   });
 
   registerTool(target, "get_move_summary", {

@@ -40,9 +40,11 @@ import { addMoveParticipant as addMoveParticipantCore } from "./lib/moveParticip
 import {
   boxStatusValidator,
   capacityValidator,
+  documentationProfileTypeValidator,
   estimateConfidenceValidator,
   moveStatusValidator,
   normalizeBoxCode,
+  normalizeDocumentationProfileTypes,
   normalizeOptionalText,
   normalizeRuleList,
   normalizeSortOrder,
@@ -184,6 +186,11 @@ export const updateMoveArgs = {
   travelMinutes: v.optional(v.number()),
   dateStart: v.optional(v.string()),
   dateEnd: v.optional(v.string()),
+  notes: v.optional(v.string()),
+  documentationProfileTypes: v.optional(
+    v.array(documentationProfileTypeValidator),
+  ),
+  moveLevelWeightAllowanceLb: v.optional(v.number()),
 };
 export const updateMove = mutation({
   args: updateMoveArgs,
@@ -258,6 +265,21 @@ export const updateMove = mutation({
     }
     if (args.dateEnd !== undefined) {
       patch.dateEnd = normalizeOptionalText(args.dateEnd);
+    }
+    if (args.notes !== undefined) {
+      patch.notes = normalizeOptionalText(args.notes);
+    }
+    if (args.documentationProfileTypes !== undefined) {
+      patch.documentationProfileTypes = normalizeDocumentationProfileTypes(
+        args.documentationProfileTypes,
+      );
+    }
+    if (args.moveLevelWeightAllowanceLb !== undefined) {
+      patch.moveLevelWeightAllowanceLb =
+        Number.isFinite(args.moveLevelWeightAllowanceLb) &&
+        args.moveLevelWeightAllowanceLb > 0
+          ? args.moveLevelWeightAllowanceLb
+          : undefined;
     }
 
     await ctx.db.patch(args.moveId, patch);

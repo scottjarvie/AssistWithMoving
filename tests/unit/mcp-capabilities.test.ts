@@ -265,11 +265,12 @@ describe("MovingManifest MCP capability discovery", () => {
     });
     const toolNames = [...registrations.keys()].sort();
 
-    expect(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(25);
+    expect(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(26);
     expect(filter("save_box_intake")).toBe(true);
     expect(filter("create_box")).toBe(false);
     expect(toolNames).toContain("save_box_intake");
     expect(toolNames).toContain("setup_move");
+    expect(toolNames).toContain("update_move");
     expect(toolNames).not.toContain("create_box");
     expect(toolNames).not.toContain("add_items_to_box");
     expect(toolNames).not.toContain("remove_item_from_box");

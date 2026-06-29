@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
-import { routeMovableUnits } from "../../convex/restApi";
+import { movePatch, routeMovableUnits } from "../../convex/restApi";
 
 import {
   bearerToken,
@@ -27,6 +27,43 @@ describe("REST API helpers", () => {
     expect(bearerToken("bearer key")).toBe("key");
     expect(bearerToken("Basic key")).toBe(null);
     expect(bearerToken(undefined)).toBe(null);
+  });
+
+  it("patches driving distance + travel time on a move (MOVE-308 agent-write)", () => {
+    // A non-negative number sets the field.
+    expect(movePatch({ distanceMiles: 42, travelMinutes: 55 })).toMatchObject({
+      distanceMiles: 42,
+      travelMinutes: 55,
+    });
+    // null clears it.
+    expect(movePatch({ distanceMiles: null })).toMatchObject({
+      distanceMiles: undefined,
+    });
+    // Unrelated fields still flow through; distance left untouched when absent.
+    expect(movePatch({ title: "Nashua move" })).not.toHaveProperty(
+      "distanceMiles",
+    );
+    // Invalid values are rejected rather than silently dropped.
+    expect(() => movePatch({ distanceMiles: -5 })).toThrow(/non-negative/);
+    expect(() => movePatch({ travelMinutes: "soon" })).toThrow(/non-negative/);
+  });
+
+  it("patches notes, documentation profiles, and weight allowance (MOVE-314)", () => {
+    expect(
+      movePatch({
+        notes: "Fragile — pack the china first.",
+        moveLevelWeightAllowanceLb: 9000,
+      }),
+    ).toMatchObject({
+      notes: "Fragile — pack the china first.",
+      moveLevelWeightAllowanceLb: 9000,
+    });
+    // Documentation profiles parse the array; unknown entries are dropped.
+    const patch = movePatch({
+      documentationProfileTypes: ["insuranceClaim", "not-a-profile"],
+    });
+    expect(patch.documentationProfileTypes).toContain("insuranceClaim");
+    expect(patch.documentationProfileTypes).not.toContain("not-a-profile");
   });
 
   it("parses route segments and scopes", () => {
