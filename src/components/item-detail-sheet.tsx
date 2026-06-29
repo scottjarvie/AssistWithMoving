@@ -52,7 +52,6 @@ import {
 } from "@/lib/inventory-detail";
 import { itemDimensionsConfidenceForRead } from "@/lib/inventory-measurements";
 import {
-  estimateConfidenceOptions,
   itemConditionOptions,
   itemDispositionOptions,
   itemFragilityOptions,
@@ -225,6 +224,15 @@ function ProvenanceCard({
   );
 }
 
+// A measurement is "an estimate" when its confidence is low/medium (a guess),
+// as opposed to a real measured value (actual/high/manual). Drives the
+// "this is an estimate" checkboxes in Measurements.
+function isEstimateConfidence(
+  confidence: InventoryItem["weightConfidence"] | undefined,
+): boolean {
+  return confidence === "low" || confidence === "medium";
+}
+
 export function ItemDetailSheet({
   householdId,
   moveId,
@@ -303,17 +311,17 @@ export function ItemDetailSheet({
       dimensionsConfidence: item?.dimensionsConfidence,
     }) ?? "none",
   );
-  const [estimatedWeightLb, setEstimatedWeightLb] = useState(
-    formatOptionalNumber(item?.estimatedWeightLb)
-  );
   const [estimatedWeightLowLb, setEstimatedWeightLowLb] = useState(
     formatOptionalNumber(item?.estimatedWeightLowLb)
   );
   const [estimatedWeightHighLb, setEstimatedWeightHighLb] = useState(
     formatOptionalNumber(item?.estimatedWeightHighLb)
   );
+  // ONE weight field, init from the actual weight or, failing that, the estimate
+  // (so the value always shows). The "estimate" checkbox below records whether
+  // it's a guess vs a measured value (via weightConfidence) and reveals a range.
   const [actualWeightLb, setActualWeightLb] = useState(
-    formatOptionalNumber(item?.actualWeightLb)
+    formatOptionalNumber(item?.actualWeightLb ?? item?.estimatedWeightLb)
   );
   const [estimatedVolumeCuFt, setEstimatedVolumeCuFt] = useState(
     formatOptionalNumber(item?.estimatedVolumeCuFt)
@@ -327,6 +335,21 @@ export function ItemDetailSheet({
   const [volumeConfidence, setVolumeConfidence] = useState<
     InventoryItem["volumeConfidence"]
   >(item?.volumeConfidence ?? "none");
+  // "This is an estimate" toggles — one per measurement. Checked ⇒ the value is a
+  // guess (stored as confidence "estimated") and the estimate extras (weight
+  // range / packed volume) show; unchecked ⇒ a real measurement ("manual").
+  const [weightIsEstimate, setWeightIsEstimate] = useState(
+    isEstimateConfidence(item?.weightConfidence) ||
+      Boolean(item?.actualWeightLb == null && item?.estimatedWeightLb != null)
+  );
+  const [volumeIsEstimate, setVolumeIsEstimate] = useState(
+    isEstimateConfidence(item?.volumeConfidence)
+  );
+  const [dimensionsAreEstimate, setDimensionsAreEstimate] = useState(
+    isEstimateConfidence(item?.dimensionsConfidence)
+  );
+  // Owner / Condition / Fragility are rarely touched — hidden behind a toggle.
+  const [showAdvancedDetails, setShowAdvancedDetails] = useState(false);
   const [privateNotes, setPrivateNotes] = useState(item?.privateNotes ?? "");
   const [reviewFlags, setReviewFlags] = useState(
     (item?.reviewFlags ?? []).join(", ")
@@ -633,9 +656,11 @@ export function ItemDetailSheet({
             : {}),
         serialNumber,
         modelNumber,
-        dimensionsConfidence,
-        weightConfidence,
-        volumeConfidence,
+        // The "this is an estimate" checkboxes drive confidence directly:
+        // an estimate is low-confidence; otherwise it's a real (actual) measure.
+        dimensionsConfidence: dimensionsAreEstimate ? "low" : "actual",
+        weightConfidence: weightIsEstimate ? "low" : "actual",
+        volumeConfidence: volumeIsEstimate ? "low" : "actual",
         reviewFlags: parseCommaList(reviewFlags),
         privateNotes,
         aiSummary,
@@ -646,7 +671,6 @@ export function ItemDetailSheet({
       const parsedReplacementValueCents = parseOptionalCurrencyCents(
         replacementValueDollars
       );
-      const parsedEstimatedWeightLb = parseOptionalNumber(estimatedWeightLb);
       const parsedEstimatedWeightLowLb =
         parseOptionalNumber(estimatedWeightLowLb);
       const parsedEstimatedWeightHighLb =
@@ -666,9 +690,6 @@ export function ItemDetailSheet({
       if (parsedValueCents !== undefined) patch.valueCents = parsedValueCents;
       if (parsedReplacementValueCents !== undefined) {
         patch.replacementValueCents = parsedReplacementValueCents;
-      }
-      if (parsedEstimatedWeightLb !== undefined) {
-        patch.estimatedWeightLb = parsedEstimatedWeightLb;
       }
       if (parsedEstimatedWeightLowLb !== undefined) {
         patch.estimatedWeightLowLb = parsedEstimatedWeightLowLb;
@@ -730,15 +751,13 @@ export function ItemDetailSheet({
 
   // Disposition-driven field gating. An item that is LEAVING the inventory
   // (sell / donate / free / dump) doesn't need move logistics — where it starts,
-  // ends, rides, or how fragile it is for the haul are all moot. Trash goes one
-  // further: no one owns or grades a discarded item. Gated fields are only
-  // hidden (never reset), so flipping the disposition back restores the values.
+  // ends, or rides are all moot. Gated fields are only hidden (never reset), so
+  // flipping the disposition back restores the values.
   const isLeavingInventory =
     disposition === "sell" ||
     disposition === "donate" ||
     disposition === "free" ||
     disposition === "dump";
-  const isDiscarded = disposition === "dump";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -876,8 +895,9 @@ export function ItemDetailSheet({
                   primitive's h-8 cap with h-auto and gives each tab a 36px target. */}
               <TabsList className="grid h-auto w-full grid-cols-3 gap-1 [&>*]:min-h-9 sm:flex sm:flex-wrap sm:justify-start">
                 <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="evidence">Evidence</TabsTrigger>
                 <TabsTrigger value="measurements">Measurements</TabsTrigger>
+                <TabsTrigger value="advanced">Advanced</TabsTrigger>
+                <TabsTrigger value="evidence">Evidence</TabsTrigger>
                 <TabsTrigger value="handling">Handling</TabsTrigger>
                 <TabsTrigger value="review">Review</TabsTrigger>
                 <TabsTrigger value="activity">Activity</TabsTrigger>
@@ -1056,9 +1076,18 @@ export function ItemDetailSheet({
                   </div>
                 ) : null}
 
-                {!isDiscarded || !isLeavingInventory ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {!isDiscarded ? (
+                {/* Owner / Condition / Fragility — advanced, behind a toggle. */}
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedDetails((value) => !value)}
+                    className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    {showAdvancedDetails ? "Hide" : "Show"} advanced fields (owner,
+                    condition, fragility)
+                  </button>
+                  {showAdvancedDetails ? (
+                    <div className="grid gap-3 md:grid-cols-2">
                       <Field label="Owner / contact">
                         <select
                           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
@@ -1077,8 +1106,6 @@ export function ItemDetailSheet({
                           ))}
                         </select>
                       </Field>
-                    ) : null}
-                    {!isDiscarded ? (
                       <Field label="Condition">
                         <select
                           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
@@ -1096,8 +1123,6 @@ export function ItemDetailSheet({
                           ))}
                         </select>
                       </Field>
-                    ) : null}
-                    {!isLeavingInventory ? (
                       <Field label="Fragility">
                         <select
                           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
@@ -1115,86 +1140,74 @@ export function ItemDetailSheet({
                           ))}
                         </select>
                       </Field>
-                    ) : null}
-                    {!isLeavingInventory ? (
-                      <Field label="Origination space">
-                        <SpaceSelect
-                          value={room}
-                          onChange={setRoom}
-                          spaceNames={spaceNameOptions}
-                          ariaLabel="Origination space"
-                        />
-                      </Field>
-                    ) : null}
-                    {!isLeavingInventory ? (
-                      <Field label="Destination space">
-                        <SpaceSelect
-                          value={destinationRoom}
-                          onChange={setDestinationRoom}
-                          spaceNames={spaceNameOptions}
-                          ariaLabel="Destination space"
-                        />
-                      </Field>
-                    ) : null}
-                    {!isLeavingInventory ? (
-                      <div className="md:col-span-2">
-                        <Field label="Present location — a space or a transport">
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Move logistics — not shown for items leaving inventory. */}
+                {!isLeavingInventory ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Origination space">
+                      <SpaceSelect
+                        value={room}
+                        onChange={setRoom}
+                        spaceNames={spaceNameOptions}
+                        ariaLabel="Origination space"
+                      />
+                    </Field>
+                    <Field label="Destination space">
+                      <SpaceSelect
+                        value={destinationRoom}
+                        onChange={setDestinationRoom}
+                        spaceNames={spaceNameOptions}
+                        ariaLabel="Destination space"
+                      />
+                    </Field>
+                    <div className="md:col-span-2">
+                      <Field label="Transportation Method">
+                        <select
+                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
+                          value={presentValue}
+                          onChange={(event) =>
+                            onPresentLocationChange(event.target.value)
+                          }
+                          aria-label="Transportation method"
+                        >
+                          <option value="">Not set</option>
+                          {(presentTransport ?? []).length === 0 ? (
+                            <option value="" disabled>
+                              Add a truck or trailer first
+                            </option>
+                          ) : (
+                            (presentTransport ?? []).map((entry) => (
+                              <option
+                                key={entry.resource._id}
+                                value={`transport:${entry.resource._id}`}
+                              >
+                                {entry.resource.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        {presentResourceId && presentZones.length ? (
                           <select
-                            className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
-                            value={presentValue}
+                            className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
+                            value={presentZoneId}
                             onChange={(event) =>
-                              onPresentLocationChange(event.target.value)
+                              setPresentZoneId(event.target.value)
                             }
-                            aria-label="Present location"
+                            aria-label="Transport zone"
                           >
-                            <option value="">Not set</option>
-                            <optgroup label="Spaces">
-                              {(presentSpaces ?? []).map((space) => (
-                                <option
-                                  key={space._id}
-                                  value={`space:${space._id}`}
-                                >
-                                  {space.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Transportation">
-                              {(presentTransport ?? []).length === 0 ? (
-                                <option value="" disabled>
-                                  Add a truck or trailer first
-                                </option>
-                              ) : (
-                                (presentTransport ?? []).map((entry) => (
-                                  <option
-                                    key={entry.resource._id}
-                                    value={`transport:${entry.resource._id}`}
-                                  >
-                                    {entry.resource.name}
-                                  </option>
-                                ))
-                              )}
-                            </optgroup>
+                            <option value="">No specific zone</option>
+                            {presentZones.map((zone) => (
+                              <option key={zone._id} value={zone._id}>
+                                {zone.name}
+                              </option>
+                            ))}
                           </select>
-                          {presentResourceId && presentZones.length ? (
-                            <select
-                              className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm sm:h-8"
-                              value={presentZoneId}
-                              onChange={(event) =>
-                                setPresentZoneId(event.target.value)
-                              }
-                              aria-label="Transport zone"
-                            >
-                              <option value="">No specific zone</option>
-                              {presentZones.map((zone) => (
-                                <option key={zone._id} value={zone._id}>
-                                  {zone.name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : null}
-                        </Field>
-                      </div>
-                    ) : null}
+                        ) : null}
+                      </Field>
+                    </div>
                   </div>
                 ) : null}
 
@@ -1261,7 +1274,140 @@ export function ItemDetailSheet({
                 />
               </TabsContent>
 
-              <TabsContent value="measurements" className="space-y-4">
+              <TabsContent value="measurements" className="space-y-5">
+                {/* One field per measurement. The "estimate" checkbox marks it a
+                    guess (low confidence) and reveals the estimate extras. */}
+                <div className="space-y-2">
+                  <Field label="Weight (lb)">
+                    <Input
+                      inputMode="decimal"
+                      value={actualWeightLb}
+                      onChange={(event) =>
+                        updateActualWeightInput(event.target.value)
+                      }
+                    />
+                  </Field>
+                  <FlagField
+                    label="I only have an estimate"
+                    checked={weightIsEstimate}
+                    onChange={(checked) => {
+                      setWeightIsEstimate(checked);
+                      setWeightConfidence(checked ? "low" : "actual");
+                    }}
+                  />
+                  {weightIsEstimate ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Field label="Low estimate (lb)">
+                        <Input
+                          inputMode="decimal"
+                          value={estimatedWeightLowLb}
+                          onChange={(event) =>
+                            updateWeightEstimateInput(
+                              event.target.value,
+                              setEstimatedWeightLowLb,
+                            )
+                          }
+                        />
+                      </Field>
+                      <Field label="High estimate (lb)">
+                        <Input
+                          inputMode="decimal"
+                          value={estimatedWeightHighLb}
+                          onChange={(event) =>
+                            updateWeightEstimateInput(
+                              event.target.value,
+                              setEstimatedWeightHighLb,
+                            )
+                          }
+                        />
+                      </Field>
+                    </div>
+                  ) : null}
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <Field label="Length (in)">
+                      <Input
+                        inputMode="decimal"
+                        value={lengthIn}
+                        onChange={(event) =>
+                          updateDimensionInput(event.target.value, setLengthIn)
+                        }
+                      />
+                    </Field>
+                    <Field label="Width (in)">
+                      <Input
+                        inputMode="decimal"
+                        value={widthIn}
+                        onChange={(event) =>
+                          updateDimensionInput(event.target.value, setWidthIn)
+                        }
+                      />
+                    </Field>
+                    <Field label="Height (in)">
+                      <Input
+                        inputMode="decimal"
+                        value={heightIn}
+                        onChange={(event) =>
+                          updateDimensionInput(event.target.value, setHeightIn)
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <FlagField
+                    label="These are estimates"
+                    checked={dimensionsAreEstimate}
+                    onChange={(checked) => {
+                      setDimensionsAreEstimate(checked);
+                      setDimensionsConfidence(checked ? "low" : "actual");
+                    }}
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <Field label="Volume (cu ft)">
+                    <Input
+                      inputMode="decimal"
+                      value={estimatedVolumeCuFt}
+                      onChange={(event) =>
+                        updateVolumeInput(
+                          event.target.value,
+                          setEstimatedVolumeCuFt,
+                        )
+                      }
+                    />
+                  </Field>
+                  <FlagField
+                    label="I only have an estimate"
+                    checked={volumeIsEstimate}
+                    onChange={(checked) => {
+                      setVolumeIsEstimate(checked);
+                      setVolumeConfidence(checked ? "low" : "actual");
+                    }}
+                  />
+                  {volumeIsEstimate ? (
+                    <Field label="Packed volume (cu ft)">
+                      <Input
+                        inputMode="decimal"
+                        value={estimatedPackedVolumeCuFt}
+                        onChange={(event) =>
+                          updateVolumeInput(
+                            event.target.value,
+                            setEstimatedPackedVolumeCuFt,
+                          )
+                        }
+                      />
+                    </Field>
+                  ) : null}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="advanced" className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Value ($)">
                     <Input
@@ -1290,164 +1436,6 @@ export function ItemDetailSheet({
                       value={modelNumber}
                       onChange={(event) => setModelNumber(event.target.value)}
                     />
-                  </Field>
-                </div>
-
-                <Separator />
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <Field label="Length (in)">
-                    <Input
-                      inputMode="decimal"
-                      value={lengthIn}
-                      onChange={(event) =>
-                        updateDimensionInput(event.target.value, setLengthIn)
-                      }
-                    />
-                  </Field>
-                  <Field label="Width (in)">
-                    <Input
-                      inputMode="decimal"
-                      value={widthIn}
-                      onChange={(event) =>
-                        updateDimensionInput(event.target.value, setWidthIn)
-                      }
-                    />
-                  </Field>
-                  <Field label="Height (in)">
-                    <Input
-                      inputMode="decimal"
-                      value={heightIn}
-                      onChange={(event) =>
-                        updateDimensionInput(event.target.value, setHeightIn)
-                      }
-                    />
-                  </Field>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <Field label="Estimated weight (lb)">
-                    <Input
-                      inputMode="decimal"
-                      value={estimatedWeightLb}
-                      onChange={(event) =>
-                        updateWeightEstimateInput(
-                          event.target.value,
-                          setEstimatedWeightLb,
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Low estimate (lb)">
-                    <Input
-                      inputMode="decimal"
-                      value={estimatedWeightLowLb}
-                      onChange={(event) =>
-                        updateWeightEstimateInput(
-                          event.target.value,
-                          setEstimatedWeightLowLb,
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="High estimate (lb)">
-                    <Input
-                      inputMode="decimal"
-                      value={estimatedWeightHighLb}
-                      onChange={(event) =>
-                        updateWeightEstimateInput(
-                          event.target.value,
-                          setEstimatedWeightHighLb,
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Actual weight (lb)">
-                    <Input
-                      inputMode="decimal"
-                      value={actualWeightLb}
-                      onChange={(event) =>
-                        updateActualWeightInput(event.target.value)
-                      }
-                    />
-                  </Field>
-                  <Field label="Estimated volume (cu ft)">
-                    <Input
-                      inputMode="decimal"
-                      value={estimatedVolumeCuFt}
-                      onChange={(event) =>
-                        updateVolumeInput(
-                          event.target.value,
-                          setEstimatedVolumeCuFt,
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Packed volume (cu ft)">
-                    <Input
-                      inputMode="decimal"
-                      value={estimatedPackedVolumeCuFt}
-                      onChange={(event) =>
-                        updateVolumeInput(
-                          event.target.value,
-                          setEstimatedPackedVolumeCuFt,
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Dimensions confidence">
-                    <select
-                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                      value={dimensionsConfidence}
-                      onChange={(event) =>
-                        setDimensionsConfidence(
-                          event.target
-                            .value as InventoryItem["dimensionsConfidence"]
-                        )
-                      }
-                    >
-                      {estimateConfidenceOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Weight confidence">
-                    <select
-                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                      value={weightConfidence}
-                      onChange={(event) =>
-                        setWeightConfidence(
-                          event.target
-                            .value as InventoryItem["weightConfidence"]
-                        )
-                      }
-                    >
-                      {estimateConfidenceOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Volume confidence">
-                    <select
-                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                      value={volumeConfidence}
-                      onChange={(event) =>
-                        setVolumeConfidence(
-                          event.target
-                            .value as InventoryItem["volumeConfidence"]
-                        )
-                      }
-                    >
-                      {estimateConfidenceOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
                   </Field>
                 </div>
 
