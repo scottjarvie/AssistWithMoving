@@ -383,24 +383,27 @@ function isEvidencePhoto(photo: Doc<"itemPhotos">) {
   );
 }
 
-async function assertMovePersonTarget(
+// Is this owner/contact a live person on this move? Returns false for a missing,
+// archived, or cross-move person. Non-throwing so callers decide: CREATE rejects
+// a bad owner (ConvexError), but UPDATE self-heals a now-dangling owner (clears
+// it) so an item whose owner was later archived can still be edited — otherwise
+// the save 500s opaquely with no way out (the form shows "Unassigned" while
+// still holding the stale id).
+async function isMovePersonAvailable(
   ctx: MutationCtx,
   args: {
     householdId: Id<"households">;
     moveId: Id<"moves">;
-    ownerPersonId?: Id<"movePeople">;
+    ownerPersonId: Id<"movePeople">;
   },
-) {
-  if (!args.ownerPersonId) return;
+): Promise<boolean> {
   const person = await ctx.db.get(args.ownerPersonId);
-  if (
-    !person ||
-    person.householdId !== args.householdId ||
-    person.moveId !== args.moveId ||
-    person.archivedAt
-  ) {
-    throw new Error("Item owner/contact is not available for this move.");
-  }
+  return Boolean(
+    person &&
+      person.householdId === args.householdId &&
+      person.moveId === args.moveId &&
+      !person.archivedAt,
+  );
 }
 
 async function assertItemSpaceTargets(
@@ -896,11 +899,18 @@ export const create = mutation({
     if (actor.type !== "user") {
       throw new Error(directConvexUserContextRequiredMessage);
     }
-    await assertMovePersonTarget(ctx, {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      ownerPersonId: args.ownerPersonId,
-    });
+    if (
+      args.ownerPersonId &&
+      !(await isMovePersonAvailable(ctx, {
+        householdId: args.householdId,
+        moveId: args.moveId,
+        ownerPersonId: args.ownerPersonId,
+      }))
+    ) {
+      throw new ConvexError(
+        "Item owner/contact is not available for this move.",
+      );
+    }
     await assertItemSpaceTargets(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -1049,11 +1059,15 @@ export const update = mutation({
     if (actor.type !== "user") {
       throw new Error(directConvexUserContextRequiredMessage);
     }
-    await assertMovePersonTarget(ctx, {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      ownerPersonId: args.ownerPersonId,
-    });
+    // Self-heal a dangling owner: if the incoming owner is gone/archived, treat
+    // it as "clear" rather than blocking the edit (see isMovePersonAvailable).
+    const ownerIsAvailable = args.ownerPersonId
+      ? await isMovePersonAvailable(ctx, {
+          householdId: args.householdId,
+          moveId: args.moveId,
+          ownerPersonId: args.ownerPersonId,
+        })
+      : true;
     await assertItemSpaceTargets(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
@@ -1107,7 +1121,10 @@ export const update = mutation({
     if (args.subcategory !== undefined) {
       patch.subcategory = normalizeOptionalText(args.subcategory);
     }
-    if (args.clearOwnerPersonId) {
+    if (args.clearOwnerPersonId || !ownerIsAvailable) {
+      // Explicit clear, OR the incoming owner is no longer a live person on this
+      // move (archived/deleted) — drop the dangling reference instead of saving
+      // it (which previously threw an opaque Server Error and blocked the edit).
       patch.ownerPersonId = undefined;
     } else if (args.ownerPersonId !== undefined) {
       patch.ownerPersonId = args.ownerPersonId;

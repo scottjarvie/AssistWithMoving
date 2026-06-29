@@ -668,6 +668,54 @@ export const setMediaUploadState = mutation({
   },
 });
 
+// How long a capture may sit mid-upload before we treat it as abandoned. The
+// presigned upload session TTL is 15 min (convex/photos.ts), and the client PUT
+// timeout + retries cap a real upload well under that — so anything still
+// "uploading" past this is a tab that reloaded/closed/dropped network mid-upload
+// and left the rollup stranded (the dismiss/unmount abort path never fired).
+const STUCK_UPLOADING_TTL_MS = 15 * 60 * 1000;
+
+// Cron-driven sweep (see convex/crons.ts). Recovers captures stuck
+// mediaUploadState==="uploading" with no live client job left to finish them —
+// the strand that makes a capture un-claimable forever. Each is recomputed to
+// its true terminal state: "complete" if every promised photo actually landed,
+// else "failed" (which isMediaUploadPending treats as claimable, so the agent
+// can process it from the note + whatever photos arrived). Bounded scan over the
+// by_media_state_created index.
+export const ageOutStuckUploadingEntries = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const cutoff = now - STUCK_UPLOADING_TTL_MS;
+    const stuck = await ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_media_state_created", (q) =>
+        q.eq("mediaUploadState", "uploading").lt("createdAt", cutoff),
+      )
+      .take(200);
+    let aged = 0;
+    for (const entry of stuck) {
+      const nextState = resolveAppendedMediaState({
+        expectedMediaCount: entry.expectedMediaCount,
+        priorState: "failed",
+        attachedCount: entry.mediaPhotoIds.length,
+      });
+      if (nextState === "uploading") continue; // defensive: priorState "failed" never yields this
+      await ctx.db.patch(entry._id, {
+        mediaUploadState: nextState,
+        updatedAt: now,
+      });
+      aged += 1;
+    }
+    if (aged > 0) {
+      console.log(
+        `[ageOutStuckUploadingEntries] aged ${aged}/${stuck.length} stuck-uploading captures`,
+      );
+    }
+    return { scanned: stuck.length, aged };
+  },
+});
+
 export const setEntryStatus = mutation({
   args: {
     householdId: v.id("households"),

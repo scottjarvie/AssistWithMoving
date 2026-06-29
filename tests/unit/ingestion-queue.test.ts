@@ -151,4 +151,26 @@ describe("resolveAppendedMediaState (appendMedia rollup)", () => {
       }),
     ).toBe("complete");
   });
+
+  it("age-out recompute (ageOutStuckUploadingEntries cron) resolves a stuck 'uploading' capture to a terminal state", () => {
+    // The cron passes priorState 'failed' so a capture stranded mid-upload never
+    // stays 'uploading' (un-claimable): it becomes 'failed' when promised photos
+    // never arrived (claimable from the note + partial photos)...
+    expect(
+      resolveAppendedMediaState({
+        expectedMediaCount: 2,
+        priorState: "failed",
+        attachedCount: 1,
+      }),
+    ).toBe("failed");
+    // ...or 'complete' if every promised photo actually landed but the rollup
+    // was left stranded (e.g. the tab reloaded before the final recompute).
+    expect(
+      resolveAppendedMediaState({
+        expectedMediaCount: 1,
+        priorState: "failed",
+        attachedCount: 1,
+      }),
+    ).toBe("complete");
+  });
 });

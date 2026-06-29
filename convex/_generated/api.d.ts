@@ -24,6 +24,7 @@ import type * as claimPackets from "../claimPackets.js";
 import type * as clerkIdentity from "../clerkIdentity.js";
 import type * as clerkUsers from "../clerkUsers.js";
 import type * as consolidateMove from "../consolidateMove.js";
+import type * as crons from "../crons.js";
 import type * as dispositionPipelines from "../dispositionPipelines.js";
 import type * as documentationProfiles from "../documentationProfiles.js";
 import type * as employerPackets from "../employerPackets.js";
@@ -163,6 +164,7 @@ declare const fullApi: ApiFromModules<{
   clerkIdentity: typeof clerkIdentity;
   clerkUsers: typeof clerkUsers;
   consolidateMove: typeof consolidateMove;
+  crons: typeof crons;
   dispositionPipelines: typeof dispositionPipelines;
   documentationProfiles: typeof documentationProfiles;
   employerPackets: typeof employerPackets;
