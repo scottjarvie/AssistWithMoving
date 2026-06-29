@@ -49,6 +49,7 @@ import {
   type SortFieldId,
 } from "@/lib/inventory-sort";
 import { SortMenu } from "@/components/inventory-sort-menu";
+import { movableUnitDensityLbPerCuFt } from "@/lib/movable-units";
 import {
   buildOrganizerEntries,
   dispositionBucketFor,
@@ -1109,6 +1110,12 @@ function EntryRow({
   selected: boolean;
   onTap: () => void;
 }) {
+  // Weight per cubic foot — a quick "how heavy for its size" read, shown next to
+  // the weight when both weight and volume are known.
+  const density = movableUnitDensityLbPerCuFt(
+    entry.estimatedWeightLb,
+    entry.estimatedVolumeCuFt,
+  );
   return (
     <li>
       <button
@@ -1141,6 +1148,9 @@ function EntryRow({
             {entry.code} · {entry.countLabel}
             {entry.estimatedWeightLb
               ? ` · ${formatNumber(entry.estimatedWeightLb)} lb`
+              : ""}
+            {density !== undefined
+              ? ` (${formatNumber(density)} lb/ft³)`
               : ""}
           </p>
         </div>
