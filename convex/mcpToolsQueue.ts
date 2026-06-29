@@ -104,6 +104,15 @@ function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
     scopeHint: entry.scopeHint ?? null,
     mediaUploadState: entry.mediaUploadState ?? null,
     intent: entry.intent ?? null,
+    // Structured capture hints (agent gap #4) — apply these directly instead of
+    // re-parsing instructions. Destination = targetSpaceId / targetTransportId.
+    itemKind: entry.itemKind ?? null,
+    estimatedWeightLb: entry.estimatedWeightLb ?? null,
+    dimensionsIn: entry.dimensionsIn ?? null,
+    disposition: entry.disposition ?? null,
+    startingSpaceId: entry.startingSpaceId ?? null,
+    presentSpaceId: entry.presentSpaceId ?? null,
+    presentTransportId: entry.presentTransportId ?? null,
     targetSpaceId: entry.targetSpaceId ?? null,
     targetTransportId: entry.targetTransportId ?? null,
     mediaPhotoIds: entry.mediaPhotoIds ?? [],

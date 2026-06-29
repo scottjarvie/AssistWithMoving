@@ -10,9 +10,14 @@ import { mcpCallerValidator } from "convex-mcp-gateway";
 import { mutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
-import { ingestionQueueIntentValidator } from "./lib/ingestionQueue";
+import { assertCaptureStructuredRefs } from "./ingestionQueue";
+import {
+  ingestionItemKindValidator,
+  ingestionQueueIntentValidator,
+} from "./lib/ingestionQueue";
 import {
   defaultDocumentationProfilesForMoveType,
+  dimensionsValidator,
   documentationProfileTypeValidator,
   itemConditionValidator,
   itemDispositionValidator,
@@ -499,6 +504,16 @@ const queueDraftValidator = v.object({
   targetSpaceId: v.optional(v.id("moveSpaces")),
   targetTransportId: v.optional(v.id("transportResources")),
   mediaPhotoIds: v.optional(v.array(v.id("itemPhotos"))),
+  // Structured capture hints (agent gap #4) — pre-declare what the capture is so
+  // the processing run applies them directly. DESTINATION room/transport reuse
+  // targetSpaceId / targetTransportId above.
+  itemKind: v.optional(ingestionItemKindValidator),
+  estimatedWeightLb: v.optional(v.number()),
+  dimensionsIn: v.optional(dimensionsValidator),
+  disposition: v.optional(itemDispositionValidator),
+  startingSpaceId: v.optional(v.id("moveSpaces")),
+  presentSpaceId: v.optional(v.id("moveSpaces")),
+  presentTransportId: v.optional(v.id("transportResources")),
 });
 export const captureToQueueArgs = {
   caller: mcpCallerValidator,
@@ -542,6 +557,8 @@ export const captureToQueue = mutation({
           throw new ConvexError("Target transport is not part of this move.");
         }
       }
+      // Validate the structured starting/present refs belong to this move too.
+      await assertCaptureStructuredRefs(ctx, args.moveId, draft);
       const entryId = await ctx.db.insert("ingestionQueueEntries", {
         householdId: args.householdId,
         moveId: args.moveId,
@@ -551,6 +568,13 @@ export const captureToQueue = mutation({
         intent: draft.intent,
         targetSpaceId: draft.targetSpaceId,
         targetTransportId: draft.targetTransportId,
+        itemKind: draft.itemKind,
+        estimatedWeightLb: draft.estimatedWeightLb,
+        dimensionsIn: draft.dimensionsIn,
+        disposition: draft.disposition,
+        startingSpaceId: draft.startingSpaceId,
+        presentSpaceId: draft.presentSpaceId,
+        presentTransportId: draft.presentTransportId,
         mediaPhotoIds,
         sortOrder: now,
         // The capture belongs to this user's personal queue.

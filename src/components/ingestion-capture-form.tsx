@@ -73,6 +73,12 @@ export function IngestionCaptureForm({
 
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [instructions, setInstructions] = useState("");
+  // Optional: pre-declare what this capture is (item vs box/tote) so the
+  // processing agent doesn't have to guess (agent gap #4). "" = let the agent
+  // decide.
+  const [itemKind, setItemKind] = useState<
+    "" | "loose_item" | "box" | "tote"
+  >("");
   // Default to one combined entry; the user opts IN to splitting per photo.
   const [scope, setScope] = useState<CaptureScope>("combined");
   const [saving, setSaving] = useState(false);
@@ -149,6 +155,7 @@ export function IngestionCaptureForm({
             householdId,
             moveId,
             instructions: effectiveInstructions,
+            itemKind: itemKind || undefined,
             scopeHint: "singleItem",
             mediaPhotoIds: [],
             expectedMediaCount: 1 + extras.length,
@@ -170,6 +177,7 @@ export function IngestionCaptureForm({
           householdId,
           moveId,
           instructions: effectiveInstructions,
+          itemKind: itemKind || undefined,
           scopeHint:
             scopeChoiceVisible && scope === "combined" ? "scene" : undefined,
           mediaPhotoIds: [],
@@ -190,6 +198,7 @@ export function IngestionCaptureForm({
       // Free the form immediately — uploads continue in the background.
       setAttachments([]);
       setInstructions("");
+      setItemKind("");
       setScope("combined");
       // Room hint intentionally kept: capture sessions usually walk one room.
       const hadMedia = attachments.length > 0;
@@ -404,6 +413,35 @@ export function IngestionCaptureForm({
             autoCorrect="on"
             disabled={!householdId || !moveId || saving}
           />
+        </div>
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="capture-item-kind"
+            className="text-sm font-medium text-foreground"
+          >
+            Kind <span className="text-muted-foreground">(optional)</span>
+          </label>
+          <select
+            id="capture-item-kind"
+            value={itemKind}
+            onChange={(event) =>
+              setItemKind(
+                event.target.value as "" | "loose_item" | "box" | "tote",
+              )
+            }
+            aria-label="What kind of unit is this capture"
+            disabled={!householdId || !moveId || saving}
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:w-56"
+          >
+            <option value="">Let the agent decide</option>
+            <option value="loose_item">Loose item</option>
+            <option value="box">Box</option>
+            <option value="tote">Tote</option>
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Pre-declare item vs box/tote so your agent doesn&apos;t have to guess.
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

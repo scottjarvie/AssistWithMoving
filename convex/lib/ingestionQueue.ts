@@ -103,6 +103,15 @@ export const ingestionQueueIntentValidator = v.union(
   v.literal("floorPlan"),
 );
 
+// What KIND of movable unit a capture should become — lets the human or agent
+// pre-declare item-vs-box at capture time so the processing agent doesn't have
+// to guess from prose (agent gap #4).
+export const ingestionItemKindValidator = v.union(
+  v.literal("loose_item"),
+  v.literal("box"),
+  v.literal("tote"),
+);
+
 // How long an agent's claim lasts before the entry is considered abandoned
 // and may be reclaimed by another run.
 export const ingestionClaimDurationMs = 15 * 60 * 1000;

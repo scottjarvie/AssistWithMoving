@@ -16,12 +16,17 @@ import {
   ingestionClaimDurationMs,
   ingestionClaimIsExpired,
   ingestionEntryIsEditable,
+  ingestionItemKindValidator,
   ingestionQueueStatusValidator,
   ingestionScopeHintValidator,
   isMediaUploadPending,
   resolveAppendedMediaState,
   type IngestionQueueStatus,
 } from "./lib/ingestionQueue";
+import {
+  dimensionsValidator,
+  itemDispositionValidator,
+} from "./lib/moveFields";
 import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
@@ -356,6 +361,33 @@ export const closeQueueEntriesById = internalMutation({
   },
 });
 
+// Validate that a capture's structured space/transport refs (agent gap #4)
+// actually belong to this move — agents can pass arbitrary ids. Exported so the
+// MCP capture_to_queue path reuses the same guard.
+export async function assertCaptureStructuredRefs(
+  ctx: MutationCtx,
+  moveId: Id<"moves">,
+  refs: {
+    startingSpaceId?: Id<"moveSpaces">;
+    presentSpaceId?: Id<"moveSpaces">;
+    presentTransportId?: Id<"transportResources">;
+  },
+) {
+  for (const spaceId of [refs.startingSpaceId, refs.presentSpaceId]) {
+    if (!spaceId) continue;
+    const space = await ctx.db.get(spaceId);
+    if (!space || space.moveId !== moveId) {
+      throw new Error("That space is not part of this move.");
+    }
+  }
+  if (refs.presentTransportId) {
+    const transport = await ctx.db.get(refs.presentTransportId);
+    if (!transport || transport.moveId !== moveId) {
+      throw new Error("That transport is not part of this move.");
+    }
+  }
+}
+
 export const createEntry = mutation({
   args: {
     householdId: v.id("households"),
@@ -369,6 +401,15 @@ export const createEntry = mutation({
     // is saved. When it exceeds what is already attached, the entry is created
     // in the "uploading" rollup state until appendMedia catches up.
     expectedMediaCount: v.optional(v.number()),
+    // Structured capture hints (agent gap #4) — pre-declared so the processing
+    // agent applies them directly instead of re-parsing the instructions.
+    itemKind: v.optional(ingestionItemKindValidator),
+    estimatedWeightLb: v.optional(v.number()),
+    dimensionsIn: v.optional(dimensionsValidator),
+    disposition: v.optional(itemDispositionValidator),
+    startingSpaceId: v.optional(v.id("moveSpaces")),
+    presentSpaceId: v.optional(v.id("moveSpaces")),
+    presentTransportId: v.optional(v.id("transportResources")),
   },
   handler: async (ctx, args) => {
     const actor = await requireUserActor(
@@ -377,6 +418,7 @@ export const createEntry = mutation({
       args.moveId,
       "inventory:edit",
     );
+    await assertCaptureStructuredRefs(ctx, args.moveId, args);
 
     const instructions = args.instructions?.trim() || undefined;
     const mediaPhotoIds = args.mediaPhotoIds ?? [];
@@ -405,6 +447,13 @@ export const createEntry = mutation({
       roomHint: args.roomHint?.trim() || undefined,
       dispositionHint: args.dispositionHint?.trim() || undefined,
       scopeHint: args.scopeHint,
+      itemKind: args.itemKind,
+      estimatedWeightLb: args.estimatedWeightLb,
+      dimensionsIn: args.dimensionsIn,
+      disposition: args.disposition,
+      startingSpaceId: args.startingSpaceId,
+      presentSpaceId: args.presentSpaceId,
+      presentTransportId: args.presentTransportId,
       mediaPhotoIds,
       expectedMediaCount,
       mediaUploadState,
