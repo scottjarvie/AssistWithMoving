@@ -8,6 +8,7 @@ const apiMock = vi.hoisted(() => ({
   boxes: {
     get: "boxes.get",
     update: "boxes.update",
+    archive: "boxes.archive",
   },
   items: {
     update: "items.update",
@@ -90,6 +91,10 @@ const lookupData = vi.hoisted(() => ({
 
 vi.mock("../../convex/_generated/api", () => ({
   api: apiMock,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock("convex/react", () => ({

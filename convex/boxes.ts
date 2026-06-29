@@ -758,6 +758,58 @@ export const convertItemToBox = mutation({
   },
 });
 
+// Remove a box/tote from the move. Archives the container (hidden everywhere,
+// reversible — the row + its photos are retained) and UNPACKS any items still
+// inside it (drops the boxItems memberships) so the user's actual item records
+// survive as loose items instead of being stranded in a hidden box.
+export const archive = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    boxId: v.id("boxes"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const box = await ctx.db.get(args.boxId);
+    if (!box || box.moveId !== args.moveId) {
+      throw new ConvexError("Box not found for this move.");
+    }
+    const now = Date.now();
+
+    const memberships = await ctx.db
+      .query("boxItems")
+      .withIndex("by_box", (q) => q.eq("boxId", args.boxId))
+      .collect();
+    for (const membership of memberships) {
+      await ctx.db.delete(membership._id);
+    }
+
+    await ctx.db.patch(args.boxId, {
+      status: "archived",
+      archivedAt: now,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: actor.type,
+      actorUserId: actor.type === "user" ? actor.userId : undefined,
+      actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
+      category: "inventory",
+      action: "box.archived",
+      objectTable: "boxes",
+      objectId: args.boxId,
+      metadata: { unpackedItemCount: memberships.length },
+    });
+  },
+});
+
 // Admin/CLI bulk cleanup: convert a list of misclassified items (totes/bins that
 // were entered as items) into boxes in one shot. Skips ids that aren't active
 // items. Returns the old item code → new box code mapping.
