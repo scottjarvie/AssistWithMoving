@@ -100,7 +100,7 @@ export function BoxLookup({
       : "skip",
   );
   const updateBox = useMutation(api.boxes.update);
-  const archiveBox = useMutation(api.boxes.archive);
+  const removeBox = useMutation(api.boxes.remove);
   const router = useRouter();
 
   // Deep-linked from the list's "missing weight/size" indicators (MOVE-343).
@@ -308,15 +308,15 @@ export function BoxLookup({
     }
   }
 
-  // Remove the unit from the move: archive it (hidden everywhere, reversible)
-  // and unpack any items inside so they survive as loose items. Navigate back
-  // afterwards since this page would otherwise show "not found".
+  // Permanently delete the unit: remove it + its photos, and unpack any items
+  // inside so they survive as loose items. Navigate back afterwards since this
+  // page would otherwise show "not found".
   async function handleRemoveBox() {
     if (!resolvedHouseholdId || !resolvedMoveId) return;
     setRemoving(true);
     setMessage(null);
     try {
-      await archiveBox({
+      await removeBox({
         householdId: resolvedHouseholdId,
         moveId: resolvedMoveId,
         boxId: box._id,
@@ -446,9 +446,12 @@ export function BoxLookup({
         {confirmRemove ? (
           <div className="mt-3 space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
             <p className="text-muted-foreground">
-              Remove {box.code} from the move? The unit disappears from your
-              inventory; any items packed inside are unpacked back to loose
-              items. (Recoverable by an admin if needed.)
+              Permanently delete {box.code}? The unit and its photos are removed;
+              any items packed inside are unpacked back to loose items (they
+              survive).{" "}
+              <span className="font-medium text-foreground">
+                This can&apos;t be undone.
+              </span>
             </p>
             <div className="flex items-center gap-2">
               <Button

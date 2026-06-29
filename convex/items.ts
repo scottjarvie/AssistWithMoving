@@ -1664,6 +1664,72 @@ export const archive = mutation({
   },
 });
 
+// PERMANENTLY delete an item. Unlike archive (reversible — status+deletedAt),
+// this removes the row and CANNOT be undone, so it cascades the data the item
+// owns: its photos, box memberships, sale listing, and load-plan placements —
+// nothing is left dangling. (B2 photo objects are not deleted here, same as the
+// move purge; only the DB rows go.)
+export const remove = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const item = await ctx.db.get(args.itemId);
+    if (!item || item.moveId !== args.moveId) {
+      throw new ConvexError("Item not found for this move.");
+    }
+
+    const photos = await ctx.db
+      .query("itemPhotos")
+      .withIndex("by_item_created", (q) => q.eq("itemId", args.itemId))
+      .collect();
+    const memberships = await ctx.db
+      .query("boxItems")
+      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+      .collect();
+    const listings = await ctx.db
+      .query("saleListings")
+      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+      .collect();
+    const placements = await ctx.db
+      .query("planPlacements")
+      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+      .collect();
+
+    for (const doc of photos) await ctx.db.delete(doc._id);
+    for (const doc of memberships) await ctx.db.delete(doc._id);
+    for (const doc of listings) await ctx.db.delete(doc._id);
+    for (const doc of placements) await ctx.db.delete(doc._id);
+    await ctx.db.delete(args.itemId);
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: actor.type,
+      actorUserId: actor.type === "user" ? actor.userId : undefined,
+      actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
+      category: "inventory",
+      action: "item.deleted",
+      objectTable: "items",
+      objectId: args.itemId,
+      metadata: {
+        code: item.code,
+        deletedPhotoCount: photos.length,
+        deletedMembershipCount: memberships.length,
+        deletedListingCount: listings.length,
+      },
+    });
+  },
+});
+
 // Mark a dump item TRASHED: set disposition=dump and ARCHIVE it — once it's
 // trashed we don't own it anymore, so it leaves the active inventory. Distinct
 // audit action ("item.trashed") so it can be told apart from a plain archive.

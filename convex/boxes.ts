@@ -758,11 +758,12 @@ export const convertItemToBox = mutation({
   },
 });
 
-// Remove a box/tote from the move. Archives the container (hidden everywhere,
-// reversible — the row + its photos are retained) and UNPACKS any items still
-// inside it (drops the boxItems memberships) so the user's actual item records
-// survive as loose items instead of being stranded in a hidden box.
-export const archive = mutation({
+// PERMANENTLY delete a box/tote. Removes the row and CANNOT be undone, so it
+// cascades the box's own photos and UNPACKS any items still inside it (drops the
+// boxItems memberships) — the user's actual item records survive as loose items
+// rather than being deleted with the container. (B2 photo objects are not
+// deleted here, same as the move purge; only the DB rows go.)
+export const remove = mutation({
   args: {
     householdId: v.id("households"),
     moveId: v.id("moves"),
@@ -779,21 +780,20 @@ export const archive = mutation({
     if (!box || box.moveId !== args.moveId) {
       throw new ConvexError("Box not found for this move.");
     }
-    const now = Date.now();
 
+    const photos = await ctx.db
+      .query("itemPhotos")
+      .withIndex("by_box_created", (q) => q.eq("boxId", args.boxId))
+      .collect();
     const memberships = await ctx.db
       .query("boxItems")
       .withIndex("by_box", (q) => q.eq("boxId", args.boxId))
       .collect();
-    for (const membership of memberships) {
-      await ctx.db.delete(membership._id);
-    }
 
-    await ctx.db.patch(args.boxId, {
-      status: "archived",
-      archivedAt: now,
-      updatedAt: now,
-    });
+    for (const doc of photos) await ctx.db.delete(doc._id);
+    // Unpack: drop memberships so the contained items survive as loose items.
+    for (const doc of memberships) await ctx.db.delete(doc._id);
+    await ctx.db.delete(args.boxId);
 
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
@@ -802,10 +802,14 @@ export const archive = mutation({
       actorUserId: actor.type === "user" ? actor.userId : undefined,
       actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
       category: "inventory",
-      action: "box.archived",
+      action: "box.deleted",
       objectTable: "boxes",
       objectId: args.boxId,
-      metadata: { unpackedItemCount: memberships.length },
+      metadata: {
+        code: box.code,
+        deletedPhotoCount: photos.length,
+        unpackedItemCount: memberships.length,
+      },
     });
   },
 });
