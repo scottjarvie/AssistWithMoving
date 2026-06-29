@@ -292,6 +292,13 @@ export async function createImageDerivatives(file: File) {
   }
 }
 
+// Hard ceiling for a single PUT to B2. XHR has NO default timeout, so on a flaky
+// mobile connection a stalled PUT would otherwise hang forever — never firing
+// onerror, never retrying, and stranding the capture as "uploading". 90s is
+// generous for a large photo on slow cellular; if it trips, the error is
+// retryable and the next attempt re-inits a fresh presigned URL.
+export const UPLOAD_PUT_TIMEOUT_MS = 90_000;
+
 export function uploadFileWithProgress({
   file,
   uploadUrl,
@@ -338,11 +345,16 @@ export function uploadFileWithProgress({
       signal.removeEventListener("abort", abortUpload);
       reject(new Error("Upload failed."));
     };
+    request.ontimeout = () => {
+      signal.removeEventListener("abort", abortUpload);
+      reject(new Error("Upload timed out. Check your connection."));
+    };
     request.onabort = () => {
       signal.removeEventListener("abort", abortUpload);
       reject(new DOMException("Upload cancelled.", "AbortError"));
     };
     request.open("PUT", uploadUrl);
+    request.timeout = UPLOAD_PUT_TIMEOUT_MS;
     request.setRequestHeader("Content-Type", contentType);
     request.send(file);
   });

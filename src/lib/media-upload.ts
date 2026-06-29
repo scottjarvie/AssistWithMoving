@@ -43,9 +43,11 @@ export type UploadMediaArgs = {
 
 // Total attempts (1 initial + retries) for a single file. Most failures we see
 // are transient — an expired presigned URL, a dropped mobile connection, a B2
-// hiccup — so a couple of automatic retries turns "too many failing" into a
-// rare hard failure that still surfaces the manual retry UI as a last resort.
-export const UPLOAD_MAX_ATTEMPTS = 3;
+// hiccup, a stalled PUT that hit the timeout — so several automatic retries turn
+// "too many failing" into a rare hard failure that still surfaces the manual
+// retry UI as a last resort. 4 attempts (with the longer mobile backoff below)
+// rides out a brief WiFi↔cellular handoff that 3 short attempts would miss.
+export const UPLOAD_MAX_ATTEMPTS = 4;
 
 // Runs the full init → PUT → finalize flow for a single file and returns the
 // finalized itemPhotos id. Automatically retries transient failures with
@@ -152,9 +154,14 @@ export function isRetryableUploadError(
   return true;
 }
 
+// Exponential backoff tuned for MOBILE, not a fast LAN. The old 400/800/1600ms
+// schedule was negligible next to a 15–30s mobile PUT — a retry fired before the
+// network (or a congested B2) had any chance to recover, so it just failed
+// again. 1s → 2s → 4s (+jitter, capped at 15s) gives the connection real time to
+// settle between attempts.
 function retryDelayMs(attempt: number): number {
-  const base = Math.min(8000, 400 * 2 ** (attempt - 1));
-  return base + Math.floor(Math.random() * 250);
+  const base = Math.min(15000, 1000 * 2 ** (attempt - 1));
+  return base + Math.floor(Math.random() * 500);
 }
 
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {

@@ -92,6 +92,20 @@ describe("isMediaUploadPending (claim-during-upload gate)", () => {
     expect(isMediaUploadPending({ mediaPhotoIds: [] })).toBe(false);
     expect(isMediaUploadPending({ mediaPhotoIds: ["a"] })).toBe(false);
   });
+
+  it("does NOT flag a FAILED upload even with an unmet promised count", () => {
+    // Regression: a capture whose photo upload permanently failed (0 attached
+    // of 1 promised) must stay CLAIMABLE — the promised photo is never arriving,
+    // and the directions alone are enough to make inventory. Treating it as
+    // pending stranded such captures in the queue forever.
+    expect(
+      isMediaUploadPending({
+        mediaUploadState: "failed",
+        expectedMediaCount: 1,
+        mediaPhotoIds: [],
+      }),
+    ).toBe(false);
+  });
 });
 
 // appendMedia's rollup recomputation. The load-bearing case is F3 add-images

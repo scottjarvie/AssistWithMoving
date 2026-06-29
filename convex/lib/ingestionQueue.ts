@@ -84,6 +84,13 @@ export function isMediaUploadPending(entry: {
   mediaPhotoIds: unknown[];
 }) {
   if (entry.mediaUploadState === "uploading") return true;
+  // A permanently FAILED upload is NOT "pending" — the promised photos are
+  // never arriving, so an unmet expectedMediaCount must not keep the entry
+  // un-claimable. Without this, a capture whose photo upload failed strands in
+  // the queue forever: the agent can never claim it (count never reached) even
+  // though the directions alone are enough to make inventory. Let it through so
+  // it can be processed from the note + whatever photos did land.
+  if (entry.mediaUploadState === "failed") return false;
   return (
     entry.expectedMediaCount != null &&
     entry.mediaPhotoIds.length < entry.expectedMediaCount
