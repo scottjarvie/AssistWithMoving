@@ -227,8 +227,22 @@ export function MediaUploadProvider({
         // kept so retry/dismiss still have something to act on.
         removeJob(job.id);
       } catch (error) {
-        // Aborted by teardown — leave the job as-is; nothing left to do.
         if (error instanceof DOMException && error.name === "AbortError") {
+          // Aborted by an explicit dismiss or by provider teardown. The PUT is
+          // cancelled and will never finish, so the entry must NOT be left in
+          // 'uploading' — that strands it un-claimable forever (the same
+          // strand-class bug a failed upload caused, just on the abort path).
+          // Flag the rollup 'failed' (best effort) so isMediaUploadPending
+          // releases it and the queue surfaces a retry; the entry is never
+          // auto-discarded.
+          await deps
+            .setMediaUploadState({
+              householdId: job.householdId,
+              moveId: job.moveId,
+              entryId: job.entryId,
+              state: "failed",
+            })
+            .catch(() => {});
           return;
         }
         // Only reached after automatic retries are exhausted (uploadMediaFile
@@ -310,12 +324,31 @@ export function MediaUploadProvider({
     );
   }, []);
 
-  const dismiss = useCallback<MediaUploadContextValue["dismiss"]>((jobId) => {
-    const controller = abortControllersRef.current.get(jobId);
-    controller?.abort();
-    abortControllersRef.current.delete(jobId);
-    setJobs((current) => current.filter((job) => job.id !== jobId));
-  }, []);
+  const dismiss = useCallback<MediaUploadContextValue["dismiss"]>(
+    (jobId) => {
+      const job = jobs.find((candidate) => candidate.id === jobId);
+      const controller = abortControllersRef.current.get(jobId);
+      controller?.abort();
+      abortControllersRef.current.delete(jobId);
+      // A job dismissed before it ever started uploading fires no AbortError,
+      // so the runJob catch never runs to release the entry. Do it here so a
+      // never-started capture isn't stranded 'uploading'. (uploading/finalizing
+      // dismisses abort the PUT and are released by the catch; an 'error' job's
+      // entry is already 'failed'.)
+      if (job?.status === "queued") {
+        void depsRef.current
+          .setMediaUploadState({
+            householdId: job.householdId,
+            moveId: job.moveId,
+            entryId: job.entryId,
+            state: "failed",
+          })
+          .catch(() => {});
+      }
+      setJobs((current) => current.filter((candidate) => candidate.id !== jobId));
+    },
+    [jobs],
+  );
 
   const jobsForEntry = useCallback<MediaUploadContextValue["jobsForEntry"]>(
     (entryId) => jobs.filter((job) => job.entryId === entryId),

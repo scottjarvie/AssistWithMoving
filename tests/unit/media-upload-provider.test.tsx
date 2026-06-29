@@ -155,4 +155,44 @@ describe("MediaUploadProvider", () => {
 
     expect(result.current.jobsForEntry(entry)).toHaveLength(0);
   });
+
+  it("releases the entry to 'failed' when an IN-FLIGHT upload is aborted (dismiss/teardown) — never stranded 'uploading'", async () => {
+    // An upload that only settles when its signal aborts — mimics dismiss() or
+    // provider unmount cancelling the in-flight PUT mid-flight.
+    harness.uploadMediaFile.mockImplementation(
+      ({ signal }: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () =>
+            reject(new DOMException("Upload cancelled.", "AbortError")),
+          );
+        }),
+    );
+
+    const { result } = renderHook(() => useMediaUpload(), { wrapper });
+
+    act(() => {
+      result.current.enqueue({ entryId: entry, householdId: household, moveId: move }, [
+        { file: imageFile("a.jpg"), kind: "image" },
+      ]);
+    });
+
+    // Job is in flight ('uploading').
+    await waitFor(() => {
+      expect(result.current.jobsForEntry(entry)[0]?.status).toBe("uploading");
+    });
+
+    const jobId = result.current.jobsForEntry(entry)[0]!.id;
+    act(() => {
+      result.current.dismiss(jobId);
+    });
+
+    // The cancelled upload MUST flag the entry rollup 'failed' — otherwise it
+    // stays 'uploading' forever and the agent can never claim it (the same
+    // strand-class bug fixed for failed uploads, on the abort path).
+    await waitFor(() => {
+      expect(harness.setMediaUploadState).toHaveBeenCalledWith(
+        expect.objectContaining({ entryId: entry, state: "failed" }),
+      );
+    });
+  });
 });
