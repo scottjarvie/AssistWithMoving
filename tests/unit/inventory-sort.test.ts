@@ -52,6 +52,15 @@ describe("compareBy", () => {
     expect(sortNames(list, "volume")).toEqual(["big", "small", "none"]);
   });
 
+  it("'density' is heaviest-per-ft³ with missing density (no volume) last", () => {
+    const list = [
+      e({ name: "fluffy", weightLb: 100, volumeCuFt: 10 }), // 10 lb/ft³
+      e({ name: "no-volume", weightLb: 50 }), // can't compute → last
+      e({ name: "dense", weightLb: 30, volumeCuFt: 1 }), // 30 lb/ft³
+    ];
+    expect(sortNames(list, "density")).toEqual(["dense", "fluffy", "no-volume"]);
+  });
+
   it("'boxNumber' sorts boxes by code (numeric-aware) and pins loose items LAST", () => {
     const list = [
       e({ kind: "item", name: "loose-a", code: "A-1" }),
@@ -84,6 +93,7 @@ describe("toTanstackSorting", () => {
     expect(toTanstackSorting("alpha")).toEqual([{ id: "name", desc: false }]);
     expect(toTanstackSorting("weight")).toEqual([{ id: "weight", desc: true }]);
     expect(toTanstackSorting("volume")).toEqual([{ id: "volume", desc: true }]);
+    expect(toTanstackSorting("density")).toEqual([{ id: "density", desc: true }]);
     expect(toTanstackSorting("boxNumber")).toEqual([{ id: "code", desc: false }]);
     expect(toTanstackSorting("itemNumber")).toEqual([{ id: "code", desc: false }]);
   });

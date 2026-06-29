@@ -10,6 +10,7 @@ export type SortFieldId =
   | "alpha"
   | "weight"
   | "volume"
+  | "density"
   | "boxNumber"
   | "itemNumber";
 
@@ -22,6 +23,7 @@ export const INVENTORY_SORT_OPTIONS: {
   { id: "alpha", label: "Name (A–Z)", short: "A–Z" },
   { id: "weight", label: "Weight (heavy → light)", short: "Weight" },
   { id: "volume", label: "Cubic feet (large → small)", short: "ft³" },
+  { id: "density", label: "Density (heaviest per ft³)", short: "Density" },
   { id: "boxNumber", label: "Box number (items last)", short: "Box #" },
   { id: "itemNumber", label: "Item number (boxes last)", short: "Item #" },
 ];
@@ -69,6 +71,19 @@ function numericDescMissingLast(av?: number, bv?: number): number {
   return bv - av;
 }
 
+// Weight per cubic foot. Undefined when either input is missing or volume is 0,
+// so density-less entries sort last like any other missing measurement.
+function densityOf(entry: SortableEntry): number | undefined {
+  if (
+    !isFinite_(entry.weightLb) ||
+    !isFinite_(entry.volumeCuFt) ||
+    entry.volumeCuFt <= 0
+  ) {
+    return undefined;
+  }
+  return entry.weightLb / entry.volumeCuFt;
+}
+
 // For boxNumber/itemNumber the "wrong" kind is pinned to the end (per Scott's
 // spec: sorting by box number puts loose items last, and vice versa).
 function kindRank(field: SortFieldId, kind: "box" | "item"): number {
@@ -98,6 +113,9 @@ export function compareBy(
     case "volume":
       return (a, b) =>
         numericDescMissingLast(a.volumeCuFt, b.volumeCuFt) || byName(a, b);
+    case "density":
+      return (a, b) =>
+        numericDescMissingLast(densityOf(a), densityOf(b)) || byName(a, b);
     case "boxNumber":
       return (a, b) =>
         kindRank("boxNumber", a.kind) - kindRank("boxNumber", b.kind) ||
@@ -124,6 +142,8 @@ export function toTanstackSorting(
       return [{ id: "weight", desc: true }];
     case "volume":
       return [{ id: "volume", desc: true }];
+    case "density":
+      return [{ id: "density", desc: true }];
     case "boxNumber":
     case "itemNumber":
       return [{ id: "code", desc: false }];
