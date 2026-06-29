@@ -1285,6 +1285,12 @@ export const update = mutation({
             : (patch.assignedZoneId ?? item.assignedZoneId),
         assignmentOverrideReason:
           patch.assignmentOverrideReason ?? item.assignmentOverrideReason,
+        // A plain item edit must RECORD assignment warnings, not block on them.
+        // Enforcing here (the default) made "set transport = Military movers" on
+        // a fragile item throw a soft-warning error with no override-reason flow
+        // in the item detail — a dead end. The warnings are still stored on the
+        // item; the load planner is where they're reviewed/enforced.
+        enforce: false,
       });
       patch.assignmentWarnings = validation.assignmentWarnings;
       patch.assignmentHardBlocks = validation.assignmentHardBlocks;
