@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 import {
+  ingestionItemKindValidator,
   ingestionQueueIntentValidator,
   ingestionQueueStatusValidator,
   ingestionScopeHintValidator,
@@ -26,6 +27,8 @@ import {
   planZoneValidator,
 } from "./lib/planValidators";
 import {
+  dimensionsValidator,
+  itemDispositionValidator,
   structuredLocationValidator,
   transportTripStatusValidator,
 } from "./lib/moveFields";
@@ -1648,6 +1651,17 @@ export default defineSchema({
     // Free string so user-defined dispositions keep working later.
     dispositionHint: v.optional(v.string()),
     scopeHint: v.optional(ingestionScopeHintValidator),
+    // Structured capture hints (agent gap #4): the user or agent can pre-set
+    // these so the processing agent applies them directly instead of re-parsing
+    // the free-text instructions. DESTINATION room/transport reuse the
+    // targetSpaceId / targetTransportId fields above; these add the rest.
+    itemKind: v.optional(ingestionItemKindValidator),
+    estimatedWeightLb: v.optional(v.number()),
+    dimensionsIn: v.optional(dimensionsValidator),
+    disposition: v.optional(itemDispositionValidator),
+    startingSpaceId: v.optional(v.id("moveSpaces")),
+    presentSpaceId: v.optional(v.id("moveSpaces")),
+    presentTransportId: v.optional(v.id("transportResources")),
     mediaPhotoIds: v.array(v.id("itemPhotos")),
     // Background-upload bookkeeping. Both optional → old rows (undefined) read as
     // "media is fully attached / complete". expectedMediaCount is how many photos

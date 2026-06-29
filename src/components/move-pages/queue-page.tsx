@@ -30,12 +30,14 @@ export function QueueWorkspacePage() {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <AddToQueueButton variant="inline" scopedToCurrentMove />
-        <Button asChild variant="ghost" size="sm">
-          <Link href={moveWorkspacePath(moveId ?? "", "ai-review")}>
-            <Sparkles aria-hidden="true" />
-            Review AI suggestions
-          </Link>
-        </Button>
+        {moveId ? (
+          <Button asChild variant="ghost" size="sm">
+            <Link href={moveWorkspacePath(moveId, "ai-review")}>
+              <Sparkles aria-hidden="true" />
+              Review AI suggestions
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       <ConnectAgentOnboarding householdId={householdId} />

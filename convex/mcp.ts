@@ -152,7 +152,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "capture_to_queue",
     description:
-      "Drop many capture notes (and references to already-uploaded photo ids) into the move's queue for later processing. Optionally aim a capture at a room (targetSpaceId) or a transport (targetTransportId) so the agent knows where it belongs.",
+      "Drop many capture notes (and references to already-uploaded photo ids) into the move's queue for later processing. Optionally pre-declare STRUCTURED hints so a later processing run applies them directly instead of re-reading the note: itemKind (loose_item|box|tote), estimatedWeightLb, dimensionsIn { lengthIn, widthIn, heightIn }, disposition, startingSpaceId (origin room), presentSpaceId/presentTransportId (where it is now), and the DESTINATION via targetSpaceId (room) or targetTransportId (transport). Space/transport ids must already exist in this move.",
     fn: api.mcpToolsWrite.captureToQueue,
     args: captureToQueueArgs,
     identityArg: "caller",
