@@ -43,6 +43,13 @@ import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { buildBoxLookupPath } from "@/lib/box-labels";
 import {
+  compareBy,
+  DEFAULT_SORT_FIELD,
+  type SortableEntry,
+  type SortFieldId,
+} from "@/lib/inventory-sort";
+import { SortMenu } from "@/components/inventory-sort-menu";
+import {
   buildOrganizerEntries,
   dispositionBucketFor,
   entriesInDispositionBucket,
@@ -228,6 +235,9 @@ function SpacesTransportWorkspace({
   const [search, setSearch] = useState("");
   // Narrow the entry list to things still missing a weight / a size (MOVE-350).
   const [needsFilter, setNeedsFilter] = useState<"weight" | "size" | null>(null);
+  // Click-to-filter the detail list to just boxes/totes or just loose items.
+  const [kindFilter, setKindFilter] = useState<"boxes" | "loose" | null>(null);
+  const [sortField, setSortField] = useState<SortFieldId>(DEFAULT_SORT_FIELD);
   const [message, setMessage] = useState<string | null>(null);
   const [overrideWarnings, setOverrideWarnings] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -395,6 +405,7 @@ function SpacesTransportWorkspace({
     setSelectedEntryIds(new Set());
     setSearch("");
     setNeedsFilter(null);
+    setKindFilter(null); // box/loose split is per-container; sort choice persists
     setPickerOpen(false); // collapse the mobile picker on choose
   }
 
@@ -410,13 +421,18 @@ function SpacesTransportWorkspace({
     let list = q
       ? selectedContainer.entries.filter((e) => e.searchText.includes(q))
       : selectedContainer.entries;
+    if (kindFilter === "boxes") list = list.filter((e) => e.kind === "box");
+    else if (kindFilter === "loose") list = list.filter((e) => e.kind === "item");
     if (needsFilter === "weight") {
       list = list.filter((e) => e.estimatedWeightLb == null);
     } else if (needsFilter === "size") {
       list = list.filter((e) => e.estimatedVolumeCuFt == null);
     }
-    return list;
-  }, [selectedContainer, search, needsFilter]);
+    const compare = compareBy(sortField);
+    return [...list].sort((a, b) =>
+      compare(entryToSortable(a), entryToSortable(b)),
+    );
+  }, [selectedContainer, search, needsFilter, kindFilter, sortField]);
 
   const selectedEntries = useMemo(
     () => entries.filter((e) => selectedEntryIds.has(e.id)),
@@ -675,6 +691,10 @@ function SpacesTransportWorkspace({
               onSearch={setSearch}
               needsFilter={needsFilter}
               onNeedsFilterChange={setNeedsFilter}
+              kindFilter={kindFilter}
+              onKindFilterChange={setKindFilter}
+              sortField={sortField}
+              onSortChange={setSortField}
             />
           ) : (
             <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -849,6 +869,10 @@ function ContainerDetail({
   onSearch,
   needsFilter,
   onNeedsFilterChange,
+  kindFilter,
+  onKindFilterChange,
+  sortField,
+  onSortChange,
 }: {
   householdId: Id<"households">;
   moveId: Id<"moves">;
@@ -865,6 +889,10 @@ function ContainerDetail({
   onSearch: (value: string) => void;
   needsFilter: "weight" | "size" | null;
   onNeedsFilterChange: (value: "weight" | "size" | null) => void;
+  kindFilter: "boxes" | "loose" | null;
+  onKindFilterChange: (value: "boxes" | "loose" | null) => void;
+  sortField: SortFieldId;
+  onSortChange: (value: SortFieldId) => void;
 }) {
   const summary = useMemo(
     () => summarizeEntries(container.entries),
@@ -892,18 +920,42 @@ function ContainerDetail({
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatPill label="Things" value={String(summary.total)} />
-        <StatPill
-          label="Boxes / loose"
-          value={`${summary.boxes} / ${summary.looseItems}`}
-        />
-        <StatPill label="Weight" value={`${formatNumber(summary.knownWeightLb)} lb`} />
-        <StatPill
-          label="Volume"
-          value={`${formatNumber(summary.knownVolumeCuFt)} cu ft`}
-        />
+      {/* Stats: totals on top, then a clickable boxes/loose split — each chip
+          filters the list to its kind and carries its own weight + ft³. */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-3 gap-2">
+          <StatPill label="Things" value={String(summary.total)} />
+          <StatPill
+            label="Weight"
+            value={`${formatNumber(summary.knownWeightLb)} lb`}
+          />
+          <StatPill
+            label="Volume"
+            value={`${formatNumber(summary.knownVolumeCuFt)} ft³`}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <KindStat
+            label="Boxes / totes"
+            count={summary.boxes}
+            weightLb={summary.boxesWeightLb}
+            volumeCuFt={summary.boxesVolumeCuFt}
+            active={kindFilter === "boxes"}
+            onToggle={() =>
+              onKindFilterChange(kindFilter === "boxes" ? null : "boxes")
+            }
+          />
+          <KindStat
+            label="Loose items"
+            count={summary.looseItems}
+            weightLb={summary.looseWeightLb}
+            volumeCuFt={summary.looseVolumeCuFt}
+            active={kindFilter === "loose"}
+            onToggle={() =>
+              onKindFilterChange(kindFilter === "loose" ? null : "loose")
+            }
+          />
+        </div>
       </div>
 
       {(summary.trash > 0 || summary.sell > 0 || summary.giveaway > 0) &&
@@ -970,8 +1022,8 @@ function ContainerDetail({
       ) : null}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[8rem] flex-1">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -980,6 +1032,7 @@ function ContainerDetail({
             className="pl-8"
           />
         </div>
+        <SortMenu value={sortField} onChange={onSortChange} />
         {selectMode ? (
           <>
             <Button
@@ -1013,7 +1066,11 @@ function ContainerDetail({
         <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
           {container.entries.length === 0
             ? "Nothing here yet."
-            : "No matches for that search."}
+            : kindFilter === "boxes"
+              ? "No boxes or totes here."
+              : kindFilter === "loose"
+                ? "No loose items here."
+                : "No matches for that search."}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -1304,6 +1361,53 @@ function StatPill({ label, value }: { label: string; value: string }) {
       </p>
       <p className="truncate text-sm font-semibold">{value}</p>
     </div>
+  );
+}
+
+// A compact, clickable stat that doubles as a kind filter: shows count + its own
+// weight + cubic-feet, and toggles the list to boxes-only / loose-only. Disabled
+// (and not pressable) when the count is zero — e.g. boxes inside a disposition
+// bucket, which only ever holds loose items.
+function KindStat({
+  label,
+  count,
+  weightLb,
+  volumeCuFt,
+  active,
+  onToggle,
+}: {
+  label: string;
+  count: number;
+  weightLb: number;
+  volumeCuFt: number;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  const empty = count === 0;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={empty}
+      aria-pressed={active}
+      className={cn(
+        "rounded-md border px-3 py-2 text-left transition-colors",
+        active
+          ? "border-primary bg-primary/10"
+          : "border-border bg-muted/40 hover:bg-muted",
+        empty && "cursor-default opacity-50 hover:bg-muted/40",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[0.62rem] uppercase tracking-wide text-muted-foreground">
+          {label}
+        </span>
+        <span className="text-sm font-semibold tabular-nums">{count}</span>
+      </div>
+      <p className="mt-0.5 truncate text-xs text-muted-foreground tabular-nums">
+        {formatNumber(weightLb)} lb · {formatNumber(volumeCuFt)} ft³
+      </p>
+    </button>
   );
 }
 
@@ -1644,4 +1748,17 @@ function errorText(error: unknown): string {
 
 function formatNumber(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+}
+
+// Project an OrganizerEntry onto the shared sort shape (weight/volume field
+// names differ between the two).
+function entryToSortable(entry: OrganizerEntry): SortableEntry {
+  return {
+    kind: entry.kind,
+    createdAt: entry.createdAt,
+    name: entry.name,
+    code: entry.code,
+    weightLb: entry.estimatedWeightLb,
+    volumeCuFt: entry.estimatedVolumeCuFt,
+  };
 }

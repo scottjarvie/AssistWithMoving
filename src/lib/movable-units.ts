@@ -86,6 +86,8 @@ export type MovableUnit = {
   label: string;
   name: string;
   status: string;
+  /** Record creation time (ms) — drives the "Recently added" sort. */
+  createdAt: number;
   roomLabel: string;
   destinationLabel: string;
   itemCountLabel: string;
@@ -293,6 +295,7 @@ function movableUnitFromBox(
     label: box.code,
     name: box.nickname ?? box.label ?? box.description ?? "Box",
     status: box.status,
+    createdAt: box._creationTime,
     roomLabel: box.room ?? "origin unset",
     destinationLabel: box.destinationRoom ?? "destination unset",
     itemCountLabel: `${record.itemCount ?? 0} item${record.itemCount === 1 ? "" : "s"}`,
@@ -376,6 +379,7 @@ function movableUnitFromLooseItem(
     label: item.code ?? "Loose item",
     name: item.nickname ?? item.name,
     status: item.status,
+    createdAt: item._creationTime,
     roomLabel: item.room ?? "origin unset",
     destinationLabel:
       item.destinationRoom ??
