@@ -11,6 +11,7 @@ import {
   Ruler,
   PackageCheck,
   Sparkles,
+  Trash2,
   UserRound,
 } from "lucide-react";
 
@@ -338,8 +339,11 @@ export function ItemDetailSheet({
   // numbered box (MOVE: "they should have a box number").
   const router = useRouter();
   const convertToBox = useMutation(api.boxes.convertItemToBox);
+  const archiveItem = useMutation(api.items.archive);
   const [converting, setConverting] = useState(false);
   const [confirmConvert, setConfirmConvert] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   // "Choose from existing photos" picker (MOVE-354) — reuse a move photo on
   // this item instead of only uploading new ones.
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
@@ -369,6 +373,22 @@ export function ItemDetailSheet({
       );
       setConverting(false);
       setConfirmConvert(false);
+    }
+  }
+
+  async function handleRemoveItem() {
+    if (!householdId || !moveId || !item) return;
+    setRemoving(true);
+    setMessage(null);
+    try {
+      await archiveItem({ householdId, moveId, itemId: item._id });
+      onOpenChange(false);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not remove this item.",
+      );
+      setRemoving(false);
+      setConfirmRemove(false);
     }
   }
 
@@ -801,6 +821,47 @@ export function ItemDetailSheet({
                 >
                   <Boxes className="size-4" aria-hidden="true" />
                   Convert to a box/tote
+                </Button>
+              )}
+
+              {confirmRemove ? (
+                <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+                  <p className="text-muted-foreground">
+                    Remove this item from the move? It disappears from your
+                    inventory everywhere. (Recoverable by an admin if needed.)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      disabled={removing}
+                      onClick={() => void handleRemoveItem()}
+                    >
+                      {removing ? "Removing…" : "Remove item"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={removing}
+                      onClick={() => setConfirmRemove(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-destructive hover:text-destructive"
+                  onClick={() => setConfirmRemove(true)}
+                  disabled={removing}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Remove item
                 </Button>
               )}
             </aside>

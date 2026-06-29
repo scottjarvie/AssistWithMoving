@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
@@ -13,6 +14,7 @@ import {
   Pencil,
   Plus,
   Ruler,
+  Trash2,
   Truck,
 } from "lucide-react";
 
@@ -98,6 +100,8 @@ export function BoxLookup({
       : "skip",
   );
   const updateBox = useMutation(api.boxes.update);
+  const archiveBox = useMutation(api.boxes.archive);
+  const router = useRouter();
 
   // Deep-linked from the list's "missing weight/size" indicators (MOVE-343).
   const [editingSize, setEditingSize] = useState(edit === "size");
@@ -108,6 +112,8 @@ export function BoxLookup({
   const [savingSize, setSavingSize] = useState(false);
   const [editingPlacement, setEditingPlacement] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   // Return the user to wherever they opened the unit from.
@@ -302,6 +308,29 @@ export function BoxLookup({
     }
   }
 
+  // Remove the unit from the move: archive it (hidden everywhere, reversible)
+  // and unpack any items inside so they survive as loose items. Navigate back
+  // afterwards since this page would otherwise show "not found".
+  async function handleRemoveBox() {
+    if (!resolvedHouseholdId || !resolvedMoveId) return;
+    setRemoving(true);
+    setMessage(null);
+    try {
+      await archiveBox({
+        householdId: resolvedHouseholdId,
+        moveId: resolvedMoveId,
+        boxId: box._id,
+      });
+      router.push(primaryBackHref);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : `Could not remove ${box.code}.`,
+      );
+      setRemoving(false);
+      setConfirmRemove(false);
+    }
+  }
+
   return (
     <Shell>
       {backRow}
@@ -413,6 +442,47 @@ export function BoxLookup({
             </div>
           )}
         </div>
+
+        {confirmRemove ? (
+          <div className="mt-3 space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <p className="text-muted-foreground">
+              Remove {box.code} from the move? The unit disappears from your
+              inventory; any items packed inside are unpacked back to loose
+              items. (Recoverable by an admin if needed.)
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={removing}
+                onClick={() => void handleRemoveBox()}
+              >
+                {removing ? "Removing…" : `Remove ${box.code}`}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={removing}
+                onClick={() => setConfirmRemove(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mt-2 text-destructive hover:text-destructive"
+            onClick={() => setConfirmRemove(true)}
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+            Remove {box.code}
+          </Button>
+        )}
 
         <div className="mt-4">
           {editingSize ? (
