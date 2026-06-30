@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SpaceSelect } from "@/components/space-select";
+import { useOptionalMoveWorkspace } from "@/components/move-workspace-context";
 import { physicalSpaceNames } from "@/lib/space-kinds";
 import {
   Sheet,
@@ -102,6 +103,22 @@ export function BoxLookup({
   const updateBox = useMutation(api.boxes.update);
   const removeBox = useMutation(api.boxes.remove);
   const router = useRouter();
+  // Optional: the box page is always rendered under MoveWorkspaceProvider in the
+  // app, but tests render BoxLookup standalone — so read the context optionally
+  // and skip the sync when it's absent rather than throwing.
+  const selectMove = useOptionalMoveWorkspace()?.selectMove;
+
+  // Sync the box's move into workspace context. The box page reads its move from
+  // the query string but the global back targets (/app/movable-units,
+  // /app/spaces-transport, /app/items) carry no move id and resolve the active
+  // move from context. Without this sync, a multi-move user who deep-links or
+  // scans a box belonging to a non-default move lands Back on the WRONG move's
+  // list. selectMove safely no-ops if the move isn't accessible to this user.
+  useEffect(() => {
+    if (resolvedMoveId && selectMove) {
+      selectMove(resolvedMoveId);
+    }
+  }, [resolvedMoveId, selectMove]);
 
   // Deep-linked from the list's "missing weight/size" indicators (MOVE-343).
   const [editingSize, setEditingSize] = useState(edit === "size");
@@ -116,7 +133,10 @@ export function BoxLookup({
   const [removing, setRemoving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Return the user to wherever they opened the unit from.
+  // Return the user to wherever they opened the unit from. The default (no
+  // returnTo — e.g. a deep link or QR scan) lands on Movable Units, the home
+  // for boxes now; its label must match where it actually goes (it used to say
+  // "Boxes" but navigate to Movable Units).
   const back =
     returnTo === "load-plan" && moveId
       ? {
@@ -127,7 +147,9 @@ export function BoxLookup({
         ? { href: "/app/movable-units", label: "Movable Units" }
         : returnTo === "spaces-transport"
           ? { href: "/app/spaces-transport", label: "Spaces & Transport" }
-          : { href: moveBoxesPath(moveId), label: "Boxes" };
+          : returnTo === "items"
+            ? { href: "/app/items", label: "Items" }
+            : { href: moveBoxesPath(moveId), label: "Movable Units" };
   const primaryBackHref = back.href;
   const primaryBackLabel = back.label;
 

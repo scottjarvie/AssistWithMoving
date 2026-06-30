@@ -726,6 +726,7 @@ function SpacesTransportWorkspace({
         householdId={householdId}
         moveId={moveId}
         item={detailItem}
+        origin="spaces-transport"
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onSave={async (patch) => {

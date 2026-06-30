@@ -17,7 +17,7 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { buildBoxLookupPath } from "@/lib/box-labels";
+import { buildBoxLookupPath, type BoxLookupReturnTo } from "@/lib/box-labels";
 import { toastSaved, toastError } from "@/lib/toast";
 import { physicalSpaceNames } from "@/lib/space-kinds";
 import { SpaceSelect } from "@/components/space-select";
@@ -67,6 +67,10 @@ type ItemDetailSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (patch: InventoryItemPatch) => Promise<void>;
+  // Which list page this sheet was opened from. Used so "Convert to box" sends
+  // the new box's Back button to where the user actually is — not always
+  // Movable Units. Defaults to "movable-units" when unset.
+  origin?: BoxLookupReturnTo;
 };
 
 function Field({
@@ -241,6 +245,7 @@ export function ItemDetailSheet({
   open,
   onOpenChange,
   onSave,
+  origin = "movable-units",
 }: ItemDetailSheetProps) {
   const [name, setName] = useState(item?.name ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
@@ -389,7 +394,7 @@ export function ItemDetailSheet({
           householdId,
           moveId,
           boxId: result.boxId,
-          returnTo: "movable-units",
+          returnTo: origin,
         }),
       );
     } catch (error) {
