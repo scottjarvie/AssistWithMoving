@@ -18,6 +18,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { buildBoxLookupPath } from "@/lib/box-labels";
+import { toastSaved, toastError } from "@/lib/toast";
 import { physicalSpaceNames } from "@/lib/space-kinds";
 import { SpaceSelect } from "@/components/space-select";
 import { PhotoEvidenceStrip } from "@/components/photo-evidence-strip";
@@ -381,6 +382,7 @@ export function ItemDetailSheet({
         moveId,
         itemId: item._id,
       });
+      toastSaved("Converted to a box");
       onOpenChange(false);
       router.push(
         buildBoxLookupPath({
@@ -391,9 +393,10 @@ export function ItemDetailSheet({
         }),
       );
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not convert to a box.",
-      );
+      const detail =
+        error instanceof Error ? error.message : "Could not convert to a box.";
+      setMessage(detail);
+      toastError(detail);
       setConverting(false);
       setConfirmConvert(false);
     }
@@ -405,11 +408,13 @@ export function ItemDetailSheet({
     setMessage(null);
     try {
       await removeItem({ householdId, moveId, itemId: item._id });
+      toastSaved("Item removed");
       onOpenChange(false);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not remove this item.",
-      );
+      const detail =
+        error instanceof Error ? error.message : "Could not remove this item.";
+      setMessage(detail);
+      toastError(detail);
       setRemoving(false);
       setConfirmRemove(false);
     }
@@ -441,8 +446,12 @@ export function ItemDetailSheet({
         itemId: item._id,
         officialPriceCents: cents,
       });
+      // Live-on-blur field — only fires when the value actually changed (guard
+      // above), so this is a confirmation, not noise on every tab-out.
+      toastSaved("Asking price saved");
     } catch {
       setMessage("Could not save the asking price.");
+      toastError("Could not save the asking price");
     }
   }
 
@@ -457,11 +466,13 @@ export function ItemDetailSheet({
         itemId: item._id,
         soldPriceCents: parseOptionalCurrencyCents(finalPrice),
       });
+      toastSaved("Marked sold");
       onOpenChange(false);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not mark it sold.",
-      );
+      const detail =
+        error instanceof Error ? error.message : "Could not mark it sold.";
+      setMessage(detail);
+      toastError(detail);
       setLifecycleBusy(false);
       setConfirmSell(false);
     }
@@ -473,11 +484,13 @@ export function ItemDetailSheet({
     setMessage(null);
     try {
       await markTrashedMutation({ householdId, moveId, itemId: item._id });
+      toastSaved("Marked trashed");
       onOpenChange(false);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not mark it trashed.",
-      );
+      const detail =
+        error instanceof Error ? error.message : "Could not mark it trashed.";
+      setMessage(detail);
+      toastError(detail);
       setLifecycleBusy(false);
     }
   }
@@ -714,9 +727,17 @@ export function ItemDetailSheet({
       }
 
       await onSave(patch);
-      setMessage("Item saved.");
+      // Close on success so the save unmistakably "lands" — a silent modal that
+      // stayed open with a faint footer line was the app's #1 looks-broken bug.
+      // The toast floats above everything (incl. this modal as it closes), so the
+      // confirmation is visible even mid-transition.
+      toastSaved("Item saved");
+      onOpenChange(false);
     } catch {
+      // Keep the modal open on failure so edits aren't lost; surface the error
+      // both in the footer and as a toast.
       setMessage("Could not save item changes yet.");
+      toastError("Could not save item changes — please try again");
     } finally {
       setSaving(false);
     }
@@ -747,6 +768,7 @@ export function ItemDetailSheet({
       },
     });
     setMessage(`${key} marked verified.`);
+    toastSaved("Marked verified");
   }
 
   // Disposition-driven field gating. An item that is LEAVING the inventory

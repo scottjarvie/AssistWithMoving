@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { InstallPrompt } from "@/components/install-prompt";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -142,6 +143,7 @@ export default function RootLayout({
           content
         )}
         <InstallPrompt />
+        <Toaster />
       </body>
     </html>
   );
