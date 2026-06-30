@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -45,10 +46,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AssignmentBadge } from "@/components/ui/status-badges";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { PhotoLightbox } from "@/components/photo-lightbox";
 import { buildBoxLookupPath } from "@/lib/box-labels";
+import { toastSaved, toastError } from "@/lib/toast";
 import {
   compareBy,
   DEFAULT_SORT_FIELD,
@@ -97,6 +107,103 @@ type MovableUnitBatchAction =
     }
   | { type: "unassign"; includeLocked: boolean; dryRun: boolean };
 
+// Manual create-a-movable-unit (a numbered box/container). A movable unit is a
+// box or a large loose item; "add a movable unit" creates a box, which gets the
+// next B-number automatically. Size, placement, and contents are added after,
+// from the unit's detail page — so this form stays intentionally tiny.
+function AddMovableUnitDialog({
+  householdId,
+  moveId,
+  open,
+  onOpenChange,
+}: {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const createBox = useMutation(api.boxes.create);
+  const [nickname, setNickname] = useState("");
+  const [room, setRoom] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!householdId || !moveId || creating) {
+      return;
+    }
+    setCreating(true);
+    try {
+      await createBox({
+        householdId,
+        moveId,
+        nickname: nickname.trim() || undefined,
+        room: room.trim() || undefined,
+      });
+      toastSaved("Movable unit added");
+      setNickname("");
+      setRoom("");
+      onOpenChange(false);
+    } catch (error) {
+      toastError(
+        error instanceof Error
+          ? error.message
+          : "Could not add the movable unit",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add a movable unit</DialogTitle>
+          <DialogDescription>
+            Creates a numbered box/container with the next B-number. Add a name
+            so it&apos;s easy to spot; set its size, placement, and contents from
+            the unit&apos;s page after it&apos;s created.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleCreate} className="grid gap-3">
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium text-foreground">Name / nickname</span>
+            <Input
+              value={nickname}
+              onChange={(event) => setNickname(event.target.value)}
+              placeholder="e.g. Kitchen pots"
+              aria-label="Movable unit name"
+              autoFocus
+            />
+          </label>
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium text-foreground">Room (optional)</span>
+            <Input
+              value={room}
+              onChange={(event) => setRoom(event.target.value)}
+              placeholder="e.g. Kitchen"
+              aria-label="Movable unit room"
+            />
+          </label>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!moveId || creating}>
+              {creating ? "Adding…" : "Add unit"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function MovableUnitsTable({
   householdId,
   moveId,
@@ -127,6 +234,27 @@ export function MovableUnitsTable({
   const batchAssign = useMutation(api.movableUnits.batchAssign);
   const updateItem = useMutation(api.items.update);
   const router = useRouter();
+
+  // Manual "add a movable unit" (a numbered box/container) — the mobile Add menu
+  // and the header button both open this dialog. Opens automatically when the
+  // page is reached with #add-unit (e.g. from the mobile "Manually Add Movable
+  // Unit" action), then strips the hash so a later navigation can re-trigger it.
+  const [addUnitOpen, setAddUnitOpen] = useState(false);
+  useEffect(() => {
+    function syncFromHash() {
+      if (window.location.hash === "#add-unit") {
+        setAddUnitOpen(true);
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search,
+        );
+      }
+    }
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
 
   // Row-open detail target. Box units navigate to the box detail route; loose
   // items open the same in-page ItemDetailSheet the Items table uses, so every
@@ -647,6 +775,16 @@ export function MovableUnitsTable({
               setSorting([]);
             }}
           />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setAddUnitOpen(true)}
+            disabled={!moveId}
+          >
+            <PackagePlus aria-hidden="true" />
+            Add unit
+          </Button>
           <Button asChild size="sm">
             <Link href={captureHref}>
               <PackagePlus aria-hidden="true" />
@@ -724,6 +862,13 @@ export function MovableUnitsTable({
             }
           />
         }
+      />
+
+      <AddMovableUnitDialog
+        householdId={householdId}
+        moveId={moveId}
+        open={addUnitOpen}
+        onOpenChange={setAddUnitOpen}
       />
 
       <ItemDetailSheet

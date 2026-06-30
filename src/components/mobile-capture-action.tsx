@@ -42,7 +42,10 @@ export function MobileCaptureAction({
 
   function goToMovableUnits() {
     setMenuOpen(false);
-    router.push(moveId ? "/app/movable-units" : "/app/moves");
+    // Land on Movable Units with the "add a movable unit" dialog already open
+    // (the page opens it on the #add-unit hash), instead of dropping the user on
+    // the list with no way to create one.
+    router.push(moveId ? "/app/movable-units#add-unit" : "/app/moves");
   }
 
   function goToItems() {
