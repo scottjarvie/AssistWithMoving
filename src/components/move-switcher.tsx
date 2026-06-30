@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 
 import { useMoveWorkspace } from "@/components/move-workspace-context";
@@ -13,13 +13,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { moveWorkspacePath } from "@/lib/move-links";
+import { buildMoveSwitchTarget } from "@/lib/move-links";
 
-// Top-bar switcher between active moves. Selecting a move both records the
-// selection in the provider and navigates to it, so the URL stays the source of
-// truth for the active move.
+// Top-bar switcher between active moves. Selecting a move records the selection
+// in the provider and KEEPS the user on their current section: on a per-move
+// route it swaps the move id segment; on a global surface (Items, Movable Units,
+// Spaces & Transport) it just updates context and the page re-renders in place.
+// Previously it always jumped to the move summary root, throwing away the page
+// the user was on.
 export function MoveSwitcher() {
   const router = useRouter();
+  const pathname = usePathname();
   const { activeMoves, moveId, selectedMove, selectMove } = useMoveWorkspace();
 
   if (!activeMoves.length) {
@@ -48,7 +52,10 @@ export function MoveSwitcher() {
             key={move._id}
             onSelect={() => {
               selectMove(move._id);
-              router.push(moveWorkspacePath(move._id));
+              const target = buildMoveSwitchTarget(pathname, move._id);
+              if (target) {
+                router.replace(target);
+              }
             }}
           >
             <span className="min-w-0 flex-1 truncate">{move.title}</span>

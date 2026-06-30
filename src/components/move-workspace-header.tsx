@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
+import { buildMoveSwitchTarget } from "@/lib/move-links";
 import { cn } from "@/lib/utils";
 
 // Shared header for every move workspace page: names the section, shows the
@@ -23,12 +24,10 @@ export function MoveWorkspaceHeader({
 
   function handleMoveChange(nextMoveId: Id<"moves">) {
     selectMove(nextMoveId);
-    router.replace(
-      pathname.replace(
-        /\/app\/moves\/[^/]+/,
-        `/app/moves/${encodeURIComponent(nextMoveId)}`
-      )
-    );
+    const target = buildMoveSwitchTarget(pathname, nextMoveId);
+    if (target) {
+      router.replace(target);
+    }
   }
 
   const routeLabel =

@@ -3,6 +3,28 @@ export function moveWorkspacePath(moveId: string, section?: string) {
   return section ? `${basePath}/${encodeURIComponent(section)}` : basePath;
 }
 
+// Where to navigate when the user switches the active move while keeping the
+// page they're on. Shared by both switchers (the top-bar MoveSwitcher and the
+// per-move MoveWorkspaceHeader) so they can't drift apart:
+//  - On a per-move route (/app/moves/<id>/<section>), swap the move id segment
+//    and keep the section.
+//  - On a global surface (/app/items, /app/movable-units, …) there is no move id
+//    in the URL — selecting the move in workspace context is enough and the page
+//    re-renders in place, so return null (no navigation).
+const PER_MOVE_SEGMENT = /\/app\/moves\/[^/]+/;
+export function buildMoveSwitchTarget(
+  pathname: string,
+  moveId: string,
+): string | null {
+  if (PER_MOVE_SEGMENT.test(pathname)) {
+    return pathname.replace(
+      PER_MOVE_SEGMENT,
+      `/app/moves/${encodeURIComponent(moveId)}`,
+    );
+  }
+  return null;
+}
+
 // The revamp removed Spaces / Sell / Photos and the per-move Boxes / Inventory
 // surfaces from the nav. The orphaned routes now just redirect, so anything that
 // used to point a person at one of those sections should aim straight at the new
