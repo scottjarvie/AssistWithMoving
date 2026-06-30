@@ -731,6 +731,7 @@ export function MovableUnitsTable({
         householdId={householdId}
         moveId={moveId}
         item={selectedLooseItem}
+        origin="movable-units"
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onSave={async (patch) => {

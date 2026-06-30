@@ -3,7 +3,8 @@
 export type BoxLookupReturnTo =
   | "load-plan"
   | "movable-units"
-  | "spaces-transport";
+  | "spaces-transport"
+  | "items";
 
 type BoxLabelPathInput = {
   householdId: string;

@@ -42,6 +42,7 @@ import type { InventoryItem } from "@/lib/inventory-types";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { buildBoxLookupPath } from "@/lib/box-labels";
+import { toastSaved, toastError } from "@/lib/toast";
 import {
   compareBy,
   DEFAULT_SORT_FIELD,
@@ -725,6 +726,7 @@ function SpacesTransportWorkspace({
         householdId={householdId}
         moveId={moveId}
         item={detailItem}
+        origin="spaces-transport"
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onSave={async (patch) => {
@@ -1579,12 +1581,16 @@ function CapacityEditor({
           capacity: nextCapacity,
         });
       }
-      setMessage("Capacity saved.");
+      // The panel collapses on success, which would unmount any inline "saved"
+      // message — so confirm via a toast (it floats above the collapse). The
+      // error path below keeps the panel open and shows the reason inline.
+      toastSaved("Capacity saved");
       setOpen(false);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not save capacity.",
-      );
+      const detail =
+        error instanceof Error ? error.message : "Could not save capacity.";
+      setMessage(detail);
+      toastError(detail);
     } finally {
       setSaving(false);
     }

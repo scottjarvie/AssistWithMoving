@@ -1634,6 +1634,7 @@ export function InventoryTable({
         householdId={householdId}
         moveId={moveId}
         item={selectedItem}
+        origin="items"
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onSave={async (patch) => {
