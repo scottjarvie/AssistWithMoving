@@ -29,6 +29,7 @@ vi.mock("convex/react", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockData.push }),
+  usePathname: () => "/app/spaces-transport",
 }));
 
 vi.mock("@/components/move-workspace-context", () => ({
