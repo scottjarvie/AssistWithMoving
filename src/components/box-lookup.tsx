@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SpaceSelect } from "@/components/space-select";
 import { useOptionalMoveWorkspace } from "@/components/move-workspace-context";
+import { toastSaved, toastError } from "@/lib/toast";
 import { physicalSpaceNames } from "@/lib/space-kinds";
 import {
   Sheet,
@@ -287,12 +288,14 @@ export function BoxLookup({
       });
       setEditingSize(false);
       setMessage(`${box.code} size updated.`);
+      toastSaved(`${box.code} size updated`);
     } catch (error) {
-      setMessage(
+      const detail =
         error instanceof Error
           ? error.message
-          : `Could not update the size for ${box.code}.`,
-      );
+          : `Could not update the size for ${box.code}.`;
+      setMessage(detail);
+      toastError(detail);
     } finally {
       setSavingSize(false);
     }
@@ -319,12 +322,14 @@ export function BoxLookup({
       });
       setEditingDetails(false);
       setMessage(`${box.code} updated.`);
+      toastSaved(`${box.code} updated`);
     } catch (error) {
-      setMessage(
+      const detail =
         error instanceof Error
           ? error.message
-          : `Could not update ${box.code}.`,
-      );
+          : `Could not update ${box.code}.`;
+      setMessage(detail);
+      toastError(detail);
     } finally {
       setSavingDetails(false);
     }
@@ -343,11 +348,13 @@ export function BoxLookup({
         moveId: resolvedMoveId,
         boxId: box._id,
       });
+      toastSaved(`${box.code} removed`);
       router.push(primaryBackHref);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : `Could not remove ${box.code}.`,
-      );
+      const detail =
+        error instanceof Error ? error.message : `Could not remove ${box.code}.`;
+      setMessage(detail);
+      toastError(detail);
       setRemoving(false);
       setConfirmRemove(false);
     }
@@ -596,6 +603,7 @@ export function BoxLookup({
             onSaved={(saved) => {
               setEditingPlacement(false);
               setMessage(saved);
+              toastSaved(saved);
             }}
             onCancel={() => setEditingPlacement(false)}
             onMessage={setMessage}
@@ -711,7 +719,10 @@ export function BoxLookup({
               room={box.room}
               label="Add photos"
               multiple
-              onUploaded={() => setMessage(`Photo added to ${box.code}.`)}
+              onUploaded={() => {
+                setMessage(`Photo added to ${box.code}.`);
+                toastSaved(`Photo added to ${box.code}`);
+              }}
             />
             <div>
               <Button
@@ -730,7 +741,10 @@ export function BoxLookup({
                 targetLabel={box.code}
                 open={photoPickerOpen}
                 onOpenChange={setPhotoPickerOpen}
-                onAttached={() => setMessage(`Photo attached to ${box.code}.`)}
+                onAttached={() => {
+                  setMessage(`Photo attached to ${box.code}.`);
+                  toastSaved(`Photo attached to ${box.code}`);
+                }}
               />
             </div>
             <PhotoEvidenceStrip
