@@ -47,7 +47,10 @@ export function MobileCaptureAction({
 
   function goToItems() {
     setMenuOpen(false);
-    router.push(moveId ? "/app/items" : "/app/moves");
+    // Land on the Items page with the manual Add form already open (the page's
+    // task tab is hash-driven), instead of dropping the user on the browse list
+    // with nothing in an add state.
+    router.push(moveId ? "/app/items#add-inventory" : "/app/moves");
   }
 
   return (

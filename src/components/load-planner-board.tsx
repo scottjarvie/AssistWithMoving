@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { buildBoxLookupPath } from "@/lib/box-labels";
+import { toastSaved, toastError } from "@/lib/toast";
 import {
   formatBoxWeightSource,
   formatBoxWeightValue,
@@ -507,9 +508,9 @@ export function LoadPlannerBoard({
     zoneId,
     overrideReason,
     includeLocked = false,
-  }: MovableUnitBulkAssignmentInput) {
+  }: MovableUnitBulkAssignmentInput): Promise<boolean> {
     if (!householdId || !moveId || !units.length) {
-      return;
+      return false;
     }
 
     const assignableUnits = units.filter(
@@ -524,7 +525,7 @@ export function LoadPlannerBoard({
             )} skipped. Unlock ${skippedLockedCount === 1 ? "it" : "them"} first or include locked units deliberately.`
           : "No selected movable units are available for assignment.",
       );
-      return;
+      return false;
     }
 
     setUnitAssignmentSavingIds((current) =>
@@ -562,21 +563,24 @@ export function LoadPlannerBoard({
         ),
       );
 
-      setMessage(
-        `${assignableUnits.length} movable ${unitWord(
-          assignableUnits.length,
-        )} ${resourceId ? "assigned" : "unassigned"}${
-          skippedLockedCount
-            ? `; ${skippedLockedCount} locked ${unitWord(skippedLockedCount)} skipped`
-            : ""
-        }.`,
-      );
+      const summary = `${assignableUnits.length} movable ${unitWord(
+        assignableUnits.length,
+      )} ${resourceId ? "assigned" : "unassigned"}${
+        skippedLockedCount
+          ? `; ${skippedLockedCount} locked ${unitWord(skippedLockedCount)} skipped`
+          : ""
+      }.`;
+      setMessage(summary);
+      toastSaved(summary);
+      return true;
     } catch (error) {
-      setMessage(
+      const detail =
         error instanceof Error
           ? error.message
-          : "Could not update the selected movable-unit assignments.",
-      );
+          : "Could not update the selected movable-unit assignments.";
+      setMessage(detail);
+      toastError(detail);
+      return false;
     } finally {
       setUnitAssignmentSavingIds((current) =>
         current.filter((id) => !assignableUnits.some((unit) => unit.id === id)),
@@ -781,7 +785,7 @@ export function LoadPlannerBoard({
               units={movableUnits}
               onFilterChange={setUnitKindFilter}
               onAssignUnit={(input) => void assignMovableUnit(input)}
-              onAssignUnits={(input) => void assignMovableUnits(input)}
+              onAssignUnits={(input) => assignMovableUnits(input)}
               onCreated={setMessage}
               onSearchChange={setUnitSearch}
               onUpdateMeasurements={(input) =>
@@ -1138,7 +1142,7 @@ function MovableUnitsPanel({
     zoneId?: string;
     overrideReason?: string;
   }) => void;
-  onAssignUnits: (input: MovableUnitBulkAssignmentInput) => void;
+  onAssignUnits: (input: MovableUnitBulkAssignmentInput) => Promise<boolean>;
   onUpdateMeasurements: (input: MovableUnitMeasurementPatch) => void;
   onFilterChange: (value: MovableUnitFilter) => void;
   onCreated: (message: string) => void;
@@ -1317,15 +1321,21 @@ function MovableUnitsPanel({
         targetResourceId={bulkResourceId}
         targetZoneId={bulkZoneId}
         visibleSelectedCount={visibleSelectedCount}
-        onAssign={() =>
-          onAssignUnits({
+        onAssign={async () => {
+          // Clear the selection on success so the panel visibly resolves —
+          // the selection collapsing is itself the confirmation (matches the
+          // Board bulk panel). The toast reinforces it.
+          const ok = await onAssignUnits({
             units: selectedUnits,
             resourceId: bulkResourceId,
             zoneId: bulkZoneId || undefined,
             overrideReason: bulkOverrideReason,
             includeLocked: bulkIncludeLocked,
-          })
-        }
+          });
+          if (ok) {
+            setSelectedUnitIds([]);
+          }
+        }}
         onClearSelection={() => setSelectedUnitIds([])}
         onIncludeLockedChange={setBulkIncludeLocked}
         onOverrideReasonChange={setBulkOverrideReason}
@@ -1334,13 +1344,16 @@ function MovableUnitsPanel({
           setBulkZoneId("");
         }}
         onSelectVisible={selectDisplayedUnits}
-        onUnassign={() =>
-          onAssignUnits({
+        onUnassign={async () => {
+          const ok = await onAssignUnits({
             units: selectedUnits,
             resourceId: null,
             includeLocked: bulkIncludeLocked,
-          })
-        }
+          });
+          if (ok) {
+            setSelectedUnitIds([]);
+          }
+        }}
         onZoneChange={setBulkZoneId}
       />
 
