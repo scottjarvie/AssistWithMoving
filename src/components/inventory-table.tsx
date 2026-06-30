@@ -89,6 +89,7 @@ import {
   type SortFieldId,
 } from "@/lib/inventory-sort";
 import { SortMenu } from "@/components/inventory-sort-menu";
+import { toastSaved, toastError } from "@/lib/toast";
 
 type InventoryTaskTab = "browse" | "add" | "bulk";
 
@@ -588,6 +589,11 @@ export function InventoryTable({
   const [newItemDisposition, setNewItemDisposition] =
     useState<(typeof itemDispositionOptions)[number]>("undecided");
   const [message, setMessage] = useState<string | null>(null);
+  // Double-submit guards: a fast double-click on Add would create a DUPLICATE
+  // item (create is not idempotent), and re-firing a batch mid-flight is wasted
+  // work. These disable the relevant buttons while their mutation runs.
+  const [creating, setCreating] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [sortField, setSortField] = useState<SortFieldId>(DEFAULT_SORT_FIELD);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -701,11 +707,12 @@ export function InventoryTable({
   async function handleCreateItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!householdId || !moveId || !newItemName.trim()) {
+    if (!householdId || !moveId || !newItemName.trim() || creating) {
       return;
     }
 
     setMessage(null);
+    setCreating(true);
 
     try {
       await createItem({
@@ -730,8 +737,12 @@ export function InventoryTable({
       setNewItemCategory("");
       setNewItemDisposition("undecided");
       setMessage("Item added.");
+      toastSaved("Item added");
     } catch {
       setMessage("Could not add that item yet.");
+      toastError("Could not add that item");
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -784,11 +795,12 @@ export function InventoryTable({
       rows: InventoryItem[],
       clearSelection: () => void,
     ) => {
-      if (!householdId || !moveId || !rows.length) {
+      if (!householdId || !moveId || !rows.length || batchBusy) {
         return;
       }
 
       setMessage(null);
+      setBatchBusy(true);
 
       try {
         const result = await batchUpdateItems({
@@ -798,16 +810,22 @@ export function InventoryTable({
           patch,
         });
         clearSelection();
-        setMessage(
-          result.failed > 0
-            ? `${result.succeeded} updated, ${result.failed} could not be changed.`
-            : `${result.succeeded} items updated.`,
-        );
+        if (result.failed > 0) {
+          const detail = `${result.succeeded} updated, ${result.failed} could not be changed.`;
+          setMessage(detail);
+          toastError(detail);
+        } else {
+          setMessage(`${result.succeeded} items updated.`);
+          toastSaved(`${result.succeeded} items updated`);
+        }
       } catch {
         setMessage("Could not update the selected items yet.");
+        toastError("Could not update the selected items");
+      } finally {
+        setBatchBusy(false);
       }
     },
-    [batchUpdateItems, householdId, moveId],
+    [batchBusy, batchUpdateItems, householdId, moveId],
   );
 
   // Personal transport + needs review are boolean flags the server batchUpdate
@@ -818,21 +836,38 @@ export function InventoryTable({
       rows: InventoryItem[],
       clearSelection: () => void,
     ) => {
-      if (!rows.length) {
+      if (!rows.length || batchBusy) {
         return;
       }
 
       setMessage(null);
+      setBatchBusy(true);
 
       try {
-        await Promise.all(rows.map((item) => patchItem(item, patch)));
+        // allSettled (not all): one row failing shouldn't mask how many of the
+        // others succeeded — report real succeeded/failed counts.
+        const results = await Promise.allSettled(
+          rows.map((item) => patchItem(item, patch)),
+        );
+        const failed = results.filter((r) => r.status === "rejected").length;
+        const succeeded = results.length - failed;
         clearSelection();
-        setMessage(`${rows.length} items updated.`);
+        if (failed > 0) {
+          const detail = `${succeeded} updated, ${failed} could not be changed.`;
+          setMessage(detail);
+          toastError(detail);
+        } else {
+          setMessage(`${succeeded} items updated.`);
+          toastSaved(`${succeeded} items updated`);
+        }
       } catch {
         setMessage("Could not update the selected items yet.");
+        toastError("Could not update the selected items");
+      } finally {
+        setBatchBusy(false);
       }
     },
-    [patchItem],
+    [batchBusy, patchItem],
   );
 
   const columns = useMemo<ColumnDef<InventoryItem, unknown>[]>(
@@ -1434,6 +1469,7 @@ export function InventoryTable({
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={batchBusy}
                       onClick={() =>
                         void handleBatchUpdate(
                           { disposition: "take" },
@@ -1448,6 +1484,7 @@ export function InventoryTable({
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={batchBusy}
                       onClick={() =>
                         void handleBatchUpdate(
                           { disposition: "sell" },
@@ -1462,6 +1499,7 @@ export function InventoryTable({
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={batchBusy}
                       onClick={() =>
                         void handleBatchUpdate(
                           { disposition: "donate" },
@@ -1476,6 +1514,7 @@ export function InventoryTable({
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={batchBusy}
                       onClick={() =>
                         void handleBatchUpdate(
                           { disposition: "dump" },
@@ -1611,10 +1650,10 @@ export function InventoryTable({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={!moveId || !newItemName.trim()}
+                  disabled={!moveId || !newItemName.trim() || creating}
                 >
                   <PackagePlus aria-hidden="true" />
-                  Add
+                  {creating ? "Adding…" : "Add"}
                 </Button>
               </form>
             </TabsContent>
