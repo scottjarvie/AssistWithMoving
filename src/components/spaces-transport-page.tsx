@@ -43,6 +43,7 @@ import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { buildBoxLookupPath } from "@/lib/box-labels";
 import { toastSaved, toastError } from "@/lib/toast";
+import { useScrollRestoration } from "@/components/use-scroll-restoration";
 import {
   compareBy,
   DEFAULT_SORT_FIELD,
@@ -251,6 +252,10 @@ function SpacesTransportWorkspace({
     itemsData === undefined ||
     spacesData === undefined ||
     transportData === undefined;
+
+  // Restore the list scroll position when returning from a box detail page
+  // (box rows here navigate away to /app/boxes/...).
+  useScrollRestoration(!loading);
 
   const entries = useMemo(
     () => buildOrganizerEntries({ boxes: boxesData ?? [], items: itemsData ?? [] }),

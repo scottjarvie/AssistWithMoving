@@ -66,6 +66,7 @@ import {
   type SortFieldId,
 } from "@/lib/inventory-sort";
 import { SortMenu } from "@/components/inventory-sort-menu";
+import { useScrollRestoration } from "@/components/use-scroll-restoration";
 import {
   buildMovableUnits,
   summarizeMovableUnits,
@@ -414,6 +415,10 @@ export function MovableUnitsTable({
     items === undefined ||
     resourcesWithZones === undefined ||
     tripsWithSpaces === undefined;
+
+  // Land back on the row you opened: restore the list scroll position when
+  // returning from a box detail page (rows here navigate away to /app/boxes/...).
+  useScrollRestoration(!loading);
 
   const captureHref =
     moveId !== null ? `/app/moves/${moveId}/capture` : "/app/moves";
