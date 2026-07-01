@@ -3,6 +3,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
+  ArrowRight,
   Bot,
   Home,
   Mail,
@@ -263,6 +264,40 @@ export function MoveParticipantsManager({
           </form>
         ) : null}
 
+        {canManage && people.some((p) => !p.isSelf && p.userId) ? (
+          <div className="rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+            <p className="flex items-center gap-1.5 font-medium text-foreground">
+              <Bot className="size-3.5 text-primary" aria-hidden="true" />
+              Capture queues &amp; AI agents
+            </p>
+            <p className="mt-1">
+              Everyone&apos;s photo and note captures pile up in their own
+              queue, and a connected AI agent turns them into inventory items.
+              Queues can be shared so one person&apos;s agent does the work for
+              several people.
+            </p>
+            <ul className="mt-2 grid gap-1">
+              <li>
+                <span className="font-medium text-foreground">
+                  You can already run everyone&apos;s queue.
+                </span>{" "}
+                Because you manage this move, open the{" "}
+                <span className="font-medium">Queue</span> tab and use the{" "}
+                <span className="font-medium">Showing</span> dropdown to pick
+                whose captures to process.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">
+                  Others only run yours if you allow it.
+                </span>{" "}
+                Use each person&apos;s{" "}
+                <span className="font-medium">capture queue</span> control below
+                to let them run your queue with their own AI agent.
+              </li>
+            </ul>
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="space-y-2">
             <Skeleton className="h-14 w-full" />
@@ -326,6 +361,7 @@ function ParticipantRow({
   const setParticipantStatus = useMutation(api.moveParticipants.setStatus);
   const updateMemberRole = useMutation(api.households.updateMemberRole);
   const disableMember = useMutation(api.households.disableMember);
+  const invite = useMutation(api.moveParticipants.invite);
   const [busy, setBusy] = useState(false);
 
   const pending = person.status === "invited";
@@ -415,6 +451,28 @@ function ParticipantRow({
     );
   }
 
+  // A family member reaches this move through household access but may have no
+  // per-move participant row yet (participantId === null), and the queue-share
+  // grant lives on that row. Create it on demand via the same get-or-create the
+  // invite form uses, seeding the grant so the toggle "just works" for them too.
+  function enableQueueViaInvite() {
+    if (!currentUserId || !person.email) return;
+    void run(
+      `${displayName} can now run your capture queue with their own AI agent.`,
+      () =>
+        invite({
+          householdId,
+          moveId,
+          email: person.email!,
+          name: person.name ?? undefined,
+          participantType: "householdMember",
+          role: person.role as GrantableRole,
+          accessKind: "householdBacked",
+          canRunMyQueue: true,
+        }),
+    );
+  }
+
   function remove() {
     if (isMember && person.membershipId) {
       // Family members have access to EVERY one of your moves, so "removing"
@@ -478,7 +536,12 @@ function ParticipantRow({
           )}
           {pending ? <Badge variant="secondary">Invited</Badge> : null}
           {agentOff ? <Badge variant="destructive">Agent off</Badge> : null}
-          {(person.canRunQueueForUserIds?.length ?? 0) > 0 ? (
+          {runsMyQueue ? (
+            <Badge variant="secondary" className="gap-1">
+              <Bot className="size-3" aria-hidden="true" />
+              Runs your queue
+            </Badge>
+          ) : (person.canRunQueueForUserIds?.length ?? 0) > 0 ? (
             <Badge variant="secondary" className="gap-1">
               <Bot className="size-3" aria-hidden="true" />
               Runs a shared queue
@@ -494,63 +557,102 @@ function ParticipantRow({
       ) : null}
 
       {showControls ? (
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          {isMember || person.participantId ? (
-            <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-              value={
-                roleOptions.some((r) => r.value === person.role)
-                  ? person.role
-                  : "viewer"
-              }
-              aria-label={`Access level for ${displayName}`}
-              disabled={busy}
-              onChange={(event) =>
-                changeRole(event.target.value as GrantableRole)
-              }
-            >
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+        <>
+          {person.userId && person.status === "active" ? (
+            <div className="mt-3 rounded-md border border-border bg-muted/20 p-2.5">
+              <p className="flex items-center gap-1.5 text-xs font-medium">
+                <Bot className="size-3.5 text-primary" aria-hidden="true" />
+                Capture queue
+              </p>
+              <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <ArrowRight
+                    className="mt-0.5 size-3 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <span className="font-medium text-foreground">
+                      You can run {displayName}&apos;s queue.
+                    </span>{" "}
+                    Process their captures from the Queue tab.
+                  </span>
+                </div>
+                <div className="flex flex-col items-start gap-1.5 sm:items-end">
+                  <p className="text-xs text-muted-foreground">
+                    {runsMyQueue
+                      ? `${displayName} can run your queue.`
+                      : `${displayName} can't run your queue yet.`}
+                  </p>
+                  {currentUserId &&
+                  (person.participantId || (isMember && person.email)) ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={runsMyQueue ? "secondary" : "outline"}
+                      disabled={busy}
+                      onClick={
+                        person.participantId
+                          ? toggleQueueDelegation
+                          : enableQueueViaInvite
+                      }
+                      title="Let this person run your capture queue with their own AI agent"
+                    >
+                      <Bot aria-hidden="true" />
+                      {runsMyQueue
+                        ? "Stop them running my queue"
+                        : "Let them run my queue"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
           ) : null}
-          {person.participantId ? (
+
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+            {isMember || person.participantId ? (
+              <select
+                className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                value={
+                  roleOptions.some((r) => r.value === person.role)
+                    ? person.role
+                    : "viewer"
+                }
+                aria-label={`Access level for ${displayName}`}
+                disabled={busy}
+                onChange={(event) =>
+                  changeRole(event.target.value as GrantableRole)
+                }
+              >
+                {roleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {person.participantId ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={toggleAgent}
+              >
+                <Bot aria-hidden="true" />
+                {agentOff ? "Allow agent" : "Block agent"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
               disabled={busy}
-              onClick={toggleAgent}
+              onClick={remove}
             >
-              <Bot aria-hidden="true" />
-              {agentOff ? "Allow agent" : "Block agent"}
+              {isMember ? "Remove from all moves" : "Remove"}
             </Button>
-          ) : null}
-          {person.participantId && currentUserId ? (
-            <Button
-              type="button"
-              size="sm"
-              variant={runsMyQueue ? "secondary" : "outline"}
-              disabled={busy}
-              onClick={toggleQueueDelegation}
-              title="Let this person run your capture queue with their own AI agent"
-            >
-              <Bot aria-hidden="true" />
-              {runsMyQueue ? "Stop sharing my queue" : "Let them run my queue"}
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={remove}
-          >
-            {isMember ? "Remove from all moves" : "Remove"}
-          </Button>
-        </div>
+          </div>
+        </>
       ) : null}
     </li>
   );

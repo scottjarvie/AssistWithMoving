@@ -926,36 +926,43 @@ export function IngestionQueueList({
       </CardHeader>
       <CardContent className="space-y-3">
         {scopes && (scopes.canManage || scopes.delegatedOwners.length > 0) ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <label htmlFor="queue-scope" className="text-muted-foreground">
-              Showing
-            </label>
-            <div className="relative inline-flex items-center">
-              <select
-                id="queue-scope"
-                className="h-8 appearance-none rounded-md border border-input bg-background pl-2 pr-8 text-sm font-medium text-foreground"
-                value={effectiveScope}
-                onChange={(event) =>
-                  setOwnerScope(
-                    event.target.value as "mine" | "all" | Id<"users">,
-                  )
-                }
-              >
-                <option value="mine">My Queue</option>
-                {scopes.delegatedOwners.map((owner) => (
-                  <option key={owner.userId} value={owner.userId}>
-                    {owner.name}&apos;s Queue
-                  </option>
-                ))}
-                {scopes.canManage ? (
-                  <option value="all">Everyone&apos;s Queue</option>
-                ) : null}
-              </select>
-              <ChevronDown
-                className="pointer-events-none absolute right-2 size-4 text-muted-foreground"
-                aria-hidden="true"
-              />
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <label htmlFor="queue-scope" className="text-muted-foreground">
+                Showing
+              </label>
+              <div className="relative inline-flex items-center">
+                <select
+                  id="queue-scope"
+                  className="h-8 appearance-none rounded-md border border-input bg-background pl-2 pr-8 text-sm font-medium text-foreground"
+                  value={effectiveScope}
+                  onChange={(event) =>
+                    setOwnerScope(
+                      event.target.value as "mine" | "all" | Id<"users">,
+                    )
+                  }
+                >
+                  <option value="mine">My Queue</option>
+                  {scopes.delegatedOwners.map((owner) => (
+                    <option key={owner.userId} value={owner.userId}>
+                      {owner.name}&apos;s Queue
+                    </option>
+                  ))}
+                  {scopes.canManage ? (
+                    <option value="all">Everyone&apos;s Queue</option>
+                  ) : null}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-2 size-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {scopes.canManage
+                ? "Pick whose photos and notes your AI agent turns into inventory. Because you manage this move you can run anyone's queue here; who can run yours is set per person under Configure → Participants (the “Let them run my queue” button)."
+                : "Pick whose captures your AI agent processes — your own, plus any queue the owner lets you run."}
+            </p>
           </div>
         ) : null}
         {loading ? (
