@@ -81,6 +81,40 @@ async function resolveQueueSubject(
   };
 }
 
+// Every user whose queue this actor may RUN on the move: their own, plus (for a
+// manager) everyone on the move, else just the owners delegated to them. Mirrors
+// moveParticipants.queueScopes so the agent's runnableOwners and the web
+// owner-picker offer the same set.
+async function resolveRunnableOwnerIds(
+  ctx: QueryCtx | MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  actor: { userId: Id<"users">; isManager: boolean; delegatedOwnerIds: Id<"users">[] },
+): Promise<Id<"users">[]> {
+  const ids = new Set<Id<"users">>([actor.userId]);
+  if (actor.isManager) {
+    const [memberships, participants] = await Promise.all([
+      ctx.db
+        .query("householdMemberships")
+        .withIndex("by_household", (q) => q.eq("householdId", householdId))
+        .collect(),
+      ctx.db
+        .query("moveParticipants")
+        .withIndex("by_household_move", (q) =>
+          q.eq("householdId", householdId).eq("moveId", moveId),
+        )
+        .collect(),
+    ]);
+    for (const m of memberships) if (m.status === "active") ids.add(m.userId);
+    for (const p of participants) {
+      if (p.status === "active" && p.userId) ids.add(p.userId);
+    }
+  } else {
+    for (const id of actor.delegatedOwnerIds) ids.add(id);
+  }
+  return [...ids];
+}
+
 // Expired claims read as queued so an abandoned agent run never strands work.
 function effectiveStatus(
   entry: Doc<"ingestionQueueEntries">,
@@ -177,8 +211,11 @@ export const listQueue = query({
     // any a move owner delegated to it. Surfaced so the agent can discover a
     // shared queue (e.g. the move owner's) and target it with
     // claim_queue.ownerUserId, instead of only ever running its own.
-    const runnableOwnerIds = Array.from(
-      new Set<Id<"users">>([actor.userId, ...actor.delegatedOwnerIds]),
+    const runnableOwnerIds = await resolveRunnableOwnerIds(
+      ctx,
+      args.householdId,
+      args.moveId,
+      actor,
     );
     const runnableOwners = await Promise.all(
       runnableOwnerIds.map(async (id) => {
@@ -233,6 +270,7 @@ export const claimQueue = mutation({
         actorUserId: userId,
         ownerUserId: targetOwnerId,
         delegatedOwnerIds: actor.delegatedOwnerIds,
+        isManager: actor.isManager,
       })
     ) {
       throw new ConvexError(
