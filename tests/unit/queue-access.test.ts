@@ -82,6 +82,19 @@ describe("per-user queue ownership + delegation (requirement 5)", () => {
       }),
     ).toBe(false);
   });
+
+  it("lets a move manager run any queue on the move without a delegation", () => {
+    // The move owner's own AI agent processing a participant's captures — the
+    // same isManager short-circuit canViewQueueEntry/canActOnQueueEntry use.
+    expect(
+      canRunQueueForOwner({
+        actorUserId: scott,
+        ownerUserId: erin,
+        delegatedOwnerIds: [],
+        isManager: true,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("acting on an existing entry (closes the clobber hole B6)", () => {

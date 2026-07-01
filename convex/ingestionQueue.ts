@@ -855,6 +855,7 @@ export const claimNext = mutation({
         actorUserId: actor.userId,
         ownerUserId: targetOwnerId,
         delegatedOwnerIds: actor.delegatedOwnerIds,
+        isManager: actor.isManager,
       })
     ) {
       throw new Error(

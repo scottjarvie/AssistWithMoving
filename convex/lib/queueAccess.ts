@@ -39,14 +39,18 @@ function includesId(ids: Id<"users">[], id: Id<"users">): boolean {
 }
 
 /**
- * May `actor` RUN (list/claim) entries owned by `ownerUserId`? Yes if it's their
- * own queue, or they've been delegated that owner's queue.
+ * May `actor` RUN (list/claim) entries owned by `ownerUserId`? Yes if they
+ * manage the move (owner/admin can run any queue on it — same short-circuit as
+ * canViewQueueEntry/canActOnQueueEntry), it's their own queue, or they've been
+ * delegated that owner's queue.
  */
 export function canRunQueueForOwner(input: {
   actorUserId: Id<"users">;
   ownerUserId: Id<"users">;
   delegatedOwnerIds: Id<"users">[];
+  isManager?: boolean;
 }): boolean {
+  if (input.isManager) return true;
   if (input.actorUserId === input.ownerUserId) return true;
   return includesId(input.delegatedOwnerIds, input.ownerUserId);
 }
