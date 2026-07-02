@@ -1230,25 +1230,31 @@ export function ItemDetailSheet({
                   ) : null}
                 </div>
 
-                {/* Move logistics — not shown for items leaving inventory. */}
-                {!isLeavingInventory ? (
+                {/* Move logistics. Leaving-inventory items hide room routing, but
+                    keep an existing transport assignment visible so it can be
+                    cleared and stop counting against truck capacity. */}
+                {!isLeavingInventory || presentResourceId ? (
                   <div className="grid gap-3 md:grid-cols-2">
-                    <Field label="Origination space">
-                      <SpaceSelect
-                        value={room}
-                        onChange={setRoom}
-                        spaceNames={spaceNameOptions}
-                        ariaLabel="Origination space"
-                      />
-                    </Field>
-                    <Field label="Destination space">
-                      <SpaceSelect
-                        value={destinationRoom}
-                        onChange={setDestinationRoom}
-                        spaceNames={spaceNameOptions}
-                        ariaLabel="Destination space"
-                      />
-                    </Field>
+                    {!isLeavingInventory ? (
+                      <>
+                        <Field label="Origination space">
+                          <SpaceSelect
+                            value={room}
+                            onChange={setRoom}
+                            spaceNames={spaceNameOptions}
+                            ariaLabel="Origination space"
+                          />
+                        </Field>
+                        <Field label="Destination space">
+                          <SpaceSelect
+                            value={destinationRoom}
+                            onChange={setDestinationRoom}
+                            spaceNames={spaceNameOptions}
+                            ariaLabel="Destination space"
+                          />
+                        </Field>
+                      </>
+                    ) : null}
                     <div className="md:col-span-2">
                       <Field label="Transportation Method">
                         <select
@@ -1291,6 +1297,13 @@ export function ItemDetailSheet({
                               </option>
                             ))}
                           </select>
+                        ) : null}
+                        {isLeavingInventory && presentResourceId ? (
+                          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                            This item is leaving your inventory but is still
+                            assigned to transport — clear this unless it&apos;s
+                            riding along.
+                          </p>
                         ) : null}
                       </Field>
                     </div>
@@ -1340,9 +1353,10 @@ export function ItemDetailSheet({
                     targetLabel={item.name}
                     open={photoPickerOpen}
                     onOpenChange={setPhotoPickerOpen}
-                    onAttached={() =>
-                      setMessage("Photo attached to this item.")
-                    }
+                    onAttached={() => {
+                      setMessage("Photo attached to this item.");
+                      toastSaved("Photo attached");
+                    }}
                   />
                 </div>
                 <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">

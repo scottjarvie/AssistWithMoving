@@ -76,8 +76,8 @@ const derivativeRefsValidator = v.object({
 });
 
 const photoWriteArgs = {
-  itemId: v.optional(v.id("items")),
-  boxId: v.optional(v.id("boxes")),
+  itemId: v.optional(v.union(v.id("items"), v.null())),
+  boxId: v.optional(v.union(v.id("boxes"), v.null())),
   spaceId: v.optional(v.id("moveSpaces")),
   transportResourceId: v.optional(v.id("transportResources")),
   transportZoneId: v.optional(v.id("transportZones")),
@@ -228,8 +228,8 @@ async function assertPhotoTargets(
   ctx: MutationCtx,
   args: {
     moveId: Doc<"moves">["_id"];
-    itemId?: Doc<"items">["_id"];
-    boxId?: Doc<"boxes">["_id"];
+    itemId?: Doc<"items">["_id"] | null;
+    boxId?: Doc<"boxes">["_id"] | null;
     spaceId?: Doc<"moveSpaces">["_id"];
     transportResourceId?: Doc<"transportResources">["_id"];
     transportZoneId?: Doc<"transportZones">["_id"];
@@ -1959,8 +1959,8 @@ export const updateEvidence = mutation({
 
     const now = Date.now();
     const patch: Partial<Doc<"itemPhotos">> = { updatedAt: now };
-    if (args.itemId !== undefined) patch.itemId = args.itemId;
-    if (args.boxId !== undefined) patch.boxId = args.boxId;
+    if (args.itemId !== undefined) patch.itemId = args.itemId ?? undefined;
+    if (args.boxId !== undefined) patch.boxId = args.boxId ?? undefined;
     if (args.spaceId !== undefined) patch.spaceId = args.spaceId;
     if (args.transportResourceId !== undefined) {
       patch.transportResourceId = args.transportResourceId;

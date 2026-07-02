@@ -88,6 +88,7 @@ import {
   type SortableEntry,
   type SortFieldId,
 } from "@/lib/inventory-sort";
+import { calculateMovableUnitVolumeCuFt } from "@/lib/movable-units";
 import { SortMenu } from "@/components/inventory-sort-menu";
 import { toastSaved, toastError } from "@/lib/toast";
 
@@ -131,7 +132,9 @@ function itemToSortable(item: InventoryItem): SortableEntry {
   const qty = item.quantity && item.quantity > 0 ? item.quantity : 1;
   const unitWeight = item.actualWeightLb ?? item.estimatedWeightLb;
   const unitVolume =
-    item.estimatedVolumeCuFt ?? item.estimatedPackedVolumeCuFt;
+    item.estimatedVolumeCuFt ??
+    item.estimatedPackedVolumeCuFt ??
+    calculateMovableUnitVolumeCuFt(item.dimensionsIn);
   return {
     kind: "item",
     createdAt: item._creationTime,

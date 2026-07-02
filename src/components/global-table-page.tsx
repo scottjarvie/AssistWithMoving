@@ -42,7 +42,11 @@ export function MovableUnitsPageContent() {
       {loadingMoves ? (
         <Skeleton className="h-44 rounded-md" />
       ) : moveId ? (
-        <MovableUnitsTable householdId={householdId} moveId={moveId} />
+        <MovableUnitsTable
+          key={moveId}
+          householdId={householdId}
+          moveId={moveId}
+        />
       ) : (
         <NoActiveMove
           title="No active move"
@@ -61,7 +65,7 @@ export function ItemsPageContent() {
       {loadingMoves ? (
         <Skeleton className="h-44 rounded-md" />
       ) : moveId ? (
-        <InventoryTable householdId={householdId} moveId={moveId} />
+        <InventoryTable key={moveId} householdId={householdId} moveId={moveId} />
       ) : (
         <NoActiveMove
           title="No active move"

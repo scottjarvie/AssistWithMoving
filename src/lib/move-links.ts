@@ -22,6 +22,9 @@ export function buildMoveSwitchTarget(
       `/app/moves/${encodeURIComponent(moveId)}`,
     );
   }
+  if (pathname.startsWith("/app/boxes/")) {
+    return "/app/movable-units";
+  }
   return null;
 }
 

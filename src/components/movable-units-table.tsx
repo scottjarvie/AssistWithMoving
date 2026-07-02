@@ -418,7 +418,7 @@ export function MovableUnitsTable({
 
   // Land back on the row you opened: restore the list scroll position when
   // returning from a box detail page (rows here navigate away to /app/boxes/...).
-  useScrollRestoration(!loading);
+  useScrollRestoration(!loading, moveId ?? undefined);
 
   const captureHref =
     moveId !== null ? `/app/moves/${moveId}/capture` : "/app/moves";

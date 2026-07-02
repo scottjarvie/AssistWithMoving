@@ -27,6 +27,14 @@ const photos = vi.hoisted(() => [
   { _id: "p_this_item", itemId: "item_target", boxId: null, room: null },
   { _id: "p_on_box", itemId: null, boxId: "box_1", room: null },
   { _id: "p_other_item", itemId: "item_other", boxId: null, room: null },
+  { _id: "p_on_space", itemId: null, boxId: null, room: null, spaceId: "space_1" },
+  {
+    _id: "p_on_transport",
+    itemId: null,
+    boxId: null,
+    room: null,
+    transportResourceId: "resource_1",
+  },
 ]);
 
 vi.mock("../../convex/_generated/api", () => ({ api: apiMock }));
@@ -65,14 +73,14 @@ describe("PhotoPickerDialog (MOVE-354)", () => {
     ).toHaveLength(2);
 
     // Turn the filter off → every photo EXCEPT the one already on this item
-    // (p_this_item) shows: the two unattached + the box one + the other item one.
+    // (p_this_item) shows: unattached, box, other item, space, and transport.
     await user.click(screen.getByLabelText("Unattached only"));
     expect(
       screen.getAllByRole("button", { name: "Attach this photo" }),
-    ).toHaveLength(4);
+    ).toHaveLength(6);
   });
 
-  it("attaches the chosen photo to the target item via updateEvidence", async () => {
+  it("attaches the chosen photo to the target item and clears sibling box attachment", async () => {
     const user = userEvent.setup();
     mocks.updateEvidence.mockClear();
     mocks.onAttached.mockClear();
@@ -88,6 +96,7 @@ describe("PhotoPickerDialog (MOVE-354)", () => {
         expect.objectContaining({
           photoId: "p_unatt_1",
           itemId: "item_target",
+          boxId: null,
           householdId: "household_1",
           moveId: "move_1",
         }),
@@ -95,5 +104,10 @@ describe("PhotoPickerDialog (MOVE-354)", () => {
     });
     expect(mocks.onAttached).toHaveBeenCalled();
     expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: "Attach this photo" })[0],
+      ).not.toBeDisabled();
+    });
   });
 });

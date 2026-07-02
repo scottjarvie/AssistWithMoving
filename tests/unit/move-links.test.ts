@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildMoveSwitchTarget,
   moveBoxesPath,
   moveWorkspaceAnchorPath,
   moveWorkspacePath,
@@ -18,6 +19,12 @@ describe("move links", () => {
     // Boxes became Movable Units; the helper ignores the (now optional) move id.
     expect(moveBoxesPath("move_123")).toBe("/app/movable-units");
     expect(moveBoxesPath()).toBe("/app/movable-units");
+  });
+
+  it("switches box detail pages back to the Movable Units home", () => {
+    expect(buildMoveSwitchTarget("/app/boxes/box_123", "move_456")).toBe(
+      "/app/movable-units",
+    );
   });
 
   it("sends removed-section anchors straight to their new homes", () => {

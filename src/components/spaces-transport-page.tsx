@@ -171,7 +171,11 @@ export function SpacesTransportPageContent() {
       {loadingMoves ? (
         <Skeleton className="h-44 rounded-md" />
       ) : moveId && householdId ? (
-        <SpacesTransportWorkspace householdId={householdId} moveId={moveId} />
+        <SpacesTransportWorkspace
+          key={moveId}
+          householdId={householdId}
+          moveId={moveId}
+        />
       ) : (
         <Card>
           <CardContent className="space-y-3 py-6">
@@ -255,7 +259,7 @@ function SpacesTransportWorkspace({
 
   // Restore the list scroll position when returning from a box detail page
   // (box rows here navigate away to /app/boxes/...).
-  useScrollRestoration(!loading);
+  useScrollRestoration(!loading, moveId ?? undefined);
 
   const entries = useMemo(
     () => buildOrganizerEntries({ boxes: boxesData ?? [], items: itemsData ?? [] }),
@@ -1153,7 +1157,7 @@ function EntryRow({
           </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {entry.code} · {entry.countLabel}
-            {entry.estimatedWeightLb
+            {entry.estimatedWeightLb != null
               ? ` · ${formatNumber(entry.estimatedWeightLb)} lb`
               : ""}
             {density !== undefined
