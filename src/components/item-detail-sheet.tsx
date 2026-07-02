@@ -450,8 +450,30 @@ export function ItemDetailSheet({
 
   async function handleSaveAskingPrice(value: string) {
     if (!householdId || !moveId || !item) return;
+    const trimmed = value.trim();
+    const currentPrice = sellListing?.officialPriceCents ?? undefined;
+    if (!trimmed) {
+      if (currentPrice === undefined) return;
+      try {
+        await upsertListing({
+          householdId,
+          moveId,
+          itemId: item._id,
+          clearOfficialPrice: true,
+        });
+        toastSaved("Asking price cleared");
+      } catch {
+        setMessage("Could not save the asking price.");
+        toastError("Could not save the asking price");
+      }
+      return;
+    }
     const cents = parseOptionalCurrencyCents(value);
-    if (cents === (sellListing?.officialPriceCents ?? undefined)) return;
+    if (cents === undefined) {
+      toastError("Enter a number for the asking price");
+      return;
+    }
+    if (cents === currentPrice) return;
     try {
       await upsertListing({
         householdId,

@@ -65,6 +65,7 @@ import type * as lib_estimateEngine from "../lib/estimateEngine.js";
 import type * as lib_evidenceDensity from "../lib/evidenceDensity.js";
 import type * as lib_exportRows from "../lib/exportRows.js";
 import type * as lib_featureFlags from "../lib/featureFlags.js";
+import type * as lib_hardDelete from "../lib/hardDelete.js";
 import type * as lib_householdInvitations from "../lib/householdInvitations.js";
 import type * as lib_householdMembers from "../lib/householdMembers.js";
 import type * as lib_imageDerivatives from "../lib/imageDerivatives.js";
@@ -205,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   "lib/evidenceDensity": typeof lib_evidenceDensity;
   "lib/exportRows": typeof lib_exportRows;
   "lib/featureFlags": typeof lib_featureFlags;
+  "lib/hardDelete": typeof lib_hardDelete;
   "lib/householdInvitations": typeof lib_householdInvitations;
   "lib/householdMembers": typeof lib_householdMembers;
   "lib/imageDerivatives": typeof lib_imageDerivatives;

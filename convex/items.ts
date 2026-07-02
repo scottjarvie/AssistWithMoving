@@ -25,6 +25,10 @@ import {
   weightBoundsFromEstimate,
 } from "./lib/estimateEngine";
 import {
+  archiveActiveSaleListingsForItem,
+  cascadeDeleteItem,
+} from "./lib/hardDelete";
+import {
   dimensionsValidator,
   estimateConfidenceValidator,
   formatItemCode,
@@ -1684,10 +1688,11 @@ export const archive = mutation({
 });
 
 // PERMANENTLY delete an item. Unlike archive (reversible — status+deletedAt),
-// this removes the row and CANNOT be undone, so it cascades the data the item
-// owns: its photos, box memberships, sale listing, and load-plan placements —
-// nothing is left dangling. (B2 photo objects are not deleted here, same as the
-// move purge; only the DB rows go.)
+// this removes the row and CANNOT be undone, so shared hard-delete cleanup owns
+// the referencing-table list. Terminal queue results and audit logs intentionally
+// keep historical ids; live queue targets/media and planning suggestions are
+// scrubbed. (B2 photo objects are not deleted here, same as the move purge; only
+// the DB rows go.)
 export const remove = mutation({
   args: {
     householdId: v.id("households"),
@@ -1706,27 +1711,12 @@ export const remove = mutation({
       throw new ConvexError("Item not found for this move.");
     }
 
-    const photos = await ctx.db
-      .query("itemPhotos")
-      .withIndex("by_item_created", (q) => q.eq("itemId", args.itemId))
-      .collect();
-    const memberships = await ctx.db
-      .query("boxItems")
-      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
-      .collect();
-    const listings = await ctx.db
-      .query("saleListings")
-      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
-      .collect();
-    const placements = await ctx.db
-      .query("planPlacements")
-      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
-      .collect();
-
-    for (const doc of photos) await ctx.db.delete(doc._id);
-    for (const doc of memberships) await ctx.db.delete(doc._id);
-    for (const doc of listings) await ctx.db.delete(doc._id);
-    for (const doc of placements) await ctx.db.delete(doc._id);
+    const now = Date.now();
+    const summary = await cascadeDeleteItem(ctx, {
+      moveId: args.moveId,
+      itemId: args.itemId,
+      now,
+    });
     await ctx.db.delete(args.itemId);
 
     await recordAuditEvent(ctx, {
@@ -1741,11 +1731,16 @@ export const remove = mutation({
       objectId: args.itemId,
       metadata: {
         code: item.code,
-        deletedPhotoCount: photos.length,
-        deletedMembershipCount: memberships.length,
-        deletedListingCount: listings.length,
+        deletedPhotoCount: summary.deletedPhotoCount,
+        deletedMembershipCount: summary.deletedMembershipCount,
+        deletedListingCount: summary.deletedListingCount,
+        deletedPlacementCount: summary.deletedPlacementCount,
+        updatedQueueEntryCount: summary.updatedQueueEntryCount,
+        updatedPlanningSuggestionCount: summary.updatedPlanningSuggestionCount,
       },
     });
+
+    return summary;
   },
 });
 
@@ -1770,6 +1765,11 @@ export const markTrashed = mutation({
       throw new ConvexError("Item not found for this move.");
     }
     const now = Date.now();
+    const archivedListingCount = await archiveActiveSaleListingsForItem(
+      ctx,
+      args.itemId,
+      now,
+    );
     await ctx.db.patch(args.itemId, {
       disposition: "dump",
       status: "archived",
@@ -1787,6 +1787,7 @@ export const markTrashed = mutation({
       action: "item.trashed",
       objectTable: "items",
       objectId: args.itemId,
+      metadata: { archivedListingCount },
     });
   },
 });

@@ -165,6 +165,9 @@ describe("IngestionQueueList tabs view", () => {
     expect(screen.getByText(/Which room is this from?/i)).toBeInTheDocument();
     expect(screen.getByText(/Proposed two items./i)).toBeInTheDocument();
     expect(
+      screen.getByRole("link", { name: /View 2 produced items/ }),
+    ).toHaveAttribute("href", "/app/items#inventory-records");
+    expect(
       screen.getByText(
         "Agent questions and processed captures waiting for your review.",
       ),
