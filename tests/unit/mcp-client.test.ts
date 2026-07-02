@@ -73,6 +73,7 @@ import {
   uploadEvidenceFile,
   updateDocumentationProfile,
   updateItem,
+  updateMove,
   updateMovePerson,
   updatePlannedItem,
   updateTransportResource,
@@ -323,6 +324,42 @@ describe("MovingManifest MCP API client", () => {
               },
             },
           ],
+        }),
+      }
+    );
+  });
+
+  it("updates moves through the API and preserves null notes clears", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { moveId: "move1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateMove(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      {
+        moveId: "move1",
+        title: undefined,
+        notes: null,
+        distanceMiles: null,
+        idempotencyKey: "update-move-1",
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/moves/move1"),
+      {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "update-move-1",
+        },
+        body: JSON.stringify({
+          notes: null,
+          distanceMiles: null,
         }),
       }
     );
