@@ -74,7 +74,7 @@ function friendlyUploadError(error: unknown): string {
     lower.includes("timed out") ||
     lower.includes("timeout")
   ) {
-    return "Upload timed out. It will retry automatically.";
+    return "Upload timed out. Check your connection and tap retry.";
   }
   if (
     lower.includes("network") ||
@@ -130,7 +130,7 @@ export function MediaUploadProvider({
 
   const [jobs, setJobs] = useState<UploadJob[]>([]);
   const jobsRef = useRef<UploadJob[]>([]);
-  const deferredFailedEntryIdsRef = useRef(new Set<string>());
+  const deferredFailedJobIdsByEntryRef = useRef(new Map<string, Set<string>>());
 
   useEffect(() => {
     jobsRef.current = jobs;
@@ -201,11 +201,15 @@ export function MediaUploadProvider({
       job: UploadJob,
       deps: Pick<typeof depsRef.current, "setMediaUploadState">,
     ) => {
+      const entryKey = String(job.entryId);
       if (hasLiveSibling(job)) {
-        deferredFailedEntryIdsRef.current.add(String(job.entryId));
+        const failedJobIds =
+          deferredFailedJobIdsByEntryRef.current.get(entryKey) ?? new Set<string>();
+        failedJobIds.add(job.id);
+        deferredFailedJobIdsByEntryRef.current.set(entryKey, failedJobIds);
         return;
       }
-      deferredFailedEntryIdsRef.current.delete(String(job.entryId));
+      deferredFailedJobIdsByEntryRef.current.delete(entryKey);
       await deps
         .setMediaUploadState({
           householdId: job.householdId,
@@ -223,9 +227,10 @@ export function MediaUploadProvider({
       job: UploadJob,
       deps: Pick<typeof depsRef.current, "setMediaUploadState">,
     ) => {
-      if (!deferredFailedEntryIdsRef.current.has(String(job.entryId))) return;
+      const entryKey = String(job.entryId);
+      if (!deferredFailedJobIdsByEntryRef.current.has(entryKey)) return;
       if (hasLiveSibling(job)) return;
-      deferredFailedEntryIdsRef.current.delete(String(job.entryId));
+      deferredFailedJobIdsByEntryRef.current.delete(entryKey);
       await deps
         .setMediaUploadState({
           householdId: job.householdId,
@@ -244,13 +249,15 @@ export function MediaUploadProvider({
       const controller = new AbortController();
       abortControllersRef.current.set(job.id, controller);
 
-      patchJob(job.id, { status: "uploading", progress: 0, error: undefined });
+      if (job.finalizedPhotoId) {
+        patchJob(job.id, { status: "finalizing", progress: 100, error: undefined });
+      } else {
+        patchJob(job.id, { status: "uploading", progress: 0, error: undefined });
+      }
 
       try {
         let photoId = job.finalizedPhotoId;
-        if (photoId) {
-          patchJob(job.id, { status: "finalizing", progress: 100 });
-        } else {
+        if (!photoId) {
           photoId = await uploadMediaFile({
             householdId: job.householdId,
             moveId: job.moveId,
@@ -380,18 +387,26 @@ export function MediaUploadProvider({
   );
 
   const retry = useCallback<MediaUploadContextValue["retry"]>((jobId) => {
-    setJobs((current) =>
-      current.map((job) =>
-        job.id === jobId && job.status === "error"
-          ? {
-              ...job,
-              status: "queued",
-              progress: job.finalizedPhotoId ? 100 : 0,
-              error: undefined,
-            }
-          : job,
-      ),
-    );
+    setJobs((current) => {
+      return current.map((job) => {
+        if (job.id !== jobId || job.status !== "error") return job;
+        const entryKey = String(job.entryId);
+        const failedJobIds =
+          deferredFailedJobIdsByEntryRef.current.get(entryKey);
+        if (failedJobIds) {
+          failedJobIds.delete(job.id);
+          if (failedJobIds.size === 0) {
+            deferredFailedJobIdsByEntryRef.current.delete(entryKey);
+          }
+        }
+        return {
+          ...job,
+          status: "queued",
+          progress: job.finalizedPhotoId ? 100 : 0,
+          error: undefined,
+        };
+      });
+    });
   }, []);
 
   const dismiss = useCallback<MediaUploadContextValue["dismiss"]>(

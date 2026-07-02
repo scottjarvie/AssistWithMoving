@@ -11,7 +11,12 @@
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { getCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
 import { activateHouseholdMemberForUser } from "./lib/householdInvitations";
@@ -56,6 +61,16 @@ function queueDelegationForOwner(
     ? Array.from(new Set([...current, ownerUserId]))
     : current.filter((id) => id !== ownerUserId);
 }
+
+type SetMyQueueDelegationArgs = {
+  householdId: Id<"households">;
+  moveId: Id<"moves">;
+  participantId?: Id<"moveParticipants">;
+  targetUserId?: Id<"users">;
+  canRunMyQueue: boolean;
+};
+
+type MovePermissionPolicy = Awaited<ReturnType<typeof requireMovePermission>>;
 
 const grantableRoleValidator = v.union(
   v.literal("admin"),
@@ -494,108 +509,116 @@ export const setMyQueueDelegation = mutation({
       args.moveId,
       "inventory:read",
     );
-    if (policy.actor.type !== "user") {
-      throw new ConvexError("Queue sharing requires a signed-in user.");
-    }
-    if (!args.participantId && !args.targetUserId) {
-      throw new ConvexError("Choose a participant to share your queue with.");
-    }
-
-    let participant = args.participantId
-      ? await ctx.db.get(args.participantId)
-      : null;
-    if (
-      participant &&
-      (participant.householdId !== args.householdId ||
-        participant.moveId !== args.moveId ||
-        participant.status !== "active")
-    ) {
-      throw new ConvexError("Choose an active participant on this move.");
-    }
-
-    const targetUserId = participant?.userId ?? args.targetUserId;
-    if (!targetUserId) {
-      throw new ConvexError("Queue sharing requires an active signed-in participant.");
-    }
-    if (targetUserId === policy.actor.userId) {
-      throw new ConvexError("You already run your own queue.");
-    }
-
-    if (!participant) {
-      participant = await ctx.db
-        .query("moveParticipants")
-        .withIndex("by_move_user", (q) =>
-          q.eq("moveId", args.moveId).eq("userId", targetUserId),
-        )
-        .unique();
-    }
-
-    if (!participant) {
-      const membership = await ctx.db
-        .query("householdMemberships")
-        .withIndex("by_household_user", (q) =>
-          q.eq("householdId", args.householdId).eq("userId", targetUserId),
-        )
-        .unique();
-      if (!membership || membership.status !== "active") {
-        throw new ConvexError("Choose an active participant on this move.");
-      }
-      const now = Date.now();
-      const participantId = await ctx.db.insert("moveParticipants", {
-        householdId: args.householdId,
-        moveId: args.moveId,
-        userId: targetUserId,
-        role: "guest",
-        accessKind: "householdBacked",
-        participantType: "householdMember",
-        status: "active",
-        agentAccessStatus: "enabled",
-        canRunQueueForUserIds: [],
-        createdByUserId: policy.actor.userId,
-        updatedByUserId: policy.actor.userId,
-        createdAt: now,
-        updatedAt: now,
-      });
-      participant = (await ctx.db.get(participantId))!;
-    }
-
-    if (
-      participant.householdId !== args.householdId ||
-      participant.moveId !== args.moveId ||
-      participant.status !== "active" ||
-      !participant.userId
-    ) {
-      throw new ConvexError("Choose an active participant on this move.");
-    }
-
-    const canRunQueueForUserIds = queueDelegationForOwner(
-      participant.canRunQueueForUserIds,
-      policy.actor.userId,
-      args.canRunMyQueue,
-    );
-    await ctx.db.patch(participant._id, {
-      canRunQueueForUserIds,
-      updatedByUserId: policy.actor.userId,
-      updatedAt: Date.now(),
-    });
-
-    await recordAuditEvent(ctx, {
-      householdId: args.householdId,
-      moveId: args.moveId,
-      actorType: "user",
-      actorUserId: policy.actor.userId,
-      category: "household",
-      action: args.canRunMyQueue
-        ? "move_participant.queue_delegation_enabled"
-        : "move_participant.queue_delegation_disabled",
-      objectTable: "moveParticipants",
-      objectId: participant._id,
-      metadata: { targetUserId },
-    });
-
-    return { participantId: participant._id, canRunQueueForUserIds };
+    return await setMyQueueDelegationForPolicy(ctx, args, policy);
   },
 });
+
+export async function setMyQueueDelegationForPolicy(
+  ctx: MutationCtx,
+  args: SetMyQueueDelegationArgs,
+  policy: MovePermissionPolicy,
+) {
+  if (policy.actor.type !== "user") {
+    throw new ConvexError("Queue sharing requires a signed-in user.");
+  }
+  if (!args.participantId && !args.targetUserId) {
+    throw new ConvexError("Choose a participant to share your queue with.");
+  }
+
+  let participant = args.participantId
+    ? await ctx.db.get(args.participantId)
+    : null;
+  if (
+    participant &&
+    (participant.householdId !== args.householdId ||
+      participant.moveId !== args.moveId ||
+      participant.status !== "active")
+  ) {
+    throw new ConvexError("Choose an active participant on this move.");
+  }
+
+  const targetUserId = participant?.userId ?? args.targetUserId;
+  if (!targetUserId) {
+    throw new ConvexError("Queue sharing requires an active signed-in participant.");
+  }
+  if (targetUserId === policy.actor.userId) {
+    throw new ConvexError("You already run your own queue.");
+  }
+
+  if (!participant) {
+    participant = await ctx.db
+      .query("moveParticipants")
+      .withIndex("by_move_user", (q) =>
+        q.eq("moveId", args.moveId).eq("userId", targetUserId),
+      )
+      .unique();
+  }
+
+  if (!participant) {
+    const membership = await ctx.db
+      .query("householdMemberships")
+      .withIndex("by_household_user", (q) =>
+        q.eq("householdId", args.householdId).eq("userId", targetUserId),
+      )
+      .unique();
+    if (!membership || membership.status !== "active") {
+      throw new ConvexError("Choose an active participant on this move.");
+    }
+    const now = Date.now();
+    const participantId = await ctx.db.insert("moveParticipants", {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      userId: targetUserId,
+      role: "guest",
+      accessKind: "householdBacked",
+      participantType: "householdMember",
+      status: "active",
+      agentAccessStatus: "enabled",
+      canRunQueueForUserIds: [],
+      createdByUserId: policy.actor.userId,
+      updatedByUserId: policy.actor.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    participant = (await ctx.db.get(participantId))!;
+  }
+
+  if (
+    participant.householdId !== args.householdId ||
+    participant.moveId !== args.moveId ||
+    participant.status !== "active" ||
+    !participant.userId
+  ) {
+    throw new ConvexError("Choose an active participant on this move.");
+  }
+
+  const canRunQueueForUserIds = queueDelegationForOwner(
+    participant.canRunQueueForUserIds,
+    policy.actor.userId,
+    args.canRunMyQueue,
+  );
+  await ctx.db.patch(participant._id, {
+    canRunQueueForUserIds,
+    updatedByUserId: policy.actor.userId,
+    updatedAt: Date.now(),
+  });
+
+  await recordAuditEvent(ctx, {
+    householdId: args.householdId,
+    moveId: args.moveId,
+    actorType: "user",
+    actorUserId: policy.actor.userId,
+    category: "household",
+    action: args.canRunMyQueue
+      ? "move_participant.queue_delegation_enabled"
+      : "move_participant.queue_delegation_disabled",
+    objectTable: "moveParticipants",
+    objectId: participant._id,
+    metadata: { targetUserId },
+  });
+
+  return { participantId: participant._id, canRunQueueForUserIds };
+}
 
 /** Disable a participant (revokes a moveOnly guest's only access). */
 export const setStatus = mutation({

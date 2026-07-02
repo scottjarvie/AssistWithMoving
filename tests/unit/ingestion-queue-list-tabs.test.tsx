@@ -235,6 +235,24 @@ describe("IngestionQueueList tabs view", () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
+  it("handles inline status failures without an unhandled rejection", async () => {
+    const user = userEvent.setup();
+    queueData.mutation.mockRejectedValueOnce(new Error("network"));
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Mark resolved" }));
+
+    expect(toastMock.toastError).toHaveBeenCalledWith(
+      "Could not update that capture",
+    );
+  });
+
   it("renders live per-file jobs: spinner tiles, the counted badge, and Retry", async () => {
     const user = userEvent.setup();
 

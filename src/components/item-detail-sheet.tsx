@@ -747,7 +747,11 @@ export function ItemDetailSheet({
           patch.actualWeightLb = parsedActualWeightLb;
         }
       }
-      if (weightIsEstimate && currentItem.actualWeightLb != null) {
+      if (
+        parsedActualWeightLb !== undefined &&
+        weightIsEstimate &&
+        currentItem.actualWeightLb != null
+      ) {
         patch.clearActualWeight = true;
       }
       if (parsedEstimatedVolumeCuFt !== undefined) {
@@ -765,17 +769,25 @@ export function ItemDetailSheet({
       const displayedWeightLb =
         currentItem.actualWeightLb ?? currentItem.estimatedWeightLb;
       const weightValueChanged =
-        parsedActualWeightLb !== displayedWeightLb ||
-        parsedEstimatedWeightLowLb !== currentItem.estimatedWeightLowLb ||
-        parsedEstimatedWeightHighLb !== currentItem.estimatedWeightHighLb;
+        (parsedActualWeightLb !== undefined &&
+          parsedActualWeightLb !== displayedWeightLb) ||
+        (parsedEstimatedWeightLowLb !== undefined &&
+          parsedEstimatedWeightLowLb !== currentItem.estimatedWeightLowLb) ||
+        (parsedEstimatedWeightHighLb !== undefined &&
+          parsedEstimatedWeightHighLb !== currentItem.estimatedWeightHighLb);
       const dimensionsValueChanged =
-        parsedLengthIn !== currentItem.dimensionsIn?.lengthIn ||
-        parsedWidthIn !== currentItem.dimensionsIn?.widthIn ||
-        parsedHeightIn !== currentItem.dimensionsIn?.heightIn;
+        (parsedLengthIn !== undefined &&
+          parsedLengthIn !== currentItem.dimensionsIn?.lengthIn) ||
+        (parsedWidthIn !== undefined &&
+          parsedWidthIn !== currentItem.dimensionsIn?.widthIn) ||
+        (parsedHeightIn !== undefined &&
+          parsedHeightIn !== currentItem.dimensionsIn?.heightIn);
       const volumeValueChanged =
-        parsedEstimatedVolumeCuFt !== currentItem.estimatedVolumeCuFt ||
-        parsedEstimatedPackedVolumeCuFt !==
-          currentItem.estimatedPackedVolumeCuFt;
+        (parsedEstimatedVolumeCuFt !== undefined &&
+          parsedEstimatedVolumeCuFt !== currentItem.estimatedVolumeCuFt) ||
+        (parsedEstimatedPackedVolumeCuFt !== undefined &&
+          parsedEstimatedPackedVolumeCuFt !==
+            currentItem.estimatedPackedVolumeCuFt);
 
       if (weightIsEstimate !== initialWeightIsEstimate || weightValueChanged) {
         patch.weightConfidence = weightIsEstimate ? "low" : "actual";

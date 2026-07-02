@@ -144,6 +144,10 @@ export function MoveParticipantsManager({
   const loading = householdId && moveId && data === undefined;
   const people = data?.people ?? [];
   const contacts = data?.contacts ?? [];
+  const showMoveOnlyQueueSharingExplainer =
+    data?.accessKind === "moveOnly" &&
+    !canManage &&
+    people.filter((person) => !person.isSelf).length === 0;
   // The viewer's own user id — used to grant "let them run MY queue" on an
   // existing participant (the self row carries it; isSelf is set server-side).
   const currentUserId = people.find((person) => person.isSelf)?.userId ?? null;
@@ -322,6 +326,13 @@ export function MoveParticipantsManager({
             No one else has access to this move yet. Add a person above.
           </div>
         )}
+
+        {showMoveOnlyQueueSharingExplainer ? (
+          <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+            Queue sharing is managed by the household — ask a move manager to
+            set up delegation for you.
+          </div>
+        ) : null}
 
         {canManage ? (
           <ContactsSection
