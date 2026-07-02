@@ -46,10 +46,17 @@ import {
   mediaKindForMimeType,
   validateMediaUploadFile,
 } from "@/lib/photo-upload";
+import { toastError, toastSaved } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 type QueueTask = "needsAction" | "working" | "archive";
 type QueueFilter = "todo" | "working" | "review" | "done" | "all";
+
+function statusToastMessage(status: "queued" | "resolved" | "discarded") {
+  if (status === "resolved") return "Marked resolved";
+  if (status === "discarded") return "Discarded";
+  return "Requeued";
+}
 
 // The top-level Queue page filters by lifecycle bucket; each filter doubles as
 // a live stat. queued -> To do, claimed -> Working, processed/needsInput ->
@@ -368,8 +375,11 @@ export function IngestionQueueList({
     setMessage(null);
     try {
       await setEntryStatus({ householdId, moveId, entryId, status });
+      toastSaved(statusToastMessage(status));
     } catch {
       setMessage("Could not update that entry yet.");
+      toastError("Could not update that capture");
+      throw new Error("Could not update that capture");
     } finally {
       setBusyEntryId(null);
     }
@@ -391,8 +401,11 @@ export function IngestionQueueList({
       });
       setEditingEntryId(null);
       setEditingText("");
+      toastSaved("Directions saved");
     } catch {
       setMessage("Could not save those directions yet.");
+      toastError("Could not save those directions");
+      throw new Error("Could not save those directions");
     } finally {
       setBusyEntryId(null);
     }
@@ -530,7 +543,10 @@ export function IngestionQueueList({
               aria-label={`Open capture ${index + 1}`}
               onClick={() => openDetail(entry._id, index + 1)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
+                if (
+                  (event.key === "Enter" || event.key === " ") &&
+                  event.target === event.currentTarget
+                ) {
                   event.preventDefault();
                   openDetail(entry._id, index + 1);
                 }
@@ -1089,7 +1105,7 @@ export function IngestionQueueList({
           busy={detailEntryId !== null && busyEntryId === detailEntryId}
           editable={Boolean(detailEditable)}
           onChangeStatus={(status) => {
-            if (detailEntryId) void changeStatus(detailEntryId, status);
+            if (detailEntryId) return changeStatus(detailEntryId, status);
           }}
           onSaveInstructions={(text) => {
             if (detailEntryId) return saveInstructions(detailEntryId, text);
