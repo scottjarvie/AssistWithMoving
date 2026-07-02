@@ -95,8 +95,7 @@ describe("hard delete cascades", () => {
       patch: {
         targetItemId: undefined,
         mediaPhotoIds: ["photo_keep"],
-        expectedMediaCount: 1,
-        mediaUploadState: "complete",
+        expectedMediaCount: 2,
         updatedAt: 100,
       },
     });
@@ -148,7 +147,7 @@ describe("hard delete cascades", () => {
       patch: {
         targetBoxId: undefined,
         mediaPhotoIds: [],
-        expectedMediaCount: 0,
+        expectedMediaCount: 1,
         updatedAt: 200,
       },
     });
@@ -187,5 +186,57 @@ describe("hard delete cascades", () => {
         patch: { archivedAt: 300, updatedAt: 300 },
       },
     ]);
+  });
+
+  it("only completes an uploading queue entry when the pruned expectation is reached", async () => {
+    const itemId = "item_1" as Id<"items">;
+    const moveId = "move_1" as Id<"moves">;
+    const { ctx, patches } = createCtx({
+      itemPhotos: [{ _id: "photo_pruned", itemId }],
+      ingestionQueueEntries: [
+        {
+          _id: "entry_still_uploading",
+          moveId,
+          status: "queued",
+          mediaPhotoIds: ["photo_pruned", "photo_keep"],
+          expectedMediaCount: 3,
+          mediaUploadState: "uploading",
+          updatedAt: 1,
+        },
+        {
+          _id: "entry_now_complete",
+          moveId,
+          status: "queued",
+          mediaPhotoIds: ["photo_pruned", "photo_keep"],
+          expectedMediaCount: 2,
+          mediaUploadState: "uploading",
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    await cascadeDeleteItem(ctx as never, {
+      moveId,
+      itemId,
+      now: 400,
+    });
+
+    expect(patches).toContainEqual({
+      id: "entry_still_uploading",
+      patch: {
+        mediaPhotoIds: ["photo_keep"],
+        expectedMediaCount: 2,
+        updatedAt: 400,
+      },
+    });
+    expect(patches).toContainEqual({
+      id: "entry_now_complete",
+      patch: {
+        mediaPhotoIds: ["photo_keep"],
+        expectedMediaCount: 1,
+        mediaUploadState: "complete",
+        updatedAt: 400,
+      },
+    });
   });
 });

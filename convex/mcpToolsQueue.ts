@@ -128,6 +128,13 @@ function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
   };
 }
 
+export function runnableQueuedEntriesForCounts(
+  entries: Doc<"ingestionQueueEntries">[],
+  now: number,
+) {
+  return entries.filter((entry) => effectiveStatus(entry, now) === "queued");
+}
+
 // ---- list_queue ------------------------------------------------------------
 export const listQueueArgs = {
   caller: mcpCallerValidator,
@@ -184,19 +191,29 @@ export const listQueue = query({
       args.moveId,
       actor,
     );
-    const rawQueued = await ctx.db
-      .query("ingestionQueueEntries")
-      .withIndex("by_move_status_order", (q) =>
-        q.eq("moveId", args.moveId).eq("status", "queued"),
-      )
-      .take(QUEUE_LIMIT);
+    const [rawQueued, rawClaimed] = await Promise.all([
+      ctx.db
+        .query("ingestionQueueEntries")
+        .withIndex("by_move_status_order", (q) =>
+          q.eq("moveId", args.moveId).eq("status", "queued"),
+        )
+        .take(QUEUE_LIMIT),
+      ctx.db
+        .query("ingestionQueueEntries")
+        .withIndex("by_move_status_order", (q) =>
+          q.eq("moveId", args.moveId).eq("status", "claimed"),
+        )
+        .take(QUEUE_LIMIT),
+    ]);
+    const runnableQueued = runnableQueuedEntriesForCounts(
+      [...rawQueued, ...rawClaimed],
+      now,
+    );
     const runnableOwners = await Promise.all(
       runnableOwnerIds.map(async (id) => {
         const owner = await ctx.db.get(id);
-        const queuedCount = rawQueued.filter(
-          (entry) =>
-            queueEntryOwnerUserId(entry) === id &&
-            effectiveStatus(entry, now) === "queued",
+        const queuedCount = runnableQueued.filter(
+          (entry) => queueEntryOwnerUserId(entry) === id,
         ).length;
         return {
           ownerUserId: id,
