@@ -56,6 +56,7 @@ export type InventoryItemPatch = {
   estimatedWeightLowLb?: number;
   estimatedWeightHighLb?: number;
   actualWeightLb?: number;
+  clearActualWeight?: boolean;
   estimatedVolumeCuFt?: number;
   estimatedPackedVolumeCuFt?: number;
   weightConfidence?: InventoryItem["weightConfidence"];

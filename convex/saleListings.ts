@@ -530,6 +530,12 @@ export const getForItem = query({
         .collect()
     ).find((entry) => !entry.archivedAt);
     if (!listing) return null;
+    if (
+      listing.householdId !== args.householdId ||
+      listing.moveId !== args.moveId
+    ) {
+      return null;
+    }
     return {
       officialPriceCents: listing.officialPriceCents ?? null,
       soldPriceCents: listing.soldPriceCents ?? null,
