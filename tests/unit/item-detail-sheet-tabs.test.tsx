@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
-import type { InventoryItem } from "@/lib/inventory-types";
+import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 
 const sheetData = vi.hoisted(() => ({
   activity: [],
@@ -98,9 +98,9 @@ const item = {
   dimensionsIn: { lengthIn: 18, widthIn: 9, heightIn: 9 },
   dimensionsConfidence: "manual",
   estimatedWeightLb: 24,
-  weightConfidence: "estimated",
+  weightConfidence: "medium",
   estimatedVolumeCuFt: 1.2,
-  volumeConfidence: "estimated",
+  volumeConfidence: "medium",
   reviewFlags: ["verify contents"],
   privateNotes: "Check the small drawer before packing.",
   aiSummary: "Photo suggests one toolbox; quantity should be verified.",
@@ -120,15 +120,22 @@ const item = {
   },
 } as unknown as InventoryItem;
 
-function renderSheet() {
+function renderSheet({
+  itemOverride,
+  onSave = vi.fn().mockResolvedValue(undefined),
+}: {
+  itemOverride?: Partial<InventoryItem>;
+  onSave?: (patch: InventoryItemPatch) => Promise<void>;
+} = {}) {
+  const renderedItem = { ...item, ...itemOverride } as InventoryItem;
   return render(
     <ItemDetailSheet
       householdId={"household_123" as Id<"households">}
       moveId={"move_123" as Id<"moves">}
-      item={item}
+      item={renderedItem}
       open
       onOpenChange={vi.fn()}
-      onSave={vi.fn()}
+      onSave={onSave}
     />
   );
 }
@@ -222,5 +229,57 @@ describe("ItemDetailSheet task tabs", () => {
         expect.objectContaining({ itemId: "item_1" }),
       );
     });
+  });
+
+  it("keeps high-confidence estimated weight as estimated on an unrelated save", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderSheet({
+      itemOverride: {
+        actualWeightLb: undefined,
+        estimatedWeightLb: 40,
+        estimatedWeightLowLb: undefined,
+        estimatedWeightHighLb: undefined,
+        weightConfidence: "high",
+      },
+      onSave,
+    });
+
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "Red toolbox updated");
+    await user.click(screen.getByRole("button", { name: "Save item" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const patch = onSave.mock.calls[0][0];
+    expect(patch).toMatchObject({ estimatedWeightLb: 40 });
+    expect(patch).not.toHaveProperty("actualWeightLb");
+    expect(patch).not.toHaveProperty("weightConfidence");
+  });
+
+  it("demotes an actual weight to an estimate when the checkbox is enabled", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderSheet({
+      itemOverride: {
+        actualWeightLb: 40,
+        estimatedWeightLb: undefined,
+        estimatedWeightLowLb: undefined,
+        estimatedWeightHighLb: undefined,
+        weightConfidence: "actual",
+      },
+      onSave,
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Measurements" }));
+    await user.click(screen.getAllByLabelText("I only have an estimate")[0]);
+    await user.click(screen.getByRole("button", { name: "Save item" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      estimatedWeightLb: 40,
+      clearActualWeight: true,
+      weightConfidence: "low",
+    });
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty("actualWeightLb");
   });
 });

@@ -235,7 +235,9 @@ function ProvenanceCard({
 function isEstimateConfidence(
   confidence: InventoryItem["weightConfidence"] | undefined,
 ): boolean {
-  return confidence === "low" || confidence === "medium";
+  return (
+    confidence === "low" || confidence === "medium" || confidence === "high"
+  );
 }
 
 export function ItemDetailSheet({
@@ -247,6 +249,13 @@ export function ItemDetailSheet({
   onSave,
   origin = "movable-units",
 }: ItemDetailSheetProps) {
+  const initialWeightIsEstimate =
+    isEstimateConfidence(item?.weightConfidence) ||
+    Boolean(item?.actualWeightLb == null && item?.estimatedWeightLb != null);
+  const initialVolumeIsEstimate = isEstimateConfidence(item?.volumeConfidence);
+  const initialDimensionsAreEstimate = isEstimateConfidence(
+    item?.dimensionsConfidence,
+  );
   const [name, setName] = useState(item?.name ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
   const [room, setRoom] = useState(item?.room ?? "");
@@ -345,14 +354,13 @@ export function ItemDetailSheet({
   // guess (stored as confidence "estimated") and the estimate extras (weight
   // range / packed volume) show; unchecked ⇒ a real measurement ("manual").
   const [weightIsEstimate, setWeightIsEstimate] = useState(
-    isEstimateConfidence(item?.weightConfidence) ||
-      Boolean(item?.actualWeightLb == null && item?.estimatedWeightLb != null)
+    initialWeightIsEstimate,
   );
   const [volumeIsEstimate, setVolumeIsEstimate] = useState(
-    isEstimateConfidence(item?.volumeConfidence)
+    initialVolumeIsEstimate,
   );
   const [dimensionsAreEstimate, setDimensionsAreEstimate] = useState(
-    isEstimateConfidence(item?.dimensionsConfidence)
+    initialDimensionsAreEstimate,
   );
   // Owner / Condition / Fragility are rarely touched — hidden behind a toggle.
   const [showAdvancedDetails, setShowAdvancedDetails] = useState(false);
@@ -674,11 +682,6 @@ export function ItemDetailSheet({
             : {}),
         serialNumber,
         modelNumber,
-        // The "this is an estimate" checkboxes drive confidence directly:
-        // an estimate is low-confidence; otherwise it's a real (actual) measure.
-        dimensionsConfidence: dimensionsAreEstimate ? "low" : "actual",
-        weightConfidence: weightIsEstimate ? "low" : "actual",
-        volumeConfidence: volumeIsEstimate ? "low" : "actual",
         reviewFlags: parseCommaList(reviewFlags),
         privateNotes,
         aiSummary,
@@ -716,7 +719,14 @@ export function ItemDetailSheet({
         patch.estimatedWeightHighLb = parsedEstimatedWeightHighLb;
       }
       if (parsedActualWeightLb !== undefined) {
-        patch.actualWeightLb = parsedActualWeightLb;
+        if (weightIsEstimate) {
+          patch.estimatedWeightLb = parsedActualWeightLb;
+        } else {
+          patch.actualWeightLb = parsedActualWeightLb;
+        }
+      }
+      if (weightIsEstimate && currentItem.actualWeightLb != null) {
+        patch.clearActualWeight = true;
       }
       if (parsedEstimatedVolumeCuFt !== undefined) {
         patch.estimatedVolumeCuFt = parsedEstimatedVolumeCuFt;
@@ -729,6 +739,33 @@ export function ItemDetailSheet({
       if (parsedHeightIn !== undefined) dimensions.heightIn = parsedHeightIn;
       if (Object.keys(dimensions).length) {
         patch.dimensionsIn = dimensions;
+      }
+      const displayedWeightLb =
+        currentItem.actualWeightLb ?? currentItem.estimatedWeightLb;
+      const weightValueChanged =
+        parsedActualWeightLb !== displayedWeightLb ||
+        parsedEstimatedWeightLowLb !== currentItem.estimatedWeightLowLb ||
+        parsedEstimatedWeightHighLb !== currentItem.estimatedWeightHighLb;
+      const dimensionsValueChanged =
+        parsedLengthIn !== currentItem.dimensionsIn?.lengthIn ||
+        parsedWidthIn !== currentItem.dimensionsIn?.widthIn ||
+        parsedHeightIn !== currentItem.dimensionsIn?.heightIn;
+      const volumeValueChanged =
+        parsedEstimatedVolumeCuFt !== currentItem.estimatedVolumeCuFt ||
+        parsedEstimatedPackedVolumeCuFt !==
+          currentItem.estimatedPackedVolumeCuFt;
+
+      if (weightIsEstimate !== initialWeightIsEstimate || weightValueChanged) {
+        patch.weightConfidence = weightIsEstimate ? "low" : "actual";
+      }
+      if (
+        dimensionsAreEstimate !== initialDimensionsAreEstimate ||
+        dimensionsValueChanged
+      ) {
+        patch.dimensionsConfidence = dimensionsAreEstimate ? "low" : "actual";
+      }
+      if (volumeIsEstimate !== initialVolumeIsEstimate || volumeValueChanged) {
+        patch.volumeConfidence = volumeIsEstimate ? "low" : "actual";
       }
 
       await onSave(patch);

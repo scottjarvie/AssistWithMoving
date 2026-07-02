@@ -111,6 +111,7 @@ const itemWriteArgs = {
   estimatedWeightLowLb: v.optional(v.number()),
   estimatedWeightHighLb: v.optional(v.number()),
   actualWeightLb: v.optional(v.number()),
+  clearActualWeight: v.optional(v.boolean()),
   estimatedVolumeCuFt: v.optional(v.number()),
   estimatedPackedVolumeCuFt: v.optional(v.number()),
   weightConfidence: v.optional(estimateConfidenceValidator),
@@ -1183,6 +1184,9 @@ export const update = mutation({
     if (args.actualWeightLb !== undefined) {
       patch.actualWeightLb = args.actualWeightLb;
     }
+    if (args.clearActualWeight) {
+      patch.actualWeightLb = undefined;
+    }
     // Recompute volume from dimensions when dims change and no explicit volume
     // was given, so updating dims via API/MCP keeps estimatedVolumeCuFt in sync.
     const itemVolumeUpdate = volumeCuFtForUpdate({
@@ -1649,11 +1653,20 @@ export const archive = mutation({
       "inventory:edit",
     );
 
+    const item = await ctx.db.get(args.itemId);
+    if (
+      !item ||
+      item.moveId !== args.moveId ||
+      item.householdId !== args.householdId
+    ) {
+      throw new ConvexError("Item not found for this move.");
+    }
+    const now = Date.now();
     await ctx.db.patch(args.itemId, {
       status: "archived",
-      deletedAt: Date.now(),
+      deletedAt: now,
       updatedByUserId: actor.type === "user" ? actor.userId : undefined,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
 
     await recordAuditEvent(ctx, {
