@@ -47,6 +47,7 @@ describe("autoAttachEntryPhotos", () => {
       ctx,
       entry({ mediaPhotoIds: ["p1", "p2"] }),
       ["item_1" as Id<"items">],
+      undefined,
       1000,
     );
     expect(n).toBe(2);
@@ -65,6 +66,7 @@ describe("autoAttachEntryPhotos", () => {
       ctx,
       entry({ mediaPhotoIds: ["p1", "p2", "p3"] }),
       ["item_1" as Id<"items">],
+      undefined,
       1000,
     );
     expect(n).toBe(1);
@@ -83,6 +85,7 @@ describe("autoAttachEntryPhotos", () => {
       ctx,
       entry({ mediaPhotoIds: ["p_foreign", "p_archived", "p_ok"] }),
       ["item_1" as Id<"items">],
+      undefined,
       1000,
     );
     expect(n).toBe(1);
@@ -97,6 +100,7 @@ describe("autoAttachEntryPhotos", () => {
     const n = await autoAttachEntryPhotos(
       ctx,
       entry({ mediaPhotoIds: ["p1"], targetSpaceId: "space_1" }),
+      undefined,
       undefined,
       1000,
     );
@@ -114,6 +118,7 @@ describe("autoAttachEntryPhotos", () => {
       ctx,
       entry({ mediaPhotoIds: ["p1"] }),
       ["item_1" as Id<"items">, "item_2" as Id<"items">],
+      undefined,
       1000,
     );
     expect(n).toBe(0);
@@ -128,6 +133,7 @@ describe("autoAttachEntryPhotos", () => {
       ctx,
       entry({ mediaPhotoIds: ["p1"] }),
       ["item_x" as Id<"items">],
+      undefined,
       1000,
     );
     expect(n).toBe(0);
@@ -139,8 +145,25 @@ describe("autoAttachEntryPhotos", () => {
       ctx,
       entry({ mediaPhotoIds: [] }),
       ["item_1" as Id<"items">],
+      undefined,
       1000,
     );
     expect(n).toBe(0);
+  });
+
+  it("attaches photos to a single result box when no result item exists", async () => {
+    const { ctx, store } = makeCtx({
+      box_1: { moveId: MOVE },
+      p1: photo(),
+    });
+    const n = await autoAttachEntryPhotos(
+      ctx,
+      entry({ mediaPhotoIds: ["p1"] }),
+      undefined,
+      ["box_1" as Id<"boxes">],
+      1000,
+    );
+    expect(n).toBe(1);
+    expect((store.get("p1") as { boxId?: string }).boxId).toBe("box_1");
   });
 });

@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -271,6 +271,7 @@ export const backfillQueueEntryPhotos = internalMutation({
         ctx,
         entry,
         entry.resultItemIds,
+        entry.resultBoxIds,
         now,
       );
     }
@@ -378,13 +379,13 @@ export async function assertCaptureStructuredRefs(
     if (!spaceId) continue;
     const space = await ctx.db.get(spaceId);
     if (!space || space.moveId !== moveId) {
-      throw new Error("That space is not part of this move.");
+      throw new ConvexError("That space is not part of this move.");
     }
   }
   if (refs.presentTransportId) {
     const transport = await ctx.db.get(refs.presentTransportId);
     if (!transport || transport.moveId !== moveId) {
-      throw new Error("That transport is not part of this move.");
+      throw new ConvexError("That transport is not part of this move.");
     }
   }
 }
@@ -952,6 +953,7 @@ export const submitResult = mutation({
     entryId: v.id("ingestionQueueEntries"),
     agentSummary: v.optional(v.string()),
     resultItemIds: v.optional(v.array(v.id("items"))),
+    resultBoxIds: v.optional(v.array(v.id("boxes"))),
     needsInputQuestion: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -979,7 +981,21 @@ export const submitResult = mutation({
           item.householdId !== args.householdId ||
           item.moveId !== args.moveId
         ) {
-          throw new Error("Result item does not belong to this move.");
+          throw new ConvexError("Result item does not belong to this move.");
+        }
+      }
+    }
+
+    if (args.resultBoxIds) {
+      for (const boxId of args.resultBoxIds) {
+        const box = await ctx.db.get(boxId);
+        if (
+          !box ||
+          box.householdId !== args.householdId ||
+          box.moveId !== args.moveId ||
+          box.archivedAt
+        ) {
+          throw new ConvexError("Result box does not belong to this move.");
         }
       }
     }
@@ -988,14 +1004,23 @@ export const submitResult = mutation({
     // follow the inventory it produced. See convex/lib/queuePhotoAttach.ts.
     const attachedPhotoCount =
       nextStatus === "processed"
-        ? await autoAttachEntryPhotos(ctx, entry, args.resultItemIds, now)
+        ? await autoAttachEntryPhotos(
+            ctx,
+            entry,
+            args.resultItemIds,
+            args.resultBoxIds,
+            now,
+          )
         : 0;
 
     await ctx.db.patch(args.entryId, {
       status: nextStatus,
       agentSummary: args.agentSummary?.trim() || undefined,
       agentQuestion: question || undefined,
-      resultItemIds: args.resultItemIds,
+      ...(args.resultItemIds !== undefined
+        ? { resultItemIds: args.resultItemIds }
+        : {}),
+      ...(args.resultBoxIds !== undefined ? { resultBoxIds: args.resultBoxIds } : {}),
       processedAt: nextStatus === "processed" ? now : undefined,
       updatedAt: now,
     });

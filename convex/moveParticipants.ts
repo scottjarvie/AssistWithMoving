@@ -22,7 +22,10 @@ import {
   type MoveParticipantType,
 } from "./lib/participants";
 import { requireMovePermission } from "./lib/permissions";
-import { queueOwnerDisplayName } from "./lib/queueAccess";
+import {
+  queueOwnerDisplayName,
+  resolveRunnableQueueOwnerIds,
+} from "./lib/queueAccess";
 import {
   canPerformHouseholdAction,
   householdRoleAtLeast,
@@ -276,50 +279,28 @@ export const queueScopes = query({
     const userId =
       policy.actor.type === "user" ? policy.actor.userId : null;
 
-    // The other people's queues this user can view + run individually (besides
-    // their own "My Queue" and, for managers, the "Everyone" aggregate).
-    //  - A manager (owner/admin) can view ANY queue on the move, so list every
-    //    person on it (household members + move participants) so they can drill
-    //    into a specific one (e.g. open just Erin's queue).
-    //  - A non-manager only gets the queues a move owner delegated to them.
-    const ownerIdSet = new Set<Id<"users">>();
-    if (userId) {
-      if (canManage) {
-        const [memberships, participants] = await Promise.all([
-          ctx.db
-            .query("householdMemberships")
-            .withIndex("by_household", (q) =>
-              q.eq("householdId", args.householdId),
-            )
-            .collect(),
-          ctx.db
-            .query("moveParticipants")
-            .withIndex("by_household_move", (q) =>
-              q.eq("householdId", args.householdId).eq("moveId", args.moveId),
-            )
-            .collect(),
-        ]);
-        for (const m of memberships) {
-          if (m.status === "active") ownerIdSet.add(m.userId);
-        }
-        for (const p of participants) {
-          if (p.status === "active" && p.userId) ownerIdSet.add(p.userId);
-        }
-      } else {
-        const participant = await ctx.db
+    const participant = userId
+      ? await ctx.db
           .query("moveParticipants")
           .withIndex("by_move_user", (q) =>
             q.eq("moveId", args.moveId).eq("userId", userId),
           )
-          .unique();
-        const ownerIds =
-          participant?.status === "active"
-            ? (participant.canRunQueueForUserIds ?? [])
-            : [];
-        for (const id of ownerIds) ownerIdSet.add(id);
-      }
-      ownerIdSet.delete(userId); // self is shown separately as "My Queue"
-    }
+          .unique()
+      : null;
+    const delegatedOwnerIds =
+      participant?.status === "active"
+        ? (participant.canRunQueueForUserIds ?? [])
+        : [];
+    const ownerIdSet = userId
+      ? new Set(
+          await resolveRunnableQueueOwnerIds(ctx, args.householdId, args.moveId, {
+            userId,
+            isManager: canManage,
+            delegatedOwnerIds,
+          }),
+        )
+      : new Set<Id<"users">>();
+    if (userId) ownerIdSet.delete(userId); // self is shown separately as "My Queue"
 
     const delegatedOwners = await Promise.all(
       [...ownerIdSet].map(async (id) => {

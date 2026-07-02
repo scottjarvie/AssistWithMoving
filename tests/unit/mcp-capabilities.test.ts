@@ -140,6 +140,18 @@ describe("MovingManifest MCP capability discovery", () => {
     );
     expect(payload.capabilities).toContainEqual(
       expect.objectContaining({
+        id: "inventory",
+        restEndpoints: expect.arrayContaining([
+          "POST /api/v1/items/:itemId/convert-to-box",
+        ]),
+        mcpTools: expect.arrayContaining([
+          "archive_item",
+          "convert_item_to_box",
+        ]),
+      }),
+    );
+    expect(payload.capabilities).toContainEqual(
+      expect.objectContaining({
         id: "photoEvidence",
         status: "available",
       })

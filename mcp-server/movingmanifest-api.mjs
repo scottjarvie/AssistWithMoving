@@ -728,6 +728,31 @@ export async function deleteItem(config, input) {
   });
 }
 
+export async function archiveItem(config, input) {
+  return await deleteItem(config, input);
+}
+
+export async function convertItemToBox(config, input) {
+  const body = { containerType: input.containerType };
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      request: {
+        method: "POST",
+        path: `/items/${input.itemId}/convert-to-box`,
+        query: { moveId: input.moveId },
+        body,
+      },
+    };
+  }
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/items/${input.itemId}/convert-to-box`,
+    query: { moveId: input.moveId },
+    body,
+  });
+}
+
 export async function listMoveSpaces(config, input) {
   return await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/spaces`,
