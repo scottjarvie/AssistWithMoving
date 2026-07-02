@@ -54,7 +54,9 @@ export async function addMoveParticipant(
   if (!grant.ok) throw new ConvexError(grant.reason);
 
   const name = params.name?.trim() || undefined;
-  const canRunQueueForUserIds = params.canRunMyQueue ? [params.actorUserId] : [];
+  const initialCanRunQueueForUserIds = params.canRunMyQueue
+    ? [params.actorUserId]
+    : [];
   const now = Date.now();
   const existingUser = await findActiveUserByEmail(ctx, email);
 
@@ -78,8 +80,6 @@ export async function addMoveParticipant(
     role: grant.role,
     accessKind: grant.accessKind,
     participantType: params.participantType,
-    agentAccessStatus: "enabled" as const,
-    canRunQueueForUserIds,
     invitedName: name,
     updatedByUserId: params.actorUserId,
     updatedByApiKeyId: params.actorApiKeyId,
@@ -92,11 +92,20 @@ export async function addMoveParticipant(
   if (existingUser) {
     status = "active";
     if (findExisting) {
+      const canRunQueueForUserIds = params.canRunMyQueue
+        ? Array.from(
+            new Set([
+              ...(findExisting.canRunQueueForUserIds ?? []),
+              params.actorUserId,
+            ]),
+          )
+        : (findExisting.canRunQueueForUserIds ?? []);
       await ctx.db.patch(findExisting._id, {
         ...baseFields,
         userId: existingUser._id,
         invitedEmail: email,
         status: "active",
+        canRunQueueForUserIds,
       });
       participantId = findExisting._id;
     } else {
@@ -105,6 +114,8 @@ export async function addMoveParticipant(
         userId: existingUser._id,
         invitedEmail: email,
         status: "active",
+        agentAccessStatus: "enabled",
+        canRunQueueForUserIds: initialCanRunQueueForUserIds,
         invitedByUserId: params.actorUserId,
         createdByUserId: params.actorUserId,
         createdByApiKeyId: params.actorApiKeyId,
@@ -132,10 +143,19 @@ export async function addMoveParticipant(
   } else {
     status = "invited";
     if (findExisting) {
+      const canRunQueueForUserIds = params.canRunMyQueue
+        ? Array.from(
+            new Set([
+              ...(findExisting.canRunQueueForUserIds ?? []),
+              params.actorUserId,
+            ]),
+          )
+        : (findExisting.canRunQueueForUserIds ?? []);
       await ctx.db.patch(findExisting._id, {
         ...baseFields,
         invitedEmail: email,
         status: "invited",
+        canRunQueueForUserIds,
       });
       participantId = findExisting._id;
     } else {
@@ -143,6 +163,8 @@ export async function addMoveParticipant(
         ...baseFields,
         invitedEmail: email,
         status: "invited",
+        agentAccessStatus: "enabled",
+        canRunQueueForUserIds: initialCanRunQueueForUserIds,
         invitedByUserId: params.actorUserId,
         createdByUserId: params.actorUserId,
         createdByApiKeyId: params.actorApiKeyId,
@@ -160,9 +182,12 @@ export async function addMoveParticipant(
       ? String(params.actorApiKeyId)
       : undefined,
     category: "household",
-    action: existingUser
-      ? "move_participant.added"
-      : "move_participant.invited",
+    action:
+      findExisting?.status === "disabled"
+        ? "move_participant.reactivated_via_invite"
+        : existingUser
+          ? "move_participant.added"
+          : "move_participant.invited",
     objectTable: "moveParticipants",
     objectId: participantId,
     metadata: {
@@ -170,7 +195,10 @@ export async function addMoveParticipant(
       role: grant.role,
       accessKind: grant.accessKind,
       participantType: params.participantType,
-      canRunQueue: canRunQueueForUserIds.length > 0,
+      canRunQueue:
+        (findExisting?.canRunQueueForUserIds?.length ?? 0) > 0 ||
+        initialCanRunQueueForUserIds.length > 0 ||
+        Boolean(params.canRunMyQueue),
     },
   });
 

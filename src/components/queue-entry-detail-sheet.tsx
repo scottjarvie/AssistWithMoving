@@ -169,7 +169,7 @@ export function QueueEntryDetailSheet({
   onOpenChange: (open: boolean) => void;
   busy: boolean;
   editable: boolean;
-  onChangeStatus: (status: "queued" | "resolved" | "discarded") => void;
+  onChangeStatus: (status: "queued" | "resolved" | "discarded") => void | Promise<void>;
   onSaveInstructions: (text: string) => void | Promise<void>;
   onAddImages: () => void;
 }) {
@@ -195,13 +195,21 @@ export function QueueEntryDetailSheet({
 
   async function handleSave() {
     setSaved(false);
-    await onSaveInstructions(draft);
-    setSaved(true);
+    try {
+      await onSaveInstructions(draft);
+      setSaved(true);
+    } catch {
+      // Parent owns the user-facing error toast.
+    }
   }
 
-  function handleTerminal(status: "queued" | "resolved" | "discarded") {
-    onChangeStatus(status);
-    onOpenChange(false);
+  async function handleTerminal(status: "queued" | "resolved" | "discarded") {
+    try {
+      await onChangeStatus(status);
+      onOpenChange(false);
+    } catch {
+      // Parent owns the user-facing error toast.
+    }
   }
 
   return (
@@ -329,7 +337,7 @@ export function QueueEntryDetailSheet({
                 size="sm"
                 variant="ghost"
                 disabled={busy}
-                onClick={() => handleTerminal("discarded")}
+                onClick={() => void handleTerminal("discarded")}
               >
                 <Trash2 aria-hidden="true" />
                 Discard
@@ -343,7 +351,7 @@ export function QueueEntryDetailSheet({
                 type="button"
                 size="sm"
                 disabled={busy}
-                onClick={() => handleTerminal("resolved")}
+                onClick={() => void handleTerminal("resolved")}
               >
                 <CheckCircle2 aria-hidden="true" />
                 Mark resolved
@@ -353,7 +361,7 @@ export function QueueEntryDetailSheet({
                 size="sm"
                 variant="outline"
                 disabled={busy}
-                onClick={() => handleTerminal("queued")}
+                onClick={() => void handleTerminal("queued")}
               >
                 <RotateCcw aria-hidden="true" />
                 Requeue
@@ -367,7 +375,7 @@ export function QueueEntryDetailSheet({
               size="sm"
               variant="outline"
               disabled={busy}
-              onClick={() => handleTerminal("queued")}
+              onClick={() => void handleTerminal("queued")}
             >
               <RotateCcw aria-hidden="true" />
               Restore

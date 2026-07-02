@@ -358,10 +358,12 @@ function ParticipantRow({
   onMessage: (message: string) => void;
 }) {
   const updateParticipant = useMutation(api.moveParticipants.update);
+  const setMyQueueDelegation = useMutation(
+    api.moveParticipants.setMyQueueDelegation,
+  );
   const setParticipantStatus = useMutation(api.moveParticipants.setStatus);
   const updateMemberRole = useMutation(api.households.updateMemberRole);
   const disableMember = useMutation(api.households.disableMember);
-  const invite = useMutation(api.moveParticipants.invite);
   const [busy, setBusy] = useState(false);
 
   const pending = person.status === "invited";
@@ -375,6 +377,11 @@ function ParticipantRow({
   const runsMyQueue =
     !!currentUserId &&
     (person.canRunQueueForUserIds ?? []).includes(currentUserId);
+  const canShareMyQueue =
+    !!currentUserId &&
+    !!person.userId &&
+    person.status === "active" &&
+    !person.isSelf;
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(true);
@@ -428,47 +435,21 @@ function ParticipantRow({
     );
   }
 
-  // Grant/revoke "let them run MY queue": add or remove the viewer's own user id
-  // from this person's canRunQueueForUserIds. Once granted, the person sees the
-  // viewer's queue in the Queue page's owner picker and can help run it.
+  // Grant/revoke "let them run MY queue": the server adds/removes only the
+  // viewer's own user id, so no client can delegate a third person's queue.
   function toggleQueueDelegation() {
-    if (!person.participantId || !currentUserId) return;
-    const existing = person.canRunQueueForUserIds ?? [];
-    const next = runsMyQueue
-      ? existing.filter((id) => id !== currentUserId)
-      : Array.from(new Set([...existing, currentUserId]));
+    if (!canShareMyQueue) return;
     void run(
       runsMyQueue
         ? `${displayName} can no longer run your queue.`
         : `${displayName} can now run your capture queue with their own AI agent.`,
       () =>
-        updateParticipant({
+        setMyQueueDelegation({
           householdId,
           moveId,
-          participantId: person.participantId!,
-          canRunQueueForUserIds: next,
-        }),
-    );
-  }
-
-  // A family member reaches this move through household access but may have no
-  // per-move participant row yet (participantId === null), and the queue-share
-  // grant lives on that row. Create it on demand via the same get-or-create the
-  // invite form uses, seeding the grant so the toggle "just works" for them too.
-  function enableQueueViaInvite() {
-    if (!currentUserId || !person.email) return;
-    void run(
-      `${displayName} can now run your capture queue with their own AI agent.`,
-      () =>
-        invite({
-          householdId,
-          moveId,
-          email: person.email!,
-          name: person.name ?? undefined,
-          participantType: "householdMember",
-          role: person.role as GrantableRole,
-          accessKind: "householdBacked",
-          canRunMyQueue: true,
+          participantId: person.participantId ?? undefined,
+          targetUserId: person.userId ?? undefined,
+          canRunMyQueue: !runsMyQueue,
         }),
     );
   }
@@ -556,58 +537,49 @@ function ParticipantRow({
         </p>
       ) : null}
 
+      {canShareMyQueue ? (
+        <div className="mt-3 rounded-md border border-border bg-muted/20 p-2.5">
+          <p className="flex items-center gap-1.5 text-xs font-medium">
+            <Bot className="size-3.5 text-primary" aria-hidden="true" />
+            Share your queue
+          </p>
+          <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+            <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <ArrowRight
+                className="mt-0.5 size-3 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <span>
+                Let {displayName} process your captures from the Queue tab with
+                their own AI agent.
+              </span>
+            </div>
+            <div className="flex flex-col items-start gap-1.5 sm:items-end">
+              <p className="text-xs text-muted-foreground">
+                {runsMyQueue
+                  ? `${displayName} can run your queue.`
+                  : `${displayName} can't run your queue yet.`}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant={runsMyQueue ? "secondary" : "outline"}
+                disabled={busy}
+                onClick={toggleQueueDelegation}
+                title="Let this person run your capture queue with their own AI agent"
+              >
+                <Bot aria-hidden="true" />
+                {runsMyQueue
+                  ? "Stop them running my queue"
+                  : "Let them run my queue"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showControls ? (
         <>
-          {person.userId && person.status === "active" ? (
-            <div className="mt-3 rounded-md border border-border bg-muted/20 p-2.5">
-              <p className="flex items-center gap-1.5 text-xs font-medium">
-                <Bot className="size-3.5 text-primary" aria-hidden="true" />
-                Capture queue
-              </p>
-              <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
-                <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                  <ArrowRight
-                    className="mt-0.5 size-3 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                  <span>
-                    <span className="font-medium text-foreground">
-                      You can run {displayName}&apos;s queue.
-                    </span>{" "}
-                    Process their captures from the Queue tab.
-                  </span>
-                </div>
-                <div className="flex flex-col items-start gap-1.5 sm:items-end">
-                  <p className="text-xs text-muted-foreground">
-                    {runsMyQueue
-                      ? `${displayName} can run your queue.`
-                      : `${displayName} can't run your queue yet.`}
-                  </p>
-                  {currentUserId &&
-                  (person.participantId || (isMember && person.email)) ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={runsMyQueue ? "secondary" : "outline"}
-                      disabled={busy}
-                      onClick={
-                        person.participantId
-                          ? toggleQueueDelegation
-                          : enableQueueViaInvite
-                      }
-                      title="Let this person run your capture queue with their own AI agent"
-                    >
-                      <Bot aria-hidden="true" />
-                      {runsMyQueue
-                        ? "Stop them running my queue"
-                        : "Let them run my queue"}
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
           <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
             {isMember || person.participantId ? (
               <select

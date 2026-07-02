@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -8,6 +9,7 @@ const apiMock = vi.hoisted(() => ({
     listForMove: "moveParticipants.listForMove",
     invite: "moveParticipants.invite",
     update: "moveParticipants.update",
+    setMyQueueDelegation: "moveParticipants.setMyQueueDelegation",
     setStatus: "moveParticipants.setStatus",
   },
   households: {
@@ -27,6 +29,23 @@ const data = vi.hoisted(() => ({
     presets: [],
     contacts: [],
     people: [
+      {
+        key: "member:self",
+        kind: "householdMember" as const,
+        participantId: null,
+        membershipId: "mem_self" as Id<"householdMemberships">,
+        userId: "user_scott" as Id<"users">,
+        name: "Scott Jarvie",
+        email: "scott@thejarvie.com",
+        imageUrl: null,
+        role: "owner" as const,
+        accessKind: "householdBacked" as const,
+        participantType: "householdMember" as const,
+        status: "active" as const,
+        agentAccessStatus: "enabled" as const,
+        canRunQueueForUserIds: [],
+        isSelf: true,
+      },
       {
         key: "member:m1",
         kind: "householdMember" as const,
@@ -76,6 +95,11 @@ vi.mock("convex/react", () => ({
 
 import { MoveParticipantsManager } from "@/components/move-participants-manager";
 
+beforeEach(() => {
+  data.mutation.mockReset();
+  data.mutation.mockResolvedValue(undefined);
+});
+
 describe("MoveParticipantsManager", () => {
   const householdId = "household_123" as Id<"households">;
   const moveId = "move_123" as Id<"moves">;
@@ -98,8 +122,27 @@ describe("MoveParticipantsManager", () => {
     // pending mover (this move only).
     expect(screen.getByText("Erin Jarvie")).toBeInTheDocument();
     expect(screen.getByText("ACME Movers")).toBeInTheDocument();
-    expect(screen.getByText("All your moves")).toBeInTheDocument();
+    expect(screen.getAllByText("All your moves").length).toBeGreaterThan(0);
     expect(screen.getByText("This move only")).toBeInTheDocument();
     expect(screen.getByText("Invited")).toBeInTheDocument();
+  });
+
+  it("shares only the viewer's own queue through the consent mutation", async () => {
+    const user = userEvent.setup();
+    render(
+      <MoveParticipantsManager householdId={householdId} moveId={moveId} />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Let them run my queue" }),
+    );
+
+    expect(data.mutation).toHaveBeenCalledWith({
+      householdId,
+      moveId,
+      participantId: undefined,
+      targetUserId: "user_erin",
+      canRunMyQueue: true,
+    });
   });
 });

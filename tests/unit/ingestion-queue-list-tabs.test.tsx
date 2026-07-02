@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 
@@ -26,6 +26,11 @@ const queueData = vi.hoisted(() => ({
   mutation: vi.fn(),
 }));
 
+const toastMock = vi.hoisted(() => ({
+  toastSaved: vi.fn(),
+  toastError: vi.fn(),
+}));
+
 // The list reads live background-upload jobs from the media-upload provider.
 // Stub the hook so we control jobsForEntry / pendingCountForEntry per entry and
 // the component never needs the real provider mounted.
@@ -48,6 +53,8 @@ vi.mock("../../convex/_generated/api", () => ({
 vi.mock("@/components/media-upload-provider", () => ({
   useMediaUpload: () => uploadStub,
 }));
+
+vi.mock("@/lib/toast", () => toastMock);
 
 vi.mock("convex/react", () => ({
   useMutation: () => queueData.mutation,
@@ -133,6 +140,15 @@ vi.mock("convex/react", () => ({
 }));
 
 import { IngestionQueueList } from "@/components/ingestion-queue-list";
+
+beforeEach(() => {
+  queueData.mutation.mockReset();
+  queueData.mutation.mockResolvedValue(undefined);
+  toastMock.toastSaved.mockReset();
+  toastMock.toastError.mockReset();
+  uploadStub.pendingCountForEntry.mockReturnValue(0);
+  uploadStub.jobsForEntry.mockReturnValue([] as unknown[]);
+});
 
 describe("IngestionQueueList tabs view", () => {
   it("separates needs-action, working, and archived entries", async () => {
@@ -393,6 +409,49 @@ describe("IngestionQueueList detail modal (MOVE-356)", () => {
     // the row's detail modal.
     await user.click(screen.getByRole("button", { name: "Add images" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not hijack Space from inline edit controls", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Answer & requeue" }));
+    const textarea = screen.getByLabelText("Edit directions");
+    await user.clear(textarea);
+    await user.type(textarea, "Garage shelf");
+
+    expect(textarea).toHaveValue("Garage shelf");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not show saved state when detail save fails", async () => {
+    const user = userEvent.setup();
+    queueData.mutation.mockRejectedValueOnce(new Error("network"));
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open capture 1" }));
+    const dialog = screen.getByRole("dialog");
+    const textarea = within(dialog).getByLabelText("Directions");
+    await user.clear(textarea);
+    await user.type(textarea, "Garage shelf");
+    await user.click(within(dialog).getByRole("button", { name: "Save directions" }));
+
+    expect(within(dialog).queryByText("Directions saved.")).not.toBeInTheDocument();
+    expect(toastMock.toastError).toHaveBeenCalledWith(
+      "Could not save those directions",
+    );
   });
 });
 
