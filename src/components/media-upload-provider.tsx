@@ -419,7 +419,9 @@ export function MediaUploadProvider({
       // so the runJob catch never runs to release the entry. Do it here so a
       // never-started capture isn't stranded 'uploading'. (uploading/finalizing
       // dismisses abort the PUT and are released by the catch; an 'error' job's
-      // entry is already 'failed'.)
+      // failure is either already written or deferred in
+      // deferredFailedJobIdsByEntryRef, and the id survives dismissal so the
+      // last sibling still flushes the failed rollup.)
       if (job?.status === "queued") {
         void markEntryFailedWhenTerminal(job, depsRef.current);
       }

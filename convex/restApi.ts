@@ -7101,6 +7101,7 @@ export function setupMovePatch(
   body: Record<string, unknown>,
   notes: string | undefined,
 ): Partial<Doc<"moves">> {
+  const notesPatch = body.notes === null && notes === undefined ? null : notes;
   const patch = buildMovePatch(
     {
       title: body.title,
@@ -7114,7 +7115,7 @@ export function setupMovePatch(
       ...(body.notes !== undefined ||
       body.originRooms !== undefined ||
       body.destinationRooms !== undefined
-        ? { notes }
+        ? { notes: notesPatch }
         : {}),
     },
     { archivedStatusMessage: setupArchiveMessage },
@@ -8793,6 +8794,7 @@ function positiveNumber(value: unknown) {
 
 export function createMoveWeightAllowanceLb(value: unknown) {
   if (value === undefined) return undefined;
+  if (value === null) return undefined;
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return value;
   }

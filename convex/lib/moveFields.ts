@@ -401,7 +401,10 @@ function patchText(
 }
 
 function patchRequiredTitle(value: unknown, error: (message: string) => Error) {
-  const title = String(value).trim();
+  if (typeof value !== "string") {
+    throw error("title must be a string.");
+  }
+  const title = value.trim();
   if (!title) throw error("title cannot be empty.");
   return title.slice(0, 2000);
 }
@@ -488,7 +491,12 @@ export function buildMovePatch(
   if (input.dateEnd !== undefined) {
     patch.dateEnd = patchText(input.dateEnd, "dateEnd", error);
   }
-  if (input.notes !== undefined) patch.notes = patchText(input.notes, "notes", error);
+  if (input.notes !== undefined) {
+    const notes = patchText(input.notes, "notes", error);
+    if (input.notes === null || notes !== undefined) {
+      patch.notes = notes;
+    }
+  }
   if (input.documentationProfileTypes !== undefined) {
     patch.documentationProfileTypes = patchDocumentationProfiles(
       input.documentationProfileTypes,
