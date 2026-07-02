@@ -606,6 +606,7 @@ export function BoxLookup({
               toastSaved(saved);
             }}
             onCancel={() => setEditingPlacement(false)}
+            message={message}
             onMessage={setMessage}
           />
         ) : (
@@ -793,6 +794,7 @@ function PlacementEditor({
   moveId,
   onSaved,
   onCancel,
+  message,
   onMessage,
 }: {
   box: Doc<"boxes">;
@@ -805,6 +807,7 @@ function PlacementEditor({
   moveId: Id<"moves">;
   onSaved: (message: string) => void;
   onCancel: () => void;
+  message: string | null;
   onMessage: (message: string | null) => void;
 }) {
   const updateBox = useMutation(api.boxes.update);
@@ -823,6 +826,10 @@ function PlacementEditor({
   const [overrideReason, setOverrideReason] = useState("");
   const [needsOverride, setNeedsOverride] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Mirrors the page-level message, but rendered right next to the field —
+  // the shared banner lives at the top of a long page and is easy to miss
+  // once you've scrolled down to Present location (MOVE-362).
+  const [formError, setFormError] = useState<string | null>(null);
 
   const selectClass =
     "h-9 w-full rounded-md border border-border bg-background px-2 text-sm";
@@ -837,9 +844,11 @@ function PlacementEditor({
     : spaceId
       ? `space:${spaceId}`
       : "";
+  const visibleFormError = message === null ? null : formError;
   function onPresentChange(value: string) {
     setNeedsOverride(false);
     setOverrideReason("");
+    setFormError(null);
     if (value.startsWith("space:")) {
       setSpaceId(value.slice("space:".length));
       setResourceId("");
@@ -859,6 +868,7 @@ function PlacementEditor({
     event.preventDefault();
     setSaving(true);
     onMessage(null);
+    setFormError(null);
     const reason = overrideReason.trim();
     try {
       await updateBox({
@@ -908,6 +918,7 @@ function PlacementEditor({
       ) {
         setNeedsOverride(true);
       }
+      setFormError(messageText);
       onMessage(messageText);
     } finally {
       setSaving(false);
@@ -993,6 +1004,17 @@ function PlacementEditor({
                 </option>
               ))}
             </select>
+          ) : null}
+          {visibleFormError ? (
+            <p
+              className={`mt-2 rounded-md border px-2 py-1.5 text-xs ${
+                needsOverride
+                  ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                  : "border-destructive/40 bg-destructive/10 text-destructive"
+              }`}
+            >
+              {visibleFormError}
+            </p>
           ) : null}
           {needsOverride ? (
             <Input

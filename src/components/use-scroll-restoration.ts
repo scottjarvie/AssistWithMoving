@@ -12,9 +12,9 @@ import { useEffect, useRef } from "react";
 // saved offset. The app scrolls the window (the shell's <main> has no inner
 // scroll container), so window.scrollY/scrollTo is the right target.
 // sessionStorage survives the in-app round-trip but resets on a fresh tab.
-export function useScrollRestoration(ready: boolean) {
+export function useScrollRestoration(ready: boolean, scopeKey?: string) {
   const pathname = usePathname();
-  const storageKey = `scroll-restore:${pathname}`;
+  const storageKey = `scroll-restore:${pathname}:${scopeKey ?? ""}`;
   const restoredRef = useRef(false);
   // Saving is gated OFF until restoration has run. Without this, the browser's
   // scroll-to-top when the list remounts fires a scroll event that overwrites

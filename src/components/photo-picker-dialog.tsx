@@ -29,6 +29,15 @@ export type PhotoPickerTarget =
   | { kind: "item"; itemId: Id<"items"> }
   | { kind: "box"; boxId: Id<"boxes"> };
 
+type PhotoPickerDialogBodyProps = {
+  householdId: Id<"households"> | null;
+  moveId: Id<"moves"> | null;
+  target: PhotoPickerTarget;
+  targetLabel?: string;
+  onOpenChange: (open: boolean) => void;
+  onAttached?: () => void;
+};
+
 function attachmentLabel(photo: MovePhoto): string | null {
   if (photo.itemId) return "Item";
   if (photo.boxId) return "Box";
@@ -55,12 +64,34 @@ export function PhotoPickerDialog({
   onOpenChange: (open: boolean) => void;
   onAttached?: () => void;
 }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <PhotoPickerDialogBody
+          householdId={householdId}
+          moveId={moveId}
+          target={target}
+          targetLabel={targetLabel}
+          onOpenChange={onOpenChange}
+          onAttached={onAttached}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function PhotoPickerDialogBody({
+  householdId,
+  moveId,
+  target,
+  targetLabel,
+  onOpenChange,
+  onAttached,
+}: PhotoPickerDialogBodyProps) {
   // Only fetch the move's photo wall while the picker is actually open.
   const photos = useQuery(
     api.photos.listForMove,
-    householdId && moveId && open
-      ? { householdId, moveId, limit: 250 }
-      : "skip",
+    householdId && moveId ? { householdId, moveId, limit: 250 } : "skip",
   );
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
   const updateEvidence = useMutation(api.photos.updateEvidence);
@@ -78,7 +109,15 @@ export function PhotoPickerDialog({
           ? photo.itemId === target.itemId
           : photo.boxId === target.boxId;
       if (alreadyHere) return false;
-      if (unattachedOnly) return !photo.itemId && !photo.boxId && !photo.room;
+      if (unattachedOnly) {
+        return (
+          !photo.itemId &&
+          !photo.boxId &&
+          !photo.room &&
+          !photo.spaceId &&
+          !photo.transportResourceId
+        );
+      }
       return true;
     });
   }, [photos, unattachedOnly, target]);
@@ -129,10 +168,11 @@ export function PhotoPickerDialog({
         moveId,
         photoId,
         ...(target.kind === "item"
-          ? { itemId: target.itemId }
-          : { boxId: target.boxId }),
+          ? { itemId: target.itemId, boxId: null }
+          : { boxId: target.boxId, itemId: null }),
       });
       onAttached?.();
+      setAttachingId(null);
       onOpenChange(false);
     } catch (caught) {
       setError(
@@ -143,94 +183,92 @@ export function PhotoPickerDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader className="pr-12">
-          <DialogTitle>Choose an existing photo</DialogTitle>
-          <DialogDescription>
-            Reuse a photo already in this move
-            {targetLabel ? ` for ${targetLabel}` : ""}.
-          </DialogDescription>
-        </DialogHeader>
+    <DialogContent className="sm:max-w-2xl">
+      <DialogHeader className="pr-12">
+        <DialogTitle>Choose an existing photo</DialogTitle>
+        <DialogDescription>
+          Reuse a photo already in this move
+          {targetLabel ? ` for ${targetLabel}` : ""}.
+        </DialogDescription>
+      </DialogHeader>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-4">
-          <label className="flex w-fit items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="size-3.5 accent-primary"
-              checked={unattachedOnly}
-              onChange={(event) => setUnattachedOnly(event.target.checked)}
-            />
-            Unattached only
-          </label>
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-4">
+        <label className="flex w-fit items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-3.5 accent-primary"
+            checked={unattachedOnly}
+            onChange={(event) => setUnattachedOnly(event.target.checked)}
+          />
+          Unattached only
+        </label>
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-          {photos === undefined ? (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="aspect-square animate-pulse rounded-md border border-border bg-muted"
-                />
-              ))}
-            </div>
-          ) : visible.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border p-6 text-sm leading-6 text-muted-foreground">
-              {unattachedOnly
-                ? "No unattached photos — every photo is already filed. Switch off “Unattached only” to reuse any photo in the move."
-                : "No other photos in this move yet."}
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {visible.map((photo) => {
-                const url = urls[photo._id];
-                const label = attachmentLabel(photo);
-                const busy = attachingId === photo._id;
-                return (
-                  <button
-                    key={photo._id}
-                    type="button"
-                    disabled={attachingId !== null}
-                    onClick={() => void attach(photo._id)}
-                    className="group relative aspect-square overflow-hidden rounded-md border border-border bg-muted transition-opacity hover:opacity-90 disabled:opacity-60"
-                    aria-label="Attach this photo"
-                  >
-                    {url ? (
-                      // B2/edge delivery URLs are short-lived and provider-
-                      // controlled, so Next image optimization is bypassed.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={url} alt="" className="size-full object-cover" />
+        {photos === undefined ? (
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={index}
+                className="aspect-square animate-pulse rounded-md border border-border bg-muted"
+              />
+            ))}
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border p-6 text-sm leading-6 text-muted-foreground">
+            {unattachedOnly
+              ? "No unattached photos — every photo is already filed. Switch off “Unattached only” to reuse any photo in the move."
+              : "No other photos in this move yet."}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {visible.map((photo) => {
+              const url = urls[photo._id];
+              const label = attachmentLabel(photo);
+              const busy = attachingId === photo._id;
+              return (
+                <button
+                  key={photo._id}
+                  type="button"
+                  disabled={attachingId !== null}
+                  onClick={() => void attach(photo._id)}
+                  className="group relative aspect-square overflow-hidden rounded-md border border-border bg-muted transition-opacity hover:opacity-90 disabled:opacity-60"
+                  aria-label="Attach this photo"
+                >
+                  {url ? (
+                    // B2/edge delivery URLs are short-lived and provider-
+                    // controlled, so Next image optimization is bypassed.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt="" className="size-full object-cover" />
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-muted-foreground">
+                      <ImageOff className="size-5" aria-hidden="true" />
+                    </div>
+                  )}
+                  {label ? (
+                    <Badge
+                      variant="secondary"
+                      className="absolute left-1 top-1 px-1 py-0 text-[0.6rem]"
+                    >
+                      {label}
+                    </Badge>
+                  ) : null}
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    {busy ? (
+                      <Loader2 className="size-5 animate-spin" aria-hidden="true" />
                     ) : (
-                      <div className="flex size-full items-center justify-center text-muted-foreground">
-                        <ImageOff className="size-5" aria-hidden="true" />
-                      </div>
+                      <>
+                        <Check className="size-4" aria-hidden="true" />
+                        Attach
+                      </>
                     )}
-                    {label ? (
-                      <Badge
-                        variant="secondary"
-                        className="absolute left-1 top-1 px-1 py-0 text-[0.6rem]"
-                      >
-                        {label}
-                      </Badge>
-                    ) : null}
-                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      {busy ? (
-                        <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <>
-                          <Check className="size-4" aria-hidden="true" />
-                          Attach
-                        </>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </DialogContent>
   );
 }

@@ -50,9 +50,10 @@ export const listForHousehold = query({
 });
 
 // Active household-member count for a move's results summary (MOVE-310).
-// Move-scoped (any move viewer can read it) and counts true household
-// membership — NOT movePeople (move contacts) or moveParticipants (per-move
-// access records), which are separate concepts.
+// Deliberately move-scoped: moveOnly viewers can see this bounded count, but
+// not the underlying household member records. Counts true household membership
+// — NOT movePeople (move contacts) or moveParticipants (per-move access
+// records), which are separate concepts.
 export const householdMemberCount = query({
   args: {
     householdId: v.id("households"),

@@ -14,6 +14,15 @@ const sheetData = vi.hoisted(() => ({
       role: "owner",
     },
   ],
+  transport: [
+    {
+      resource: {
+        _id: "transport_1",
+        name: "Rental truck",
+      },
+      zones: [],
+    },
+  ],
   convert: vi.fn(),
 }));
 
@@ -45,7 +54,9 @@ vi.mock("convex/react", () => ({
     if (args === "skip") return undefined;
     if (query === "audit.listForObject") return sheetData.activity;
     if (query === "movePeople.listForMove") return sheetData.people;
-    // moveSpaces.listForMove + transportResources.listForMoveWithZones — empty here.
+    if (query === "transportResources.listForMoveWithZones")
+      return sheetData.transport;
+    // moveSpaces.listForMove is empty here.
     return [];
   }),
   useMutation: () => sheetData.convert,
@@ -209,6 +220,28 @@ describe("ItemDetailSheet task tabs", () => {
     expect(
       screen.queryByRole("button", { name: "Mark sold" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps transport visible for leaving-inventory items that are still assigned", () => {
+    renderSheet({
+      itemOverride: {
+        disposition: "sell",
+        assignedResourceId: "transport_1" as Id<"transportResources">,
+      },
+    });
+
+    expect(
+      screen.queryByLabelText("Origination space"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Destination space"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Transportation method")).toHaveValue(
+      "transport:transport_1",
+    );
+    expect(
+      screen.getByText(/still assigned to transport/),
+    ).toBeInTheDocument();
   });
 
   it("converts a misclassified item into a numbered box after confirming", async () => {

@@ -1,9 +1,6 @@
 // Shared sort spec for every inventory-style list (Spaces & Transport detail,
 // Items page, Movable Units). The goal is ONE source of truth for the option
-// labels + the comparison rules so the three surfaces never drift. Two surfaces
-// (Spaces & Transport, Movable Units) sort a plain array with `compareBy`; the
-// Items page is a tanstack table, so it maps a preset to a SortingState via
-// `toTanstackSorting`.
+// labels + the comparison rules so the three surfaces never drift.
 
 export type SortFieldId =
   | "added"
@@ -124,28 +121,5 @@ export function compareBy(
       return (a, b) =>
         kindRank("itemNumber", a.kind) - kindRank("itemNumber", b.kind) ||
         byCode(a, b);
-  }
-}
-
-// Map a preset to a tanstack SortingState for the Items page (single-kind, so
-// the box/item pinning is moot there — both code presets just sort by code).
-// The accessor column ids must exist on that table.
-export function toTanstackSorting(
-  field: SortFieldId,
-): { id: string; desc: boolean }[] {
-  switch (field) {
-    case "added":
-      return [{ id: "createdAt", desc: true }];
-    case "alpha":
-      return [{ id: "name", desc: false }];
-    case "weight":
-      return [{ id: "weight", desc: true }];
-    case "volume":
-      return [{ id: "volume", desc: true }];
-    case "density":
-      return [{ id: "density", desc: true }];
-    case "boxNumber":
-    case "itemNumber":
-      return [{ id: "code", desc: false }];
   }
 }

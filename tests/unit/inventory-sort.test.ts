@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   compareBy,
   type SortableEntry,
-  toTanstackSorting,
 } from "@/lib/inventory-sort";
 
 function e(partial: Partial<SortableEntry> & { name: string }): SortableEntry {
@@ -84,17 +83,5 @@ describe("compareBy", () => {
       e({ kind: "item", name: "item-2", code: "I-2" }),
     ];
     expect(sortNames(list, "itemNumber")).toEqual(["item-2", "item-10", "box"]);
-  });
-});
-
-describe("toTanstackSorting", () => {
-  it("maps presets to accessor column ids (descending where natural)", () => {
-    expect(toTanstackSorting("added")).toEqual([{ id: "createdAt", desc: true }]);
-    expect(toTanstackSorting("alpha")).toEqual([{ id: "name", desc: false }]);
-    expect(toTanstackSorting("weight")).toEqual([{ id: "weight", desc: true }]);
-    expect(toTanstackSorting("volume")).toEqual([{ id: "volume", desc: true }]);
-    expect(toTanstackSorting("density")).toEqual([{ id: "density", desc: true }]);
-    expect(toTanstackSorting("boxNumber")).toEqual([{ id: "code", desc: false }]);
-    expect(toTanstackSorting("itemNumber")).toEqual([{ id: "code", desc: false }]);
   });
 });
