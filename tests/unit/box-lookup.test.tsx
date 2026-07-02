@@ -29,6 +29,11 @@ const lookupData = vi.hoisted(() => ({
   mutations: {
     updateBox: vi.fn(),
   },
+  auth: {
+    isLoading: false,
+    isAuthenticated: true,
+  },
+  queryCalls: [] as Array<{ query: string; args: unknown }>,
   boxRecord: {
     box: {
       _id: "box_12" as Id<"boxes">,
@@ -100,7 +105,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("convex/react", () => ({
   useMutation: (mutation: string) =>
     mutation === apiMock.boxes.update ? lookupData.mutations.updateBox : vi.fn(),
-  useQuery: (query: string) => {
+  useQuery: (query: string, args: unknown) => {
+    lookupData.queryCalls.push({ query, args });
     switch (query) {
       case apiMock.boxes.get:
         return lookupData.boxRecord;
@@ -117,6 +123,7 @@ vi.mock("convex/react", () => ({
         return undefined;
     }
   },
+  useConvexAuth: () => lookupData.auth,
   useAction: () => vi.fn().mockResolvedValue({ url: "" }),
 }));
 
@@ -147,6 +154,9 @@ function renderBoxLookup() {
 describe("BoxLookup", () => {
   beforeEach(() => {
     lookupData.mutations.updateBox.mockReset();
+    lookupData.auth.isLoading = false;
+    lookupData.auth.isAuthenticated = true;
+    lookupData.queryCalls.length = 0;
   });
 
   it("builds an assistant handoff that targets the existing rough box", () => {
@@ -185,6 +195,41 @@ describe("BoxLookup", () => {
     expect(
       screen.queryByText("Paste this into your assistant"),
     ).not.toBeInTheDocument();
+  });
+
+  it("waits for auth before issuing protected box queries", () => {
+    lookupData.auth.isLoading = true;
+    lookupData.auth.isAuthenticated = false;
+
+    const { container } = renderBoxLookup();
+
+    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    expect(lookupData.queryCalls).toEqual(
+      expect.arrayContaining([
+        { query: apiMock.boxes.get, args: "skip" },
+        { query: apiMock.transportResources.listForMoveWithZones, args: "skip" },
+        { query: apiMock.moveSpaces.listForMove, args: "skip" },
+        { query: apiMock.photos.listForMove, args: "skip" },
+      ]),
+    );
+  });
+
+  it("shows sign-in copy instead of querying when auth is settled out", () => {
+    lookupData.auth.isLoading = false;
+    lookupData.auth.isAuthenticated = false;
+
+    renderBoxLookup();
+
+    expect(screen.getByText("Sign in required")).toBeInTheDocument();
+    expect(screen.getByText("Sign in before opening this unit lookup.")).toBeInTheDocument();
+    expect(lookupData.queryCalls).toEqual(
+      expect.arrayContaining([
+        { query: apiMock.boxes.get, args: "skip" },
+        { query: apiMock.transportResources.listForMoveWithZones, args: "skip" },
+        { query: apiMock.moveSpaces.listForMove, args: "skip" },
+        { query: apiMock.photos.listForMove, args: "skip" },
+      ]),
+    );
   });
 
   it("reveals the size editor only after clicking size, then saves", async () => {
