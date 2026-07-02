@@ -10,6 +10,7 @@
 // Convex mutations (convex/ingestionQueue.ts web twin + convex/mcpToolsQueue.ts
 // gateway twin) both call them so the two surfaces can't drift.
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 // A friendly label for a queue owner shown in the picker / agent list. Prefers
 // the real display name; falls back to the email's capitalized local part (so it
@@ -93,4 +94,47 @@ export function canViewQueueEntry(input: {
     ownerUserId: input.ownerUserId,
     delegatedOwnerIds: input.delegatedOwnerIds,
   });
+}
+
+/**
+ * Every user whose queue this actor may run on the move. Managers get every
+ * active household/member participant; non-managers get only their own queue
+ * plus owner IDs explicitly delegated to them.
+ */
+export async function resolveRunnableQueueOwnerIds(
+  ctx: QueryCtx | MutationCtx,
+  householdId: Id<"households">,
+  moveId: Id<"moves">,
+  actor: {
+    userId: Id<"users">;
+    isManager: boolean;
+    delegatedOwnerIds: Id<"users">[];
+  },
+): Promise<Id<"users">[]> {
+  const ids = new Set<Id<"users">>([actor.userId]);
+  if (actor.isManager) {
+    const [memberships, participants] = await Promise.all([
+      ctx.db
+        .query("householdMemberships")
+        .withIndex("by_household", (q) => q.eq("householdId", householdId))
+        .collect(),
+      ctx.db
+        .query("moveParticipants")
+        .withIndex("by_household_move", (q) =>
+          q.eq("householdId", householdId).eq("moveId", moveId),
+        )
+        .collect(),
+    ]);
+    for (const membership of memberships) {
+      if (membership.status === "active") ids.add(membership.userId);
+    }
+    for (const participant of participants) {
+      if (participant.status === "active" && participant.userId) {
+        ids.add(participant.userId);
+      }
+    }
+  } else {
+    for (const id of actor.delegatedOwnerIds) ids.add(id);
+  }
+  return [...ids];
 }

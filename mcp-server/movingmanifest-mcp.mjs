@@ -8,6 +8,7 @@ import {
   addItemFromPhoto,
   addItemsToBox,
   applyAssignments,
+  archiveItem,
   batchUpsertItems,
   attachPhoto,
   archiveMovePerson,
@@ -63,6 +64,7 @@ import {
   planSnapshot,
   planSummary,
   plansList,
+  convertItemToBox,
   convertPlannedItem,
   removeItemFromBox,
   rejectAiPhotoSuggestions,
@@ -1017,14 +1019,14 @@ export function registerTools(target, apiConfig, options = {}) {
       title: z.string().optional(),
       updateExisting: z.boolean().optional(),
       type: z.string().optional(),
-      status: z.string().optional(),
+      status: z.enum(["planning", "active", "completed"]).optional(),
       origin: z.string().optional(),
       destination: z.string().optional(),
       dateStart: z.string().optional(),
       dateEnd: z.string().optional(),
       unitSystem: z.enum(["imperial", "metric"]).optional(),
-      documentationProfileTypes: z.array(z.string()).optional(),
-      moveLevelWeightAllowanceLb: z.number().positive().optional(),
+      documentationProfileTypes: z.array(documentationProfileTypeSchema).optional(),
+      moveLevelWeightAllowanceLb: z.number().positive().nullable().optional(),
       notes: z.string().optional(),
       originRooms: z.array(z.string()).optional(),
       destinationRooms: z.array(z.string()).optional(),
@@ -1054,11 +1056,11 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "update_move", {
     title: "Update move",
     description:
-      "Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), and travel time (minutes). Distance + travel time are user- or agent-entered (no maps integration). Pass null to clear distance/travel. Requires a household-scoped key with moves/write.",
+      "Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), travel time (minutes), notes, documentation profiles, and official weight allowance. Distance, travel time, and allowance can be null to clear. Requires a household-scoped key with moves/write.",
     inputSchema: {
       moveId: z.string().describe("MovingManifest move id to update."),
       title: z.string().optional(),
-      status: z.string().optional(),
+      status: z.enum(["planning", "active", "completed"]).optional(),
       origin: z.string().optional(),
       destination: z.string().optional(),
       dateStart: z.string().optional(),
@@ -1076,8 +1078,8 @@ export function registerTools(target, apiConfig, options = {}) {
         .optional()
         .describe("Driving time in minutes. null clears it."),
       notes: z.string().optional(),
-      documentationProfileTypes: z.array(z.string()).optional(),
-      moveLevelWeightAllowanceLb: z.number().positive().optional(),
+      documentationProfileTypes: z.array(documentationProfileTypeSchema).optional(),
+      moveLevelWeightAllowanceLb: z.number().positive().nullable().optional(),
       idempotencyKey: z.string().optional(),
       dryRun: z.boolean().optional(),
     },
@@ -1334,6 +1336,41 @@ export function registerTools(target, apiConfig, options = {}) {
     },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     handler: (input) => deleteItem(apiConfig, input),
+  });
+
+  registerTool(target, "archive_item", {
+    title: "Archive item",
+    description:
+      "Soft-archive one inventory item. Alias for delete_item using MovingManifest's archive language. Set dryRun true to preview the request without writing.",
+    inputSchema: {
+      moveId: z.string(),
+      itemId: z.string(),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (input) => archiveItem(apiConfig, input),
+  });
+
+  registerTool(target, "convert_item_to_box", {
+    title: "Convert item to box",
+    description:
+      "Convert an inventory item that was mistakenly captured as a container into a real MovingManifest box. Use this for totes, crates, bins, cartons, wardrobe boxes, and dish packs that should hold other items.",
+    inputSchema: {
+      moveId: z.string(),
+      itemId: z.string(),
+      containerType: z.enum([
+        "carton",
+        "plasticTote",
+        "bin",
+        "wardrobe",
+        "dishPack",
+        "crate",
+        "other",
+      ]),
+      dryRun: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => convertItemToBox(apiConfig, input),
   });
 
   registerTool(target, "list_move_spaces", {

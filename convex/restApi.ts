@@ -50,8 +50,10 @@ import {
   parseManagedHouseholdMemberRole,
 } from "./lib/householdMembers";
 import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
+import { convertItemToBoxCore } from "./boxes";
 import {
   boxStatuses,
+  buildMovePatch,
   documentationProfileTypes,
   defaultDocumentationProfilesForMoveType,
   exifHandlingStatuses,
@@ -138,6 +140,15 @@ import {
 } from "./rest/documentationProfiles";
 
 const restMoveStatuses = ["planning", "active", "completed", "archived"] as const;
+const boxContainerTypes = [
+  "carton",
+  "plasticTote",
+  "bin",
+  "wardrobe",
+  "dishPack",
+  "crate",
+  "other",
+] as const;
 const restExportJobTypes = [
   "inventory",
   "boxes",
@@ -532,7 +543,7 @@ async function routeRequest(
     return await routeTopLevelExport(ctx, args, auth, moveIdSegment);
   }
   if (resource === "items") {
-    return await routeTopLevelItem(ctx, args, auth, moveIdSegment);
+    return await routeTopLevelItem(ctx, args, auth, moveIdSegment, nested, nestedId);
   }
   if (resource === "boxes") {
     return await routeTopLevelBox(ctx, args, auth, moveIdSegment, nested, nestedId);
@@ -5878,7 +5889,9 @@ async function routeTopLevelItem(
   ctx: MutationCtx,
   args: RestRequestInput,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
-  itemIdSegment?: string
+  itemIdSegment?: string,
+  actionSegment?: string,
+  extraSegment?: string,
 ) {
   if (!itemIdSegment) {
     return restError({ status: 404, code: "not_found", message: "Item not found." });
@@ -5886,6 +5899,28 @@ async function routeTopLevelItem(
   const item = await requireApiItemById(ctx, auth.householdId, itemIdSegment);
   assertApiObjectMoveAccess(auth, item.moveId);
   assertRequestedMoveMatches(args, item.moveId, "Item not found.");
+
+  if (args.method === "POST" && actionSegment === "convert-to-box" && !extraSegment) {
+    const body = bodyObject(args.body);
+    const containerType = parseBoxContainerType(body.containerType);
+    const result = await convertItemToBoxCore(
+      ctx,
+      item,
+      containerType,
+      auth.createdByUserId,
+      Date.now(),
+      "agent",
+    );
+    return restOk({ data: result }, 201);
+  }
+
+  if (actionSegment) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Item route not found.",
+    });
+  }
 
   if (args.method === "GET") {
     return restOk({ data: safeItem(item, auth.visibility) });
@@ -8020,58 +8055,7 @@ function rowsForExport({
 }
 
 export function movePatch(body: unknown): Partial<Doc<"moves">> {
-  const input = bodyObject(body);
-  const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
-  if (input.title !== undefined) patch.title = String(input.title).trim();
-  if (input.status !== undefined) patch.status = parseMoveStatus(input.status);
-  if (input.origin !== undefined) patch.origin = normalizeOptionalText(asString(input.origin));
-  if (input.destination !== undefined) {
-    patch.destination = normalizeOptionalText(asString(input.destination));
-  }
-  if (input.dateStart !== undefined) patch.dateStart = normalizeOptionalText(asString(input.dateStart));
-  if (input.dateEnd !== undefined) patch.dateEnd = normalizeOptionalText(asString(input.dateEnd));
-  // Driving distance + travel time (MOVE-308): user- or agent-entered, no maps
-  // API. null clears the value; a non-negative number sets it.
-  if (input.distanceMiles !== undefined) {
-    if (input.distanceMiles === null) {
-      patch.distanceMiles = undefined;
-    } else {
-      const distance = optionalNumber(input.distanceMiles);
-      if (distance === undefined || distance < 0) {
-        throw new Error("distanceMiles must be a non-negative number.");
-      }
-      patch.distanceMiles = distance;
-    }
-  }
-  if (input.travelMinutes !== undefined) {
-    if (input.travelMinutes === null) {
-      patch.travelMinutes = undefined;
-    } else {
-      const travel = optionalNumber(input.travelMinutes);
-      if (travel === undefined || travel < 0) {
-        throw new Error("travelMinutes must be a non-negative number.");
-      }
-      patch.travelMinutes = travel;
-    }
-  }
-  // Notes, documentation profiles, and the official weight allowance round out
-  // agent move-config parity with updateBasics (MOVE-314).
-  if (input.notes !== undefined) {
-    patch.notes = normalizeOptionalText(asString(input.notes));
-  }
-  if (input.documentationProfileTypes !== undefined) {
-    patch.documentationProfileTypes = Array.isArray(
-      input.documentationProfileTypes,
-    )
-      ? parseDocumentationProfileTypes(input.documentationProfileTypes)
-      : undefined;
-  }
-  if (input.moveLevelWeightAllowanceLb !== undefined) {
-    patch.moveLevelWeightAllowanceLb = optionalNumber(
-      input.moveLevelWeightAllowanceLb,
-    );
-  }
-  return patch;
+  return buildMovePatch(bodyObject(body));
 }
 
 function transportResourcePatch(
@@ -8943,6 +8927,14 @@ function parseMoveStatus(value: unknown) {
     : undefined;
 }
 
+function parseBoxContainerType(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  if (!includesLiteral(boxContainerTypes, value)) {
+    throw new Error("containerType must be carton|plasticTote|bin|wardrobe|dishPack|crate|other.");
+  }
+  return value as (typeof boxContainerTypes)[number];
+}
+
 function parseMoveType(value: unknown) {
   return includesLiteral(moveTypes, value) ? (value as Doc<"moves">["type"]) : undefined;
 }
@@ -9337,9 +9329,11 @@ function parsePlanningDefaultKeys(
 }
 
 function parseDocumentationProfileTypes(value: unknown) {
-  const values = parseStringArray(value)?.filter((entry) =>
-    includesLiteral(documentationProfileTypes, entry)
-  ) as (typeof documentationProfileTypes)[number][] | undefined;
+  const values = parseLiteralArray(
+    value,
+    documentationProfileTypes,
+    "documentationProfileTypes",
+  );
   return normalizeDocumentationProfileTypes(values);
 }
 

@@ -10,6 +10,7 @@ import {
   approveAiPhotoSuggestions,
   approveAiTextSuggestions,
   approvePlanningSuggestions,
+  archiveItem,
   archivePlannedItem,
   batchUpsertItems,
   applyAssignments,
@@ -56,6 +57,7 @@ import {
   plansList,
   movingManifestImageDerivativeVariants,
   movingManifestRequest,
+  convertItemToBox,
   convertPlannedItem,
   removeItemFromBox,
   rejectAiPhotoSuggestions,
@@ -1826,6 +1828,52 @@ describe("MovingManifest MCP API client", () => {
           authorization: "Bearer mmk_test_secret",
           "idempotency-key": expect.any(String),
         },
+      }
+    );
+  });
+
+  it("archives items through the stdio alias", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { deleted: true, itemId: "item1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await archiveItem(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1", itemId: "item1" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/items/item1?moveId=move1"),
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("converts a mistaken container item into a box through the API", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: { boxId: "box1", itemId: "item1" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await convertItemToBox(
+      { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+      { moveId: "move1", itemId: "item1", containerType: "plasticTote" }
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("https://example.com/api/v1/items/item1/convert-to-box?moveId=move1"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        },
+        body: JSON.stringify({ containerType: "plasticTote" }),
       }
     );
   });

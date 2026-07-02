@@ -648,6 +648,7 @@ export async function convertItemToBoxCore(
   containerType: Doc<"boxes">["containerType"] | undefined,
   createdByUserId: Id<"users">,
   now: number,
+  actorType: "user" | "agent" = "user",
 ): Promise<{ boxId: Id<"boxes">; code: string }> {
   // A container can't also be packed inside another container — drop any
   // membership this item had before it becomes a box.
@@ -725,7 +726,7 @@ export async function convertItemToBoxCore(
   await recordAuditEvent(ctx, {
     householdId: item.householdId,
     moveId: item.moveId,
-    actorType: "user",
+    actorType,
     actorUserId: createdByUserId,
     category: "inventory",
     action: "item.converted_to_box",

@@ -28,6 +28,7 @@ async function resolveTarget(
   ctx: MutationCtx,
   entry: Doc<"ingestionQueueEntries">,
   resultItemIds: Id<"items">[] | undefined,
+  resultBoxIds: Id<"boxes">[] | undefined,
 ): Promise<AttachTarget | null> {
   // A single created item is the strongest signal that the capture documents it.
   if (resultItemIds && resultItemIds.length === 1) {
@@ -39,6 +40,15 @@ async function resolveTarget(
   }
   // Multiple items -> ambiguous which photo belongs to which; leave to the agent.
   if (resultItemIds && resultItemIds.length > 1) return null;
+
+  if (resultBoxIds && resultBoxIds.length === 1) {
+    const box = await ctx.db.get(resultBoxIds[0]);
+    if (box && box.moveId === entry.moveId && !box.archivedAt) {
+      return { boxId: resultBoxIds[0] };
+    }
+    return null;
+  }
+  if (resultBoxIds && resultBoxIds.length > 1) return null;
 
   if (entry.targetBoxId) {
     const box = await ctx.db.get(entry.targetBoxId);
@@ -71,12 +81,13 @@ export async function autoAttachEntryPhotos(
   ctx: MutationCtx,
   entry: Doc<"ingestionQueueEntries">,
   resultItemIds: Id<"items">[] | undefined,
+  resultBoxIds: Id<"boxes">[] | undefined,
   now: number,
 ): Promise<number> {
   const photoIds = entry.mediaPhotoIds ?? [];
   if (photoIds.length === 0) return 0;
 
-  const target = await resolveTarget(ctx, entry, resultItemIds);
+  const target = await resolveTarget(ctx, entry, resultItemIds, resultBoxIds);
   if (!target) return 0;
 
   let attached = 0;

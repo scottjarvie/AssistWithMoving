@@ -7,11 +7,15 @@ import {
   canViewQueueEntry,
   queueEntryOwnerUserId,
   queueOwnerDisplayName,
+  resolveRunnableQueueOwnerIds,
 } from "../../convex/lib/queueAccess";
 
 const scott = "user_scott" as Id<"users">;
 const erin = "user_erin" as Id<"users">;
 const mover = "user_mover" as Id<"users">;
+const helper = "user_helper" as Id<"users">;
+const household = "household_1" as Id<"households">;
+const move = "move_1" as Id<"moves">;
 
 describe("queueOwnerDisplayName", () => {
   it("prefers a real name", () => {
@@ -94,6 +98,58 @@ describe("per-user queue ownership + delegation (requirement 5)", () => {
         isManager: true,
       }),
     ).toBe(true);
+  });
+
+  it("resolves non-manager runnable owners from self plus delegations", async () => {
+    const ctx = {
+      db: {
+        query: () => {
+          throw new Error("Non-manager owner resolution should not query.");
+        },
+      },
+    };
+
+    await expect(
+      resolveRunnableQueueOwnerIds(ctx as never, household, move, {
+        userId: erin,
+        isManager: false,
+        delegatedOwnerIds: [scott, scott],
+      }),
+    ).resolves.toEqual([erin, scott]);
+  });
+
+  it("resolves manager runnable owners from active household and move participants", async () => {
+    const ctx = {
+      db: {
+        query: (table: string) => ({
+          withIndex: () => ({
+            collect: async () => {
+              if (table === "householdMemberships") {
+                return [
+                  { userId: scott, status: "active" },
+                  { userId: helper, status: "disabled" },
+                ];
+              }
+              if (table === "moveParticipants") {
+                return [
+                  { userId: erin, status: "active" },
+                  { userId: mover, status: "inactive" },
+                ];
+              }
+              return [];
+            },
+          }),
+        }),
+      },
+    };
+
+    await expect(
+      resolveRunnableQueueOwnerIds(ctx as never, household, move, {
+        userId: scott,
+        isManager: true,
+        delegatedOwnerIds: [],
+      }),
+    ).resolves.toEqual([scott, erin]);
   });
 });
 

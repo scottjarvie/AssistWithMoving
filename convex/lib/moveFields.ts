@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 
+import type { Doc } from "../_generated/dataModel";
+
 export const moveTypes = [
   "pcs",
   "local",
@@ -364,6 +366,127 @@ export function normalizeDocumentationProfileTypes(
   return Array.from(
     new Set(profileTypes.filter((type) => allowed.has(type)))
   );
+}
+
+type MovePatchInput = {
+  title?: unknown;
+  status?: unknown;
+  origin?: unknown;
+  destination?: unknown;
+  distanceMiles?: unknown;
+  travelMinutes?: unknown;
+  dateStart?: unknown;
+  dateEnd?: unknown;
+  notes?: unknown;
+  documentationProfileTypes?: unknown;
+  moveLevelWeightAllowanceLb?: unknown;
+};
+
+type MovePatchOptions = {
+  now?: number;
+  error?: (message: string) => Error;
+};
+
+function patchText(value: unknown) {
+  return normalizeOptionalText(value === undefined ? undefined : String(value));
+}
+
+function patchRequiredTitle(value: unknown, error: (message: string) => Error) {
+  const title = String(value).trim();
+  if (!title) throw error("title cannot be empty.");
+  return title.slice(0, 2000);
+}
+
+function patchFiniteNumber(
+  value: unknown,
+  fieldName: "distanceMiles" | "travelMinutes",
+  error: (message: string) => Error,
+) {
+  if (value === null) return undefined;
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+  throw error(`${fieldName} must be a non-negative number, or null to clear.`);
+}
+
+function patchPositiveNumber(
+  value: unknown,
+  fieldName: "moveLevelWeightAllowanceLb",
+  error: (message: string) => Error,
+) {
+  if (value === null) return undefined;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  throw error(`${fieldName} must be a positive number, or null to clear.`);
+}
+
+function patchDocumentationProfiles(
+  value: unknown,
+  error: (message: string) => Error,
+) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw error("documentationProfileTypes must be an array.");
+  }
+  const allowed = new Set<string>(documentationProfileTypes);
+  const entries: (typeof documentationProfileTypes)[number][] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !allowed.has(entry)) {
+      throw error("Unsupported documentationProfileTypes value.");
+    }
+    entries.push(entry as (typeof documentationProfileTypes)[number]);
+  }
+  return normalizeDocumentationProfileTypes(entries);
+}
+
+export function buildMovePatch(
+  input: MovePatchInput,
+  options: MovePatchOptions = {},
+): Partial<Doc<"moves">> {
+  const error = options.error ?? ((message: string) => new Error(message));
+  const patch: Partial<Doc<"moves">> = { updatedAt: options.now ?? Date.now() };
+  if (input.title !== undefined) patch.title = patchRequiredTitle(input.title, error);
+  if (input.status !== undefined) {
+    if (
+      input.status !== "planning" &&
+      input.status !== "active" &&
+      input.status !== "completed"
+    ) {
+      if (input.status === "archived") {
+        throw error("Archiving a move isn't supported via PATCH — archive it in the app.");
+      }
+      throw error("status must be one of planning|active|completed.");
+    }
+    patch.status = input.status;
+  }
+  if (input.origin !== undefined) patch.origin = patchText(input.origin);
+  if (input.destination !== undefined) {
+    patch.destination = patchText(input.destination);
+  }
+  if (input.distanceMiles !== undefined) {
+    patch.distanceMiles = patchFiniteNumber(input.distanceMiles, "distanceMiles", error);
+  }
+  if (input.travelMinutes !== undefined) {
+    patch.travelMinutes = patchFiniteNumber(input.travelMinutes, "travelMinutes", error);
+  }
+  if (input.dateStart !== undefined) patch.dateStart = patchText(input.dateStart);
+  if (input.dateEnd !== undefined) patch.dateEnd = patchText(input.dateEnd);
+  if (input.notes !== undefined) patch.notes = patchText(input.notes);
+  if (input.documentationProfileTypes !== undefined) {
+    patch.documentationProfileTypes = patchDocumentationProfiles(
+      input.documentationProfileTypes,
+      error,
+    );
+  }
+  if (input.moveLevelWeightAllowanceLb !== undefined) {
+    patch.moveLevelWeightAllowanceLb = patchPositiveNumber(
+      input.moveLevelWeightAllowanceLb,
+      "moveLevelWeightAllowanceLb",
+      error,
+    );
+  }
+  return patch;
 }
 
 export function defaultDocumentationProfilesForMoveType(

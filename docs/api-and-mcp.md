@@ -57,7 +57,8 @@ returns crew-safe box status, counts, assignments, warnings, and exception notes
 Layout Studio plan endpoints use `plans/read` and `plans/write`; move-restricted
 keys can access only plans belonging to their restricted move.
 
-Top-level object aliases such as `/items/{itemId}`, `/boxes/{boxId}`, and
+Top-level object aliases such as `/items/{itemId}`,
+`/items/{itemId}/convert-to-box`, `/boxes/{boxId}`, and
 `/photos/{photoId}/attach` still validate object ownership server-side. For
 move-restricted keys, include `moveId` in the JSON body or query string so the
 key can be authenticated before the object is loaded. Top-level `DELETE`
@@ -585,8 +586,22 @@ curl -X PATCH https://movingmanifest.com/api/v1/items/ITEM_ID \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: update-item-001" \
-  -d '{ "moveId": "MOVE_ID", "status": "packed", "room": "Office" }'
+	  -d '{ "moveId": "MOVE_ID", "status": "packed", "room": "Office" }'
 ```
+
+Convert a mistakenly captured container item into a box:
+
+```bash
+curl -X POST "https://movingmanifest.com/api/v1/items/ITEM_ID/convert-to-box?moveId=MOVE_ID" \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: convert-item-to-box-001" \
+  -d '{ "containerType": "plasticTote" }'
+```
+
+`containerType` must be one of `carton`, `plasticTote`, `bin`, `wardrobe`,
+`dishPack`, `crate`, or `other`. Conversion is audited as an agent action when it
+comes through REST/MCP, preserving the distinction from manual app conversion.
 
 Soft-delete an item:
 
@@ -596,9 +611,10 @@ curl -X DELETE "https://movingmanifest.com/api/v1/items/ITEM_ID?moveId=MOVE_ID" 
   -H "Idempotency-Key: delete-item-001"
 ```
 
-Top-level item aliases require `inventory/write` for `PATCH`/`DELETE` and
-`inventory/read` for `GET`. Delete is a soft delete: the record is hidden from
-normal inventory reads and the write is audited.
+Top-level item aliases require `inventory/write` for `PATCH`, `POST
+/convert-to-box`, and `DELETE`, and `inventory/read` for `GET`. Delete/archive is
+a soft delete: the record is hidden from normal inventory reads and the write is
+audited.
 
 Create a box:
 
@@ -1844,7 +1860,7 @@ Available MCP tools:
 | `list_moves` | List accessible moves. |
 | `create_move` | Create a move with app-equivalent defaults, with `dryRun` support. |
 | `setup_move` | Create or update a move, room lists, transport resources/zones, and starter inventory in one setup call. |
-| `update_move` | Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), travel time (minutes), notes, documentation profiles, and the official weight allowance. Wraps `PATCH /api/v1/moves/{moveId}`. |
+| `update_move` | Update an existing move's basics — name, status (`planning`, `active`, or `completed` only), origin/destination, dates, driving distance (miles), travel time (minutes), notes, documentation profiles, and the official weight allowance. `distanceMiles`, `travelMinutes`, and `moveLevelWeightAllowanceLb` accept `null` to clear. Wraps `PATCH /api/v1/moves/{moveId}`. |
 | `get_move_summary` | Fetch a move plus resources, zones, people/contacts, inventory, boxes, assignments, photo metadata, planning suggestions, documentation profiles, export jobs, and share-link metadata. |
 | `get_agent_context` | Fetch one compact structured context payload for AI agents: move, spaces, transport, inventory, photos, sale pipeline, counts, and write guidance. |
 | `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |
@@ -1862,6 +1878,8 @@ Available MCP tools:
 | `batch_upsert_items` | Create or update up to 100 items with per-row results and API-side `dryRun` validation. |
 | `update_item` | Update selected item fields, with `dryRun` support. |
 | `delete_item` | Soft-delete one item, with `dryRun` support. |
+| `archive_item` | Product-language alias for soft-archiving one item, with `dryRun` support. |
+| `convert_item_to_box` | Convert a mistakenly captured container item into a real box. `containerType` must be `carton`, `plasticTote`, `bin`, `wardrobe`, `dishPack`, `crate`, or `other`. |
 | `list_move_spaces` | List durable rooms/spaces for a move. |
 | `create_move_space` | Create a durable room/space target, with `dryRun` support. |
 | `upsert_sale_listing` | Create or update sale listing workflow fields, pricing research, status, buyer interest, and sold details. |
@@ -1922,6 +1940,18 @@ Available MCP tools:
 | `list_share_link_comments` | List public-recipient comments for a move or one share link without returning raw share tokens. |
 | `create_share_link` | Create a scoped documentation share link, with `dryRun` support. |
 | `revoke_share_link` | Revoke a documentation share link, with `dryRun` support. |
+
+OAuth capture-queue tools (`list_queue`, `claim_queue`, and
+`submit_queue_result`) are served by the Convex MCP gateway for signed-in
+MovingManifest users. Queue entries expose structured capture hints such as
+`itemKind`, `estimatedWeightLb`, `dimensionsIn`, `disposition`,
+`startingSpaceId`, `presentSpaceId`, `presentTransportId`, `targetSpaceId`, and
+`targetTransportId` so agents do not have to re-parse the user's instructions.
+When submitting results, agents may pass `resultItemIds` and `resultBoxIds`.
+Omitting either field preserves any previously stored links; passing an empty
+array clears that field. Result boxes must belong to the same move and cannot be
+archived. If a processed queue entry has uploaded photos and exactly one result
+item or box, MovingManifest automatically attaches those photos to that record.
 
 Recommended MCP key scopes depend on the intended agent:
 

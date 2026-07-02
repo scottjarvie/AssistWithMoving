@@ -58,12 +58,22 @@ describe("REST API helpers", () => {
       notes: "Fragile — pack the china first.",
       moveLevelWeightAllowanceLb: 9000,
     });
-    // Documentation profiles parse the array; unknown entries are dropped.
-    const patch = movePatch({
-      documentationProfileTypes: ["insuranceClaim", "not-a-profile"],
-    });
+    const patch = movePatch({ documentationProfileTypes: ["insuranceClaim"] });
     expect(patch.documentationProfileTypes).toContain("insuranceClaim");
-    expect(patch.documentationProfileTypes).not.toContain("not-a-profile");
+    expect(movePatch({ moveLevelWeightAllowanceLb: null })).toMatchObject({
+      moveLevelWeightAllowanceLb: undefined,
+    });
+    expect(() =>
+      movePatch({ documentationProfileTypes: ["insuranceClaim", "not-a-profile"] }),
+    ).toThrow(/Unsupported documentationProfileTypes/);
+    expect(() => movePatch({ moveLevelWeightAllowanceLb: 0 })).toThrow(/positive/);
+    expect(() => movePatch({ status: "paused" })).toThrow(
+      /planning\|active\|completed/,
+    );
+    expect(() => movePatch({ status: "archived" })).toThrow(
+      /archive it in the app/,
+    );
+    expect(() => movePatch({ title: "   " })).toThrow(/title cannot be empty/);
   });
 
   it("parses route segments and scopes", () => {
@@ -160,6 +170,12 @@ describe("REST API helpers", () => {
       requiredScopesForRestRoute({
         method: "PATCH",
         segments: ["items", "item1"],
+      })
+    ).toEqual(["inventory/write"]);
+    expect(
+      requiredScopesForRestRoute({
+        method: "POST",
+        segments: ["items", "item1", "convert-to-box"],
       })
     ).toEqual(["inventory/write"]);
     expect(

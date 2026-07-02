@@ -36,6 +36,7 @@ import {
   canViewQueueEntry,
   queueEntryOwnerUserId,
   queueOwnerDisplayName,
+  resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -79,40 +80,6 @@ async function resolveQueueSubject(
     ),
     delegatedOwnerIds,
   };
-}
-
-// Every user whose queue this actor may RUN on the move: their own, plus (for a
-// manager) everyone on the move, else just the owners delegated to them. Mirrors
-// moveParticipants.queueScopes so the agent's runnableOwners and the web
-// owner-picker offer the same set.
-async function resolveRunnableOwnerIds(
-  ctx: QueryCtx | MutationCtx,
-  householdId: Id<"households">,
-  moveId: Id<"moves">,
-  actor: { userId: Id<"users">; isManager: boolean; delegatedOwnerIds: Id<"users">[] },
-): Promise<Id<"users">[]> {
-  const ids = new Set<Id<"users">>([actor.userId]);
-  if (actor.isManager) {
-    const [memberships, participants] = await Promise.all([
-      ctx.db
-        .query("householdMemberships")
-        .withIndex("by_household", (q) => q.eq("householdId", householdId))
-        .collect(),
-      ctx.db
-        .query("moveParticipants")
-        .withIndex("by_household_move", (q) =>
-          q.eq("householdId", householdId).eq("moveId", moveId),
-        )
-        .collect(),
-    ]);
-    for (const m of memberships) if (m.status === "active") ids.add(m.userId);
-    for (const p of participants) {
-      if (p.status === "active" && p.userId) ids.add(p.userId);
-    }
-  } else {
-    for (const id of actor.delegatedOwnerIds) ids.add(id);
-  }
-  return [...ids];
 }
 
 // Expired claims read as queued so an abandoned agent run never strands work.
@@ -211,16 +178,22 @@ export const listQueue = query({
     // any a move owner delegated to it. Surfaced so the agent can discover a
     // shared queue (e.g. the move owner's) and target it with
     // claim_queue.ownerUserId, instead of only ever running its own.
-    const runnableOwnerIds = await resolveRunnableOwnerIds(
+    const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
       ctx,
       args.householdId,
       args.moveId,
       actor,
     );
+    const rawQueued = await ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_move_status_order", (q) =>
+        q.eq("moveId", args.moveId).eq("status", "queued"),
+      )
+      .take(QUEUE_LIMIT);
     const runnableOwners = await Promise.all(
       runnableOwnerIds.map(async (id) => {
         const owner = await ctx.db.get(id);
-        const queuedCount = raw.filter(
+        const queuedCount = rawQueued.filter(
           (entry) =>
             queueEntryOwnerUserId(entry) === id &&
             effectiveStatus(entry, now) === "queued",
@@ -440,7 +413,8 @@ export const submitQueueResult = mutation({
         if (
           !box ||
           box.householdId !== args.householdId ||
-          box.moveId !== args.moveId
+          box.moveId !== args.moveId ||
+          box.archivedAt
         ) {
           throw new ConvexError("Result box does not belong to this move.");
         }
@@ -453,7 +427,13 @@ export const submitQueueResult = mutation({
     // rather than relying on the agent to remember a separate attach step.
     const attachedPhotoCount =
       nextStatus === "processed"
-        ? await autoAttachEntryPhotos(ctx, entry, args.resultItemIds, now)
+        ? await autoAttachEntryPhotos(
+            ctx,
+            entry,
+            args.resultItemIds,
+            args.resultBoxIds,
+            now,
+          )
         : 0;
 
     await ctx.db.patch(args.entryId, {

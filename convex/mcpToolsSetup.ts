@@ -43,13 +43,13 @@ import { recordAuditEvent } from "./lib/audit";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
 import { addMoveParticipant as addMoveParticipantCore } from "./lib/moveParticipantWrite";
 import {
+  buildMovePatch,
   boxStatusValidator,
   capacityValidator,
   documentationProfileTypeValidator,
   estimateConfidenceValidator,
   moveStatusValidator,
   normalizeBoxCode,
-  normalizeDocumentationProfileTypes,
   normalizeOptionalText,
   normalizeRuleList,
   normalizeSortOrder,
@@ -187,15 +187,15 @@ export const updateMoveArgs = {
   destination: v.optional(v.string()),
   startLocation: v.optional(structuredLocationValidator),
   endLocation: v.optional(structuredLocationValidator),
-  distanceMiles: v.optional(v.number()),
-  travelMinutes: v.optional(v.number()),
+  distanceMiles: v.optional(v.union(v.number(), v.null())),
+  travelMinutes: v.optional(v.union(v.number(), v.null())),
   dateStart: v.optional(v.string()),
   dateEnd: v.optional(v.string()),
   notes: v.optional(v.string()),
   documentationProfileTypes: v.optional(
     v.array(documentationProfileTypeValidator),
   ),
-  moveLevelWeightAllowanceLb: v.optional(v.number()),
+  moveLevelWeightAllowanceLb: v.optional(v.union(v.number(), v.null())),
 };
 export const updateMove = mutation({
   args: updateMoveArgs,
@@ -225,15 +225,9 @@ export const updateMove = mutation({
       );
     }
 
-    const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
-    if (args.title !== undefined) patch.title = normalizeOptionalText(args.title);
-    if (args.status !== undefined) patch.status = args.status;
-    if (args.origin !== undefined) {
-      patch.origin = normalizeOptionalText(args.origin);
-    }
-    if (args.destination !== undefined) {
-      patch.destination = normalizeOptionalText(args.destination);
-    }
+    const patch = buildMovePatch(args, {
+      error: (message) => new ConvexError(message),
+    });
     // Structured locations are additive; only derive origin/destination strings
     // when the caller didn't pass them and the stored value is empty (mirrors
     // moves.updateBasics — never clobber a hand-typed origin/destination).
@@ -253,40 +247,6 @@ export const updateMove = mutation({
         if (derived) patch.destination = derived;
       }
     }
-    if (args.distanceMiles !== undefined) {
-      patch.distanceMiles =
-        Number.isFinite(args.distanceMiles) && args.distanceMiles >= 0
-          ? args.distanceMiles
-          : undefined;
-    }
-    if (args.travelMinutes !== undefined) {
-      patch.travelMinutes =
-        Number.isFinite(args.travelMinutes) && args.travelMinutes >= 0
-          ? args.travelMinutes
-          : undefined;
-    }
-    if (args.dateStart !== undefined) {
-      patch.dateStart = normalizeOptionalText(args.dateStart);
-    }
-    if (args.dateEnd !== undefined) {
-      patch.dateEnd = normalizeOptionalText(args.dateEnd);
-    }
-    if (args.notes !== undefined) {
-      patch.notes = normalizeOptionalText(args.notes);
-    }
-    if (args.documentationProfileTypes !== undefined) {
-      patch.documentationProfileTypes = normalizeDocumentationProfileTypes(
-        args.documentationProfileTypes,
-      );
-    }
-    if (args.moveLevelWeightAllowanceLb !== undefined) {
-      patch.moveLevelWeightAllowanceLb =
-        Number.isFinite(args.moveLevelWeightAllowanceLb) &&
-        args.moveLevelWeightAllowanceLb > 0
-          ? args.moveLevelWeightAllowanceLb
-          : undefined;
-    }
-
     await ctx.db.patch(args.moveId, patch);
     await recordAuditEvent(ctx, {
       householdId: args.householdId,
@@ -1541,6 +1501,7 @@ export const convertItemToBox = mutation({
       args.containerType,
       policy.actor.userId,
       Date.now(),
+      "agent",
     );
     return { boxId: result.boxId, code: result.code };
   },
