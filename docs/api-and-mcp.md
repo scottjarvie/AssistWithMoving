@@ -390,8 +390,8 @@ curl -X PATCH https://movingmanifest.com/api/v1/moves/MOVE_ID \
 `documentationProfileTypes`, and `moveLevelWeightAllowanceLb`. `status` can be
 `planning`, `active`, or `completed`; `archived` is blocked here and must go
 through the app archive flow so archive bookkeeping is preserved.
-`distanceMiles`, `travelMinutes`, and `moveLevelWeightAllowanceLb` accept `null`
-to clear the stored value.
+`distanceMiles`, `travelMinutes`, `notes`, and `moveLevelWeightAllowanceLb`
+accept `null` to clear the stored value.
 
 Get one compact move summary:
 

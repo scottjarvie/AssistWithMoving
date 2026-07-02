@@ -82,12 +82,30 @@ describe("REST API helpers", () => {
     expect(() => movePatch({ title: "   " })).toThrow(/title cannot be empty/);
   });
 
+  it("clears, stores, and ignores move notes intentionally", () => {
+    const cleared = movePatch({ notes: null });
+    expect(cleared).toHaveProperty("notes", undefined);
+    expect(movePatch({ notes: "" })).not.toHaveProperty("notes");
+    expect(movePatch({ notes: "Pack the garage first." })).toMatchObject({
+      notes: "Pack the garage first.",
+    });
+
+    const setupCleared = setupMovePatch({ notes: null }, undefined);
+    expect(setupCleared).toHaveProperty("notes", undefined);
+  });
+
   it("rejects non-string move text fields instead of coercing them", () => {
     expect(() => movePatch({ origin: 123 })).toThrow(
       /origin must be a string/,
     );
+    expect(() => movePatch({ title: 123 })).toThrow(
+      /title must be a string/,
+    );
     expect(movePatch({ origin: "123 Main St" })).toMatchObject({
       origin: "123 Main St",
+    });
+    expect(movePatch({ title: "Real name" })).toMatchObject({
+      title: "Real name",
     });
   });
 
@@ -104,6 +122,7 @@ describe("REST API helpers", () => {
   });
 
   it("rejects non-positive create-move weight allowances", () => {
+    expect(createMoveWeightAllowanceLb(null)).toBe(undefined);
     expect(() => createMoveWeightAllowanceLb(-500)).toThrow(
       /must be a positive number/,
     );

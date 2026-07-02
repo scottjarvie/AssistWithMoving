@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
@@ -106,6 +106,8 @@ export function BoxLookup({
   const updateBox = useMutation(api.boxes.update);
   const removeBox = useMutation(api.boxes.remove);
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   // Optional: the box page is always rendered under MoveWorkspaceProvider in the
   // app, but tests render BoxLookup standalone — so read the context optionally
   // and skip the sync when it's absent rather than throwing.
@@ -155,6 +157,9 @@ export function BoxLookup({
             : { href: moveBoxesPath(moveId), label: "Movable Units" };
   const primaryBackHref = back.href;
   const primaryBackLabel = back.label;
+  const currentSearch = searchParams.toString();
+  const currentPath = currentSearch ? `${pathname}?${currentSearch}` : pathname;
+  const signInHref = `/sign-in?redirect_url=${encodeURIComponent(currentPath)}`;
 
   const backRow = (
     <div className="mb-4">
@@ -182,7 +187,7 @@ export function BoxLookup({
     );
   }
 
-  if (auth.isLoading || boxRecord === undefined) {
+  if (auth.isLoading) {
     return (
       <Shell>
         {backRow}
@@ -205,12 +210,25 @@ export function BoxLookup({
             Sign in before opening this unit lookup.
           </p>
           <Button asChild variant="outline" className="mt-4">
-            <Link href="/sign-in">
+            <Link href={signInHref}>
               <ShieldCheck aria-hidden="true" />
               Sign in
             </Link>
           </Button>
         </section>
+      </Shell>
+    );
+  }
+
+  if (boxRecord === undefined) {
+    return (
+      <Shell>
+        {backRow}
+        <div className="space-y-3">
+          <Skeleton className="h-28 w-full rounded-lg" />
+          <Skeleton className="h-20 w-full rounded-lg" />
+          <Skeleton className="h-40 w-full rounded-lg" />
+        </div>
       </Shell>
     );
   }

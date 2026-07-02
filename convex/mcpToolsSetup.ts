@@ -191,7 +191,7 @@ export const updateMoveArgs = {
   travelMinutes: v.optional(v.union(v.number(), v.null())),
   dateStart: v.optional(v.string()),
   dateEnd: v.optional(v.string()),
-  notes: v.optional(v.string()),
+  notes: v.optional(v.union(v.string(), v.null())),
   documentationProfileTypes: v.optional(
     v.array(documentationProfileTypeValidator),
   ),

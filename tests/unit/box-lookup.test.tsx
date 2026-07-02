@@ -99,7 +99,12 @@ vi.mock("../../convex/_generated/api", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/app/boxes/box_12",
   useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () =>
+    new URLSearchParams(
+      "householdId=household_123&moveId=move_123&returnTo=load-plan",
+    ),
 }));
 
 vi.mock("convex/react", () => ({
@@ -107,6 +112,7 @@ vi.mock("convex/react", () => ({
     mutation === apiMock.boxes.update ? lookupData.mutations.updateBox : vi.fn(),
   useQuery: (query: string, args: unknown) => {
     lookupData.queryCalls.push({ query, args });
+    if (args === "skip") return undefined;
     switch (query) {
       case apiMock.boxes.get:
         return lookupData.boxRecord;
@@ -222,6 +228,10 @@ describe("BoxLookup", () => {
 
     expect(screen.getByText("Sign in required")).toBeInTheDocument();
     expect(screen.getByText("Sign in before opening this unit lookup.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/sign-in?redirect_url=%2Fapp%2Fboxes%2Fbox_12%3FhouseholdId%3Dhousehold_123%26moveId%3Dmove_123%26returnTo%3Dload-plan",
+    );
     expect(lookupData.queryCalls).toEqual(
       expect.arrayContaining([
         { query: apiMock.boxes.get, args: "skip" },
