@@ -1056,7 +1056,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "update_move", {
     title: "Update move",
     description:
-      "Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), travel time (minutes), notes, documentation profiles, and official weight allowance. Distance, travel time, and allowance can be null to clear. Requires a household-scoped key with moves/write.",
+      "Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), travel time (minutes), notes, documentation profiles, and official weight allowance. Distance, travel time, notes, and allowance can be null to clear. Requires a household-scoped key with moves/write.",
     inputSchema: {
       moveId: z.string().describe("MovingManifest move id to update."),
       title: z.string().optional(),
@@ -1077,7 +1077,7 @@ export function registerTools(target, apiConfig, options = {}) {
         .nullable()
         .optional()
         .describe("Driving time in minutes. null clears it."),
-      notes: z.string().optional(),
+      notes: z.string().nullable().optional().describe("Move notes. null clears them."),
       documentationProfileTypes: z.array(documentationProfileTypeSchema).optional(),
       moveLevelWeightAllowanceLb: z.number().positive().nullable().optional(),
       idempotencyKey: z.string().optional(),
