@@ -21,6 +21,7 @@ import {
   ingestionScopeHintValidator,
   isMediaUploadPending,
   resolveAppendedMediaState,
+  uploadRollupIsInactive,
   type IngestionQueueStatus,
 } from "./lib/ingestionQueue";
 import {
@@ -695,6 +696,7 @@ export const ageOutStuckUploadingEntries = internalMutation({
       .take(200);
     let aged = 0;
     for (const entry of stuck) {
+      if (!uploadRollupIsInactive(entry, cutoff)) continue;
       const nextState = resolveAppendedMediaState({
         expectedMediaCount: entry.expectedMediaCount,
         priorState: "failed",

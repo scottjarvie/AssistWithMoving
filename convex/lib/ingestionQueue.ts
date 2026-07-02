@@ -75,6 +75,13 @@ export function resolveAppendedMediaState(args: {
   return args.priorState === "failed" ? "failed" : "uploading";
 }
 
+export function uploadRollupIsInactive(
+  entry: { updatedAt: number },
+  cutoff: number,
+) {
+  return entry.updatedAt <= cutoff;
+}
+
 // True while an entry's background photo upload is still in flight. Composable
 // with effectiveStatus (status governs the lifecycle; this gates claimability).
 // An agent must never claim an entry whose media is still uploading.

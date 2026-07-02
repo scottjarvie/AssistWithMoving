@@ -50,6 +50,7 @@ export type UploadJob = {
   status: UploadJobStatus;
   progress: number;
   error?: string;
+  finalizedPhotoId?: Id<"itemPhotos">;
 };
 
 // Map a raw upload error (storage/SDK/network) to a short, actionable message
@@ -68,6 +69,12 @@ function friendlyUploadError(error: unknown): string {
     lower.includes("403")
   ) {
     return "Storage rejected the upload. Tap retry.";
+  }
+  if (
+    lower.includes("timed out") ||
+    lower.includes("timeout")
+  ) {
+    return "Upload timed out. It will retry automatically.";
   }
   if (
     lower.includes("network") ||
@@ -122,6 +129,12 @@ export function MediaUploadProvider({
   );
 
   const [jobs, setJobs] = useState<UploadJob[]>([]);
+  const jobsRef = useRef<UploadJob[]>([]);
+  const deferredFailedEntryIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    jobsRef.current = jobs;
+  }, [jobs]);
 
   // Bound Convex hooks change identity; keep a ref so the long-lived runner loop
   // always calls the current ones without being a dependency of the loop. The
@@ -172,6 +185,59 @@ export function MediaUploadProvider({
     setJobs((current) => current.filter((job) => job.id !== jobId));
   }, []);
 
+  const hasLiveSibling = useCallback((job: UploadJob) => {
+    return jobsRef.current.some(
+      (candidate) =>
+        candidate.entryId === job.entryId &&
+        candidate.id !== job.id &&
+        (candidate.status === "queued" ||
+          candidate.status === "uploading" ||
+          candidate.status === "finalizing"),
+    );
+  }, []);
+
+  const markEntryFailedWhenTerminal = useCallback(
+    async (
+      job: UploadJob,
+      deps: Pick<typeof depsRef.current, "setMediaUploadState">,
+    ) => {
+      if (hasLiveSibling(job)) {
+        deferredFailedEntryIdsRef.current.add(String(job.entryId));
+        return;
+      }
+      deferredFailedEntryIdsRef.current.delete(String(job.entryId));
+      await deps
+        .setMediaUploadState({
+          householdId: job.householdId,
+          moveId: job.moveId,
+          entryId: job.entryId,
+          state: "failed",
+        })
+        .catch(() => {});
+    },
+    [hasLiveSibling],
+  );
+
+  const flushDeferredFailureIfTerminal = useCallback(
+    async (
+      job: UploadJob,
+      deps: Pick<typeof depsRef.current, "setMediaUploadState">,
+    ) => {
+      if (!deferredFailedEntryIdsRef.current.has(String(job.entryId))) return;
+      if (hasLiveSibling(job)) return;
+      deferredFailedEntryIdsRef.current.delete(String(job.entryId));
+      await deps
+        .setMediaUploadState({
+          householdId: job.householdId,
+          moveId: job.moveId,
+          entryId: job.entryId,
+          state: "failed",
+        })
+        .catch(() => {});
+    },
+    [hasLiveSibling],
+  );
+
   const runJob = useCallback(
     async (job: UploadJob) => {
       const deps = depsRef.current;
@@ -181,34 +247,40 @@ export function MediaUploadProvider({
       patchJob(job.id, { status: "uploading", progress: 0, error: undefined });
 
       try {
-        const photoId = await uploadMediaFile({
-          householdId: job.householdId,
-          moveId: job.moveId,
-          file: job.file,
-          kind: job.kind,
-          deps: {
-            initUpload: deps.initUpload,
-            finalizeUpload: deps.finalizeUpload,
-            cancelUploadSession: deps.cancelUploadSession,
-          },
-          onProgress: (progress) => {
-            patchJob(job.id, { progress });
-            // Once the PUT completes (100%), finalize/derivatives are running.
-            if (progress >= 100) {
-              patchJob(job.id, { status: "finalizing" });
-            }
-          },
-          onRetry: () => {
-            // A transient failure is being retried automatically — reset the
-            // bar and clear the prior error so it doesn't look stuck/failed.
-            patchJob(job.id, {
-              status: "uploading",
-              progress: 0,
-              error: undefined,
-            });
-          },
-          signal: controller.signal,
-        });
+        let photoId = job.finalizedPhotoId;
+        if (photoId) {
+          patchJob(job.id, { status: "finalizing", progress: 100 });
+        } else {
+          photoId = await uploadMediaFile({
+            householdId: job.householdId,
+            moveId: job.moveId,
+            file: job.file,
+            kind: job.kind,
+            deps: {
+              initUpload: deps.initUpload,
+              finalizeUpload: deps.finalizeUpload,
+              cancelUploadSession: deps.cancelUploadSession,
+            },
+            onProgress: (progress) => {
+              patchJob(job.id, { progress });
+              // Once the PUT completes (100%), finalize/derivatives are running.
+              if (progress >= 100) {
+                patchJob(job.id, { status: "finalizing" });
+              }
+            },
+            onRetry: () => {
+              // A transient failure is being retried automatically — reset the
+              // bar and clear the prior error so it doesn't look stuck/failed.
+              patchJob(job.id, {
+                status: "uploading",
+                progress: 0,
+                error: undefined,
+              });
+            },
+            signal: controller.signal,
+          });
+          patchJob(job.id, { finalizedPhotoId: photoId });
+        }
 
         // Attach the finished photo to the saved entry. appendMedia recomputes
         // the entry's mediaUploadState rollup (complete once all expected
@@ -219,6 +291,7 @@ export function MediaUploadProvider({
           entryId: job.entryId,
           mediaPhotoIds: [photoId],
         });
+        await flushDeferredFailureIfTerminal(job, deps);
 
         // The photo is now attached (it shows as a resolved thumbnail via the
         // entry's mediaPhotoIds), so a "done" job carries no UI value. Drop it
@@ -235,14 +308,7 @@ export function MediaUploadProvider({
           // Flag the rollup 'failed' (best effort) so isMediaUploadPending
           // releases it and the queue surfaces a retry; the entry is never
           // auto-discarded.
-          await deps
-            .setMediaUploadState({
-              householdId: job.householdId,
-              moveId: job.moveId,
-              entryId: job.entryId,
-              state: "failed",
-            })
-            .catch(() => {});
+          await markEntryFailedWhenTerminal(job, deps);
           return;
         }
         // Only reached after automatic retries are exhausted (uploadMediaFile
@@ -251,21 +317,20 @@ export function MediaUploadProvider({
         patchJob(job.id, { status: "error", error: friendlyUploadError(error) });
         // Flag the entry rollup as failed so the queue list can surface retry.
         // The entry itself stays saved — never auto-discarded.
-        await deps
-          .setMediaUploadState({
-            householdId: job.householdId,
-            moveId: job.moveId,
-            entryId: job.entryId,
-            state: "failed",
-          })
-          .catch(() => {});
+        await markEntryFailedWhenTerminal(job, deps);
       } finally {
         abortControllersRef.current.delete(job.id);
         runningRef.current -= 1;
         pump();
       }
     },
-    [patchJob, removeJob, pump],
+    [
+      flushDeferredFailureIfTerminal,
+      markEntryFailedWhenTerminal,
+      patchJob,
+      removeJob,
+      pump,
+    ],
   );
 
   // Scheduler: whenever jobs change or a slot frees up, start as many queued
@@ -318,7 +383,12 @@ export function MediaUploadProvider({
     setJobs((current) =>
       current.map((job) =>
         job.id === jobId && job.status === "error"
-          ? { ...job, status: "queued", progress: 0, error: undefined }
+          ? {
+              ...job,
+              status: "queued",
+              progress: job.finalizedPhotoId ? 100 : 0,
+              error: undefined,
+            }
           : job,
       ),
     );
@@ -336,18 +406,11 @@ export function MediaUploadProvider({
       // dismisses abort the PUT and are released by the catch; an 'error' job's
       // entry is already 'failed'.)
       if (job?.status === "queued") {
-        void depsRef.current
-          .setMediaUploadState({
-            householdId: job.householdId,
-            moveId: job.moveId,
-            entryId: job.entryId,
-            state: "failed",
-          })
-          .catch(() => {});
+        void markEntryFailedWhenTerminal(job, depsRef.current);
       }
       setJobs((current) => current.filter((candidate) => candidate.id !== jobId));
     },
-    [jobs],
+    [jobs, markEntryFailedWhenTerminal],
   );
 
   const jobsForEntry = useCallback<MediaUploadContextValue["jobsForEntry"]>(

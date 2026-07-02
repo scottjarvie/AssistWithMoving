@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   coverDimensions,
@@ -7,9 +7,47 @@ import {
   maxPhotoUploadBytes,
   maxVideoUploadBytes,
   mediaKindForMimeType,
+  uploadFileWithProgress,
+  UPLOAD_STALL_TIMEOUT_MS,
   validateMediaUploadFile,
   validatePhotoUploadFile,
 } from "@/lib/photo-upload";
+
+class FakeXMLHttpRequest {
+  static instances: FakeXMLHttpRequest[] = [];
+
+  upload: {
+    onprogress?: (event: {
+      lengthComputable: boolean;
+      loaded: number;
+      total: number;
+    }) => void;
+  } = {};
+  status = 200;
+  timeout = 0;
+  aborted = false;
+  onload?: () => void;
+  onerror?: () => void;
+  onabort?: () => void;
+  open = vi.fn();
+  setRequestHeader = vi.fn();
+  send = vi.fn();
+
+  constructor() {
+    FakeXMLHttpRequest.instances.push(this);
+  }
+
+  abort() {
+    this.aborted = true;
+    this.onabort?.();
+  }
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  FakeXMLHttpRequest.instances = [];
+});
 
 describe("photo upload validation", () => {
   it("allows supported image types under the size limit", () => {
@@ -98,5 +136,53 @@ describe("photo upload validation", () => {
       width: 200,
       height: 200,
     });
+  });
+});
+
+describe("uploadFileWithProgress", () => {
+  it("uses a progress stall watchdog instead of a total request timeout", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+
+    const onProgress = vi.fn();
+    const promise = uploadFileWithProgress({
+      file: new Blob(["x"], { type: "image/jpeg" }),
+      uploadUrl: "https://uploads.example/file",
+      contentType: "image/jpeg",
+      onProgress,
+      signal: new AbortController().signal,
+    });
+    const request = FakeXMLHttpRequest.instances[0]!;
+    let settled = false;
+    void promise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    expect(request.timeout).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(UPLOAD_STALL_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+
+    request.upload.onprogress?.({
+      lengthComputable: true,
+      loaded: 50,
+      total: 100,
+    });
+    expect(onProgress).toHaveBeenLastCalledWith(50);
+
+    await vi.advanceTimersByTimeAsync(UPLOAD_STALL_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+
+    const assertion = expect(promise).rejects.toThrow(
+      "Upload timed out. Check your connection.",
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    await assertion;
+    expect(request.aborted).toBe(true);
   });
 });
