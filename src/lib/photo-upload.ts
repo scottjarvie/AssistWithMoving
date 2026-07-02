@@ -292,12 +292,10 @@ export async function createImageDerivatives(file: File) {
   }
 }
 
-// Hard ceiling for a single PUT to B2. XHR has NO default timeout, so on a flaky
-// mobile connection a stalled PUT would otherwise hang forever — never firing
-// onerror, never retrying, and stranding the capture as "uploading". 90s is
-// generous for a large photo on slow cellular; if it trips, the error is
-// retryable and the next attempt re-inits a fresh presigned URL.
-export const UPLOAD_PUT_TIMEOUT_MS = 90_000;
+// Idle ceiling for a single PUT to B2. XHR's native timeout caps total request
+// time, which breaks large files on slow-but-progressing links. Instead, retry
+// only when no upload progress arrives for this window.
+export const UPLOAD_STALL_TIMEOUT_MS = 45_000;
 
 export function uploadFileWithProgress({
   file,
@@ -314,8 +312,27 @@ export function uploadFileWithProgress({
 }) {
   return new Promise<void>((resolve, reject) => {
     const request = new XMLHttpRequest();
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function clearStallTimer() {
+      if (stallTimer) {
+        clearTimeout(stallTimer);
+        stallTimer = undefined;
+      }
+    }
+
+    function armStallTimer() {
+      clearStallTimer();
+      stallTimer = setTimeout(() => {
+        signal.removeEventListener("abort", abortUpload);
+        reject(new Error("Upload timed out. Check your connection."));
+        request.abort();
+      }, UPLOAD_STALL_TIMEOUT_MS);
+    }
 
     function abortUpload() {
+      clearStallTimer();
+      signal.removeEventListener("abort", abortUpload);
       request.abort();
       reject(new DOMException("Upload cancelled.", "AbortError"));
     }
@@ -328,11 +345,13 @@ export function uploadFileWithProgress({
     signal.addEventListener("abort", abortUpload, { once: true });
 
     request.upload.onprogress = (event) => {
+      armStallTimer();
       if (event.lengthComputable) {
         onProgress(Math.round((event.loaded / event.total) * 100));
       }
     };
     request.onload = () => {
+      clearStallTimer();
       signal.removeEventListener("abort", abortUpload);
       if (request.status >= 200 && request.status < 300) {
         onProgress(100);
@@ -342,20 +361,18 @@ export function uploadFileWithProgress({
       }
     };
     request.onerror = () => {
+      clearStallTimer();
       signal.removeEventListener("abort", abortUpload);
       reject(new Error("Upload failed."));
     };
-    request.ontimeout = () => {
-      signal.removeEventListener("abort", abortUpload);
-      reject(new Error("Upload timed out. Check your connection."));
-    };
     request.onabort = () => {
+      clearStallTimer();
       signal.removeEventListener("abort", abortUpload);
       reject(new DOMException("Upload cancelled.", "AbortError"));
     };
     request.open("PUT", uploadUrl);
-    request.timeout = UPLOAD_PUT_TIMEOUT_MS;
     request.setRequestHeader("Content-Type", contentType);
     request.send(file);
+    armStallTimer();
   });
 }

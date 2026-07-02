@@ -8,6 +8,7 @@ import {
   ingestionQueueStatuses,
   isMediaUploadPending,
   resolveAppendedMediaState,
+  uploadRollupIsInactive,
 } from "../../convex/lib/ingestionQueue";
 
 describe("ingestion queue lifecycle", () => {
@@ -172,5 +173,14 @@ describe("resolveAppendedMediaState (appendMedia rollup)", () => {
         attachedCount: 1,
       }),
     ).toBe("complete");
+  });
+
+  it("only ages out upload rollups with no recent media activity", () => {
+    const cutoff = 1_000_000;
+    expect(uploadRollupIsInactive({ updatedAt: cutoff - 1 }, cutoff)).toBe(true);
+    expect(uploadRollupIsInactive({ updatedAt: cutoff }, cutoff)).toBe(true);
+    expect(uploadRollupIsInactive({ updatedAt: cutoff + 1 }, cutoff)).toBe(
+      false,
+    );
   });
 });

@@ -59,6 +59,16 @@ function imageFile(name: string) {
   return new File(["x"], name, { type: "image/jpeg" });
 }
 
+function deferredPhotoUpload() {
+  let resolve!: (photoId: Id<"itemPhotos">) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<Id<"itemPhotos">>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("MediaUploadProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -194,5 +204,91 @@ describe("MediaUploadProvider", () => {
         expect.objectContaining({ entryId: entry, state: "failed" }),
       );
     });
+  });
+
+  it("defers a failed rollup while sibling uploads for the same entry are still live", async () => {
+    const uploads: ReturnType<typeof deferredPhotoUpload>[] = [];
+    harness.uploadMediaFile.mockImplementation(
+      ({ signal }: { signal: AbortSignal }) => {
+        const upload = deferredPhotoUpload();
+        uploads.push(upload);
+        signal.addEventListener("abort", () =>
+          upload.reject(new DOMException("Upload cancelled.", "AbortError")),
+        );
+        return upload.promise;
+      },
+    );
+
+    const { result } = renderHook(() => useMediaUpload(), { wrapper });
+
+    act(() => {
+      result.current.enqueue({ entryId: entry, householdId: household, moveId: move }, [
+        { file: imageFile("a.jpg"), kind: "image" },
+        { file: imageFile("b.jpg"), kind: "image" },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(uploads).toHaveLength(2);
+      expect(result.current.jobsForEntry(entry)).toHaveLength(2);
+    });
+
+    const firstJobId = result.current.jobsForEntry(entry)[0]!.id;
+    act(() => {
+      result.current.dismiss(firstJobId);
+    });
+
+    await waitFor(() => {
+      expect(result.current.jobsForEntry(entry)).toHaveLength(1);
+    });
+    expect(harness.setMediaUploadState).not.toHaveBeenCalled();
+
+    act(() => {
+      uploads[1]!.resolve("photo_2" as Id<"itemPhotos">);
+    });
+
+    await waitFor(() => {
+      expect(harness.appendMedia).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaPhotoIds: ["photo_2"] }),
+      );
+    });
+    await waitFor(() => {
+      expect(harness.setMediaUploadState).toHaveBeenCalledWith(
+        expect.objectContaining({ entryId: entry, state: "failed" }),
+      );
+    });
+  });
+
+  it("retries a finalized-but-unattached photo without uploading a duplicate", async () => {
+    harness.uploadMediaFile.mockResolvedValue("photo_1" as Id<"itemPhotos">);
+    harness.appendMedia
+      .mockRejectedValueOnce(new Error("entry temporarily locked"))
+      .mockResolvedValueOnce(undefined);
+
+    const { result } = renderHook(() => useMediaUpload(), { wrapper });
+
+    act(() => {
+      result.current.enqueue({ entryId: entry, householdId: household, moveId: move }, [
+        { file: imageFile("a.jpg"), kind: "image" },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.jobsForEntry(entry)[0]?.status).toBe("error");
+    });
+    expect(harness.uploadMediaFile).toHaveBeenCalledTimes(1);
+
+    const failedJobId = result.current.jobsForEntry(entry)[0]!.id;
+    act(() => {
+      result.current.retry(failedJobId);
+    });
+
+    await waitFor(() => {
+      expect(harness.appendMedia).toHaveBeenCalledTimes(2);
+    });
+    expect(harness.uploadMediaFile).toHaveBeenCalledTimes(1);
+    expect(harness.appendMedia).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mediaPhotoIds: ["photo_1"] }),
+    );
   });
 });
