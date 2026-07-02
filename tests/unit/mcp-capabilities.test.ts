@@ -270,6 +270,37 @@ describe("MovingManifest MCP capability discovery", () => {
     );
   });
 
+  it("update_move schema accepts null for clearable fields", () => {
+    type FieldSchema = {
+      safeParse: (value: unknown) => { success: boolean };
+      description?: string;
+    };
+    const updateMoveOptions = collectToolRegistrations().get("update_move")
+      ?.options as { inputSchema?: Record<string, FieldSchema> } | undefined;
+    const inputSchema = updateMoveOptions?.inputSchema;
+    if (!inputSchema) {
+      throw new Error("update_move inputSchema was not registered.");
+    }
+
+    for (const field of [
+      "notes",
+      "distanceMiles",
+      "travelMinutes",
+      "moveLevelWeightAllowanceLb",
+    ]) {
+      expect(inputSchema[field].safeParse(null).success).toBe(true);
+    }
+    expect(inputSchema.notes.safeParse("Updated notes").success).toBe(true);
+    expect(inputSchema.distanceMiles.safeParse(12).success).toBe(true);
+    expect(inputSchema.travelMinutes.safeParse(12).success).toBe(true);
+    expect(inputSchema.moveLevelWeightAllowanceLb.safeParse(12).success).toBe(true);
+
+    expect(inputSchema.title.safeParse(null).success).toBe(false);
+    expect(inputSchema.moveId.safeParse(null).success).toBe(false);
+
+    expect(inputSchema.notes.description).toContain("null clears");
+  });
+
   it("offers a smaller trusted-helper MCP tool set for hosted assistants", () => {
     const filter = createAllowedToolFilter(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS);
     const registrations = collectToolRegistrations({
