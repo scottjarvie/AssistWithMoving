@@ -199,6 +199,18 @@ function verificationNeeded(confidence: Doc<"items">["weightConfidence"]) {
   return confidence !== "manual" && confidence !== "actual";
 }
 
+export function weightConfidenceForActualUpdate(args: {
+  actualWeightLb?: number;
+  clearActualWeight?: boolean;
+  weightConfidence?: Doc<"items">["weightConfidence"];
+}) {
+  if (args.weightConfidence !== undefined) return args.weightConfidence;
+  if (args.actualWeightLb !== undefined && !args.clearActualWeight) {
+    return "actual";
+  }
+  return undefined;
+}
+
 function provenanceEntry({
   sourceType,
   confidence,
@@ -1205,8 +1217,13 @@ export const update = mutation({
     if (args.estimatedPackedVolumeCuFt !== undefined) {
       patch.estimatedPackedVolumeCuFt = args.estimatedPackedVolumeCuFt;
     }
-    if (args.weightConfidence !== undefined) {
-      patch.weightConfidence = args.weightConfidence;
+    const nextWeightConfidence = weightConfidenceForActualUpdate({
+      actualWeightLb: args.actualWeightLb,
+      clearActualWeight: args.clearActualWeight,
+      weightConfidence: args.weightConfidence,
+    });
+    if (nextWeightConfidence !== undefined) {
+      patch.weightConfidence = nextWeightConfidence;
     }
     if (args.volumeConfidence !== undefined) {
       patch.volumeConfidence = args.volumeConfidence;

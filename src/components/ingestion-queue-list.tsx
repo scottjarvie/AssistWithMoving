@@ -410,6 +410,11 @@ export function IngestionQueueList({
     }
   }
 
+  function ignoreInlineActionError(promise: Promise<void> | undefined) {
+    // Errors are already toasted inside; the rethrow exists for the modal path.
+    void promise?.catch(() => {});
+  }
+
   // F3: add images to an EXISTING queued/needs-input entry. We never call
   // updateEntry here — that would wholesale-replace media and (for needsInput)
   // auto-requeue, which adding a photo must not do. Instead we kick the files
@@ -673,7 +678,9 @@ export function IngestionQueueList({
                           size="sm"
                           disabled={busy}
                           onClick={() =>
-                            void saveInstructions(entry._id, editingText)
+                            ignoreInlineActionError(
+                              saveInstructions(entry._id, editingText),
+                            )
                           }
                         >
                           Save directions
@@ -787,7 +794,11 @@ export function IngestionQueueList({
                         type="button"
                         size="sm"
                         disabled={busy}
-                        onClick={() => void changeStatus(entry._id, "resolved")}
+                        onClick={() =>
+                          ignoreInlineActionError(
+                            changeStatus(entry._id, "resolved"),
+                          )
+                        }
                       >
                         <CheckCircle2 aria-hidden="true" />
                         Mark resolved
@@ -797,7 +808,11 @@ export function IngestionQueueList({
                         size="sm"
                         variant="outline"
                         disabled={busy}
-                        onClick={() => void changeStatus(entry._id, "queued")}
+                        onClick={() =>
+                          ignoreInlineActionError(
+                            changeStatus(entry._id, "queued"),
+                          )
+                        }
                       >
                         <RotateCcw aria-hidden="true" />
                         Requeue
@@ -810,7 +825,11 @@ export function IngestionQueueList({
                       size="sm"
                       variant="outline"
                       disabled={busy}
-                      onClick={() => void changeStatus(entry._id, "queued")}
+                      onClick={() =>
+                        ignoreInlineActionError(
+                          changeStatus(entry._id, "queued"),
+                        )
+                      }
                     >
                       <RotateCcw aria-hidden="true" />
                       Restore
@@ -828,7 +847,9 @@ export function IngestionQueueList({
                             disabled={busy}
                             aria-label="Discard"
                             onClick={() =>
-                              void changeStatus(entry._id, "discarded")
+                              ignoreInlineActionError(
+                                changeStatus(entry._id, "discarded"),
+                              )
                             }
                           >
                             <Trash2 aria-hidden="true" />

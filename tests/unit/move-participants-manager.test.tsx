@@ -145,4 +145,48 @@ describe("MoveParticipantsManager", () => {
       canRunMyQueue: true,
     });
   });
+
+  it("explains queue sharing for move-only helpers with no visible household roster", () => {
+    const originalResult = data.result;
+    data.result = {
+      ...originalResult,
+      canManage: false,
+      accessKind: "moveOnly",
+      people: [
+        {
+          key: "participant:self",
+          kind: "moveParticipant" as const,
+          participantId: "part_self" as Id<"moveParticipants">,
+          membershipId: null,
+          userId: "user_helper" as Id<"users">,
+          name: "Move Helper",
+          email: "helper@example.com",
+          imageUrl: null,
+          role: "viewer" as const,
+          accessKind: "moveOnly" as const,
+          participantType: "helper" as const,
+          status: "active" as const,
+          agentAccessStatus: "enabled" as const,
+          canRunQueueForUserIds: [],
+          isSelf: true,
+        },
+      ],
+      contacts: [],
+    } as never;
+
+    try {
+      render(
+        <MoveParticipantsManager householdId={householdId} moveId={moveId} />,
+      );
+
+      expect(
+        screen.getByText(/Queue sharing is managed by the household/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Let them run my queue" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      data.result = originalResult;
+    }
+  });
 });

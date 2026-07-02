@@ -49,6 +49,11 @@ describe("isRetryableUploadError", () => {
     expect(isRetryableUploadError(new Error("Network error"))).toBe(true);
     expect(isRetryableUploadError(new Error("Upload failed"))).toBe(true);
     expect(isRetryableUploadError(new Error("SignatureDoesNotMatch"))).toBe(true);
+    expect(
+      isRetryableUploadError(
+        new Error("Upload timed out. Check your connection."),
+      ),
+    ).toBe(true);
   });
 });
 

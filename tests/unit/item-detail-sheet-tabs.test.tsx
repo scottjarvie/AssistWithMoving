@@ -315,4 +315,30 @@ describe("ItemDetailSheet task tabs", () => {
     });
     expect(onSave.mock.calls[0][0]).not.toHaveProperty("actualWeightLb");
   });
+
+  it("does not rewrite confidence or clear actual weight when weight is blanked", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderSheet({
+      itemOverride: {
+        actualWeightLb: 40,
+        estimatedWeightLb: undefined,
+        estimatedWeightLowLb: undefined,
+        estimatedWeightHighLb: undefined,
+        weightConfidence: "actual",
+      },
+      onSave,
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Measurements" }));
+    await user.clear(screen.getByLabelText("Weight (lb)"));
+    await user.click(screen.getByRole("button", { name: "Save item" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const patch = onSave.mock.calls[0][0];
+    expect(patch).not.toHaveProperty("weightConfidence");
+    expect(patch).not.toHaveProperty("clearActualWeight");
+    expect(patch).not.toHaveProperty("actualWeightLb");
+    expect(patch).not.toHaveProperty("estimatedWeightLb");
+  });
 });

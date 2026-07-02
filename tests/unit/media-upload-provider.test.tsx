@@ -259,6 +259,89 @@ describe("MediaUploadProvider", () => {
     });
   });
 
+  it("clears a deferred failed job when it is manually retried before siblings finish", async () => {
+    const uploads: ReturnType<typeof deferredPhotoUpload>[] = [];
+    harness.uploadMediaFile.mockImplementation(() => {
+      const upload = deferredPhotoUpload();
+      uploads.push(upload);
+      return upload.promise;
+    });
+
+    const { result } = renderHook(() => useMediaUpload(), { wrapper });
+
+    act(() => {
+      result.current.enqueue({ entryId: entry, householdId: household, moveId: move }, [
+        { file: imageFile("a.jpg"), kind: "image" },
+        { file: imageFile("b.jpg"), kind: "image" },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(uploads).toHaveLength(2);
+    });
+
+    act(() => {
+      uploads[0]!.reject(new Error("network blip"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.jobsForEntry(entry)[0]?.status).toBe("error");
+    });
+    expect(harness.setMediaUploadState).not.toHaveBeenCalled();
+
+    const failedJobId = result.current.jobsForEntry(entry)[0]!.id;
+    act(() => {
+      result.current.retry(failedJobId);
+    });
+
+    await waitFor(() => {
+      expect(uploads).toHaveLength(3);
+    });
+
+    act(() => {
+      uploads[1]!.resolve("photo_b" as Id<"itemPhotos">);
+    });
+    await waitFor(() => {
+      expect(harness.appendMedia).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaPhotoIds: ["photo_b"] }),
+      );
+    });
+
+    act(() => {
+      uploads[2]!.resolve("photo_a_retry" as Id<"itemPhotos">);
+    });
+
+    await waitFor(() => {
+      expect(harness.appendMedia).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaPhotoIds: ["photo_a_retry"] }),
+      );
+    });
+    expect(harness.setMediaUploadState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ state: "failed" }),
+    );
+    await waitFor(() => {
+      expect(result.current.jobsForEntry(entry)).toHaveLength(0);
+    });
+  });
+
+  it("uses terminal timeout copy that points to manual retry", async () => {
+    harness.uploadMediaFile.mockRejectedValue(new Error("Upload timed out."));
+
+    const { result } = renderHook(() => useMediaUpload(), { wrapper });
+
+    act(() => {
+      result.current.enqueue({ entryId: entry, householdId: household, moveId: move }, [
+        { file: imageFile("a.jpg"), kind: "image" },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.jobsForEntry(entry)[0]?.error).toBe(
+        "Upload timed out. Check your connection and tap retry.",
+      );
+    });
+  });
+
   it("retries a finalized-but-unattached photo without uploading a duplicate", async () => {
     harness.uploadMediaFile.mockResolvedValue("photo_1" as Id<"itemPhotos">);
     harness.appendMedia
