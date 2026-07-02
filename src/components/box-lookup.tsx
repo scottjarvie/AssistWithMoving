@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Bot,
@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   Ruler,
+  ShieldCheck,
   Trash2,
   Truck,
 } from "lucide-react";
@@ -75,14 +76,15 @@ export function BoxLookup({
   const resolvedMoveId = moveId as Id<"moves"> | undefined;
   const resolvedBoxId = boxId as Id<"boxes">;
   const hasContext = Boolean(resolvedHouseholdId && resolvedMoveId);
+  const auth = useConvexAuth();
   const queryArgs =
-    resolvedHouseholdId && resolvedMoveId
+    resolvedHouseholdId && resolvedMoveId && auth.isAuthenticated
       ? { householdId: resolvedHouseholdId, moveId: resolvedMoveId }
       : "skip";
 
   const boxRecord = useQuery(
     api.boxes.get,
-    resolvedHouseholdId && resolvedMoveId
+    resolvedHouseholdId && resolvedMoveId && auth.isAuthenticated
       ? {
           householdId: resolvedHouseholdId,
           moveId: resolvedMoveId,
@@ -97,7 +99,7 @@ export function BoxLookup({
   const spaces = useQuery(api.moveSpaces.listForMove, queryArgs);
   const movePhotos = useQuery(
     api.photos.listForMove,
-    resolvedHouseholdId && resolvedMoveId
+    resolvedHouseholdId && resolvedMoveId && auth.isAuthenticated
       ? { householdId: resolvedHouseholdId, moveId: resolvedMoveId, limit: 250 }
       : "skip",
   );
@@ -180,7 +182,7 @@ export function BoxLookup({
     );
   }
 
-  if (boxRecord === undefined) {
+  if (auth.isLoading || boxRecord === undefined) {
     return (
       <Shell>
         {backRow}
@@ -189,6 +191,26 @@ export function BoxLookup({
           <Skeleton className="h-20 w-full rounded-lg" />
           <Skeleton className="h-40 w-full rounded-lg" />
         </div>
+      </Shell>
+    );
+  }
+
+  if (!auth.isAuthenticated) {
+    return (
+      <Shell>
+        {backRow}
+        <section className="rounded-lg border border-border bg-card p-5">
+          <h1 className="text-lg font-semibold">Sign in required</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Sign in before opening this unit lookup.
+          </p>
+          <Button asChild variant="outline" className="mt-4">
+            <Link href="/sign-in">
+              <ShieldCheck aria-hidden="true" />
+              Sign in
+            </Link>
+          </Button>
+        </section>
       </Shell>
     );
   }

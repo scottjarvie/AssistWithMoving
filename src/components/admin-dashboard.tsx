@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   Activity,
   Bot,
@@ -172,10 +172,15 @@ const coreMetrics = [
 ] as const;
 
 export function AdminDashboard() {
+  const auth = useConvexAuth();
   const loadOverviewMutation = useMutation(api.admin.overview);
   const flags = useQuery(api.featureFlags.effective, {}) as
     | EffectiveFeatureFlag[]
     | undefined;
+  const currentUser = useQuery(
+    api.users.current,
+    auth.isAuthenticated ? {} : "skip",
+  );
   const searchMutation = useMutation(api.admin.search);
   const getUser = useMutation(api.admin.getUser);
   const getHousehold = useMutation(api.admin.getHousehold);
@@ -190,8 +195,14 @@ export function AdminDashboard() {
     "overview"
   );
   const [message, setMessage] = useState<string | null>(null);
+  const currentUserIsLoading = auth.isAuthenticated && currentUser === undefined;
+  const canLoadAdmin = auth.isAuthenticated && currentUser?.appRole === "admin";
 
   const refreshOverview = useCallback(async () => {
+    if (!canLoadAdmin) {
+      setMessage("Sign in before opening the admin dashboard.");
+      return;
+    }
     setLoading("overview");
     setMessage(null);
     try {
@@ -202,10 +213,20 @@ export function AdminDashboard() {
     } finally {
       setLoading(null);
     }
-  }, [loadOverviewMutation]);
+  }, [canLoadAdmin, loadOverviewMutation]);
 
   useEffect(() => {
     let cancelled = false;
+    if (auth.isLoading || currentUserIsLoading) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!canLoadAdmin) {
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function loadInitialOverview() {
       try {
@@ -229,7 +250,7 @@ export function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [loadOverviewMutation]);
+  }, [auth.isLoading, canLoadAdmin, currentUserIsLoading, loadOverviewMutation]);
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -315,7 +336,37 @@ export function AdminDashboard() {
         </div>
       ) : null}
 
-      {!adminToolsEnabled ? (
+      {auth.isLoading || currentUserIsLoading ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {coreMetrics.slice(0, 5).map(([, label]) => (
+            <Skeleton key={label} className="h-28 w-full" />
+          ))}
+        </div>
+      ) : !auth.isAuthenticated ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="size-4 text-destructive" aria-hidden="true" />
+              Sign in required
+            </CardTitle>
+            <CardDescription>
+              Sign in before opening the admin dashboard.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : currentUser?.appRole !== "admin" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert className="size-4 text-destructive" aria-hidden="true" />
+              Admin access required
+            </CardTitle>
+            <CardDescription>
+              This dashboard is available only to MovingManifest admins.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : !adminToolsEnabled ? (
         <div className="space-y-4">
           <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
             Admin operational dashboards are disabled by feature flag. Runtime
