@@ -1410,6 +1410,7 @@ export default defineSchema({
     .index("by_level", ["levelId"])
     .index("by_plan", ["planId"])
     .index("by_item", ["itemId"])
+    .index("by_box", ["boxId"])
     .index("by_planned_item", ["plannedItemId"])
     .index("by_parent", ["parentPlacementId"])
     .index("by_household", ["householdId"]),

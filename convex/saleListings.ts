@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
@@ -39,6 +39,7 @@ const saleListingPatchArgs = {
   suggestedPriceLowCents: v.optional(v.number()),
   suggestedPriceHighCents: v.optional(v.number()),
   officialPriceCents: v.optional(v.number()),
+  clearOfficialPrice: v.optional(v.boolean()),
   currency: v.optional(v.string()),
   pricingConfidence: v.optional(estimateConfidenceValidator),
   priceDecisionSource: v.optional(v.string()),
@@ -122,6 +123,15 @@ function normalizeSources(
   }));
 }
 
+export function assertPriceCents(value: number | undefined, label: string) {
+  if (value === undefined) return;
+  if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+    throw new ConvexError(
+      `${label} must be a non-negative whole number of cents.`,
+    );
+  }
+}
+
 async function assertSelectedPhotos(
   ctx: MutationCtx,
   args: {
@@ -185,13 +195,22 @@ function listingPatch(args: Record<string, unknown>): Partial<Doc<"saleListings"
     patch.lastRefreshedAt = args.lastRefreshedAt as number;
   }
   if (args.suggestedPriceLowCents !== undefined) {
+    assertPriceCents(args.suggestedPriceLowCents as number, "Suggested low price");
     patch.suggestedPriceLowCents = args.suggestedPriceLowCents as number;
   }
   if (args.suggestedPriceHighCents !== undefined) {
+    assertPriceCents(
+      args.suggestedPriceHighCents as number,
+      "Suggested high price",
+    );
     patch.suggestedPriceHighCents = args.suggestedPriceHighCents as number;
   }
   if (args.officialPriceCents !== undefined) {
+    assertPriceCents(args.officialPriceCents as number, "Official price");
     patch.officialPriceCents = args.officialPriceCents as number;
+  }
+  if (args.clearOfficialPrice) {
+    patch.officialPriceCents = undefined;
   }
   if (args.currency !== undefined) {
     patch.currency = normalizeCurrency(args.currency as string);
@@ -249,6 +268,7 @@ function listingPatch(args: Record<string, unknown>): Partial<Doc<"saleListings"
     patch.pickupStatus = normalizeOptionalText(args.pickupStatus as string);
   }
   if (args.soldPriceCents !== undefined) {
+    assertPriceCents(args.soldPriceCents as number, "Sold price");
     patch.soldPriceCents = args.soldPriceCents as number;
   }
   if (args.soldAt !== undefined) patch.soldAt = args.soldAt as number;
@@ -583,6 +603,7 @@ export const markSold = mutation({
     // The asking price is the default sale amount unless an actual amount is given.
     const soldPriceCents =
       args.soldPriceCents ?? existing?.officialPriceCents ?? undefined;
+    assertPriceCents(soldPriceCents, "Sold price");
 
     if (existing) {
       await ctx.db.patch(existing._id, {

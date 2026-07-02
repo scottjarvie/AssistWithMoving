@@ -35,7 +35,6 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { PhotoLightbox } from "@/components/photo-lightbox";
-import { moveWorkspacePath } from "@/lib/move-links";
 
 type QueueEntry = FunctionReturnType<
   typeof api.ingestionQueue.listForMove
@@ -279,16 +278,14 @@ export function QueueEntryDetailSheet({
                   ? ` (${entry.resultItemIds.length} items proposed)`
                   : ""}
               </p>
-              {entry.resultItemIds?.length && moveId ? (
+              {entry.resultItemIds?.length ? (
                 <Button
                   asChild
                   size="sm"
                   variant="link"
                   className="h-auto p-0"
                 >
-                  <Link
-                    href={`${moveWorkspacePath(moveId, "inventory")}#inventory-records`}
-                  >
+                  <Link href="/app/items#inventory-records">
                     View{" "}
                     {entry.resultItemIds.length === 1
                       ? "the produced item"

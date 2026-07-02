@@ -28,6 +28,10 @@ import {
   volumeCuFtForUpdate,
 } from "./lib/estimateEngine";
 import {
+  archiveActiveSaleListingsForItem,
+  cascadeDeleteBox,
+} from "./lib/hardDelete";
+import {
   boxStatusValidator,
   dimensionsValidator,
   isReservedUnitCode,
@@ -715,7 +719,14 @@ export async function convertItemToBoxCore(
     await ctx.db.patch(photo._id, { itemId: undefined, boxId, updatedAt: now });
   }
 
-  // Retire the now-converted item.
+  const archivedListingCount = await archiveActiveSaleListingsForItem(
+    ctx,
+    item._id,
+    now,
+  );
+
+  // Retire the now-converted item. Active sale listings are archived above so a
+  // sell workflow never keeps pointing at an item that no longer exists.
   await ctx.db.patch(item._id, {
     status: "archived",
     deletedAt: now,
@@ -732,7 +743,7 @@ export async function convertItemToBoxCore(
     action: "item.converted_to_box",
     objectTable: "boxes",
     objectId: boxId,
-    metadata: { code, fromItemId: String(item._id) },
+    metadata: { code, fromItemId: String(item._id), archivedListingCount },
   });
 
   return { boxId, code };
@@ -792,18 +803,11 @@ export const remove = mutation({
       throw new ConvexError("Box not found for this move.");
     }
 
-    const photos = await ctx.db
-      .query("itemPhotos")
-      .withIndex("by_box_created", (q) => q.eq("boxId", args.boxId))
-      .collect();
-    const memberships = await ctx.db
-      .query("boxItems")
-      .withIndex("by_box", (q) => q.eq("boxId", args.boxId))
-      .collect();
-
-    for (const doc of photos) await ctx.db.delete(doc._id);
-    // Unpack: drop memberships so the contained items survive as loose items.
-    for (const doc of memberships) await ctx.db.delete(doc._id);
+    const summary = await cascadeDeleteBox(ctx, {
+      moveId: args.moveId,
+      boxId: args.boxId,
+      now: Date.now(),
+    });
     await ctx.db.delete(args.boxId);
 
     await recordAuditEvent(ctx, {
@@ -818,10 +822,15 @@ export const remove = mutation({
       objectId: args.boxId,
       metadata: {
         code: box.code,
-        deletedPhotoCount: photos.length,
-        unpackedItemCount: memberships.length,
+        deletedPhotoCount: summary.deletedPhotoCount,
+        unpackedItemCount: summary.unpackedItemCount,
+        deletedPlacementCount: summary.deletedPlacementCount,
+        updatedQueueEntryCount: summary.updatedQueueEntryCount,
+        updatedPlanningSuggestionCount: summary.updatedPlanningSuggestionCount,
       },
     });
+
+    return summary;
   },
 });
 

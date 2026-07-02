@@ -9033,6 +9033,13 @@ function parsePhotoIdArray(value: unknown) {
     .slice(0, 20) as Id<"itemPhotos">[];
 }
 
+function assertRestPriceCents(value: number | undefined, label: string) {
+  if (value === undefined) return;
+  if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+    throw new Error(`${label} must be a non-negative whole number of cents.`);
+  }
+}
+
 function saleListingPatchFromBody(
   body: Record<string, unknown>,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
@@ -9074,12 +9081,18 @@ function saleListingPatchFromBody(
   }
   if (body.suggestedPriceLowCents !== undefined) {
     patch.suggestedPriceLowCents = optionalNumber(body.suggestedPriceLowCents);
+    assertRestPriceCents(patch.suggestedPriceLowCents, "suggestedPriceLowCents");
   }
   if (body.suggestedPriceHighCents !== undefined) {
     patch.suggestedPriceHighCents = optionalNumber(body.suggestedPriceHighCents);
+    assertRestPriceCents(
+      patch.suggestedPriceHighCents,
+      "suggestedPriceHighCents",
+    );
   }
   if (body.officialPriceCents !== undefined) {
     patch.officialPriceCents = optionalNumber(body.officialPriceCents);
+    assertRestPriceCents(patch.officialPriceCents, "officialPriceCents");
   }
   if (body.currency !== undefined) {
     const currency = normalizeOptionalText(asString(body.currency))?.toUpperCase();
@@ -9140,6 +9153,7 @@ function saleListingPatchFromBody(
   }
   if (body.soldPriceCents !== undefined) {
     patch.soldPriceCents = optionalNumber(body.soldPriceCents);
+    assertRestPriceCents(patch.soldPriceCents, "soldPriceCents");
   }
   if (body.soldAt !== undefined) patch.soldAt = optionalNumber(body.soldAt);
   if (body.needsMorePhotos !== undefined) {

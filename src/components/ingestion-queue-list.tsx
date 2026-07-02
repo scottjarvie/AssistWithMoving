@@ -41,7 +41,6 @@ import {
   useMediaUpload,
 } from "@/components/media-upload-provider";
 import { QueueEntryDetailSheet } from "@/components/queue-entry-detail-sheet";
-import { moveWorkspacePath } from "@/lib/move-links";
 import {
   mediaKindForMimeType,
   validateMediaUploadFile,
@@ -706,7 +705,7 @@ export function IngestionQueueList({
                     </p>
                   ) : null}
 
-                  {entry.resultItemIds?.length && moveId ? (
+                  {entry.resultItemIds?.length ? (
                     <Button
                       asChild
                       size="sm"
@@ -714,9 +713,7 @@ export function IngestionQueueList({
                       className="h-auto p-0"
                       onClick={stop}
                     >
-                      <Link
-                        href={`${moveWorkspacePath(moveId, "inventory")}#inventory-records`}
-                      >
+                      <Link href="/app/items#inventory-records">
                         View{" "}
                         {entry.resultItemIds.length === 1
                           ? "the produced item"
