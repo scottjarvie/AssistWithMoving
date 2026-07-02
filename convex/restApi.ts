@@ -139,7 +139,6 @@ import {
   safeDocumentationProfile,
 } from "./rest/documentationProfiles";
 
-const restMoveStatuses = ["planning", "active", "completed", "archived"] as const;
 const boxContainerTypes = [
   "carton",
   "plasticTote",
@@ -1451,7 +1450,9 @@ async function routeCreateMove(
     dateEnd: normalizeOptionalText(asString(body.dateEnd)),
     unitSystem: parseUnitSystem(body.unitSystem) ?? "imperial",
     documentationProfileTypes,
-    moveLevelWeightAllowanceLb: optionalNumber(body.moveLevelWeightAllowanceLb),
+    moveLevelWeightAllowanceLb: createMoveWeightAllowanceLb(
+      body.moveLevelWeightAllowanceLb,
+    ),
     pcsBranch: parsePcsBranch(body.pcsBranch),
     pcsRankPayGrade: normalizeOptionalText(asString(body.pcsRankPayGrade)),
     pcsDependentStatus: parsePcsDependentStatus(body.pcsDependentStatus),
@@ -1584,14 +1585,16 @@ async function routeSetupMove(
       householdId: auth.householdId,
       title: title!,
       type,
-      status: parseMoveStatus(body.status) ?? "planning",
+      status: setupMoveStatus(body.status),
       origin: normalizeOptionalText(asString(body.origin)),
       destination: normalizeOptionalText(asString(body.destination)),
       dateStart: normalizeOptionalText(asString(body.dateStart)),
       dateEnd: normalizeOptionalText(asString(body.dateEnd)),
       unitSystem: parseUnitSystem(body.unitSystem) ?? "imperial",
       documentationProfileTypes,
-      moveLevelWeightAllowanceLb: optionalNumber(body.moveLevelWeightAllowanceLb),
+      moveLevelWeightAllowanceLb: createMoveWeightAllowanceLb(
+        body.moveLevelWeightAllowanceLb,
+      ),
       pcsBranch: parsePcsBranch(body.pcsBranch),
       pcsRankPayGrade: normalizeOptionalText(asString(body.pcsRankPayGrade)),
       pcsDependentStatus: parsePcsDependentStatus(body.pcsDependentStatus),
@@ -7081,53 +7084,46 @@ async function findApiMoveByTitle(
   );
 }
 
-function setupMovePatch(
+const setupArchiveMessage =
+  "Archiving a move isn't supported via this endpoint — archive it in the app.";
+
+function setupMoveStatus(value: unknown): Doc<"moves">["status"] {
+  if (value === undefined) return "planning";
+  return (
+    buildMovePatch(
+      { status: value },
+      { archivedStatusMessage: setupArchiveMessage },
+    ).status ?? "planning"
+  );
+}
+
+export function setupMovePatch(
   body: Record<string, unknown>,
   notes: string | undefined,
 ): Partial<Doc<"moves">> {
-  const patch: Partial<Doc<"moves">> = { updatedAt: Date.now() };
-  if (body.title !== undefined) {
-    const title = normalizeOptionalText(asString(body.title));
-    if (!title) throw new Error("title cannot be empty.");
-    patch.title = title;
-  }
-  if (body.status !== undefined) {
-    patch.status = parseMoveStatus(body.status) ?? "planning";
-  }
+  const patch = buildMovePatch(
+    {
+      title: body.title,
+      status: body.status,
+      origin: body.origin,
+      destination: body.destination,
+      dateStart: body.dateStart,
+      dateEnd: body.dateEnd,
+      documentationProfileTypes: body.documentationProfileTypes,
+      moveLevelWeightAllowanceLb: body.moveLevelWeightAllowanceLb,
+      ...(body.notes !== undefined ||
+      body.originRooms !== undefined ||
+      body.destinationRooms !== undefined
+        ? { notes }
+        : {}),
+    },
+    { archivedStatusMessage: setupArchiveMessage },
+  );
   if (body.type !== undefined) {
     patch.type = parseMoveType(body.type) ?? "other";
   }
-  if (body.origin !== undefined) {
-    patch.origin = normalizeOptionalText(asString(body.origin));
-  }
-  if (body.destination !== undefined) {
-    patch.destination = normalizeOptionalText(asString(body.destination));
-  }
-  if (body.dateStart !== undefined) {
-    patch.dateStart = normalizeOptionalText(asString(body.dateStart));
-  }
-  if (body.dateEnd !== undefined) {
-    patch.dateEnd = normalizeOptionalText(asString(body.dateEnd));
-  }
   if (body.unitSystem !== undefined) {
     patch.unitSystem = parseUnitSystem(body.unitSystem) ?? "imperial";
-  }
-  if (body.documentationProfileTypes !== undefined) {
-    patch.documentationProfileTypes = Array.isArray(body.documentationProfileTypes)
-      ? parseDocumentationProfileTypes(body.documentationProfileTypes)
-      : undefined;
-  }
-  if (body.moveLevelWeightAllowanceLb !== undefined) {
-    patch.moveLevelWeightAllowanceLb = optionalNumber(
-      body.moveLevelWeightAllowanceLb,
-    );
-  }
-  if (
-    body.notes !== undefined ||
-    body.originRooms !== undefined ||
-    body.destinationRooms !== undefined
-  ) {
-    patch.notes = notes;
   }
   return patch;
 }
@@ -8795,6 +8791,14 @@ function positiveNumber(value: unknown) {
   return number && number > 0 ? number : undefined;
 }
 
+export function createMoveWeightAllowanceLb(value: unknown) {
+  if (value === undefined) return undefined;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  throw new Error("moveLevelWeightAllowanceLb must be a positive number.");
+}
+
 function normalizePlannedItemPriority(value: number | undefined) {
   if (value === undefined || !Number.isFinite(value)) return undefined;
   return Math.min(4, Math.max(1, Math.round(value)));
@@ -8921,12 +8925,6 @@ async function assertExternalItemKeyAvailable(
   }
 }
 
-function parseMoveStatus(value: unknown) {
-  return includesLiteral(restMoveStatuses, value)
-    ? (value as Doc<"moves">["status"])
-    : undefined;
-}
-
 function parseBoxContainerType(value: unknown) {
   if (value === undefined || value === "") return undefined;
   if (!includesLiteral(boxContainerTypes, value)) {
@@ -9040,7 +9038,24 @@ function assertRestPriceCents(value: number | undefined, label: string) {
   }
 }
 
-function saleListingPatchFromBody(
+function optionalPriceCents(
+  body: Record<string, unknown>,
+  key:
+    | "officialPriceCents"
+    | "soldPriceCents"
+    | "suggestedPriceLowCents"
+    | "suggestedPriceHighCents",
+) {
+  const value = body[key];
+  if (value !== undefined && value !== null && typeof value !== "number") {
+    throw new Error(`${key} must be a number of cents.`);
+  }
+  const cents = optionalNumber(value);
+  assertRestPriceCents(cents, key);
+  return cents;
+}
+
+export function saleListingPatchFromBody(
   body: Record<string, unknown>,
   auth: Awaited<ReturnType<typeof authenticateApiKey>>,
 ): Partial<Doc<"saleListings">> {
@@ -9080,19 +9095,19 @@ function saleListingPatchFromBody(
     patch.lastRefreshedAt = optionalNumber(body.lastRefreshedAt);
   }
   if (body.suggestedPriceLowCents !== undefined) {
-    patch.suggestedPriceLowCents = optionalNumber(body.suggestedPriceLowCents);
-    assertRestPriceCents(patch.suggestedPriceLowCents, "suggestedPriceLowCents");
+    patch.suggestedPriceLowCents = optionalPriceCents(
+      body,
+      "suggestedPriceLowCents",
+    );
   }
   if (body.suggestedPriceHighCents !== undefined) {
-    patch.suggestedPriceHighCents = optionalNumber(body.suggestedPriceHighCents);
-    assertRestPriceCents(
-      patch.suggestedPriceHighCents,
+    patch.suggestedPriceHighCents = optionalPriceCents(
+      body,
       "suggestedPriceHighCents",
     );
   }
   if (body.officialPriceCents !== undefined) {
-    patch.officialPriceCents = optionalNumber(body.officialPriceCents);
-    assertRestPriceCents(patch.officialPriceCents, "officialPriceCents");
+    patch.officialPriceCents = optionalPriceCents(body, "officialPriceCents");
   }
   if (body.currency !== undefined) {
     const currency = normalizeOptionalText(asString(body.currency))?.toUpperCase();
@@ -9152,8 +9167,7 @@ function saleListingPatchFromBody(
     patch.pickupStatus = normalizeOptionalText(asString(body.pickupStatus));
   }
   if (body.soldPriceCents !== undefined) {
-    patch.soldPriceCents = optionalNumber(body.soldPriceCents);
-    assertRestPriceCents(patch.soldPriceCents, "soldPriceCents");
+    patch.soldPriceCents = optionalPriceCents(body, "soldPriceCents");
   }
   if (body.soldAt !== undefined) patch.soldAt = optionalNumber(body.soldAt);
   if (body.needsMorePhotos !== undefined) {

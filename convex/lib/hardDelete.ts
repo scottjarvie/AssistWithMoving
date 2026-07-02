@@ -211,13 +211,21 @@ function queueReferencePatch(
       (photoId) => !args.deletedPhotoIds.has(photoId),
     );
     if (mediaPhotoIds.length !== entry.mediaPhotoIds.length) {
+      const prunedCount = entry.mediaPhotoIds.length - mediaPhotoIds.length;
       patch.mediaPhotoIds = mediaPhotoIds;
       if (
         entry.expectedMediaCount !== undefined &&
         entry.expectedMediaCount > mediaPhotoIds.length
       ) {
-        patch.expectedMediaCount = mediaPhotoIds.length;
-        if (entry.mediaUploadState === "uploading") {
+        const expectedMediaCount = Math.max(
+          mediaPhotoIds.length,
+          entry.expectedMediaCount - prunedCount,
+        );
+        patch.expectedMediaCount = expectedMediaCount;
+        if (
+          entry.mediaUploadState === "uploading" &&
+          mediaPhotoIds.length >= expectedMediaCount
+        ) {
           patch.mediaUploadState = "complete";
         }
       }

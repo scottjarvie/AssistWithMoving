@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
-import { movePatch, routeMovableUnits } from "../../convex/restApi";
+import {
+  createMoveWeightAllowanceLb,
+  movePatch,
+  routeMovableUnits,
+  saleListingPatchFromBody,
+  setupMovePatch,
+} from "../../convex/restApi";
 
 import {
   bearerToken,
@@ -74,6 +80,51 @@ describe("REST API helpers", () => {
       /archive it in the app/,
     );
     expect(() => movePatch({ title: "   " })).toThrow(/title cannot be empty/);
+  });
+
+  it("rejects non-string move text fields instead of coercing them", () => {
+    expect(() => movePatch({ origin: 123 })).toThrow(
+      /origin must be a string/,
+    );
+    expect(movePatch({ origin: "123 Main St" })).toMatchObject({
+      origin: "123 Main St",
+    });
+  });
+
+  it("applies PATCH move status rules to POST /moves/setup updates", () => {
+    expect(() => setupMovePatch({ status: "archived" }, undefined)).toThrow(
+      /via this endpoint/,
+    );
+    expect(() => setupMovePatch({ status: "bogus" }, undefined)).toThrow(
+      /planning\|active\|completed/,
+    );
+    expect(setupMovePatch({ status: "active" }, undefined)).toMatchObject({
+      status: "active",
+    });
+  });
+
+  it("rejects non-positive create-move weight allowances", () => {
+    expect(() => createMoveWeightAllowanceLb(-500)).toThrow(
+      /must be a positive number/,
+    );
+    expect(createMoveWeightAllowanceLb(2000)).toBe(2000);
+  });
+
+  it("rejects string-typed sale listing prices instead of clearing them", () => {
+    const auth = {
+      apiKeyId: "key_1",
+      apiKeyName: "Move bot",
+      apiKeyTokenPreview: "mmk_test",
+    } as never;
+
+    expect(() =>
+      saleListingPatchFromBody({ officialPriceCents: "500" }, auth),
+    ).toThrow(/officialPriceCents must be a number of cents/);
+    expect(
+      saleListingPatchFromBody({ officialPriceCents: 500 }, auth),
+    ).toMatchObject({
+      officialPriceCents: 500,
+    });
   });
 
   it("parses route segments and scopes", () => {

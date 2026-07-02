@@ -385,10 +385,19 @@ type MovePatchInput = {
 type MovePatchOptions = {
   now?: number;
   error?: (message: string) => Error;
+  archivedStatusMessage?: string;
 };
 
-function patchText(value: unknown) {
-  return normalizeOptionalText(value === undefined ? undefined : String(value));
+function patchText(
+  value: unknown,
+  fieldName: string,
+  error: (message: string) => Error,
+) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") {
+    throw error(`${fieldName} must be a string.`);
+  }
+  return normalizeOptionalText(value);
 }
 
 function patchRequiredTitle(value: unknown, error: (message: string) => Error) {
@@ -454,15 +463,18 @@ export function buildMovePatch(
       input.status !== "completed"
     ) {
       if (input.status === "archived") {
-        throw error("Archiving a move isn't supported via PATCH — archive it in the app.");
+        throw error(
+          options.archivedStatusMessage ??
+            "Archiving a move isn't supported via PATCH — archive it in the app.",
+        );
       }
       throw error("status must be one of planning|active|completed.");
     }
     patch.status = input.status;
   }
-  if (input.origin !== undefined) patch.origin = patchText(input.origin);
+  if (input.origin !== undefined) patch.origin = patchText(input.origin, "origin", error);
   if (input.destination !== undefined) {
-    patch.destination = patchText(input.destination);
+    patch.destination = patchText(input.destination, "destination", error);
   }
   if (input.distanceMiles !== undefined) {
     patch.distanceMiles = patchFiniteNumber(input.distanceMiles, "distanceMiles", error);
@@ -470,9 +482,13 @@ export function buildMovePatch(
   if (input.travelMinutes !== undefined) {
     patch.travelMinutes = patchFiniteNumber(input.travelMinutes, "travelMinutes", error);
   }
-  if (input.dateStart !== undefined) patch.dateStart = patchText(input.dateStart);
-  if (input.dateEnd !== undefined) patch.dateEnd = patchText(input.dateEnd);
-  if (input.notes !== undefined) patch.notes = patchText(input.notes);
+  if (input.dateStart !== undefined) {
+    patch.dateStart = patchText(input.dateStart, "dateStart", error);
+  }
+  if (input.dateEnd !== undefined) {
+    patch.dateEnd = patchText(input.dateEnd, "dateEnd", error);
+  }
+  if (input.notes !== undefined) patch.notes = patchText(input.notes, "notes", error);
   if (input.documentationProfileTypes !== undefined) {
     patch.documentationProfileTypes = patchDocumentationProfiles(
       input.documentationProfileTypes,

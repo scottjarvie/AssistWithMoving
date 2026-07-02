@@ -364,6 +364,35 @@ curl https://movingmanifest.com/api/v1/moves/MOVE_ID \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
+Update a move:
+
+```bash
+curl -X PATCH https://movingmanifest.com/api/v1/moves/MOVE_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "PCS Utah to Virginia",
+    "status": "active",
+    "origin": "Utah",
+    "destination": "Virginia",
+    "dateStart": "2026-08-01",
+    "dateEnd": "2026-08-12",
+    "distanceMiles": 2050,
+    "travelMinutes": 1920,
+    "notes": "Pack the garage first.",
+    "documentationProfileTypes": ["insuranceClaim"],
+    "moveLevelWeightAllowanceLb": 9000
+  }'
+```
+
+`PATCH /moves/:moveId` accepts `title`, `status`, `origin`, `destination`,
+`dateStart`, `dateEnd`, `distanceMiles`, `travelMinutes`, `notes`,
+`documentationProfileTypes`, and `moveLevelWeightAllowanceLb`. `status` can be
+`planning`, `active`, or `completed`; `archived` is blocked here and must go
+through the app archive flow so archive bookkeeping is preserved.
+`distanceMiles`, `travelMinutes`, and `moveLevelWeightAllowanceLb` accept `null`
+to clear the stored value.
+
 Get one compact move summary:
 
 ```bash

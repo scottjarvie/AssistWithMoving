@@ -10,6 +10,7 @@ import {
   resolveAppendedMediaState,
   uploadRollupIsInactive,
 } from "../../convex/lib/ingestionQueue";
+import { runnableQueuedEntriesForCounts } from "../../convex/mcpToolsQueue";
 
 describe("ingestion queue lifecycle", () => {
   it("allows the documented forward path", () => {
@@ -56,6 +57,39 @@ describe("ingestion queue lifecycle", () => {
     expect(ingestionClaimIsExpired(fresh, now)).toBe(false);
     expect(ingestionClaimIsExpired(stale, now)).toBe(true);
     expect(ingestionClaimIsExpired(unclaimed, now)).toBe(false);
+  });
+
+  it("counts expired claimed entries as queued for runnable MCP owners", () => {
+    const now = 1_000_000;
+    const entries = [
+      {
+        _id: "entry_queued",
+        ownerUserId: "user_1",
+        status: "queued",
+        mediaPhotoIds: [],
+      },
+      {
+        _id: "entry_expired_claim",
+        ownerUserId: "user_1",
+        status: "claimed",
+        claimExpiresAt: now - 1,
+        mediaPhotoIds: [],
+      },
+      {
+        _id: "entry_fresh_claim",
+        ownerUserId: "user_1",
+        status: "claimed",
+        claimExpiresAt: now + ingestionClaimDurationMs,
+        mediaPhotoIds: [],
+      },
+    ];
+
+    const queued = runnableQueuedEntriesForCounts(entries as never, now);
+
+    expect(queued.map((entry) => entry._id)).toEqual([
+      "entry_queued",
+      "entry_expired_claim",
+    ]);
   });
 });
 
