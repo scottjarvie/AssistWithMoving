@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 
+import { describeMutationError } from "@/lib/mutation-error";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { InventoryItem } from "@/lib/inventory-types";
@@ -1596,8 +1597,10 @@ function CapacityEditor({
       toastSaved("Capacity saved");
       setOpen(false);
     } catch (error) {
-      const detail =
-        error instanceof Error ? error.message : "Could not save capacity.";
+      const detail = describeMutationError(
+        error,
+        "Couldn't save capacity. Try again.",
+      );
       setMessage(detail);
       toastError(detail);
     } finally {
@@ -1763,12 +1766,7 @@ function summarize(result: BatchResult, verb: string): string {
 }
 
 function errorText(error: unknown): string {
-  if (error && typeof error === "object" && "data" in error) {
-    const data = (error as { data?: unknown }).data;
-    if (typeof data === "string") return data;
-  }
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Please try again.";
+  return describeMutationError(error, "Something went wrong. Please try again.");
 }
 
 function formatNumber(value: number): string {
