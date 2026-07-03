@@ -12,6 +12,7 @@ import { useQuery } from "convex/react";
 import {
   CalendarClock,
   Gauge,
+  HeartPulse,
   Route,
   Settings2,
   Truck,
@@ -29,6 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { moveWorkspacePath } from "@/lib/move-links";
 
 // One agreed vocabulary for a move's lifecycle stage (MOVE-299): Planning →
 // Active → Completed, each with a hover explanation. "Archived" is here only so
@@ -199,6 +201,25 @@ export function MoveSummaryPage() {
       />
 
       <MoveOperationsNav />
+
+      {moveId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/40 p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              Move health & decisions
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Open questions, packing readiness, people, and planning defaults.
+            </p>
+          </div>
+          <Button asChild variant="ghost" size="sm">
+            <Link href={moveWorkspacePath(moveId, "overview")}>
+              <HeartPulse className="size-4" aria-hidden="true" />
+              Move health & decisions
+            </Link>
+          </Button>
+        </div>
+      ) : null}
 
       {stage ? (
         <div className="flex flex-wrap items-center gap-2">
