@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
+
 import { PrintableSubManifest } from "@/components/printable-sub-manifest";
 import type { SubManifestKind, SubManifestMode } from "@/lib/sub-manifest";
+
+export const metadata: Metadata = {
+  title: "Sub-manifest",
+};
 
 const subManifestKinds = new Set(["donation", "sellFree", "storage"]);
 

@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { BoxLookup } from "@/components/box-lookup";
+
+export const metadata: Metadata = {
+  title: "Box details",
+};
 
 export default async function BoxLookupPage({
   params,

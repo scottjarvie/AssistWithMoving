@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { PrintableClaimPacket } from "@/components/printable-claim-packet";
+
+export const metadata: Metadata = {
+  title: "Claim packet",
+};
 
 export default async function ClaimPacketPage({
   searchParams,

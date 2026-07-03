@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { PrintableBoxLabels } from "@/components/printable-box-labels";
+
+export const metadata: Metadata = {
+  title: "Box labels",
+};
 
 export default async function BoxLabelsPage({
   searchParams,

@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { PrintablePcsPacket } from "@/components/printable-pcs-packet";
+
+export const metadata: Metadata = {
+  title: "PCS packet",
+};
 
 export default async function PcsPacketPage({
   searchParams,
