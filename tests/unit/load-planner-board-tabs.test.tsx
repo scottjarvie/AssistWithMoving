@@ -907,8 +907,10 @@ describe("LoadPlannerBoard task tabs", () => {
   });
 
   // Large-dataset tests use 120 units: still two pages (page size 100) so
-  // pagination is exercised, but small enough that the jsdom renders stay
-  // inside the 20s timeout under full-suite parallel load (250 units blew it).
+  // pagination is exercised while keeping jsdom renders as cheap as possible.
+  // The generous 45s timeouts absorb full-suite CPU contention on slow
+  // machines — these tests run 5-13s isolated but have been observed blowing
+  // 20s when the whole suite runs in parallel.
   it(
     "paginates large movable-unit sets and keeps summary metrics global",
     async () => {
@@ -948,7 +950,7 @@ describe("LoadPlannerBoard task tabs", () => {
 
       expect(screen.getByText(/Showing 1–100 of 120/)).toBeInTheDocument();
     },
-    20_000,
+    45_000,
   );
 
   it(
@@ -992,7 +994,7 @@ describe("LoadPlannerBoard task tabs", () => {
         screen.getByText(/0 selected total, 0 selected in/),
       ).toBeInTheDocument();
     },
-    20_000,
+    45_000,
   );
 
   it(
@@ -1049,7 +1051,7 @@ describe("LoadPlannerBoard task tabs", () => {
       expect(assignedBoxIds).not.toContain("box_10");
       expect(assignedBoxIds).not.toContain("box_120");
     },
-    20_000,
+    45_000,
   );
 
   it(
@@ -1070,7 +1072,7 @@ describe("LoadPlannerBoard task tabs", () => {
         screen.getByText(/21 selected total, 20 selected in/),
       ).toBeInTheDocument();
     },
-    20_000,
+    45_000,
   );
 
   it("updates missing movable-unit measurements from the table", async () => {
