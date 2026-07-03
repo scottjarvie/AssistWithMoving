@@ -51,7 +51,7 @@ export function BoxQrCode({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={dataUrl}
-      alt={`${label} QR code`}
+      alt={`QR code for box ${label}`}
       width={size}
       height={size}
       className="rounded-md border border-border bg-white"

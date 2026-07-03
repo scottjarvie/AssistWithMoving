@@ -342,6 +342,25 @@ describe("BoxLookup", () => {
     });
   });
 
+  it("cancels description edits with Escape and restores the saved copy", async () => {
+    const user = userEvent.setup();
+    renderBoxLookup();
+
+    await user.click(screen.getByRole("button", { name: /Rename \/ edit/ }));
+    const description = screen.getByLabelText("Unit description");
+    await user.clear(description);
+    await user.type(description, "Unsaved garage draft");
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByLabelText("Unit description")).not.toBeInTheDocument();
+    expect(screen.getByText("Rough garage contents")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Rename \/ edit/ }));
+    expect(screen.getByLabelText("Unit description")).toHaveValue(
+      "Rough garage contents",
+    );
+  });
+
   it("shows a compact empty state when the unit has no items", () => {
     const originalContents = lookupData.boxRecord.contents;
     const originalCount = lookupData.boxRecord.itemCount;

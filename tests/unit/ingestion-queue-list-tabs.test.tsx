@@ -451,6 +451,48 @@ describe("IngestionQueueList detail modal (MOVE-356)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("cancels inline direction edits with Escape and discards the draft", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Answer & requeue" }));
+    const textarea = screen.getByLabelText("Edit directions");
+    await user.clear(textarea);
+    await user.type(textarea, "Garage shelf draft");
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByLabelText("Edit directions")).not.toBeInTheDocument();
+    expect(screen.getByText("Identify the blue bin.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Answer & requeue" }));
+    expect(screen.getByLabelText("Edit directions")).toHaveValue(
+      "Identify the blue bin.",
+    );
+  });
+
+  it("ignores Escape when no inline direction edit is active", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByLabelText("Edit directions")).not.toBeInTheDocument();
+    expect(screen.getByText("Identify the blue bin.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("does not show saved state when detail save fails", async () => {
     const user = userEvent.setup();
     queueData.mutation.mockRejectedValueOnce(new Error("network"));

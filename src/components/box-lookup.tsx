@@ -473,6 +473,12 @@ export function BoxLookup({
                 <Textarea
                   name="description"
                   defaultValue={box.description ?? ""}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setEditingDetails(false);
+                    }
+                  }}
                   placeholder="What's inside or any notes"
                   aria-label="Unit description"
                   rows={2}

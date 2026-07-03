@@ -117,7 +117,7 @@ export default function AiStartPage() {
               <Bot className="size-4 text-primary" aria-hidden="true" />
               Hosted MCP endpoint
             </div>
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/35 p-3 font-mono text-xs leading-5 text-muted-foreground">
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted/35 p-3 font-mono text-xs leading-5 text-muted-foreground">
               {remoteMcpEndpoint}
             </pre>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
