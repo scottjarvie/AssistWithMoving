@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -55,7 +55,9 @@ export const create = mutation({
       args.moveId,
       "household:edit"
     );
-    if (actor.type !== "user") throw new Error("Signed-in user context required.");
+    if (actor.type !== "user") {
+      throw new ConvexError("Signed-in user context required.");
+    }
     const now = Date.now();
     const personId = await ctx.db.insert("movePeople", {
       householdId: args.householdId,
@@ -106,7 +108,9 @@ export const update = mutation({
       args.moveId,
       "household:edit"
     );
-    if (actor.type !== "user") throw new Error("Signed-in user context required.");
+    if (actor.type !== "user") {
+      throw new ConvexError("Signed-in user context required.");
+    }
 
     const person = await ctx.db.get(args.personId);
     if (
@@ -115,7 +119,7 @@ export const update = mutation({
       person.moveId !== args.moveId ||
       person.archivedAt
     ) {
-      throw new Error("Move contact not found.");
+      throw new ConvexError("Move contact not found.");
     }
 
     const now = Date.now();
@@ -125,7 +129,7 @@ export const update = mutation({
     };
     if (args.name !== undefined) {
       const name = args.name.trim();
-      if (!name) throw new Error("Contact name is required.");
+      if (!name) throw new ConvexError("Contact name is required.");
       patch.name = name;
     }
     if (args.role !== undefined) patch.role = args.role;
@@ -167,7 +171,9 @@ export const archive = mutation({
       args.moveId,
       "household:edit"
     );
-    if (actor.type !== "user") throw new Error("Signed-in user context required.");
+    if (actor.type !== "user") {
+      throw new ConvexError("Signed-in user context required.");
+    }
 
     const person = await ctx.db.get(args.personId);
     if (
@@ -176,7 +182,7 @@ export const archive = mutation({
       person.moveId !== args.moveId ||
       person.archivedAt
     ) {
-      throw new Error("Move contact not found.");
+      throw new ConvexError("Move contact not found.");
     }
 
     const now = Date.now();

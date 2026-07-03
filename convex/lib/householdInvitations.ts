@@ -1,3 +1,5 @@
+import { ConvexError } from "convex/values";
+
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { recordAuditEvent } from "./audit";
@@ -83,7 +85,7 @@ export async function activateHouseholdMemberForUser(
     .unique();
 
   if (existing?.role === "owner") {
-    throw new Error(
+    throw new ConvexError(
       "Owner access cannot be changed from this collaborator manager.",
     );
   }
@@ -261,13 +263,13 @@ export async function addOrInviteHouseholdMemberByEmail(
 ): Promise<AddOrInviteHouseholdMemberResult> {
   const normalizedEmail = normalizeCollaboratorEmail(email);
   if (!normalizedEmail) {
-    throw new Error("Enter a collaborator email.");
+    throw new ConvexError("Enter a collaborator email.");
   }
 
   const targetUser = await findActiveUserByEmail(ctx, normalizedEmail);
   if (targetUser) {
     if (actor.type === "user" && targetUser._id === actor.userId) {
-      throw new Error("You are already a member of this household.");
+      throw new ConvexError("You are already a member of this household.");
     }
 
     return await activateHouseholdMemberForUser(ctx, {

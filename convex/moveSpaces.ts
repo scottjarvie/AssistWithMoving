@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
@@ -53,7 +53,7 @@ const defaultCapacity = {
 function normalizeName(name: string) {
   const normalized = normalizeOptionalText(name);
   if (!normalized) {
-    throw new Error("Space name is required.");
+    throw new ConvexError("Space name is required.");
   }
   return normalized.slice(0, 120);
 }
@@ -80,7 +80,7 @@ async function assertSpaceTargets(
       resource.moveId !== args.moveId ||
       resource.archivedAt
     ) {
-      throw new Error("Transport resource is not available for this move.");
+      throw new ConvexError("Transport resource is not available for this move.");
     }
   }
 
@@ -92,7 +92,7 @@ async function assertSpaceTargets(
       zone.moveId !== args.moveId ||
       zone.archivedAt
     ) {
-      throw new Error("Transport zone is not available for this move.");
+      throw new ConvexError("Transport zone is not available for this move.");
     }
   }
 
@@ -104,7 +104,7 @@ async function assertSpaceTargets(
       entity.moveId !== args.moveId ||
       entity.archivedAt
     ) {
-      throw new Error("Plan entity is not available for this move.");
+      throw new ConvexError("Plan entity is not available for this move.");
     }
   }
 }
@@ -242,7 +242,7 @@ export const update = mutation({
       space.householdId !== args.householdId ||
       space.moveId !== args.moveId
     ) {
-      throw new Error("Space not found.");
+      throw new ConvexError("Space not found.");
     }
     await assertSpaceTargets(ctx, args);
 

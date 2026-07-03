@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { describeMutationError } from "@/lib/mutation-error";
 
 type ExportSummary = Record<string, number>;
 
@@ -544,5 +545,8 @@ function labelize(value: string) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Privacy request failed.";
+  return describeMutationError(
+    error,
+    "Couldn't complete the privacy request. Try again, and reload the page if it keeps failing.",
+  );
 }

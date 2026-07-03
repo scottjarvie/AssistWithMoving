@@ -57,6 +57,7 @@ import {
   type PcsShipmentType,
 } from "@/lib/move-presets";
 import { moveWorkspacePath } from "@/lib/move-links";
+import { describeMutationError } from "@/lib/mutation-error";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MOVE_TYPE: MoveType = "local";
@@ -380,8 +381,13 @@ function HouseholdSetupCard() {
       const id = await createHousehold({ name: nextHouseholdName });
       selectHousehold(id);
       setMessage("Household created. You can now create your first move.");
-    } catch {
-      setMessage("Could not create the household yet.");
+    } catch (error) {
+      setMessage(
+        describeMutationError(
+          error,
+          "Couldn't create the household. Check the name and try again.",
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -512,8 +518,13 @@ function CreateMoveSheet({
       selectMove(id);
       onOpenChange(false);
       router.push(moveWorkspacePath(id));
-    } catch {
-      setMessage("Could not create the move yet.");
+    } catch (error) {
+      setMessage(
+        describeMutationError(
+          error,
+          "Couldn't create the move. Check the required fields and try again.",
+        ),
+      );
     } finally {
       setSaving(false);
     }

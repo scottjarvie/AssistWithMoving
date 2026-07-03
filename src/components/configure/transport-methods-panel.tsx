@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { describeMutationError } from "@/lib/mutation-error";
 import { cn } from "@/lib/utils";
 import {
   transportResourcePresetOptions,
@@ -221,8 +222,13 @@ export function TransportMethodsPanel({
       await createFromPreset({ householdId, moveId, presetKey });
       setShowPresets(false);
       setMessage("Method added.");
-    } catch {
-      setMessage("Could not add that method yet.");
+    } catch (error) {
+      setMessage(
+        describeMutationError(
+          error,
+          "Couldn't add that transportation method. Try again, and reload the page if it keeps failing.",
+        ),
+      );
     } finally {
       setAddingPreset(null);
     }

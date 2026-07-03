@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { describeMutationError } from "@/lib/mutation-error";
 
 type Spaces = FunctionReturnType<typeof api.moveSpaces.listForMove>;
 type Space = Spaces[number];
@@ -240,8 +241,13 @@ export function MoveAreasPanel({
       setName("");
       setFloorLevel("");
       setMessage("Area added.");
-    } catch {
-      setMessage("Could not add that area yet.");
+    } catch (error) {
+      setMessage(
+        describeMutationError(
+          error,
+          "Couldn't add that area. Check the name and try again.",
+        ),
+      );
     }
   }
 

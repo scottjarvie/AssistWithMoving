@@ -27,6 +27,7 @@ import {
   type PcsDependentStatus,
   type PcsShipmentType,
 } from "@/lib/move-presets";
+import { describeMutationError } from "@/lib/mutation-error";
 
 type MoveEntries = FunctionReturnType<typeof api.moves.listForHousehold>;
 type Move = MoveEntries[number];
@@ -104,8 +105,13 @@ export function MoveDetailsPanel({
             : undefined,
       });
       setLogisticsMessage("Logistics saved.");
-    } catch {
-      setLogisticsMessage("Could not save logistics yet.");
+    } catch (error) {
+      setLogisticsMessage(
+        describeMutationError(
+          error,
+          "Couldn't save the logistics. Check the values and try again.",
+        ),
+      );
     } finally {
       setSavingLogistics(false);
     }
@@ -128,8 +134,13 @@ export function MoveDetailsPanel({
         proGearNotes: proGearNotes.trim() || undefined,
       });
       setPcsMessage("PCS template saved.");
-    } catch {
-      setPcsMessage("Could not save the PCS template yet.");
+    } catch (error) {
+      setPcsMessage(
+        describeMutationError(
+          error,
+          "Couldn't save the PCS template. Check the PCS fields and try again.",
+        ),
+      );
     } finally {
       setSavingPcs(false);
     }

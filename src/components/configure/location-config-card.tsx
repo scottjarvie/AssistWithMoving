@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { describeMutationError } from "@/lib/mutation-error";
 
 // The structured location stored on a move. All fields optional so the form can
 // be present-but-partial; the legacy origin/destination strings stay canonical
@@ -94,8 +95,13 @@ export function LocationConfigCard({
         },
       });
       setMessage("Address saved.");
-    } catch {
-      setMessage("Could not save that address yet.");
+    } catch (error) {
+      setMessage(
+        describeMutationError(
+          error,
+          "Couldn't save the address. Try again, and reload the page if it keeps failing.",
+        ),
+      );
     } finally {
       setSaving(false);
     }
