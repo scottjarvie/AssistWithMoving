@@ -11,7 +11,7 @@ const apiMock = vi.hoisted(() => ({
 // Reconfigured per test before render.
 const state = vi.hoisted(() => ({
   workspace: {} as Record<string, unknown>,
-  transport: [] as unknown[],
+  transport: [] as unknown[] | undefined,
   memberCount: undefined as number | undefined,
 }));
 
@@ -122,5 +122,20 @@ describe("MoveSummaryPage (MOVE-307/308/309/310)", () => {
     ).toHaveAttribute("href", "/app/moves/move_1/configure");
     // Household row is suppressed for the lone default member.
     expect(screen.queryByText("1 members")).not.toBeInTheDocument();
+  });
+
+  it("renders shared skeletons while the move summary is loading", () => {
+    state.workspace = {
+      householdId: "household_1" as Id<"households">,
+      moveId: "move_1" as Id<"moves">,
+      selectedMove: undefined,
+    };
+    state.transport = undefined;
+    state.memberCount = undefined;
+
+    const { container } = render(<MoveSummaryPage />);
+
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(2);
+    expect(screen.queryByText(/Let.s set up this move/)).not.toBeInTheDocument();
   });
 });

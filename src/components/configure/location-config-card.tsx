@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { describeMutationError } from "@/lib/mutation-error";
 
 // The structured location stored on a move. All fields optional so the form can
@@ -73,6 +74,31 @@ export function LocationConfigCard({
       ? "Where the move begins. Add via your connected AI agent or here."
       : "Where the move ends. Add via your connected AI agent or here.";
   const argKey = side === "start" ? "startLocation" : "endLocation";
+
+  if (!householdId || !moveId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="size-4 text-primary" aria-hidden="true" />
+            {heading}
+          </CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Skeleton className="h-9 rounded-md" />
+          <Skeleton className="h-9 rounded-md" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Skeleton className="h-9 rounded-md" />
+            <Skeleton className="h-9 rounded-md" />
+            <Skeleton className="h-9 rounded-md" />
+            <Skeleton className="h-9 rounded-md" />
+          </div>
+          <Skeleton className="h-9 w-36 rounded-md" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

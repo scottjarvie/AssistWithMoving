@@ -1447,15 +1447,27 @@ function MovableUnitsPanel({
             </table>
             {filteredUnits.length > 100 ? (
               <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
-                {filteredUnits.length - 100} more units hidden by the table
-                limit. Search or filter to narrow the view.
+                Showing {displayedUnits.length} of {filteredUnits.length} -
+                search or filter to narrow.
               </div>
             ) : null}
           </div>
         </>
       ) : (
         <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-          No movable units match this filter.
+          <p>No movable units match this filter.</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            onClick={() => {
+              onFilterChange("all");
+              onSearchChange("");
+            }}
+          >
+            Clear filter
+          </Button>
         </div>
       )}
     </div>
@@ -4004,8 +4016,8 @@ function UnboxedItemsPanel({
           ))}
           {allUnboxedItemCount > unboxedItems.length ? (
             <div className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-              {allUnboxedItemCount - unboxedItems.length} more unboxed items
-              hidden by the queue limit.
+              Showing {unboxedItems.length} of {allUnboxedItemCount} - search
+              or filter to narrow.
             </div>
           ) : null}
         </div>

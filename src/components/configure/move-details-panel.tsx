@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   moveTypeOptions,
@@ -81,6 +82,34 @@ export function MoveDetailsPanel({
   const [proGearNotes, setProGearNotes] = useState(move?.proGearNotes ?? "");
   const [pcsMessage, setPcsMessage] = useState<string | null>(null);
   const [savingPcs, setSavingPcs] = useState(false);
+
+  if (!householdId || !moveId || !move) {
+    return (
+      <div className="grid gap-4 xl:grid-cols-2">
+        {["Logistics", "Type & template"].map((title) => (
+          <Card key={title}>
+            <CardHeader>
+              <CardTitle>{title}</CardTitle>
+              <CardDescription>
+                {title === "Logistics"
+                  ? "Dates, distance, and travel time for the move."
+                  : "The move template and any template-specific details."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Skeleton className="h-9 rounded-md" />
+                <Skeleton className="h-9 rounded-md" />
+                <Skeleton className="h-9 rounded-md" />
+                <Skeleton className="h-9 rounded-md" />
+              </div>
+              <Skeleton className="h-9 w-40 rounded-md" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
   async function handleSaveLogistics(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
