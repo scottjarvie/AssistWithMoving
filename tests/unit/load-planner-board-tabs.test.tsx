@@ -217,6 +217,8 @@ import {
   serializeRoughMovableUnitRowsForAssistant,
 } from "@/components/load-planner-board";
 
+type TestBoxRecord = (typeof loadPlannerData.boxes)[number];
+
 function renderLoadPlannerBoard() {
   render(
     <LoadPlannerBoard
@@ -254,13 +256,65 @@ function makeItem(
   } as unknown as Doc<"items">;
 }
 
+function makeBox(
+  index: number,
+  overrides: Record<string, unknown> = {},
+  contents: TestBoxRecord["contents"] = [],
+) {
+  const code = `BOX-${String(index).padStart(3, "0")}`;
+  return {
+    box: {
+      _id: `box_${index}` as Id<"boxes">,
+      _creationTime: index,
+      householdId: "household_123" as Id<"households">,
+      moveId: "move_123" as Id<"moves">,
+      code,
+      label: `Box ${index}`,
+      room: "Garage",
+      destinationRoom: "Storage",
+      status: "open",
+      assignmentWarnings: [],
+      assignmentHardBlocks: [],
+      assignmentLocked: false,
+      createdByUserId: "user_123" as Id<"users">,
+      createdAt: 1,
+      updatedAt: 1,
+      ...overrides,
+    },
+    contents,
+    itemCount: contents.length,
+    weightSummary: {
+      valueLb: 0,
+      label: "missing",
+      source: "missing",
+    },
+  } as unknown as TestBoxRecord;
+}
+
 function resetLoadPlannerData() {
-  loadPlannerData.items = [
-    makeItem("item_boxed", "Coffee mugs", {
-      status: "packed",
+  const boxedItem = makeItem("item_boxed", "Coffee mugs", {
+    status: "packed",
+    room: "Kitchen",
+    category: "Kitchen",
+  });
+  const kitchenBox = makeBox(
+    1,
+    {
+      label: "Kitchen essentials",
       room: "Kitchen",
-      category: "Kitchen",
-    }),
+      destinationRoom: "Kitchen",
+      status: "sealed",
+    },
+    [{ item: boxedItem }],
+  );
+  kitchenBox.weightSummary = {
+    valueLb: 18,
+    label: "contents-derived",
+    source: "contents",
+  };
+  loadPlannerData.boxes = [kitchenBox];
+  loadPlannerData.items = [
+    boxedItem,
     makeItem("item_unboxed", "Floor lamp", {
       category: "Lighting",
       planningDefaultKeys: ["firstNight"],
@@ -270,6 +324,43 @@ function resetLoadPlannerData() {
       needsReview: true,
     }),
   ];
+  loadPlannerData.report = {
+    boxReports: [
+      {
+        boxId: "box_1" as Id<"boxes">,
+        warnings: [],
+        weightSummary: {
+          valueLb: 18,
+          label: "contents-derived",
+          source: "contents",
+        },
+      },
+    ],
+    resourceReports: [
+      {
+        resourceId: "resource_1" as Id<"transportResources">,
+        estimatedWeightLb: 0,
+        estimatedVolumeCuFt: 0,
+      },
+    ],
+  };
+}
+
+function useLargeMovableUnitDataset(count: number) {
+  loadPlannerData.boxes = Array.from({ length: count }, (_, index) =>
+    makeBox(index + 1),
+  );
+  loadPlannerData.items = [];
+  loadPlannerData.report = {
+    boxReports: [],
+    resourceReports: [
+      {
+        resourceId: "resource_1" as Id<"transportResources">,
+        estimatedWeightLb: 0,
+        estimatedVolumeCuFt: 0,
+      },
+    ],
+  };
 }
 
 describe("LoadPlannerBoard task tabs", () => {
@@ -814,6 +905,72 @@ describe("LoadPlannerBoard task tabs", () => {
     expect(screen.getByText("Loose item 12")).toBeInTheDocument();
     expect(screen.queryByText("Loose item 13")).not.toBeInTheDocument();
   });
+
+  it(
+    "paginates large movable-unit sets and keeps summary metrics global",
+    async () => {
+      const user = userEvent.setup();
+      useLargeMovableUnitDataset(250);
+
+      renderLoadPlannerBoard();
+
+      const metrics = screen.getByLabelText("Movable unit summary");
+      expect(within(metrics).getByLabelText("Units: 250")).toBeInTheDocument();
+      expect(within(metrics).getByLabelText("Boxes: 250")).toBeInTheDocument();
+      expect(
+        within(metrics).getByLabelText("Need load: 250"),
+      ).toBeInTheDocument();
+
+      let unitsTable = screen.getByRole("table", { name: "Movable units" });
+      expect(within(unitsTable).getAllByRole("row")).toHaveLength(101);
+      expect(within(unitsTable).getByText("BOX-001")).toBeInTheDocument();
+      expect(within(unitsTable).getByText("BOX-100")).toBeInTheDocument();
+      expect(within(unitsTable).queryByText("BOX-101")).not.toBeInTheDocument();
+      expect(screen.getByText(/Showing 1–100 of 250/)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Next" }));
+
+      unitsTable = screen.getByRole("table", { name: "Movable units" });
+      expect(within(unitsTable).queryByText("BOX-001")).not.toBeInTheDocument();
+      expect(within(unitsTable).getByText("BOX-101")).toBeInTheDocument();
+      expect(within(unitsTable).getByText("BOX-200")).toBeInTheDocument();
+      expect(screen.getByText(/Showing 101–200 of 250/)).toBeInTheDocument();
+      expect(within(metrics).getByLabelText("Units: 250")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /Need load\s+250/ }));
+
+      expect(screen.getByText(/Showing 1–100 of 250/)).toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "selects the current movable-unit page before offering all matching units",
+    async () => {
+      const user = userEvent.setup();
+      useLargeMovableUnitDataset(250);
+
+      renderLoadPlannerBoard();
+
+      await user.click(screen.getByRole("button", { name: "Select visible" }));
+
+      expect(
+        screen.getByText(/100 selected total, 100 selected in/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/All 100 on this page selected/),
+      ).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: "Select all 250 matching" }),
+      );
+
+      expect(
+        screen.getByText(/250 selected total, 100 selected in/),
+      ).toBeInTheDocument();
+    },
+    20_000,
+  );
 
   it("updates missing movable-unit measurements from the table", async () => {
     const user = userEvent.setup();
