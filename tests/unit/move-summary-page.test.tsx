@@ -93,6 +93,14 @@ describe("MoveSummaryPage (MOVE-307/308/309/310)", () => {
     expect(
       screen.getByRole("link", { name: "Configure Transportation" }),
     ).toHaveAttribute("href", "/app/moves/move_1/configure#transport");
+
+    expect(screen.getAllByText("Move health & decisions")).toHaveLength(2);
+    expect(
+      screen.getByText("Open questions, packing readiness, people, and planning defaults."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Move health & decisions" }),
+    ).toHaveAttribute("href", "/app/moves/move_1/overview");
   });
 
   it("hides household when it's just the default member and shows a get-started prompt when nothing is configured", () => {

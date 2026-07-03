@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Inbox,
   LayoutDashboard,
+  PencilRuler,
   Truck,
   CalendarClock,
   Settings2,
@@ -22,14 +23,15 @@ type OperationLink = {
 };
 
 // The move detail surface has two groups: the move's own pages (Summary index +
-// Configure forms) and Operations (Load Plan / Move Day / Packets / Queue — real
-// move-scoped operations that are not part of the global nav). The "Queue" slot
-// replaced the confusing "AI Review" tab (MOVE-311); the AI-suggestion review is
-// demoted to a secondary link on the queue page.
+// Configure forms) and Operations (Load Plan / Plan / Move Day / Packets /
+// Queue — real move-scoped operations that are not part of the global nav). The
+// "Queue" slot replaced the confusing "AI Review" tab (MOVE-311); secondary
+// surfaces such as AI Review and Overview stay as contextual page links.
 const OPERATION_LINKS: OperationLink[] = [
   { segment: null, label: "Summary", icon: LayoutDashboard, group: "config" },
   { segment: "configure", label: "Configure", icon: Settings2, group: "config" },
   { segment: "load-plan", label: "Load Plan", icon: Truck, group: "operations" },
+  { segment: "plan", label: "Plan", icon: PencilRuler, group: "operations" },
   {
     segment: "move-day",
     label: "Move Day",
