@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { AiConnectionSetup } from "@/components/ai-connection-setup";
+
+export const metadata: Metadata = {
+  title: "AI connections",
+};
 
 export default function AiConnectionsPage() {
   return (

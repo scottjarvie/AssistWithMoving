@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { PrintableMoverPacket } from "@/components/printable-mover-packet";
+
+export const metadata: Metadata = {
+  title: "Mover packet",
+};
 
 export default async function MoverPacketPage({
   searchParams,

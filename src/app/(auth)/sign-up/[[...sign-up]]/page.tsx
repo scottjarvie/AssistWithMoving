@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { SignUp } from "@clerk/nextjs";
 import { UserPlus } from "lucide-react";
 
@@ -6,6 +7,11 @@ import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+export const metadata: Metadata = {
+  title: "Create account",
+  description: "Create a MovingManifest account.",
+};
 
 export default function SignUpPage() {
   return (

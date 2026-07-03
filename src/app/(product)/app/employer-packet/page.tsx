@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { PrintableEmployerPacket } from "@/components/printable-employer-packet";
+
+export const metadata: Metadata = {
+  title: "Employer packet",
+};
 
 export default async function EmployerPacketPage({
   searchParams,

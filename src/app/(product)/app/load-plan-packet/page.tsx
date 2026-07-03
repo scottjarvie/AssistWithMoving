@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
+
 import { PrintableLoadPlanPacket } from "@/components/printable-load-plan-packet";
+
+export const metadata: Metadata = {
+  title: "Load plan packet",
+};
 
 export default async function LoadPlanPacketPage({
   searchParams,
