@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -1104,6 +1104,39 @@ function BulkAssignmentPanel({
   );
 }
 
+function movableUnitMatchesFilter(
+  unit: MovableUnit,
+  filter: MovableUnitFilter,
+  normalizedSearch: string,
+) {
+  if (filter === "box" && unit.kind !== "box") return false;
+  if (filter === "looseItem" && unit.kind !== "looseItem") return false;
+  if (filter === "missing" && !unit.missingFields.length) return false;
+  if (filter === "missingWeight" && !unit.missingFields.includes("weight")) {
+    return false;
+  }
+  if (
+    filter === "missingDimensions" &&
+    !unit.missingFields.includes("dimensions")
+  ) {
+    return false;
+  }
+  if (filter === "missingVolume" && !unit.missingFields.includes("volume")) {
+    return false;
+  }
+  if (filter === "unassigned" && unit.assignmentState !== "unassigned") {
+    return false;
+  }
+  if (
+    filter === "ready" &&
+    (unit.missingFields.length || unit.assignmentState === "unassigned")
+  ) {
+    return false;
+  }
+  if (!normalizedSearch) return true;
+  return unit.searchText.includes(normalizedSearch);
+}
+
 function MovableUnitsPanel({
   existingBoxes,
   filter,
@@ -1158,46 +1191,13 @@ function MovableUnitsPanel({
   const [bulkIncludeLocked, setBulkIncludeLocked] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const normalizedSearch = search.trim().toLowerCase();
-  const filteredUnits = useMemo(() => units.filter((unit) => {
-    if (filter === "box" && unit.kind !== "box") return false;
-    if (filter === "looseItem" && unit.kind !== "looseItem") return false;
-    if (filter === "missing" && !unit.missingFields.length) return false;
-    if (filter === "missingWeight" && !unit.missingFields.includes("weight")) {
-      return false;
-    }
-    if (
-      filter === "missingDimensions" &&
-      !unit.missingFields.includes("dimensions")
-    ) {
-      return false;
-    }
-    if (filter === "missingVolume" && !unit.missingFields.includes("volume")) {
-      return false;
-    }
-    if (filter === "unassigned" && unit.assignmentState !== "unassigned") {
-      return false;
-    }
-    if (
-      filter === "ready" &&
-      (unit.missingFields.length || unit.assignmentState === "unassigned")
-    ) {
-      return false;
-    }
-    if (!normalizedSearch) return true;
-    return unit.searchText.includes(normalizedSearch);
-  }), [units, filter, normalizedSearch]);
-  // A selection must never outlive the filter that produced it: bulk assign
-  // operates on selected units, so ids that no longer match the active
-  // filter/search are pruned here (and selectedUnits below is derived from
-  // filteredUnits, not units, so even the pre-effect render can't hand a
-  // stale unit to the bulk mutation).
-  useEffect(() => {
-    setSelectedUnitIds((current) => {
-      const eligible = new Set(filteredUnits.map((unit) => unit.id));
-      const next = current.filter((id) => eligible.has(id));
-      return next.length === current.length ? current : next;
-    });
-  }, [filteredUnits]);
+  const filteredUnits = useMemo(
+    () =>
+      units.filter((unit) =>
+        movableUnitMatchesFilter(unit, filter, normalizedSearch),
+      ),
+    [units, filter, normalizedSearch],
+  );
   const pageCount = Math.max(
     1,
     Math.ceil(filteredUnits.length / movableUnitsPageSize),
@@ -1250,13 +1250,36 @@ function MovableUnitsPanel({
     setSelectedUnitIds(filteredUnits.map((unit) => unit.id));
   }
 
+  // A selection must never outlive the filter that produced it: bulk assign
+  // operates on selected units, so when the filter or search narrows, ids
+  // that no longer match are pruned. Units that still match stay selected.
+  // (selectedUnits above is also derived from filteredUnits, not units, so a
+  // stale id could never hand a non-matching unit to the bulk mutation.)
+  function pruneSelectionFor(filterValue: MovableUnitFilter, searchValue: string) {
+    const nextSearch = searchValue.trim().toLowerCase();
+    setSelectedUnitIds((current) => {
+      if (!current.length) return current;
+      const eligible = new Set(
+        units
+          .filter((unit) =>
+            movableUnitMatchesFilter(unit, filterValue, nextSearch),
+          )
+          .map((unit) => unit.id),
+      );
+      const next = current.filter((id) => eligible.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }
+
   function handleFilterChange(value: MovableUnitFilter) {
     setPageIndex(0);
+    pruneSelectionFor(value, search);
     onFilterChange(value);
   }
 
   function handleSearchChange(value: string) {
     setPageIndex(0);
+    pruneSelectionFor(filter, value);
     onSearchChange(value);
   }
 
