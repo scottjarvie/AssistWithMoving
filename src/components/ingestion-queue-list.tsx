@@ -669,6 +669,12 @@ export function IngestionQueueList({
                       <Textarea
                         value={editingText}
                         onChange={(event) => setEditingText(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setEditingEntryId(null);
+                          }
+                        }}
                         aria-label="Edit directions"
                         className="min-h-20"
                       />

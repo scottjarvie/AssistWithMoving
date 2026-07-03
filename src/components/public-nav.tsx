@@ -28,7 +28,12 @@ export function PublicMobileNav({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="outline" size="icon-sm" aria-label="Open menu">
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label="Open navigation menu"
+          aria-expanded={open}
+        >
           <Menu aria-hidden="true" />
         </Button>
       </SheetTrigger>
