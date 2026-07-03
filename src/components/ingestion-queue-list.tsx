@@ -46,6 +46,7 @@ import {
   validateMediaUploadFile,
 } from "@/lib/photo-upload";
 import { toastError, toastSaved } from "@/lib/toast";
+import { toastWithUndo } from "@/lib/toast-undo";
 import { cn } from "@/lib/utils";
 
 type QueueTask = "needsAction" | "working" | "archive";
@@ -374,7 +375,22 @@ export function IngestionQueueList({
     setMessage(null);
     try {
       await setEntryStatus({ householdId, moveId, entryId, status });
-      toastSaved(statusToastMessage(status));
+      if (status === "resolved" || status === "discarded") {
+        toastWithUndo({
+          message:
+            status === "resolved" ? "Marked resolved" : "Capture discarded",
+          onUndo: async () => {
+            await setEntryStatus({
+              householdId,
+              moveId,
+              entryId,
+              status: "queued",
+            });
+          },
+        });
+      } else {
+        toastSaved(statusToastMessage(status));
+      }
     } catch {
       setMessage("Could not update that entry yet.");
       toastError("Could not update that capture");
