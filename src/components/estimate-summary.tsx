@@ -355,6 +355,12 @@ export function EstimateSummary({ householdId, moveId }: EstimateSummaryProps) {
                     </div>
                   </div>
                 ))}
+                {missingEstimateItems.length > 12 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing 12 of {missingEstimateItems.length} items with
+                    estimate gaps.
+                  </p>
+                ) : null}
                 {!missingEstimateItems.length ? (
                   <EmptyEstimateState text="No item-level estimate gaps in the first reviewed items." />
                 ) : null}

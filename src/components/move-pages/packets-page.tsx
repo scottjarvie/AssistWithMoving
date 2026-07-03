@@ -71,7 +71,7 @@ export function PacketsWorkspacePage() {
           ) : (
             <FeatureUnavailable
               title="Documentation packets disabled"
-              description="Recipient packets are currently hidden by rollout controls. Ask the household owner to enable Documentation packets in Settings > AI access."
+              description="Documentation packets aren't enabled for this household yet. They're being rolled out gradually — contact support if you need them now."
             />
           )}
         </TabsContent>

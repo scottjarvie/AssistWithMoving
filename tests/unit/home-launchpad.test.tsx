@@ -18,7 +18,7 @@ vi.mock("@/components/move-workspace-context", () => ({
 import { HomeLaunchpad } from "@/components/home-launchpad";
 
 describe("HomeLaunchpad", () => {
-  it("renders card-shaped skeletons while move shortcuts load", () => {
+  it("renders one banner-shaped skeleton while move shortcuts load", () => {
     state.workspace = {
       activeMoves: [],
       selectedMove: null,
@@ -28,7 +28,7 @@ describe("HomeLaunchpad", () => {
     const { container } = render(<HomeLaunchpad />);
 
     expect(screen.getByLabelText("Loading move shortcuts")).toBeInTheDocument();
-    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(1);
     expect(screen.queryByText("Create your first move")).not.toBeInTheDocument();
   });
 

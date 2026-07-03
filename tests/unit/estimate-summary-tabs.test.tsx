@@ -192,6 +192,48 @@ describe("EstimateSummary task tabs", () => {
     expect(screen.queryByText("Rental truck")).not.toBeInTheDocument();
   });
 
+  it("shows an honest truncation count when estimate gaps exceed the 12-item cap", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/app/moves/move_123/inventory#estimate-assumptions"
+    );
+    const originalItems = reportData.report.itemEstimates;
+    reportData.report.itemEstimates = Array.from({ length: 15 }, (_, index) => ({
+      itemId: `item_gap_${index}`,
+      name: `Unmeasured item ${index}`,
+      room: "Office",
+      disposition: "keep",
+      estimate: {
+        warnings: ["missingWeightEstimate"],
+      },
+    }));
+
+    try {
+      render(
+        <EstimateSummary
+          householdId={"household_123" as Id<"households">}
+          moveId={"move_123" as Id<"moves">}
+        />
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("tab", { name: "Assumptions" })
+        ).toHaveAttribute("data-state", "active");
+      });
+
+      expect(
+        screen.getByText(/Showing 12 of 15 items with estimate gaps\./)
+      ).toBeInTheDocument();
+      expect(screen.getByText("Unmeasured item 11")).toBeInTheDocument();
+      // Negative guard: item 12 is beyond the cap.
+      expect(screen.queryByText("Unmeasured item 12")).not.toBeInTheDocument();
+    } finally {
+      reportData.report.itemEstimates = originalItems;
+    }
+  });
+
   it("opens assumptions from the estimate assumptions hash", async () => {
     window.history.replaceState(
       null,

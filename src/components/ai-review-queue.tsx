@@ -474,6 +474,12 @@ export function AiReviewQueue({
                     </TableBody>
                   </Table>
                 </div>
+                {filteredEntries.length > visibleEntries.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing {visibleEntries.length} of {filteredEntries.length}{" "}
+                    - resolve or filter to see more.
+                  </p>
+                ) : null}
               </>
             ) : (
               <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">

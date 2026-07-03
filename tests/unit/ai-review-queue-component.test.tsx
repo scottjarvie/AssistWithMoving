@@ -87,6 +87,42 @@ describe("AiReviewQueue responsive review surface", () => {
     queueData.mutation.mockResolvedValue(null);
   });
 
+  it("shows an honest truncation count when entries exceed the 80-row cap", () => {
+    const original = queueData.textSuggestions;
+    queueData.textSuggestions = Array.from({ length: 85 }, (_, index) => ({
+      _id: `text_bulk_${index}` as Id<"aiTextSuggestions">,
+      type: "item",
+      confidence: "medium",
+      itemDraft: { name: `Bulk item ${index}` },
+      sourceLine: `Line ${index}`,
+      reasoning: "Bulk intake row.",
+    }));
+    try {
+      render(
+        <AiReviewQueue
+          householdId={"household_123" as Id<"households">}
+          moveId={"move_123" as Id<"moves">}
+        />,
+      );
+      // 85 text + 1 photo + 1 planning = 87 filtered, 80 visible.
+      expect(
+        screen.getByText(/Showing 80 of 87 - resolve or filter to see more\./),
+      ).toBeInTheDocument();
+    } finally {
+      queueData.textSuggestions = original;
+    }
+  });
+
+  it("shows no truncation count when entries fit within the cap", () => {
+    render(
+      <AiReviewQueue
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+    expect(screen.queryByText(/Showing \d+ of/)).not.toBeInTheDocument();
+  });
+
   it("renders mobile review cards while keeping the desktop table controls", async () => {
     const user = userEvent.setup();
 

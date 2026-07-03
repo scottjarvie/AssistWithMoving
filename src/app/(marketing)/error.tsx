@@ -21,8 +21,7 @@ export default function MarketingError({
           This page hit a snag.
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Retry once; if it repeats, the error belongs in Linear with the route
-          and browser details.
+          Retry once, or head back to the home page.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button onClick={reset}>Retry</Button>
