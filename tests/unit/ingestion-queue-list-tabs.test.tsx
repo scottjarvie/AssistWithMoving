@@ -27,6 +27,7 @@ const queueData = vi.hoisted(() => ({
 }));
 
 const toastMock = vi.hoisted(() => ({
+  toast: vi.fn(),
   toastSaved: vi.fn(),
   toastError: vi.fn(),
 }));
@@ -55,6 +56,10 @@ vi.mock("@/components/media-upload-provider", () => ({
 }));
 
 vi.mock("@/lib/toast", () => toastMock);
+
+vi.mock("sonner", () => ({
+  toast: toastMock.toast,
+}));
 
 vi.mock("convex/react", () => ({
   useMutation: () => queueData.mutation,
@@ -144,6 +149,7 @@ import { IngestionQueueList } from "@/components/ingestion-queue-list";
 beforeEach(() => {
   queueData.mutation.mockReset();
   queueData.mutation.mockResolvedValue(undefined);
+  toastMock.toast.mockReset();
   toastMock.toastSaved.mockReset();
   toastMock.toastError.mockReset();
   uploadStub.pendingCountForEntry.mockReturnValue(0);
@@ -250,6 +256,83 @@ describe("IngestionQueueList tabs view", () => {
 
     expect(toastMock.toastError).toHaveBeenCalledWith(
       "Could not update that capture",
+    );
+  });
+
+  it("shows an undo toast for discard and restores only once when Undo is clicked twice", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(queueData.mutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryId: "entry_needs_input",
+        status: "discarded",
+      }),
+    );
+    expect(toastMock.toast).toHaveBeenCalledWith(
+      "Capture discarded",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Undo" }),
+        duration: 6000,
+      }),
+    );
+    expect(toastMock.toastSaved).not.toHaveBeenCalledWith("Discarded");
+
+    const undoAction = toastMock.toast.mock.calls[0]?.[1]?.action;
+    await undoAction.onClick();
+    await undoAction.onClick();
+
+    expect(
+      queueData.mutation.mock.calls.filter(
+        ([args]) =>
+          args.entryId === "entry_needs_input" && args.status === "queued",
+      ),
+    ).toHaveLength(1);
+    expect(toastMock.toastSaved).toHaveBeenCalledWith("Restored.");
+  });
+
+  it("shows an undo toast for mark resolved and requeues from Undo", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <IngestionQueueList
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Mark resolved" }));
+
+    expect(queueData.mutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryId: "entry_processed",
+        status: "resolved",
+      }),
+    );
+    expect(toastMock.toast).toHaveBeenCalledWith(
+      "Marked resolved",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Undo" }),
+        duration: 6000,
+      }),
+    );
+
+    const undoAction = toastMock.toast.mock.calls[0]?.[1]?.action;
+    await undoAction.onClick();
+
+    expect(queueData.mutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryId: "entry_processed",
+        status: "queued",
+      }),
     );
   });
 
