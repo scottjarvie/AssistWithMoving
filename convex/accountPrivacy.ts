@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
@@ -119,13 +119,13 @@ export const getAccountExportArtifact = query({
     const job = await ctx.db.get(args.exportJobId);
 
     if (!job || job.userId !== user._id) {
-      throw new Error("Account export not found.");
+      throw new ConvexError("Account export not found.");
     }
     if (job.status !== "completed" || !job.artifactText) {
-      throw new Error("Account export is not ready.");
+      throw new ConvexError("Account export is not ready.");
     }
     if (job.expiresAt < Date.now()) {
-      throw new Error("Account export has expired.");
+      throw new ConvexError("Account export has expired.");
     }
 
     return {
@@ -186,7 +186,7 @@ export const cancelAccountDeletion = mutation({
     const user = await requireCurrentUser(ctx);
     const request = await ctx.db.get(args.requestId);
     if (!request || request.userId !== user._id || request.status !== "pending") {
-      throw new Error("Pending deletion request not found.");
+      throw new ConvexError("Pending deletion request not found.");
     }
 
     const now = Date.now();
@@ -216,7 +216,7 @@ export const completeAccountDeletion = mutation({
     const user = await requireCurrentUser(ctx);
     const request = await ctx.db.get(args.requestId);
     if (!request || request.userId !== user._id || request.status !== "pending") {
-      throw new Error("Pending deletion request not found.");
+      throw new ConvexError("Pending deletion request not found.");
     }
 
     const now = Date.now();

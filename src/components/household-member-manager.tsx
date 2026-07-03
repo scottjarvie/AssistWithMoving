@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { describeMutationError } from "@/lib/mutation-error";
 
 type HouseholdEntry = {
   household: {
@@ -175,9 +176,10 @@ function HouseholdMemberPanel({
       );
     } catch (error) {
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not add that collaborator yet.",
+        describeMutationError(
+          error,
+          "Couldn't add that collaborator. Check the email and try again.",
+        ),
       );
     } finally {
       setAdding(false);
@@ -195,9 +197,10 @@ function HouseholdMemberPanel({
       setMessage("Collaborator role updated.");
     } catch (error) {
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not update that collaborator role.",
+        describeMutationError(
+          error,
+          "Couldn't update that collaborator role. Try again, and reload the page if it keeps failing.",
+        ),
       );
     } finally {
       setWorkingMemberId(null);
@@ -212,9 +215,10 @@ function HouseholdMemberPanel({
       setMessage("Collaborator access disabled.");
     } catch (error) {
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not disable that collaborator.",
+        describeMutationError(
+          error,
+          "Couldn't disable that collaborator. Try again, and reload the page if it keeps failing.",
+        ),
       );
     } finally {
       setWorkingMemberId(null);
@@ -229,9 +233,10 @@ function HouseholdMemberPanel({
       setMessage("Pending invitation revoked.");
     } catch (error) {
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not revoke that invitation.",
+        describeMutationError(
+          error,
+          "Couldn't revoke that invitation. Try again, and reload the page if it keeps failing.",
+        ),
       );
     } finally {
       setWorkingMemberId(null);

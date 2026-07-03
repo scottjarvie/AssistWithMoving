@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
@@ -310,14 +310,14 @@ export const addExistingMember = mutation({
     );
     const role = parseManagedHouseholdMemberRole(args.role);
     if (!role) {
-      throw new Error(
+      throw new ConvexError(
         "Owner access cannot be granted from this collaborator manager.",
       );
     }
 
     const normalizedEmail = normalizeCollaboratorEmail(args.email);
     if (!normalizedEmail) {
-      throw new Error("Enter a collaborator email.");
+      throw new ConvexError("Enter a collaborator email.");
     }
 
     return await addOrInviteHouseholdMemberByEmail(ctx, {
@@ -347,7 +347,7 @@ export const revokeInvitation = mutation({
       "household:manage_members",
     );
     if (actor.type !== "user") {
-      throw new Error("Invitation changes require a signed-in user.");
+      throw new ConvexError("Invitation changes require a signed-in user.");
     }
 
     const invitation = await ctx.db.get(args.invitationId);
@@ -356,7 +356,7 @@ export const revokeInvitation = mutation({
       invitation.householdId !== args.householdId ||
       invitation.status !== "invited"
     ) {
-      throw new Error("Pending invitation not found.");
+      throw new ConvexError("Pending invitation not found.");
     }
 
     await ctx.db.patch(args.invitationId, {
@@ -393,17 +393,17 @@ export const updateMemberRole = mutation({
       "household:manage_members",
     );
     if (actor.type !== "user") {
-      throw new Error("Member role changes require a signed-in user.");
+      throw new ConvexError("Member role changes require a signed-in user.");
     }
     const role = parseManagedHouseholdMemberRole(args.role);
     if (!role) {
-      throw new Error(
+      throw new ConvexError(
         "Owner access cannot be granted from this collaborator manager.",
       );
     }
     const membership = await ctx.db.get(args.membershipId);
     if (!membership || membership.householdId !== args.householdId) {
-      throw new Error("Household member not found.");
+      throw new ConvexError("Household member not found.");
     }
 
     const blockedReason = memberManagementBlockReason({
@@ -413,7 +413,7 @@ export const updateMemberRole = mutation({
       targetRole: membership.role,
     });
     if (blockedReason) {
-      throw new Error(blockedReason);
+      throw new ConvexError(blockedReason);
     }
 
     await ctx.db.patch(args.membershipId, {
@@ -451,11 +451,11 @@ export const disableMember = mutation({
       "household:manage_members",
     );
     if (actor.type !== "user") {
-      throw new Error("Member access changes require a signed-in user.");
+      throw new ConvexError("Member access changes require a signed-in user.");
     }
     const membership = await ctx.db.get(args.membershipId);
     if (!membership || membership.householdId !== args.householdId) {
-      throw new Error("Household member not found.");
+      throw new ConvexError("Household member not found.");
     }
 
     const blockedReason = memberManagementBlockReason({
@@ -465,7 +465,7 @@ export const disableMember = mutation({
       targetRole: membership.role,
     });
     if (blockedReason) {
-      throw new Error(blockedReason);
+      throw new ConvexError(blockedReason);
     }
 
     await ctx.db.patch(args.membershipId, {

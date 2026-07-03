@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { describeMutationError } from "@/lib/mutation-error";
 
 type GrantableRole = "admin" | "editor" | "packer" | "viewer" | "guest";
 type AccessKind = "householdBacked" | "moveOnly";
@@ -134,7 +135,10 @@ export function MoveParticipantsManager({
       );
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Could not add this person.",
+        describeMutationError(
+          error,
+          "Couldn't add this person. Check the details and try again.",
+        ),
       );
     } finally {
       setSaving(false);
@@ -400,7 +404,12 @@ function ParticipantRow({
       await fn();
       onMessage(label);
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : "Could not update.");
+      onMessage(
+        describeMutationError(
+          error,
+          "Couldn't update this person's access. Try again, and reload the page if it keeps failing.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -677,7 +686,12 @@ function ContactsSection({
       setContactEmail("");
       onMessage("Contact added.");
     } catch (error) {
-      onMessage(error instanceof Error ? error.message : "Could not add contact.");
+      onMessage(
+        describeMutationError(
+          error,
+          "Couldn't add that contact. Check the name and try again.",
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -733,9 +747,10 @@ function ContactsSection({
                       onMessage(`${contact.name} removed.`);
                     } catch (error) {
                       onMessage(
-                        error instanceof Error
-                          ? error.message
-                          : "Could not remove contact.",
+                        describeMutationError(
+                          error,
+                          "Couldn't remove that contact. Try again, and reload the page if it keeps failing.",
+                        ),
                       );
                     } finally {
                       setBusy(false);

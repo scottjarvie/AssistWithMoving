@@ -1,3 +1,5 @@
+import { ConvexError } from "convex/values";
+
 import type { Doc } from "../_generated/dataModel";
 import { visibilityForHouseholdRole, type HouseholdRole } from "./roles";
 
@@ -47,7 +49,7 @@ export function anonymizedUserPatch(now: number) {
 
 export function assertDeletionConfirmation(value: string) {
   if (value !== ACCOUNT_DELETION_CONFIRMATION) {
-    throw new Error(`Type ${ACCOUNT_DELETION_CONFIRMATION} to confirm deletion.`);
+    throw new ConvexError(`Type ${ACCOUNT_DELETION_CONFIRMATION} to confirm deletion.`);
   }
 }
 
