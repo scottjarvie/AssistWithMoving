@@ -76,11 +76,13 @@ function AreaCard({
     return "";
   });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const summary = capacitySummary(space);
 
   async function handleSave() {
     setSaving(true);
+    setSaveError(null);
     const parsed = Number(limitValue);
     const hasLimit = limitValue.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
     try {
@@ -100,6 +102,10 @@ function AreaCard({
         },
       });
       setEditing(false);
+    } catch (error) {
+      setSaveError(
+        describeMutationError(error, `Couldn't save ${space.name}. Try again.`),
+      );
     } finally {
       setSaving(false);
     }
@@ -183,6 +189,11 @@ function AreaCard({
           >
             Save area
           </Button>
+          {saveError ? (
+            <p role="status" aria-live="polite" className="text-xs text-destructive">
+              {saveError}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

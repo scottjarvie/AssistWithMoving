@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 
+import { describeMutationError } from "@/lib/mutation-error";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
@@ -116,9 +117,7 @@ export function MovePeopleManager({
       setNotes("");
       setMessage("Contact added.");
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not add contact.",
-      );
+      setMessage(describeMutationError(error, "Couldn't add that contact. Check the name and try again."));
     } finally {
       setSaving(false);
     }
@@ -335,9 +334,7 @@ function useMovePersonEditor({
       onMessage(`${name} saved.`);
       onDone?.();
     } catch (error) {
-      onMessage(
-        error instanceof Error ? error.message : `Could not save ${name}.`,
-      );
+      onMessage(describeMutationError(error, `Couldn't save ${name}. Try again.`));
     } finally {
       setSaving(false);
     }
@@ -355,9 +352,7 @@ function useMovePersonEditor({
       onDone?.();
     } catch (error) {
       onMessage(
-        error instanceof Error
-          ? error.message
-          : `Could not archive ${person.name}.`,
+        describeMutationError(error, `Couldn't archive ${person.name}. Try again.`),
       );
     } finally {
       setSaving(false);

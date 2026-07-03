@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { describeMutationError, offlineMutationMessage } from "@/lib/mutation-error";
 
@@ -25,6 +25,31 @@ describe("describeMutationError", () => {
       error: new Error("database stack leaked"),
       expected: "Try that again.",
     },
+    {
+      name: "coding-bug TypeError while online",
+      error: new TypeError("Cannot read properties of undefined (reading 'foo')"),
+      expected: "Try that again.",
+    },
+    {
+      name: "ConvexError with whitespace-only string data",
+      error: new ConvexError("   "),
+      expected: "Try that again.",
+    },
+    {
+      name: "ConvexError with whitespace-only object message",
+      error: new ConvexError({ message: "  " }),
+      expected: "Try that again.",
+    },
+    {
+      name: "thrown string",
+      error: "boom",
+      expected: "Try that again.",
+    },
+    {
+      name: "thrown undefined",
+      error: undefined,
+      expected: "Try that again.",
+    },
   ])("returns the safe message for $name", ({ error, expected }) => {
     expect(describeMutationError(error, "Try that again.")).toBe(expected);
   });
@@ -36,5 +61,29 @@ describe("describeMutationError", () => {
         "Use the safe fallback.",
       ),
     ).toBe("Use the safe fallback.");
+  });
+});
+
+describe("describeMutationError offline handling", () => {
+  it("returns the offline message for any error while navigator reports offline", () => {
+    const onLine = vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      expect(describeMutationError(new Error("anything"), "fallback")).toBe(
+        offlineMutationMessage,
+      );
+    } finally {
+      onLine.mockRestore();
+    }
+  });
+
+  it("still prefers a ConvexError message while offline", () => {
+    const onLine = vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      expect(
+        describeMutationError(new ConvexError("Name is required."), "fallback"),
+      ).toBe("Name is required.");
+    } finally {
+      onLine.mockRestore();
+    }
   });
 });

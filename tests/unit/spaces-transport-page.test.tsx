@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConvexError } from "convex/values";
 
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -176,6 +177,23 @@ describe("SpacesTransportPageContent (mobile-first)", () => {
     await user.type(screen.getByLabelText("Cargo height in inches"), "84");
     // 120 × 96 × 84 / 1728 = 560 cu ft.
     expect(screen.getByText(/560 cu ft/)).toBeInTheDocument();
+  });
+
+  it("shows the clean ConvexError reason when saving capacity fails", async () => {
+    const user = userEvent.setup();
+    mockData.mutation.mockRejectedValueOnce(
+      new ConvexError("Capacity must be a positive number."),
+    );
+    render(<SpacesTransportPageContent />);
+
+    await user.click(screen.getByRole("button", { name: "Set max capacity" }));
+    await user.click(screen.getByRole("button", { name: "Save capacity" }));
+
+    expect(
+      await screen.findByText("Capacity must be a positive number."),
+    ).toBeInTheDocument();
+    // Negative guard: the verbose Convex client wrapper must never reach the UI.
+    expect(document.body.textContent).not.toMatch(/Request ID|CONVEX/);
   });
 
   it("the 'need a weight' chip filters the list to entries missing a weight", async () => {

@@ -2,6 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ConvexError } from "convex/values";
+
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 
 const apiMock = vi.hoisted(() => ({
@@ -56,6 +58,26 @@ function renderMovePeopleManager() {
 describe("MovePeopleManager task tabs", () => {
   beforeEach(() => {
     peopleData.mutation.mockReset();
+  });
+
+  it("shows the clean ConvexError reason when saving a contact fails", async () => {
+    const user = userEvent.setup();
+    peopleData.mutation.mockRejectedValueOnce(
+      new ConvexError("Contact name is required."),
+    );
+
+    renderMovePeopleManager();
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Edit Riley Helper" })[0],
+    );
+    await user.click(screen.getAllByRole("button", { name: "Save" })[0]);
+
+    const status = await screen.findByText("Contact name is required.");
+    expect(status).toBeInTheDocument();
+    // Negative guard: the verbose Convex client wrapper (function path,
+    // request id) must never reach the UI.
+    expect(document.body.textContent).not.toMatch(/Request ID|CONVEX/);
   });
 
   it("opens on contact records and keeps contact creation separate", async () => {
