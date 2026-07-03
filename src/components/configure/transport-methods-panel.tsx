@@ -125,7 +125,15 @@ function MethodCapacityEditor({
         </Button>
       </div>
       {editing ? (
-        <div className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-2">
+        <div
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setEditing(false);
+            }
+          }}
+          className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-2"
+        >
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
               Weight limit (lb)

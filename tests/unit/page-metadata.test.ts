@@ -76,5 +76,8 @@ describe("page metadata", () => {
     } else {
       expect(source).not.toMatch(/description:/);
     }
+    // A client component exporting metadata is a Next build error — the
+    // combination this suite exists to prevent.
+    expect(source).not.toMatch(/^\s*["']use client["']/m);
   });
 });

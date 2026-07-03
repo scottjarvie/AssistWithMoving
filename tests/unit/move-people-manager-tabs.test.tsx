@@ -60,6 +60,27 @@ describe("MovePeopleManager task tabs", () => {
     peopleData.mutation.mockReset();
   });
 
+  it("closes the contact editor with Escape without saving", async () => {
+    const user = userEvent.setup();
+
+    renderMovePeopleManager();
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Edit Riley Helper" })[0],
+    );
+    const nameInput = screen.getAllByLabelText(
+      "Contact name for Riley Helper",
+    )[0];
+    await user.clear(nameInput);
+    await user.type(nameInput, "Draft never saved");
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByLabelText("Contact name for Riley Helper"),
+    ).not.toBeInTheDocument();
+    expect(peopleData.mutation).not.toHaveBeenCalled();
+  });
+
   it("shows the clean ConvexError reason when saving a contact fails", async () => {
     const user = userEvent.setup();
     peopleData.mutation.mockRejectedValueOnce(

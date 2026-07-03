@@ -19,6 +19,7 @@ import {
   Truck,
 } from "lucide-react";
 
+import { describeMutationError } from "@/lib/mutation-error";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { IngestionCaptureForm } from "@/components/ingestion-capture-form";
@@ -455,6 +456,12 @@ export function BoxLookup({
           {editingDetails ? (
             <form
               onSubmit={(event) => void handleSaveDetails(event)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setEditingDetails(false);
+                }
+              }}
               className="space-y-2 rounded-md border border-border bg-background/60 p-3"
             >
               <label className="block text-xs">
@@ -473,12 +480,6 @@ export function BoxLookup({
                 <Textarea
                   name="description"
                   defaultValue={box.description ?? ""}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      setEditingDetails(false);
-                    }
-                  }}
                   placeholder="What's inside or any notes"
                   aria-label="Unit description"
                   rows={2}
@@ -566,6 +567,12 @@ export function BoxLookup({
           {editingSize ? (
             <form
               onSubmit={(event) => void handleSaveSize(event)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setEditingSize(false);
+                }
+              }}
               className="rounded-md border border-border bg-background/60 p-3"
             >
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -974,6 +981,12 @@ function PlacementEditor({
   return (
     <form
       onSubmit={(event) => void handleSubmit(event)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onCancel();
+        }
+      }}
       className="rounded-md border border-border bg-background/60 p-3"
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1158,9 +1171,7 @@ function BoxItemRow({
       await updateItem({ householdId, moveId, itemId: item._id, name: trimmed });
       onMessage(`Renamed to “${trimmed}”.`);
     } catch (error) {
-      onMessage(
-        error instanceof Error ? error.message : "Couldn't rename that item.",
-      );
+      onMessage(describeMutationError(error, "Couldn't rename that item."));
       setName(item.name);
     } finally {
       setSaving(false);

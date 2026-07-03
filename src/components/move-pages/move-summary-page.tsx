@@ -220,7 +220,7 @@ export function MoveSummaryPage() {
           <Button asChild variant="ghost" size="sm">
             <Link href={moveWorkspacePath(moveId, "overview")}>
               <HeartPulse className="size-4" aria-hidden="true" />
-              Move health & decisions
+              Open overview
             </Link>
           </Button>
         </div>

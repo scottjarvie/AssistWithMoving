@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Check, PackagePlus, ShoppingBag, Tag, Trash2 } from "lucide-react";
 
+import { toastWithUndo } from "@/lib/toast-undo";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,7 @@ export function PlannedItemsPanel({
   const createPlannedItem = useMutation(api.plannedItems.create);
   const updatePlannedItem = useMutation(api.plannedItems.update);
   const archivePlannedItem = useMutation(api.plannedItems.archive);
+  const unarchivePlannedItem = useMutation(api.plannedItems.unarchive);
   const convertPlannedItem = useMutation(api.plannedItems.convertToOwned);
 
   const activePlannedItems = useMemo(
@@ -183,7 +185,17 @@ export function PlannedItemsPanel({
   async function archiveItem(item: PlannedItem) {
     if (!householdId || !moveId) return;
     await archivePlannedItem({ householdId, moveId, plannedItemId: item._id });
-    setMessage("Planned item archived.");
+    setMessage(null);
+    toastWithUndo({
+      message: `"${item.name}" archived`,
+      onUndo: async () => {
+        await unarchivePlannedItem({
+          householdId,
+          moveId,
+          plannedItemId: item._id,
+        });
+      },
+    });
   }
 
   async function convertItem(item: PlannedItem) {

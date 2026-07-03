@@ -22,7 +22,7 @@ describe("MoveOperationsNav", () => {
     state.moveId = "move_123";
   });
 
-  it("links Layout Studio from the move operations nav", () => {
+  it("links the Plan workspace (Layout Studio) from the move operations nav", () => {
     render(<MoveOperationsNav />);
 
     expect(screen.getByRole("link", { name: "Plan" })).toHaveAttribute(

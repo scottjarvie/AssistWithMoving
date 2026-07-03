@@ -361,6 +361,21 @@ describe("BoxLookup", () => {
     );
   });
 
+  it("cancels the details edit with Escape from the name input too", async () => {
+    const user = userEvent.setup();
+    renderBoxLookup();
+
+    await user.click(screen.getByRole("button", { name: /Rename \/ edit/ }));
+    const nameInput = screen.getByLabelText("Unit name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Unsaved name draft");
+    await user.keyboard("{Escape}");
+
+    // The whole form cancels — not just the description field.
+    expect(screen.queryByLabelText("Unit name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unsaved name draft")).not.toBeInTheDocument();
+  });
+
   it("shows a compact empty state when the unit has no items", () => {
     const originalContents = lookupData.boxRecord.contents;
     const originalCount = lookupData.boxRecord.itemCount;
