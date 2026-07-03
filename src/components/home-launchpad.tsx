@@ -17,6 +17,7 @@ import {
 
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { globalNavItems, type GlobalNavItem } from "@/lib/workspace-nav-items";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +64,16 @@ export function HomeLaunchpad() {
       </header>
 
       {/* Continue / first-move context — real data only, shown once it loads. */}
-      {!loadingMoves && hasMoves && continueMove ? (
+      {loadingMoves ? (
+        <div
+          className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
+          aria-label="Loading move shortcuts"
+        >
+          <Skeleton className="h-28 rounded-md" />
+          <Skeleton className="h-28 rounded-md" />
+          <Skeleton className="h-28 rounded-md" />
+        </div>
+      ) : hasMoves && continueMove ? (
         <Link
           href={`/app/moves/${continueMove._id}`}
           className="group flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/5 p-4 transition-colors hover:bg-primary/10"

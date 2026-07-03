@@ -226,12 +226,59 @@ function renderLoadPlannerBoard() {
   );
 }
 
+function makeItem(
+  id: string,
+  name: string,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    _id: id as Id<"items">,
+    _creationTime: 1,
+    householdId: "household_123" as Id<"households">,
+    moveId: "move_123" as Id<"moves">,
+    name,
+    status: "inventory",
+    room: "Living room",
+    category: "General",
+    disposition: "mover",
+    planningDefaultKeys: [],
+    quantity: 1,
+    highValue: false,
+    fragile: false,
+    hazardousFlag: false,
+    requiresPersonalTransport: false,
+    needsReview: false,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  } as unknown as Doc<"items">;
+}
+
+function resetLoadPlannerData() {
+  loadPlannerData.items = [
+    makeItem("item_boxed", "Coffee mugs", {
+      status: "packed",
+      room: "Kitchen",
+      category: "Kitchen",
+    }),
+    makeItem("item_unboxed", "Floor lamp", {
+      category: "Lighting",
+      planningDefaultKeys: ["firstNight"],
+      highValue: true,
+      fragile: true,
+      requiresPersonalTransport: true,
+      needsReview: true,
+    }),
+  ];
+}
+
 describe("LoadPlannerBoard task tabs", () => {
   beforeEach(() => {
     loadPlannerData.mutations.boxCreate.mockReset();
     loadPlannerData.mutations.boxUpdate.mockReset();
     loadPlannerData.mutations.itemCreate.mockReset();
     loadPlannerData.mutations.itemUpdate.mockReset();
+    resetLoadPlannerData();
   });
 
   it("builds an assistant handoff for rough movable unit intake", () => {
@@ -717,6 +764,55 @@ describe("LoadPlannerBoard task tabs", () => {
     expect(
       within(dimensionsGapsTable).getByText("BOX-001"),
     ).toBeInTheDocument();
+  });
+
+  it("offers a clear filter action for filtered-empty movable units", async () => {
+    const user = userEvent.setup();
+
+    renderLoadPlannerBoard();
+
+    await user.type(
+      screen.getByPlaceholderText(
+        "Search movable units, rooms, status, or follow-ups",
+      ),
+      "zzzz",
+    );
+
+    expect(screen.getByText("No movable units match this filter.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear filter" }));
+
+    const unitsTable = screen.getByRole("table", { name: "Movable units" });
+    expect(within(unitsTable).getByText("BOX-001")).toBeInTheDocument();
+    expect(within(unitsTable).getByText("Floor lamp")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(
+        "Search movable units, rooms, status, or follow-ups",
+      ),
+    ).toHaveValue("");
+  });
+
+  it("states the real loose-item cap count", async () => {
+    const user = userEvent.setup();
+    loadPlannerData.items = [
+      makeItem("item_boxed", "Coffee mugs", {
+        status: "packed",
+        room: "Kitchen",
+        category: "Kitchen",
+      }),
+      ...Array.from({ length: 47 }, (_, index) =>
+        makeItem(`item_unboxed_${index + 1}`, `Loose item ${index + 1}`, {
+          room: "Garage",
+        }),
+      ),
+    ];
+
+    renderLoadPlannerBoard();
+
+    await user.click(screen.getByRole("tab", { name: "Loose items: 47 items" }));
+
+    expect(screen.getByText(/Showing 12 of 47/)).toBeInTheDocument();
+    expect(screen.getByText("Loose item 12")).toBeInTheDocument();
+    expect(screen.queryByText("Loose item 13")).not.toBeInTheDocument();
   });
 
   it("updates missing movable-unit measurements from the table", async () => {

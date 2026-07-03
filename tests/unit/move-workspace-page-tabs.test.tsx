@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MoveWorkspaceValue } from "@/components/move-workspace-context";
 import type { Id } from "../../convex/_generated/dataModel";
 
+const featureFlagState = vi.hoisted(() => ({
+  enabled: true,
+}));
+
 vi.mock("@/components/move-workspace-context", () => ({
   useMoveWorkspace: () =>
     ({
@@ -77,7 +81,7 @@ vi.mock("@/components/household-member-manager", () => ({
 }));
 
 vi.mock("@/lib/feature-flags", () => ({
-  flagEnabled: () => true,
+  flagEnabled: () => featureFlagState.enabled,
 }));
 
 vi.mock("@/components/move-questions-panel", () => ({
@@ -122,7 +126,18 @@ vi.mock("@/components/claims-center-panel", () => ({
   ClaimsCenterPanel: () => <div>Claims center surface</div>,
 }));
 vi.mock("@/components/feature-unavailable", () => ({
-  FeatureUnavailable: ({ title }: { title: string }) => <div>{title}</div>,
+  FeatureUnavailable: ({
+    title,
+    description,
+  }: {
+    title: string;
+    description: string;
+  }) => (
+    <div>
+      <p>{title}</p>
+      <p>{description}</p>
+    </div>
+  ),
 }));
 vi.mock("@/components/ai-review-queue", () => ({
   AiReviewQueue: () => <div>AI review queue surface</div>,
@@ -166,6 +181,7 @@ import { PhotosWorkspacePage } from "@/components/move-pages/photos-page";
 describe("move workspace task tabs", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/app/moves/move_123");
+    featureFlagState.enabled = true;
   });
 
   it("opens overview on decisions instead of stacking readiness, people, and defaults", () => {
@@ -492,6 +508,19 @@ describe("move workspace task tabs", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Packet builder surface")).toBeInTheDocument();
     expect(screen.queryByText("Claims center surface")).not.toBeInTheDocument();
+  });
+
+  it("tells users where to enable documentation packets when rollout disables them", () => {
+    featureFlagState.enabled = false;
+
+    render(<PacketsWorkspacePage />);
+
+    expect(screen.getByText("Documentation packets disabled")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Recipient packets are currently hidden by rollout controls. Ask the household owner to enable Documentation packets in Settings > AI access.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("opens packet claims when routed to the claims-center hash", async () => {

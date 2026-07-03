@@ -30,6 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 import { moveWorkspacePath } from "@/lib/move-links";
 
 // One agreed vocabulary for a move's lifecycle stage (MOVE-299): Planning →
@@ -133,13 +134,17 @@ export function MoveSummaryPage() {
   const activeTransport = (transport ?? []).filter(
     (resource) => !resource.archivedAt,
   );
+  const visibleTransportNames = activeTransport
+    .slice(0, 3)
+    .map((resource) => resource.name);
   const transportValue = activeTransport.length
     ? `${activeTransport.length} ${
         activeTransport.length === 1 ? "method" : "methods"
-      } · ${activeTransport
-        .slice(0, 3)
-        .map((resource) => resource.name)
-        .join(", ")}${activeTransport.length > 3 ? "…" : ""}`
+      } · ${visibleTransportNames.join(", ")}${
+        activeTransport.length > visibleTransportNames.length
+          ? ` + ${activeTransport.length - visibleTransportNames.length} more`
+          : ""
+      }`
     : undefined;
 
   // Only surface household size once it's been set up beyond the lone default
@@ -263,8 +268,8 @@ export function MoveSummaryPage() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="h-16 animate-pulse rounded-md border border-border bg-muted" />
-          <div className="h-16 animate-pulse rounded-md border border-border bg-muted" />
+          <Skeleton className="h-16 rounded-md border border-border" />
+          <Skeleton className="h-16 rounded-md border border-border" />
         </div>
       )}
     </div>

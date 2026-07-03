@@ -52,4 +52,22 @@ describe("LocationConfigCard", () => {
       "That address could not be parsed",
     );
   });
+
+  it("renders a form-shaped skeleton while move context loads", () => {
+    const { container } = render(
+      <LocationConfigCard
+        householdId={null}
+        moveId={null}
+        side="start"
+        location={undefined}
+      />,
+    );
+
+    expect(
+      container.querySelectorAll('[data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "Save address" }),
+    ).not.toBeInTheDocument();
+  });
 });
