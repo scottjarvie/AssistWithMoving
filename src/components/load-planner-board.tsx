@@ -118,6 +118,8 @@ type MovableUnitBulkAssignmentInput = {
   includeLocked?: boolean;
 };
 
+const movableUnitsPageSize = 100;
+
 const loadPlannerTasks: Array<{
   value: LoadPlannerTask;
   label: string;
@@ -1154,6 +1156,7 @@ function MovableUnitsPanel({
   const [bulkZoneId, setBulkZoneId] = useState("");
   const [bulkOverrideReason, setBulkOverrideReason] = useState("");
   const [bulkIncludeLocked, setBulkIncludeLocked] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
   const normalizedSearch = search.trim().toLowerCase();
   const filteredUnits = units.filter((unit) => {
     if (filter === "box" && unit.kind !== "box") return false;
@@ -1183,7 +1186,16 @@ function MovableUnitsPanel({
     if (!normalizedSearch) return true;
     return unit.searchText.includes(normalizedSearch);
   });
-  const displayedUnits = filteredUnits.slice(0, 100);
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredUnits.length / movableUnitsPageSize),
+  );
+  const currentPageIndex = Math.min(pageIndex, pageCount - 1);
+  const pageStartIndex = currentPageIndex * movableUnitsPageSize;
+  const displayedUnits = filteredUnits.slice(
+    pageStartIndex,
+    pageStartIndex + movableUnitsPageSize,
+  );
   const selectedUnits = units.filter((unit) =>
     selectedUnitIds.includes(unit.id),
   );
@@ -1193,6 +1205,9 @@ function MovableUnitsPanel({
   const selectedLockedCount = selectedUnits.filter(
     (unit) => unit.assignmentLocked,
   ).length;
+  const pageSelected =
+    displayedUnits.length > 0 &&
+    displayedUnits.every((unit) => selectedUnitIds.includes(unit.id));
   const selectedBulkZones = bulkResourceId
     ? (resourcesWithZones.find(
         ({ resource }) => String(resource._id) === bulkResourceId,
@@ -1209,6 +1224,20 @@ function MovableUnitsPanel({
 
   function selectDisplayedUnits() {
     setSelectedUnitIds(displayedUnits.map((unit) => unit.id));
+  }
+
+  function selectAllMatchingUnits() {
+    setSelectedUnitIds(filteredUnits.map((unit) => unit.id));
+  }
+
+  function handleFilterChange(value: MovableUnitFilter) {
+    setPageIndex(0);
+    onFilterChange(value);
+  }
+
+  function handleSearchChange(value: string) {
+    setPageIndex(0);
+    onSearchChange(value);
   }
 
   return (
@@ -1258,31 +1287,31 @@ function MovableUnitsPanel({
             active={filter === "missingWeight"}
             count={summary.missingWeight}
             label="Need weight"
-            onClick={() => onFilterChange("missingWeight")}
+            onClick={() => handleFilterChange("missingWeight")}
           />
           <GapFilterButton
             active={filter === "missingDimensions"}
             count={summary.missingDimensions}
             label="Need dimensions"
-            onClick={() => onFilterChange("missingDimensions")}
+            onClick={() => handleFilterChange("missingDimensions")}
           />
           <GapFilterButton
             active={filter === "missingVolume"}
             count={summary.missingVolume}
             label="Need volume"
-            onClick={() => onFilterChange("missingVolume")}
+            onClick={() => handleFilterChange("missingVolume")}
           />
           <GapFilterButton
             active={filter === "unassigned"}
             count={summary.unassigned}
             label="Need load"
-            onClick={() => onFilterChange("unassigned")}
+            onClick={() => handleFilterChange("unassigned")}
           />
           <GapFilterButton
             active={filter === "ready"}
             count={readiness.ready}
             label="Ready"
-            onClick={() => onFilterChange("ready")}
+            onClick={() => handleFilterChange("ready")}
           />
         </div>
       </div>
@@ -1291,15 +1320,15 @@ function MovableUnitsPanel({
           householdId={householdId}
           moveId={moveId}
           units={units}
-          onFilterChange={onFilterChange}
-          onSearchChange={onSearchChange}
+          onFilterChange={handleFilterChange}
+          onSearchChange={handleSearchChange}
         />
 
       <MovableUnitFollowUpQueue
         householdId={householdId}
         moveId={moveId}
         units={units}
-        onFilterChange={onFilterChange}
+        onFilterChange={handleFilterChange}
       />
 
       <RoughMovableUnitIntake
@@ -1320,7 +1349,10 @@ function MovableUnitsPanel({
         selectedTargetZones={selectedBulkZones}
         targetResourceId={bulkResourceId}
         targetZoneId={bulkZoneId}
+        pageSelected={pageSelected}
+        visibleCount={displayedUnits.length}
         visibleSelectedCount={visibleSelectedCount}
+        matchingCount={filteredUnits.length}
         onAssign={async () => {
           // Clear the selection on success so the panel visibly resolves —
           // the selection collapsing is itself the confirmation (matches the
@@ -1344,6 +1376,7 @@ function MovableUnitsPanel({
           setBulkZoneId("");
         }}
         onSelectVisible={selectDisplayedUnits}
+        onSelectAllMatching={selectAllMatchingUnits}
         onUnassign={async () => {
           const ok = await onAssignUnits({
             units: selectedUnits,
@@ -1366,7 +1399,7 @@ function MovableUnitsPanel({
           <Input
             className="pl-8"
             value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
+            onChange={(event) => handleSearchChange(event.target.value)}
             placeholder="Search movable units, rooms, status, or follow-ups"
           />
         </div>
@@ -1387,7 +1420,7 @@ function MovableUnitsPanel({
               type="button"
               size="sm"
               variant={filter === value ? "default" : "outline"}
-              onClick={() => onFilterChange(value as MovableUnitFilter)}
+              onClick={() => handleFilterChange(value as MovableUnitFilter)}
             >
               {label}
             </Button>
@@ -1445,13 +1478,17 @@ function MovableUnitsPanel({
                 ))}
               </tbody>
             </table>
-            {filteredUnits.length > 100 ? (
-              <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
-                Showing {displayedUnits.length} of {filteredUnits.length} -
-                search or filter to narrow.
-              </div>
-            ) : null}
           </div>
+          {filteredUnits.length > movableUnitsPageSize ? (
+            <MovableUnitsPager
+              currentPageIndex={currentPageIndex}
+              pageCount={pageCount}
+              pageSize={movableUnitsPageSize}
+              totalCount={filteredUnits.length}
+              visibleCount={displayedUnits.length}
+              onPageChange={setPageIndex}
+            />
+          ) : null}
         </>
       ) : (
         <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -1462,14 +1499,61 @@ function MovableUnitsPanel({
             variant="outline"
             className="mt-3"
             onClick={() => {
-              onFilterChange("all");
-              onSearchChange("");
+              handleFilterChange("all");
+              handleSearchChange("");
             }}
           >
             Clear filter
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+function MovableUnitsPager({
+  currentPageIndex,
+  pageCount,
+  pageSize,
+  totalCount,
+  visibleCount,
+  onPageChange,
+}: {
+  currentPageIndex: number;
+  pageCount: number;
+  pageSize: number;
+  totalCount: number;
+  visibleCount: number;
+  onPageChange: (pageIndex: number) => void;
+}) {
+  const firstVisible = currentPageIndex * pageSize + 1;
+  const lastVisible = firstVisible + visibleCount - 1;
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+      <span>
+        Showing {firstVisible}–{lastVisible} of {totalCount}
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={currentPageIndex === 0}
+        onClick={() => onPageChange(Math.max(0, currentPageIndex - 1))}
+      >
+        Previous
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={currentPageIndex >= pageCount - 1}
+        onClick={() =>
+          onPageChange(Math.min(pageCount - 1, currentPageIndex + 1))
+        }
+      >
+        Next
+      </Button>
     </div>
   );
 }
@@ -1681,25 +1765,31 @@ function MovableUnitMobileCard({
 
 function MovableUnitBulkAssignmentPanel({
   includeLocked,
+  matchingCount,
   overrideReason,
+  pageSelected,
   resourcesWithZones,
   selectedCount,
   selectedLockedCount,
   selectedTargetZones,
   targetResourceId,
   targetZoneId,
+  visibleCount,
   visibleSelectedCount,
   onAssign,
   onClearSelection,
   onIncludeLockedChange,
   onOverrideReasonChange,
   onResourceChange,
+  onSelectAllMatching,
   onSelectVisible,
   onUnassign,
   onZoneChange,
 }: {
   includeLocked: boolean;
+  matchingCount: number;
   overrideReason: string;
+  pageSelected: boolean;
   resourcesWithZones: NonNullable<
     ReturnType<
       typeof useQuery<typeof api.transportResources.listForMoveWithZones>
@@ -1710,16 +1800,21 @@ function MovableUnitBulkAssignmentPanel({
   selectedTargetZones: Doc<"transportZones">[];
   targetResourceId: string;
   targetZoneId: string;
+  visibleCount: number;
   visibleSelectedCount: number;
   onAssign: () => void;
   onClearSelection: () => void;
   onIncludeLockedChange: (value: boolean) => void;
   onOverrideReasonChange: (value: string) => void;
   onResourceChange: (value: string) => void;
+  onSelectAllMatching: () => void;
   onSelectVisible: () => void;
   onUnassign: () => void;
   onZoneChange: (value: string) => void;
 }) {
+  const showSelectAllMatching =
+    pageSelected && matchingCount > visibleCount && visibleCount > 0;
+
   return (
     <div className="rounded-md border border-border bg-background/65 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1758,6 +1853,20 @@ function MovableUnitBulkAssignmentPanel({
           </Button>
         </div>
       </div>
+      {showSelectAllMatching ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          All {visibleCount} on this page selected -{" "}
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto px-0 text-xs"
+            onClick={onSelectAllMatching}
+          >
+            Select all {matchingCount} matching
+          </Button>
+        </p>
+      ) : null}
       <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(180px,1fr)]">
           <select
