@@ -21,8 +21,8 @@ export default function ProductError({
           Something went wrong loading this workspace
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Your data is safe. Retry once; if it repeats, the error belongs in
-          Linear with the route and browser details.
+          Your data is safe. Retry once; if this keeps happening, mention the
+          code above when you contact support.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button onClick={reset}>Retry</Button>

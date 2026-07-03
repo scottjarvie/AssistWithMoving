@@ -65,13 +65,10 @@ export function HomeLaunchpad() {
 
       {/* Continue / first-move context — real data only, shown once it loads. */}
       {loadingMoves ? (
-        <div
-          className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
-          aria-label="Loading move shortcuts"
-        >
-          <Skeleton className="h-28 rounded-md" />
-          <Skeleton className="h-28 rounded-md" />
-          <Skeleton className="h-28 rounded-md" />
+        // One banner-shaped skeleton: the loaded state is a single
+        // "Continue where you left off" strip, not a card grid.
+        <div aria-label="Loading move shortcuts">
+          <Skeleton className="h-16 w-full rounded-lg" />
         </div>
       ) : hasMoves && continueMove ? (
         <Link

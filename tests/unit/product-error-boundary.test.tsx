@@ -31,6 +31,9 @@ describe("ProductError", () => {
     expect(
       screen.queryByText("Sensitive database stack exploded"),
     ).not.toBeInTheDocument();
+    // Users don't have access to the issue tracker — the copy must point at
+    // support, not internal tooling.
+    expect(document.body.textContent).not.toMatch(/Linear/);
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
