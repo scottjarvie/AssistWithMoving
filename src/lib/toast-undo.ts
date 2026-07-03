@@ -22,6 +22,9 @@ export function toastWithUndo({
           await onUndo();
           toastSaved("Restored.");
         } catch {
+          // A failed inverse (e.g. offline) must stay retryable — only a
+          // successful undo latches the guard.
+          done = false;
           toastError("Could not undo that action.");
         }
       },

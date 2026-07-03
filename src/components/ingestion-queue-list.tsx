@@ -52,12 +52,6 @@ import { cn } from "@/lib/utils";
 type QueueTask = "needsAction" | "working" | "archive";
 type QueueFilter = "todo" | "working" | "review" | "done" | "all";
 
-function statusToastMessage(status: "queued" | "resolved" | "discarded") {
-  if (status === "resolved") return "Marked resolved";
-  if (status === "discarded") return "Discarded";
-  return "Requeued";
-}
-
 // The top-level Queue page filters by lifecycle bucket; each filter doubles as
 // a live stat. queued -> To do, claimed -> Working, processed/needsInput ->
 // Review, resolved/discarded -> Done.
@@ -389,7 +383,7 @@ export function IngestionQueueList({
           },
         });
       } else {
-        toastSaved(statusToastMessage(status));
+        toastSaved("Requeued");
       }
     } catch {
       setMessage("Could not update that entry yet.");

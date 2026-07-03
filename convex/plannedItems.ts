@@ -286,6 +286,42 @@ export const archive = mutation({
   },
 });
 
+export const unarchive = mutation({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    plannedItemId: v.id("plannedItems"),
+  },
+  handler: async (ctx, args) => {
+    const { actor } = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:edit",
+    );
+    const plannedItem = await requirePlannedItem(ctx, args);
+    const now = Date.now();
+
+    await ctx.db.patch(plannedItem._id, {
+      archivedAt: undefined,
+      updatedByUserId: actor.type === "user" ? actor.userId : plannedItem.updatedByUserId,
+      updatedAt: now,
+    });
+
+    await recordAuditEvent(ctx, {
+      householdId: args.householdId,
+      moveId: args.moveId,
+      actorType: actor.type,
+      actorUserId: actor.type === "user" ? actor.userId : undefined,
+      actorApiKeyId: actor.type === "apiKey" ? actor.apiKeyId : undefined,
+      category: "inventory",
+      action: "planned_item.unarchived",
+      objectTable: "plannedItems",
+      objectId: plannedItem._id,
+    });
+  },
+});
+
 export const convertToOwned = mutation({
   args: {
     householdId: v.id("households"),

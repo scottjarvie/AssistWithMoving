@@ -528,6 +528,12 @@ function MovePersonEditorPanel({
 
   return (
     <div
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+        }
+      }}
       className={[
         "rounded-md border border-border bg-background p-3",
         className,

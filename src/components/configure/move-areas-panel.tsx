@@ -138,7 +138,15 @@ function AreaCard({
       </div>
 
       {editing ? (
-        <div className="mt-3 space-y-3 border-t border-border pt-3">
+        <div
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setEditing(false);
+            }
+          }}
+          className="mt-3 space-y-3 border-t border-border pt-3"
+        >
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
               Floor / level

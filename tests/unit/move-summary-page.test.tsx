@@ -94,12 +94,12 @@ describe("MoveSummaryPage (MOVE-307/308/309/310)", () => {
       screen.getByRole("link", { name: "Configure Transportation" }),
     ).toHaveAttribute("href", "/app/moves/move_1/configure#transport");
 
-    expect(screen.getAllByText("Move health & decisions")).toHaveLength(2);
+    expect(screen.getAllByText("Move health & decisions")).toHaveLength(1);
     expect(
       screen.getByText("Open questions, packing readiness, people, and planning defaults."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Move health & decisions" }),
+      screen.getByRole("link", { name: "Open overview" }),
     ).toHaveAttribute("href", "/app/moves/move_1/overview");
   });
 

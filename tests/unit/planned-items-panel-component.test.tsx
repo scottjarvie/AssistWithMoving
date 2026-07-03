@@ -14,6 +14,11 @@ vi.mock("convex/react", () => ({
   useMutation: () => mockData.mutation,
 }));
 
+const toastUndoMock = vi.hoisted(() => ({ toastWithUndo: vi.fn() }));
+vi.mock("@/lib/toast-undo", () => ({
+  toastWithUndo: toastUndoMock.toastWithUndo,
+}));
+
 import { PlannedItemsPanel } from "@/components/planned-items-panel";
 
 describe("PlannedItemsPanel", () => {
@@ -45,6 +50,38 @@ describe("PlannedItemsPanel", () => {
         archivedAt: undefined,
       },
     ];
+  });
+
+  it("offers Undo after archiving and fires the unarchive inverse", async () => {
+    const user = userEvent.setup();
+    toastUndoMock.toastWithUndo.mockClear();
+    mockData.mutation.mockResolvedValue(undefined);
+
+    render(
+      <PlannedItemsPanel
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Archive" })[0],
+    );
+
+    expect(mockData.mutation).toHaveBeenCalledTimes(1);
+    expect(toastUndoMock.toastWithUndo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: '"Walnut dining table" archived',
+      }),
+    );
+
+    // Invoking the captured Undo fires the inverse mutation.
+    const { onUndo } = toastUndoMock.toastWithUndo.mock.calls[0][0];
+    await onUndo();
+    expect(mockData.mutation).toHaveBeenCalledTimes(2);
+    expect(mockData.mutation).toHaveBeenLastCalledWith(
+      expect.objectContaining({ plannedItemId: "planned_1" }),
+    );
   });
 
   it("shows planned item records before opening the add form", async () => {

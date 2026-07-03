@@ -53,5 +53,27 @@ describe("toastWithUndo", () => {
       "Could not undo that action.",
     );
   });
+
+  it("keeps Undo retryable after a failed inverse, and latches after success", async () => {
+    const onUndo = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(undefined);
+
+    toastWithUndo({ message: "Capture discarded", onUndo });
+
+    const action = sonnerMock.toast.mock.calls[0]?.[1]?.action;
+    await action.onClick();
+    expect(sonnerMock.toast.error).toHaveBeenCalledTimes(1);
+
+    // The failure must not deaden the button — the retry goes through.
+    await action.onClick();
+    expect(onUndo).toHaveBeenCalledTimes(2);
+    expect(sonnerMock.toast.success).toHaveBeenCalledWith("Restored.");
+
+    // After a successful undo the guard latches: no third invocation.
+    await action.onClick();
+    expect(onUndo).toHaveBeenCalledTimes(2);
+  });
 });
 

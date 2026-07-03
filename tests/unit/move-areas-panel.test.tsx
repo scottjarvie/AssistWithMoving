@@ -46,6 +46,29 @@ describe("MoveAreasPanel space edit path", () => {
     areasData.mutation.mockReset();
   });
 
+  it("closes the capacity edit with Escape without saving", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MoveAreasPanel
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+        kind="originRoom"
+        title="Start areas"
+        description="Rooms being packed."
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.type(screen.getByLabelText("Garage floor"), "2nd");
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByRole("button", { name: "Save area" }),
+    ).not.toBeInTheDocument();
+    expect(areasData.mutation).not.toHaveBeenCalled();
+  });
+
   it("shows the clean ConvexError reason when the capacity edit fails", async () => {
     const user = userEvent.setup();
     areasData.mutation.mockRejectedValueOnce(
