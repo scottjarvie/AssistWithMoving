@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -906,19 +906,22 @@ describe("LoadPlannerBoard task tabs", () => {
     expect(screen.queryByText("Loose item 13")).not.toBeInTheDocument();
   });
 
+  // Large-dataset tests use 120 units: still two pages (page size 100) so
+  // pagination is exercised, but small enough that the jsdom renders stay
+  // inside the 20s timeout under full-suite parallel load (250 units blew it).
   it(
     "paginates large movable-unit sets and keeps summary metrics global",
     async () => {
       const user = userEvent.setup();
-      useLargeMovableUnitDataset(250);
+      useLargeMovableUnitDataset(120);
 
       renderLoadPlannerBoard();
 
       const metrics = screen.getByLabelText("Movable unit summary");
-      expect(within(metrics).getByLabelText("Units: 250")).toBeInTheDocument();
-      expect(within(metrics).getByLabelText("Boxes: 250")).toBeInTheDocument();
+      expect(within(metrics).getByLabelText("Units: 120")).toBeInTheDocument();
+      expect(within(metrics).getByLabelText("Boxes: 120")).toBeInTheDocument();
       expect(
-        within(metrics).getByLabelText("Need load: 250"),
+        within(metrics).getByLabelText("Need load: 120"),
       ).toBeInTheDocument();
 
       let unitsTable = screen.getByRole("table", { name: "Movable units" });
@@ -926,20 +929,24 @@ describe("LoadPlannerBoard task tabs", () => {
       expect(within(unitsTable).getByText("BOX-001")).toBeInTheDocument();
       expect(within(unitsTable).getByText("BOX-100")).toBeInTheDocument();
       expect(within(unitsTable).queryByText("BOX-101")).not.toBeInTheDocument();
-      expect(screen.getByText(/Showing 1–100 of 250/)).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1–100 of 120/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
 
       await user.click(screen.getByRole("button", { name: "Next" }));
 
       unitsTable = screen.getByRole("table", { name: "Movable units" });
       expect(within(unitsTable).queryByText("BOX-001")).not.toBeInTheDocument();
       expect(within(unitsTable).getByText("BOX-101")).toBeInTheDocument();
-      expect(within(unitsTable).getByText("BOX-200")).toBeInTheDocument();
-      expect(screen.getByText(/Showing 101–200 of 250/)).toBeInTheDocument();
-      expect(within(metrics).getByLabelText("Units: 250")).toBeInTheDocument();
+      expect(within(unitsTable).getByText("BOX-120")).toBeInTheDocument();
+      expect(screen.getByText(/Showing 101–120 of 120/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+      expect(within(metrics).getByLabelText("Units: 120")).toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: /Need load\s+250/ }));
+      await user.click(screen.getByRole("button", { name: /Need load\s+120/ }));
 
-      expect(screen.getByText(/Showing 1–100 of 250/)).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1–100 of 120/)).toBeInTheDocument();
     },
     20_000,
   );
@@ -948,7 +955,7 @@ describe("LoadPlannerBoard task tabs", () => {
     "selects the current movable-unit page before offering all matching units",
     async () => {
       const user = userEvent.setup();
-      useLargeMovableUnitDataset(250);
+      useLargeMovableUnitDataset(120);
 
       renderLoadPlannerBoard();
 
@@ -962,11 +969,105 @@ describe("LoadPlannerBoard task tabs", () => {
       ).toBeInTheDocument();
 
       await user.click(
-        screen.getByRole("button", { name: "Select all 250 matching" }),
+        screen.getByRole("button", { name: "Select all 120 matching" }),
       );
 
       expect(
-        screen.getByText(/250 selected total, 100 selected in/),
+        screen.getByText(/120 selected total, 100 selected in/),
+      ).toBeInTheDocument();
+      // The affordance resolves to a confirmation with an escape hatch once
+      // everything matching is selected.
+      expect(
+        screen.getByText(/All 120 matching selected/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Select all 120 matching" }),
+      ).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: "Clear selection" }),
+      );
+
+      expect(
+        screen.getByText(/0 selected total, 0 selected in/),
+      ).toBeInTheDocument();
+    },
+    20_000,
+  );
+
+  it(
+    "prunes the selection when the filter narrows so bulk assign only hits matching units",
+    async () => {
+      const user = userEvent.setup();
+      useLargeMovableUnitDataset(120);
+
+      renderLoadPlannerBoard();
+
+      await user.click(screen.getByRole("button", { name: "Select visible" }));
+      await user.click(
+        screen.getByRole("button", { name: "Select all 120 matching" }),
+      );
+      expect(
+        screen.getByText(/120 selected total, 100 selected in/),
+      ).toBeInTheDocument();
+
+      // Narrow the search after selecting everything: BOX-00 matches only
+      // BOX-001..BOX-009. One change event (not per-keystroke typing) keeps
+      // this render-heavy test fast.
+      fireEvent.change(
+        screen.getByPlaceholderText(
+          "Search movable units, rooms, status, or follow-ups",
+        ),
+        { target: { value: "BOX-00" } },
+      );
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(/9 selected total, 9 selected in/),
+        ).toBeInTheDocument(),
+      );
+
+      await user.selectOptions(
+        screen.getByLabelText("Mixed-unit bulk assignment resource"),
+        "resource_1",
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Assign selected" }),
+      );
+
+      await waitFor(() =>
+        expect(loadPlannerData.mutations.boxUpdate).toHaveBeenCalledTimes(9),
+      );
+      const assignedBoxIds = loadPlannerData.mutations.boxUpdate.mock.calls.map(
+        (call) => (call[0] as { boxId: string }).boxId,
+      );
+      expect(assignedBoxIds).toEqual(
+        expect.arrayContaining(["box_1", "box_9"]),
+      );
+      // Negative guard: units outside the narrowed filter never reach the
+      // mutation even though they were selected before the search changed.
+      expect(assignedBoxIds).not.toContain("box_10");
+      expect(assignedBoxIds).not.toContain("box_120");
+    },
+    20_000,
+  );
+
+  it(
+    "keeps hand-picked units from other pages when selecting the visible page",
+    async () => {
+      const user = userEvent.setup();
+      useLargeMovableUnitDataset(120);
+
+      renderLoadPlannerBoard();
+
+      await user.click(screen.getByLabelText("Select Box 1"));
+      await user.click(screen.getByRole("button", { name: "Next" }));
+      await user.click(screen.getByRole("button", { name: "Select visible" }));
+
+      // 1 hand-picked on page 1 + the 20 units on page 2 (additive union,
+      // matching the row-checkbox semantics).
+      expect(
+        screen.getByText(/21 selected total, 20 selected in/),
       ).toBeInTheDocument();
     },
     20_000,

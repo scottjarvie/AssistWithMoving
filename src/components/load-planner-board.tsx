@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -1158,7 +1158,7 @@ function MovableUnitsPanel({
   const [bulkIncludeLocked, setBulkIncludeLocked] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const normalizedSearch = search.trim().toLowerCase();
-  const filteredUnits = units.filter((unit) => {
+  const filteredUnits = useMemo(() => units.filter((unit) => {
     if (filter === "box" && unit.kind !== "box") return false;
     if (filter === "looseItem" && unit.kind !== "looseItem") return false;
     if (filter === "missing" && !unit.missingFields.length) return false;
@@ -1185,7 +1185,19 @@ function MovableUnitsPanel({
     }
     if (!normalizedSearch) return true;
     return unit.searchText.includes(normalizedSearch);
-  });
+  }), [units, filter, normalizedSearch]);
+  // A selection must never outlive the filter that produced it: bulk assign
+  // operates on selected units, so ids that no longer match the active
+  // filter/search are pruned here (and selectedUnits below is derived from
+  // filteredUnits, not units, so even the pre-effect render can't hand a
+  // stale unit to the bulk mutation).
+  useEffect(() => {
+    setSelectedUnitIds((current) => {
+      const eligible = new Set(filteredUnits.map((unit) => unit.id));
+      const next = current.filter((id) => eligible.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [filteredUnits]);
   const pageCount = Math.max(
     1,
     Math.ceil(filteredUnits.length / movableUnitsPageSize),
@@ -1196,7 +1208,7 @@ function MovableUnitsPanel({
     pageStartIndex,
     pageStartIndex + movableUnitsPageSize,
   );
-  const selectedUnits = units.filter((unit) =>
+  const selectedUnits = filteredUnits.filter((unit) =>
     selectedUnitIds.includes(unit.id),
   );
   const visibleSelectedCount = displayedUnits.filter((unit) =>
@@ -1223,7 +1235,15 @@ function MovableUnitsPanel({
   }
 
   function selectDisplayedUnits() {
-    setSelectedUnitIds(displayedUnits.map((unit) => unit.id));
+    // Additive, matching the row checkboxes: hand-picked units on other
+    // pages stay selected when the user adds the current page.
+    setSelectedUnitIds((current) => {
+      const merged = new Set(current);
+      for (const unit of displayedUnits) {
+        merged.add(unit.id);
+      }
+      return [...merged];
+    });
   }
 
   function selectAllMatchingUnits() {
@@ -1812,8 +1832,13 @@ function MovableUnitBulkAssignmentPanel({
   onUnassign: () => void;
   onZoneChange: (value: string) => void;
 }) {
+  const allMatchingSelected =
+    matchingCount > visibleCount && selectedCount >= matchingCount;
   const showSelectAllMatching =
-    pageSelected && matchingCount > visibleCount && visibleCount > 0;
+    pageSelected &&
+    matchingCount > visibleCount &&
+    visibleCount > 0 &&
+    !allMatchingSelected;
 
   return (
     <div className="rounded-md border border-border bg-background/65 p-3">
@@ -1864,6 +1889,20 @@ function MovableUnitBulkAssignmentPanel({
             onClick={onSelectAllMatching}
           >
             Select all {matchingCount} matching
+          </Button>
+        </p>
+      ) : null}
+      {allMatchingSelected ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          All {matchingCount} matching selected -{" "}
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto px-0 text-xs"
+            onClick={onClearSelection}
+          >
+            Clear selection
           </Button>
         </p>
       ) : null}
