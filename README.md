@@ -1,34 +1,81 @@
 # MovingManifest
 
-MovingManifest is a Next.js, Convex, Clerk, Vercel, and Backblaze-backed move manifest product. It is being built from `movingmanifest_ai_build_spec.md`.
+MovingManifest helps people plan and execute a move: capture belongings by photo, organize them into boxes and movable units, plan spaces and transport, and generate documentation packets (claims, employer, mover, military PCS). Its differentiator is **bring-your-own AI agent**: instead of a built-in AI, users connect their own assistant (Claude, ChatGPT, etc.) over MCP, and the agent does the heavy lifting — identifying items from photos, packing boxes, planning loads — through the same permissioned APIs a human would use.
 
-Local development uses an intentionally uncommon port:
+**Production:** https://movingmanifest.com
 
-```sh
-npm run dev
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js (App Router) + React, Tailwind, shadcn/ui |
+| Backend / DB | [Convex](https://convex.dev) (queries, mutations, schema, crons) |
+| Auth | Clerk (users) + `mmk_` API keys / MCP OAuth (agents) |
+| Hosting | Vercel — production deploys automatically on merge to `main` |
+| Media | Backblaze B2 (+ optional Cloudflare image worker in `infra/`) |
+| Tests | Vitest (unit) + Playwright (e2e) |
+
+## Repository map
+
+```
+src/app/            Next.js routes, in three route groups:
+  (marketing)/        public pages (features, faq, /mcp guide, /updates …)
+  (auth)/             Clerk sign-in / sign-up
+  (product)/app/      the signed-in product (moves, boxes, items, queue …)
+  api/mcp, mcp/       remote MCP endpoint + OAuth discovery routes
+src/components/     React components (ui/ = shadcn primitives)
+src/lib/            shared client/server helpers (sorting, labels, geometry …)
+convex/             the entire backend — one file per API namespace
+                    (items.ts, boxes.ts, moves.ts …); schema.ts is the DB schema;
+                    mcp*.ts are the OAuth-gateway agent tools; lib/ = shared logic
+mcp-server/         standalone stdio MCP server (npm package) that talks to the
+                    REST API with an mmk_ API key — the second of two MCP surfaces
+scripts/            operational "doctor" checks, smoke tests, seeding
+tests/              Playwright e2e + Vitest unit tests
+docs/               deeper docs: api-and-mcp.md, audits/, original build spec
+infra/              Cloudflare image worker
+patches/            patch-package patches applied on install
 ```
 
-Then open `http://localhost:3827`.
+**The two MCP surfaces** (easy to confuse — check both before assuming a capability is missing):
 
-Useful checks:
+1. **Remote OAuth gateway** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served at `movingmanifest.com/mcp/connect`. Users connect from claude.ai/ChatGPT via OAuth.
+2. **Stdio server** — `mcp-server/`, installed locally, authenticates with an `mmk_` API key against the REST API.
+
+See [docs/api-and-mcp.md](docs/api-and-mcp.md) for details.
+
+## Local development
 
 ```sh
-npm run lint
-npm run typecheck
-npm run build
+npm install
+cp .env.example .env.local   # fill in real values — see comments in the file
+npm run dev                  # Next.js on http://localhost:3827 (intentionally uncommon port)
+npx convex dev               # pushes functions to the DEV Convex deployment; keep running
 ```
 
-Secrets belong in `.env.local`. Keep `.env.example` safe and placeholder-only.
+Convex has separate **dev** and **prod** deployments. Local work and e2e tests point at dev; prod is only touched by the Vercel deploy on merge to `main`. New/changed Convex functions must be pushed with `npx convex dev` (or `--once`) before the UI can call them, or you'll see "Could not find public function".
 
-To learn more about Next.js, take a look at the following resources:
+Secrets live in `.env.local` (never committed). `.env.example` stays placeholder-only.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Checks and tests
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```sh
+npm run lint          # eslint
+npm run typecheck     # tsc --noEmit
+npm run test          # vitest unit tests
+npm run test:e2e      # playwright (needs dev server + dev Convex)
+npm run verify:launch # all of the above + build, in sequence
+```
 
-## Deploy on Vercel
+`scripts/` also has environment "doctor" checks (`npm run doctor:all`, `doctor:storage`, `doctor:webhooks`, `mcp:doctor` …) that validate env vars, storage, webhooks, and MCP discovery without changing anything.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploying
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Merging to `main` on GitHub **is** the production deploy (Vercel builds and ships automatically, and prod Convex functions deploy with it). There is no separate release step — so `main` must always be green: lint, typecheck, unit tests, and build before merging.
+
+## Conventions
+
+- Work happens on short-lived branches PR'd into `main`; branches are deleted after merge. Long-lived experiments get an `archive/*` branch on GitHub.
+- Issue tracking is in Linear (`MOVE-###`); PR titles reference the issue.
+- Agent-facing Convex tools must throw `ConvexError` (plain `Error` gets redacted to "Tool execution failed" by the MCP gateway).
+- No fabricated demo data in the UI — real data or an honest empty/explainer state.
