@@ -318,9 +318,9 @@ API-key door (advanced):  https://movingmanifest.com/api/mcp
 OAuth-capable clients should connect to `/mcp` and follow the protected-resource
 login flow. The `/api/mcp` API-key door is ADVANCED and only for clients that
 cannot use remote MCP OAuth (local/headless, CI) — never point a hosted/OAuth
-client there, it rejects OAuth and fails to register. Clients that cannot set
-custom headers may append `?key=mmk_...` to the `/api/mcp` URL, but header auth
-is recommended because URLs can be logged.
+client there, it rejects OAuth and fails to register. Send the key in the
+`Authorization: Bearer mmk_...` header (or `x-api-key`); the legacy
+`?key=mmk_...` query-string form is rejected with a 401 because URLs get logged.
 
 Local MCP via npx — Codex setup when the user has local shell access:
 

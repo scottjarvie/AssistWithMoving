@@ -193,10 +193,10 @@ export default function McpPage() {
               In claude.ai or Claude Cowork: Settings → Connectors → Add custom
               connector and paste the endpoint URL. If the client does not
               support OAuth, create a scoped helper key and supply it as the
-              bearer token. Do not paste raw keys into OAuth-capable hosted
-              clients. Clients that cannot set headers may append ?key=mmk_...
-              to the URL for temporary fallback, but header auth is safer
-              because URLs can be logged.
+              bearer token (or an <code>x-api-key</code> header). Do not paste
+              raw keys into OAuth-capable hosted clients. Passing the key in the
+              URL (<code>?key=...</code>) is no longer supported — URLs get
+              logged, so a key that has ever been in one should be rotated.
             </p>
           </div>
         </div>

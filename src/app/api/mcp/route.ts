@@ -6,16 +6,18 @@
 // https://<site>/mcp/connect. See src/lib/mcp-oauth.ts for the full two-door
 // explanation — do not make this endpoint advertise OAuth.
 //
-// Preferred transport is the Authorization header; `x-api-key` and a `?key=`
-// query parameter are accepted as fallbacks for clients that cannot set custom
-// headers (note: query-string keys can end up in request logs — header auth is
-// recommended).
+// Transport is the Authorization header (`Bearer mmk_...`) or the `x-api-key`
+// header. The legacy `?key=` query parameter is rejected with a migration error
+// — URL-borne keys leak into request logs, browser history, and referrers.
 //
 // Tool definitions are shared with the local stdio server in
 // mcp-server/movingmanifest-mcp.mjs so the two transports cannot drift.
 import { createMcpHandler } from "mcp-handler";
 
-import { apiKeyFromRequest } from "@/lib/mcp-request-auth";
+import {
+  apiKeyFromRequest,
+  requestHasQueryStringKey,
+} from "@/lib/mcp-request-auth";
 import { mcpBearerChallenge } from "@/lib/mcp-oauth";
 import {
   MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
@@ -55,11 +57,15 @@ function hostedAllowedToolNames(apiKey: string): string[] | undefined {
   return undefined;
 }
 
-function unauthorized(request: Request, message: string): Response {
+function unauthorized(
+  request: Request,
+  message: string,
+  code = "unauthorized",
+): Response {
   return Response.json(
     {
       error: {
-        code: "unauthorized",
+        code,
         message,
       },
     },
@@ -75,6 +81,13 @@ function unauthorized(request: Request, message: string): Response {
 async function handleMcpRequest(request: Request): Promise<Response> {
   const apiKey = apiKeyFromRequest(request);
   if (!apiKey) {
+    if (requestHasQueryStringKey(request)) {
+      return unauthorized(
+        request,
+        "API keys in the URL query string (?key=...) are no longer accepted: URLs leak into browser history, server access logs, referrers, and analytics. Send the key in the 'Authorization: Bearer mmk_...' header (or 'x-api-key') instead. Any key that has ever traveled in a URL should be treated as exposed — rotate it from AI Connections settings.",
+        "query_credentials_rejected",
+      );
+    }
     return unauthorized(
       request,
       "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp."

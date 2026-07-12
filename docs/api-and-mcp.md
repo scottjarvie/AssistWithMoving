@@ -1813,11 +1813,13 @@ Endpoint: https://movingmanifest.com/api/mcp
 Auth:     Authorization: Bearer mmk_replace_with_a_scoped_api_key
 ```
 
-For clients that can't OAuth (local/headless, CI). `x-api-key` headers and a
-`?key=mmk_...` query parameter are accepted as fallbacks for clients that cannot
-set custom headers; prefer the bearer header because URLs can end up in logs.
-Requests without a key get a 401 pointing to the OAuth endpoint. **This endpoint
-rejects OAuth/JWT tokens** — if your client signs in with OAuth, use
+For clients that can't OAuth (local/headless, CI). Send the key in the
+`Authorization: Bearer mmk_...` header, or the `x-api-key` header. The legacy
+`?key=mmk_...` query-string form is **rejected** with a 401 (`code:
+"query_credentials_rejected"`) — URLs leak into logs, history, and referrers, so
+any key that has traveled in a URL should be rotated. Requests without a key get
+a 401 pointing to the OAuth endpoint. **This endpoint rejects OAuth/JWT
+tokens** — if your client signs in with OAuth, use
 `/mcp/connect` above instead.
 
 ### Local MCP
