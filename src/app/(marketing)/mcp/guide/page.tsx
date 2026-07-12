@@ -33,7 +33,7 @@ const mcpCards = [
   },
   {
     title: "MCP first, API only if you must",
-    copy: "Recommended: hosted assistants connect to https://movingmanifest.com/mcp and sign in with your MovingManifest account — no key to copy, works with your subscription. Advanced only: local/headless or non-OAuth agents use a scoped API key, either at https://movingmanifest.com/api/mcp (key-only, NOT for OAuth sign-in) or the local npx movingmanifest-mcp server.",
+    copy: "Recommended: hosted assistants connect to https://movingmanifest.com/mcp and sign in with your MovingManifest account — no key to copy, works with your subscription. Advanced only: local/headless or non-OAuth agents use a scoped API key, either at https://movingmanifest.com/api/mcp (key-only, NOT for OAuth sign-in) or the local MCP server run from a clone of the repo.",
     icon: Laptop,
   },
   {
@@ -95,13 +95,17 @@ This door is key-only and rejects OAuth sign-in; do not use it for hosted client
 POST https://movingmanifest.com/api/mcp
 Authorization: Bearer mmk_replace_with_a_scoped_api_key`;
 
+const localInstallCommand = `git clone https://github.com/scottjarvie/movingmanifest
+cd movingmanifest/mcp-server
+npm install`;
+
 const codexCliCommand = `codex mcp add movingmanifest \\
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \\
-  -- npx -y movingmanifest-mcp`;
+  -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs`;
 
 const codexTomlConfig = `[mcp_servers.movingmanifest]
-command = "npx"
-args = ["-y", "movingmanifest-mcp"]
+command = "node"
+args = ["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]
 
 [mcp_servers.movingmanifest.env]
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"`;
@@ -109,8 +113,10 @@ MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"`;
 const desktopJsonConfig = `{
   "mcpServers": {
     "movingmanifest": {
-      "command": "npx",
-      "args": ["-y", "movingmanifest-mcp"],
+      "command": "node",
+      "args": [
+        "/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"
+      ],
       "env": {
         "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
       }
@@ -210,8 +216,10 @@ export default function McpPage() {
               What an assistant should know.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Desktop and CLI agents (Claude Desktop, Claude Code, Codex) can
-              run the server locally with npx — no repo clone needed. The local
+              Desktop and CLI agents (Claude Desktop, Claude Code, Codex) run
+              the server locally from a clone of the open-source repo — clone,
+              npm install once, then point the client at the server script. (An
+              npm package install is planned for a future launch.) The local
               server can use the broader API-key tool surface. Hosted OAuth is
               narrower by default so a mobile or hosted assistant gets trusted
               move-helper powers without also receiving export, sale, household
@@ -220,9 +228,15 @@ export default function McpPage() {
           </div>
           <div className="rounded-md border border-border bg-card p-4">
             <p className="mb-3 text-sm font-medium">
-              Codex CLI/App setup
+              One-time install (clone the repo)
             </p>
             <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
+              {localInstallCommand}
+            </pre>
+            <p className="mt-4 text-sm font-medium">
+              Codex CLI/App setup (use your absolute clone path)
+            </p>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
               {codexCliCommand}
             </pre>
             <p className="mt-4 text-sm font-medium">
@@ -347,7 +361,7 @@ function McpVisual() {
       <div className="mt-4 space-y-3">
         {[
           ["1", "User signs in to MovingManifest."],
-          ["2", "Assistant connects via the hosted MCP URL or a local npx server."],
+          ["2", "Assistant connects via the hosted MCP URL or a locally cloned server."],
           ["3", "Hosted OAuth clients ask for consent; local clients use a scoped key."],
           ["4", "User can revoke the connection or key when finished."],
         ].map(([step, copy]) => (

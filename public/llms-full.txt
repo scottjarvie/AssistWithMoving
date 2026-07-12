@@ -300,9 +300,9 @@ Use `/openapi.json` for machine-readable endpoint details.
 ## MCP
 
 MovingManifest offers MCP two ways: a remote endpoint for hosted assistants and
-a local npx server for desktop/CLI agents. They share the same implementation,
-but hosted OAuth defaults to a narrower trusted-helper surface than broad
-local/API-key setups.
+a local stdio server for desktop/CLI agents, run from a clone of the repo. They
+share the same implementation, but hosted OAuth defaults to a narrower
+trusted-helper surface than broad local/API-key setups.
 
 Remote MCP (claude.ai custom connectors, Claude Cowork, any Streamable HTTP
 client — no install needed):
@@ -322,27 +322,40 @@ client there, it rejects OAuth and fails to register. Send the key in the
 `Authorization: Bearer mmk_...` header (or `x-api-key`); the legacy
 `?key=mmk_...` query-string form is rejected with a 401 because URLs get logged.
 
-Local MCP via npx — Codex setup when the user has local shell access:
+Local MCP runs from a clone of the repo. (An npm package / `npx` install is
+planned for a future launch; the package is not published yet, so
+`npx movingmanifest-mcp` will fail with a not-found error.) One-time setup:
+
+```bash
+git clone https://github.com/scottjarvie/movingmanifest
+cd movingmanifest/mcp-server
+npm install
+```
+
+Codex setup when the user has local shell access (use the absolute path of the
+clone):
 
 ```bash
 codex mcp add movingmanifest \
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
-  -- npx -y movingmanifest-mcp
+  -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
 ```
 
 Equivalent Codex `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.movingmanifest]
-command = "npx"
-args = ["-y", "movingmanifest-mcp"]
+command = "node"
+args = ["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]
 
 [mcp_servers.movingmanifest.env]
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
 ```
 
 Claude Desktop and similar JSON-config MCP clients use the same command:
-`"command": "npx", "args": ["-y", "movingmanifest-mcp"]` with the key in env.
+`"command": "node", "args":
+["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]` with
+the key in env.
 
 After configuring MCP for Codex, restart Codex or start a fresh session. The
 agent should confirm `movingmanifest` appears in `/mcp` or `codex mcp list`,

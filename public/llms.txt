@@ -72,12 +72,16 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
   SEPARATE API-key door that rejects OAuth sign-in and fails to register
   ("couldn't register with the sign-in service"). The API-key door is only for
   local/headless or non-OAuth automation, with a scoped mmk_ key.
-- For Codex users with local shell access, configure MCP with:
-  `codex mcp add movingmanifest --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- npx -y movingmanifest-mcp`.
+- For Codex users with local shell access, first clone the repo and install the
+  local server: `git clone https://github.com/scottjarvie/movingmanifest`, then
+  `cd movingmanifest/mcp-server && npm install`. Configure MCP with:
+  `codex mcp add movingmanifest --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs`.
   Restart Codex or start a fresh session, verify `movingmanifest` appears in
   `/mcp` or `codex mcp list`, then call `get_api_context`. Claude Desktop and
-  similar clients use the same `npx -y movingmanifest-mcp` command in their
-  JSON MCP config.
+  similar clients use the same `node` command plus the absolute script path in
+  their JSON MCP config. (An npm package / `npx` install is planned for a
+  future launch; the package is not published yet, so `npx movingmanifest-mcp`
+  will fail with a not-found error.)
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Start MCP work with `get_api_capabilities`, then `get_api_context`, then
   `list_moves` or `setup_move`. Hosted OAuth defaults to a trusted-helper tool

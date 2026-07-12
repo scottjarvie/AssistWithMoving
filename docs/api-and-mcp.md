@@ -1783,9 +1783,10 @@ registry (`mcp-server/movingmanifest-mcp.mjs`), so they cannot drift:
   or `https://movingmanifest.com/mcp/connect` (OAuth) — for hosted assistants
   such as claude.ai custom connectors and Claude Cowork. Served by
   `src/app/api/mcp/route.ts` and `src/app/mcp/connect/route.ts`.
-- **Local (stdio)** via the published `movingmanifest-mcp` npm package — for
-  Claude Desktop, Claude Code, Codex, and other clients that run local
-  processes.
+- **Local (stdio)** via `mcp-server/movingmanifest-mcp.mjs`, run with Node from
+  a clone of this repo — for Claude Desktop, Claude Code, Codex, and other
+  clients that run local processes. (An npm package install is planned for a
+  future launch; the package is not published yet.)
 
 Both wrap the REST API. Neither connects directly to Convex or Clerk.
 
@@ -1824,10 +1825,20 @@ tokens** — if your client signs in with OAuth, use
 
 ### Local MCP
 
-Run from the published package (no repo clone needed):
+The local server runs from a clone of this repo. (npm package publishing is
+planned for a future launch, so there is no `npx` install yet.) One-time setup:
 
 ```bash
-MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" npx -y movingmanifest-mcp
+git clone https://github.com/scottjarvie/movingmanifest
+cd movingmanifest/mcp-server
+npm install
+```
+
+Then run the server with a scoped key:
+
+```bash
+MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" \
+  node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
 ```
 
 From this repo during development: `npm run mcp` with the same env. Optional
@@ -1837,20 +1848,20 @@ env override (defaults to production):
 MOVINGMANIFEST_API_BASE_URL="https://movingmanifest.com/api/v1"
 ```
 
-Codex CLI/App setup:
+Codex CLI/App setup (use the absolute path of your clone):
 
 ```bash
 codex mcp add movingmanifest \
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
-  -- npx -y movingmanifest-mcp
+  -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
 ```
 
 Equivalent Codex `config.toml`:
 
 ```toml
 [mcp_servers.movingmanifest]
-command = "npx"
-args = ["-y", "movingmanifest-mcp"]
+command = "node"
+args = ["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]
 
 [mcp_servers.movingmanifest.env]
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
@@ -1860,14 +1871,17 @@ After adding the server, restart Codex or start a fresh Codex session, use
 `/mcp` or `codex mcp list` to confirm `movingmanifest` is enabled, then call
 `get_api_context` before reading or writing private move data.
 
-Desktop agent config example (Claude Desktop and similar):
+Desktop agent config example (Claude Desktop and similar — see
+`mcp-server/example-desktop-config.json`; use the absolute path of your clone):
 
 ```json
 {
   "mcpServers": {
     "movingmanifest": {
-      "command": "npx",
-      "args": ["-y", "movingmanifest-mcp"],
+      "command": "node",
+      "args": [
+        "/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"
+      ],
       "env": {
         "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
       }
@@ -1876,9 +1890,11 @@ Desktop agent config example (Claude Desktop and similar):
 }
 ```
 
-Publishing the package (maintainers): bump the version in
-`mcp-server/package.json` and the `McpServer` constructor in
-`mcp-server/movingmanifest-mcp.mjs`, then `cd mcp-server && npm publish`.
+Publishing the package (maintainers): npm publishing is deferred until a future
+launch. When it happens, bump the version in `mcp-server/package.json` and the
+`McpServer` constructor in `mcp-server/movingmanifest-mcp.mjs`, then
+`cd mcp-server && npm publish`, and switch the install docs back to
+`npx -y movingmanifest-mcp`.
 
 Available MCP tools:
 
