@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { countEffectivelyActiveApiKeys } from "./apiKeys";
 import { applyFlagOverrides, featureEnvironment } from "./featureFlags";
 
 export const billingTiers = ["free", "launch", "plus", "pro", "unlimited"] as const;
@@ -282,7 +283,7 @@ export async function usageSnapshotForHousehold(
     exportJobsMonthly: exportJobs.length,
     apiCallsMonthly: apiAudits.filter((entry) => entry.category === "apiKey")
       .length,
-    activeApiKeys: apiKeys.filter((key) => key.status === "active").length,
+    activeApiKeys: countEffectivelyActiveApiKeys(apiKeys, now),
     activeShareLinks: shareLinks.filter(
       (link) => link.status === "active" && link.expiresAt > now
     ).length,

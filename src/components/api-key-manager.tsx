@@ -41,7 +41,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   apiKeyRestrictionLabel,
   apiKeyScopeOptions,
-  apiKeyStatusLabel,
   formatApiKeyDate,
   type ApiKeyScope,
 } from "@/lib/api-keys";
@@ -72,7 +71,7 @@ type ApiKeySummary = {
   moveId?: Id<"moves">;
   tokenPreview: string;
   scopes: ApiKeyScope[];
-  status: "active" | "revoked";
+  status: "active" | "expired" | "revoked";
   expiresAt?: number;
   revokedAt?: number;
   lastUsedAt?: number;
@@ -218,6 +217,12 @@ function summarizeScopes(scopes: ApiKeyScope[]) {
   if (sameScopes(scopes, readOnlyScopes)) return "Read only";
   if (sameScopes(scopes, memberManagerScopes)) return "Member invites";
   return `${scopes.length} custom permissions`;
+}
+
+function apiKeyLifecycleLabel(status: ApiKeySummary["status"]) {
+  if (status === "active") return "Active";
+  if (status === "expired") return "Expired";
+  return "Revoked";
 }
 
 export function ApiKeyManager({
@@ -524,7 +529,7 @@ export function ApiKeyManager({
           <StatusTile
             icon={Activity}
             label="AI connections"
-            value={formatStat(stats?.activeApiKeyCount ?? activeKeys.length)}
+            value={formatStat(activeKeys.length)}
             note={
               lastUsedKey
                 ? `Last used ${formatApiKeyDate(lastUsedKey.lastUsedAt)}`
@@ -1083,7 +1088,7 @@ function ConnectionRow({
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium">{apiKey.name}</p>
             <Badge variant={active ? "secondary" : "outline"}>
-              {apiKeyStatusLabel(apiKey.status)}
+              {apiKeyLifecycleLabel(apiKey.status)}
             </Badge>
             <Badge variant={apiKey.moveId ? "secondary" : "outline"}>
               {apiKeyRestrictionLabel(
@@ -1107,6 +1112,7 @@ function ConnectionRow({
             type="button"
             size="sm"
             variant="outline"
+            aria-label={`Rotate ${apiKey.name}`}
             disabled={!active || busy === `rotate-${apiKey.apiKeyId}`}
             onClick={() => void onRotate(apiKey.apiKeyId)}
           >
@@ -1121,6 +1127,7 @@ function ConnectionRow({
             type="button"
             size="sm"
             variant="outline"
+            aria-label={`Revoke ${apiKey.name}`}
             disabled={!active || busy === `revoke-${apiKey.apiKeyId}`}
             onClick={() => void onRevoke(apiKey.apiKeyId)}
           >

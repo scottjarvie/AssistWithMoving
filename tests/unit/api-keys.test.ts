@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { Id } from "../../convex/_generated/dataModel";
 import {
   apiKeyHasScopes,
+  apiKeyEffectiveStatus,
   apiKeyPrefix,
   apiKeyPreview,
   canApiKeyPerformAction,
+  countEffectivelyActiveApiKeys,
   describeInvalidApiKeyFormat,
   generateApiKeySecret,
   hashApiKey,
@@ -181,6 +183,28 @@ describe("api key primitives", () => {
         now: 1000,
       })
     ).toBe(false);
+  });
+
+  it("derives one effective lifecycle state from stored status and expiry", () => {
+    expect(
+      apiKeyEffectiveStatus({ status: "active", expiresAt: 2000 }, 1000),
+    ).toBe("active");
+    expect(
+      apiKeyEffectiveStatus({ status: "active", expiresAt: 1000 }, 1000),
+    ).toBe("expired");
+    expect(
+      apiKeyEffectiveStatus({ status: "revoked", expiresAt: 2000 }, 1000),
+    ).toBe("revoked");
+    expect(
+      countEffectivelyActiveApiKeys(
+        [
+          { status: "active", expiresAt: 2000 },
+          { status: "active", expiresAt: 1000 },
+          { status: "revoked", expiresAt: 2000 },
+        ],
+        1000,
+      ),
+    ).toBe(1);
   });
 });
 

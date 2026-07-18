@@ -25,6 +25,28 @@ export type ApiKeyVerificationInput = {
   secretHash: string;
 };
 
+export type ApiKeyEffectiveStatus = "active" | "expired" | "revoked";
+
+export function apiKeyEffectiveStatus(
+  record: Pick<ApiKeyVerificationInput, "status" | "expiresAt">,
+  now = Date.now(),
+): ApiKeyEffectiveStatus {
+  if (record.status === "revoked") return "revoked";
+  if (record.expiresAt !== undefined && record.expiresAt <= now) {
+    return "expired";
+  }
+  return "active";
+}
+
+export function countEffectivelyActiveApiKeys(
+  records: Array<Pick<ApiKeyVerificationInput, "status" | "expiresAt">>,
+  now = Date.now(),
+) {
+  return records.filter(
+    (record) => apiKeyEffectiveStatus(record, now) === "active",
+  ).length;
+}
+
 const textEncoder = new TextEncoder();
 const generatedKeyPrefix = "mmk_";
 const generatedLookupPrefixLength = 14;
@@ -157,8 +179,7 @@ export function validateApiKeyRecord({
   requiredScopes: ApiKeyScope[];
   now?: number;
 }) {
-  if (record.status !== "active") return false;
-  if (record.expiresAt !== undefined && record.expiresAt <= now) return false;
+  if (apiKeyEffectiveStatus(record, now) !== "active") return false;
   if (householdId && record.householdId !== householdId) return false;
   if (record.moveId && moveId && record.moveId !== moveId) return false;
   if (record.moveId && !moveId) return false;

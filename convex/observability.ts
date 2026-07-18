@@ -1,6 +1,7 @@
 import { mutation, type MutationCtx } from "./_generated/server";
 import { requireAppAdmin, recordAdminAccess } from "./lib/admin";
 import { countBy, safeAuditSummary, sumBy } from "./lib/adminSummaries";
+import { countEffectivelyActiveApiKeys } from "./lib/apiKeys";
 import {
   buildAbuseReviewQueue,
   evaluateOperationalSignals,
@@ -92,7 +93,7 @@ export const status = mutation({
         photos.filter((photo) => !photo.archivedAt),
         (photo) => photo.sizeBytes
       ),
-      activeApiKeys: apiKeys.filter((key) => key.status === "active").length,
+      activeApiKeys: countEffectivelyActiveApiKeys(apiKeys, now),
       apiRateLimitedWindows24h: recentApiRateLimitWindows.filter(
         (window) => window.count > window.limit
       ).length,
