@@ -4,6 +4,10 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx } from "./_generated/server";
 import { requireAppAdmin, recordAdminAccess } from "./lib/admin";
 import {
+  apiKeyEffectiveStatus,
+  countEffectivelyActiveApiKeys,
+} from "./lib/apiKeys";
+import {
   clampLimit,
   countBy,
   matchesAdminSearch,
@@ -88,7 +92,7 @@ export const overview = mutation({
         exportBytes: sumBy(exportJobs, (job) => job.sizeBytes),
         aiJobs: aiJobs.length,
         aiEstimatedCents: sumBy(aiJobs, (job) => job.cost?.estimatedCents),
-        activeApiKeys: apiKeys.filter((key) => key.status === "active").length,
+        activeApiKeys: countEffectivelyActiveApiKeys(apiKeys, now),
         activeShareLinks: shareLinks.filter(
           (link) => link.status === "active" && link.expiresAt > now
         ).length,
@@ -100,7 +104,9 @@ export const overview = mutation({
         movesByType: countBy(moves, (move) => move.type),
         exportsByStatus: countBy(exportJobs, (job) => job.status),
         aiJobsByStatus: countBy(aiJobs, (job) => job.status),
-        apiKeysByStatus: countBy(apiKeys, (key) => key.status),
+        apiKeysByStatus: countBy(apiKeys, (key) =>
+          apiKeyEffectiveStatus(key, now),
+        ),
         shareLinksByStatus: countBy(shareLinks, (link) => link.status),
       },
       recentAudit,
@@ -257,6 +263,7 @@ export const getHousehold = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAppAdmin(ctx);
+    const now = Date.now();
     const household = await ctx.db.get(args.householdId);
     if (!household) {
       return null;
@@ -373,9 +380,9 @@ export const getHousehold = mutation({
         exportBytes: sumBy(exportJobs, (job) => job.sizeBytes),
         aiJobs: aiJobs.length,
         aiEstimatedCents: sumBy(aiJobs, (job) => job.cost?.estimatedCents),
-        activeApiKeys: apiKeys.filter((key) => key.status === "active").length,
+        activeApiKeys: countEffectivelyActiveApiKeys(apiKeys, now),
         activeShareLinks: shareLinks.filter(
-          (link) => link.status === "active" && link.expiresAt > Date.now()
+          (link) => link.status === "active" && link.expiresAt > now
         ).length,
       },
       distributions: {
@@ -397,6 +404,7 @@ export const getMove = mutation({
   },
   handler: async (ctx, args) => {
     const admin = await requireAppAdmin(ctx);
+    const now = Date.now();
     const move = await ctx.db.get(args.moveId);
     if (!move) {
       return null;
@@ -482,9 +490,9 @@ export const getMove = mutation({
         exportBytes: sumBy(exportJobs, (job) => job.sizeBytes),
         aiJobs: aiJobs.length,
         aiEstimatedCents: sumBy(aiJobs, (job) => job.cost?.estimatedCents),
-        activeApiKeys: apiKeys.filter((key) => key.status === "active").length,
+        activeApiKeys: countEffectivelyActiveApiKeys(apiKeys, now),
         activeShareLinks: shareLinks.filter(
-          (link) => link.status === "active" && link.expiresAt > Date.now()
+          (link) => link.status === "active" && link.expiresAt > now
         ).length,
       },
       distributions: {

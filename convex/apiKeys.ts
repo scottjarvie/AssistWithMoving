@@ -5,8 +5,10 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
+  apiKeyEffectiveStatus,
   apiKeyPrefix,
   apiKeyPreview,
+  countEffectivelyActiveApiKeys,
   generateApiKeySecret,
   hashApiKey,
   normalizeApiKeyScopes,
@@ -50,6 +52,7 @@ export const listForHousehold = query({
       .withIndex("by_household_status", (q) => q.eq("householdId", args.householdId))
       .collect();
 
+    const now = Date.now();
     return keys
       .sort((first, second) => second.createdAt - first.createdAt)
       .map((key) => ({
@@ -59,7 +62,7 @@ export const listForHousehold = query({
         name: key.name,
         tokenPreview: key.tokenPreview,
         scopes: key.scopes,
-        status: key.status,
+        status: apiKeyEffectiveStatus(key, now),
         expiresAt: key.expiresAt,
         revokedAt: key.revokedAt,
         lastUsedAt: key.lastUsedAt,
@@ -92,7 +95,12 @@ export const create = mutation({
         q.eq("householdId", args.householdId).eq("status", "active"),
       )
       .collect();
-    if (activeKeys.length >= MAX_ACTIVE_API_KEYS) {
+    const effectiveStateNow = Date.now();
+    const effectiveActiveKeyCount = countEffectivelyActiveApiKeys(
+      activeKeys,
+      effectiveStateNow,
+    );
+    if (effectiveActiveKeyCount >= MAX_ACTIVE_API_KEYS) {
       throw new ConvexError(
         `You can have up to ${MAX_ACTIVE_API_KEYS} active connections. Revoke one before adding another.`,
       );
@@ -199,17 +207,41 @@ export const rotate = mutation({
       "api_keys:manage"
     );
     if (actor.type !== "user") {
-      throw new Error("API-key management requires a user actor.");
+      throw new ConvexError("API-key management requires a signed-in user.");
     }
+    return await rotateApiKeyForUser(ctx, args, actor.userId);
+  },
+});
+
+export async function rotateApiKeyForUser(
+  ctx: MutationCtx,
+  args: {
+    householdId: Id<"households">;
+    apiKeyId: Id<"apiKeys">;
+  },
+  actorUserId: Id<"users">,
+  now = Date.now(),
+) {
     const key = await getMutableKey(ctx, args);
+    const effectiveStatus = apiKeyEffectiveStatus(key, now);
+    if (effectiveStatus === "revoked") {
+      throw new ConvexError(
+        "This connection was revoked and cannot be rotated. Create a new key instead.",
+      );
+    }
+    if (effectiveStatus === "expired") {
+      throw new ConvexError(
+        "This connection expired and cannot be rotated. Create a new key instead.",
+      );
+    }
+
     const rawKey = generateApiKeySecret();
     const prefix = apiKeyPrefix(rawKey);
-    const now = Date.now();
 
     await ctx.db.patch(args.apiKeyId, {
       status: "revoked",
       revokedAt: key.revokedAt ?? now,
-      revokedByUserId: key.revokedByUserId ?? actor.userId,
+      revokedByUserId: key.revokedByUserId ?? actorUserId,
       updatedAt: now,
     });
 
@@ -224,7 +256,7 @@ export const rotate = mutation({
       status: "active",
       expiresAt: key.expiresAt,
       rotatedFromApiKeyId: key._id,
-      createdByUserId: actor.userId,
+      createdByUserId: actorUserId,
       createdAt: now,
       updatedAt: now,
     });
@@ -233,7 +265,7 @@ export const rotate = mutation({
       householdId: args.householdId,
       moveId: key.moveId,
       actorType: "user",
-      actorUserId: actor.userId,
+      actorUserId,
       category: "apiKey",
       action: "api_key.rotated",
       objectTable: "apiKeys",
@@ -247,8 +279,7 @@ export const rotate = mutation({
       tokenPreview: apiKeyPreview(rawKey),
       scopes: key.scopes,
     };
-  },
-});
+}
 
 async function assertMoveRestriction(
   ctx: MutationCtx,

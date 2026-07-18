@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import type { Id } from "../../convex/_generated/dataModel";
+import type { QueryCtx } from "../../convex/_generated/server";
 
 import {
   billingProviderDecision,
@@ -9,6 +12,7 @@ import {
   tierDefinitions,
   usagePercent,
   type UsageSnapshot,
+  usageSnapshotForHousehold,
 } from "../../convex/lib/billing";
 
 const emptyUsage: UsageSnapshot = {
@@ -86,5 +90,30 @@ describe("billing readiness helpers", () => {
     expect(copy).not.toMatch(/placeholder/i);
     expect(billingTierDefinition("plus").label).toBe("Plus household");
     expect(billingTierDefinition("pro").label).toBe("Pro operations");
+  });
+
+  it("excludes expired stored-active keys from entitlement usage", async () => {
+    const now = Date.now();
+    const recordsByTable: Record<string, unknown[]> = {
+      apiKeys: [
+        { status: "active", expiresAt: now - 1 },
+        { status: "active", expiresAt: now + 60_000 },
+        { status: "revoked", expiresAt: now + 60_000 },
+      ],
+    };
+    const query = vi.fn((table: string) => ({
+      withIndex: vi.fn(() => ({
+        collect: vi.fn().mockResolvedValue(recordsByTable[table] ?? []),
+      })),
+    }));
+    const ctx = { db: { query } } as unknown as QueryCtx;
+
+    const usage = await usageSnapshotForHousehold(
+      ctx,
+      "household_123" as Id<"households">,
+      now,
+    );
+
+    expect(usage.activeApiKeys).toBe(1);
   });
 });
