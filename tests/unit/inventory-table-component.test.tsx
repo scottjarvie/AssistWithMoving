@@ -1,5 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
@@ -134,7 +135,7 @@ describe("InventoryTable", () => {
     mockItems.useMutation.mockReturnValue(vi.fn());
   });
 
-  it("shows the disposition facet, action controls, and dual record views", () => {
+  it("shows the disposition facet, action controls, and one record interaction tree", () => {
     render(
       <InventoryTable
         householdId={"household_123" as Id<"households">}
@@ -172,14 +173,15 @@ describe("InventoryTable", () => {
     expect(screen.getByLabelText("Search inventory")).toBeInTheDocument();
     expect(screen.getByText("Columns")).toBeInTheDocument();
 
-    // Records section + sortable headers.
+    // Inventory deliberately uses the compact record cards at every width. The
+    // Sort menu above the records is the only sorting affordance, so a hidden
+    // duplicate desktop table must not remain mounted.
     expect(screen.getByText("Inventory records")).toBeInTheDocument();
+    expect(screen.getByRole("list")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Sort by Item" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Sort by Room" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Sort by Item" }),
+    ).not.toBeInTheDocument();
 
     // Records now render as compact, tappable rows (the whole row opens the
     // detail sheet, where editing lives). The detail-heavy columns/indicators
@@ -323,6 +325,160 @@ describe("InventoryTable", () => {
     expect(screen.queryByLabelText("New item name")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["mobile", 390],
+    ["tablet", 820],
+    ["desktop", 1440],
+  ])(
+    "mounts one paginated interaction tree for 100 marked-synthetic records at %s width",
+    (_viewport, width) => {
+      // cardOnly is intentionally viewport-independent. Repeating the lock at
+      // representative widths proves resize never swaps or duplicates trees.
+      setViewportWidth(width);
+      mockItems.rows = Array.from({ length: 100 }, (_, index) =>
+        inventoryItem(
+          `synthetic_item_${index + 1}`,
+          `[synthetic] Dense inventory ${String(index + 1).padStart(3, "0")}`,
+          {
+            room: `Synthetic room ${(index % 12) + 1}`,
+            needsReview: index % 3 === 0,
+            highValue: index % 5 === 0,
+            requiresPersonalTransport: index % 7 === 0,
+          },
+        ),
+      );
+
+      render(
+        <InventoryTable
+          householdId={"household_123" as Id<"households">}
+          moveId={"move_123" as Id<"moves">}
+        />,
+      );
+
+      expect(screen.getAllByRole("list")).toHaveLength(1);
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      // Ten mounted rows is the deliberate dense-list performance boundary.
+      expect(
+        screen.getAllByRole("button", { name: /^Open \[synthetic\]/ }),
+      ).toHaveLength(10);
+      expect(screen.getByText("Page 1 of 10")).toBeInTheDocument();
+    },
+  );
+
+  it("preserves selection, focus, and card identity across breakpoint transitions", async () => {
+    const user = userEvent.setup();
+    setViewportWidth(390);
+    mockItems.rows = Array.from({ length: 12 }, (_, index) =>
+      inventoryItem(
+        `synthetic_item_${index + 1}`,
+        `[synthetic] Continuity item ${index + 1}`,
+      ),
+    );
+
+    render(
+      <InventoryTable
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    const recordList = screen.getByRole("list");
+    const firstCard = screen.getByRole("button", {
+      name: "Open [synthetic] Continuity item 1",
+    });
+    const firstSelection = screen.getByRole("checkbox", {
+      name: "Select [synthetic] Continuity item 1",
+    });
+    const search = screen.getByLabelText("Search inventory");
+
+    await user.click(firstSelection);
+    search.focus();
+    expect(search).toHaveFocus();
+    expect(firstSelection).toHaveAttribute("aria-checked", "true");
+
+    for (const width of [820, 1440]) {
+      setViewportWidth(width);
+      expect(screen.getByRole("list")).toBe(recordList);
+      expect(
+        screen.getByRole("button", {
+          name: "Open [synthetic] Continuity item 1",
+        }),
+      ).toBe(firstCard);
+      expect(search).toHaveFocus();
+      expect(firstSelection).toHaveAttribute("aria-checked", "true");
+    }
+
+    expect(screen.getAllByText(/1 selected/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("opens the same item detail with Enter and Space keyboard semantics", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <InventoryTable
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />,
+    );
+
+    const card = screen.getByRole("button", {
+      name: "Open Walnut media console",
+    });
+    card.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    card.focus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("server-renders and hydrates the same single inventory interaction tree", () => {
+    mockItems.rows = Array.from({ length: 12 }, (_, index) =>
+      inventoryItem(
+        `synthetic_item_${index + 1}`,
+        `[synthetic] Hydration item ${index + 1}`,
+      ),
+    );
+    const inventory = (
+      <InventoryTable
+        householdId={"household_123" as Id<"households">}
+        moveId={"move_123" as Id<"moves">}
+      />
+    );
+    const serverHtml = renderToString(inventory);
+
+    expect(serverHtml).toContain('role="list"');
+    expect(serverHtml).not.toContain("<table");
+
+    const container = document.createElement("div");
+    container.innerHTML = serverHtml;
+    document.body.appendChild(container);
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const hydrated = render(inventory, { container, hydrate: true });
+
+    expect(within(container).getAllByRole("list")).toHaveLength(1);
+    expect(within(container).queryByRole("table")).not.toBeInTheDocument();
+    expect(
+      consoleError.mock.calls.filter(([message]) =>
+        /hydration|did not match|server rendered/i.test(String(message)),
+      ),
+    ).toEqual([]);
+
+    consoleError.mockRestore();
+    hydrated.unmount();
+    container.remove();
+  });
+
   it("resets to the first page when search narrows inventory", async () => {
     const user = userEvent.setup();
     mockItems.rows = Array.from({ length: 12 }, (_, index) =>
@@ -389,4 +545,15 @@ function inventoryItem(
     },
     ...overrides,
   } as InventoryItem;
+}
+
+function setViewportWidth(width: number) {
+  act(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: width,
+      writable: true,
+    });
+    window.dispatchEvent(new Event("resize"));
+  });
 }
