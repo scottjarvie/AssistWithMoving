@@ -1,0 +1,69 @@
+name: MovingManifest CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  required:
+    name: Required CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20.20.0
+          cache: npm
+
+      - name: Install from the lockfile
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Verify REST and MCP contract drift
+        run: npm run contract:drift
+
+      - name: Verify anonymous OAuth and API-key refusal boundaries
+        run: >-
+          npx vitest run
+          tests/unit/mcp-oauth-config-lock.test.ts
+          tests/unit/mcp-route-auth.test.ts
+
+      - name: Build without credentials or deployment keys
+        run: npm run build
+
+  full-tests:
+    name: Unit tests (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20.20.0
+          cache: npm
+
+      - name: Install from the lockfile
+        run: npm ci
+
+      - name: Run the full suite without making it a required policy check
+        run: npm run test
