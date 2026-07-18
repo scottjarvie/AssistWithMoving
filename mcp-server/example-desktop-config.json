@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "movingmanifest": {
+    "movingmanifest-maintainer-stdio": {
       "command": "node",
       "args": [
         "/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"

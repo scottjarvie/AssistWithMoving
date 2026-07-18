@@ -33,7 +33,7 @@ const mcpCards = [
   },
   {
     title: "MCP first, API only if you must",
-    copy: "Recommended: hosted assistants connect to https://movingmanifest.com/mcp and sign in with your MovingManifest account — no key to copy, works with your subscription. Advanced only: local/headless or non-OAuth agents use a scoped API key, either at https://movingmanifest.com/api/mcp (key-only, NOT for OAuth sign-in) or the local MCP server run from a clone of the repo.",
+    copy: "Recommended: connect to https://movingmanifest.com/mcp and sign in with your MovingManifest account — no key to copy, works with your subscription. Advanced only: headless or non-OAuth agents connect directly to https://movingmanifest.com/api/mcp with a scoped API key.",
     icon: Laptop,
   },
   {
@@ -43,7 +43,7 @@ const mcpCards = [
   },
   {
     title: "Scoped credentials",
-    copy: "OAuth connections and API keys are revocable. Use API keys for local/headless automation, and use separate keys for separate assistants when OAuth is not available.",
+    copy: "OAuth connections and API keys are revocable. Use API keys for headless or non-OAuth automation, and use separate keys for separate assistants when OAuth is not available.",
     icon: KeyRound,
   },
   {
@@ -68,8 +68,8 @@ const trustedHelperToolGroups = [
   "Move-day and planning helpers: list_planned_items, create_planned_item, update_planned_item",
 ];
 
-const localExtendedToolGroups = [
-  "Move creation and local setup for headless automations",
+const apiKeyExtendedToolGroups = [
+  "Move creation and setup for headless automations",
   "Detailed item and box primitives for advanced partial workflows",
   "Sale-prep workflows when the user grants that scope intentionally",
   "Export and share workflows when the user grants documentation access",
@@ -90,48 +90,34 @@ Then sign in with your MovingManifest account — no key needed.
 The client discovers Clerk auth from:
 /.well-known/oauth-protected-resource/mcp`;
 
-const remoteApiKeyFallbackExample = `Advanced — local / headless / non-OAuth clients ONLY.
+const remoteApiKeyFallbackExample = `Advanced — headless / non-OAuth clients ONLY.
 This door is key-only and rejects OAuth sign-in; do not use it for hosted clients.
 POST https://movingmanifest.com/api/mcp
 Authorization: Bearer mmk_replace_with_a_scoped_api_key`;
 
-const localInstallCommand = `git clone https://github.com/scottjarvie/movingmanifest
-cd movingmanifest/mcp-server
-npm install`;
+const codexOAuthCommand = `codex mcp add movingmanifest --url https://movingmanifest.com/mcp
+codex mcp login movingmanifest`;
 
-const codexCliCommand = `codex mcp add movingmanifest \\
-  --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \\
-  -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs`;
+const codexApiKeyCommand = `export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key
+codex mcp add movingmanifest \\
+  --url https://movingmanifest.com/api/mcp \\
+  --bearer-token-env-var MOVINGMANIFEST_API_KEY`;
 
 const codexTomlConfig = `[mcp_servers.movingmanifest]
-command = "node"
-args = ["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]
-
-[mcp_servers.movingmanifest.env]
-MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"`;
-
-const desktopJsonConfig = `{
-  "mcpServers": {
-    "movingmanifest": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"
-      ],
-      "env": {
-        "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
-      }
-    }
-  }
-}`;
+url = "https://movingmanifest.com/api/mcp"
+bearer_token_env_var = "MOVINGMANIFEST_API_KEY"`;
 
 export default function McpPage() {
   return (
     <PublicPageChrome
       eyebrow="Model Context Protocol"
       title="Connect capable assistants to MovingManifest tools."
-      description="For AI apps that support MCP, MovingManifest provides a hosted OAuth MCP endpoint and a local MCP server that wrap the REST API with move-aware tools. The user still controls sign-in, connection access, API-key fallback, and revocation."
+      description="For AI apps that support MCP, MovingManifest provides a hosted OAuth endpoint plus an advanced remote API-key endpoint. The user still controls sign-in, connection access, fallback keys, and revocation."
       primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
-      secondaryAction={{ href: "/settings/ai-connections", label: "AI connections" }}
+      secondaryAction={{
+        href: "/settings/ai-connections",
+        label: "AI connections",
+      }}
       visual={<McpVisual />}
     >
       <PublicBand>
@@ -140,7 +126,7 @@ export default function McpPage() {
 
       <PublicBand>
         <div className="grid gap-5 rounded-md border border-primary/25 bg-primary/5 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div>
+          <div className="min-w-0">
             <Badge variant="secondary">Hosted connection</Badge>
             <h2 className="mt-3 text-xl font-semibold tracking-normal">
               Paste the MCP URL, then sign in.
@@ -179,7 +165,7 @@ export default function McpPage() {
               sign-in and consent instead of asking the user to paste a key.
             </p>
           </div>
-          <div className="rounded-md border border-border bg-card p-4">
+          <div className="min-w-0 rounded-md border border-border bg-card p-4">
             <SnippetBlock
               title="MCP endpoint (recommended)"
               text={remoteEndpointUrl}
@@ -191,7 +177,7 @@ export default function McpPage() {
               buttonLabel="Copy OAuth setup"
             />
             <SnippetBlock
-              title="Advanced: API-key door (local / non-OAuth only)"
+              title="Advanced: API-key door (headless / non-OAuth only)"
               text={remoteApiKeyFallbackExample}
               buttonLabel="Copy advanced"
             />
@@ -210,52 +196,43 @@ export default function McpPage() {
 
       <PublicBand>
         <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr]">
-          <div>
-            <Badge variant="secondary">Local server</Badge>
+          <div className="min-w-0">
+            <Badge variant="secondary">CLI and headless clients</Badge>
             <h2 className="mt-4 text-2xl font-semibold tracking-normal">
-              What an assistant should know.
+              Use remote MCP; no clone required.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Desktop and CLI agents (Claude Desktop, Claude Code, Codex) run
-              the server locally from a clone of the open-source repo — clone,
-              npm install once, then point the client at the server script. (An
-              npm package install is planned for a future launch.) The local
-              server can use the broader API-key tool surface. Hosted OAuth is
-              narrower by default so a mobile or hosted assistant gets trusted
-              move-helper powers without also receiving export, sale, household
-              admin, or lower-level workflow primitives.
+              OAuth-capable CLI and desktop agents should use the same hosted
+              endpoint as other clients. When OAuth is unavailable, connect
+              directly to the remote API-key door and read the key from an
+              environment variable. The API-key surface can expose broader tools
+              when the user grants those scopes intentionally.
             </p>
           </div>
-          <div className="rounded-md border border-border bg-card p-4">
-            <p className="mb-3 text-sm font-medium">
-              One-time install (clone the repo)
-            </p>
-            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
-              {localInstallCommand}
-            </pre>
-            <p className="mt-4 text-sm font-medium">
-              Codex CLI/App setup (use your absolute clone path)
+          <div className="min-w-0 rounded-md border border-border bg-card p-4">
+            <p className="text-sm font-medium">
+              Codex OAuth setup (recommended)
             </p>
             <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
-              {codexCliCommand}
+              {codexOAuthCommand}
             </pre>
             <p className="mt-4 text-sm font-medium">
-              Or edit Codex config.toml
+              Codex API-key setup (advanced)
+            </p>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
+              {codexApiKeyCommand}
+            </pre>
+            <p className="mt-4 text-sm font-medium">
+              Equivalent advanced Codex config.toml
             </p>
             <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
               {codexTomlConfig}
             </pre>
-            <details className="mt-4 rounded-md border border-border p-3">
-              <summary className="cursor-pointer text-sm font-medium">
-                JSON config used by Claude Desktop and similar MCP clients
-              </summary>
-              <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5 text-muted-foreground">
-                {desktopJsonConfig}
-              </pre>
-            </details>
             <p className="mt-4 text-xs leading-5 text-muted-foreground">
-              Restart Codex after adding the server. In a new Codex thread,
-              check MCP tools for movingmanifest, then call get_api_context.
+              Keep the key in your shell or secret manager, not in the
+              checked-in config. Restart Codex after adding the server. In a new
+              Codex thread, check MCP tools for movingmanifest, then call
+              get_api_context.
             </p>
           </div>
         </div>
@@ -293,14 +270,14 @@ export default function McpPage() {
             </section>
             <section>
               <h3 className="text-sm font-semibold tracking-normal">
-                Local/API-key extended surface
+                Remote API-key extended surface
               </h3>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                Available when a user intentionally grants a broader local or
-                API-key connection.
+                Available when a user intentionally grants a broader API-key
+                connection.
               </p>
               <div className="mt-3 divide-y divide-border border-y border-border">
-                {localExtendedToolGroups.map((group) => (
+                {apiKeyExtendedToolGroups.map((group) => (
                   <p
                     key={group}
                     className="py-3 font-mono text-xs leading-5 text-muted-foreground"
@@ -361,8 +338,14 @@ function McpVisual() {
       <div className="mt-4 space-y-3">
         {[
           ["1", "User signs in to MovingManifest."],
-          ["2", "Assistant connects via the hosted MCP URL or a locally cloned server."],
-          ["3", "Hosted OAuth clients ask for consent; local clients use a scoped key."],
+          [
+            "2",
+            "Assistant connects via hosted OAuth or the remote API-key door.",
+          ],
+          [
+            "3",
+            "OAuth clients ask for consent; non-OAuth clients use a scoped key.",
+          ],
           ["4", "User can revoke the connection or key when finished."],
         ].map(([step, copy]) => (
           <div
