@@ -32,10 +32,10 @@ describe("required CI workflow contract", () => {
     );
     expect(requiredJob).toContain("name: Required CI");
     expect(requiredJob).toContain(
-      "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+      "actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd",
     );
     expect(requiredJob).toContain(
-      "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
     );
     expect(requiredJob).toContain("node-version: 20.20.0");
     expect(requiredJob).toContain("cache: npm");
