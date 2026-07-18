@@ -16,6 +16,7 @@ import {
   PublicBand,
   PublicPageChrome,
 } from "@/components/public-page-chrome";
+import type { PublicNavigationMode } from "@/components/public-page-chrome";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -80,7 +81,11 @@ export default function AiAssistantPage() {
       title="Let your AI help with the move."
       description="MovingManifest gives your assistant a structured place to save rooms, photos, inventory, boxes, vehicles, sale prep, layouts, and packets. You stay in control of the account and the key."
       primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
-      secondaryAction={{ href: "/llms.txt", label: "AI-readable guide" }}
+      secondaryAction={{
+        href: "/llms.txt",
+        label: "AI-readable guide",
+        navigation: "document",
+      }}
       visual={<AssistantVisual />}
     >
       <PublicBand>
@@ -104,7 +109,7 @@ export default function AiAssistantPage() {
                 </Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href="/llms.txt">AI-readable guide</Link>
+                <a href="/llms.txt">AI-readable guide</a>
               </Button>
             </div>
           </div>
@@ -177,10 +182,18 @@ export default function AiAssistantPage() {
           </ExpandableSection>
           <ExpandableSection title="Technical docs for the assistant">
             <div className="grid gap-2">
-              <DocLink href="/llms-full.txt" title="Full AI guide" />
-              <DocLink href="/openapi.json" title="OpenAPI contract" />
+              <DocLink
+                href="/llms-full.txt"
+                title="Full AI guide"
+                navigation="document"
+              />
+              <DocLink
+                href="/openapi.json"
+                title="OpenAPI contract"
+                navigation="document"
+              />
               <DocLink href="/api" title="REST API overview" />
-              <DocLink href="/mcp" title="MCP overview" />
+              <DocLink href="/mcp/guide" title="MCP overview" />
             </div>
           </ExpandableSection>
         </div>
@@ -206,14 +219,35 @@ function ExpandableSection({
   );
 }
 
-function DocLink({ href, title }: { href: string; title: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted/40"
-    >
+function DocLink({
+  href,
+  title,
+  navigation = "app",
+}: {
+  href: string;
+  title: string;
+  navigation?: PublicNavigationMode;
+}) {
+  const className =
+    "inline-flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted/40";
+  const content = (
+    <>
       {title}
       <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+    </>
+  );
+
+  if (navigation === "document") {
+    return (
+      <a href={href} className={className}>
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} className={className}>
+      {content}
     </Link>
   );
 }

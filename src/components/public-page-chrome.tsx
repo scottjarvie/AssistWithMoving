@@ -43,6 +43,14 @@ export type PublicFeatureCard = {
   icon: LucideIcon;
 };
 
+export type PublicNavigationMode = "app" | "document";
+
+type PublicPageAction = {
+  href: string;
+  label: string;
+  navigation?: PublicNavigationMode;
+};
+
 export function PublicPageChrome({
   eyebrow,
   title,
@@ -56,16 +64,19 @@ export function PublicPageChrome({
   title: string;
   description: string;
   children: React.ReactNode;
-  primaryAction?: {
-    href: string;
-    label: string;
-  };
-  secondaryAction?: {
-    href: string;
-    label: string;
-  };
+  primaryAction?: PublicPageAction;
+  secondaryAction?: PublicPageAction;
   visual?: React.ReactNode;
 }) {
+  const resolvedPrimaryAction = primaryAction ?? {
+    href: "/sign-up",
+    label: "Create account",
+  };
+  const resolvedSecondaryAction = secondaryAction ?? {
+    href: "/ai",
+    label: "Use with your AI assistant",
+  };
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <PublicHeader />
@@ -83,15 +94,28 @@ export function PublicPageChrome({
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg">
-                <Link href={primaryAction?.href ?? "/sign-up"}>
-                  {primaryAction?.label ?? "Create account"}
-                  <ArrowRight aria-hidden="true" />
-                </Link>
+                {resolvedPrimaryAction.navigation === "document" ? (
+                  <a href={resolvedPrimaryAction.href}>
+                    {resolvedPrimaryAction.label}
+                    <ArrowRight aria-hidden="true" />
+                  </a>
+                ) : (
+                  <Link href={resolvedPrimaryAction.href}>
+                    {resolvedPrimaryAction.label}
+                    <ArrowRight aria-hidden="true" />
+                  </Link>
+                )}
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href={secondaryAction?.href ?? "/ai"}>
-                  {secondaryAction?.label ?? "Use with your AI assistant"}
-                </Link>
+                {resolvedSecondaryAction.navigation === "document" ? (
+                  <a href={resolvedSecondaryAction.href}>
+                    {resolvedSecondaryAction.label}
+                  </a>
+                ) : (
+                  <Link href={resolvedSecondaryAction.href}>
+                    {resolvedSecondaryAction.label}
+                  </Link>
+                )}
               </Button>
             </div>
           </div>
