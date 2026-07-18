@@ -1,8 +1,10 @@
 {
   "mcpServers": {
-    "movingmanifest": {
-      "command": "npx",
-      "args": ["-y", "movingmanifest-mcp"],
+    "movingmanifest-maintainer-stdio": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"
+      ],
       "env": {
         "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
       }

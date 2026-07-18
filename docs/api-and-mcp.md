@@ -1,6 +1,7 @@
 # MovingManifest API and MCP Guide
 
-This guide covers the shipped `v1` REST API and the MCP server (remote endpoint + local npm package).
+This guide covers the shipped `v1` REST API, the two remote MCP doors, and the
+maintainer-only stdio server.
 The API is designed for controlled automation: API keys carry explicit scopes,
 may be restricted to one move, and all write paths are auditable.
 
@@ -1399,9 +1400,10 @@ multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
 `fileBase64`. It is intentionally image-only and server-preps `thumb`, `card`,
 `detail`, and `full` WebP derivatives after storing the original. Direct upload
 responses include a `derivativeVariants` array describing those prepared web
-sizes without storage URLs or object keys. MCP clients should pass `filePath` to
-`upload_evidence_image` and let the local MCP server read and send the original
-file bytes. Set `generateAiSuggestions` when the same upload should also place
+sizes without storage URLs or object keys. Remote MCP clients should pass a
+`sourceUrl`, `dataUrl`, or `fileBase64`; the maintainer-only stdio server can
+also read a local `filePath`. Set `generateAiSuggestions` when the same upload
+should also place
 the photo into AI review; that queueing step requires `inventory/write` in
 addition to `photos/write`. Use the presigned flow below for larger/custom
 upload clients, audio/video evidence, progress bars, or client-created
@@ -1762,11 +1764,12 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 Hosted assistants reach MovingManifest through **two separate doors — do not
 confuse them** (crossing them is the recurring "Invalid API key format" 401):
 
-- **OAuth door (recommended for claude.ai / Cowork):**
-  `https://movingmanifest.com/mcp/connect` — sign in with your MovingManifest
-  account, no key to copy. This is the OAuth 2.1 flow (Clerk) via the
-  convex-mcp-gateway. **Use this URL for any client that supports browser
-  sign-in.** Discovery: `/.well-known/oauth-protected-resource/mcp/connect`.
+- **OAuth door (recommended):** `https://movingmanifest.com/mcp` — sign in
+  with your MovingManifest account, no key to copy. This is the OAuth 2.1 flow
+  (Clerk) via the convex-mcp-gateway. **Use this URL for any client that
+  supports browser sign-in.** Discovery:
+  `/.well-known/oauth-protected-resource/mcp`. The older `/mcp/connect` URL is
+  a working alias, not the default users should copy.
 - **API-key door:** `https://movingmanifest.com/api/mcp` — accepts `mmk_` API
   keys ONLY (forwarded to REST as a key). It **cannot** consume an OAuth/JWT
   token, so do not point an OAuth sign-in at it. For local/headless tools, CI,
@@ -1774,18 +1777,19 @@ confuse them** (crossing them is the recurring "Invalid API key format" 401):
 
 > ⚠️ `/api/mcp` does NOT do OAuth. If you paste it into an OAuth client, the
 > sign-in completes but every tool call 401s ("Invalid API key format"). Use
-> `/mcp/connect` for OAuth. See `src/lib/mcp-oauth.ts` for the full rationale.
+> `/mcp` for OAuth. See `src/lib/mcp-oauth.ts` for the full rationale.
 
 The tool implementations are available over transports that share one tool
 registry (`mcp-server/movingmanifest-mcp.mjs`), so they cannot drift:
 
 - **Remote (Streamable HTTP)** at `https://movingmanifest.com/api/mcp` (API key)
-  or `https://movingmanifest.com/mcp/connect` (OAuth) — for hosted assistants
-  such as claude.ai custom connectors and Claude Cowork. Served by
-  `src/app/api/mcp/route.ts` and `src/app/mcp/connect/route.ts`.
-- **Local (stdio)** via the published `movingmanifest-mcp` npm package — for
-  Claude Desktop, Claude Code, Codex, and other clients that run local
-  processes.
+  or `https://movingmanifest.com/mcp` (OAuth) — for hosted, desktop, CLI, and
+  headless clients. Served by `src/app/api/mcp/route.ts` and
+  `src/app/mcp/route.ts`; `/mcp/connect` remains an OAuth alias.
+- **Maintainer-only local stdio** via
+  `mcp-server/movingmanifest-mcp.mjs`, run with Node from a clone of this repo
+  for development and transport debugging. It is not the public installation
+  path and the package is not published to npm.
 
 Both wrap the REST API. Neither connects directly to Convex or Clerk.
 
@@ -1795,16 +1799,23 @@ REST endpoints, MCP tool names, and known launch blockers. This keeps agents
 from guessing from a long tool list and makes operational gaps explicit without
 treating verified storage/upload support as unavailable.
 
-### Remote MCP — OAuth door (recommended)
+### Remote MCP — OAuth door (recommended default)
 
 ```
-Endpoint: https://movingmanifest.com/mcp/connect
+Endpoint: https://movingmanifest.com/mcp
 Auth:     OAuth 2.1 sign-in (Clerk) — no key to paste
 ```
 
 In claude.ai or Claude Cowork: Settings → Connectors → Add custom connector →
-paste `https://movingmanifest.com/mcp/connect`. The client opens MovingManifest
-sign-in and consent; on approval it can call the tools. No `mmk_` key needed.
+paste `https://movingmanifest.com/mcp`. The client opens MovingManifest sign-in
+and consent; on approval it can call the tools. No `mmk_` key needed.
+
+Codex CLI/App:
+
+```bash
+codex mcp add movingmanifest --url https://movingmanifest.com/mcp
+codex mcp login movingmanifest
+```
 
 ### Remote MCP — API-key door
 
@@ -1820,14 +1831,43 @@ For clients that can't OAuth (local/headless, CI). Send the key in the
 any key that has traveled in a URL should be rotated. Requests without a key get
 a 401 pointing to the OAuth endpoint. **This endpoint rejects OAuth/JWT
 tokens** — if your client signs in with OAuth, use
-`/mcp/connect` above instead.
+`/mcp` above instead.
 
-### Local MCP
-
-Run from the published package (no repo clone needed):
+Codex CLI/App reads the bearer token from an environment variable rather than
+putting the secret in checked-in configuration:
 
 ```bash
-MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" npx -y movingmanifest-mcp
+export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key
+codex mcp add movingmanifest \
+  --url https://movingmanifest.com/api/mcp \
+  --bearer-token-env-var MOVINGMANIFEST_API_KEY
+```
+
+Equivalent Codex `config.toml`:
+
+```toml
+[mcp_servers.movingmanifest]
+url = "https://movingmanifest.com/api/mcp"
+bearer_token_env_var = "MOVINGMANIFEST_API_KEY"
+```
+
+### Maintainer-only local stdio server
+
+The stdio server remains useful for repository development, transport debugging,
+and parity checks. It is not the user-facing fallback for npm publication. Run
+it only from a trusted clone:
+
+```bash
+git clone https://github.com/scottjarvie/movingmanifest
+cd movingmanifest/mcp-server
+npm install
+```
+
+Run the server with a scoped key:
+
+```bash
+MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" \
+  node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
 ```
 
 From this repo during development: `npm run mcp` with the same env. Optional
@@ -1837,37 +1877,41 @@ env override (defaults to production):
 MOVINGMANIFEST_API_BASE_URL="https://movingmanifest.com/api/v1"
 ```
 
-Codex CLI/App setup:
+Maintainer Codex setup (use the absolute path of your clone):
 
 ```bash
-codex mcp add movingmanifest \
+codex mcp add movingmanifest-maintainer-stdio \
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
-  -- npx -y movingmanifest-mcp
+  -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
 ```
 
 Equivalent Codex `config.toml`:
 
 ```toml
-[mcp_servers.movingmanifest]
-command = "npx"
-args = ["-y", "movingmanifest-mcp"]
+[mcp_servers.movingmanifest-maintainer-stdio]
+command = "node"
+args = ["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]
 
-[mcp_servers.movingmanifest.env]
+[mcp_servers.movingmanifest-maintainer-stdio.env]
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
 ```
 
 After adding the server, restart Codex or start a fresh Codex session, use
-`/mcp` or `codex mcp list` to confirm `movingmanifest` is enabled, then call
-`get_api_context` before reading or writing private move data.
+`/mcp` or `codex mcp list` to confirm `movingmanifest-maintainer-stdio` is
+enabled, then call `get_api_context` before reading or writing private move
+data.
 
-Desktop agent config example (Claude Desktop and similar):
+Maintainer desktop-agent config example (see
+`mcp-server/example-desktop-config.json`; use the absolute path of your clone):
 
 ```json
 {
   "mcpServers": {
-    "movingmanifest": {
-      "command": "npx",
-      "args": ["-y", "movingmanifest-mcp"],
+    "movingmanifest-maintainer-stdio": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"
+      ],
       "env": {
         "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
       }
@@ -1876,9 +1920,13 @@ Desktop agent config example (Claude Desktop and similar):
 }
 ```
 
-Publishing the package (maintainers): bump the version in
+Publishing the package was declined by owner decision and is not planned; the
+remote MCP endpoints above are the public connection solution. Do not advertise
+npm or `npx` setup unless the owner explicitly reopens publication.
+If that decision changes, maintainers must bump the version in
 `mcp-server/package.json` and the `McpServer` constructor in
-`mcp-server/movingmanifest-mcp.mjs`, then `cd mcp-server && npm publish`.
+`mcp-server/movingmanifest-mcp.mjs`, publish from `mcp-server`, verify a clean
+install, and update every public setup surface in the same release.
 
 Available MCP tools:
 
@@ -1997,14 +2045,15 @@ Recommended MCP key scopes depend on the intended agent:
 | Broad move assistant | `moves/read`, `moves/write`, `inventory/read`, `inventory/write`, `plans/read`, `plans/write`, `photos/write`, `exports/read`, `exports/create`, `members/manage` |
 | Layout Studio helper | `plans/read`, `plans/write`, plus `inventory/read` when placing real items or boxes |
 
-Prefer move-restricted API keys for local agents.
+Prefer move-restricted API keys for headless or non-OAuth agents.
 
 ## Security Guidance
 
 - Use separate keys per agent/client.
 - Prefer the smallest scope set that supports the workflow.
 - Prefer move-restricted keys when the agent only needs one move.
-- Store keys in local MCP client config or a password manager, not source code.
+- Store keys in an environment variable, secret manager, or password manager,
+  not source code.
 - Use `dryRun` before write tools when an agent is planning a bulk change.
 - Revoke keys after temporary helper sessions.
 

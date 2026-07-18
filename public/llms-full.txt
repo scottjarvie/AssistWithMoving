@@ -159,7 +159,7 @@ user has not already approved the write. A live new box requires a stable
 ## Image Upload Guidance
 
 One user photo should normally be one upload call. MCP agents should use
-`upload_image`, `upload_photo`, or `upload_evidence_image` with a local `filePath`, public
+`upload_image`, `upload_photo`, or `upload_evidence_image` with a public
 `sourceUrl`, `dataUrl`, or `fileBase64`. When the user gives several ordinary
 photos from the same room/context or for one existing item, use `upload_images`,
 `upload_photos`, or `upload_evidence_images` with shared defaults and one image
@@ -178,8 +178,8 @@ do not create another inventory item. Resolve the existing item first with
 `get_agent_context` or `get_move_summary`; if the user gave a clear item name
 and only one match is plausible, use that `itemId`. Then call `upload_photos` or
 `upload_evidence_images` with shared defaults such as `moveId`, `itemId`, room,
-`photoType: "item"`, normal privacy, and one `images[]` entry per local
-`filePath`. Set `continueOnError: true` for batches so one bad image does not
+`photoType: "item"`, normal privacy, and one `images[]` entry per supported
+image source. Set `continueOnError: true` for batches so one bad image does not
 block the others. Afterward, report a short confirmation: item name, uploaded
 count, failed count, photo IDs, and whether derivatives are ready. Only ask the
 user to correct target, caption, privacy, or quantity if the result looks wrong.
@@ -192,9 +192,7 @@ MovingManifest stores the original, reads dimensions, finalizes the evidence
 record, and creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
 server-side. Direct upload responses include `derivativeVariants` for the
 200x200 square `thumb`, 600x600 `card`, 1200x1200 `detail`, and 2400x2400
-`full` WebP display versions without exposing private storage keys. For local
-`filePath`, the MCP helper sends the original image bytes directly instead of
-putting the file into a JSON/base64 payload. Do not ask users for dimensions,
+`full` WebP display versions without exposing private storage keys. Do not ask users for dimensions,
 thumbnail sizes, or derivative files for ordinary photos. Set
 `generateAiSuggestions: true` when the uploaded photo should also enter AI review
 for possible item, box, or duplicate suggestions; report whether
@@ -299,10 +297,10 @@ Use `/openapi.json` for machine-readable endpoint details.
 
 ## MCP
 
-MovingManifest offers MCP two ways: a remote endpoint for hosted assistants and
-a local npx server for desktop/CLI agents. They share the same implementation,
-but hosted OAuth defaults to a narrower trusted-helper surface than broad
-local/API-key setups.
+MovingManifest exposes two remote MCP doors. Hosted OAuth is the default for
+clients that support browser sign-in; the API-key door is an advanced fallback
+for headless or non-OAuth clients. No repository clone is required. Hosted OAuth
+defaults to a narrower trusted-helper surface than broad API-key setups.
 
 Remote MCP (claude.ai custom connectors, Claude Cowork, any Streamable HTTP
 client — no install needed):
@@ -322,27 +320,29 @@ client there, it rejects OAuth and fails to register. Send the key in the
 `Authorization: Bearer mmk_...` header (or `x-api-key`); the legacy
 `?key=mmk_...` query-string form is rejected with a 401 because URLs get logged.
 
-Local MCP via npx — Codex setup when the user has local shell access:
+Codex OAuth setup (recommended):
 
 ```bash
-codex mcp add movingmanifest \
-  --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
-  -- npx -y movingmanifest-mcp
+codex mcp add movingmanifest --url https://movingmanifest.com/mcp
+codex mcp login movingmanifest
 ```
 
-Equivalent Codex `~/.codex/config.toml`:
+Codex API-key setup (advanced, non-OAuth only):
+
+```bash
+export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key
+codex mcp add movingmanifest \
+  --url https://movingmanifest.com/api/mcp \
+  --bearer-token-env-var MOVINGMANIFEST_API_KEY
+```
+
+Equivalent advanced Codex `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.movingmanifest]
-command = "npx"
-args = ["-y", "movingmanifest-mcp"]
-
-[mcp_servers.movingmanifest.env]
-MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
+url = "https://movingmanifest.com/api/mcp"
+bearer_token_env_var = "MOVINGMANIFEST_API_KEY"
 ```
-
-Claude Desktop and similar JSON-config MCP clients use the same command:
-`"command": "npx", "args": ["-y", "movingmanifest-mcp"]` with the key in env.
 
 After configuring MCP for Codex, restart Codex or start a fresh session. The
 agent should confirm `movingmanifest` appears in `/mcp` or `codex mcp list`,
@@ -378,7 +378,7 @@ Hosted OAuth trusted-helper tools:
 - `create_planned_item`
 - `update_planned_item`
 
-Local/API-key extended tools may include broader categories when the user
+API-key extended tools may include broader categories when the user
 intentionally grants them:
 
 - move creation and advanced setup;
@@ -392,7 +392,7 @@ intentionally grants them:
 Always call `get_api_capabilities` and trust the live tool list before using a
 tool. Do not assume sale, export, household-management, or low-level item/box
 primitives are available in hosted OAuth just because they are documented for
-local/API-key setups.
+API-key setups.
 
 ## Safety Rules For Assistants
 

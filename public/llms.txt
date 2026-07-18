@@ -72,20 +72,23 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
   SEPARATE API-key door that rejects OAuth sign-in and fails to register
   ("couldn't register with the sign-in service"). The API-key door is only for
   local/headless or non-OAuth automation, with a scoped mmk_ key.
-- For Codex users with local shell access, configure MCP with:
-  `codex mcp add movingmanifest --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key -- npx -y movingmanifest-mcp`.
+- Codex users should connect remotely; no repository clone or local server is
+  required. Recommended OAuth setup:
+  `codex mcp add movingmanifest --url https://movingmanifest.com/mcp`, then
+  `codex mcp login movingmanifest`. Advanced non-OAuth setup:
+  `export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key`, then
+  `codex mcp add movingmanifest --url https://movingmanifest.com/api/mcp --bearer-token-env-var MOVINGMANIFEST_API_KEY`.
   Restart Codex or start a fresh session, verify `movingmanifest` appears in
-  `/mcp` or `codex mcp list`, then call `get_api_context`. Claude Desktop and
-  similar clients use the same `npx -y movingmanifest-mcp` command in their
-  JSON MCP config.
+  `/mcp` or `codex mcp list`, then call `get_api_context`. Keep the key in an
+  environment variable or secret manager, never in source or the command URL.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
 - Start MCP work with `get_api_capabilities`, then `get_api_context`, then
   `list_moves` or `setup_move`. Hosted OAuth defaults to a trusted-helper tool
-  surface; local/API-key connections can expose broader tools when the user
+  surface; API-key connections can expose broader tools when the user
   intentionally grants them.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
 - For image upload, use one call by default. MCP agents should call
-  `upload_image`, `upload_photo`, or `upload_evidence_image` with a local `filePath`, public
+  `upload_image`, `upload_photo`, or `upload_evidence_image` with a public
   `sourceUrl`, `dataUrl`, or `fileBase64`; when the user gives several ordinary
   photos from the same room/context or for one existing item, call
   `upload_images`, `upload_photos`, or `upload_evidence_images` with shared
@@ -109,9 +112,7 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
   `derivativeVariants` for the 200x200 square `thumb`, 600x600 `card`,
   1200x1200 `detail`, and 2400x2400 `full` WebP display versions without
   exposing private storage keys. Do not ask users for thumbnail sizes or
-  dimensions. For local `filePath`, the MCP helper sends original image bytes
-  directly; do not base64-wrap local files unless you already only have base64.
-  Set `generateAiSuggestions: true` when the user wants the app to place the
+  dimensions. Set `generateAiSuggestions: true` when the user wants the app to place the
   uploaded photo into AI review automatically; upload still succeeds if review
   queueing fails or the key only has `photos/write`. MCP image results and REST
   direct upload responses include `agentReview`; use it to tell the user the
@@ -158,7 +159,7 @@ and planned-item helpers.
 
 Do not assume hosted OAuth exposes sale, export, household-member management, or
 low-level item/box primitives by default. Those broader categories belong to
-local/API-key setups only when the user intentionally grants them. Always trust
+API-key setups only when the user intentionally grants them. Always trust
 `get_api_capabilities` over old public examples.
 
 ## Common Workflows
