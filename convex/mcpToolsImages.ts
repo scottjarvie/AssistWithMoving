@@ -1,6 +1,6 @@
 // OAuth MCP gateway IMAGE tools — multi-image in both directions.
 //   get_images: pull many photos at once (short-lived display URLs).
-//   add_images: upload many photos at once (from URL or base64) and attach each
+//   add_images: upload many base64 photos at once and attach each
 //               to an item / box / space / room.
 // Gateway tools have no ctx.auth, so we resolve permission from caller.subject
 // via the bridge in a helper query, then reuse the existing photo pipeline
@@ -14,6 +14,7 @@ import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, mutation, query } from "./_generated/server";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
+import { assertOAuthImageSource } from "./lib/mcpMediaIngress";
 import { imageDimensions } from "./lib/mediaStorage";
 
 const imageFilterValidator = v.object({
@@ -341,17 +342,13 @@ export const addImages = action({
 
     for (const image of args.images) {
       try {
+        assertOAuthImageSource(image);
         let bytes: Uint8Array;
-        let mimeType = image.mimeType ?? "image/jpeg";
-        if (image.url) {
-          const res = await fetch(image.url);
-          if (!res.ok) throw new ConvexError(`fetch failed (${res.status})`);
-          mimeType = image.mimeType ?? res.headers.get("content-type") ?? mimeType;
-          bytes = new Uint8Array(await res.arrayBuffer());
-        } else if (image.base64) {
+        const mimeType = image.mimeType ?? "image/jpeg";
+        if (image.base64) {
           bytes = bytesFromBase64(image.base64);
         } else {
-          throw new ConvexError("Provide url or base64.");
+          throw new ConvexError("Provide base64 image data.");
         }
 
         // completeUploadSession requires positive width/height for images, but

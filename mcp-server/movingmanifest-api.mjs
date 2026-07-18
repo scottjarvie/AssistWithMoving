@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
+
+import {
+  downloadPublicHttpsMedia,
+  parseAllowedFileRoots,
+  readAllowedLocalMedia,
+} from "./media-ingress.mjs";
 
 export { getApiCapabilities } from "./capabilities.mjs";
 
@@ -45,6 +50,12 @@ export function createApiConfig(env = process.env) {
   return {
     baseUrl: baseUrl.replace(/\/+$/g, ""),
     apiKey,
+    mediaIngress: {
+      transport: "stdio",
+      allowedFileRoots: parseAllowedFileRoots(
+        env.MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS,
+      ),
+    },
   };
 }
 
@@ -1310,13 +1321,20 @@ export async function startPhotoUpload(config, input) {
 }
 
 export async function uploadEvidenceFile(config, input) {
-  const media = await loadEvidenceMedia(input);
-  const mimeType = normalizeMimeType(input.mimeType ?? media.mimeType);
-  if (!mimeType) {
+  const media = await loadEvidenceMedia(config, input);
+  const requestedMimeType = normalizeMimeType(input.mimeType ?? media.mimeType);
+  const detectedMimeType = sniffMimeType(media.bytes);
+  if (!detectedMimeType) {
     throw new Error(
-      "Could not determine MIME type. Pass mimeType for files without a known image, audio, or video extension."
+      "Could not verify the media type from its file signature. Use a supported JPEG, PNG, WebP, MP3, MP4/MOV, AAC, WAV, WebM, or Ogg file.",
     );
   }
+  if (requestedMimeType && requestedMimeType !== detectedMimeType) {
+    throw new Error(
+      `Media MIME type mismatch: content is ${detectedMimeType}, not ${requestedMimeType}.`,
+    );
+  }
+  const mimeType = detectedMimeType;
 
   const dimensions = imageDimensionsFromBuffer(media.bytes, mimeType);
   const width = input.width ?? dimensions?.width;
@@ -1440,7 +1458,7 @@ export async function uploadEvidenceImage(config, input) {
   }
 
   const directImage = input.filePath
-    ? await loadLocalImageForDirectUpload(input)
+    ? await loadLocalImageForDirectUpload(config, input)
     : input.dataUrl
       ? loadDataUrlImageForDirectUpload(input)
       : input.fileBase64
@@ -1618,17 +1636,31 @@ export async function uploadEvidenceImages(config, input) {
   };
 }
 
-async function loadLocalImageForDirectUpload(input) {
-  const bytes = await readFile(input.filePath);
+async function loadLocalImageForDirectUpload(config, input) {
+  const { bytes } = await readAllowedLocalMedia({
+    filePath: input.filePath,
+    transport: config.mediaIngress?.transport,
+    allowedFileRoots: config.mediaIngress?.allowedFileRoots,
+    maxBytes: 25 * 1024 * 1024,
+  });
   const fileName = input.fileName ?? path.basename(input.filePath);
-  const mimeType = normalizeMimeType(
-    input.mimeType ?? sniffMimeType(bytes) ?? mimeTypeForFilename(fileName)
+  const requestedMimeType = normalizeMimeType(
+    input.mimeType ?? mimeTypeForFilename(fileName),
   );
+  const detectedMimeType = sniffMimeType(bytes);
+  if (!detectedMimeType || !detectedMimeType.startsWith("image/")) {
+    throw new Error("filePath content is not a supported JPEG, PNG, or WebP image.");
+  }
+  if (requestedMimeType && requestedMimeType !== detectedMimeType) {
+    throw new Error(
+      `Image MIME type mismatch: content is ${detectedMimeType}, not ${requestedMimeType}.`,
+    );
+  }
   return finalizeImageForDirectUpload({
     bytes,
     source: "filePath",
     fileName,
-    mimeType,
+    mimeType: detectedMimeType,
   });
 }
 
@@ -1898,13 +1930,18 @@ function defaultPhotoTypeForTarget(target) {
   }
 }
 
-async function loadEvidenceMedia(input) {
+async function loadEvidenceMedia(config, input) {
   if (Boolean(input.filePath) === Boolean(input.sourceUrl)) {
     throw new Error("Provide exactly one of filePath or sourceUrl.");
   }
 
   if (input.filePath) {
-    const bytes = await readFile(input.filePath);
+    const { bytes } = await readAllowedLocalMedia({
+      filePath: input.filePath,
+      transport: config.mediaIngress?.transport,
+      allowedFileRoots: config.mediaIngress?.allowedFileRoots,
+      maxBytes: 500 * 1024 * 1024,
+    });
     return {
       bytes,
       source: "filePath",
@@ -1916,20 +1953,18 @@ async function loadEvidenceMedia(input) {
     };
   }
 
-  const response = await fetch(input.sourceUrl);
-  if (!response.ok) {
-    throw new Error(`Could not download sourceUrl: HTTP ${response.status}.`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  const bytes = Buffer.from(arrayBuffer);
-  const url = new URL(input.sourceUrl);
+  const remote = await downloadPublicHttpsMedia(input.sourceUrl, {
+    maxBytes: 25 * 1024 * 1024,
+  });
+  const bytes = remote.bytes;
+  const url = remote.finalUrl;
   return {
     bytes,
     source: "sourceUrl",
     fileName: input.fileName ?? (path.basename(url.pathname) || "evidence"),
     mimeType:
       input.mimeType ??
-      normalizeMimeType(response.headers.get("content-type") ?? "") ??
+      normalizeMimeType(remote.contentType ?? "") ??
       sniffMimeType(bytes) ??
       mimeTypeForFilename(url.pathname),
   };
@@ -2016,6 +2051,21 @@ function sniffMimeType(bytes) {
   if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF") {
     const riffType = bytes.toString("ascii", 8, 12);
     if (riffType === "WAVE") return "audio/wav";
+  }
+  if (bytes.length >= 4 && bytes.toString("ascii", 0, 4) === "OggS") {
+    return "audio/ogg";
+  }
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x1a &&
+    bytes[1] === 0x45 &&
+    bytes[2] === 0xdf &&
+    bytes[3] === 0xa3
+  ) {
+    return "video/webm";
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0) {
+    return "audio/aac";
   }
   return undefined;
 }
