@@ -25,7 +25,7 @@ export default function ProductLayout({
 }>) {
   if (!hasPublicConvexUrl()) {
     return (
-      <AppShell>
+      <AppShell workspaceEnabled={false}>
         <ProductBackendUnavailable />
       </AppShell>
     );

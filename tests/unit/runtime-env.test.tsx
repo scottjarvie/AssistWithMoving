@@ -1,8 +1,22 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ProductBackendUnavailable } from "../../src/app/(product)/layout";
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/app",
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+  }),
+}));
+
+import ProductLayout, {
+  ProductBackendUnavailable,
+} from "../../src/app/(product)/layout";
 import { hasPublicConvexUrl } from "@/lib/runtime-env";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("runtime env helpers", () => {
   it("treats blank Convex URLs as unconfigured", () => {
@@ -34,5 +48,32 @@ describe("ProductBackendUnavailable", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Backend env missing")).toBeInTheDocument();
     expect(screen.getByText(/NEXT_PUBLIC_CONVEX_URL/)).toBeInTheDocument();
+  });
+
+  it("renders through the product shell without mounting backend consumers", () => {
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "");
+
+    expect(() =>
+      render(
+        <ProductLayout>
+          <p>Configured workspace child</p>
+        </ProductLayout>,
+      ),
+    ).not.toThrow();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Workspace backend is not configured",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Configured workspace child"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
   });
 });
