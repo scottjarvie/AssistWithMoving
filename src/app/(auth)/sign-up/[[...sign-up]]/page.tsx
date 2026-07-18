@@ -27,9 +27,9 @@ export default function SignUpPage() {
               fallbackRedirectUrl="/app"
               appearance={{
                 elements: {
-                  rootBox: "w-full",
-                  cardBox: "w-full max-w-full",
-                  card: "w-full max-w-full",
+                  rootBox: { width: "100%", maxWidth: "100%" },
+                  cardBox: { width: "100%", maxWidth: "100%" },
+                  card: { width: "100%", maxWidth: "100%" },
                 },
               }}
             />

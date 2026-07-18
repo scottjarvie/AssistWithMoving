@@ -14,8 +14,8 @@ describe("auth page mobile sizing", () => {
     expect(source).toContain(
       'className="w-full min-w-0 max-w-sm rounded-lg border border-border bg-card p-6"',
     );
-    expect(source).toContain('rootBox: "w-full"');
-    expect(source).toContain('cardBox: "w-full max-w-full"');
-    expect(source).toContain('card: "w-full max-w-full"');
+    expect(source).toContain('rootBox: { width: "100%", maxWidth: "100%" }');
+    expect(source).toContain('cardBox: { width: "100%", maxWidth: "100%" }');
+    expect(source).toContain('card: { width: "100%", maxWidth: "100%" }');
   });
 });
