@@ -83,6 +83,15 @@ import {
 const derivativeVariantsWithStatus = (status: "pending" | "ready" | "failed") =>
   movingManifestImageDerivativeVariants.map((variant) => ({ ...variant, status }));
 
+const localMediaApiConfig = (allowedRoot: string) => ({
+  baseUrl: "https://example.com/api/v1",
+  apiKey: "mmk_test_secret",
+  mediaIngress: {
+    transport: "stdio" as const,
+    allowedFileRoots: [allowedRoot],
+  },
+});
+
 describe("MovingManifest MCP API client", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -97,6 +106,10 @@ describe("MovingManifest MCP API client", () => {
     ).toEqual({
       baseUrl: "https://example.com/api/v1",
       apiKey: "mmk_test_secret",
+      mediaIngress: {
+        transport: "stdio",
+        allowedFileRoots: [],
+      },
     });
   });
 
@@ -728,7 +741,7 @@ describe("MovingManifest MCP API client", () => {
     try {
       await expect(
         createItemWithImages(
-          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          localMediaApiConfig(tempDir),
           {
             moveId: "move1",
             name: "Red toolbox",
@@ -897,7 +910,7 @@ describe("MovingManifest MCP API client", () => {
     try {
       await expect(
         addItemFromPhoto(
-          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          localMediaApiConfig(tempDir),
           {
             moveId: "move1",
             name: "Desk lamp",
@@ -2151,7 +2164,7 @@ describe("MovingManifest MCP API client", () => {
     try {
       await expect(
         uploadEvidenceFile(
-          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          localMediaApiConfig(tempDir),
           {
             moveId: "move1",
             filePath,
@@ -2375,7 +2388,7 @@ describe("MovingManifest MCP API client", () => {
     try {
       await expect(
         uploadEvidenceImage(
-          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          localMediaApiConfig(tempDir),
           {
             moveId: "move1",
             filePath,
@@ -2494,7 +2507,7 @@ describe("MovingManifest MCP API client", () => {
     try {
       await expect(
         uploadEvidenceImages(
-          { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+          localMediaApiConfig(tempDir),
           {
             moveId: "move1",
             room: "Garage",
@@ -2623,7 +2636,7 @@ describe("MovingManifest MCP API client", () => {
 
     try {
       const result = await uploadEvidenceImage(
-        { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
+        localMediaApiConfig(tempDir),
         {
           moveId: "move1",
           filePath,

@@ -94,7 +94,11 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     );
   }
 
-  const apiConfig = { baseUrl: restApiBaseUrl(), apiKey };
+  const apiConfig = {
+    baseUrl: restApiBaseUrl(),
+    apiKey,
+    mediaIngress: { transport: "hosted", allowedFileRoots: [] },
+  };
 
   const handler = createMcpHandler(
     (server) => {

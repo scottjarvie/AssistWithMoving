@@ -11,6 +11,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v } from "convex/values";
 import sharp from "sharp";
 
+import { downloadPublicHttpsMedia } from "../mcp-server/media-ingress.mjs";
+
 import { internal } from "./_generated/api";
 import type { Id, TableNames } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
@@ -1202,30 +1204,19 @@ async function loadRemoteImageUploadMedia({
   fileName?: string;
   mimeType?: string;
 }) {
-  const url = parseRemoteImageUrl(sourceUrl);
-  const response = await fetch(url, {
-    redirect: "error",
-    headers: { accept: "image/jpeg,image/png,image/webp" },
+  const remote = await downloadPublicHttpsMedia(sourceUrl, {
+    maxBytes: maxImageUploadBytes,
   });
-  if (!response.ok) {
-    throw new Error(`Could not download sourceUrl: HTTP ${response.status}.`);
-  }
-
-  const contentLength = Number(response.headers.get("content-length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > maxImageUploadBytes) {
-    throw new Error("Images must be under 25 MB.");
-  }
-
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = remote.bytes;
   return finalizeLoadedImageUploadMedia({
     bytes,
     source: "sourceUrl",
-    fileName: fileName ?? filenameFromUrl(url),
+    fileName: fileName ?? filenameFromUrl(remote.finalUrl),
     mimeType:
       mimeType ??
-      normalizeHeaderMimeType(response.headers.get("content-type")) ??
+      normalizeHeaderMimeType(remote.contentType) ??
       sniffImageMimeType(bytes) ??
-      mimeTypeForFilename(fileName ?? url.pathname),
+      mimeTypeForFilename(fileName ?? remote.finalUrl.pathname),
   });
 }
 
@@ -1246,9 +1237,16 @@ function finalizeLoadedImageUploadMedia({
   if (bytes.byteLength > maxImageUploadBytes) {
     throw new Error("Images must be under 25 MB.");
   }
-  if (!mimeType) {
+  const detectedMimeType = sniffImageMimeType(bytes);
+  if (!detectedMimeType) {
     throw new Error(
-      "Could not determine MIME type. Pass mimeType for base64 uploads."
+      "Could not verify a JPEG, PNG, or WebP image from the file signature."
+    );
+  }
+  const requestedMimeType = normalizeHeaderMimeType(mimeType);
+  if (requestedMimeType && requestedMimeType !== detectedMimeType) {
+    throw new Error(
+      `Image MIME type mismatch: content is ${detectedMimeType}, not ${requestedMimeType}.`,
     );
   }
 
@@ -1256,58 +1254,8 @@ function finalizeLoadedImageUploadMedia({
     bytes,
     source,
     fileName,
-    mimeType,
+    mimeType: detectedMimeType,
   };
-}
-
-function parseRemoteImageUrl(sourceUrl: string) {
-  let url: URL;
-  try {
-    url = new URL(sourceUrl);
-  } catch {
-    throw new Error("sourceUrl must be a valid HTTP or HTTPS URL.");
-  }
-
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("sourceUrl must be an HTTP or HTTPS URL.");
-  }
-  if (url.username || url.password) {
-    throw new Error("sourceUrl must not include credentials.");
-  }
-  if (isBlockedRemoteHostname(url.hostname)) {
-    throw new Error("sourceUrl must point to a public image URL.");
-  }
-
-  return url;
-}
-
-function isBlockedRemoteHostname(hostname: string) {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (
-    normalized === "localhost" ||
-    normalized.endsWith(".localhost") ||
-    normalized.endsWith(".local")
-  ) {
-    return true;
-  }
-
-  if (normalized === "::1" || normalized === "0:0:0:0:0:0:0:1") {
-    return true;
-  }
-
-  const ipv4 = normalized.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (!ipv4) return false;
-  const octets = ipv4.slice(1).map(Number);
-  if (octets.some((octet) => octet < 0 || octet > 255)) return true;
-  const [first, second] = octets;
-  return (
-    first === 0 ||
-    first === 10 ||
-    first === 127 ||
-    (first === 169 && second === 254) ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168)
-  );
 }
 
 function parseImageDataUrl(dataUrl: string) {

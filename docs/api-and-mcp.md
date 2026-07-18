@@ -1285,12 +1285,15 @@ originals. Image derivatives remain image-only.
 
 For MCP agents, prefer the plain `upload_image` or `upload_photo` alias, or
 `upload_evidence_image` when the client already knows that name, for normal
-single-image work. The assistant can pass a local `filePath`, public
-`sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original,
-finalizes evidence metadata, creates web-ready derivatives server-side, and
-returns the `photoId`.
-For local `filePath`, the MCP helper reads the file and sends the original image
-bytes directly to `POST /photos/upload`; it does not require the agent to
+single-image work. The assistant can pass a public HTTPS `sourceUrl`, `dataUrl`,
+or `fileBase64`; the maintainer-only local stdio server can additionally use an
+approved `filePath`. MovingManifest stores the original, finalizes evidence
+metadata, creates web-ready derivatives server-side, and returns the `photoId`.
+Hosted MCP always rejects `filePath`. Local stdio enables it only for paths
+whose resolved real path is inside a directory named in
+`MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS`; symlinks, non-regular files, and paths
+outside those roots are rejected. The local helper sends approved original
+image bytes directly to `POST /photos/upload`; it does not require the agent to
 base64-wrap the photo, calculate dimensions, or create display files. Use
 `upload_images`, `upload_photos`, or `upload_evidence_images` when the user gives several
 ordinary photos from the same room or context. Use `upload_evidence_file` for
@@ -1400,9 +1403,15 @@ multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
 `fileBase64`. It is intentionally image-only and server-preps `thumb`, `card`,
 `detail`, and `full` WebP derivatives after storing the original. Direct upload
 responses include a `derivativeVariants` array describing those prepared web
-sizes without storage URLs or object keys. Remote MCP clients should pass a
-`sourceUrl`, `dataUrl`, or `fileBase64`; the maintainer-only stdio server can
-also read a local `filePath`. Set `generateAiSuggestions` when the same upload
+sizes without storage URLs or object keys. Remote URLs must use public HTTPS
+without embedded credentials. MovingManifest validates every DNS result and
+redirect hop, pins the accepted address for the connection, applies a timeout,
+and enforces a 25 MB limit from both headers and streamed bytes. Claimed image
+types must also match JPEG, PNG, or WebP file signatures. API-key REST/MCP
+clients may pass a public `sourceUrl`, `dataUrl`, or `fileBase64`. Hosted OAuth
+MCP accepts base64 only because its runtime cannot safely pin DNS resolution;
+the maintainer-only stdio server can also read an approved local `filePath`.
+Set `generateAiSuggestions` when the same upload
 should also place
 the photo into AI review; that queueing step requires `inventory/write` in
 addition to `photos/write`. Use the presigned flow below for larger/custom
@@ -1867,8 +1876,15 @@ Run the server with a scoped key:
 
 ```bash
 MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" \
+MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS="/absolute/path/to/approved/media" \
   node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
 ```
+
+`MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS` is path-delimited (`:` on macOS/Linux,
+`;` on Windows). Leave it empty to disable local-file ingestion. Only explicitly
+trusted media directories belong here; the server verifies the resolved real
+path and rejects symlinks, devices, pipes, directories, and traversal outside
+the configured roots.
 
 From this repo during development: `npm run mcp` with the same env. Optional
 env override (defaults to production):
@@ -1882,6 +1898,7 @@ Maintainer Codex setup (use the absolute path of your clone):
 ```bash
 codex mcp add movingmanifest-maintainer-stdio \
   --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
+  --env MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS=/absolute/path/to/approved/media \
   -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
 ```
 
@@ -1894,6 +1911,7 @@ args = ["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]
 
 [mcp_servers.movingmanifest-maintainer-stdio.env]
 MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
+MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS = "/absolute/path/to/approved/media"
 ```
 
 After adding the server, restart Codex or start a fresh Codex session, use
@@ -1992,9 +2010,9 @@ Available MCP tools:
 | `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos or several new photos attached to one existing item. |
 | `upload_image` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload when the user or agent says image instead of photo. |
 | `upload_images` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload when the user or agent says images instead of photos, including several new images for one existing item. |
-| `upload_evidence_image` | Easiest MCP single-image upload: pass a local `filePath`, public `sourceUrl`, `dataUrl`, or `fileBase64`; MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
+| `upload_evidence_image` | Easiest MCP single-image upload: pass public HTTPS `sourceUrl`, `dataUrl`, or `fileBase64`; hosted OAuth accepts base64 only, while maintainer-only local stdio can also read a `filePath` inside an explicitly configured real-path root. MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
 | `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status plus `agentReview`. |
-| `upload_evidence_file` | Easy MCP media upload: pass a local `filePath` or `sourceUrl`; the tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
+| `upload_evidence_file` | Maintainer-only local stdio media upload: pass a `filePath` inside an explicitly configured real-path root or a bounded public HTTPS `sourceUrl`; hosted transports reject filesystem paths. The tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
 | `start_photo_upload` | Start an evidence media upload session and return presigned original/optional derivative upload information. |
 | `finalize_photo_upload` | Finalize a completed presigned upload and create the evidence record after server-side object verification. |
 | `attach_photo` | Attach/update photo evidence metadata after upload finalization, with `dryRun` support. |

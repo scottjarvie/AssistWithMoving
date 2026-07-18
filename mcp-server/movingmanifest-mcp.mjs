@@ -112,6 +112,11 @@ const allowedOriginalImageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
 const allowedDerivativeImageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
+const localFilePathDescription =
+  "Maintainer-only local stdio input. filePath is refused by hosted MCP and local stdio refuses it unless MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS contains the file's trusted directory; symlinks and non-regular files are refused.";
+const publicSourceUrlDescription =
+  "Public HTTPS media URL without embedded credentials. Private, loopback, link-local, mixed public/private DNS, unsafe redirect, oversized, timed-out, or MIME-mismatched responses are refused.";
+
 const capacityInputSchema = z.object({
   maxWeightLb: z.number().nonnegative().optional(),
   maxVolumeCuFt: z.number().nonnegative().optional(),
@@ -361,12 +366,12 @@ const evidenceImageInputSchema = z.object({
   filePath: z
     .string()
     .optional()
-    .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path."),
+    .describe(localFilePathDescription),
   sourceUrl: z
     .string()
     .url()
     .optional()
-    .describe("Public HTTP(S) image URL. Do not use for private localhost or credentialed URLs."),
+    .describe(publicSourceUrlDescription),
   dataUrl: z
     .string()
     .optional()
@@ -1279,7 +1284,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "add_item_from_photo", {
     title: "Add item from photo",
     description:
-      "Plain-language fastest path for one household item from one user photo plus a few words. Provide one local filePath, public sourceUrl, dataUrl, or fileBase64 with the item name and any obvious fields. Set quantity only when the user says it or the photo clearly shows a count; omitted quantity defaults to 1. Missing weight, dimensions, disposition, and condition do not block creation; MovingManifest stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
+      "Plain-language fastest path for one household item from one user photo plus a few words. Provide dataUrl/fileBase64, a public HTTPS sourceUrl, or a maintainer-approved local filePath with the item name and any obvious fields. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Set quantity only when the user says it or the photo clearly shows a count; omitted quantity defaults to 1. Missing weight, dimensions, disposition, and condition do not block creation; MovingManifest stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
     inputSchema: {
       moveId: z.string(),
       name: z.string().min(1),
@@ -1934,11 +1939,11 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_file", {
     title: "Upload evidence file",
     description:
-      "Easy MCP upload path: provide a local file path or source URL and this tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. For images, MovingManifest creates web-ready derivatives server-side so agents do not need to resize or re-encode files.",
+      "Easy MCP upload path: provide a public HTTPS source URL, or a maintainer-approved local filePath when running stdio with MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Hosted MCP refuses filePath. The tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. For images, MovingManifest creates web-ready derivatives server-side so agents do not need to resize or re-encode files.",
     inputSchema: {
       moveId: z.string(),
-      filePath: z.string().optional(),
-      sourceUrl: z.string().url().optional(),
+      filePath: z.string().optional().describe(localFilePathDescription),
+      sourceUrl: z.string().url().optional().describe(publicSourceUrlDescription),
       fileName: z.string().optional(),
       itemId: z.string().optional(),
       boxId: z.string().optional(),
@@ -1969,18 +1974,18 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_image", {
     title: "Upload evidence image in one call",
     description:
-      "Default image upload path for agents: provide exactly one local file path, public source URL, data URL, or base64 image. The tool sends the original image to MovingManifest, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId plus agentReview so the assistant can tell the user what caption, target, privacy/type, and assumptions were used. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Default image upload path for agents: provide exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. The tool sends the original image to MovingManifest, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId plus agentReview so the assistant can tell the user what caption, target, privacy/type, and assumptions were used. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       filePath: z
         .string()
         .optional()
-        .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path. The MCP helper reads and sends the original bytes directly; do not base64-wrap local files."),
+        .describe(localFilePathDescription),
       sourceUrl: z
         .string()
         .url()
         .optional()
-        .describe("Public HTTP(S) image URL. Do not use for private localhost or credentialed URLs."),
+        .describe(publicSourceUrlDescription),
       dataUrl: z
         .string()
         .optional()
@@ -2025,7 +2030,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_images", {
     title: "Upload multiple evidence images",
     description:
-      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one local file path, public source URL, data URL, or base64 image. Shared metadata at the top level applies to every image unless an image entry overrides it. MovingManifest stores originals and creates web-ready derivatives server-side, then returns per-image status plus agentReview summaries; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Shared metadata at the top level applies to every image unless an image entry overrides it. MovingManifest stores originals and creates web-ready derivatives server-side, then returns per-image status plus agentReview summaries; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       images: z
@@ -2034,12 +2039,12 @@ export function registerTools(target, apiConfig, options = {}) {
             filePath: z
               .string()
               .optional()
-              .describe("Absolute or working-directory-relative local JPEG, PNG, or WebP file path."),
+              .describe(localFilePathDescription),
             sourceUrl: z
               .string()
               .url()
               .optional()
-              .describe("Public HTTP(S) image URL. Do not use for private localhost or credentialed URLs."),
+              .describe(publicSourceUrlDescription),
             dataUrl: z
               .string()
               .optional()
@@ -2112,7 +2117,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_photo", {
     title: "Upload photo",
     description:
-      "Plain-language alias for upload_evidence_image. Use this for a normal single household photo: pass a local filePath, public sourceUrl, dataUrl, or fileBase64, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
+      "Plain-language alias for upload_evidence_image. Use this for a normal single household photo: pass a public HTTPS sourceUrl, dataUrl/fileBase64, or a maintainer-approved local filePath, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       ...evidenceImageInputSchema.shape,
@@ -2125,7 +2130,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_image", {
     title: "Upload image",
     description:
-      "Plain-language alias for upload_evidence_image using image terminology. Use this when the user or agent says image instead of photo: pass a local filePath, public sourceUrl, dataUrl, or fileBase64, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
+      "Plain-language alias for upload_evidence_image using image terminology. Use this when the user or agent says image instead of photo: pass a public HTTPS sourceUrl, dataUrl/fileBase64, or a maintainer-approved local filePath, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       ...evidenceImageInputSchema.shape,
