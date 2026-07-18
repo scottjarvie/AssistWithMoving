@@ -25,6 +25,13 @@ export default function SignUpPage() {
               path="/sign-up"
               signInUrl="/sign-in"
               fallbackRedirectUrl="/app"
+              appearance={{
+                elements: {
+                  rootBox: "w-full",
+                  cardBox: "w-full max-w-full",
+                  card: "w-full max-w-full",
+                },
+              }}
             />
           </div>
         ) : (
