@@ -161,7 +161,7 @@ function isPublicIpv6(address) {
   const first = groups[0];
   const second = groups[1];
   const isIpv4Mapped = groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff;
-  return !(groups.every((group) => group === 0) || (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) || isIpv4Mapped || (first === 0x0064 && second === 0xff9b) || (first === 0x0100 && second === 0) || (first === 0x2001 && second <= 0x01ff) || (first === 0x2001 && second === 0x0db8) || first === 0x2002 || (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xff00) === 0xff00);
+  return !(groups.every((group) => group === 0) || (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) || isIpv4Mapped || (first === 0x0064 && second === 0xff9b) || (first === 0x0100 && second === 0) || (first === 0x2001 && second <= 0x01ff) || (first === 0x2001 && second === 0x0db8) || first === 0x2002 || (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xffc0) === 0xfec0 || (first & 0xff00) === 0xff00);
 }
 
 function expandIpv6(address) {

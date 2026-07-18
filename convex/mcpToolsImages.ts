@@ -14,7 +14,10 @@ import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, mutation, query } from "./_generated/server";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
-import { assertOAuthImageSource } from "./lib/mcpMediaIngress";
+import {
+  assertOAuthImageBytes,
+  assertOAuthImageSource,
+} from "./lib/mcpMediaIngress";
 import { imageDimensions } from "./lib/mediaStorage";
 
 const imageFilterValidator = v.object({
@@ -344,12 +347,12 @@ export const addImages = action({
       try {
         assertOAuthImageSource(image);
         let bytes: Uint8Array;
-        const mimeType = image.mimeType ?? "image/jpeg";
         if (image.base64) {
           bytes = bytesFromBase64(image.base64);
         } else {
           throw new ConvexError("Provide base64 image data.");
         }
+        const mimeType = assertOAuthImageBytes(bytes, image.mimeType);
 
         // completeUploadSession requires positive width/height for images, but
         // the gateway has no Sharp/Node runtime. Read the dimensions from the

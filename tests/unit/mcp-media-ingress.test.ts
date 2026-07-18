@@ -55,7 +55,7 @@ describe("MCP media ingress policy", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each(["file:///etc/hosts", "http://example.com/image.png", "https://user:pass@example.com/image.png", "https://localhost:3210/image.png", "https://127.0.0.1/image.png", "https://169.254.169.254/latest/meta-data", "https://192.0.2.1/image.png", "https://198.51.100.1/image.png", "https://203.0.113.1/image.png", "https://[::1]/image.png", "https://[fc00::1]/image.png", "https://[fe80::1]/image.png", "https://[2001:db8::1]/image.png", "https://[0:0:0:0:0:ffff:7f00:1]/image.png"])("refuses a non-public URL before download: %s", (sourceUrl) => {
+  it.each(["file:///etc/hosts", "http://example.com/image.png", "https://user:pass@example.com/image.png", "https://localhost:3210/image.png", "https://127.0.0.1/image.png", "https://169.254.169.254/latest/meta-data", "https://192.0.2.1/image.png", "https://198.51.100.1/image.png", "https://203.0.113.1/image.png", "https://[::1]/image.png", "https://[fc00::1]/image.png", "https://[fe80::1]/image.png", "https://[fec0::1]/image.png", "https://[feff::1]/image.png", "https://[2001:db8::1]/image.png", "https://[0:0:0:0:0:ffff:7f00:1]/image.png"])("refuses a non-public URL before download: %s", (sourceUrl) => {
     expect(() => parsePublicHttpsUrl(sourceUrl)).toThrow();
   });
 
@@ -64,8 +64,20 @@ describe("MCP media ingress policy", () => {
     await expect(resolvePublicAddresses(url, async () => [{ address: "93.184.216.34", family: 4 }, { address: "10.0.0.4", family: 4 }])).rejects.toThrow(/only to public Internet addresses/i);
   });
 
+  it("rejects site-local IPv6 DNS answers, including mixed public results", async () => {
+    const url = parsePublicHttpsUrl("https://images.example/photo.png");
+    await expect(resolvePublicAddresses(url, async () => [{ address: "fec0::1", family: 6 }])).rejects.toThrow(/only to public Internet addresses/i);
+    await expect(resolvePublicAddresses(url, async () => [{ address: "2606:4700:4700::1111", family: 6 }, { address: "feff::1", family: 6 }])).rejects.toThrow(/only to public Internet addresses/i);
+  });
+
   it("revalidates a redirect target before the next request", async () => {
     const requestFn = vi.fn(async () => ({ status: 302, headers: new Headers({ location: "https://127.0.0.1/private.png" }), body: [], destroy: vi.fn() }));
+    await expect(downloadPublicHttpsMedia("https://images.example/photo.png", { lookupFn: async () => [{ address: "93.184.216.34", family: 4 }], requestFn })).rejects.toThrow(/public Internet address/i);
+    expect(requestFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a redirect to a site-local IPv6 target", async () => {
+    const requestFn = vi.fn(async () => ({ status: 302, headers: new Headers({ location: "https://[fec0::1]/private.png" }), body: [], destroy: vi.fn() }));
     await expect(downloadPublicHttpsMedia("https://images.example/photo.png", { lookupFn: async () => [{ address: "93.184.216.34", family: 4 }], requestFn })).rejects.toThrow(/public Internet address/i);
     expect(requestFn).toHaveBeenCalledTimes(1);
   });
@@ -132,6 +144,19 @@ describe("MCP media ingress policy", () => {
       await expect(readAllowedLocalMedia({ filePath: outsideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/outside MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS/i);
       await expect(readAllowedLocalMedia({ filePath: symlinkPath, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/symlinks, devices, directories, and pipes/i);
       await expect(readAllowedLocalMedia({ filePath: "/dev/zero", transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/regular file/i);
+    } finally { await rm(tempDir, { recursive: true, force: true }); }
+  });
+
+  it.each([
+    { name: "voice-note.m4a", mimeType: "audio/mp4", bytes: Buffer.from([0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20]) },
+    { name: "voice-note.weba", mimeType: "audio/webm", bytes: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00]) },
+    { name: "voice-note.mp3", mimeType: "audio/mpeg", bytes: Buffer.from([0xff, 0xfb, 0x90, 0x64]) },
+  ])("keeps advertised $mimeType local media compatible with signature checks", async ({ name, mimeType, bytes }) => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-media-compat-"));
+    const filePath = path.join(tempDir, name);
+    await writeFile(filePath, bytes);
+    try {
+      await expect(uploadEvidenceFile(apiConfig({ transport: "stdio", allowedFileRoots: [tempDir] }), { moveId: "move1", filePath, mimeType, dryRun: true })).resolves.toMatchObject({ media: { mimeType } });
     } finally { await rm(tempDir, { recursive: true, force: true }); }
   });
 });

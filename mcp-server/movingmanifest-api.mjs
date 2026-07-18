@@ -1329,12 +1329,12 @@ export async function uploadEvidenceFile(config, input) {
       "Could not verify the media type from its file signature. Use a supported JPEG, PNG, WebP, MP3, MP4/MOV, AAC, WAV, WebM, or Ogg file.",
     );
   }
-  if (requestedMimeType && requestedMimeType !== detectedMimeType) {
+  if (requestedMimeType && !mediaMimeTypesCompatible(requestedMimeType, detectedMimeType)) {
     throw new Error(
       `Media MIME type mismatch: content is ${detectedMimeType}, not ${requestedMimeType}.`,
     );
   }
-  const mimeType = detectedMimeType;
+  const mimeType = requestedMimeType ?? detectedMimeType;
 
   const dimensions = imageDimensionsFromBuffer(media.bytes, mimeType);
   const width = input.width ?? dimensions?.width;
@@ -2040,9 +2040,9 @@ function sniffMimeType(bytes) {
       return "image/webp";
     }
     if (bytes.toString("ascii", 4, 8) === "ftyp") {
-      return bytes.toString("ascii", 8, 12) === "qt  "
-        ? "video/quicktime"
-        : "video/mp4";
+      const majorBrand = bytes.toString("ascii", 8, 12);
+      if (["M4A ", "M4B ", "M4P "].includes(majorBrand)) return "audio/mp4";
+      return majorBrand === "qt  " ? "video/quicktime" : "video/mp4";
     }
   }
   if (bytes.length >= 3 && bytes.toString("ascii", 0, 3) === "ID3") {
@@ -2051,6 +2051,14 @@ function sniffMimeType(bytes) {
   if (bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF") {
     const riffType = bytes.toString("ascii", 8, 12);
     if (riffType === "WAVE") return "audio/wav";
+  }
+  if (
+    bytes.length >= 2 &&
+    bytes[0] === 0xff &&
+    (bytes[1] & 0xe0) === 0xe0 &&
+    ((bytes[1] >> 1) & 0x03) !== 0
+  ) {
+    return "audio/mpeg";
   }
   if (bytes.length >= 4 && bytes.toString("ascii", 0, 4) === "OggS") {
     return "audio/ogg";
@@ -2068,6 +2076,16 @@ function sniffMimeType(bytes) {
     return "audio/aac";
   }
   return undefined;
+}
+
+function mediaMimeTypesCompatible(requestedMimeType, detectedMimeType) {
+  if (requestedMimeType === detectedMimeType) return true;
+  return (
+    (requestedMimeType === "audio/mp4" && detectedMimeType === "video/mp4") ||
+    (requestedMimeType === "video/mp4" && detectedMimeType === "audio/mp4") ||
+    (requestedMimeType === "audio/webm" && detectedMimeType === "video/webm") ||
+    (requestedMimeType === "video/webm" && detectedMimeType === "audio/webm")
+  );
 }
 
 function imageDimensionsFromBuffer(bytes, mimeType) {
