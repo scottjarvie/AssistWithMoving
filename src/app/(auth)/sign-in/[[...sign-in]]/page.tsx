@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default function SignInPage() {
   return (
     <main className="grid min-h-screen place-items-center px-4">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6">
+      <div className="w-full min-w-0 max-w-sm rounded-lg border border-border bg-card p-6">
         <BrandMark />
         {clerkEnabled ? (
           <div className="mt-8">
@@ -25,6 +25,13 @@ export default function SignInPage() {
               path="/sign-in"
               signUpUrl="/sign-up"
               fallbackRedirectUrl="/app"
+              appearance={{
+                elements: {
+                  rootBox: { width: "100%", maxWidth: "100%" },
+                  cardBox: { width: "100%", maxWidth: "100%" },
+                  card: { width: "100%", maxWidth: "100%" },
+                },
+              }}
             />
           </div>
         ) : (
