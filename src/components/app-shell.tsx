@@ -14,7 +14,13 @@ import { WorkspaceNav } from "@/components/workspace-nav";
 // (product)/layout.tsx, so every region can read the move.
 const SIDEBAR_WIDTH = "lg:w-56";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  workspaceEnabled = true,
+}: {
+  children: React.ReactNode;
+  workspaceEnabled?: boolean;
+}) {
   return (
     <div className="min-h-screen bg-background">
       <a
@@ -37,10 +43,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="hidden sm:inline-flex">
               <ShellSectionEyebrow />
             </span>
-            <MoveSwitcher />
+            {workspaceEnabled ? <MoveSwitcher /> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <AccountMenu />
+            {workspaceEnabled ? <AccountMenu /> : null}
           </div>
         </div>
       </header>
@@ -51,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <WorkspaceNav variant="sidebar" />
         <div className="mt-auto">
-          <MobileCaptureAction variant="sidebar" />
+          {workspaceEnabled ? <MobileCaptureAction variant="sidebar" /> : null}
         </div>
       </aside>
 
@@ -70,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-xl items-stretch">
           <WorkspaceNav variant="mobile" />
-          <MobileCaptureAction />
+          {workspaceEnabled ? <MobileCaptureAction /> : null}
         </div>
       </div>
     </div>
