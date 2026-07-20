@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
@@ -63,6 +63,13 @@ import { cn } from "@/lib/utils";
 const DEFAULT_MOVE_TYPE: MoveType = "local";
 type HomeMove = MoveWorkspaceValue["activeMoves"][number];
 type CreateMoveTask = "basics" | "pcs" | "packets";
+type MoveStatusFilter = "all" | "planning" | "active" | "completed";
+type MoveSort = "updated" | "name";
+
+const moveTitleCollator = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
 
 const createMoveTasks: Array<{ value: CreateMoveTask; label: string }> = [
   { value: "basics", label: "Basics" },
@@ -106,6 +113,10 @@ export function MovesHome() {
   } = useMoveWorkspace();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [moveSearch, setMoveSearch] = useState("");
+  const [statusFilter, setStatusFilter] =
+    useState<MoveStatusFilter>("all");
+  const [moveSort, setMoveSort] = useState<MoveSort>("updated");
 
   // Archived moves stay out of the active grid but remain restorable; owners can
   // also permanently delete them.
@@ -127,6 +138,43 @@ export function MovesHome() {
   // from their participant moves, which load a beat later than households.
   const needsHousehold =
     !identityResolving && !loadingParticipantMoves && !hasHousehold;
+  const visibleMoves = useMemo(() => {
+    const search = moveSearch.trim().toLocaleLowerCase("en-US");
+
+    return activeMoves
+      .filter((move) => {
+        if (statusFilter !== "all" && move.status !== statusFilter) {
+          return false;
+        }
+        if (!search) {
+          return true;
+        }
+
+        return [
+          move.title,
+          move.origin,
+          move.destination,
+          moveStatusMeta[move.status]?.label ?? move.status,
+        ]
+          .filter(Boolean)
+          .some((value) =>
+            value?.toLocaleLowerCase("en-US").includes(search),
+          );
+      })
+      .sort((left, right) => {
+        const titleOrder = moveTitleCollator.compare(left.title, right.title);
+        if (moveSort === "name") {
+          return titleOrder || moveTitleCollator.compare(left._id, right._id);
+        }
+
+        return (
+          (right.updatedAt ?? 0) - (left.updatedAt ?? 0) ||
+          titleOrder ||
+          moveTitleCollator.compare(left._id, right._id)
+        );
+      });
+  }, [activeMoves, moveSearch, moveSort, statusFilter]);
+  const moveListFiltered = Boolean(moveSearch.trim()) || statusFilter !== "all";
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -185,6 +233,74 @@ export function MovesHome() {
 
       {hasHousehold ? <MovesStatsStrip activeMoves={activeMoves} /> : null}
 
+      {activeMoves.length > 1 ? (
+        <section
+          aria-label="Move list controls"
+          className="rounded-xl border border-border bg-card/40 p-3"
+        >
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem_11rem] md:items-end">
+            <label className="grid gap-1.5 text-sm font-medium">
+              Search moves
+              <Input
+                type="search"
+                value={moveSearch}
+                onChange={(event) => setMoveSearch(event.target.value)}
+                placeholder="Name, origin, or destination"
+                aria-label="Search moves"
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              Status
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as MoveStatusFilter)
+                }
+                aria-label="Filter moves by status"
+                className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <option value="all">All statuses</option>
+                <option value="planning">Planning</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              Sort
+              <select
+                value={moveSort}
+                onChange={(event) => setMoveSort(event.target.value as MoveSort)}
+                aria-label="Sort moves"
+                className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <option value="updated">Recently updated</option>
+                <option value="name">Move name</option>
+              </select>
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p role="status" className="text-xs text-muted-foreground">
+              {moveListFiltered
+                ? `${visibleMoves.length} of ${activeMoves.length} moves`
+                : `${activeMoves.length} moves`}
+            </p>
+            {moveListFiltered && visibleMoves.length > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setMoveSearch("");
+                  setStatusFilter("all");
+                }}
+              >
+                Clear search and filters
+              </Button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       {needsHousehold ? (
         <HouseholdSetupCard />
       ) : loadingMoves ? (
@@ -194,21 +310,39 @@ export function MovesHome() {
           <Skeleton className="h-44 rounded-md" />
         </div>
       ) : activeMoves.length ? (
-        <div
-          className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
-          role="list"
-          aria-label="Active moves"
-        >
-          {activeMoves.map((move) => (
-            <MoveCard
-              key={move._id}
-              move={move}
-              householdId={householdId}
-              selected={move._id === moveId}
-              onSelect={selectMove}
-            />
-          ))}
-        </div>
+        visibleMoves.length ? (
+          <div
+            className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
+            role="list"
+            aria-label="Moves"
+          >
+            {visibleMoves.map((move) => (
+              <MoveCard
+                key={move._id}
+                move={move}
+                householdId={householdId}
+                selected={move._id === moveId}
+                onSelect={selectMove}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+            <p>No moves match this search and status.</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => {
+                setMoveSearch("");
+                setStatusFilter("all");
+              }}
+            >
+              Clear search and filters
+            </Button>
+          </div>
+        )
       ) : (
         <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
           <p>
