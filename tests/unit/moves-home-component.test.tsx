@@ -132,4 +132,89 @@ describe("MovesHome", () => {
     expect(menu.closest("a")).toBeNull();
     expect(menu.closest(".z-10")).not.toBeNull();
   });
+
+  it("keeps a dense move list searchable, filterable, and deterministically sortable", async () => {
+    const user = userEvent.setup();
+    movesHomeData.workspace.householdId = "household_123" as Id<"households">;
+    movesHomeData.workspace.households = [
+      {
+        household: { _id: "household_123" as Id<"households">, name: "Home" },
+        role: "owner",
+      },
+    ];
+    movesHomeData.workspace.activeMoves = [
+      {
+        _id: "move_zion" as Id<"moves">,
+        title: "Zion move",
+        origin: "Phoenix",
+        destination: "Denver",
+        status: "planning",
+      },
+      {
+        _id: "move_alpine" as Id<"moves">,
+        title: "Alpine move",
+        origin: "Boise",
+        destination: "Seattle",
+        status: "active",
+      },
+      {
+        _id: "move_bay" as Id<"moves">,
+        title: "Bay move",
+        origin: "Tampa",
+        destination: "Miami",
+        status: "completed",
+      },
+      ...Array.from({ length: 33 }, (_, index) => ({
+        _id: `move_bulk_${index}` as Id<"moves">,
+        title: `Bulk move ${String(index + 1).padStart(2, "0")}`,
+        origin: "Salt Lake City",
+        destination: "Cedar City",
+        status: index % 2 === 0 ? "planning" : "active",
+      })),
+    ];
+
+    render(<MovesHome />);
+
+    expect(screen.getAllByRole("link", { name: /^Open / })).toHaveLength(36);
+    expect(screen.getByRole("status")).toHaveTextContent("36 moves");
+
+    await user.type(screen.getByRole("searchbox", { name: "Search moves" }), "phoenix");
+
+    expect(screen.getAllByRole("link", { name: /^Open / })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Open Zion move" })).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 36 moves");
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search moves" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter moves by status" }),
+      "completed",
+    );
+
+    expect(screen.getAllByRole("link", { name: /^Open / })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Open Bay move" })).toBeVisible();
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter moves by status" }),
+      "all",
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Sort moves" }),
+      "name",
+    );
+
+    expect(screen.getAllByRole("link", { name: /^Open / })[0]).toHaveAccessibleName(
+      "Open Alpine move",
+    );
+
+    await user.type(screen.getByRole("searchbox", { name: "Search moves" }), "no such move");
+
+    expect(screen.getByText("No moves match this search and status.")).toBeVisible();
+    expect(
+      screen.getAllByRole("button", { name: "Clear search and filters" }),
+    ).toHaveLength(1);
+    await user.click(
+      screen.getByRole("button", { name: "Clear search and filters" }),
+    );
+    expect(screen.getAllByRole("link", { name: /^Open / })).toHaveLength(36);
+  });
 });
