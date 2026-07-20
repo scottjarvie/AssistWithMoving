@@ -101,7 +101,7 @@ export function MoveSwitcher() {
           type="button"
           variant="ghost"
           size="sm"
-          className="max-w-[14rem] justify-between gap-2"
+          className="min-w-0 max-w-[14rem] flex-1 justify-between gap-2 sm:flex-none"
         >
           <span className="truncate">{label}</span>
           <ChevronsUpDown className="opacity-60" aria-hidden="true" />
