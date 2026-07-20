@@ -100,9 +100,10 @@ describe("MoveSwitcher", () => {
     const user = userEvent.setup();
     render(<MoveSwitcher />);
 
-    await user.click(
-      screen.getByRole("button", { name: /Phoenix apartment/i }),
-    );
+    const trigger = screen.getByRole("button", { name: /Phoenix apartment/i });
+    expect(trigger).toHaveClass("min-w-0", "flex-1", "sm:flex-none");
+
+    await user.click(trigger);
 
     const search = screen.getByRole("searchbox", {
       name: "Search active moves",
