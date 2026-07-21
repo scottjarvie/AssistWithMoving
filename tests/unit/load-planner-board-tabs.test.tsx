@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -363,8 +370,37 @@ function useLargeMovableUnitDataset(count: number) {
   };
 }
 
+let desktopViewport = true;
+const mediaQueryListeners = new Set<() => void>();
+
+function setDesktopViewport(matches: boolean) {
+  desktopViewport = matches;
+  for (const listener of mediaQueryListeners) listener();
+}
+
 describe("LoadPlannerBoard task tabs", () => {
   beforeEach(() => {
+    mediaQueryListeners.clear();
+    setDesktopViewport(true);
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === "(min-width: 768px)" ? desktopViewport : false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(
+          (_event: string, listener: () => void) =>
+            mediaQueryListeners.add(listener),
+        ),
+        removeEventListener: vi.fn(
+          (_event: string, listener: () => void) =>
+            mediaQueryListeners.delete(listener),
+        ),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
     loadPlannerData.mutations.boxCreate.mockReset();
     loadPlannerData.mutations.boxUpdate.mockReset();
     loadPlannerData.mutations.itemCreate.mockReset();
@@ -617,47 +653,9 @@ describe("LoadPlannerBoard task tabs", () => {
       "href",
       "/app/boxes/box_1?householdId=household_123&moveId=move_123&returnTo=load-plan",
     );
-    const mobileCards = screen.getByLabelText("Movable units mobile cards");
-    expect(within(mobileCards).getByText("Kitchen essentials")).toBeInTheDocument();
-    expect(within(mobileCards).getByText("Floor lamp")).toBeInTheDocument();
-    expect(within(mobileCards).getAllByText("Missing dimensions").length).toBe(
-      2,
-    );
     expect(
-      within(mobileCards).getByLabelText(
-        "Mobile measurement controls for Floor lamp",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(mobileCards).getByLabelText(
-        "Mobile Weight estimate for Floor lamp",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(mobileCards).getByLabelText(
-        "Mobile Length estimate for Floor lamp",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(mobileCards).getByLabelText(
-        "Mobile load assignment controls for Floor lamp",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(mobileCards).getByLabelText("Mobile Resource for Floor lamp"),
-    ).toBeInTheDocument();
-    expect(
-      within(mobileCards).getByText("Needs load assignment"),
-    ).toBeInTheDocument();
-    expect(within(mobileCards).getByText("Personal transport")).toBeInTheDocument();
-    expect(
-      within(mobileCards).getByRole("link", {
-        name: "Open BOX-001 contents from mobile card",
-      }),
-    ).toHaveAttribute(
-      "href",
-      "/app/boxes/box_1?householdId=household_123&moveId=move_123&returnTo=load-plan",
-    );
+      screen.queryByLabelText("Movable units mobile cards"),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("BOX-001").length).toBeGreaterThan(1);
     expect(screen.getAllByText("Floor lamp").length).toBeGreaterThan(1);
     expect(screen.getAllByText("Loose item").length).toBeGreaterThan(1);
@@ -740,6 +738,68 @@ describe("LoadPlannerBoard task tabs", () => {
     expect(screen.getByText("first night")).toBeInTheDocument();
     expect(screen.queryByText("Bulk assignment")).not.toBeInTheDocument();
     expect(screen.queryByText("BOX-001")).not.toBeInTheDocument();
+  });
+
+  it("mounts mobile movable-unit cards without the desktop table", () => {
+    setDesktopViewport(false);
+
+    renderLoadPlannerBoard();
+
+    const mobileCards = screen.getByLabelText("Movable units mobile cards");
+    expect(within(mobileCards).getByText("Kitchen essentials")).toBeInTheDocument();
+    expect(within(mobileCards).getByText("Floor lamp")).toBeInTheDocument();
+    expect(within(mobileCards).getAllByText("Missing dimensions")).toHaveLength(2);
+    expect(
+      within(mobileCards).getByLabelText(
+        "Mobile measurement controls for Floor lamp",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(mobileCards).getByLabelText(
+        "Mobile load assignment controls for Floor lamp",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(mobileCards).getByRole("link", {
+        name: "Open BOX-001 contents from mobile card",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "/app/boxes/box_1?householdId=household_123&moveId=move_123&returnTo=load-plan",
+    );
+    expect(
+      screen.queryByRole("table", { name: "Movable units" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("replaces the mounted tree while preserving shared focus and selection state", () => {
+    renderLoadPlannerBoard();
+
+    expect(
+      screen.getByRole("table", { name: "Movable units" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Movable units mobile cards"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Select Floor lamp"));
+    const search = screen.getByPlaceholderText(
+      "Search movable units, rooms, status, or follow-ups",
+    );
+    search.focus();
+
+    act(() => setDesktopViewport(false));
+
+    expect(search).toHaveFocus();
+    expect(
+      screen.queryByRole("table", { name: "Movable units" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Movable units mobile cards"),
+    ).toBeInTheDocument();
+
+    act(() => setDesktopViewport(true));
+
+    expect(screen.getByLabelText("Select Floor lamp")).toBeChecked();
   });
 
   it("filters movable units by missing data", async () => {
@@ -1178,6 +1238,7 @@ describe("LoadPlannerBoard task tabs", () => {
 
   it("updates missing movable-unit measurements from mobile cards", async () => {
     const user = userEvent.setup();
+    setDesktopViewport(false);
 
     renderLoadPlannerBoard();
 
@@ -1725,6 +1786,7 @@ describe("LoadPlannerBoard task tabs", () => {
 
   it("assigns a loose movable item directly from mobile cards", async () => {
     const user = userEvent.setup();
+    setDesktopViewport(false);
 
     renderLoadPlannerBoard();
 
