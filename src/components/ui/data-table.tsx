@@ -227,7 +227,7 @@ export type DataTableProps<TData> = {
     /** Opens the row's detail (same as a desktop row click); undefined when the table has no onRowOpen. */
     onOpen?: () => void
   }) => React.ReactNode
-  /** Render the mobile card at ALL breakpoints (and hide the desktop table) —
+  /** Render the mobile card at ALL breakpoints (without mounting the desktop table) —
    * for compact, tap-to-open list views. Requires renderMobileCard. */
   cardOnly?: boolean
   onRowOpen?: (row: TData) => void
@@ -461,16 +461,13 @@ export function DataTable<TData>({
             </div>
           ) : null}
 
-          <div
-            className={cn(
-              "overflow-x-auto rounded-md border border-border",
-              cardOnly
-                ? "hidden"
-                : renderMobileCard
-                  ? "hidden md:block"
-                  : "block"
-            )}
-          >
+          {!cardOnly ? (
+            <div
+              className={cn(
+                "overflow-x-auto rounded-md border border-border",
+                renderMobileCard ? "hidden md:block" : "block"
+              )}
+            >
             <Table aria-label={ariaLabel} className={cn(minWidthClassName)}>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -559,8 +556,9 @@ export function DataTable<TData>({
                   )
                 })}
               </TableBody>
-            </Table>
-          </div>
+              </Table>
+            </div>
+          ) : null}
         </>
       ) : (
         emptyState ?? (
