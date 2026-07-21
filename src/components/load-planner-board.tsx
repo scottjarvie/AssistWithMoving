@@ -58,6 +58,7 @@ import {
   type MovableUnitKind,
 } from "@/lib/movable-units";
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/use-media-query";
 
 type BoxRecord = NonNullable<
   ReturnType<typeof useQuery<typeof api.boxes.listForMove>>
@@ -1183,6 +1184,7 @@ function MovableUnitsPanel({
   onCreated: (message: string) => void;
   onSearchChange: (value: string) => void;
 }) {
+  const usesDesktopUnitTable = useMediaQuery("(min-width: 768px)");
   const readiness = summarizeMovableUnitReadiness(units);
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   const [bulkResourceId, setBulkResourceId] = useState("");
@@ -1475,53 +1477,62 @@ function MovableUnitsPanel({
         <Skeleton className="h-72 rounded-md" />
       ) : filteredUnits.length ? (
         <>
-          <MovableUnitMobileList
-            householdId={householdId}
-            moveId={moveId}
-            resourcesWithZones={resourcesWithZones}
-            savingMeasurementUnitIds={savingMeasurementUnitIds}
-            savingUnitIds={savingUnitIds}
-            units={displayedUnits}
-            onAssignUnit={onAssignUnit}
-            onUpdateMeasurements={onUpdateMeasurements}
-          />
-          <div className="hidden overflow-x-auto rounded-md border border-border md:block">
-            <table
-              className="w-full min-w-[980px] text-left text-sm"
-              aria-label="Movable units"
-            >
-              <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="w-14 px-3 py-2 font-medium">Use</th>
-                  <th className="px-3 py-2 font-medium">Unit</th>
-                  <th className="px-3 py-2 font-medium">Location</th>
-                  <th className="px-3 py-2 font-medium">Weight</th>
-                  <th className="px-3 py-2 font-medium">Size / volume</th>
-                  <th className="px-3 py-2 font-medium">Load</th>
-                  <th className="px-3 py-2 font-medium">Follow-up</th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayedUnits.map((unit) => (
-                  <MovableUnitRow
-                    key={unit.id}
-                    householdId={householdId}
-                    moveId={moveId}
-                    selected={selectedUnitIds.includes(unit.id)}
-                    unit={unit}
-                    resourcesWithZones={resourcesWithZones}
-                    saving={savingUnitIds.includes(unit.id)}
-                    savingMeasurements={savingMeasurementUnitIds.includes(
-                      unit.id,
-                    )}
-                    onAssignUnit={onAssignUnit}
-                    onToggleSelected={() => toggleUnitSelection(unit.id)}
-                    onUpdateMeasurements={onUpdateMeasurements}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {usesDesktopUnitTable === undefined ? (
+            <Skeleton
+              className="h-72 rounded-md"
+              role="status"
+              aria-label="Loading movable units layout"
+            />
+          ) : usesDesktopUnitTable ? (
+            <div className="overflow-x-auto rounded-md border border-border">
+              <table
+                className="w-full min-w-[980px] text-left text-sm"
+                aria-label="Movable units"
+              >
+                <thead className="bg-muted/35 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="w-14 px-3 py-2 font-medium">Use</th>
+                    <th className="px-3 py-2 font-medium">Unit</th>
+                    <th className="px-3 py-2 font-medium">Location</th>
+                    <th className="px-3 py-2 font-medium">Weight</th>
+                    <th className="px-3 py-2 font-medium">Size / volume</th>
+                    <th className="px-3 py-2 font-medium">Load</th>
+                    <th className="px-3 py-2 font-medium">Follow-up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedUnits.map((unit) => (
+                    <MovableUnitRow
+                      key={unit.id}
+                      householdId={householdId}
+                      moveId={moveId}
+                      selected={selectedUnitIds.includes(unit.id)}
+                      unit={unit}
+                      resourcesWithZones={resourcesWithZones}
+                      saving={savingUnitIds.includes(unit.id)}
+                      savingMeasurements={savingMeasurementUnitIds.includes(
+                        unit.id,
+                      )}
+                      onAssignUnit={onAssignUnit}
+                      onToggleSelected={() => toggleUnitSelection(unit.id)}
+                      onUpdateMeasurements={onUpdateMeasurements}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <MovableUnitMobileList
+              householdId={householdId}
+              moveId={moveId}
+              resourcesWithZones={resourcesWithZones}
+              savingMeasurementUnitIds={savingMeasurementUnitIds}
+              savingUnitIds={savingUnitIds}
+              units={displayedUnits}
+              onAssignUnit={onAssignUnit}
+              onUpdateMeasurements={onUpdateMeasurements}
+            />
+          )}
           {filteredUnits.length > movableUnitsPageSize ? (
             <MovableUnitsPager
               currentPageIndex={currentPageIndex}

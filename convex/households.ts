@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
+import { countEffectivelyActiveApiKeys } from "./lib/apiKeys";
 import { addOrInviteHouseholdMemberByEmail } from "./lib/householdInvitations";
 import {
   memberManagementBlockReason,
@@ -127,7 +128,7 @@ export const summaryStats = query({
         .length,
       itemCount: items.filter((item) => item.deletedAt === undefined).length,
       boxCount: boxes.filter((box) => box.archivedAt === undefined).length,
-      activeApiKeyCount: activeApiKeys.length,
+      activeApiKeyCount: countEffectivelyActiveApiKeys(activeApiKeys),
       activeMemberCount: memberships.filter(
         (membership) => membership.status === "active",
       ).length,

@@ -32,13 +32,13 @@ export function AppShell({
 
       <header className="sticky top-0 z-30 border-b border-border bg-background/88 backdrop-blur">
         <div className="flex h-16 w-full items-center justify-between gap-2 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <Link
               href="/app"
               aria-label="MovingManifest home"
               className="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
             >
-              <BrandMark />
+              <BrandMark compactOnMobile />
             </Link>
             <span className="hidden sm:inline-flex">
               <ShellSectionEyebrow />

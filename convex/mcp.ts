@@ -280,7 +280,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpAction({
     name: "add_images",
     description:
-      "Upload MANY photos at once, each from a url OR base64, and attach each via attachTo to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId or transportZoneId), or room name. Returns results: [{ photoId, ok, error? }].",
+      "Upload MANY photos at once from base64 image data and attach each via attachTo to an item (itemId), box (boxId), room (spaceId), transport (transportResourceId or transportZoneId), or room name. Remote URL ingestion is refused at this OAuth gateway because it cannot safely verify DNS and redirect targets; fetch user-approved media in the client and pass base64. Returns results: [{ photoId, ok, error? }].",
     fn: api.mcpToolsImages.addImages,
     args: addImagesArgs,
     identityArg: "caller",

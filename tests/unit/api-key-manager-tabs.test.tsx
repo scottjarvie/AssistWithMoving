@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -195,6 +195,45 @@ describe("ApiKeyManager task tabs", () => {
       ).not.toBeInTheDocument();
     } finally {
       apiKeyManagerData.households = originalHouseholds;
+    }
+  });
+
+  it("shows expired keys as inactive and disables terminal lifecycle actions", async () => {
+    const user = userEvent.setup();
+    const originalKeysLength = apiKeyManagerData.keys.length;
+    const originalCount = apiKeyManagerData.stats.activeApiKeyCount;
+    apiKeyManagerData.keys.push(
+      {
+        ...apiKeyManagerData.keys[0],
+        apiKeyId: "api_key_expired" as Id<"apiKeys">,
+        name: "Expired helper key",
+        status: "expired" as const,
+        expiresAt: 1,
+      } as unknown as (typeof apiKeyManagerData.keys)[number],
+    );
+    apiKeyManagerData.stats.activeApiKeyCount = 2;
+
+    try {
+      render(<ApiKeyManager enabled />);
+
+      await user.click(screen.getByRole("tab", { name: "Connections" }));
+      expect(screen.getByText("1 active")).toBeInTheDocument();
+      await user.click(screen.getByText("Show revoked and old keys (1)"));
+      expect(screen.getByText("Expired helper key")).toBeInTheDocument();
+      expect(screen.getByText("Expired")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Rotate Expired helper key" }),
+      ).toBeDisabled();
+
+      await user.click(screen.getByRole("tab", { name: "Overview" }));
+      const overview = screen.getByLabelText("AI connection overview");
+      const connectionLabel = within(overview).getByText("AI connections");
+      expect(connectionLabel.parentElement?.parentElement).toHaveTextContent(
+        "AI connections1",
+      );
+    } finally {
+      apiKeyManagerData.keys.splice(originalKeysLength);
+      apiKeyManagerData.stats.activeApiKeyCount = originalCount;
     }
   });
 });
