@@ -34,9 +34,19 @@ function isConvexWebSocket(rawUrl: string): boolean {
 for (const route of marketingRoutes) {
   test(`${route} loads without Clerk or Convex vendors`, async ({ page }) => {
     const clerkRequests: string[] = [];
+    const developmentMiddlewareHandshakes: string[] = [];
     const convexWebSockets: string[] = [];
 
     page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (
+        url.pathname === "/v1/client/handshake" &&
+        url.searchParams.get("__clerk_hs_reason") === "dev-browser-missing"
+      ) {
+        expect(request.resourceType()).toBe("document");
+        developmentMiddlewareHandshakes.push(request.url());
+        return;
+      }
       if (isClerkVendorUrl(request.url())) {
         clerkRequests.push(request.url());
       }
@@ -51,6 +61,14 @@ for (const route of marketingRoutes) {
     expect(response?.ok()).toBe(true);
 
     expect(clerkRequests, `Clerk requests observed on ${route}`).toEqual([]);
+    expect(
+      developmentMiddlewareHandshakes.every(
+        (rawUrl) =>
+          new URL(rawUrl).pathname === "/v1/client/handshake" &&
+          new URL(rawUrl).searchParams.get("__clerk_hs_reason") ===
+            "dev-browser-missing",
+      ),
+    ).toBe(true);
     expect(
       convexWebSockets,
       `Convex WebSockets observed on ${route}`,

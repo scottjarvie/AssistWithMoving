@@ -121,6 +121,14 @@ requests):**
   URLs; assert **zero** requests to `*.clerk.accounts.dev`,
   `clerk-telemetry.com`, and zero WebSocket to the Convex deployment. Red
   first: this spec fails on current main.
+- **Execution correction (verified 2026-07-27):** Clerk development keys make
+  the unchanged server-side `clerkMiddleware` perform an exact
+  `/v1/client/handshake?__clerk_hs_reason=dev-browser-missing` document
+  redirect on localhost. That is not provider JavaScript, a client API call,
+  or telemetry. The lock exempts only that exact document-level development
+  handshake and still fails on every other Clerk origin request, all Clerk
+  scripts/API resources, telemetry, and Convex WebSockets. Production-domain
+  acceptance remains zero third-party Clerk JavaScript.
 - Keep green: `tests/unit/runtime-env.test.tsx` (PR #151's provider-safe
   missing-backend shell — this WP touches exactly that seam) and
   `tests/e2e/authenticated-flow.spec.ts` when Clerk E2E creds are present.
