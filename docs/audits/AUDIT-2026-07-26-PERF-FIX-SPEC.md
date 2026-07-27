@@ -63,12 +63,16 @@ provider deployment:
 | Movable-units responsive trees | 1 mounted tree after media resolution; one SSR status skeleton before resolution | Pass in component and SSR locks |
 | Schema indexes unreferenced by `withIndex()` | 0 of 152 | Pass; down from 47 of 199 |
 
-The authenticated desktop five-run measurement on the existing 24-unit
-development move recorded median first paint, first contentful paint, and LCP
-at 32 ms on both `origin/main` and WP7: no observed regression. This is
-indicative only, not the WP7 decision rider: the required before/after run on
-an approved marked-synthetic ~100-unit fixture remains a pre-merge provider
-gate. The load-plan browser lock also requires the development Convex
+The authenticated desktop measurement on the existing 24-unit development
+move recorded median first paint, first contentful paint, and LCP at 32 ms on
+both `origin/main` and WP7 over five Movable Units runs: no observed
+regression. Over 11 Load Plan runs, median FP stayed 40 ms while median
+FCP/LCP moved from 48 ms to 340 ms (+292 ms). That is below the spec's
+greater-than-300-ms fallback trigger, so the fallback is not activated. These
+results are indicative only, not the WP7 decision rider: the required
+before/after run on an approved marked-synthetic ~100-unit fixture remains a
+pre-merge provider gate, especially given the Load Plan margin. The combined
+load-plan browser lock also requires the development Convex
 deployment to contain `planOps.loadPlanSnapshot`; the current deployment
 correctly fails with “Could not find public function” until that authorized
 deployment occurs.
