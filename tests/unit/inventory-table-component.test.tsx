@@ -9,6 +9,7 @@ import type { InventoryItem } from "@/lib/inventory-types";
 const apiMock = vi.hoisted(() => ({
   items: {
     facetedListForMove: "items.facetedListForMove",
+    get: "items.get",
     create: "items.create",
     update: "items.update",
     setDisposition: "items.setDisposition",
@@ -95,9 +96,11 @@ vi.mock("convex/react", () => ({
   // The rebuilt table reads a single faceted query that returns both the rows
   // and the disposition facet counts. Transport resources are only needed for
   // the batch-assign menu and stay empty here.
-  useQuery: (query: string) =>
+  useQuery: (query: string, args?: { itemId?: Id<"items"> } | "skip") =>
     query === apiMock.items.facetedListForMove
       ? { items: mockItems.rows, facets: buildFacets(mockItems.rows) }
+      : query === apiMock.items.get && args !== "skip"
+        ? (mockItems.rows.find((item) => item._id === args?.itemId) ?? null)
       : query === apiMock.transportResources.listForMoveWithZones
         ? []
         : query === apiMock.photos.listForMove

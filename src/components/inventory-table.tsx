@@ -88,10 +88,13 @@ import {
   type SortableEntry,
   type SortFieldId,
 } from "@/lib/inventory-sort";
-import { calculateMovableUnitVolumeCuFt } from "@/lib/movable-units";
 import { SortMenu } from "@/components/inventory-sort-menu";
 import { toastSaved, toastError } from "@/lib/toast";
 
+type FacetedInventoryResult = NonNullable<
+  ReturnType<typeof useQuery<typeof api.items.facetedListForMove>>
+>;
+type InventoryListItem = FacetedInventoryResult["items"][number];
 type InventoryTaskTab = "browse" | "add" | "bulk";
 
 // Primary disposition facet groups. The All/Moving/Sell/Trash/Donate pills are
@@ -102,7 +105,7 @@ type DispositionGroup = "all" | "moving" | "sell" | "trash" | "donate";
 
 const dispositionGroupMembers: Record<
   Exclude<DispositionGroup, "all">,
-  ReadonlyArray<InventoryItem["disposition"]>
+  ReadonlyArray<InventoryListItem["disposition"]>
 > = {
   moving: ["take", "mover", "personalTransport", "storage"],
   sell: ["sell"],
@@ -122,26 +125,20 @@ const dispositionGroupChips: Array<{
 ];
 
 // Stored enum stays `dump`; only the visible label maps to "Trash".
-function dispositionLabel(disposition: InventoryItem["disposition"]) {
+function dispositionLabel(disposition: InventoryListItem["disposition"]) {
   return disposition === "dump" ? "Trash" : disposition;
 }
 
 // Project an item onto the shared sort shape. Weight/volume are totalled across
 // quantity to match how the other inventory surfaces sort.
-function itemToSortable(item: InventoryItem): SortableEntry {
-  const qty = item.quantity && item.quantity > 0 ? item.quantity : 1;
-  const unitWeight = item.actualWeightLb ?? item.estimatedWeightLb;
-  const unitVolume =
-    item.estimatedVolumeCuFt ??
-    item.estimatedPackedVolumeCuFt ??
-    calculateMovableUnitVolumeCuFt(item.dimensionsIn);
+function itemToSortable(item: InventoryListItem): SortableEntry {
   return {
     kind: "item",
-    createdAt: item._creationTime,
+    createdAt: item.createdAt,
     name: item.nickname ?? item.name,
     code: item.code,
-    weightLb: typeof unitWeight === "number" ? unitWeight * qty : undefined,
-    volumeCuFt: typeof unitVolume === "number" ? unitVolume * qty : undefined,
+    weightLb: item.sortWeightLb,
+    volumeCuFt: item.sortVolumeCuFt,
   };
 }
 
@@ -189,8 +186,6 @@ const visibleDefaultColumns: VisibilityState = {
   category: true,
   room: true,
   ownerContact: false,
-  condition: false,
-  confidence: false,
   indicators: true,
   status: true,
   disposition: true,
@@ -201,8 +196,6 @@ const columnLabels: Record<string, string> = {
   category: "Category",
   room: "Room",
   ownerContact: "Owner / contact",
-  condition: "Condition",
-  confidence: "Confidence",
   indicators: "Indicators",
   status: "Status",
   disposition: "Disposition",
@@ -211,15 +204,14 @@ const columnLabels: Record<string, string> = {
 
 const columnDescriptions: Record<string, string> = {
   ownerContact: "Person responsible for the item.",
-  confidence: "Weight and volume estimate confidence.",
   indicators: "Compact flags for evidence, boxes, load, value, and review.",
   review: "Marks records that need another look.",
 };
 
 // Batch actions that the server batchUpdate mutation can apply directly.
 type ItemBatchPatch = {
-  disposition?: InventoryItem["disposition"];
-  status?: InventoryItem["status"];
+  disposition?: InventoryListItem["disposition"];
+  status?: InventoryListItem["status"];
   assignedResourceId?: Id<"transportResources">;
   assignedZoneId?: Id<"transportZones">;
 };
@@ -252,7 +244,7 @@ function isIndicatorBadge(
   return badge !== null;
 }
 
-function indicatorBadges(item: InventoryItem): IndicatorBadgeModel[] {
+function indicatorBadges(item: InventoryListItem): IndicatorBadgeModel[] {
   const signals = item.signals;
   const photoCount = signals?.photoCount ?? 0;
   const evidencePhotoCount = signals?.evidencePhotoCount ?? 0;
@@ -334,7 +326,7 @@ function InventoryIndicators({
   item,
   visibleLimit = 2,
 }: {
-  item: InventoryItem;
+  item: InventoryListItem;
   visibleLimit?: number;
 }) {
   const badges = indicatorBadges(item);
@@ -371,7 +363,7 @@ function InventoryIndicators({
 }
 
 // A short "code · room · category" line under the item name.
-function itemMetaLine(item: InventoryItem): string {
+function itemMetaLine(item: InventoryListItem): string {
   return [item.code, item.room, item.category]
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part))
@@ -439,7 +431,7 @@ function InventoryItemCard({
   householdId,
   moveId,
 }: {
-  item: InventoryItem;
+  item: InventoryListItem;
   selected: boolean;
   onSelectedChange: (checked: boolean) => void;
   onOpenDetails: () => void;
@@ -613,7 +605,7 @@ export function InventoryTable({
     inventoryTaskHashes,
   );
 
-  // The faceted query returns the full move set plus disposition facet counts.
+  // The faceted query returns slim list rows plus disposition facet counts.
   // We keep search/owner/saved-filter slicing client-side (reusing the existing
   // helpers) and apply the primary disposition-group filter client-side too,
   // because the facet groups (Moving spans four dispositions) don't map to the
@@ -652,7 +644,7 @@ export function InventoryTable({
     if (dispositionGroup === "all") {
       return items;
     }
-    const members = new Set<InventoryItem["disposition"]>(
+    const members = new Set<InventoryListItem["disposition"]>(
       dispositionGroupMembers[dispositionGroup],
     );
     return items.filter((item) => members.has(item.disposition));
@@ -692,9 +684,11 @@ export function InventoryTable({
       ...owner,
     }));
   }, [items]);
-  const selectedItem = useMemo(
-    () => items?.find((item) => item._id === selectedItemId) ?? null,
-    [items, selectedItemId],
+  const selectedItem = useQuery(
+    api.items.get,
+    householdId && moveId && selectedItemId
+      ? { householdId, moveId, itemId: selectedItemId }
+      : "skip",
   );
 
   // Live facet pill counts straight from the server. Falls back to 0 while the
@@ -750,7 +744,7 @@ export function InventoryTable({
   }
 
   const patchItem = useCallback(
-    async (item: InventoryItem, patch: InventoryItemPatch) => {
+    async (item: Pick<InventoryItem, "_id">, patch: InventoryItemPatch) => {
       if (!householdId || !moveId) {
         return;
       }
@@ -769,7 +763,10 @@ export function InventoryTable({
   // setDisposition mutation (one row -> one focused write) instead of the full
   // update path. Status / needs-review inline edits keep using update.
   const quickClassify = useCallback(
-    async (item: InventoryItem, disposition: InventoryItem["disposition"]) => {
+    async (
+      item: InventoryListItem,
+      disposition: InventoryListItem["disposition"],
+    ) => {
       if (!householdId || !moveId) {
         return;
       }
@@ -795,7 +792,7 @@ export function InventoryTable({
   const handleBatchUpdate = useCallback(
     async (
       patch: ItemBatchPatch,
-      rows: InventoryItem[],
+      rows: InventoryListItem[],
       clearSelection: () => void,
     ) => {
       if (!householdId || !moveId || !rows.length || batchBusy) {
@@ -836,7 +833,7 @@ export function InventoryTable({
   const handleBatchFlag = useCallback(
     async (
       patch: InventoryItemPatch,
-      rows: InventoryItem[],
+      rows: InventoryListItem[],
       clearSelection: () => void,
     ) => {
       if (!rows.length || batchBusy) {
@@ -873,7 +870,7 @@ export function InventoryTable({
     [batchBusy, patchItem],
   );
 
-  const columns = useMemo<ColumnDef<InventoryItem, unknown>[]>(
+  const columns = useMemo<ColumnDef<InventoryListItem, unknown>[]>(
     () => [
       {
         accessorKey: "name",
@@ -894,9 +891,6 @@ export function InventoryTable({
               </p>
             ) : null}
             <p className="font-medium">{row.original.name}</p>
-            <p className="mt-1 line-clamp-2 max-w-[30rem] whitespace-normal break-words text-xs leading-5 text-muted-foreground">
-              {row.original.description ?? "No description"}
-            </p>
           </div>
         ),
       },
@@ -1028,30 +1022,6 @@ export function InventoryTable({
             <span className="text-muted-foreground">Unassigned</span>
           );
         },
-      },
-      {
-        accessorKey: "condition",
-        meta: { label: "Condition", mobile: "expansion" },
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} label="Condition" />
-        ),
-        cell: ({ row }) => row.original.condition,
-      },
-      {
-        id: "confidence",
-        meta: {
-          label: "Confidence",
-          mobile: "expansion",
-          description: "Weight and volume estimate confidence.",
-        },
-        header: "Confidence",
-        enableSorting: false,
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            <Badge variant="outline">W {row.original.weightConfidence}</Badge>
-            <Badge variant="outline">V {row.original.volumeConfidence}</Badge>
-          </div>
-        ),
       },
       {
         accessorKey: "needsReview",
@@ -1672,10 +1642,10 @@ export function InventoryTable({
         </CardContent>
       </Card>
       <ItemDetailSheet
-        key={selectedItem?._id ?? "no-item-selected"}
+        key={selectedItemId ?? "no-item-selected"}
         householdId={householdId}
         moveId={moveId}
-        item={selectedItem}
+        item={selectedItem ?? null}
         origin="items"
         open={detailOpen}
         onOpenChange={setDetailOpen}

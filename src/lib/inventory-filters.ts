@@ -30,6 +30,8 @@ export type InventoryFilterableItem = {
   valueCents?: number;
   replacementValueCents?: number;
   serialNumber?: string;
+  hasReplacementValue?: boolean;
+  hasSerialNumber?: boolean;
   highValue: boolean;
   needsReview: boolean;
   requiresPersonalTransport: boolean;
@@ -159,7 +161,11 @@ export function filterInventoryItems<TItem extends InventoryFilterableItem>(
         const hasEvidenceTrigger =
           item.highValue ||
           Boolean(item.valueCents || item.replacementValueCents) ||
-          Boolean(item.serialNumber) ||
+          Boolean(
+            item.hasReplacementValue ||
+              item.serialNumber ||
+              item.hasSerialNumber,
+          ) ||
           item.requiresPersonalTransport ||
           item.planningDefaultKeys.includes("doNotLetMoversTouch");
         return hasEvidenceTrigger && (item.signals?.evidencePhotoCount ?? 0) === 0;

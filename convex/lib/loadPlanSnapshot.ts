@@ -145,8 +145,8 @@ function sortedZones(zones: Doc<"transportZones">[]) {
   );
 }
 
-export function redactItemForVisibility(
-  item: Doc<"items">,
+export function redactItemForVisibility<Item extends Doc<"items">>(
+  item: Item,
   visibility: Visibility,
 ) {
   return {

@@ -28,6 +28,7 @@ import {
   archiveActiveSaleListingsForItem,
   cascadeDeleteItem,
 } from "./lib/hardDelete";
+import { toInventoryListRow } from "./lib/inventoryListRow";
 import {
   composeItemsWithSignals,
   redactItemForVisibility,
@@ -545,6 +546,33 @@ export const listForMove = query({
   },
 });
 
+export const get = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    itemId: v.id("items"),
+  },
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+    const item = await ctx.db.get(args.itemId);
+    if (
+      !item ||
+      item.householdId !== args.householdId ||
+      item.moveId !== args.moveId ||
+      item.deletedAt
+    ) {
+      return null;
+    }
+
+    return redactItemForVisibility(item, policy.visibility);
+  },
+});
+
 export async function fetchMoveSignalData(
   ctx: Parameters<typeof requireMovePermission>[0],
   householdId: Id<"households">,
@@ -674,9 +702,12 @@ export const facetedListForMove = query({
     }
 
     const visibleItems = filterItemRecords(data.items, args);
-    const items = composeItemsWithSignals(
+    const fullItems = composeItemsWithSignals(
       { ...data, items: visibleItems },
       policy.visibility,
+    );
+    const items = fullItems.map((item) =>
+      toInventoryListRow(item, policy.visibility),
     );
 
     return { items, facets };

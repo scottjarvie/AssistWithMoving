@@ -168,6 +168,21 @@ describe("inventory filters", () => {
     ).toEqual(["Guest sheets"]);
   });
 
+  it("keeps serial-triggered evidence filtering without exposing serials", () => {
+    const serialOnly = {
+      ...items[2],
+      name: "Serialized receiver",
+      needsReview: false,
+      hasSerialNumber: true,
+    };
+
+    expect(
+      filterInventoryItems([serialOnly], "needsEvidence", "").map(
+        (item) => item.name,
+      ),
+    ).toEqual(["Serialized receiver"]);
+  });
+
   it("filters by owner/contact assignment", () => {
     expect(filterInventoryItemsByOwner(items, "person-scott")).toEqual([
       items[0],
