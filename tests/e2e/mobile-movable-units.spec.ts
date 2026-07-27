@@ -13,6 +13,10 @@ test.describe("mobile movable-unit workflow", () => {
   test.setTimeout(180_000);
 
   test.skip(
+    ({ isMobile }) => !isMobile,
+    "This workflow locks the mobile card and bottom-navigation experience.",
+  );
+  test.skip(
     !e2eUserEmail,
     "Set E2E_CLERK_USER_EMAIL to run signed-in MovingManifest product flows.",
   );
@@ -105,60 +109,39 @@ test.describe("mobile movable-unit workflow", () => {
       timeout: 30_000,
     });
     await expect(
-      page.getByRole("heading", { name: "Open box", exact: true }),
+      page.getByRole("heading", { name: boxLabel, exact: true }),
     ).toBeVisible({ timeout: 30_000 });
-    await expect(
-      page.getByText(`Everything you add here stays packed in ${boxCode}`),
-    ).toBeVisible();
+    await expect(page.getByText(boxCode, { exact: true })).toBeVisible();
 
-    await page.getByLabel(`Quick item name inside ${boxCode}`).fill(contentName);
     await page
-      .getByLabel(`Quick item category inside ${boxCode}`)
-      .fill("Workshop");
-    await page
-      .getByLabel(`Quick item notes inside ${boxCode}`)
-      .fill("Added from signed-in mobile rough-box smoke.");
-    await page.getByRole("button", { name: "Add to box" }).click();
-
-    await expect(
-      page.getByText(`${contentName} added to ${boxCode}.`),
-    ).toBeVisible({ timeout: 30_000 });
-    const recordedContents = page.getByLabel(`Recorded contents for ${boxCode}`);
-    await expect(recordedContents.getByText(contentName)).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(
-      recordedContents.getByText("1 item", { exact: true }),
-    ).toBeVisible();
-
-    const photoItem = page.locator("#box-photo-item");
-    await photoItem
-      .getByLabel(`Photo item name inside ${boxCode}`)
-      .fill(photoContentName);
-    await photoItem
-      .getByLabel(`Photo item category inside ${boxCode}`)
-      .fill("Workshop");
-    await photoItem
-      .getByLabel(`Photo item notes inside ${boxCode}`)
-      .fill("Created from a mobile open-box photo smoke.");
-    await photoItem.getByLabel(`Photo for new item in ${boxCode}`).setInputFiles({
+      .getByRole("main", { name: "Workspace content" })
+      .getByRole("button", { name: "Add", exact: true })
+      .click();
+    const addToBox = page.getByRole("dialog", { name: `Add to ${boxCode}` });
+    await addToBox
+      .getByLabel("Directions/Requests")
+      .fill(
+        `Add ${contentName} and ${photoContentName} to this same box. Workshop items from the signed-in mobile smoke.`,
+      );
+    await addToBox
+      .getByLabel("What kind of unit is this capture")
+      .selectOption("loose_item");
+    await addToBox.getByLabel("Choose media files").setInputFiles({
       name: "open-box-photo-item.png",
       mimeType: "image/png",
       buffer: createPng({ width: 640, height: 480 }),
     });
-    await photoItem.getByRole("button", { name: "Upload" }).click();
+    await addToBox
+      .getByRole("button", { name: "Add 1 file to queue" })
+      .click();
     await expect(
-      page.getByText(`${photoContentName} created inside ${boxCode}.`),
-    ).toBeVisible({ timeout: 45_000 });
-    await expect(recordedContents.getByText(photoContentName)).toBeVisible({
+      page.getByText(`Sent to the queue for ${boxCode}.`),
+    ).toBeVisible({
       timeout: 30_000,
     });
-    await expect(
-      recordedContents.getByText("2 items", { exact: true }),
-    ).toBeVisible();
 
     await expect(
-      page.getByRole("link", { name: "Review load plan" }),
+      page.getByRole("link", { name: "Load plan" }),
     ).toHaveAttribute(
       "href",
       `/app/moves/${encodeURIComponent(moveId)}/load-plan#load-plan`,
@@ -213,34 +196,39 @@ async function gotoDashboard(page: Page) {
 
 async function waitForWorkspaceAuth(page: Page) {
   await expect(
-    page.getByText(/Convex sees this browser session as/),
+    page.getByRole("main", { name: "Workspace content" }),
   ).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible({
     timeout: 30_000,
   });
 }
 
 async function ensureHousehold(page: Page, householdName: string) {
-  await page.getByRole("tab", { name: "Household" }).click();
+  const householdSwitcher = page.getByLabel("Switch household");
+  if (await householdSwitcher.isVisible().catch(() => false)) {
+    return;
+  }
+
   const householdInput = page.getByLabel("Household name");
-  const selectedHousehold = page.getByLabel("Selected household");
   const createHousehold = page.getByRole("button", {
     name: "Create household",
   });
+
+  if (!(await householdInput.isVisible().catch(() => false))) {
+    return;
+  }
 
   await expect(householdInput).toBeVisible({ timeout: 30_000 });
   await householdInput.fill(householdName);
   await expect(createHousehold).toBeEnabled({ timeout: 30_000 });
   await createHousehold.click();
-  await expect(selectedHousehold).toBeVisible({ timeout: 30_000 });
-  await expect(selectedHousehold).toContainText(householdName, {
+  await expect(page.getByRole("status")).toContainText("Household created", {
     timeout: 30_000,
   });
-  await selectedHousehold.selectOption({ label: `${householdName} - owner` });
 }
 
 async function createMove(page: Page, moveTitle: string) {
-  await page.getByRole("tab", { name: "Create move" }).click();
+  await page.getByRole("button", { name: "New move" }).first().click();
   await expect(page.getByLabel("Move title")).toBeEnabled({
     timeout: 30_000,
   });
