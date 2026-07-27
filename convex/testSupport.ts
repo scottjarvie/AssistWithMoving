@@ -109,8 +109,10 @@ export const cleanupE2eDataForCurrentUser = mutation({
       await ctx.db
         .query("moves")
         .withIndex("by_created_by", (q) => q.eq("createdByUserId", user._id))
-        .take(batchSize)
-    ).filter((move) => move.title.startsWith(moveTitlePrefix));
+        .collect()
+    )
+      .filter((move) => move.title.startsWith(moveTitlePrefix))
+      .slice(0, batchSize);
     const targetMoveIds = new Set(targetMoves.map((move) => String(move._id)));
 
     await cleanupApiKeys(ctx, {
@@ -135,8 +137,10 @@ export const cleanupE2eDataForCurrentUser = mutation({
       await ctx.db
         .query("households")
         .withIndex("by_owner", (q) => q.eq("ownerUserId", user._id))
-        .take(batchSize)
-    ).filter((household) => household.name.startsWith(householdNamePrefix));
+        .collect()
+    )
+      .filter((household) => household.name.startsWith(householdNamePrefix))
+      .slice(0, batchSize);
 
     for (const household of targetHouseholds) {
       await cleanupHousehold(ctx, household._id, counts);

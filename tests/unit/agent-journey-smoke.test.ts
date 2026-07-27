@@ -188,9 +188,8 @@ describe("agent journey smoke script", () => {
     expect(api.movingManifestRequest).toHaveBeenCalledWith(
       { baseUrl: "https://movingmanifest.com/api/v1", apiKey: "mmk_smoke" },
       {
-        method: "PATCH",
+        method: "DELETE",
         path: "/moves/move1",
-        body: { status: "archived" },
       }
     );
   });
@@ -335,9 +334,8 @@ describe("agent journey smoke script", () => {
     expect(api.movingManifestRequest).toHaveBeenCalledWith(
       { baseUrl: "https://movingmanifest.com/api/v1", apiKey: "mmk_smoke" },
       {
-        method: "PATCH",
+        method: "DELETE",
         path: "/moves/move1",
-        body: { status: "archived" },
       }
     );
   });

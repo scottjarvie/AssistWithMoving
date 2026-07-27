@@ -604,6 +604,23 @@ async function routeRequest(
     });
     return restOk({ data: { moveId, ...patch } });
   }
+  if (args.method === "DELETE" && segments.length === 2) {
+    const now = Date.now();
+    await ctx.db.patch(moveId, {
+      status: "archived",
+      archivedAt: now,
+      updatedAt: now,
+    });
+    await auditApiWrite(
+      ctx,
+      auth,
+      moveId,
+      "move.api_archived",
+      "moves",
+      moveId,
+    );
+    return restOk({ data: { moveId, status: "archived" } });
+  }
   if (nested === "summary" && args.method === "GET" && segments.length === 3) {
     return await routeMoveSummary(ctx, auth, move);
   }

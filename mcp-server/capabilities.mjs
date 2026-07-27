@@ -70,6 +70,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "POST /api/v1/moves",
       "POST /api/v1/moves/setup",
       "PATCH /api/v1/moves/:moveId",
+      "DELETE /api/v1/moves/:moveId",
       "GET /api/v1/moves/:moveId/summary",
       "GET /api/v1/moves/:moveId/agent-context",
     ],

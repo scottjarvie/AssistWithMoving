@@ -143,9 +143,8 @@ function createdItemIds(batchResult) {
 
 async function archiveSmokeMove(api, config, moveId, log) {
   await api.movingManifestRequest(config, {
-    method: "PATCH",
+    method: "DELETE",
     path: `/moves/${moveId}`,
-    body: { status: "archived" },
   });
   log(`ARCHIVED smoke move ${moveId}`);
 }

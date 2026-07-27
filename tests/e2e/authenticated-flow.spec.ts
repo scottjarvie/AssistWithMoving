@@ -185,23 +185,30 @@ test.describe("authenticated product flow", () => {
     await waitForWorkspaceAuth(page);
 
     const runId = Date.now().toString(36);
-    const requestedHouseholdName = `E2E API household ${runId}`;
-    const moveTitle = `E2E API move ${runId}`;
-    const householdName = await ensureHousehold(page, requestedHouseholdName);
-
-    await page.getByRole("button", { name: "New move" }).first().click();
-    await expect(page.getByLabel("Move title")).toBeEnabled({
-      timeout: 30_000,
+    const requestedHouseholdName = `E2E household ${runId}`;
+    const moveTitle = `E2E PCS move ${runId}`;
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+    expect(convexUrl).toBeTruthy();
+    const token = await page.evaluate(async () => {
+      const session = window.Clerk?.session;
+      return (
+        (await session?.getToken().catch(() => null)) ??
+        (await session?.getToken({ template: "convex" }).catch(() => null)) ??
+        null
+      );
     });
-    await page.getByLabel("Move title").fill(moveTitle);
-    await page.getByLabel("Move template").selectOption("local");
-    await page.getByRole("button", { name: "Create move" }).click();
-
-    await page.waitForURL(/\/app\/moves\/[^/]+$/, { timeout: 30_000 });
-    const e2eMoveId = decodeURIComponent(
-      new URL(page.url()).pathname.split("/").pop() ?? "",
-    );
-    expect(e2eMoveId).toBeTruthy();
+    expect(token).toBeTruthy();
+    const client = new ConvexHttpClient(convexUrl!);
+    client.setAuth(token!);
+    const householdId = await client.mutation(api.households.create, {
+      name: requestedHouseholdName,
+    });
+    const e2eMoveId = await client.mutation(api.moves.create, {
+      householdId,
+      title: moveTitle,
+      type: "local",
+    });
+    const householdName = requestedHouseholdName;
 
     await page.goto("/ai/start", { waitUntil: "domcontentloaded" });
     await page.waitForURL(/\/settings\/ai-connections$/, { timeout: 30_000 });
@@ -228,7 +235,7 @@ test.describe("authenticated product flow", () => {
       { timeout: 30_000 },
     );
 
-    const apiKeyName = `E2E AI connection ${runId}`;
+    const apiKeyName = `E2E local agent ${runId}`;
     await page.getByText("Advanced API settings", { exact: true }).first().click();
     await page.getByLabel("Key name").fill(apiKeyName);
     await apiKeys.getByLabel("Where can it work?").selectOption({

@@ -389,8 +389,16 @@ curl -X PATCH https://movingmanifest.com/api/v1/moves/MOVE_ID \
 `PATCH /moves/:moveId` accepts `title`, `status`, `origin`, `destination`,
 `dateStart`, `dateEnd`, `distanceMiles`, `travelMinutes`, `notes`,
 `documentationProfileTypes`, and `moveLevelWeightAllowanceLb`. `status` can be
-`planning`, `active`, or `completed`; `archived` is blocked here and must go
-through the app archive flow so archive bookkeeping is preserved.
+`planning`, `active`, or `completed`; `archived` is blocked on PATCH so archive
+bookkeeping cannot be bypassed. Use the soft-delete endpoint instead:
+
+```bash
+curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID \
+  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
+```
+
+`DELETE /moves/:moveId` archives the move; it does not permanently erase its
+inventory or history.
 `distanceMiles`, `travelMinutes`, `notes`, and `moveLevelWeightAllowanceLb`
 accept `null` to clear the stored value.
 
