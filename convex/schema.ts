@@ -737,8 +737,7 @@ export default defineSchema({
     lastSeenAt: v.number(),
   })
     .index("by_clerk_user_id", ["clerkUserId"])
-    .index("by_email", ["email"])
-    .index("by_status", ["status"]),
+    .index("by_email", ["email"]),
 
   clerkOrganizations: defineTable({
     clerkOrganizationId: v.string(),
@@ -751,9 +750,7 @@ export default defineSchema({
     updatedAt: v.number(),
     sourceUpdatedAt: v.optional(v.number()),
   })
-    .index("by_clerk_organization_id", ["clerkOrganizationId"])
-    .index("by_status", ["status"])
-    .index("by_linked_household", ["linkedHouseholdId"]),
+    .index("by_clerk_organization_id", ["clerkOrganizationId"]),
 
   clerkOrganizationMemberships: defineTable({
     clerkOrganizationMembershipId: v.string(),
@@ -767,7 +764,6 @@ export default defineSchema({
     sourceUpdatedAt: v.optional(v.number()),
   })
     .index("by_clerk_membership_id", ["clerkOrganizationMembershipId"])
-    .index("by_clerk_org_user", ["clerkOrganizationId", "clerkUserId"])
     .index("by_org_status", ["clerkOrganizationId", "status"])
     .index("by_user_status", ["userId", "status"]),
 
@@ -784,7 +780,6 @@ export default defineSchema({
     expiresAt: v.number(),
   })
     .index("by_user_created", ["userId", "createdAt"])
-    .index("by_status", ["status"])
     .index("by_expires", ["expiresAt"]),
 
   accountDeletionRequests: defineTable({
@@ -800,9 +795,7 @@ export default defineSchema({
     disabledMoveGrantCount: v.optional(v.number()),
     completedSummary: v.optional(v.any()),
   })
-    .index("by_user_status", ["userId", "status"])
-    .index("by_status", ["status"])
-    .index("by_scheduled", ["scheduledDeletionAt"]),
+    .index("by_user_status", ["userId", "status"]),
 
   featureFlags: defineTable({
     key: v.string(),
@@ -834,9 +827,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_household", ["householdId"])
-    .index("by_tier", ["tier"])
-    .index("by_provider", ["provider"]),
+    .index("by_household", ["householdId"]),
 
   households: defineTable({
     name: v.string(),
@@ -847,9 +838,7 @@ export default defineSchema({
     updatedAt: v.number(),
     archivedAt: v.optional(v.number()),
   })
-    .index("by_owner", ["ownerUserId"])
-    .index("by_slug", ["slug"])
-    .index("by_archived", ["archivedAt"]),
+    .index("by_owner", ["ownerUserId"]),
 
   householdMemberships: defineTable({
     householdId: v.id("households"),
@@ -870,8 +859,7 @@ export default defineSchema({
     .index("by_household", ["householdId"])
     .index("by_household_user", ["householdId", "userId"])
     .index("by_user_status", ["userId", "status"])
-    .index("by_household_status_role", ["householdId", "status", "role"])
-    .index("by_invited_email", ["invitedEmail"]),
+    .index("by_household_status_role", ["householdId", "status", "role"]),
 
   householdInvitations: defineTable({
     householdId: v.id("households"),
@@ -1000,9 +988,7 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
   })
     .index("by_move_created", ["moveId", "createdAt"])
-    .index("by_profile_created", ["documentationProfileId", "createdAt"])
     .index("by_household_created", ["householdId", "createdAt"])
-    .index("by_status", ["status"])
     .index("by_expires", ["expiresAt"]),
 
   apiKeys: defineTable({
@@ -1034,7 +1020,6 @@ export default defineSchema({
     .index("by_household_status", ["householdId", "status"])
     .index("by_move_status", ["moveId", "status"])
     .index("by_created_by", ["createdByUserId"])
-    .index("by_household_creator", ["householdId", "createdByUserId", "status"])
     .index("by_expires", ["expiresAt"]),
 
   apiIdempotencyKeys: defineTable({
@@ -1093,7 +1078,6 @@ export default defineSchema({
   })
     .index("by_token_hash", ["tokenHash"])
     .index("by_move_status", ["moveId", "status"])
-    .index("by_profile_status", ["documentationProfileId", "status"])
     .index("by_household_status", ["householdId", "status"])
     .index("by_expires", ["expiresAt"]),
 
@@ -1109,8 +1093,6 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_move_created", ["moveId", "createdAt"])
-    .index("by_share_link_created", ["shareLinkId", "createdAt"])
-    .index("by_profile_created", ["documentationProfileId", "createdAt"])
     .index("by_household_created", ["householdId", "createdAt"]),
 
   auditLogs: defineTable({
@@ -1130,8 +1112,6 @@ export default defineSchema({
     .index("by_move_time", ["moveId", "createdAt"])
     .index("by_object_time", ["objectTable", "objectId", "createdAt"])
     .index("by_actor_user_time", ["actorUserId", "createdAt"])
-    // Answer "what did THIS agent (api key) do" efficiently — previously a scan.
-    .index("by_actor_apikey_time", ["actorApiKeyId", "createdAt"])
     .index("by_category_time", ["category", "createdAt"]),
 
   moves: defineTable({
@@ -1168,7 +1148,6 @@ export default defineSchema({
     archivedAt: v.optional(v.number()),
   })
     .index("by_household_status", ["householdId", "status"])
-    .index("by_household_type", ["householdId", "type"])
     .index("by_created_by", ["createdByUserId"]),
 
   movePeople: defineTable({
@@ -1299,7 +1278,6 @@ export default defineSchema({
     archivedAt: v.optional(v.number()),
   })
     .index("by_move_sort", ["moveId", "sortOrder"])
-    .index("by_move_kind", ["moveId", "kind"])
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_name", ["moveId", "name"])
     .index("by_household", ["householdId"]),
@@ -1319,7 +1297,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_move_sort", ["moveId", "sortOrder"])
-    .index("by_move_key", ["moveId", "key"])
     .index("by_household", ["householdId"]),
 
   floorPlans: defineTable({
@@ -1379,9 +1356,7 @@ export default defineSchema({
     updatedAt: v.number(),
     archivedAt: v.optional(v.number()),
   })
-    .index("by_level", ["levelId"])
     .index("by_plan_type", ["planId", "entityType"])
-    .index("by_plan_shortId", ["planId", "shortId"])
     .index("by_household", ["householdId"]),
 
   planPlacements: defineTable({
@@ -1407,7 +1382,6 @@ export default defineSchema({
     updatedAt: v.number(),
     archivedAt: v.optional(v.number()),
   })
-    .index("by_level", ["levelId"])
     .index("by_plan", ["planId"])
     .index("by_item", ["itemId"])
     .index("by_box", ["boxId"])
@@ -1491,9 +1465,6 @@ export default defineSchema({
     .index("by_move_code", ["moveId", "code"])
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_updated", ["moveId", "updatedAt"])
-    .index("by_assigned_resource", ["assignedResourceId"])
-    .index("by_assigned_trip", ["assignedTripId"])
-    .index("by_current_space", ["currentSpaceId"])
     .index("by_household", ["householdId"]),
 
   boxItems: defineTable({
@@ -1565,9 +1536,7 @@ export default defineSchema({
       "createdAt",
     ])
     .index("by_transport_zone_created", ["transportZoneId", "createdAt"])
-    .index("by_move_ai_processed", ["moveId", "aiProcessed"])
     .index("by_move_verification", ["moveId", "verificationStatus"])
-    .index("by_move_privacy", ["moveId", "privacyLevel"])
     .index("by_household", ["householdId"]),
 
   photoUploadSessions: defineTable({
@@ -1617,7 +1586,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_move_status", ["moveId", "status"])
-    .index("by_status_expires", ["status", "expiresAt"])
     .index("by_expires", ["expiresAt"])
     .index("by_household", ["householdId"]),
 
@@ -1695,7 +1663,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_move_status_order", ["moveId", "status", "sortOrder"])
-    .index("by_move_owner_status", ["moveId", "ownerUserId", "status", "sortOrder"])
     .index("by_move_created", ["moveId", "createdAt"])
     .index("by_household_status", ["householdId", "status"])
     // Global sweep for captures stuck mid-upload (cron ages them out to "failed"
@@ -1750,8 +1717,7 @@ export default defineSchema({
     .index("by_household_status", ["householdId", "status"])
     .index("by_household_created", ["householdId", "createdAt"])
     .index("by_created_by", ["createdByUserId"])
-    .index("by_created_by_created", ["createdByUserId", "createdAt"])
-    .index("by_status_updated", ["status", "updatedAt"]),
+    .index("by_created_by_created", ["createdByUserId", "createdAt"]),
 
   aiTextSuggestions: defineTable({
     householdId: v.id("households"),
@@ -1798,7 +1764,6 @@ export default defineSchema({
   })
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_created", ["moveId", "createdAt"])
-    .index("by_job", ["aiJobId"])
     .index("by_household_status", ["householdId", "status"]),
 
   aiPhotoSuggestions: defineTable({
@@ -1846,7 +1811,6 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_created", ["moveId", "createdAt"])
     .index("by_photo_status", ["photoId", "status"])
-    .index("by_job", ["aiJobId"])
     .index("by_household_status", ["householdId", "status"]),
 
   aiPlanningSuggestions: defineTable({
@@ -1893,9 +1857,6 @@ export default defineSchema({
   })
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_created", ["moveId", "createdAt"])
-    .index("by_item_status", ["itemId", "status"])
-    .index("by_box_status", ["boxId", "status"])
-    .index("by_job", ["aiJobId"])
     .index("by_household_status", ["householdId", "status"]),
 
   inventoryDuplicateDecisions: defineTable({
@@ -1989,14 +1950,6 @@ export default defineSchema({
   })
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_disposition", ["moveId", "disposition"])
-    .index("by_move_room", ["moveId", "room"])
-    .index("by_current_space", ["currentSpaceId"])
-    .index("by_destination_space", ["destinationSpaceId"])
-    .index("by_move_category", ["moveId", "category"])
-    .index("by_move_needs_review", ["moveId", "needsReview"])
-    .index("by_move_high_value", ["moveId", "highValue"])
-    .index("by_assigned_resource", ["assignedResourceId"])
-    .index("by_assigned_trip", ["assignedTripId"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_move_code", ["moveId", "code"])
@@ -2060,7 +2013,6 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_item", ["itemId"])
-    .index("by_platform_status", ["platform", "status"])
     .index("by_household", ["householdId"]),
 
   plannedItems: defineTable({
