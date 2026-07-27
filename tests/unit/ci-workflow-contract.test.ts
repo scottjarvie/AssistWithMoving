@@ -58,10 +58,11 @@ describe("required CI workflow contract", () => {
     expect(requiredJob).toContain("tests/unit/mcp-route-auth.test.ts");
   });
 
-  it("runs the known-flaky full suite as informational until MOVE-395 lands", () => {
+  it("runs the full unit suite as the required Unit tests check", () => {
     const source = workflowSource();
 
-    expect(source).toContain("name: Unit tests (informational)");
+    expect(source).toMatch(/\n    name: Unit tests\n/);
+    expect(source).not.toContain("Unit tests (informational)");
     expect(source).toContain("run: npm run test");
     expect(source).not.toContain("continue-on-error: true");
   });

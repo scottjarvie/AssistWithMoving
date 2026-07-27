@@ -49,7 +49,7 @@ jobs:
         run: npm run build
 
   full-tests:
-    name: Unit tests (informational)
+    name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -65,5 +65,5 @@ jobs:
       - name: Install from the lockfile
         run: npm ci
 
-      - name: Run the full suite without making it a required policy check
+      - name: Run the full unit suite
         run: npm run test
