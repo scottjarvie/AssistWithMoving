@@ -46,6 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useMediaQuery } from "@/lib/use-media-query"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
@@ -259,6 +260,30 @@ export function isRowOpenIgnoredTarget(target: EventTarget | null): boolean {
   )
 }
 
+function ResponsiveDataTableTree({
+  ariaLabel,
+  renderDesktop,
+  renderMobile,
+}: {
+  ariaLabel?: string
+  renderDesktop: () => React.ReactNode
+  renderMobile: () => React.ReactNode
+}) {
+  const isDesktop = useMediaQuery("(min-width: 768px)")
+
+  if (isDesktop === undefined) {
+    return (
+      <Skeleton
+        role="status"
+        aria-label={`Loading ${ariaLabel ?? "data table"}`}
+        className="h-32 w-full"
+      />
+    )
+  }
+
+  return isDesktop ? renderDesktop() : renderMobile()
+}
+
 function useControllableState<S>(
   controlled: S | undefined,
   onChange: React.Dispatch<React.SetStateAction<S>> | undefined,
@@ -420,6 +445,110 @@ export function DataTable<TData>({
   }
 
   const hasRows = pageRows.length > 0
+  const renderMobileTree = () => (
+    <div role="list" className={cn("grid gap-2", cardOnly ? "" : "gap-3")}>
+      {pageRows.map((row) => (
+        <React.Fragment key={row.id}>
+          {renderMobileCard?.({
+            row: row.original,
+            selected: row.getIsSelected(),
+            onSelectedChange: (checked) => row.toggleSelected(checked),
+            table,
+            onOpen: onRowOpen ? () => onRowOpen(row.original) : undefined,
+          })}
+        </React.Fragment>
+      ))}
+    </div>
+  )
+  const renderDesktopTree = () => (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <Table aria-label={ariaLabel} className={cn(minWidthClassName)}>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => {
+                const meta = header.column.columnDef.meta
+                return (
+                  <TableHead
+                    key={header.id}
+                    className={cn(
+                      DATA_TABLE_DENSITY.head,
+                      meta?.headClassName ?? DATA_TABLE_DENSITY.defaultColumn,
+                      meta?.align === "end" && "text-right"
+                    )}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
+                )
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {pageRows.map((row) => {
+            const openable = Boolean(onRowOpen)
+            return (
+              <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() ? "selected" : undefined}
+                role={openable ? "button" : undefined}
+                tabIndex={openable ? 0 : undefined}
+                aria-label={
+                  openable
+                    ? getRowOpenLabel?.(row.original) ?? "Open row details"
+                    : undefined
+                }
+                className={
+                  openable
+                    ? "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                    : undefined
+                }
+                onClick={
+                  openable
+                    ? (event) => {
+                        if (isRowOpenIgnoredTarget(event.target)) return
+                        onRowOpen?.(row.original)
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  openable
+                    ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return
+                        if (isRowOpenIgnoredTarget(event.target)) return
+                        event.preventDefault()
+                        onRowOpen?.(row.original)
+                      }
+                    : undefined
+                }
+              >
+                {row.getVisibleCells().map((cell) => {
+                  const meta = cell.column.columnDef.meta
+                  return (
+                    <TableCell
+                      key={cell.id}
+                      className={cn(
+                        DATA_TABLE_DENSITY.cell,
+                        meta?.cellClassName,
+                        meta?.align === "end" && "text-right"
+                      )}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  )
+                })}
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  )
 
   return (
     <div className="space-y-2">
@@ -441,124 +570,18 @@ export function DataTable<TData>({
       {hasRows ? (
         <>
           {renderMobileCard ? (
-            <div
-              role="list"
-              className={cn("grid gap-2", cardOnly ? "" : "gap-3 md:hidden")}
-            >
-              {pageRows.map((row) => (
-                <React.Fragment key={row.id}>
-                  {renderMobileCard({
-                    row: row.original,
-                    selected: row.getIsSelected(),
-                    onSelectedChange: (checked) => row.toggleSelected(checked),
-                    table,
-                    onOpen: onRowOpen
-                      ? () => onRowOpen(row.original)
-                      : undefined,
-                  })}
-                </React.Fragment>
-              ))}
-            </div>
-          ) : null}
-
-          {!cardOnly ? (
-            <div
-              className={cn(
-                "overflow-x-auto rounded-md border border-border",
-                renderMobileCard ? "hidden md:block" : "block"
-              )}
-            >
-            <Table aria-label={ariaLabel} className={cn(minWidthClassName)}>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
-                      const meta = header.column.columnDef.meta
-                      return (
-                        <TableHead
-                          key={header.id}
-                          className={cn(
-                            DATA_TABLE_DENSITY.head,
-                            meta?.headClassName ??
-                              DATA_TABLE_DENSITY.defaultColumn,
-                            meta?.align === "end" && "text-right"
-                          )}
-                        >
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
-                      )
-                    })}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {pageRows.map((row) => {
-                  const openable = Boolean(onRowOpen)
-                  return (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() ? "selected" : undefined}
-                    role={openable ? "button" : undefined}
-                    tabIndex={openable ? 0 : undefined}
-                    aria-label={
-                      openable
-                        ? getRowOpenLabel?.(row.original) ?? "Open row details"
-                        : undefined
-                    }
-                    className={
-                      openable
-                        ? "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                        : undefined
-                    }
-                    onClick={
-                      openable
-                        ? (event) => {
-                            if (isRowOpenIgnoredTarget(event.target)) return
-                            onRowOpen?.(row.original)
-                          }
-                        : undefined
-                    }
-                    onKeyDown={
-                      openable
-                        ? (event) => {
-                            if (event.key !== "Enter" && event.key !== " ") return
-                            if (isRowOpenIgnoredTarget(event.target)) return
-                            event.preventDefault()
-                            onRowOpen?.(row.original)
-                          }
-                        : undefined
-                    }
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      const meta = cell.column.columnDef.meta
-                      return (
-                        <TableCell
-                          key={cell.id}
-                          className={cn(
-                            DATA_TABLE_DENSITY.cell,
-                            meta?.cellClassName,
-                            meta?.align === "end" && "text-right"
-                          )}
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      )
-                    })}
-                  </TableRow>
-                  )
-                })}
-              </TableBody>
-              </Table>
-            </div>
-          ) : null}
+            cardOnly ? (
+              renderMobileTree()
+            ) : (
+              <ResponsiveDataTableTree
+                ariaLabel={ariaLabel}
+                renderDesktop={renderDesktopTree}
+                renderMobile={renderMobileTree}
+              />
+            )
+          ) : (
+            renderDesktopTree()
+          )}
         </>
       ) : (
         emptyState ?? (

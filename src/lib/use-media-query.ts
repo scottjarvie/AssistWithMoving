@@ -2,6 +2,17 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
+const mediaQueryLists = new Map<string, MediaQueryList>();
+
+function getMediaQueryList(query: string) {
+  const cached = mediaQueryLists.get(query);
+  if (cached) return cached;
+
+  const mediaQuery = window.matchMedia(query);
+  mediaQueryLists.set(query, mediaQuery);
+  return mediaQuery;
+}
+
 function getServerSnapshot() {
   return undefined;
 }
@@ -16,16 +27,13 @@ function getServerSnapshot() {
 export function useMediaQuery(query: string): boolean | undefined {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
-      const mediaQuery = window.matchMedia(query);
+      const mediaQuery = getMediaQueryList(query);
       mediaQuery.addEventListener("change", onStoreChange);
       return () => mediaQuery.removeEventListener("change", onStoreChange);
     },
     [query],
   );
-  const getSnapshot = useCallback(
-    () => window.matchMedia(query).matches,
-    [query],
-  );
+  const getSnapshot = useCallback(() => getMediaQueryList(query).matches, [query]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

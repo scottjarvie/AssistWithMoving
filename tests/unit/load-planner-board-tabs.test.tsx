@@ -385,7 +385,9 @@ describe("LoadPlannerBoard task tabs", () => {
     vi.stubGlobal(
       "matchMedia",
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === "(min-width: 768px)" ? desktopViewport : false,
+        get matches() {
+          return query === "(min-width: 768px)" ? desktopViewport : false;
+        },
         media: query,
         onchange: null,
         addEventListener: vi.fn(
