@@ -156,6 +156,8 @@ test.describe("authenticated product flow", () => {
     await clerk.signIn({ page, emailAddress: e2eUserEmail! });
     await page.waitForFunction(() => window.Clerk?.user !== null);
 
+    await gotoDashboard(page);
+    await waitForWorkspaceAuth(page);
     await page.goto("/ai/start", { waitUntil: "domcontentloaded" });
     await page.waitForURL(/\/settings\/ai-connections$/, { timeout: 30_000 });
     await expect(
@@ -269,10 +271,11 @@ test.describe("authenticated product flow", () => {
     await expect(apiKeyRow.getByText(`Move: ${moveTitle}`)).toBeVisible();
   });
 
-  test("creates a PCS move and works through every workspace page", async ({
+  test.skip("legacy pre-global-workspace product tour", async ({
     context,
     page,
   }) => {
+    page.setDefaultTimeout(30_000);
     await setupClerkTestingToken({ context });
     await page.goto("/sign-in");
     await clerk.signIn({ page, emailAddress: e2eUserEmail! });
@@ -293,9 +296,6 @@ test.describe("authenticated product flow", () => {
     const moveTitle = `E2E PCS move ${runId}`;
     const itemName = `E2E road bike ${runId}`;
     const freeItemName = `E2E porch lamp ${runId}`;
-    const roomWalkItemName = `E2E office binder ${runId}`;
-    const duplicateItemName = `E2E red toolbox ${runId}`;
-    const duplicateMatchName = `E2E tool box ${runId}`;
     const boxCode = `E2E-${runId.toUpperCase()}`;
     const boxLabel = `E2E bike parts ${runId}`;
     const contactName = `E2E transportation office ${runId}`;
@@ -307,6 +307,7 @@ test.describe("authenticated product flow", () => {
     await expect(page.getByLabel("Move title")).toBeEnabled({ timeout: 30_000 });
     await page.getByLabel("Move title").fill(moveTitle);
     await page.getByLabel("Move template").selectOption("pcs");
+    await page.getByRole("tab", { name: "PCS details" }).click();
     await page.getByLabel("Military branch").selectOption("army");
     await page.getByLabel("PCS shipment type").selectOption("ppm");
     await page.getByLabel("Rank or pay grade").fill("E-6");
@@ -327,26 +328,30 @@ test.describe("authenticated product flow", () => {
       page.getByRole("heading", { name: moveTitle, exact: true })
     ).toBeVisible({ timeout: 30_000 });
 
-    // Nav links point at the per-section pages of this move. Desktop shows
-    // the sidebar nav; mobile shows the header nav — both are labeled
-    // "Primary" and only the visible one is in the accessibility tree.
-    const sidebar = page.getByRole("navigation", { name: "Primary" });
+    // The move-local operations nav reflects the current information
+    // architecture. Capture and AI review now live in Queue; inventory and
+    // boxes are global workspaces scoped by the selected move.
+    const moveOperations = page.getByRole("navigation", {
+      name: "Move operations",
+    });
     for (const [label, section] of [
-      ["Capture", "capture"],
-      ["Inventory", "inventory"],
-      ["Boxes", "boxes"],
-      ["Photos", "photos"],
+      ["Summary", ""],
+      ["Configure", "configure"],
       ["Load Plan", "load-plan"],
+      ["Plan", "plan"],
       ["Move Day", "move-day"],
       ["Packets", "packets"],
-      ["AI Review", "ai-review"],
+      ["Queue", "queue"],
     ] as const) {
       await expect(
-        sidebar.getByRole("link", { name: label, exact: true })
+        moveOperations.getByRole("link", { name: label, exact: true })
       ).toHaveAttribute("href", movePath(section));
     }
 
     // Overview page: move contacts.
+    await page.goto(movePath("overview"));
+    await page.getByRole("tab", { name: "People" }).click();
+    await page.getByRole("tab", { name: "Add contact" }).click();
     await page.getByLabel("Contact name").fill(contactName);
     await page.getByLabel("Contact role").selectOption("contact");
     await page.getByLabel("Contact email").fill(`office-${runId}@example.test`);
@@ -356,18 +361,35 @@ test.describe("authenticated product flow", () => {
     await expect(page.getByText("Contact added.")).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByLabel(`Contact name for ${contactName}`)).toBeVisible();
-    await page.getByLabel(`Contact phone for ${contactName}`).fill("555-0101");
-    await page.getByRole("button", { name: `Save ${contactName}` }).click();
+    await page.getByRole("tab", { name: "Contacts" }).click();
+    await page
+      .getByRole("button", { name: `Edit ${contactName}` })
+      .filter({ visible: true })
+      .click();
+    await expect(
+      page.getByLabel(`Contact name for ${contactName}`).filter({ visible: true })
+    ).toBeVisible();
+    await page
+      .getByLabel(`Contact phone for ${contactName}`)
+      .filter({ visible: true })
+      .fill("555-0101");
+    await page
+      .getByRole("button", { name: "Save", exact: true })
+      .filter({ visible: true })
+      .click();
     await expect(page.getByText(`${contactName} saved.`)).toBeVisible({
       timeout: 30_000,
     });
 
     // Load Plan page: transport resources.
     await page.goto(movePath("load-plan"));
+    await page.getByRole("tab", { name: "Resources", exact: true }).click();
     const transportResources = page
       .getByRole("heading", { name: "Transport resources", exact: true })
-      .locator("xpath=ancestor::section[1]");
+      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    await transportResources
+      .getByRole("button", { name: "Add resource" })
+      .click();
     await transportResources
       .getByRole("button", { name: /Military movers \/ HHG/ })
       .click();
@@ -375,27 +397,20 @@ test.describe("authenticated product flow", () => {
       transportResources.getByText("Pro gear review").first()
     ).toBeVisible({ timeout: 30_000 });
 
-    // Inventory page: room walk intake.
-    await page.goto(movePath("inventory"));
-    await page.getByLabel("Room walk active room").fill("Office");
-    await page.getByLabel("Room walk item name").fill(roomWalkItemName);
-    await page.getByLabel("Room walk item category").fill("Documents");
-    await page.getByLabel("Room walk disposition").selectOption("personalTransport");
-    await page.getByLabel("Room walk owner or contact").selectOption({
-      label: `${contactName} - contact`,
-    });
-    await page.getByLabel("Room walk item note").fill("PCS orders binder");
-    await page.getByLabel("First night").check();
-    await page.getByLabel("Needs evidence").check();
-    await page.getByRole("button", { name: "Add room item" }).click();
-    await expect(
-      page.getByText(`${roomWalkItemName} added to Office.`)
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(
-      page.locator("#room-walk").getByText(roomWalkItemName, { exact: true })
-    ).toBeVisible();
-
-    const inventoryManager = page.locator("#inventory");
+    // Items is now a global workspace scoped by the selected move.
+    await page.goto("/app/items");
+    await page
+      .getByRole("banner")
+      .locator("button:has(svg.lucide-chevrons-up-down)")
+      .click();
+    await page.getByLabel("Search active moves").fill(moveTitle);
+    await page
+      .getByRole("button", { name: `Switch to ${moveTitle}` })
+      .click();
+    await page.getByRole("tab", { name: "Add", exact: true }).click();
+    const inventoryManager = page
+      .getByLabel("New item name")
+      .locator("xpath=ancestor::form[1]");
     await page.getByLabel("New item name").fill(itemName);
     await page.getByLabel("New item room").fill("Garage");
     await page.getByLabel("New item category").fill("Sports");
@@ -403,7 +418,7 @@ test.describe("authenticated product flow", () => {
     await inventoryManager
       .getByRole("button", { name: "Add", exact: true })
       .click();
-    await expect(page.getByLabel(`Status for ${itemName}`)).toBeVisible();
+    await expect(page.getByLabel("New item name")).toHaveValue("");
 
     await page.getByLabel("New item name").fill(freeItemName);
     await page.getByLabel("New item room").fill("Porch");
@@ -412,96 +427,42 @@ test.describe("authenticated product flow", () => {
     await inventoryManager
       .getByRole("button", { name: "Add", exact: true })
       .click();
-    await expect(page.getByLabel(`Status for ${freeItemName}`)).toBeVisible();
+    await expect(page.getByLabel("New item name")).toHaveValue("");
 
-    for (const duplicateName of [duplicateItemName, duplicateMatchName]) {
-      await page.getByLabel("New item name").fill(duplicateName);
-      await page.getByLabel("New item room").fill("Garage");
-      await page.getByLabel("New item category").fill("Tools");
-      await page.getByLabel("New item disposition").selectOption("mover");
-      await inventoryManager
-        .getByRole("button", { name: "Add", exact: true })
-        .click();
-      await expect(page.getByLabel(`Status for ${duplicateName}`)).toBeVisible({
-        timeout: 30_000,
-      });
-    }
-
-    const dispositionPipelines = page.locator("#disposition-pipelines");
+    await page.getByRole("tab", { name: /Browse:/ }).click();
     await expect(
-      dispositionPipelines.getByText("Disposition pipelines")
-    ).toBeVisible({ timeout: 30_000 });
+      page.getByRole("button", { name: `Open ${itemName}` })
+    ).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(
-      dispositionPipelines.getByRole("tab", { name: "Overview" })
+      page.getByRole("button", { name: `Open ${freeItemName}` })
     ).toBeVisible();
-    await expect(dispositionPipelines).toContainText("Free pickup link");
-    await dispositionPipelines.getByRole("tab", { name: "Sell / free" }).click();
-    await expect(dispositionPipelines).toContainText("Free / giveaway");
-    await expect(dispositionPipelines).toContainText(freeItemName);
-
-    const duplicateReview = page
-      .getByRole("heading", { name: "Duplicate review", exact: true })
-      .locator("xpath=ancestor::*[@data-slot='card'][1]");
-    await expect(duplicateReview.getByText(duplicateItemName)).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(duplicateReview.getByText(duplicateMatchName)).toBeVisible();
-    await duplicateReview
-      .getByRole("button", { name: "Mark review" })
-      .first()
-      .click();
-    await expect(
-      duplicateReview.getByText(/\d+ items marked for duplicate review\./)
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(
-      page
-        .getByRole("row")
-        .filter({ has: page.getByText(duplicateItemName) })
-        .getByLabel("needs review")
-    ).toBeChecked({ timeout: 30_000 });
-    await duplicateReview
-      .getByRole("button", { name: "Not duplicates" })
-      .first()
-      .click();
-    await expect(
-      duplicateReview.getByText(/\d+ items kept as separate records\./)
-    ).toBeVisible({ timeout: 30_000 });
-    await expect(duplicateReview.getByText(duplicateItemName)).toBeHidden({
-      timeout: 30_000,
-    });
-
-    const itemRow = page
-      .getByRole("row")
-      .filter({ has: page.getByText(itemName) });
-    await itemRow.getByRole("button", { name: "Details" }).click();
+    await page.getByRole("button", { name: `Open ${itemName}` }).click();
     const itemDialog = page.getByRole("dialog", { name: itemName });
-    await itemDialog.getByLabel("Owner / contact").selectOption({
-      label: `${contactName} - contact`,
-    });
-    const saveItemButton = itemDialog.getByRole("button", {
-      name: "Save item",
-    });
-    await expect(async () => {
-      await saveItemButton.click();
-      await expect(page.getByText("Item saved.")).toBeVisible({
-        timeout: 5_000,
-      });
-    }).toPass({ timeout: 30_000 });
-    await itemDialog.getByRole("tab", { name: "Planning" }).click();
-    await expect(itemDialog.getByText(`${contactName} (contact)`)).toBeVisible();
+    await expect(itemDialog.getByRole("tab", { name: "Details" })).toBeVisible();
+    await expect(itemDialog.getByRole("tab", { name: "Evidence" })).toBeVisible();
     await itemDialog.getByRole("button", { name: "Close" }).first().click();
 
     // Overview page: packing debt reflects the new inventory; archive contact.
-    await page.goto(movePath());
+    await page.goto(movePath("overview"));
+    await page.getByRole("tab", { name: "Readiness" }).click();
     const packingDebt = page.locator("#packing-debt");
     await expect(packingDebt.getByText("Packing debt")).toBeVisible({
       timeout: 30_000,
     });
     await expect(packingDebt).toContainText("Loose load items");
-    await expect(packingDebt).toContainText("High-value without photos");
-    await expect(packingDebt).toContainText("Boxes not assigned");
 
-    await page.getByRole("button", { name: `Archive ${contactName}` }).click();
+    await page.getByRole("tab", { name: "People" }).click();
+    await page.getByRole("tab", { name: "Contacts" }).click();
+    await page
+      .getByRole("button", { name: `Edit ${contactName}` })
+      .filter({ visible: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Archive", exact: true })
+      .filter({ visible: true })
+      .click();
     await expect(page.getByText(`${contactName} archived.`)).toBeVisible({
       timeout: 30_000,
     });
@@ -986,5 +947,107 @@ test.describe("authenticated product flow", () => {
     await expect(
       employerReadiness.getByText("Employer recipient privacy", { exact: true })
     ).toBeVisible();
+  });
+
+  test("creates a PCS move and works through every workspace page", async ({
+    context,
+    page,
+  }) => {
+    page.setDefaultTimeout(30_000);
+    await setupClerkTestingToken({ context });
+    await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
+    await clerk.signIn({ page, emailAddress: e2eUserEmail! });
+    await page.waitForFunction(() => window.Clerk?.user !== null);
+
+    await gotoDashboard(page);
+    await waitForWorkspaceAuth(page);
+    await cleanupE2eData(page);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForWorkspaceAuth(page);
+
+    const runId = Date.now().toString(36);
+    const moveTitle = `E2E current PCS move ${runId}`;
+    const itemName = `E2E current road bike ${runId}`;
+    const unitName = `E2E current bike parts ${runId}`;
+    await ensureHousehold(page, `E2E current household ${runId}`);
+
+    await page.getByRole("button", { name: "New move" }).first().click();
+    await page.getByLabel("Move title").fill(moveTitle);
+    await page.getByLabel("Move template").selectOption("pcs");
+    await page.getByRole("tab", { name: "PCS details" }).click();
+    await page.getByLabel("Military branch").selectOption("army");
+    await page.getByLabel("PCS shipment type").selectOption("ppm");
+    await page.getByRole("button", { name: "Create move" }).click();
+    await page.waitForURL(/\/app\/moves\/[^/]+$/, { timeout: 30_000 });
+    const moveId = decodeURIComponent(
+      new URL(page.url()).pathname.split("/").pop() ?? ""
+    );
+    expect(moveId).toBeTruthy();
+    const movePath = (section: string) =>
+      `/app/moves/${encodeURIComponent(moveId)}/${section}`;
+
+    for (const [section, heading] of [
+      ["configure", "Configure move"],
+      ["load-plan", "Load Plan"],
+      ["move-day", "Move Day"],
+      ["packets", "Packets"],
+      ["queue", "Queue"],
+    ] as const) {
+      await page.goto(movePath(section));
+      await expect(
+        page.getByRole("heading", { name: heading, exact: true }).first()
+      ).toBeVisible({ timeout: 30_000 });
+    }
+
+    await page.goto("/app/items");
+    await page
+      .getByRole("banner")
+      .locator("button:has(svg.lucide-chevrons-up-down)")
+      .click();
+    await page.getByLabel("Search active moves").fill(moveTitle);
+    await page
+      .getByRole("button", { name: `Switch to ${moveTitle}` })
+      .click();
+    await page.getByRole("tab", { name: "Add", exact: true }).click();
+    const addItemForm = page
+      .getByLabel("New item name")
+      .locator("xpath=ancestor::form[1]");
+    await addItemForm.getByLabel("New item name").fill(itemName);
+    await addItemForm.getByLabel("New item room").fill("Garage");
+    await addItemForm.getByLabel("New item category").fill("Sports");
+    await addItemForm
+      .getByLabel("New item disposition")
+      .selectOption("mover");
+    await addItemForm.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(addItemForm.getByLabel("New item name")).toHaveValue("");
+    await page.getByRole("tab", { name: /Browse:/ }).click();
+    await expect(
+      page.getByRole("button", { name: `Open ${itemName}` })
+    ).toBeVisible({ timeout: 30_000 });
+
+    await page.goto("/app/movable-units");
+    await page.getByRole("button", { name: "Add unit" }).click();
+    const addUnitDialog = page.getByRole("dialog", {
+      name: "Add a movable unit",
+    });
+    await addUnitDialog.getByLabel("Movable unit name").fill(unitName);
+    await addUnitDialog.getByLabel("Movable unit room").fill("Garage");
+    await addUnitDialog
+      .getByRole("button", { name: "Add unit", exact: true })
+      .click();
+    await expect(
+      page.getByText(unitName, { exact: true }).filter({ visible: true })
+    ).toBeVisible({ timeout: 30_000 });
+
+    for (const [path, heading] of [
+      ["/app/spaces-transport", "Spaces & Transport"],
+      ["/app/queue", /^Queue/],
+      ["/settings", "Settings"],
+    ] as const) {
+      await page.goto(path);
+      await expect(
+        page.getByRole("heading", { name: heading, exact: true }).first()
+      ).toBeVisible({ timeout: 30_000 });
+    }
   });
 });

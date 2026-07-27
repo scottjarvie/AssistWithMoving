@@ -12,6 +12,9 @@ const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const safeForMutationQa =
   process.env.CONVEX_DEPLOYMENT?.startsWith("dev:") ||
   process.env.CONVEX_E2E_CLEANUP_ENABLED === "true";
+const layoutStudioExposed =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_LAYOUT_STUDIO_CURRENT_DB_QA === "true";
 const tinyBlueprintPng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -44,16 +47,21 @@ async function gotoDashboard(page: Page) {
 
 async function waitForWorkspaceAuth(page: Page) {
   await expect(
-    page.getByText(/Convex sees this browser session as/),
+    page.getByRole("main", { name: "Workspace content" }),
   ).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible({
     timeout: 30_000,
   });
 }
 
 async function ensureHousehold(page: Page, householdName: string) {
+  const client = await convexClientForPage(page);
+  const existingHouseholds = await client.query(api.households.listMine, {});
+  if (existingHouseholds.length > 0) {
+    return existingHouseholds[0]!.household._id;
+  }
+
   const householdInput = page.getByLabel("Household name");
-  const selectedHousehold = page.getByLabel("Selected household");
   const createHousehold = page.getByRole("button", {
     name: "Create household",
   });
@@ -62,10 +70,15 @@ async function ensureHousehold(page: Page, householdName: string) {
   await householdInput.fill(householdName);
   await expect(createHousehold).toBeEnabled({ timeout: 30_000 });
   await createHousehold.click();
-  await expect(selectedHousehold).toContainText(householdName, {
+  await expect(page.getByRole("status")).toContainText("Household created", {
     timeout: 30_000,
   });
-  await selectedHousehold.selectOption({ label: `${householdName} - owner` });
+
+  await expect
+    .poll(async () => (await client.query(api.households.listMine, {})).length)
+    .toBeGreaterThan(0);
+  const households = await client.query(api.households.listMine, {});
+  return households[0]!.household._id;
 }
 
 async function cleanupE2eData(page: Page) {
@@ -155,8 +168,9 @@ async function createE2eMove(page: Page, prefix: string) {
   const householdName = `E2E ${prefix} household ${runId}`;
   const moveTitle = `E2E ${prefix} move ${runId}`;
 
-  await ensureHousehold(page, householdName);
-  const householdId = (await page.getByLabel("Selected household").inputValue()) as Id<"households">;
+  const householdId = await ensureHousehold(page, householdName);
+  await page.getByRole("button", { name: "New move" }).first().click();
+  await expect(page.getByLabel("Move title")).toBeEnabled({ timeout: 30_000 });
   await page.getByLabel("Move title").fill(moveTitle);
   await page.getByLabel("Move template").selectOption("local");
   await page.getByRole("button", { name: "Create move" }).click();
@@ -178,7 +192,7 @@ async function signInCleanAndOpenDashboard({
   page: Page;
 }) {
   await setupClerkTestingToken({ context });
-  await page.goto("/");
+  await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
   await clerk.signIn({ page, emailAddress: e2eUserEmail! });
   await page.waitForFunction(() => window.Clerk?.user !== null);
 
@@ -261,8 +275,8 @@ test.describe("Layout Studio authenticated smoke", () => {
   test.setTimeout(120_000);
 
   test.skip(
-    !e2eUserEmail || !convexUrl || !safeForMutationQa,
-    "Set E2E_CLERK_USER_EMAIL plus a dev Convex target or explicit current-DB QA cleanup opt-in to run Layout Studio mutation QA.",
+    !e2eUserEmail || !convexUrl || !safeForMutationQa || !layoutStudioExposed,
+    "Set E2E_CLERK_USER_EMAIL plus a dev Convex target or explicit current-DB QA cleanup opt-in, and expose Layout Studio in the tested build.",
   );
 
   test.afterEach(async ({ page }, testInfo) => {
