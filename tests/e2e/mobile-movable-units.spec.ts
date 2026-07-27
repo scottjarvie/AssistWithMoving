@@ -11,7 +11,6 @@ const photoUploadSmokeOrigin = "http://localhost:3827";
 
 test.describe("mobile movable-unit workflow", () => {
   test.setTimeout(180_000);
-  test.describe.configure({ retries: 1 });
 
   test.skip(
     ({ isMobile }) => !isMobile,
