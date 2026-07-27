@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
-import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { InstallPrompt } from "@/components/install-prompt";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -112,12 +110,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const content = (
-    <ConvexClientProvider>
-      {children}
-    </ConvexClientProvider>
-  );
-
   return (
     <html
       lang="en"
@@ -131,17 +123,7 @@ export default function RootLayout({
             dangerouslySetInnerHTML={{ __html: extensionHydrationGuard }}
           />
         ) : null}
-        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
-          <ClerkProvider
-            signInUrl="/sign-in"
-            signUpUrl="/sign-up"
-            afterSignOutUrl="/"
-          >
-            {content}
-          </ClerkProvider>
-        ) : (
-          content
-        )}
+        {children}
         <InstallPrompt />
         <Toaster />
       </body>

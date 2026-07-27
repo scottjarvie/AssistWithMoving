@@ -100,7 +100,14 @@ export function PublicPageChrome({
                     <ArrowRight aria-hidden="true" />
                   </a>
                 ) : (
-                  <Link href={resolvedPrimaryAction.href}>
+                  <Link
+                    href={resolvedPrimaryAction.href}
+                    prefetch={
+                      isProviderBackedRoute(resolvedPrimaryAction.href)
+                        ? false
+                        : undefined
+                    }
+                  >
                     {resolvedPrimaryAction.label}
                     <ArrowRight aria-hidden="true" />
                   </Link>
@@ -112,7 +119,14 @@ export function PublicPageChrome({
                     {resolvedSecondaryAction.label}
                   </a>
                 ) : (
-                  <Link href={resolvedSecondaryAction.href}>
+                  <Link
+                    href={resolvedSecondaryAction.href}
+                    prefetch={
+                      isProviderBackedRoute(resolvedSecondaryAction.href)
+                        ? false
+                        : undefined
+                    }
+                  >
                     {resolvedSecondaryAction.label}
                   </Link>
                 )}
@@ -145,7 +159,7 @@ export function PublicHeader() {
       </nav>
       <div className="flex items-center gap-2">
         <Button asChild size="sm" className="hidden lg:inline-flex">
-          <Link href="/sign-in">
+          <Link href="/sign-in" prefetch={false}>
             Sign in
             <ArrowRight aria-hidden="true" />
           </Link>
@@ -155,6 +169,16 @@ export function PublicHeader() {
         </div>
       </div>
     </header>
+  );
+}
+
+function isProviderBackedRoute(href: string): boolean {
+  return (
+    href.startsWith("/sign-in") ||
+    href.startsWith("/sign-up") ||
+    href.startsWith("/ai/start") ||
+    href.startsWith("/app") ||
+    href.startsWith("/settings")
   );
 }
 

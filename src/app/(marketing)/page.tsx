@@ -67,7 +67,9 @@ export default function MarketingPage() {
                 </Link>
               </Button>
               <Button asChild variant="outline" size="lg">
-                <Link href="/sign-up">Create account</Link>
+                <Link href="/sign-up" prefetch={false}>
+                  Create account
+                </Link>
               </Button>
             </div>
             <div className="mt-6 rounded-md border border-primary/25 bg-primary/5 p-4">

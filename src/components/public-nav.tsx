@@ -66,13 +66,13 @@ export function PublicMobileNav({
         </nav>
         <div className="mt-auto flex flex-col gap-2 px-4 pb-4">
           <Button asChild>
-            <Link href="/sign-in" onClick={() => setOpen(false)}>
+            <Link href="/sign-in" prefetch={false} onClick={() => setOpen(false)}>
               Sign in
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/sign-up" onClick={() => setOpen(false)}>
+            <Link href="/sign-up" prefetch={false} onClick={() => setOpen(false)}>
               Create account
             </Link>
           </Button>

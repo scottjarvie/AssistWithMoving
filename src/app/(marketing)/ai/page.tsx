@@ -103,7 +103,7 @@ export default function AiAssistantPage() {
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button asChild>
-                <Link href="/ai/start">
+                <Link href="/ai/start" prefetch={false}>
                   Start AI setup
                   <ArrowRight aria-hidden="true" />
                 </Link>
@@ -296,7 +296,7 @@ function AssistantVisual() {
         </p>
       </div>
       <Button asChild className="mt-4 w-full">
-        <Link href="/ai/start">
+        <Link href="/ai/start" prefetch={false}>
           Start AI setup
           <Sparkles aria-hidden="true" />
         </Link>

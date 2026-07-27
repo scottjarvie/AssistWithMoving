@@ -139,13 +139,15 @@ export default function McpPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
-              <Link href="/settings/ai-connections">
+              <Link href="/settings/ai-connections" prefetch={false}>
                 Open AI connections
                 <ArrowRight aria-hidden="true" />
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/ai/start">Start setup</Link>
+              <Link href="/ai/start" prefetch={false}>
+                Start setup
+              </Link>
             </Button>
           </div>
         </div>

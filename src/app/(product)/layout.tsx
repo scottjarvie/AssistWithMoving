@@ -1,5 +1,6 @@
 import { ServerOff } from "lucide-react";
 
+import { AppProviders } from "@/components/app-providers";
 import { AppShell } from "@/components/app-shell";
 import { MediaUploadProvider } from "@/components/media-upload-provider";
 import { MoveWorkspaceProvider } from "@/components/move-workspace-context";
@@ -19,6 +20,18 @@ import { hasPublicConvexUrl } from "@/lib/runtime-env";
 // remounting or re-keying it. (Re-keying the provider on navigation was the
 // original freeze bug; do not reintroduce it.)
 export default function ProductLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <AppProviders>
+      <ProductContent>{children}</ProductContent>
+    </AppProviders>
+  );
+}
+
+function ProductContent({
   children,
 }: Readonly<{
   children: React.ReactNode;

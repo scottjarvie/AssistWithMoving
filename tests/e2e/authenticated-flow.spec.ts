@@ -31,16 +31,26 @@ async function gotoDashboard(page: Page) {
 
 async function waitForWorkspaceAuth(page: Page) {
   await expect(
-    page.getByText(/Convex sees this browser session as/)
+    page.getByRole("main", { name: "Workspace content" }),
   ).toBeVisible({ timeout: 45_000 });
-  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByLabel("Switch household")).toBeVisible({
     timeout: 30_000,
   });
 }
 
 async function ensureHousehold(page: Page, householdName: string) {
+  const householdSwitcher = page.getByLabel("Switch household");
+  if (await householdSwitcher.isVisible().catch(() => false)) {
+    return (
+      (await householdSwitcher.locator("option:checked").textContent())?.trim() ??
+      ""
+    );
+  }
+
   const householdInput = page.getByLabel("Household name");
-  const selectedHousehold = page.getByLabel("Selected household");
   const createHousehold = page.getByRole("button", {
     name: "Create household",
   });
@@ -51,30 +61,18 @@ async function ensureHousehold(page: Page, householdName: string) {
       await householdInput.fill(householdName);
       await expect(createHousehold).toBeEnabled({ timeout: 30_000 });
       await createHousehold.click();
-      await expect(selectedHousehold).toBeVisible({ timeout: 30_000 });
-      await expect(selectedHousehold).toContainText(householdName, {
+      await expect(page.getByRole("status")).toContainText("Household created", {
         timeout: 30_000,
       });
-      await selectedHousehold.selectOption({
-        label: `${householdName} - owner`,
-      });
-      return;
+      return householdName;
     } catch (error) {
-      const householdExists = await selectedHousehold
-        .getByRole("option", { name: `${householdName} - owner` })
-        .isVisible()
-        .catch(() => false);
-      if (householdExists) {
-        await selectedHousehold.selectOption({
-          label: `${householdName} - owner`,
-        });
-        return;
-      }
       if (attempt === 2) {
         throw error;
       }
     }
   }
+
+  return householdName;
 }
 
 async function waitForAiOutcome(card: Locator, successPattern: RegExp) {
@@ -149,12 +147,32 @@ test.describe("authenticated product flow", () => {
     }
   });
 
+  test("redirects signed-in users from AI start to connection settings", async ({
+    context,
+    page,
+  }) => {
+    await setupClerkTestingToken({ context });
+    await page.goto("/sign-in");
+    await clerk.signIn({ page, emailAddress: e2eUserEmail! });
+    await page.waitForFunction(() => window.Clerk?.user !== null);
+
+    await page.goto("/ai/start", { waitUntil: "domcontentloaded" });
+    await page.waitForURL(/\/settings\/ai-connections$/, { timeout: 30_000 });
+    await expect(
+      page.getByRole("heading", {
+        name: "Create an AI connection",
+        exact: true,
+        level: 2,
+      }),
+    ).toBeVisible({ timeout: 30_000 });
+  });
+
   test("creates an AI connection from simplified settings", async ({
     context,
     page,
   }) => {
     await setupClerkTestingToken({ context });
-    await page.goto("/");
+    await page.goto("/sign-in");
     await clerk.signIn({ page, emailAddress: e2eUserEmail! });
     await page.waitForFunction(() => window.Clerk?.user !== null);
 
@@ -165,10 +183,11 @@ test.describe("authenticated product flow", () => {
     await waitForWorkspaceAuth(page);
 
     const runId = Date.now().toString(36);
-    const householdName = `E2E API household ${runId}`;
+    const requestedHouseholdName = `E2E API household ${runId}`;
     const moveTitle = `E2E API move ${runId}`;
-    await ensureHousehold(page, householdName);
+    const householdName = await ensureHousehold(page, requestedHouseholdName);
 
+    await page.getByRole("button", { name: "New move" }).first().click();
     await expect(page.getByLabel("Move title")).toBeEnabled({
       timeout: 30_000,
     });
@@ -185,11 +204,16 @@ test.describe("authenticated product flow", () => {
     await page.goto("/ai/start", { waitUntil: "domcontentloaded" });
     await page.waitForURL(/\/settings\/ai-connections$/, { timeout: 30_000 });
     await expect(
-      page.getByRole("heading", { name: "Create an AI connection", exact: true }),
+      page.getByRole("heading", {
+        name: "Create an AI connection",
+        exact: true,
+        level: 2,
+      }),
     ).toBeVisible({ timeout: 30_000 });
-    const apiKeys = page
-      .getByRole("heading", { name: "Create an AI connection", exact: true })
-      .locator("xpath=ancestor::*[@data-slot='card'][1]");
+    const apiKeys = page.getByRole("region", {
+      name: "Create an AI connection",
+      exact: true,
+    });
     await expect(
       apiKeys.getByText("Recommended: full trusted helper"),
     ).toBeVisible({ timeout: 30_000 });
@@ -203,19 +227,19 @@ test.describe("authenticated product flow", () => {
     );
 
     const apiKeyName = `E2E AI connection ${runId}`;
-    await apiKeys.getByText("Advanced API settings").click();
-    await apiKeys.getByLabel("Key name").fill(apiKeyName);
+    await page.getByText("Advanced API settings", { exact: true }).first().click();
+    await page.getByLabel("Key name").fill(apiKeyName);
     await apiKeys.getByLabel("Where can it work?").selectOption({
       label: moveTitle,
     });
     await apiKeys.getByRole("button", { name: "Create key" }).click();
     await expect(
-      apiKeys.getByText(/^AI connection created/),
+      page.getByText(/^AI connection created/),
     ).toBeVisible({ timeout: 30_000 });
-    const rawApiKey = await apiKeys
+    const rawApiKey = await page
       .getByLabel("One-time API key secret")
       .inputValue();
-    const copyKeyButton = apiKeys.getByRole("button", { name: "Copy key" });
+    const copyKeyButton = page.getByRole("button", { name: "Copy key" });
     await expect(copyKeyButton).toBeVisible();
     await expect(copyKeyButton).toHaveClass(/bg-emerald-600/);
 
@@ -237,8 +261,8 @@ test.describe("authenticated product flow", () => {
     });
     expect(broadApiReadResponse.status()).toBe(403);
 
-    await apiKeys.getByText("Manage existing AI connections").click();
-    const apiKeyRow = apiKeys.getByRole("group", {
+    await page.getByText("Manage existing AI connections", { exact: true }).click();
+    const apiKeyRow = page.getByRole("group", {
       name: `AI connection ${apiKeyName}`,
     });
     await expect(apiKeyRow).toBeVisible({ timeout: 30_000 });
@@ -250,14 +274,14 @@ test.describe("authenticated product flow", () => {
     page,
   }) => {
     await setupClerkTestingToken({ context });
-    await page.goto("/");
+    await page.goto("/sign-in");
     await clerk.signIn({ page, emailAddress: e2eUserEmail! });
     await page.waitForFunction(() => window.Clerk?.user !== null);
 
     await gotoDashboard(page);
     await expect(page.getByRole("main", { name: "Workspace content" })).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Household", exact: true })
+      page.getByRole("heading", { name: "Your moves", exact: true })
     ).toBeVisible();
     await waitForWorkspaceAuth(page);
     await cleanupE2eData(page);
@@ -265,7 +289,7 @@ test.describe("authenticated product flow", () => {
     await waitForWorkspaceAuth(page);
 
     const runId = Date.now().toString(36);
-    const householdName = `E2E household ${runId}`;
+    const requestedHouseholdName = `E2E household ${runId}`;
     const moveTitle = `E2E PCS move ${runId}`;
     const itemName = `E2E road bike ${runId}`;
     const freeItemName = `E2E porch lamp ${runId}`;
@@ -277,8 +301,9 @@ test.describe("authenticated product flow", () => {
     const contactName = `E2E transportation office ${runId}`;
     const publicComment = `E2E pickup note ${runId}`;
 
-    await ensureHousehold(page, householdName);
+    const householdName = await ensureHousehold(page, requestedHouseholdName);
 
+    await page.getByRole("button", { name: "New move" }).first().click();
     await expect(page.getByLabel("Move title")).toBeEnabled({ timeout: 30_000 });
     await page.getByLabel("Move title").fill(moveTitle);
     await page.getByLabel("Move template").selectOption("pcs");
