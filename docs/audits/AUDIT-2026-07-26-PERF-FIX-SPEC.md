@@ -49,8 +49,8 @@ post-filters ahead of `take()` and are explicitly **not** findings.
 
 ## Combined-branch measurement record (2026-07-27)
 
-Measured from a production build containing WP1–WP8, before merge or any
-provider deployment:
+Measured from production builds containing WP1–WP8 and from the authorized
+development Convex deployment, before merge or production deployment:
 
 | Metric | Combined result | Decision |
 | --- | --- | --- |
@@ -62,20 +62,28 @@ provider deployment:
 | Load-plan subscriptions | 1 (`planOps.loadPlanSnapshot`) | Pass in code and component locks |
 | Movable-units responsive trees | 1 mounted tree after media resolution; one SSR status skeleton before resolution | Pass in component and SSR locks |
 | Schema indexes unreferenced by `withIndex()` | 0 of 152 | Pass; down from 47 of 199 |
+| 100-unit Load Plan paint, `origin/main` → WP7 | FP 40 → 40 ms; FCP 52 → 40 ms; LCP 52 → 40 ms (five-run medians) | Pass; LCP improved 12 ms, so the >300 ms fallback is not activated |
+| 100-unit Movable Units selection-to-visible-table, `origin/main` → WP7 | 492 → 497 ms (five-run medians) | Pass; +5 ms while removing the duplicate desktop/mobile tree |
 
-The authenticated desktop measurement on the existing 24-unit development
-move recorded median first paint, first contentful paint, and LCP at 32 ms on
-both `origin/main` and WP7 over five Movable Units runs: no observed
-regression. Over 11 Load Plan runs, median FP stayed 40 ms while median
-FCP/LCP moved from 48 ms to 340 ms (+292 ms). That is below the spec's
-greater-than-300-ms fallback trigger, so the fallback is not activated. These
-results are indicative only, not the WP7 decision rider: the required
-before/after run on an approved marked-synthetic ~100-unit fixture remains a
-pre-merge provider gate, especially given the Load Plan margin. The combined
-load-plan browser lock also requires the development Convex
-deployment to contain `planOps.loadPlanSnapshot`; the current deployment
-correctly fails with “Could not find public function” until that authorized
-deployment occurs.
+The authorized marked-synthetic fixture contained 50 boxes and 50 loose items
+and was removed after the runs. Load Plan used true document FP/FCP/LCP. The
+global Movable Units URL resets to the account's default move on a document
+load, so fixture-specific document LCP there would be false evidence; its
+controlled comparison measures selecting the same 100-unit move through the
+global move switcher until the desktop table is visible. Main rendered both
+the hidden mobile card tree and desktop table; WP7 rendered only the resolved
+desktop tree.
+
+The authorized development deployment now contains
+`planOps.loadPlanSnapshot`, `items.searchForMove`, and
+`items.search_normalized_name`. An authenticated hosted-gateway smoke proved
+token search, all optional filters, blank-query newest-first fallback, and the
+unchanged eight-key `search_inventory` projection. The canonical
+`smoke:agent-journey` also completed all six steps and archived its move after
+a red-first fix added the supported `DELETE /api/v1/moves/:moveId` soft-archive
+path. Final combined verification: `verify:launch` passed 1,014 unit tests,
+the production build, and 39 browser tests with 19 intentional Layout Studio
+skips; `doctor:all` exited zero with only already-tracked provider gates.
 
 ## Conventions that apply to every WP
 
