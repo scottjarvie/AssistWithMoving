@@ -34,6 +34,10 @@ import {
   redactItemForVisibility,
 } from "./lib/loadPlanSnapshot";
 import {
+  inventorySearchLimit,
+  searchInventoryRecords,
+} from "./lib/inventorySearch";
+import {
   dimensionsValidator,
   estimateConfidenceValidator,
   formatItemCode,
@@ -716,6 +720,29 @@ export const facetedListForMove = query({
     );
 
     return { items, facets };
+  },
+});
+
+export const searchForMove = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+    const items = await searchInventoryRecords(ctx, {
+      moveId: args.moveId,
+      query: args.query,
+      limit: inventorySearchLimit(args.limit, 50),
+    });
+    return items.map((item) => toInventoryListRow(item, policy.visibility));
   },
 });
 

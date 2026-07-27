@@ -2002,7 +2002,18 @@ export default defineSchema({
     .index("by_move_updated", ["moveId", "updatedAt"])
     .index("by_move_external_key", ["moveId", "externalSource", "externalId"])
     .index("by_move_code", ["moveId", "code"])
-    .index("by_household", ["householdId"]),
+    .index("by_household", ["householdId"])
+    .searchIndex("search_normalized_name", {
+      searchField: "normalizedName",
+      filterFields: [
+        "moveId",
+        "room",
+        "category",
+        "disposition",
+        "needsReview",
+        "deletedAt",
+      ],
+    }),
 
   saleListings: defineTable({
     householdId: v.id("households"),

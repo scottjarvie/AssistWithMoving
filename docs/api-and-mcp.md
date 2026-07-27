@@ -1788,19 +1788,23 @@ confuse them** (crossing them is the recurring "Invalid API key format" 401):
 > sign-in completes but every tool call 401s ("Invalid API key format"). Use
 > `/mcp` for OAuth. See `src/lib/mcp-oauth.ts` for the full rationale.
 
-The tool implementations are available over transports that share one tool
-registry (`mcp-server/movingmanifest-mcp.mjs`), so they cannot drift:
+The two doors use separate tool registries:
 
-- **Remote (Streamable HTTP)** at `https://movingmanifest.com/api/mcp` (API key)
-  or `https://movingmanifest.com/mcp` (OAuth) — for hosted, desktop, CLI, and
-  headless clients. Served by `src/app/api/mcp/route.ts` and
-  `src/app/mcp/route.ts`; `/mcp/connect` remains an OAuth alias.
+- **OAuth remote MCP** at `https://movingmanifest.com/mcp` proxies the Convex MCP
+  gateway registered by `convex/mcp.ts` and implemented by
+  `convex/mcpTools*.ts`; `/mcp/connect` remains an OAuth alias.
+- **API-key remote MCP** at `https://movingmanifest.com/api/mcp` and the local
+  stdio server share the REST-backed registry in
+  `mcp-server/movingmanifest-mcp.mjs`.
 - **Maintainer-only local stdio** via
   `mcp-server/movingmanifest-mcp.mjs`, run with Node from a clone of this repo
   for development and transport debugging. It is not the public installation
   path and the package is not published to npm.
 
-Both wrap the REST API. Neither connects directly to Convex or Clerk.
+The OAuth registry calls Convex functions directly and resolves Clerk-backed
+identity through the gateway. The API-key and stdio registries wrap the REST
+API. When changing a tool, inspect both implementations and preserve their
+documented contracts deliberately.
 
 Agents should usually call `get_api_capabilities` first. It returns a
 code-backed capability matrix with supported workflows, required scopes,

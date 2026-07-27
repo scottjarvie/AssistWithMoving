@@ -38,6 +38,10 @@ import {
   requireHouseholdForSubject,
   requireMoveForSubject,
 } from "./lib/mcpIdentity";
+import {
+  searchInventoryRecords,
+  toMcpInventorySearchResult,
+} from "./lib/inventorySearch";
 import { generateItemCodes } from "./items";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import { insertTransportResourceFromPreset } from "./transportResources";
@@ -119,35 +123,16 @@ export const searchInventory = query({
       args.moveId,
       "inventory:read",
     );
-    const needle = args.query ? normalizedSearchName(args.query) : null;
-    const all = await ctx.db
-      .query("items")
-      .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
-      .order("desc")
-      .take(1000);
-    const matches = all.filter((item) => {
-      if (item.deletedAt !== undefined) return false;
-      if (needle && !item.normalizedName.includes(needle)) return false;
-      if (args.room && item.room !== args.room) return false;
-      if (args.category && item.category !== args.category) return false;
-      if (args.disposition && item.disposition !== args.disposition) {
-        return false;
-      }
-      if (args.needsReview !== undefined && item.needsReview !== args.needsReview) {
-        return false;
-      }
-      return true;
+    const matches = await searchInventoryRecords(ctx, {
+      moveId: args.moveId,
+      query: args.query,
+      room: args.room,
+      category: args.category,
+      disposition: args.disposition,
+      needsReview: args.needsReview,
+      limit: READ_LIMIT,
     });
-    return matches.slice(0, READ_LIMIT).map((item) => ({
-      itemId: item._id,
-      name: item.name,
-      room: item.room ?? null,
-      category: item.category ?? null,
-      quantity: item.quantity,
-      disposition: item.disposition,
-      status: item.status,
-      needsReview: item.needsReview,
-    }));
+    return matches.map(toMcpInventorySearchResult);
   },
 });
 
