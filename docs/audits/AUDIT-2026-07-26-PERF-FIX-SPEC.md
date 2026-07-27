@@ -63,8 +63,9 @@ provider deployment:
 | Movable-units responsive trees | 1 mounted tree after media resolution; one SSR status skeleton before resolution | Pass in component and SSR locks |
 | Schema indexes unreferenced by `withIndex()` | 0 of 152 | Pass; down from 47 of 199 |
 
-The authenticated desktop measurement on the existing 22-unit development
-move recorded first paint, first contentful paint, and LCP at 32 ms. This is
+The authenticated desktop five-run measurement on the existing 24-unit
+development move recorded median first paint, first contentful paint, and LCP
+at 32 ms on both `origin/main` and WP7: no observed regression. This is
 indicative only, not the WP7 decision rider: the required before/after run on
 an approved marked-synthetic ~100-unit fixture remains a pre-merge provider
 gate. The load-plan browser lock also requires the development Convex
