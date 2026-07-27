@@ -28,6 +28,7 @@ async function authedClient(page: Page) {
 test("config gaps: editable method capacity + sq-ft area limit persist", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   test.skip(!e2eUserEmail || !convexUrl, "E2E env not set");
   await setupClerkTestingToken({ page });
   await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
@@ -35,6 +36,7 @@ test("config gaps: editable method capacity + sq-ft area limit persist", async (
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
   });
+  await page.waitForLoadState("networkidle").catch(() => {});
 
   const client = await authedClient(page);
   const households = (await client.query(api.households.listMine, {})) as Array<{

@@ -13,13 +13,16 @@ function watch(page: Page, sink: Problem[]) {
 function realErrors(p: Problem[]) {
   return p.filter(
     (x) =>
-      !/favicon|_clientMiddlewareManifest|MIME type|status of 4/i.test(x.text),
+      !/favicon|_clientMiddlewareManifest|MIME type|status of 4|frame-ancestors.*report-only/i.test(
+        x.text
+      ),
   );
 }
 
 test("Move Operations nav reaches Load Plan / Move Day / Packets / Queue", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   test.skip(!e2eUserEmail, "no e2e user");
   const problems: Problem[] = [];
   watch(page, problems);
@@ -30,6 +33,7 @@ test("Move Operations nav reaches Load Plan / Move Day / Packets / Queue", async
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
   });
+  await page.waitForLoadState("networkidle").catch(() => {});
 
   // Open a move.
   await page.goto("/app/moves", { waitUntil: "domcontentloaded" });

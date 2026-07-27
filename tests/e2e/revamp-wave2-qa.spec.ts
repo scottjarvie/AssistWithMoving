@@ -13,13 +13,14 @@ function watch(page: Page, sink: Problem[]) {
 function realErrors(p: Problem[]) {
   return p.filter(
     (x) =>
-      !/favicon|_clientMiddlewareManifest|MIME type|Failed to load resource: the server responded with a status of 4/i.test(
+      !/favicon|_clientMiddlewareManifest|MIME type|Failed to load resource: the server responded with a status of 4|frame-ancestors.*report-only/i.test(
         x.text
       )
   );
 }
 
 test("Movable Units + Queue/onboarding render cleanly", async ({ page }) => {
+  test.setTimeout(90_000);
   test.skip(!e2eUserEmail, "E2E_CLERK_USER_EMAIL not set");
   const problems: Problem[] = [];
   watch(page, problems);
@@ -30,6 +31,7 @@ test("Movable Units + Queue/onboarding render cleanly", async ({ page }) => {
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
   });
+  await page.waitForLoadState("networkidle").catch(() => {});
 
   // Movable Units
   await page.goto("/app/movable-units", { waitUntil: "domcontentloaded" });

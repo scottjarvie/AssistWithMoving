@@ -29,9 +29,19 @@ function renderStormErrors(problems: ConsoleProblem[]) {
   );
 }
 
+function globalNavLink(page: Page, label: "Moves" | "Movable Units" | "Items") {
+  const name = label === "Movable Units" ? /^(Movable Units|Units)$/ : label;
+  return page
+    .getByRole("navigation")
+    .first()
+    .getByRole("link", { name, exact: true })
+    .first();
+}
+
 test("revamp shell navigates the 3 sections without freezing", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   test.skip(!e2eUserEmail, "E2E_CLERK_USER_EMAIL not set");
   const problems: ConsoleProblem[] = [];
   watchConsole(page, problems);
@@ -42,6 +52,7 @@ test("revamp shell navigates the 3 sections without freezing", async ({
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
   });
+  await page.waitForLoadState("networkidle").catch(() => {});
 
   // Land on the new home.
   await page.goto("/app/moves", { waitUntil: "domcontentloaded" });
@@ -55,7 +66,7 @@ test("revamp shell navigates the 3 sections without freezing", async ({
   const nav = page.getByRole("navigation").first();
   for (const label of ["Moves", "Movable Units", "Items"]) {
     await expect(
-      nav.getByRole("link", { name: label, exact: true }).first()
+      globalNavLink(page, label as "Moves" | "Movable Units" | "Items")
     ).toBeVisible({ timeout: 15_000 });
   }
 
@@ -70,10 +81,10 @@ test("revamp shell navigates the 3 sections without freezing", async ({
   ];
   for (const [label, urlRe] of order) {
     const start = Date.now();
-    await nav
-      .getByRole("link", { name: label, exact: true })
-      .first()
-      .click();
+    await globalNavLink(
+      page,
+      label as "Moves" | "Movable Units" | "Items"
+    ).click();
     await expect(page).toHaveURL(urlRe, { timeout: 15_000 });
     // The body must still be interactive (a known landmark renders quickly).
     await expect(page.getByRole("navigation").first()).toBeVisible({

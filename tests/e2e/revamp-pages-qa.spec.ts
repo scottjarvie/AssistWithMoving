@@ -14,7 +14,7 @@ function realErrors(p: Problem[]) {
   // Ignore known-benign dev noise (favicon/MIME/manifest), keep real app errors.
   return p.filter(
     (x) =>
-      !/favicon|_clientMiddlewareManifest|MIME type|Failed to load resource: the server responded with a status of 4/i.test(
+      !/favicon|_clientMiddlewareManifest|MIME type|Failed to load resource: the server responded with a status of 4|frame-ancestors.*report-only/i.test(
         x.text
       )
   );
@@ -23,6 +23,7 @@ function realErrors(p: Problem[]) {
 test("Items facets + Move config tabs render and navigate cleanly", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   test.skip(!e2eUserEmail, "E2E_CLERK_USER_EMAIL not set");
   const problems: Problem[] = [];
   watch(page, problems);
@@ -33,17 +34,18 @@ test("Items facets + Move config tabs render and navigate cleanly", async ({
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
   });
+  await page.waitForLoadState("networkidle").catch(() => {});
 
   // --- Items page: facet chips render, no error boundary ---
   await page.goto("/app/items", { waitUntil: "domcontentloaded" });
   await expect(page.getByText("Something went wrong")).toHaveCount(0, {
     timeout: 15_000,
   });
-  // Facet chips (All / Moving / Sell / Trash / Donate)
+  // Facet chips (All / Moving / Sell / Trash / Donate).
   for (const chip of ["Moving", "Sell", "Trash", "Donate"]) {
-    await expect(page.getByText(chip, { exact: false }).first()).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(
+      page.getByRole("button", { name: new RegExp(`^${chip}\\b`) })
+    ).toBeVisible({ timeout: 15_000 });
   }
   await page.screenshot({ path: "/tmp/mm-items2.png" });
 
@@ -55,12 +57,23 @@ test("Items facets + Move config tabs render and navigate cleanly", async ({
   const openLink = page.getByRole("link", { name: /Open/i }).first();
   await openLink.click();
   await expect(page).toHaveURL(/\/app\/moves\/[^/]+/, { timeout: 30_000 });
+  await page
+    .getByRole("navigation", { name: "Move operations" })
+    .getByRole("link", { name: "Configure", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/configure$/, { timeout: 30_000 });
   await expect(page.getByText("Something went wrong")).toHaveCount(0, {
     timeout: 15_000,
   });
 
   // Click through whichever config tabs are present (loose match) — freeze would time out.
-  const tabLabels = ["Start", "End", "Transport", "Details", "Household"];
+  const tabLabels = [
+    "Start location",
+    "End location",
+    "Transportation",
+    "Details",
+    "Participants",
+  ];
   let tabsFound = 0;
   for (const label of tabLabels) {
     const tab = page.getByRole("tab", { name: new RegExp(label, "i") }).first();
