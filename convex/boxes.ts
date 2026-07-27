@@ -20,7 +20,6 @@ import {
   runBatchAssign,
   type BatchAssignTarget,
 } from "./lib/batchAssign";
-import { buildBoxContentsIndex } from "./lib/boxContents";
 import { resolveBoxWeight } from "./lib/boxWeight";
 import {
   estimateItem,
@@ -28,6 +27,7 @@ import {
   sumEstimateValues,
   volumeCuFtForUpdate,
 } from "./lib/estimateEngine";
+import { composeBoxRows } from "./lib/loadPlanSnapshot";
 import {
   archiveActiveSaleListingsForItem,
   cascadeDeleteBox,
@@ -476,31 +476,7 @@ export const listForMove = query({
         .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
         .collect(),
     ]);
-    const contentsByBox = buildBoxContentsIndex(boxItems, items);
-
-    return boxes
-      .filter((box) => args.includeArchived || !box.archivedAt)
-      .map((box) => {
-        const contents = contentsByBox.get(box._id) ?? [];
-        const itemCount = contents.reduce(
-          (sum, entry) => sum + entry.membership.quantity,
-          0,
-        );
-        const contentsEstimatedWeightLb = contentsEstimatedWeight(contents);
-        const weightSummary = resolveBoxWeight({
-          actualWeightLb: box.actualWeightLb,
-          estimatedWeightLb: box.estimatedWeightLb,
-          contentsEstimatedWeightLb,
-        });
-
-        return {
-          box,
-          contents,
-          itemCount,
-          contentsEstimatedWeightLb,
-          weightSummary,
-        };
-      });
+    return composeBoxRows({ boxes, boxItems, items }, args.includeArchived);
   },
 });
 

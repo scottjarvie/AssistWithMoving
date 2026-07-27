@@ -21,6 +21,7 @@ import {
   getTransportResourcePreset,
   type TransportResourcePresetKey,
 } from "./lib/transportPresets";
+import { composeResourcesWithZones } from "./lib/loadPlanSnapshot";
 
 // "Calculate the cubic feet available for a transport": if cargo dimensions are
 // known but the max volume wasn't entered, derive it from L×W×H (the same rule
@@ -189,28 +190,18 @@ export const listForMoveWithZones = query({
       "inventory:read",
     );
 
-    const resources = await ctx.db
-      .query("transportResources")
-      .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
-      .collect();
+    const [resources, zones] = await Promise.all([
+      ctx.db
+        .query("transportResources")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+      ctx.db
+        .query("transportZones")
+        .withIndex("by_move_sort", (q) => q.eq("moveId", args.moveId))
+        .collect(),
+    ]);
 
-    return await Promise.all(
-      resources
-        .filter((resource) => !resource.archivedAt)
-        .map(async (resource) => {
-          const zones = await ctx.db
-            .query("transportZones")
-            .withIndex("by_resource_sort", (q) =>
-              q.eq("resourceId", resource._id),
-            )
-            .collect();
-
-          return {
-            resource,
-            zones: zones.filter((zone) => !zone.archivedAt),
-          };
-        }),
-    );
+    return composeResourcesWithZones({ resources, zones });
   },
 });
 

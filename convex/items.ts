@@ -29,6 +29,10 @@ import {
   cascadeDeleteItem,
 } from "./lib/hardDelete";
 import {
+  composeItemsWithSignals,
+  redactItemForVisibility,
+} from "./lib/loadPlanSnapshot";
+import {
   dimensionsValidator,
   estimateConfidenceValidator,
   formatItemCode,
@@ -162,17 +166,6 @@ type ItemListFilterArgs = {
   needsReview?: boolean;
   highValue?: boolean;
   includeDeleted?: boolean;
-};
-
-type MutableItemSignals = {
-  photoCount: number;
-  evidencePhotoCount: number;
-  boxCount: number;
-  assignedBoxCount: number;
-  assignmentCount: number;
-  boxCodes: string[];
-  assignedResourceNames: string[];
-  assignedZoneNames: string[];
 };
 
 function normalizeStringList(values: string[] | undefined) {
@@ -313,29 +306,6 @@ export function inferredMeasurementProvenanceForUser({
   return changed ? next : undefined;
 }
 
-function redactItemForVisibility(
-  item: Doc<"items">,
-  visibility: Awaited<ReturnType<typeof requireMovePermission>>["visibility"],
-) {
-  return {
-    ...item,
-    valueCents: visibility.estimatedValue ? item.valueCents : undefined,
-    replacementValueCents: visibility.estimatedValue
-      ? item.replacementValueCents
-      : undefined,
-    serialNumber: visibility.serialNumber ? item.serialNumber : undefined,
-    modelNumber: visibility.serialNumber ? item.modelNumber : undefined,
-    privateNotes: visibility.privateNotes ? item.privateNotes : undefined,
-    // AI/research prose frequently restates market value, purchase price, and
-    // researched serials — gate it like values so a walled-off mover/helper
-    // can't read what the value/serial redaction above is hiding.
-    aiSummary: visibility.research ? item.aiSummary : undefined,
-    researchSummary: visibility.research ? item.researchSummary : undefined,
-    researchSources: visibility.research ? item.researchSources : undefined,
-    researchNotes: visibility.research ? item.researchNotes : undefined,
-  };
-}
-
 function filterItemRecords(items: Doc<"items">[], args: ItemListFilterArgs) {
   return items
     .filter((item) => args.includeDeleted || !item.deletedAt)
@@ -355,49 +325,6 @@ function filterItemRecords(items: Doc<"items">[], args: ItemListFilterArgs) {
         ? item.highValue === args.highValue
         : true,
     );
-}
-
-function defaultItemSignals(): MutableItemSignals {
-  return {
-    photoCount: 0,
-    evidencePhotoCount: 0,
-    boxCount: 0,
-    assignedBoxCount: 0,
-    assignmentCount: 0,
-    boxCodes: [],
-    assignedResourceNames: [],
-    assignedZoneNames: [],
-  };
-}
-
-function signalsForItem(
-  signalsByItemId: Map<string, MutableItemSignals>,
-  itemId: Id<"items">,
-) {
-  const key = String(itemId);
-  const existing = signalsByItemId.get(key);
-  if (existing) return existing;
-  const next = defaultItemSignals();
-  signalsByItemId.set(key, next);
-  return next;
-}
-
-function pushUnique(values: string[], value: string | undefined, limit = 4) {
-  if (!value || values.includes(value) || values.length >= limit) return;
-  values.push(value);
-}
-
-function isEvidencePhoto(photo: Doc<"itemPhotos">) {
-  return (
-    photo.claimId ||
-    photo.privacyLevel === "claimOnly" ||
-    ["condition", "damage", "serialNumber", "receipt"].includes(
-      photo.photoType,
-    ) ||
-    photo.documentationProfileTypes.some((type) =>
-      ["insuranceClaim", "pcsMove", "movingCompany"].includes(type),
-    )
-  );
 }
 
 // Is this owner/contact a live person on this move? Returns false for a missing,
@@ -618,136 +545,9 @@ export const listForMove = query({
   },
 });
 
-// Shared signal-building used by listForMoveWithSignals and facetedListForMove.
-// Takes the already-fetched move data plus the caller's chosen visibleItems
-// (after whatever filters the caller wants applied) and returns the redacted +
-// signal-decorated rows. Extracted so both queries are guaranteed identical.
-function buildItemsWithSignals({
-  householdId,
-  visibleItems,
-  boxItems,
-  boxes,
-  photos,
-  resources,
-  zones,
-  people,
-  visibility,
-}: {
-  householdId: Id<"households">;
-  visibleItems: Doc<"items">[];
-  boxItems: Doc<"boxItems">[];
-  boxes: Doc<"boxes">[];
-  photos: Doc<"itemPhotos">[];
-  resources: Doc<"transportResources">[];
-  zones: Doc<"transportZones">[];
-  people: Doc<"movePeople">[];
-  visibility: Awaited<ReturnType<typeof requireMovePermission>>["visibility"];
-}) {
-  const visibleItemIds = new Set(visibleItems.map((item) => String(item._id)));
-  const boxById = new Map(
-    boxes
-      .filter((box) => box.householdId === householdId && !box.archivedAt)
-      .map((box) => [String(box._id), box]),
-  );
-  const resourceById = new Map(
-    resources
-      .filter(
-        (resource) =>
-          resource.householdId === householdId && !resource.archivedAt,
-      )
-      .map((resource) => [String(resource._id), resource]),
-  );
-  const zoneById = new Map(
-    zones
-      .filter((zone) => zone.householdId === householdId && !zone.archivedAt)
-      .map((zone) => [String(zone._id), zone]),
-  );
-  const ownerContactById = new Map(
-    people
-      .filter(
-        (person) => person.householdId === householdId && !person.archivedAt,
-      )
-      .map((person) => [
-        String(person._id),
-        {
-          _id: person._id,
-          name: person.name,
-          role: person.role,
-        },
-      ]),
-  );
-  const signalsByItemId = new Map<string, MutableItemSignals>();
-
-  for (const photo of photos) {
-    if (
-      photo.householdId !== householdId ||
-      photo.archivedAt ||
-      !photo.itemId ||
-      !visibleItemIds.has(String(photo.itemId))
-    ) {
-      continue;
-    }
-    const signals = signalsForItem(signalsByItemId, photo.itemId);
-    signals.photoCount += 1;
-    if (isEvidencePhoto(photo)) {
-      signals.evidencePhotoCount += 1;
-    }
-  }
-
-  for (const membership of boxItems) {
-    if (
-      membership.householdId !== householdId ||
-      !visibleItemIds.has(String(membership.itemId))
-    ) {
-      continue;
-    }
-    const box = boxById.get(String(membership.boxId));
-    if (!box) continue;
-    const signals = signalsForItem(signalsByItemId, membership.itemId);
-    signals.boxCount += 1;
-    pushUnique(signals.boxCodes, box.code);
-
-    if (box.assignedResourceId || box.assignedZoneId) {
-      signals.assignedBoxCount += 1;
-      signals.assignmentCount += 1;
-      const resource = box.assignedResourceId
-        ? resourceById.get(String(box.assignedResourceId))
-        : null;
-      const zone = box.assignedZoneId
-        ? zoneById.get(String(box.assignedZoneId))
-        : null;
-      pushUnique(signals.assignedResourceNames, resource?.name);
-      pushUnique(signals.assignedZoneNames, zone?.name);
-    }
-  }
-
-  for (const item of visibleItems) {
-    if (!item.assignedResourceId && !item.assignedZoneId) {
-      continue;
-    }
-    const signals = signalsForItem(signalsByItemId, item._id);
-    signals.assignmentCount += 1;
-    const resource = item.assignedResourceId
-      ? resourceById.get(String(item.assignedResourceId))
-      : null;
-    const zone = item.assignedZoneId
-      ? zoneById.get(String(item.assignedZoneId))
-      : null;
-    pushUnique(signals.assignedResourceNames, resource?.name);
-    pushUnique(signals.assignedZoneNames, zone?.name);
-  }
-
-  return visibleItems.map((item) => ({
-    ...redactItemForVisibility(item, visibility),
-    signals: signalsByItemId.get(String(item._id)) ?? defaultItemSignals(),
-    ownerContact: item.ownerPersonId
-      ? ownerContactById.get(String(item.ownerPersonId))
-      : undefined,
-  }));
-}
-
-async function fetchMoveSignalData(
+export async function fetchMoveSignalData(
   ctx: Parameters<typeof requireMovePermission>[0],
+  householdId: Id<"households">,
   moveId: Id<"moves">,
 ) {
   const [items, boxItems, boxes, photos, resources, zones, people] =
@@ -782,7 +582,16 @@ async function fetchMoveSignalData(
         .withIndex("by_move_sort", (q) => q.eq("moveId", moveId))
         .collect(),
     ]);
-  return { items, boxItems, boxes, photos, resources, zones, people };
+  return {
+    householdId,
+    items,
+    boxItems,
+    boxes,
+    photos,
+    resources,
+    zones,
+    people,
+  };
 }
 
 // Disposition facet grouping for the inventory chip counts.
@@ -803,20 +612,17 @@ export const listForMoveWithSignals = query({
       "inventory:read",
     );
 
-    const data = await fetchMoveSignalData(ctx, args.moveId);
+    const data = await fetchMoveSignalData(
+      ctx,
+      args.householdId,
+      args.moveId,
+    );
     const visibleItems = filterItemRecords(data.items, args);
 
-    return buildItemsWithSignals({
-      householdId: args.householdId,
-      visibleItems,
-      boxItems: data.boxItems,
-      boxes: data.boxes,
-      photos: data.photos,
-      resources: data.resources,
-      zones: data.zones,
-      people: data.people,
-      visibility: policy.visibility,
-    });
+    return composeItemsWithSignals(
+      { ...data, items: visibleItems },
+      policy.visibility,
+    );
   },
 });
 
@@ -835,7 +641,11 @@ export const facetedListForMove = query({
       "inventory:read",
     );
 
-    const data = await fetchMoveSignalData(ctx, args.moveId);
+    const data = await fetchMoveSignalData(
+      ctx,
+      args.householdId,
+      args.moveId,
+    );
 
     // Facet base: all filters EXCEPT disposition (so chip counts are stable).
     const facetBase = filterItemRecords(data.items, {
@@ -864,17 +674,10 @@ export const facetedListForMove = query({
     }
 
     const visibleItems = filterItemRecords(data.items, args);
-    const items = buildItemsWithSignals({
-      householdId: args.householdId,
-      visibleItems,
-      boxItems: data.boxItems,
-      boxes: data.boxes,
-      photos: data.photos,
-      resources: data.resources,
-      zones: data.zones,
-      people: data.people,
-      visibility: policy.visibility,
-    });
+    const items = composeItemsWithSignals(
+      { ...data, items: visibleItems },
+      policy.visibility,
+    );
 
     return { items, facets };
   },

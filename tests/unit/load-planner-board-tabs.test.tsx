@@ -14,20 +14,14 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 const apiMock = vi.hoisted(() => ({
   boxes: {
     create: "boxes.create",
-    listForMove: "boxes.listForMove",
     update: "boxes.update",
-  },
-  estimates: {
-    reportForMove: "estimates.reportForMove",
   },
   items: {
     create: "items.create",
-    listForMove: "items.listForMove",
-    listForMoveWithSignals: "items.listForMoveWithSignals",
     update: "items.update",
   },
-  transportResources: {
-    listForMoveWithZones: "transportResources.listForMoveWithZones",
+  planOps: {
+    loadPlanSnapshot: "planOps.loadPlanSnapshot",
   },
 }));
 
@@ -178,6 +172,14 @@ const loadPlannerData = vi.hoisted(() => ({
       },
     ],
   },
+  get snapshot() {
+    return {
+      boxes: this.boxes,
+      items: this.items,
+      resourcesWithZones: this.resources,
+      report: this.report,
+    };
+  },
 }));
 
 vi.mock("../../convex/_generated/api", () => ({
@@ -201,15 +203,8 @@ vi.mock("convex/react", () => ({
   },
   useQuery: (query: string) => {
     switch (query) {
-      case apiMock.boxes.listForMove:
-        return loadPlannerData.boxes;
-      case apiMock.items.listForMove:
-      case apiMock.items.listForMoveWithSignals:
-        return loadPlannerData.items;
-      case apiMock.transportResources.listForMoveWithZones:
-        return loadPlannerData.resources;
-      case apiMock.estimates.reportForMove:
-        return loadPlannerData.report;
+      case apiMock.planOps.loadPlanSnapshot:
+        return loadPlannerData.snapshot;
       default:
         return undefined;
     }

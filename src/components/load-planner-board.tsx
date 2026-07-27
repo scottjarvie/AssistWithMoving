@@ -60,17 +60,12 @@ import {
 import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/lib/use-media-query";
 
-type BoxRecord = NonNullable<
-  ReturnType<typeof useQuery<typeof api.boxes.listForMove>>
->[number];
-type ResourcesWithZones = NonNullable<
-  ReturnType<
-    typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-  >
+type LoadPlanSnapshot = NonNullable<
+  ReturnType<typeof useQuery<typeof api.planOps.loadPlanSnapshot>>
 >;
-type EstimateReport = NonNullable<
-  ReturnType<typeof useQuery<typeof api.estimates.reportForMove>>
->;
+type BoxRecord = LoadPlanSnapshot["boxes"][number];
+type ResourcesWithZones = LoadPlanSnapshot["resourcesWithZones"];
+type EstimateReport = LoadPlanSnapshot["report"];
 type BoxReport = EstimateReport["boxReports"][number];
 type PlannerFilter =
   | "all"
@@ -179,22 +174,14 @@ export function LoadPlannerBoard({
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
 }) {
-  const boxes = useQuery(
-    api.boxes.listForMove,
+  const snapshot = useQuery(
+    api.planOps.loadPlanSnapshot,
     householdId && moveId ? { householdId, moveId } : "skip",
   );
-  const items = useQuery(
-    api.items.listForMoveWithSignals,
-    householdId && moveId ? { householdId, moveId } : "skip",
-  );
-  const resourcesWithZones = useQuery(
-    api.transportResources.listForMoveWithZones,
-    householdId && moveId ? { householdId, moveId } : "skip",
-  );
-  const report = useQuery(
-    api.estimates.reportForMove,
-    householdId && moveId ? { householdId, moveId } : "skip",
-  );
+  const boxes = snapshot?.boxes;
+  const items = snapshot?.items;
+  const resourcesWithZones = snapshot?.resourcesWithZones;
+  const report = snapshot?.report;
   const updateBox = useMutation(api.boxes.update);
   const updateItem = useMutation(api.items.update);
 
@@ -983,11 +970,7 @@ function BulkAssignmentPanel({
   assigning: boolean;
   includeLockedInBulk: boolean;
   overrideReason: string;
-  resourcesWithZones: NonNullable<
-    ReturnType<
-      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-    >
-  >;
+  resourcesWithZones: ResourcesWithZones;
   selectedBoxIds: Id<"boxes">[];
   selectedBulkSplit: ReturnType<typeof splitBulkAssignmentSelection>;
   selectedTargetZones: Doc<"transportZones">[];
@@ -1163,11 +1146,7 @@ function MovableUnitsPanel({
   loading: boolean;
   moveId: Id<"moves"> | null;
   savingMeasurementUnitIds: string[];
-  resourcesWithZones: NonNullable<
-    ReturnType<
-      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-    >
-  >;
+  resourcesWithZones: ResourcesWithZones;
   savingUnitIds: string[];
   search: string;
   summary: ReturnType<typeof summarizeMovableUnits>;
@@ -1624,11 +1603,7 @@ function MovableUnitMobileList({
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
-  resourcesWithZones: NonNullable<
-    ReturnType<
-      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-    >
-  >;
+  resourcesWithZones: ResourcesWithZones;
   savingMeasurementUnitIds: string[];
   savingUnitIds: string[];
   units: readonly MovableUnit[];
@@ -1674,11 +1649,7 @@ function MovableUnitMobileCard({
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
-  resourcesWithZones: NonNullable<
-    ReturnType<
-      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-    >
-  >;
+  resourcesWithZones: ResourcesWithZones;
   savingAssignment: boolean;
   savingMeasurements: boolean;
   unit: MovableUnit;
@@ -1844,11 +1815,7 @@ function MovableUnitBulkAssignmentPanel({
   matchingCount: number;
   overrideReason: string;
   pageSelected: boolean;
-  resourcesWithZones: NonNullable<
-    ReturnType<
-      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-    >
-  >;
+  resourcesWithZones: ResourcesWithZones;
   selectedCount: number;
   selectedLockedCount: number;
   selectedTargetZones: Doc<"transportZones">[];
@@ -3709,11 +3676,7 @@ function MovableUnitRow({
   moveId: Id<"moves"> | null;
   selected: boolean;
   unit: MovableUnit;
-  resourcesWithZones: NonNullable<
-    ReturnType<
-      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-    >
-  >;
+  resourcesWithZones: ResourcesWithZones;
   saving: boolean;
   savingMeasurements: boolean;
   onAssignUnit: (input: {
@@ -4030,11 +3993,7 @@ function MovableUnitAssignmentControls({
 }: {
   ariaPrefix?: string;
   unit: MovableUnit;
-  resourcesWithZones: NonNullable<
-    ReturnType<
-      typeof useQuery<typeof api.transportResources.listForMoveWithZones>
-    >
-  >;
+  resourcesWithZones: ResourcesWithZones;
   saving: boolean;
   onAssignUnit: (input: {
     unit: MovableUnit;

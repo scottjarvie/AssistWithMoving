@@ -13,7 +13,9 @@ import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
+import { composeLoadPlanSnapshot } from "./lib/loadPlanSnapshot";
 import { planOpValidator } from "./lib/planValidators";
+import { fetchMoveSignalData } from "./items";
 
 type ApplyContext = {
   householdId: Id<"households">;
@@ -31,6 +33,27 @@ type ApplyContext = {
     placementIds: Id<"planPlacements">[];
   };
 };
+
+export const loadPlanSnapshot = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+  },
+  handler: async (ctx, args) => {
+    const policy = await requireMovePermission(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "inventory:read",
+    );
+    const [move, data] = await Promise.all([
+      ctx.db.get(args.moveId),
+      fetchMoveSignalData(ctx, args.householdId, args.moveId),
+    ]);
+
+    return composeLoadPlanSnapshot({ ...data, move }, policy.visibility);
+  },
+});
 
 export const applyOps = mutation({
   args: {
