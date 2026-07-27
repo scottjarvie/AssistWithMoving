@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
-import type { Doc, Id } from "./_generated/dataModel";
-import { query, type QueryCtx } from "./_generated/server";
+import { query } from "./_generated/server";
+import { buildBoxContentsIndex } from "./lib/boxContents";
 import { resolveBoxWeight } from "./lib/boxWeight";
 import {
   boxVolumeCuFt,
@@ -67,25 +67,6 @@ function bucketFor(map: Map<string, BucketTotals>, key: string, label = key) {
   return bucket;
 }
 
-async function boxContents(ctx: QueryCtx, boxId: Id<"boxes">) {
-  const memberships = await ctx.db
-    .query("boxItems")
-    .withIndex("by_box", (q) => q.eq("boxId", boxId))
-    .collect();
-
-  const entries = await Promise.all(
-    memberships.map(async (membership) => {
-      const item = await ctx.db.get(membership.itemId);
-      return item && !item.deletedAt ? { membership, item } : null;
-    }),
-  );
-
-  return entries.filter(
-    (entry): entry is { membership: Doc<"boxItems">; item: Doc<"items"> } =>
-      Boolean(entry),
-  );
-}
-
 export const reportForMove = query({
   args: {
     householdId: v.id("households"),
@@ -125,6 +106,7 @@ export const reportForMove = query({
 
     const activeItems = items.filter((item) => !item.deletedAt);
     const activeBoxes = boxes.filter((box) => !box.archivedAt);
+    const contentsByBox = buildBoxContentsIndex(boxItems, items);
     const activeBoxIds = new Set(activeBoxes.map((box) => String(box._id)));
     const boxedItemIds = new Set(
       boxItems
@@ -177,66 +159,64 @@ export const reportForMove = query({
         };
       });
 
-    const boxReports = await Promise.all(
-      activeBoxes.map(async (box) => {
-        const contents = await boxContents(ctx, box._id);
-        const contentEstimates = contents.map(({ item, membership }) =>
-          estimateItem({
-            ...item,
-            quantity: membership.quantity,
-          }),
-        );
-        const contentsWeight = sumEstimateValues(
-          contentEstimates.map((estimate) => estimate.weight),
-        );
-        const contentsVolume = sumEstimateValues(
-          contentEstimates.map((estimate) => estimate.volume),
-        );
-        const weightSummary = resolveBoxWeight({
-          actualWeightLb: box.actualWeightLb,
-          estimatedWeightLb: box.estimatedWeightLb,
-          contentsEstimatedWeightLb: contentsWeight,
-        });
-        const estimatedWeightLb = weightSummary.valueLb ?? 0;
-        // Honor the box's own dimensions (boxVolumeCuFt derives L x W x H / 1728
-        // when no stored volume) before falling back to its contents, and never
-        // crash on a null — a dims-only box now counts toward the rollup.
-        const estimatedVolumeCuFt = boxVolumeCuFt(box) ?? contentsVolume;
-        const warnings: string[] = [];
-        if (weightSummary.source === "missing") {
-          warnings.push("missingBoxWeightEstimate");
-        }
-        if (boxVolumeCuFt(box) === undefined && contentsVolume === 0) {
-          warnings.push("missingBoxVolumeEstimate");
-        }
-        if (estimatedWeightLb > 65) {
-          warnings.push("overweightBox");
-        }
+    const boxReports = activeBoxes.map((box) => {
+      const contents = contentsByBox.get(box._id) ?? [];
+      const contentEstimates = contents.map(({ item, membership }) =>
+        estimateItem({
+          ...item,
+          quantity: membership.quantity,
+        }),
+      );
+      const contentsWeight = sumEstimateValues(
+        contentEstimates.map((estimate) => estimate.weight),
+      );
+      const contentsVolume = sumEstimateValues(
+        contentEstimates.map((estimate) => estimate.volume),
+      );
+      const weightSummary = resolveBoxWeight({
+        actualWeightLb: box.actualWeightLb,
+        estimatedWeightLb: box.estimatedWeightLb,
+        contentsEstimatedWeightLb: contentsWeight,
+      });
+      const estimatedWeightLb = weightSummary.valueLb ?? 0;
+      // Honor the box's own dimensions (boxVolumeCuFt derives L x W x H / 1728
+      // when no stored volume) before falling back to its contents, and never
+      // crash on a null — a dims-only box now counts toward the rollup.
+      const estimatedVolumeCuFt = boxVolumeCuFt(box) ?? contentsVolume;
+      const warnings: string[] = [];
+      if (weightSummary.source === "missing") {
+        warnings.push("missingBoxWeightEstimate");
+      }
+      if (boxVolumeCuFt(box) === undefined && contentsVolume === 0) {
+        warnings.push("missingBoxVolumeEstimate");
+      }
+      if (estimatedWeightLb > 65) {
+        warnings.push("overweightBox");
+      }
 
-        return {
-          boxId: box._id,
-          code: box.code,
-          label: box.label,
-          room: box.room,
-          assignedResourceId: box.assignedResourceId,
-          assignedZoneId: box.assignedZoneId,
-          assignmentLocked: box.assignmentLocked ?? false,
-          assignmentOverrideReason: box.assignmentOverrideReason,
-          assignmentWarnings: box.assignmentWarnings ?? [],
-          assignmentHardBlocks: box.assignmentHardBlocks ?? [],
-          itemCount: contents.reduce(
-            (sum, entry) => sum + entry.membership.quantity,
-            0,
-          ),
-          estimatedWeightLb: roundEstimate(estimatedWeightLb),
-          weightSource: weightSummary.source,
-          weightSourceLabel: weightSummary.label,
-          weightSummary,
-          estimatedVolumeCuFt: roundEstimate(estimatedVolumeCuFt),
-          warnings,
-        };
-      }),
-    );
+      return {
+        boxId: box._id,
+        code: box.code,
+        label: box.label,
+        room: box.room,
+        assignedResourceId: box.assignedResourceId,
+        assignedZoneId: box.assignedZoneId,
+        assignmentLocked: box.assignmentLocked ?? false,
+        assignmentOverrideReason: box.assignmentOverrideReason,
+        assignmentWarnings: box.assignmentWarnings ?? [],
+        assignmentHardBlocks: box.assignmentHardBlocks ?? [],
+        itemCount: contents.reduce(
+          (sum, entry) => sum + entry.membership.quantity,
+          0,
+        ),
+        estimatedWeightLb: roundEstimate(estimatedWeightLb),
+        weightSource: weightSummary.source,
+        weightSourceLabel: weightSummary.label,
+        weightSummary,
+        estimatedVolumeCuFt: roundEstimate(estimatedVolumeCuFt),
+        warnings,
+      };
+    });
 
     const resourceReports = resources.map((resource) => {
       const assignedBoxes = boxReports.filter(
