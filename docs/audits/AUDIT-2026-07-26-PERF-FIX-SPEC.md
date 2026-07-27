@@ -47,6 +47,31 @@ Server TTFB is healthy (10–24 ms warm on all HTML routes) and is **not** in
 scope. The `mcpTools.ts` `.filter((q))` sites are trivial archived/deleted
 post-filters ahead of `take()` and are explicitly **not** findings.
 
+## Combined-branch measurement record (2026-07-27)
+
+Measured from a production build containing WP1–WP8, before merge or any
+provider deployment:
+
+| Metric | Combined result | Decision |
+| --- | --- | --- |
+| `/mcp/guide` cold load, decoded JS | 653.0 KiB across 17 local JS responses; 194.4 KiB gz; 2.47 s local load | Passes the ≤ 900 KiB target |
+| Marketing-page third-party JS | 0 bytes | Pass; the development Clerk key still causes document-level handshake redirects, which are not script downloads |
+| Warm local HTML TTFB | 1.7–10.1 ms across representative public, auth, and protected routes | Healthy; remains out of scope |
+| `/app/movable-units` route JS | 227.7 KiB gz | Does not meet the ≤ 200 KiB stretch target; WP7 removes duplicate mounted/rendered trees, not both renderer implementations from the bundle |
+| `/app/moves/[moveId]/load-plan` route JS | 198.6 KiB gz | Passes the ≤ 200 KiB target |
+| Load-plan subscriptions | 1 (`planOps.loadPlanSnapshot`) | Pass in code and component locks |
+| Movable-units responsive trees | 1 mounted tree after media resolution; one SSR status skeleton before resolution | Pass in component and SSR locks |
+| Schema indexes unreferenced by `withIndex()` | 0 of 152 | Pass; down from 47 of 199 |
+
+The authenticated desktop measurement on the existing 22-unit development
+move recorded first paint, first contentful paint, and LCP at 32 ms. This is
+indicative only, not the WP7 decision rider: the required before/after run on
+an approved marked-synthetic ~100-unit fixture remains a pre-merge provider
+gate. The load-plan browser lock also requires the development Convex
+deployment to contain `planOps.loadPlanSnapshot`; the current deployment
+correctly fails with “Could not find public function” until that authorized
+deployment occurs.
+
 ## Conventions that apply to every WP
 
 - Red-first: land the failing lock before the fix, same as PRs #154–#160.
