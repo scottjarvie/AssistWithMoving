@@ -44,6 +44,12 @@ import {
   requireMovePermission,
 } from "./lib/permissions";
 import { boxContainerType } from "./schema";
+import {
+  CodeSequenceExhaustedError,
+  formatBoxCode,
+  legacySequenceSeed,
+  nextCodes,
+} from "./lib/codeSequence";
 
 const boxWriteArgs = {
   code: v.optional(v.string()),
@@ -104,28 +110,60 @@ export async function assertResourceAndZone(
 // pool (B-###). A tote is just a box with a different containerType; it should
 // never get its own number sequence. (Historically totes got T-### — see the
 // renumberTotesIntoBoxPool backfill that merges old T-### codes into this pool.)
-async function generateBoxCode(ctx: MutationCtx, moveId: Id<"moves">) {
-  const boxes = await ctx.db
-    .query("boxes")
-    .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
-    .collect();
-  const existingCodes = new Set(boxes.map((box) => box.code));
+export async function generateBoxCodes(
+  ctx: MutationCtx,
+  moveId: Id<"moves">,
+  count: number,
+) {
+  if (count === 0) return [];
+  const move = await ctx.db.get(moveId);
+  if (!move) throw new ConvexError("Move not found.");
 
-  // Continue from the highest existing B-### number in the move.
-  let maxIndex = 0;
-  for (const box of boxes) {
-    const match = /^B-(\d+)$/.exec(box.code);
-    if (match) maxIndex = Math.max(maxIndex, Number(match[1]));
+  let seq = move.nextBoxCodeSeq;
+  let isOccupied: (code: string) => boolean | Promise<boolean>;
+  if (seq === undefined) {
+    const boxes = await ctx.db
+      .query("boxes")
+      .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
+      .collect();
+    const existing = new Set(boxes.map((box) => box.code));
+    seq = legacySequenceSeed([...existing], /^B-(\d+)$/);
+    isOccupied = (code) => existing.has(code);
+  } else {
+    isOccupied = async (code) =>
+      Boolean(
+        await ctx.db
+          .query("boxes")
+          .withIndex("by_move_code", (q) =>
+            q.eq("moveId", moveId).eq("code", code),
+          )
+          .first(),
+      );
   }
 
-  for (let index = maxIndex + 1; index < maxIndex + 1001; index += 1) {
-    const code = `B-${String(index).padStart(3, "0")}`;
-    if (!existingCodes.has(code)) {
-      return code;
+  try {
+    const reservation = await nextCodes({
+      seq,
+      count,
+      format: formatBoxCode,
+      isOccupied,
+    });
+    // This move patch is the reservation lock: concurrent mutations conflict
+    // and Convex OCC retries one against the newly advanced sequence.
+    await ctx.db.patch(moveId, { nextBoxCodeSeq: reservation.nextSeq });
+    return reservation.codes;
+  } catch (error) {
+    if (error instanceof CodeSequenceExhaustedError) {
+      throw new ConvexError("Could not generate unique unit codes.");
     }
+    throw error;
   }
+}
 
-  throw new Error("Could not generate a unique unit code.");
+async function generateBoxCode(ctx: MutationCtx, moveId: Id<"moves">) {
+  const [code] = await generateBoxCodes(ctx, moveId, 1);
+  if (!code) throw new ConvexError("Could not generate a unique unit code.");
+  return code;
 }
 
 // Read-only census of how units are numbered, so we can see the legacy T-###
@@ -639,6 +677,7 @@ export async function convertItemToBoxCore(
   createdByUserId: Id<"users">,
   now: number,
   actorType: "user" | "agent" = "user",
+  reservedCode?: string,
 ): Promise<{ boxId: Id<"boxes">; code: string }> {
   // A container can't also be packed inside another container — drop any
   // membership this item had before it becomes a box.
@@ -650,7 +689,7 @@ export async function convertItemToBoxCore(
     await ctx.db.delete(membership._id);
   }
 
-  const code = await generateBoxCode(ctx, item.moveId);
+  const code = reservedCode ?? (await generateBoxCode(ctx, item.moveId));
   // The item already carried this assignment, so converting it just preserves
   // that — pass an override reason so a soft capacity warning doesn't block the
   // migration (it would otherwise throw for a heavy tote already on a truck).
@@ -833,11 +872,39 @@ export const adminConvertItemsToBoxes = internalMutation({
     const converted: { itemId: string; itemCode: string; boxCode: string }[] =
       [];
     const skipped: string[] = [];
+    const prepared: Doc<"items">[] = [];
+    const seen = new Set<string>();
     for (const itemId of args.itemIds) {
       const item = await ctx.db.get(itemId);
-      if (!item || item.deletedAt) {
+      const key = String(itemId);
+      if (!item || item.deletedAt || seen.has(key)) {
         skipped.push(String(itemId));
         continue;
+      }
+      seen.add(key);
+      prepared.push(item);
+    }
+
+    const itemsByMove = new Map<string, Doc<"items">[]>();
+    for (const item of prepared) {
+      const key = String(item.moveId);
+      const group = itemsByMove.get(key) ?? [];
+      group.push(item);
+      itemsByMove.set(key, group);
+    }
+    const reservedByMove = new Map<string, string[]>();
+    for (const [key, items] of itemsByMove) {
+      reservedByMove.set(
+        key,
+        await generateBoxCodes(ctx, items[0].moveId, items.length),
+      );
+    }
+
+    for (const item of prepared) {
+      const reserved = reservedByMove.get(String(item.moveId));
+      const code = reserved?.shift();
+      if (!code) {
+        throw new ConvexError("Could not reserve a unit code for conversion.");
       }
       const result = await convertItemToBoxCore(
         ctx,
@@ -845,9 +912,11 @@ export const adminConvertItemsToBoxes = internalMutation({
         args.containerType,
         item.createdByUserId,
         now,
+        "user",
+        code,
       );
       converted.push({
-        itemId: String(itemId),
+        itemId: String(item._id),
         itemCode: item.code ?? "",
         boxCode: result.code,
       });

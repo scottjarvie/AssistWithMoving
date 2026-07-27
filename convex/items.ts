@@ -52,6 +52,11 @@ import {
   directConvexUserContextRequiredMessage,
   requireMovePermission,
 } from "./lib/permissions";
+import {
+  CodeSequenceExhaustedError,
+  legacySequenceSeed,
+  nextCodes,
+} from "./lib/codeSequence";
 
 const itemWriteArgs = {
   nickname: v.optional(v.string()),
@@ -714,23 +719,67 @@ export const facetedListForMove = query({
   },
 });
 
-export async function generateItemCode(ctx: MutationCtx, moveId: Id<"moves">) {
-  const items = await ctx.db
-    .query("items")
-    .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
-    .collect();
-  const existing = new Set(
-    items
-      .map((item) => item.code)
-      .filter((code): code is string => Boolean(code)),
-  );
-  for (let index = items.length + 1; index < items.length + 2000; index += 1) {
-    const code = formatItemCode(index);
-    if (!existing.has(code)) {
-      return code;
-    }
+export async function generateItemCodes(
+  ctx: MutationCtx,
+  moveId: Id<"moves">,
+  count: number,
+) {
+  if (count === 0) return [];
+  const move = await ctx.db.get(moveId);
+  if (!move) throw new ConvexError("Move not found.");
+
+  let seq = move.nextItemCodeSeq;
+  let isOccupied: (code: string) => boolean | Promise<boolean>;
+  if (seq === undefined) {
+    // Legacy moves pay for one scan, once. Exact conforming codes determine the
+    // seed; gaps and manually named codes do not make the sequence move backward.
+    const items = await ctx.db
+      .query("items")
+      .withIndex("by_move_code", (q) => q.eq("moveId", moveId))
+      .collect();
+    const existing = new Set(
+      items
+        .map((item) => item.code)
+        .filter((code): code is string => Boolean(code)),
+    );
+    seq = legacySequenceSeed([...existing], /^item-(\d+)$/);
+    isOccupied = (code) => existing.has(code);
+  } else {
+    isOccupied = async (code) =>
+      Boolean(
+        await ctx.db
+          .query("items")
+          .withIndex("by_move_code", (q) =>
+            q.eq("moveId", moveId).eq("code", code),
+          )
+          .first(),
+      );
   }
-  throw new Error("Could not generate a unique item code.");
+
+  try {
+    const reservation = await nextCodes({
+      seq,
+      count,
+      format: formatItemCode,
+      isOccupied,
+    });
+    // Reading and patching this shared move document intentionally makes
+    // concurrent reservations conflict. Convex OCC retries the losing mutation,
+    // which then observes the winner's advanced counter.
+    await ctx.db.patch(moveId, { nextItemCodeSeq: reservation.nextSeq });
+    return reservation.codes;
+  } catch (error) {
+    if (error instanceof CodeSequenceExhaustedError) {
+      throw new ConvexError("Could not generate unique item codes.");
+    }
+    throw error;
+  }
+}
+
+export async function generateItemCode(ctx: MutationCtx, moveId: Id<"moves">) {
+  const [code] = await generateItemCodes(ctx, moveId, 1);
+  if (!code) throw new ConvexError("Could not generate a unique item code.");
+  return code;
 }
 
 export const create = mutation({

@@ -38,7 +38,7 @@ import {
   requireHouseholdForSubject,
   requireMoveForSubject,
 } from "./lib/mcpIdentity";
-import { generateItemCode } from "./items";
+import { generateItemCodes } from "./items";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
 import { insertTransportResourceFromPreset } from "./transportResources";
 import { transportPresetsForMoveType } from "./lib/transportPresets";
@@ -260,6 +260,12 @@ export const upsertItems = mutation({
     const dryRun = args.dryRun ?? false;
     const results: Array<{ itemId: string; action: "created" | "updated" }> =
       [];
+    const createCount = args.items.filter((draft) => !draft.itemId).length;
+    const reservedCodes =
+      !dryRun && createCount > 0
+        ? await generateItemCodes(ctx, args.moveId, createCount)
+        : [];
+    let nextReservedCode = 0;
 
     for (const draft of args.items) {
       if (draft.itemId) {
@@ -300,7 +306,13 @@ export const upsertItems = mutation({
         const name = normalizeItemName(draft.name);
         let itemId = "(dry-run)";
         if (!dryRun) {
-          const code = await generateItemCode(ctx, args.moveId);
+          const code = reservedCodes[nextReservedCode];
+          nextReservedCode += 1;
+          if (!code) {
+            throw new ConvexError(
+              "Could not reserve an item code for this batch.",
+            );
+          }
           itemId = String(
             await ctx.db.insert("items", {
               householdId: args.householdId,

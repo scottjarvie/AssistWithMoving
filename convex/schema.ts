@@ -1162,6 +1162,8 @@ export default defineSchema({
     pcsRestrictedItemsNotes: v.optional(v.string()),
     proGearNotes: v.optional(v.string()),
     notes: v.optional(v.string()),
+    nextItemCodeSeq: v.optional(v.number()),
+    nextBoxCodeSeq: v.optional(v.number()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
