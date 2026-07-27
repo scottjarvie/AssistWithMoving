@@ -25,7 +25,7 @@ test("Movable Units + Queue/onboarding render cleanly", async ({ page }) => {
   watch(page, problems);
 
   await setupClerkTestingToken({ page });
-  await page.goto("/");
+  await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
   await clerk.signIn({ page, emailAddress: e2eUserEmail! });
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,

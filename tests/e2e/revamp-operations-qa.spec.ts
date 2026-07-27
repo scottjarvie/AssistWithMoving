@@ -17,7 +17,7 @@ function realErrors(p: Problem[]) {
   );
 }
 
-test("Move Operations nav reaches Load Plan / Move Day / Packets / AI Review", async ({
+test("Move Operations nav reaches Load Plan / Move Day / Packets / Queue", async ({
   page,
 }) => {
   test.skip(!e2eUserEmail, "no e2e user");
@@ -25,7 +25,7 @@ test("Move Operations nav reaches Load Plan / Move Day / Packets / AI Review", a
   watch(page, problems);
 
   await setupClerkTestingToken({ page });
-  await page.goto("/");
+  await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
   await clerk.signIn({ page, emailAddress: e2eUserEmail! });
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
@@ -39,7 +39,7 @@ test("Move Operations nav reaches Load Plan / Move Day / Packets / AI Review", a
   // The Operations nav is present with all four operational links + Configure.
   const opsNav = page.getByRole("navigation", { name: "Move operations" });
   await expect(opsNav).toBeVisible({ timeout: 15_000 });
-  for (const label of ["Configure", "Load Plan", "Move Day", "Packets", "AI Review"]) {
+  for (const label of ["Configure", "Load Plan", "Move Day", "Packets", "Queue"]) {
     await expect(opsNav.getByRole("link", { name: label, exact: true })).toBeVisible();
   }
   await page.screenshot({ path: "/tmp/mm-operations-nav.png" });
@@ -49,8 +49,8 @@ test("Move Operations nav reaches Load Plan / Move Day / Packets / AI Review", a
     ["Load Plan", /\/load-plan/],
     ["Move Day", /\/move-day/],
     ["Packets", /\/packets/],
-    ["AI Review", /\/ai-review/],
-    ["Configure", /\/app\/moves\/[^/]+$/],
+    ["Queue", /\/queue/],
+    ["Configure", /\/configure/],
   ] as Array<[string, RegExp]>) {
     await page
       .getByRole("navigation", { name: "Move operations" })

@@ -30,7 +30,7 @@ test("config gaps: editable method capacity + sq-ft area limit persist", async (
 }) => {
   test.skip(!e2eUserEmail || !convexUrl, "E2E env not set");
   await setupClerkTestingToken({ page });
-  await page.goto("/");
+  await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
   await clerk.signIn({ page, emailAddress: e2eUserEmail! });
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
@@ -105,8 +105,10 @@ test("config gaps: editable method capacity + sq-ft area limit persist", async (
   // --- UI render check: Transportation config tab renders the methods panel ---
   // (Selecting a method in the rail reveals "Method capacity: <value>" + Edit;
   // that is verified visually. Here we confirm the tab renders without crashing.)
-  await page.goto(`/app/moves/${moveId}`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("tab", { name: /Transport/i }).first().click();
+  await page.goto(`/app/moves/${moveId}/configure`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.getByRole("tab", { name: "Transportation" }).click();
   await expect(page.getByText("Methods").first()).toBeVisible({
     timeout: 15_000,
   });

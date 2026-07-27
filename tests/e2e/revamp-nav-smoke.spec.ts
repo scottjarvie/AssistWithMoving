@@ -37,7 +37,7 @@ test("revamp shell navigates the 3 sections without freezing", async ({
   watchConsole(page, problems);
 
   await setupClerkTestingToken({ page });
-  await page.goto("/");
+  await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
   await clerk.signIn({ page, emailAddress: e2eUserEmail! });
   await page.waitForFunction(() => window.Clerk?.user !== null, undefined, {
     timeout: 45_000,
