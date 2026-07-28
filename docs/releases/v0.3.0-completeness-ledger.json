@@ -1,0 +1,1979 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "version": "0.3.0",
+    "from": "992b1e3f75f3933bf0be244a4e434b5f38509f8c",
+    "to": "15cf0063218a6208326abf6b10142d8d1a500ef6",
+    "cutoff": "2026-07-27T17:08:59.000Z",
+    "cutoffTimezone": "America/Phoenix",
+    "posture": "release-ready",
+    "recordType": "backfilled production release record"
+  },
+  "reconciliation": {
+    "git": {
+      "selection": "992b1e3..15cf006",
+      "exactAncestorRange": true,
+      "sourceCount": 142,
+      "pullRequestSources": 130,
+      "directCommitSources": 12
+    },
+    "github": {
+      "repository": "scottjarvie/movingmanifest",
+      "tagsOrReleasesAtCutoff": 0,
+      "productionDeployment": {
+        "commit": "15cf0063218a6208326abf6b10142d8d1a500ef6",
+        "deploymentId": 5626681451,
+        "statusId": 16000454577,
+        "environment": "Production",
+        "state": "success",
+        "deployedAt": "2026-07-27T17:08:59.000Z"
+      },
+      "checks": [
+        {
+          "name": "Required CI",
+          "conclusion": "success",
+          "completedAt": "2026-07-27T17:09:38.000Z"
+        },
+        {
+          "name": "Unit tests (informational)",
+          "conclusion": "success",
+          "completedAt": "2026-07-27T17:10:26.000Z"
+        }
+      ]
+    },
+    "linear": {
+      "team": "MovingManifest",
+      "query": "completed issues created on or after 2026-06-20",
+      "completedIssueCount": 111,
+      "hasNextPage": false,
+      "note": "Completed issues corroborate the Git and GitHub outcome groups; the exact Git range remains the source ledger boundary."
+    },
+    "historyRepair": {
+      "marker": "992b1e3f75f3933bf0be244a4e434b5f38509f8c",
+      "markerMeaning": "Head commit of PR #19, which added release notes for the already shipped PR #17 Other Photos gallery.",
+      "shippedOutcome": {
+        "source": "pr-17",
+        "mergedAt": "2026-06-20T15:54:20.000Z"
+      },
+      "releaseNoteBackfill": {
+        "source": "pr-19",
+        "mergedAt": "2026-06-20T22:46:25.000Z"
+      },
+      "evidence": "PR #19 explicitly states that it is release-note-only, intentionally remains at 0.2.0, and requires a separate version decision for a distinct SemVer entry.",
+      "disposition": "Keep both historical 0.2.0 records, visibly label the later-added Other Photos record as Backfilled, and do not invent a replacement version."
+    },
+    "dispositionCounts": {
+      "include": 17,
+      "group": 118,
+      "exclude": 7,
+      "unshipped": 0
+    },
+    "completenessGate": "pass"
+  },
+  "releaseItems": [
+    {
+      "id": "connected-agent-workflows",
+      "sourceCount": 16
+    },
+    {
+      "id": "move-workspace",
+      "sourceCount": 7
+    },
+    {
+      "id": "shared-moving-team",
+      "sourceCount": 6
+    },
+    {
+      "id": "spaces-transport-planning",
+      "sourceCount": 7
+    },
+    {
+      "id": "capture-evidence-workflow",
+      "sourceCount": 10
+    },
+    {
+      "id": "inventory-controls",
+      "sourceCount": 21
+    },
+    {
+      "id": "mobile-install",
+      "sourceCount": 1
+    },
+    {
+      "id": "public-guidance",
+      "sourceCount": 3
+    },
+    {
+      "id": "privacy-access-boundaries",
+      "sourceCount": 12
+    },
+    {
+      "id": "media-reliability",
+      "sourceCount": 12
+    },
+    {
+      "id": "agent-error-recovery",
+      "sourceCount": 6
+    },
+    {
+      "id": "inventory-data-integrity",
+      "sourceCount": 4
+    },
+    {
+      "id": "collaboration-permissions",
+      "sourceCount": 1
+    },
+    {
+      "id": "responsive-adaptive-interface",
+      "sourceCount": 8
+    },
+    {
+      "id": "large-move-discovery",
+      "sourceCount": 8
+    },
+    {
+      "id": "trustworthy-workflow-feedback",
+      "sourceCount": 12
+    },
+    {
+      "id": "release-safety",
+      "sourceCount": 1
+    }
+  ],
+  "sources": [
+    {
+      "id": "pr-19",
+      "kind": "pull_request",
+      "prNumber": 19,
+      "title": "Merge pull request #19 from scottjarvie/codex/move-268-other-photos-updates",
+      "commits": [
+        "6f8fec7773d7418b2a60d9d382fb6e95953b199a"
+      ],
+      "firstSeenAt": "2026-06-20T18:46:24-04:00",
+      "lastSeenAt": "2026-06-20T18:46:24-04:00",
+      "disposition": "exclude",
+      "reason": "Release-note-only backfill for the already shipped Other Photos outcome; it creates no independent v0.3.0 product outcome."
+    },
+    {
+      "id": "pr-18",
+      "kind": "pull_request",
+      "prNumber": 18,
+      "title": "Merge pull request #18 from scottjarvie/codex/move-213-agent-journey-smoke",
+      "commits": [
+        "97cd4f2358d6c41d1db0c518c9a9bbfb85844e27"
+      ],
+      "firstSeenAt": "2026-06-20T19:17:29-04:00",
+      "lastSeenAt": "2026-06-20T19:17:29-04:00",
+      "disposition": "exclude",
+      "reason": "Test-only agent journey proof with no changed user, admin, or agent operating contract."
+    },
+    {
+      "id": "pr-20",
+      "kind": "pull_request",
+      "prNumber": 20,
+      "title": "Merge pull request #20 from scottjarvie/feature/ui-revamp",
+      "commits": [
+        "b697df50ba3cd7a8cd1a17bad9894222704b12ff"
+      ],
+      "firstSeenAt": "2026-06-22T12:01:53-04:00",
+      "lastSeenAt": "2026-06-22T12:01:53-04:00",
+      "disposition": "include",
+      "releaseItemId": "move-workspace"
+    },
+    {
+      "id": "pr-21",
+      "kind": "pull_request",
+      "prNumber": 21,
+      "title": "Merge pull request #21 from scottjarvie/feature/ui-revamp",
+      "commits": [
+        "5c65d34dedb61ef8cd0147a6f797b08d93b9e48c"
+      ],
+      "firstSeenAt": "2026-06-22T12:12:19-04:00",
+      "lastSeenAt": "2026-06-22T12:12:19-04:00",
+      "disposition": "include",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-22",
+      "kind": "pull_request",
+      "prNumber": 22,
+      "title": "Merge pull request #22 from scottjarvie/feature/revamp-followups",
+      "commits": [
+        "13fa956d70ce95b70b3a4b76fb1f44d1049d54b5"
+      ],
+      "firstSeenAt": "2026-06-22T14:13:32-04:00",
+      "lastSeenAt": "2026-06-22T14:13:32-04:00",
+      "disposition": "group",
+      "releaseItemId": "move-workspace"
+    },
+    {
+      "id": "pr-23",
+      "kind": "pull_request",
+      "prNumber": 23,
+      "title": "Merge pull request #23 from scottjarvie/feature/move-config-backend-gaps",
+      "commits": [
+        "546ba7fd07f4d5b6f24606b8d427998e0d74b600"
+      ],
+      "firstSeenAt": "2026-06-22T14:31:26-04:00",
+      "lastSeenAt": "2026-06-22T14:31:26-04:00",
+      "disposition": "include",
+      "releaseItemId": "spaces-transport-planning"
+    },
+    {
+      "id": "pr-24",
+      "kind": "pull_request",
+      "prNumber": 24,
+      "title": "Merge pull request #24 from scottjarvie/feature/moveable-unit-detail",
+      "commits": [
+        "9f39c6c14a3017d239f39fdab569fa20d3fcb16b"
+      ],
+      "firstSeenAt": "2026-06-22T16:01:18-04:00",
+      "lastSeenAt": "2026-06-22T16:01:18-04:00",
+      "disposition": "group",
+      "releaseItemId": "move-workspace"
+    },
+    {
+      "id": "pr-25",
+      "kind": "pull_request",
+      "prNumber": 25,
+      "title": "Merge pull request #25 from scottjarvie/feature/queue-capture-polish",
+      "commits": [
+        "90828784fa9875be1ea9cdcd577c38a7764abb24"
+      ],
+      "firstSeenAt": "2026-06-22T16:40:43-04:00",
+      "lastSeenAt": "2026-06-22T16:40:43-04:00",
+      "disposition": "include",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-26",
+      "kind": "pull_request",
+      "prNumber": 26,
+      "title": "Merge pull request #26 from scottjarvie/feature/capture-switchers",
+      "commits": [
+        "cf69b4c3ebd23230cb9f41cbbfcb9399a07da40f"
+      ],
+      "firstSeenAt": "2026-06-22T17:00:47-04:00",
+      "lastSeenAt": "2026-06-22T17:00:47-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-28",
+      "kind": "pull_request",
+      "prNumber": 28,
+      "title": "Merge pull request #28 from scottjarvie/feature/unified-design",
+      "commits": [
+        "7974e291bb3e6bd7dd85d66e392f90d21733e2b3"
+      ],
+      "firstSeenAt": "2026-06-23T15:30:09-04:00",
+      "lastSeenAt": "2026-06-23T15:30:09-04:00",
+      "disposition": "include",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-29",
+      "kind": "pull_request",
+      "prNumber": 29,
+      "title": "Merge pull request #29 from scottjarvie/feature/queue-nav",
+      "commits": [
+        "54ceadcf79eb934b20f2d281076ce3737d19285c"
+      ],
+      "firstSeenAt": "2026-06-23T16:30:48-04:00",
+      "lastSeenAt": "2026-06-23T16:30:48-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-30",
+      "kind": "pull_request",
+      "prNumber": 30,
+      "title": "Merge pull request #30 from scottjarvie/feature/mcp-auth-guards",
+      "commits": [
+        "8094bbc31e1f79df666fb2f422c34a901b664824"
+      ],
+      "firstSeenAt": "2026-06-23T16:46:20-04:00",
+      "lastSeenAt": "2026-06-23T16:46:20-04:00",
+      "disposition": "include",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-31",
+      "kind": "pull_request",
+      "prNumber": 31,
+      "title": "Merge pull request #31 from scottjarvie/feature/mcp-oauth-gateway",
+      "commits": [
+        "23de90973bd31a8e8cf7ca9bd73493d6357ab0c7"
+      ],
+      "firstSeenAt": "2026-06-23T19:19:39-04:00",
+      "lastSeenAt": "2026-06-23T19:19:39-04:00",
+      "disposition": "include",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-32",
+      "kind": "pull_request",
+      "prNumber": 32,
+      "title": "Merge pull request #32 from scottjarvie/feature/mcp-clean-url",
+      "commits": [
+        "beea94fd998ae5b2fdc6820429808f59dea77830"
+      ],
+      "firstSeenAt": "2026-06-23T19:53:29-04:00",
+      "lastSeenAt": "2026-06-23T19:53:29-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-33",
+      "kind": "pull_request",
+      "prNumber": 33,
+      "title": "Moves list: redesign move cards + fix status vocabulary",
+      "commits": [
+        "b688ee0abb3e9c0869107da9a73fdef132c1099a"
+      ],
+      "firstSeenAt": "2026-06-24T03:12:53-04:00",
+      "lastSeenAt": "2026-06-24T03:12:53-04:00",
+      "disposition": "group",
+      "releaseItemId": "move-workspace"
+    },
+    {
+      "id": "pr-34",
+      "kind": "pull_request",
+      "prNumber": 34,
+      "title": "Queue list cleanup: filter-stats bar, numbered cards, fewer chips, icon actions",
+      "commits": [
+        "3b1a004200b7c4994e04b296c963ef5233def02b"
+      ],
+      "firstSeenAt": "2026-06-24T03:12:56-04:00",
+      "lastSeenAt": "2026-06-24T03:12:56-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-35",
+      "kind": "pull_request",
+      "prNumber": 35,
+      "title": "Agent connections: cap active keys at 3 + plain-language connected banner",
+      "commits": [
+        "e3a2ffcef84bc29e195cf69f4a316edafaec4de7"
+      ],
+      "firstSeenAt": "2026-06-24T03:12:59-04:00",
+      "lastSeenAt": "2026-06-24T03:12:59-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-36",
+      "kind": "pull_request",
+      "prNumber": 36,
+      "title": "Schema foundations: unit nickname, item-0000 codes, box currentSpace, reserve \"I\"",
+      "commits": [
+        "e04a96e97b2cad07215cf3163ba429be4262b0f2"
+      ],
+      "firstSeenAt": "2026-06-24T03:24:26-04:00",
+      "lastSeenAt": "2026-06-24T03:24:26-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-37",
+      "kind": "pull_request",
+      "prNumber": 37,
+      "title": "Movable Units list: thumbnails + item-0000 codes + nicknames (MOVE-293, MOVE-298, MOVE-289)",
+      "commits": [
+        "156cb1dc59899393bb028aaf5c57f695d011d271"
+      ],
+      "firstSeenAt": "2026-06-24T03:56:52-04:00",
+      "lastSeenAt": "2026-06-24T03:56:52-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-38",
+      "kind": "pull_request",
+      "prNumber": 38,
+      "title": "Remove the redundant top-right header \"Add to Queue\" button",
+      "commits": [
+        "65e635a87eaec6df196a84e665ff0a104812f37c"
+      ],
+      "firstSeenAt": "2026-06-24T04:04:44-04:00",
+      "lastSeenAt": "2026-06-24T04:04:44-04:00",
+      "disposition": "group",
+      "releaseItemId": "move-workspace"
+    },
+    {
+      "id": "pr-39",
+      "kind": "pull_request",
+      "prNumber": 39,
+      "title": "Public site: drop fabricated dashboards for honest panel + About/FAQ; logged-in launchpad home",
+      "commits": [
+        "8585fc9b85d01306a6066671394c02893abf5716"
+      ],
+      "firstSeenAt": "2026-06-24T05:33:37-04:00",
+      "lastSeenAt": "2026-06-24T05:33:37-04:00",
+      "disposition": "include",
+      "releaseItemId": "public-guidance"
+    },
+    {
+      "id": "pr-40",
+      "kind": "pull_request",
+      "prNumber": 40,
+      "title": "Simplify the movable-unit detail page to six essentials (MOVE-294…297)",
+      "commits": [
+        "d5fabcd87e5b945fd2889dbd99b8260838206e0f"
+      ],
+      "firstSeenAt": "2026-06-24T06:14:03-04:00",
+      "lastSeenAt": "2026-06-24T06:14:03-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-41",
+      "kind": "pull_request",
+      "prNumber": 41,
+      "title": "Make the movable-unit placement line editable",
+      "commits": [
+        "7ae396865435e9f204d6c319b1ceb79e91d2ec3a"
+      ],
+      "firstSeenAt": "2026-06-24T06:30:49-04:00",
+      "lastSeenAt": "2026-06-24T06:30:49-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-42",
+      "kind": "pull_request",
+      "prNumber": 42,
+      "title": "Fix BYO-agent MCP connection: separate the OAuth and API-key doors",
+      "commits": [
+        "a0a6a69ed07278c66f82a1d1320f390d320bf4cd"
+      ],
+      "firstSeenAt": "2026-06-24T06:59:52-04:00",
+      "lastSeenAt": "2026-06-24T06:59:52-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-43",
+      "kind": "pull_request",
+      "prNumber": 43,
+      "title": "Fix /mcp/connect proxy corrupting large gateway responses (gzip)",
+      "commits": [
+        "96e97ae0c74a33ff2fe4e7444cba39a19fb13703"
+      ],
+      "firstSeenAt": "2026-06-24T07:04:37-04:00",
+      "lastSeenAt": "2026-06-24T07:04:37-04:00",
+      "disposition": "include",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-44",
+      "kind": "pull_request",
+      "prNumber": 44,
+      "title": "Add capture-queue agent tools to the MCP gateway (list/claim/submit)",
+      "commits": [
+        "a5d1378b58cd02f0f704ba74b97184e9835a3177"
+      ],
+      "firstSeenAt": "2026-06-24T07:38:51-04:00",
+      "lastSeenAt": "2026-06-24T07:38:51-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-45",
+      "kind": "pull_request",
+      "prNumber": 45,
+      "title": "Add move-setup agent tools to the MCP gateway (config + transport + placement)",
+      "commits": [
+        "ce40c008673452a43e28877051de597e4e28c838"
+      ],
+      "firstSeenAt": "2026-06-24T08:15:11-04:00",
+      "lastSeenAt": "2026-06-24T08:15:11-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-46",
+      "kind": "pull_request",
+      "prNumber": 46,
+      "title": "MCP: photos to rooms+transport, and room/transport targets in the queue",
+      "commits": [
+        "1a98dd0ea56a7c6c1183fa2d9ce11936d247d8cc"
+      ],
+      "firstSeenAt": "2026-06-24T12:42:20-04:00",
+      "lastSeenAt": "2026-06-24T12:42:20-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-47",
+      "kind": "pull_request",
+      "prNumber": 47,
+      "title": "Fix get_images returning null displayUrl: bridge-authed photo delivery",
+      "commits": [
+        "1079df498fa00460b83238343a85db97d76a987c"
+      ],
+      "firstSeenAt": "2026-06-24T13:07:42-04:00",
+      "lastSeenAt": "2026-06-24T13:07:42-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-48",
+      "kind": "pull_request",
+      "prNumber": 48,
+      "title": "MCP get_images: fix same-household cross-move photo leak + add variant",
+      "commits": [
+        "553392693fed5f8fa7d262484f46b28ecdaa6731"
+      ],
+      "firstSeenAt": "2026-06-24T14:13:42-04:00",
+      "lastSeenAt": "2026-06-24T14:13:42-04:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-49",
+      "kind": "pull_request",
+      "prNumber": 49,
+      "title": "Fix add_images: bridge-authed photo upload (was silently failing in the gateway)",
+      "commits": [
+        "d5b37c46dc699821773ec7d026ae81d90264b9d0"
+      ],
+      "firstSeenAt": "2026-06-24T14:14:10-04:00",
+      "lastSeenAt": "2026-06-24T14:14:10-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-50",
+      "kind": "pull_request",
+      "prNumber": 50,
+      "title": "add_images: compute image dimensions before finalize (completes the upload fix)",
+      "commits": [
+        "f0bfac0539f89228522e6a9c898601d835e1f8a3"
+      ],
+      "firstSeenAt": "2026-06-24T14:25:27-04:00",
+      "lastSeenAt": "2026-06-24T14:25:27-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-51",
+      "kind": "pull_request",
+      "prNumber": 51,
+      "title": "Fix 8 gateway tool bugs from the per-tool audit",
+      "commits": [
+        "05d9e793c57b75c3f1edd9c86e7cf846225e5a93"
+      ],
+      "firstSeenAt": "2026-06-24T14:51:11-04:00",
+      "lastSeenAt": "2026-06-24T14:51:11-04:00",
+      "disposition": "include",
+      "releaseItemId": "agent-error-recovery"
+    },
+    {
+      "id": "pr-52",
+      "kind": "pull_request",
+      "prNumber": 52,
+      "title": "MCP gateway: let upsert_transport read/write truck load zones",
+      "commits": [
+        "e39903173848518ab834ecb8ce96882f50887003"
+      ],
+      "firstSeenAt": "2026-06-24T15:47:55-04:00",
+      "lastSeenAt": "2026-06-24T15:47:55-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-53",
+      "kind": "pull_request",
+      "prNumber": 53,
+      "title": "MCP gateway: add update_box tool (full box/movable-unit editor)",
+      "commits": [
+        "d78e444d1d203f0cf539ee96637a6e3a9a2c470b"
+      ],
+      "firstSeenAt": "2026-06-24T16:26:51-04:00",
+      "lastSeenAt": "2026-06-24T16:26:51-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-54",
+      "kind": "pull_request",
+      "prNumber": 54,
+      "title": "MCP gateway: add update_item tool (full loose-item/movable-unit editor)",
+      "commits": [
+        "ca1c2438b6d3361a06adb3d24e7bf56f207a158a"
+      ],
+      "firstSeenAt": "2026-06-24T16:58:21-04:00",
+      "lastSeenAt": "2026-06-24T16:58:21-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-55",
+      "kind": "pull_request",
+      "prNumber": 55,
+      "title": "Add PWA \"Add to Home Screen\" install + mobile-friendly metadata",
+      "commits": [
+        "daa76acf02f759677c5b15c22402c2e9fd85377e"
+      ],
+      "firstSeenAt": "2026-06-24T19:11:09-04:00",
+      "lastSeenAt": "2026-06-24T19:11:09-04:00",
+      "disposition": "include",
+      "releaseItemId": "mobile-install"
+    },
+    {
+      "id": "pr-56",
+      "kind": "pull_request",
+      "prNumber": 56,
+      "title": "Derive box volume from dimensions wherever stored volume is missing",
+      "commits": [
+        "f1959996811e42b4f56ee200a4cce1f320ef2862"
+      ],
+      "firstSeenAt": "2026-06-24T19:11:12-04:00",
+      "lastSeenAt": "2026-06-24T19:11:12-04:00",
+      "disposition": "include",
+      "releaseItemId": "inventory-data-integrity"
+    },
+    {
+      "id": "pr-57",
+      "kind": "pull_request",
+      "prNumber": 57,
+      "title": "Add a calculated Density (lb/ft³) column to Movable Units",
+      "commits": [
+        "36e240c243296147b719755e1307b7ecdc26a59f"
+      ],
+      "firstSeenAt": "2026-06-24T19:11:15-04:00",
+      "lastSeenAt": "2026-06-24T19:11:15-04:00",
+      "disposition": "include",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-58",
+      "kind": "pull_request",
+      "prNumber": 58,
+      "title": "Queue: background photo upload, one-entry default, add-images-later",
+      "commits": [
+        "f021d108e33638aa3b840aa183b0293522409b5b"
+      ],
+      "firstSeenAt": "2026-06-24T20:05:34-04:00",
+      "lastSeenAt": "2026-06-24T20:05:34-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-59",
+      "kind": "pull_request",
+      "prNumber": 59,
+      "title": "MCP: fix agent friction — inline images, footgun guard, archive, tool drift",
+      "commits": [
+        "4aa82c67a574b2f985ae371bb893126da97c2266"
+      ],
+      "firstSeenAt": "2026-06-25T00:57:41-04:00",
+      "lastSeenAt": "2026-06-25T00:57:41-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-60",
+      "kind": "pull_request",
+      "prNumber": 60,
+      "title": "Fix MCP get_images API-key auth (MOVE-317 hotfix) + surface real key-creation errors",
+      "commits": [
+        "fb81c63a06b58ec739a8cc9290e4ed9dd939ddbd"
+      ],
+      "firstSeenAt": "2026-06-25T12:01:47-04:00",
+      "lastSeenAt": "2026-06-25T12:01:47-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-61",
+      "kind": "pull_request",
+      "prNumber": 61,
+      "title": "MCP connector: get_images returns photos as INLINE images (TPP-parity, MOVE-326)",
+      "commits": [
+        "5a6127cf970a54e4bedc2a845c86a8e9d495e299"
+      ],
+      "firstSeenAt": "2026-06-25T17:41:03-04:00",
+      "lastSeenAt": "2026-06-25T17:41:03-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-62",
+      "kind": "pull_request",
+      "prNumber": 62,
+      "title": "Move participants, per-user queues & agent provenance (+ 2 security fixes)",
+      "commits": [
+        "7281a324083da1d9b59291e0c9bd41d7757f40a0"
+      ],
+      "firstSeenAt": "2026-06-26T07:55:41-04:00",
+      "lastSeenAt": "2026-06-26T07:55:41-04:00",
+      "disposition": "include",
+      "releaseItemId": "shared-moving-team"
+    },
+    {
+      "id": "pr-63",
+      "kind": "pull_request",
+      "prNumber": 63,
+      "title": "REST keys: redact item values/serials by the key creator's role (MOVE-337)",
+      "commits": [
+        "523ee4eab8191ff5af23eb2ffdb5e48be1c3d307"
+      ],
+      "firstSeenAt": "2026-06-26T08:04:01-04:00",
+      "lastSeenAt": "2026-06-26T08:04:01-04:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-64",
+      "kind": "pull_request",
+      "prNumber": 64,
+      "title": "Fix invited-participant claim + install-prompt gating",
+      "commits": [
+        "fe2c8434356c013fb778d0848c3194df8688199f"
+      ],
+      "firstSeenAt": "2026-06-26T08:41:55-04:00",
+      "lastSeenAt": "2026-06-26T08:41:55-04:00",
+      "disposition": "group",
+      "releaseItemId": "shared-moving-team"
+    },
+    {
+      "id": "pr-65",
+      "kind": "pull_request",
+      "prNumber": 65,
+      "title": "Fix participant access + make \"household\" invisible plumbing",
+      "commits": [
+        "41ef52b92fef6fe53e66694613869dda82645514"
+      ],
+      "firstSeenAt": "2026-06-26T09:47:13-04:00",
+      "lastSeenAt": "2026-06-26T09:47:13-04:00",
+      "disposition": "group",
+      "releaseItemId": "shared-moving-team"
+    },
+    {
+      "id": "pr-66",
+      "kind": "pull_request",
+      "prNumber": 66,
+      "title": "Move participants durable claim, per-user queues, MCP front door, volume/weight derivation + recompute hardening",
+      "commits": [
+        "707b13e43566bba860e336e3e2f3f1e17181b489"
+      ],
+      "firstSeenAt": "2026-06-26T17:33:47-04:00",
+      "lastSeenAt": "2026-06-26T17:33:47-04:00",
+      "disposition": "group",
+      "releaseItemId": "shared-moving-team"
+    },
+    {
+      "id": "pr-67",
+      "kind": "pull_request",
+      "prNumber": 67,
+      "title": "MCP: surface real tool errors to agents (throw ConvexError, not Error)",
+      "commits": [
+        "206b0292d06b7ab0098ff186367c1da7e0aeb738"
+      ],
+      "firstSeenAt": "2026-06-26T20:54:43-04:00",
+      "lastSeenAt": "2026-06-26T20:54:43-04:00",
+      "disposition": "group",
+      "releaseItemId": "agent-error-recovery"
+    },
+    {
+      "id": "pr-68",
+      "kind": "pull_request",
+      "prNumber": 68,
+      "title": "Add Spaces & Transport organizer page (MOVE)",
+      "commits": [
+        "aec756919af550e74cf80d4335efeccdc86fcccb"
+      ],
+      "firstSeenAt": "2026-06-27T12:06:37-04:00",
+      "lastSeenAt": "2026-06-27T12:06:37-04:00",
+      "disposition": "group",
+      "releaseItemId": "spaces-transport-planning"
+    },
+    {
+      "id": "pr-69",
+      "kind": "pull_request",
+      "prNumber": 69,
+      "title": "Auto-attach queue capture photos to the inventory they produce",
+      "commits": [
+        "af9ea3af1d954d894329efe0e3260f327af2302e"
+      ],
+      "firstSeenAt": "2026-06-27T12:23:29-04:00",
+      "lastSeenAt": "2026-06-27T12:23:29-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-70",
+      "kind": "pull_request",
+      "prNumber": 70,
+      "title": "Make queue photo uploads resilient: auto-retry + fix B2 signing",
+      "commits": [
+        "5fe0b0b622ed8cfa1f44b8c0949a26a9abe54261"
+      ],
+      "firstSeenAt": "2026-06-27T12:25:22-04:00",
+      "lastSeenAt": "2026-06-27T12:25:22-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-71",
+      "kind": "pull_request",
+      "prNumber": 71,
+      "title": "Spaces & Transport: mobile-first overhaul + nav polish",
+      "commits": [
+        "719b1937c23b82d0f1bec6c7636650f10904b0af"
+      ],
+      "firstSeenAt": "2026-06-27T12:53:02-04:00",
+      "lastSeenAt": "2026-06-27T12:53:02-04:00",
+      "disposition": "group",
+      "releaseItemId": "spaces-transport-planning"
+    },
+    {
+      "id": "pr-72",
+      "kind": "pull_request",
+      "prNumber": 72,
+      "title": "Universal nav bar + mobile-usability sweep of the main screens",
+      "commits": [
+        "fc6c7375d17bdd05b42327fdf826b0c6e59d712c"
+      ],
+      "firstSeenAt": "2026-06-27T13:34:11-04:00",
+      "lastSeenAt": "2026-06-27T13:34:11-04:00",
+      "disposition": "include",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "pr-73",
+      "kind": "pull_request",
+      "prNumber": 73,
+      "title": "Four requested fixes: back-link origin, stat filters, photo lightbox, present-location transport",
+      "commits": [
+        "1a81e3c93015f7298e7106ea1173f0f6a95de688"
+      ],
+      "firstSeenAt": "2026-06-27T13:57:32-04:00",
+      "lastSeenAt": "2026-06-27T13:57:32-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-74",
+      "kind": "pull_request",
+      "prNumber": 74,
+      "title": "MOVE-347 + MOVE-344: Movable Units search + mobile overflow fix",
+      "commits": [
+        "d5e18b6d3f0c0b739c168dc946c49a7d08820571"
+      ],
+      "firstSeenAt": "2026-06-27T14:08:21-04:00",
+      "lastSeenAt": "2026-06-27T14:08:21-04:00",
+      "disposition": "group",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "pr-75",
+      "kind": "pull_request",
+      "prNumber": 75,
+      "title": "MOVE-340/341/342/343: unit detail page improvements",
+      "commits": [
+        "c879b0a9f3465ddf788ac3f96f9be165ff6c0dc4"
+      ],
+      "firstSeenAt": "2026-06-27T14:21:03-04:00",
+      "lastSeenAt": "2026-06-27T14:21:03-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-76",
+      "kind": "pull_request",
+      "prNumber": 76,
+      "title": "MOVE-349 ph.7 + MOVE-350 (capacity edit) + fix Spaces transport shape",
+      "commits": [
+        "b8985e41faa9fbb0305db4aaedd86a714746e6e6"
+      ],
+      "firstSeenAt": "2026-06-27T14:38:41-04:00",
+      "lastSeenAt": "2026-06-27T14:38:41-04:00",
+      "disposition": "group",
+      "releaseItemId": "spaces-transport-planning"
+    },
+    {
+      "id": "pr-77",
+      "kind": "pull_request",
+      "prNumber": 77,
+      "title": "MOVE-350: room capacity gauge + editor, needs-weight/size filters",
+      "commits": [
+        "3753924fb33b74ab1045df3916e43711447f5ac6"
+      ],
+      "firstSeenAt": "2026-06-27T14:56:46-04:00",
+      "lastSeenAt": "2026-06-27T14:56:46-04:00",
+      "disposition": "group",
+      "releaseItemId": "spaces-transport-planning"
+    },
+    {
+      "id": "pr-78",
+      "kind": "pull_request",
+      "prNumber": 78,
+      "title": "Fix orphaned photos: backfill relink + location thumbnail fallback",
+      "commits": [
+        "99f97efed4b56f67458857d1e1b93a9fedf840bb"
+      ],
+      "firstSeenAt": "2026-06-27T15:16:38-04:00",
+      "lastSeenAt": "2026-06-27T15:16:38-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-79",
+      "kind": "pull_request",
+      "prNumber": 79,
+      "title": "Totes share the box number pool (B-###), drop the box/tote toggle",
+      "commits": [
+        "4a1070f6170e383400bae193c284a70fcd3621df"
+      ],
+      "firstSeenAt": "2026-06-27T15:25:09-04:00",
+      "lastSeenAt": "2026-06-27T15:25:09-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-80",
+      "kind": "pull_request",
+      "prNumber": 80,
+      "title": "Transport: derive available cubic feet from cargo dimensions",
+      "commits": [
+        "f9f0b539540367f8f7b6c461cae4aeb22116f356"
+      ],
+      "firstSeenAt": "2026-06-27T15:34:41-04:00",
+      "lastSeenAt": "2026-06-27T15:34:41-04:00",
+      "disposition": "group",
+      "releaseItemId": "spaces-transport-planning"
+    },
+    {
+      "id": "pr-81",
+      "kind": "pull_request",
+      "prNumber": 81,
+      "title": "Box/tote detail: rename the unit + edit its description",
+      "commits": [
+        "c9ec8ae406465939a27578ca35382165e9a242a7"
+      ],
+      "firstSeenAt": "2026-06-27T15:39:55-04:00",
+      "lastSeenAt": "2026-06-27T15:39:55-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-82",
+      "kind": "pull_request",
+      "prNumber": 82,
+      "title": "Items page: compact tap-to-open rows like the Spaces page",
+      "commits": [
+        "9a00de04e9d4ab05f0f9b289bcb490392a22c670"
+      ],
+      "firstSeenAt": "2026-06-27T15:50:59-04:00",
+      "lastSeenAt": "2026-06-27T15:50:59-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-83",
+      "kind": "pull_request",
+      "prNumber": 83,
+      "title": "Convert a misclassified item into a numbered box/tote",
+      "commits": [
+        "96839601f949e23ff9a614c25113639a3f504308"
+      ],
+      "firstSeenAt": "2026-06-27T16:22:32-04:00",
+      "lastSeenAt": "2026-06-27T16:22:32-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-84",
+      "kind": "pull_request",
+      "prNumber": 84,
+      "title": "Cleanup tooling: bulk item→box convert, queue close, agent guidance",
+      "commits": [
+        "576fc8e59d0fe250d06f56b829edb1a7a52d173a"
+      ],
+      "firstSeenAt": "2026-06-27T17:24:48-04:00",
+      "lastSeenAt": "2026-06-27T17:24:48-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-85",
+      "kind": "pull_request",
+      "prNumber": 85,
+      "title": "convertItemToBox: pass override reason so heavy assigned totes convert",
+      "commits": [
+        "7319f7ee8e37fb5543c2b88594a93784bdfd54e6"
+      ],
+      "firstSeenAt": "2026-06-27T17:31:24-04:00",
+      "lastSeenAt": "2026-06-27T17:31:24-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-data-integrity"
+    },
+    {
+      "id": "pr-86",
+      "kind": "pull_request",
+      "prNumber": 86,
+      "title": "Desktop: nav as a left sidebar; bottom bar stays for mobile/tablet",
+      "commits": [
+        "66ba718349320840c7771bac20aff320bb92796a"
+      ],
+      "firstSeenAt": "2026-06-27T17:39:19-04:00",
+      "lastSeenAt": "2026-06-27T17:39:19-04:00",
+      "disposition": "group",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "pr-87",
+      "kind": "pull_request",
+      "prNumber": 87,
+      "title": "Item detail: open as a modal (centered desktop / full-screen mobile)",
+      "commits": [
+        "d7c1bc21d8e5293eebcba99d9a311b42d0d03a71"
+      ],
+      "firstSeenAt": "2026-06-27T17:52:28-04:00",
+      "lastSeenAt": "2026-06-27T17:52:28-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-88",
+      "kind": "pull_request",
+      "prNumber": 88,
+      "title": "Account menu: surface the orphaned /admin page (admin-only) + fix dead link",
+      "commits": [
+        "58609ab082f0cd76bceef8c5dac1cd27d0f3e5ae"
+      ],
+      "firstSeenAt": "2026-06-27T17:57:04-04:00",
+      "lastSeenAt": "2026-06-27T17:57:04-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-89",
+      "kind": "pull_request",
+      "prNumber": 89,
+      "title": "Sell/trash lifecycle: editable price, mark sold, mark trashed",
+      "commits": [
+        "9842f43053e68fbf1380360ae32d2a01af2c9bd9"
+      ],
+      "firstSeenAt": "2026-06-27T18:05:15-04:00",
+      "lastSeenAt": "2026-06-27T18:05:15-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-90",
+      "kind": "pull_request",
+      "prNumber": 90,
+      "title": "Origination/Destination = space dropdowns (item + box detail) [MOVE-355]",
+      "commits": [
+        "9dd9c422eb1fcf7a62c7e6cb10f42969bc8e10ff"
+      ],
+      "firstSeenAt": "2026-06-27T18:32:51-04:00",
+      "lastSeenAt": "2026-06-27T18:32:51-04:00",
+      "disposition": "group",
+      "releaseItemId": "spaces-transport-planning"
+    },
+    {
+      "id": "pr-91",
+      "kind": "pull_request",
+      "prNumber": 91,
+      "title": "items.adminArchiveItems: internal bulk soft-delete for cleanup",
+      "commits": [
+        "bd47c2073b72ed835e093af3c9ef618fae522c7e"
+      ],
+      "firstSeenAt": "2026-06-27T18:38:25-04:00",
+      "lastSeenAt": "2026-06-27T18:38:25-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-92",
+      "kind": "pull_request",
+      "prNumber": 92,
+      "title": "Queue: click an entry to open a detail modal + big desktop thumbnail [MOVE-356]",
+      "commits": [
+        "4e24045ceb6e8efffdf242811630f80ab731f46e"
+      ],
+      "firstSeenAt": "2026-06-28T17:50:14-04:00",
+      "lastSeenAt": "2026-06-28T17:50:14-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-93",
+      "kind": "pull_request",
+      "prNumber": 93,
+      "title": "Item detail: two-column shell with a pinned hero rail [MOVE-357]",
+      "commits": [
+        "df6be9aa2a3758a81bd5a11c71af142058a58c38"
+      ],
+      "firstSeenAt": "2026-06-28T17:50:17-04:00",
+      "lastSeenAt": "2026-06-28T17:50:17-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-95",
+      "kind": "pull_request",
+      "prNumber": 95,
+      "title": "Photos: reuse an existing photo on an item/box [MOVE-354]",
+      "commits": [
+        "56c2f882f3def283c5152417458f71fd0472feb8"
+      ],
+      "firstSeenAt": "2026-06-28T17:55:45-04:00",
+      "lastSeenAt": "2026-06-28T17:55:45-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-96",
+      "kind": "pull_request",
+      "prNumber": 96,
+      "title": "Move detail: land on a results summary, not empty Configure forms [MOVE-307/308/309/310]",
+      "commits": [
+        "73b68dcf45a9b69f4e657eac3964c09462af8113"
+      ],
+      "firstSeenAt": "2026-06-28T18:44:34-04:00",
+      "lastSeenAt": "2026-06-28T18:44:34-04:00",
+      "disposition": "group",
+      "releaseItemId": "move-workspace"
+    },
+    {
+      "id": "pr-97",
+      "kind": "pull_request",
+      "prNumber": 97,
+      "title": "Move detail: AI Review tab → the move's Queue (demote AI suggestions) [MOVE-311/312]",
+      "commits": [
+        "8300c87f665df7d39b3f3fbac7b6348ef5e7e233"
+      ],
+      "firstSeenAt": "2026-06-28T19:05:55-04:00",
+      "lastSeenAt": "2026-06-28T19:05:55-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-98",
+      "kind": "pull_request",
+      "prNumber": 98,
+      "title": "Moves list polish: bigger move name + fix WorkspaceNav hydration warning [MOVE-299]",
+      "commits": [
+        "18588fc4112ffde3f0c3a579f1881f41b4662f6f"
+      ],
+      "firstSeenAt": "2026-06-28T19:05:58-04:00",
+      "lastSeenAt": "2026-06-28T19:05:58-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-99",
+      "kind": "pull_request",
+      "prNumber": 99,
+      "title": "Agent-write driving distance: update_move on REST + stdio MCP [MOVE-308/314]",
+      "commits": [
+        "2ba46eb3d1ce05e8f9ef9947d84f23818bf1ce45"
+      ],
+      "firstSeenAt": "2026-06-28T20:36:02-04:00",
+      "lastSeenAt": "2026-06-28T20:36:02-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-100",
+      "kind": "pull_request",
+      "prNumber": 100,
+      "title": "Agent queue tools: convert_item_to_box, archive_item, resultBoxIds [agent gaps 1/2/3/6]",
+      "commits": [
+        "eef6038b9159b4484d45ae3b02ad6085837892d0"
+      ],
+      "firstSeenAt": "2026-06-28T22:25:59-04:00",
+      "lastSeenAt": "2026-06-28T22:25:59-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-101",
+      "kind": "pull_request",
+      "prNumber": 101,
+      "title": "Queue: structured capture fields (itemKind + weight/dims/disposition/location) [agent gap #4]",
+      "commits": [
+        "a4be0ab2bb3c792bb184a22fb87e5db2cbdcbc0d"
+      ],
+      "firstSeenAt": "2026-06-28T23:13:59-04:00",
+      "lastSeenAt": "2026-06-28T23:13:59-04:00",
+      "disposition": "group",
+      "releaseItemId": "capture-evidence-workflow"
+    },
+    {
+      "id": "pr-102",
+      "kind": "pull_request",
+      "prNumber": 102,
+      "title": "Upload reliability: bound the PUT, mobile-tuned retries, un-strand failed captures",
+      "commits": [
+        "c52822d4315e26bf038d7c159cf63d8ee28e094b"
+      ],
+      "firstSeenAt": "2026-06-29T09:16:08-04:00",
+      "lastSeenAt": "2026-06-29T09:16:08-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-103",
+      "kind": "pull_request",
+      "prNumber": 103,
+      "title": "Upload: don't strand a capture 'uploading' when its upload is aborted",
+      "commits": [
+        "fb1c6a88685535040459c61dbfa2398d5db5fb35"
+      ],
+      "firstSeenAt": "2026-06-29T09:33:39-04:00",
+      "lastSeenAt": "2026-06-29T09:33:39-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-104",
+      "kind": "pull_request",
+      "prNumber": 104,
+      "title": "Inventory sorting (all surfaces) + Spaces & Transport split box/loose stats",
+      "commits": [
+        "33e1bc3f457973a0c8e0b50cc9cac0c3909013f9"
+      ],
+      "firstSeenAt": "2026-06-29T11:16:42-04:00",
+      "lastSeenAt": "2026-06-29T11:16:42-04:00",
+      "disposition": "group",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-105",
+      "kind": "pull_request",
+      "prNumber": 105,
+      "title": "Item detail: classification-first layout + disposition-gated fields [MOVE-357]",
+      "commits": [
+        "a6446edb6e3b38224954cd6658626928888ea20a"
+      ],
+      "firstSeenAt": "2026-06-29T11:16:49-04:00",
+      "lastSeenAt": "2026-06-29T11:16:49-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-106",
+      "kind": "pull_request",
+      "prNumber": 106,
+      "title": "Fix opaque item-save + photo Server Errors, and un-stick uploading-strand captures",
+      "commits": [
+        "489a6ceed86d22d6b51fe8a2845dcee916719b69"
+      ],
+      "firstSeenAt": "2026-06-29T11:40:40-04:00",
+      "lastSeenAt": "2026-06-29T11:40:40-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-107",
+      "kind": "pull_request",
+      "prNumber": 107,
+      "title": "Remove an item or a box from the system (soft-delete, reversible)",
+      "commits": [
+        "efcf5c299c6ffadac69526382e9d838f36349af8"
+      ],
+      "firstSeenAt": "2026-06-29T12:45:00-04:00",
+      "lastSeenAt": "2026-06-29T12:45:00-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-108",
+      "kind": "pull_request",
+      "prNumber": 108,
+      "title": "Make Remove a hard delete (permanent), replacing the soft-delete archive",
+      "commits": [
+        "46ea121f98a411e3213e86d0e40c1f1c3cc62d31"
+      ],
+      "firstSeenAt": "2026-06-29T13:42:55-04:00",
+      "lastSeenAt": "2026-06-29T13:42:55-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-109",
+      "kind": "pull_request",
+      "prNumber": 109,
+      "title": "Spaces & Transport: show density (lb/ft³) next to weight + add a \"Density\" sort",
+      "commits": [
+        "b90b8bf2731fbf1eb43012bad62bd044e4fcf844"
+      ],
+      "firstSeenAt": "2026-06-29T15:32:28-04:00",
+      "lastSeenAt": "2026-06-29T15:32:28-04:00",
+      "disposition": "group",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-110",
+      "kind": "pull_request",
+      "prNumber": 110,
+      "title": "Fix item-save error when setting a transport + the getDisplayUrl photo 500",
+      "commits": [
+        "0ac3d0adb36ede4021a182607643847e02646da2"
+      ],
+      "firstSeenAt": "2026-06-29T15:44:33-04:00",
+      "lastSeenAt": "2026-06-29T15:44:33-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "pr-111",
+      "kind": "pull_request",
+      "prNumber": 111,
+      "title": "boxes.get: degrade to \"not found\" on an access error instead of crashing",
+      "commits": [
+        "69ee920e92930955afacf30651941ba70f6b0f23"
+      ],
+      "firstSeenAt": "2026-06-29T16:46:30-04:00",
+      "lastSeenAt": "2026-06-29T16:46:30-04:00",
+      "disposition": "group",
+      "releaseItemId": "agent-error-recovery"
+    },
+    {
+      "id": "pr-112",
+      "kind": "pull_request",
+      "prNumber": 112,
+      "title": "Item detail: simplify Measurements (one field + estimate checkbox), add Advanced tab",
+      "commits": [
+        "4c3ac6e38d234b8d2cb20b8ec01cb076f8edaa24"
+      ],
+      "firstSeenAt": "2026-06-29T17:06:27-04:00",
+      "lastSeenAt": "2026-06-29T17:06:27-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-113",
+      "kind": "pull_request",
+      "prNumber": 113,
+      "title": "Save confirmation + return-navigation fixes",
+      "commits": [
+        "34c6010b4b8eaa60968097433d4ebedf931e8784"
+      ],
+      "firstSeenAt": "2026-06-30T08:38:54-04:00",
+      "lastSeenAt": "2026-06-30T08:38:54-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-114",
+      "kind": "pull_request",
+      "prNumber": 114,
+      "title": "Save feedback on the box page + double-submit guards on Items",
+      "commits": [
+        "e384ced0e2532a45dfdd1c145156f16f0460bc24"
+      ],
+      "firstSeenAt": "2026-06-30T09:18:19-04:00",
+      "lastSeenAt": "2026-06-30T09:18:19-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-115",
+      "kind": "pull_request",
+      "prNumber": 115,
+      "title": "Navigation: keep your section on move-switch + clear bulk selection on save",
+      "commits": [
+        "da265a7d252066b2f492782a61e79229c6e04445"
+      ],
+      "firstSeenAt": "2026-06-30T09:28:38-04:00",
+      "lastSeenAt": "2026-06-30T09:28:38-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-116",
+      "kind": "pull_request",
+      "prNumber": 116,
+      "title": "Manually add a movable unit + delete dead box-manager",
+      "commits": [
+        "4f3cd8abcc61d86fd338c2b4bf2bedf115b0b343"
+      ],
+      "firstSeenAt": "2026-06-30T11:57:50-04:00",
+      "lastSeenAt": "2026-06-30T11:57:50-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-117",
+      "kind": "pull_request",
+      "prNumber": 117,
+      "title": "Restore list scroll position when returning from a box detail page",
+      "commits": [
+        "76e1d9a801f83b33e16b3c5a2b81b3dc31c00b21"
+      ],
+      "firstSeenAt": "2026-06-30T13:12:58-04:00",
+      "lastSeenAt": "2026-06-30T13:12:58-04:00",
+      "disposition": "group",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-118",
+      "kind": "pull_request",
+      "prNumber": 118,
+      "title": "Make queue-sharing bidirectional and obvious on the Participants page",
+      "commits": [
+        "0d12195ecf4c8b45181893f38754ec532831eb6e"
+      ],
+      "firstSeenAt": "2026-07-01T13:21:35-04:00",
+      "lastSeenAt": "2026-07-01T13:21:35-04:00",
+      "disposition": "group",
+      "releaseItemId": "shared-moving-team"
+    },
+    {
+      "id": "pr-119",
+      "kind": "pull_request",
+      "prNumber": 119,
+      "title": "Fix: a move manager's agent couldn't claim/run another person's queue",
+      "commits": [
+        "6e0200af045792252ba73b41c7b81eed7992e916"
+      ],
+      "firstSeenAt": "2026-07-01T14:32:39-04:00",
+      "lastSeenAt": "2026-07-01T14:32:39-04:00",
+      "disposition": "include",
+      "releaseItemId": "collaboration-permissions"
+    },
+    {
+      "id": "pr-120",
+      "kind": "pull_request",
+      "prNumber": 120,
+      "title": "MOVE-364 fix P0 audit findings",
+      "commits": [
+        "46ed22f68553b01c2b5047b21ecb1bb898ba6e8a"
+      ],
+      "firstSeenAt": "2026-07-01T22:39:39-04:00",
+      "lastSeenAt": "2026-07-01T22:39:39-04:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-121",
+      "kind": "pull_request",
+      "prNumber": 121,
+      "title": "MOVE-365 harden media upload reliability",
+      "commits": [
+        "2ff8482519f99bf5527520ba740426589525b225"
+      ],
+      "firstSeenAt": "2026-07-01T22:47:23-04:00",
+      "lastSeenAt": "2026-07-01T22:47:23-04:00",
+      "disposition": "group",
+      "releaseItemId": "media-reliability"
+    },
+    {
+      "id": "commit-db51e35c2107",
+      "kind": "commit",
+      "title": "MOVE-366 align agent surfaces",
+      "commits": [
+        "db51e35c2107d3a74e38b891cad03d8800c25e56"
+      ],
+      "firstSeenAt": "2026-07-01T23:05:00-04:00",
+      "lastSeenAt": "2026-07-01T23:05:00-04:00",
+      "disposition": "group",
+      "releaseItemId": "connected-agent-workflows"
+    },
+    {
+      "id": "pr-123",
+      "kind": "pull_request",
+      "prNumber": 123,
+      "title": "Fix queue UI and participant delegation consent",
+      "commits": [
+        "d2384dc3f8b22780ed4c2a406dd11f08b50dbfe2"
+      ],
+      "firstSeenAt": "2026-07-01T23:21:18-04:00",
+      "lastSeenAt": "2026-07-01T23:21:18-04:00",
+      "disposition": "group",
+      "releaseItemId": "shared-moving-team"
+    },
+    {
+      "id": "pr-124",
+      "kind": "pull_request",
+      "prNumber": 124,
+      "title": "Fix hard-delete cascades and sale price integrity",
+      "commits": [
+        "9f5c73ea3b762463fef2db0e989f6479e63f8199"
+      ],
+      "firstSeenAt": "2026-07-01T23:33:45-04:00",
+      "lastSeenAt": "2026-07-01T23:33:45-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-data-integrity"
+    },
+    {
+      "id": "commit-67da3ec473ee",
+      "kind": "commit",
+      "title": "Fix MOVE-369 UI consistency cleanups",
+      "commits": [
+        "67da3ec473eee9bc3b852d07e97e3981d8b970fe"
+      ],
+      "firstSeenAt": "2026-07-01T23:49:11-04:00",
+      "lastSeenAt": "2026-07-01T23:49:11-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "commit-a728daff3813",
+      "kind": "commit",
+      "title": "Audit round 2: backend/REST",
+      "commits": [
+        "a728daff38137d6be893a4c68e3c7ca13340978f"
+      ],
+      "firstSeenAt": "2026-07-02T07:46:10-04:00",
+      "lastSeenAt": "2026-07-02T07:46:10-04:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "commit-a38769122acf",
+      "kind": "commit",
+      "title": "Audit round 2: frontend",
+      "commits": [
+        "a38769122acf233e9612bd95f9de46e31b281049"
+      ],
+      "firstSeenAt": "2026-07-02T08:01:41-04:00",
+      "lastSeenAt": "2026-07-02T08:01:41-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "commit-2ba97bff3947",
+      "kind": "commit",
+      "title": "Clean up route auth guards",
+      "commits": [
+        "2ba97bff39471476e114f4fd79ca45e6d7bea139"
+      ],
+      "firstSeenAt": "2026-07-02T08:22:03-04:00",
+      "lastSeenAt": "2026-07-02T08:22:03-04:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "commit-2f2d9d571d2d",
+      "kind": "commit",
+      "title": "Fix MOVE-371 round 3 audit items",
+      "commits": [
+        "2f2d9d571d2dc57b5f906f6a3e6812f32186f7d8"
+      ],
+      "firstSeenAt": "2026-07-02T10:31:46-04:00",
+      "lastSeenAt": "2026-07-02T10:31:46-04:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "commit-684e7c496778",
+      "kind": "commit",
+      "title": "Allow stdio update_move to clear notes",
+      "commits": [
+        "684e7c4967784c437201390b805b4ff9bd429218"
+      ],
+      "firstSeenAt": "2026-07-02T12:39:15-04:00",
+      "lastSeenAt": "2026-07-02T12:39:15-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-data-integrity"
+    },
+    {
+      "id": "pr-131",
+      "kind": "pull_request",
+      "prNumber": 131,
+      "title": "Add schema-level regression tests for update_move nullable fields",
+      "commits": [
+        "64297f6fcaa6e4466c5a8f1b8c7c2b2573fffc33"
+      ],
+      "firstSeenAt": "2026-07-02T16:19:12-04:00",
+      "lastSeenAt": "2026-07-02T16:19:12-04:00",
+      "disposition": "exclude",
+      "reason": "Schema regression tests only; the underlying nullable update behavior is represented by its shipped implementation source."
+    },
+    {
+      "id": "commit-c03075778226",
+      "kind": "commit",
+      "title": "Surface move plan and overview pages",
+      "commits": [
+        "c030757782263ada7353dcfc48e1a823e03d9dbd"
+      ],
+      "firstSeenAt": "2026-07-03T11:32:52-04:00",
+      "lastSeenAt": "2026-07-03T11:32:52-04:00",
+      "disposition": "group",
+      "releaseItemId": "move-workspace"
+    },
+    {
+      "id": "commit-baf692fcb47d",
+      "kind": "commit",
+      "title": "MOVE-376: Add shared mutation error helper",
+      "commits": [
+        "baf692fcb47dcf1101613090c3a63bea7823a156"
+      ],
+      "firstSeenAt": "2026-07-03T11:46:50-04:00",
+      "lastSeenAt": "2026-07-03T11:46:50-04:00",
+      "disposition": "group",
+      "releaseItemId": "agent-error-recovery"
+    },
+    {
+      "id": "commit-59b1ea590b2e",
+      "kind": "commit",
+      "title": "MOVE-377: Standardize loading and empty states",
+      "commits": [
+        "59b1ea590b2ed6d84f0d878cc03c57558e4268e7"
+      ],
+      "firstSeenAt": "2026-07-03T11:56:00-04:00",
+      "lastSeenAt": "2026-07-03T11:56:00-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "commit-285f4fe1a628",
+      "kind": "commit",
+      "title": "MOVE-379: Paginate load planner movable units",
+      "commits": [
+        "285f4fe1a628fe16ae4d27a83e418eab6dad1c0a"
+      ],
+      "firstSeenAt": "2026-07-03T12:06:30-04:00",
+      "lastSeenAt": "2026-07-03T12:06:30-04:00",
+      "disposition": "group",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-136",
+      "kind": "pull_request",
+      "prNumber": 136,
+      "title": "MOVE-378 add page metadata and error boundaries",
+      "commits": [
+        "a2ebf376844dab12b86621397219c3a9077054ac"
+      ],
+      "firstSeenAt": "2026-07-03T12:15:19-04:00",
+      "lastSeenAt": "2026-07-03T12:15:19-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-137",
+      "kind": "pull_request",
+      "prNumber": 137,
+      "title": "MOVE-380 polish mobile and accessibility affordances",
+      "commits": [
+        "e0828853f18335e92ccbaea897e002c1f80c2bf9"
+      ],
+      "firstSeenAt": "2026-07-03T12:24:30-04:00",
+      "lastSeenAt": "2026-07-03T12:24:30-04:00",
+      "disposition": "group",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "pr-138",
+      "kind": "pull_request",
+      "prNumber": 138,
+      "title": "MOVE-381 add undo toast for queue actions",
+      "commits": [
+        "c874738f10ae3021b082943df728658f03d46339"
+      ],
+      "firstSeenAt": "2026-07-03T12:31:53-04:00",
+      "lastSeenAt": "2026-07-03T12:31:53-04:00",
+      "disposition": "group",
+      "releaseItemId": "inventory-controls"
+    },
+    {
+      "id": "pr-139",
+      "kind": "pull_request",
+      "prNumber": 139,
+      "title": "MOVE-382: Prune load-planner selection on filter change; additive select-visible",
+      "commits": [
+        "4e8cc98f959791526103fd7ad3805503e7e9a165"
+      ],
+      "firstSeenAt": "2026-07-03T14:30:26-04:00",
+      "lastSeenAt": "2026-07-03T14:30:26-04:00",
+      "disposition": "group",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-140",
+      "kind": "pull_request",
+      "prNumber": 140,
+      "title": "Route remaining raw error renders through describeMutationError",
+      "commits": [
+        "e6b0564c420a43533aefe968b39c84bacc4102ad"
+      ],
+      "firstSeenAt": "2026-07-03T14:40:13-04:00",
+      "lastSeenAt": "2026-07-03T14:40:13-04:00",
+      "disposition": "group",
+      "releaseItemId": "agent-error-recovery"
+    },
+    {
+      "id": "pr-141",
+      "kind": "pull_request",
+      "prNumber": 141,
+      "title": "Fix misleading copy, add truncation counts, single launchpad skeleton",
+      "commits": [
+        "480ea479950951b5eacf09945fad4941227ab0a4"
+      ],
+      "firstSeenAt": "2026-07-03T14:46:34-04:00",
+      "lastSeenAt": "2026-07-03T14:46:34-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-142",
+      "kind": "pull_request",
+      "prNumber": 142,
+      "title": "Polish batch: complete Escape sweep, undo hardening, dedupe summary link text",
+      "commits": [
+        "c53ec09fde138dbf925ed6cc80e8f10eba4c2cf4"
+      ],
+      "firstSeenAt": "2026-07-03T14:56:14-04:00",
+      "lastSeenAt": "2026-07-03T14:56:14-04:00",
+      "disposition": "group",
+      "releaseItemId": "trustworthy-workflow-feedback"
+    },
+    {
+      "id": "pr-143",
+      "kind": "pull_request",
+      "prNumber": 143,
+      "title": "Raise heavy load-planner test timeouts to absorb full-suite contention",
+      "commits": [
+        "9244ce7d030f26701cf79c02902c4522775489ba"
+      ],
+      "firstSeenAt": "2026-07-03T15:02:04-04:00",
+      "lastSeenAt": "2026-07-03T15:02:04-04:00",
+      "disposition": "exclude",
+      "reason": "Test timeout maintenance only, with no independent product outcome."
+    },
+    {
+      "id": "pr-144",
+      "kind": "pull_request",
+      "prNumber": 144,
+      "title": "Tidy repo root: real README, move audits + build spec into docs/",
+      "commits": [
+        "5bdd54e7ecde9c9b182c6ed2fc62266b0497fe9a"
+      ],
+      "firstSeenAt": "2026-07-07T09:22:20-04:00",
+      "lastSeenAt": "2026-07-07T09:22:20-04:00",
+      "disposition": "exclude",
+      "reason": "Repository documentation and file organization only, with no changed public or signed-in product contract."
+    },
+    {
+      "id": "pr-145",
+      "kind": "pull_request",
+      "prNumber": 145,
+      "title": "AGENTS.md: add project orientation for AI coding agents",
+      "commits": [
+        "0c3f94d722a2fbe7b136ffd9f74ae0e269219e8c"
+      ],
+      "firstSeenAt": "2026-07-07T09:53:42-04:00",
+      "lastSeenAt": "2026-07-07T09:53:42-04:00",
+      "disposition": "exclude",
+      "reason": "Contributor-agent instructions only, with no changed customer, admin, or connected-agent capability."
+    },
+    {
+      "id": "pr-146",
+      "kind": "pull_request",
+      "prNumber": 146,
+      "title": "MOVE-393 [P0]: lock production OAuth configuration",
+      "commits": [
+        "c0c8bc262ea2e896fdb7070eb29680bdad93bd8b"
+      ],
+      "firstSeenAt": "2026-07-11T19:54:03-07:00",
+      "lastSeenAt": "2026-07-11T19:54:03-07:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-147",
+      "kind": "pull_request",
+      "prNumber": 147,
+      "title": "MOVE-394 [High]: reject query-string API keys on /api/mcp with a migration error",
+      "commits": [
+        "4c8076de1b4b5e28400172a414e34ab20f40a583"
+      ],
+      "firstSeenAt": "2026-07-12T06:33:43-07:00",
+      "lastSeenAt": "2026-07-12T06:33:43-07:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-148",
+      "kind": "pull_request",
+      "prNumber": 148,
+      "title": "MOVE-399: replace broken npx setup with remote MCP connection guidance",
+      "commits": [
+        "dffea76bf4176d8d708dc3815c78f2041038844c"
+      ],
+      "firstSeenAt": "2026-07-17T23:50:29-07:00",
+      "lastSeenAt": "2026-07-17T23:50:29-07:00",
+      "disposition": "group",
+      "releaseItemId": "public-guidance"
+    },
+    {
+      "id": "pr-151",
+      "kind": "pull_request",
+      "prNumber": 151,
+      "title": "MOVE-396: keep missing-backend shell provider-safe",
+      "commits": [
+        "1a575c38b81e3bbf0975c225f4f74d0f4f777a0a"
+      ],
+      "firstSeenAt": "2026-07-18T05:10:54-07:00",
+      "lastSeenAt": "2026-07-18T05:10:54-07:00",
+      "disposition": "group",
+      "releaseItemId": "agent-error-recovery"
+    },
+    {
+      "id": "pr-152",
+      "kind": "pull_request",
+      "prNumber": 152,
+      "title": "MOVE-396: define the Phase 1 CI gate",
+      "commits": [
+        "ad0c66cf0c8289ccf604c9c114c90f31eb60a069"
+      ],
+      "firstSeenAt": "2026-07-18T05:26:33-07:00",
+      "lastSeenAt": "2026-07-18T05:26:33-07:00",
+      "disposition": "include",
+      "releaseItemId": "release-safety"
+    },
+    {
+      "id": "pr-150",
+      "kind": "pull_request",
+      "prNumber": 150,
+      "title": "MOVE-392: fix AI document navigation prefetch",
+      "commits": [
+        "2c033349e0edead793e4e18a842f3b4305c79bd5"
+      ],
+      "firstSeenAt": "2026-07-18T05:34:32-07:00",
+      "lastSeenAt": "2026-07-18T05:34:32-07:00",
+      "disposition": "group",
+      "releaseItemId": "public-guidance"
+    },
+    {
+      "id": "pr-149",
+      "kind": "pull_request",
+      "prNumber": 149,
+      "title": "MOVE-398 [High]: clear all high npm-audit advisories",
+      "commits": [
+        "586bea10d11c7c002d7b4385b4c45fb13209be4e"
+      ],
+      "firstSeenAt": "2026-07-18T05:50:42-07:00",
+      "lastSeenAt": "2026-07-18T05:50:42-07:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-153",
+      "kind": "pull_request",
+      "prNumber": 153,
+      "title": "Fix Clerk auth card mobile overflow",
+      "commits": [
+        "8dda238a974eba45ba7bc34bea6ab732e55d1ee2"
+      ],
+      "firstSeenAt": "2026-07-18T06:29:13-07:00",
+      "lastSeenAt": "2026-07-18T06:29:13-07:00",
+      "disposition": "group",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "pr-156",
+      "kind": "pull_request",
+      "prNumber": 156,
+      "title": "MOVE-397: harden media ingress boundaries",
+      "commits": [
+        "3acbb63003a39ab92f1fa8674fc6e27cd945da21"
+      ],
+      "firstSeenAt": "2026-07-18T14:53:17-07:00",
+      "lastSeenAt": "2026-07-18T14:53:17-07:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-157",
+      "kind": "pull_request",
+      "prNumber": 157,
+      "title": "MOVE-392 enforce API key effective state",
+      "commits": [
+        "26356bafbb42985ad7ab14d440084b83427829c8"
+      ],
+      "firstSeenAt": "2026-07-18T16:29:41-07:00",
+      "lastSeenAt": "2026-07-18T16:29:41-07:00",
+      "disposition": "group",
+      "releaseItemId": "privacy-access-boundaries"
+    },
+    {
+      "id": "pr-158",
+      "kind": "pull_request",
+      "prNumber": 158,
+      "title": "MOVE-389 scale the move directory",
+      "commits": [
+        "f5759ac7519d1f2cd930b318721a0205b7cf5f0a"
+      ],
+      "firstSeenAt": "2026-07-20T09:47:35-07:00",
+      "lastSeenAt": "2026-07-20T09:47:35-07:00",
+      "disposition": "group",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-159",
+      "kind": "pull_request",
+      "prNumber": 159,
+      "title": "MOVE-389 make the canonical move switcher searchable",
+      "commits": [
+        "486f4c354c54cc4b77b6f5ac136ab90de477c7fe"
+      ],
+      "firstSeenAt": "2026-07-20T11:40:47-07:00",
+      "lastSeenAt": "2026-07-20T11:40:47-07:00",
+      "disposition": "group",
+      "releaseItemId": "large-move-discovery"
+    },
+    {
+      "id": "pr-160",
+      "kind": "pull_request",
+      "prNumber": 160,
+      "title": "MOVE-389 keep the workspace header inside mobile widths",
+      "commits": [
+        "20afac53b77a2c3b91b9594066b1a0abab2c8fac"
+      ],
+      "firstSeenAt": "2026-07-20T12:29:39-07:00",
+      "lastSeenAt": "2026-07-20T12:29:39-07:00",
+      "disposition": "group",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "pr-154",
+      "kind": "pull_request",
+      "prNumber": 154,
+      "title": "Merge pull request #154 from scottjarvie/codex/move395-adaptive-tree",
+      "commits": [
+        "55b34b6537c187363ad2061eea40bde71a3f690a"
+      ],
+      "firstSeenAt": "2026-07-20T23:10:09-07:00",
+      "lastSeenAt": "2026-07-20T23:10:09-07:00",
+      "disposition": "group",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "pr-155",
+      "kind": "pull_request",
+      "prNumber": 155,
+      "title": "Merge pull request #155 from scottjarvie/codex/move395-inventory-characterization",
+      "commits": [
+        "e8b11127dcd69f048092f53c11046f09f6c837cc"
+      ],
+      "firstSeenAt": "2026-07-20T23:25:07-07:00",
+      "lastSeenAt": "2026-07-20T23:25:07-07:00",
+      "disposition": "group",
+      "releaseItemId": "responsive-adaptive-interface"
+    },
+    {
+      "id": "commit-15cf0063218a",
+      "kind": "commit",
+      "title": "docs: add approved performance fix spec (2026-07-26 audit, v2)",
+      "commits": [
+        "15cf0063218a6208326abf6b10142d8d1a500ef6"
+      ],
+      "firstSeenAt": "2026-07-27T10:07:23-07:00",
+      "lastSeenAt": "2026-07-27T10:07:23-07:00",
+      "disposition": "exclude",
+      "reason": "Docs-only performance work plan; the described implementation was not shipped by this production cutoff."
+    }
+  ]
+}
