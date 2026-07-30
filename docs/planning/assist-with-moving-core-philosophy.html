@@ -1,0 +1,1915 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A designed human-reader companion to the canonical Assist With Moving core philosophy."
+    >
+    <meta
+      name="source-markdown"
+      content="docs/planning/assist-with-moving-core-philosophy.md"
+    >
+    <meta
+      name="source-sha256"
+      content="fd1b1222abfc218d800f5d5615879b60a8bfa1512374ef709a6b819fa85a2186"
+    >
+    <title>Assist With Moving — Core Philosophy Reader</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #eee9dc;
+        --sheet: #fbf8ef;
+        --ink: #172631;
+        --ink-soft: #4d5b61;
+        --navy: #163649;
+        --navy-deep: #0d2634;
+        --sage: #657d70;
+        --orange: #b84f2f;
+        --amber: #c98732;
+        --blue: #2f718a;
+        --rule: #c9bfaa;
+        --rule-strong: #8fa095;
+        --focus: #e36b35;
+        --now: #256348;
+        --soon: #8a5d1b;
+        --later: #73566d;
+        --measure: 73ch;
+        --display: "Iowan Old Style", "Baskerville", "Palatino Linotype",
+          "Book Antiqua", Palatino, Georgia, serif;
+        --body: "Avenir Next", Avenir, "Gill Sans", "Trebuchet MS", sans-serif;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--paper);
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          linear-gradient(
+            90deg,
+            transparent 0 31px,
+            rgba(184, 79, 47, 0.12) 32px,
+            transparent 33px
+          ),
+          var(--paper);
+        font-family: var(--body);
+        font-size: 1rem;
+        line-height: 1.72;
+        text-rendering: optimizeLegibility;
+      }
+
+      a {
+        color: var(--navy);
+        text-decoration-color: rgba(22, 54, 73, 0.4);
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      a:hover {
+        text-decoration-color: currentColor;
+      }
+
+      a:focus-visible,
+      summary:focus-visible,
+      [tabindex="0"]:focus-visible {
+        border-radius: 0.12rem;
+        outline: 3px solid var(--focus);
+        outline-offset: 4px;
+      }
+
+      code {
+        padding: 0.08em 0.28em;
+        border: 1px solid rgba(22, 54, 73, 0.13);
+        border-radius: 0.18rem;
+        background: rgba(255, 255, 255, 0.5);
+        font-family: var(--mono);
+        font-size: 0.84em;
+        overflow-wrap: anywhere;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 100;
+        top: 0.75rem;
+        left: 0.75rem;
+        padding: 0.7rem 1rem;
+        color: var(--sheet);
+        background: var(--navy-deep);
+        font-weight: 800;
+        transform: translateY(-170%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .reading-progress {
+        position: fixed;
+        z-index: 90;
+        inset: 0 0 auto;
+        height: 4px;
+        background: linear-gradient(
+          90deg,
+          var(--orange) 0 var(--reading-progress, 0%),
+          transparent var(--reading-progress, 0%) 100%
+        );
+        pointer-events: none;
+      }
+
+      .masthead {
+        position: relative;
+        overflow: hidden;
+        color: #f7f2e7;
+        background:
+          linear-gradient(112deg, transparent 62%, rgba(201, 135, 50, 0.13)),
+          var(--navy-deep);
+        border-bottom: 1px solid #071a24;
+      }
+
+      .masthead::before {
+        position: absolute;
+        inset: 0;
+        content: "";
+        background:
+          repeating-linear-gradient(
+            0deg,
+            transparent 0 39px,
+            rgba(255, 255, 255, 0.035) 40px
+          ),
+          repeating-linear-gradient(
+            90deg,
+            transparent 0 79px,
+            rgba(255, 255, 255, 0.035) 80px
+          );
+        pointer-events: none;
+      }
+
+      .route-mark {
+        position: absolute;
+        right: clamp(-8rem, 2vw, 2rem);
+        bottom: -7rem;
+        width: min(38vw, 31rem);
+        aspect-ratio: 1;
+        border: 1px solid rgba(247, 242, 231, 0.16);
+        border-radius: 50%;
+        transform: rotate(-14deg);
+      }
+
+      .route-mark::before,
+      .route-mark::after {
+        position: absolute;
+        content: "";
+        border-radius: 50%;
+      }
+
+      .route-mark::before {
+        inset: 18%;
+        border: 1px dashed rgba(247, 242, 231, 0.24);
+      }
+
+      .route-mark::after {
+        top: 13%;
+        left: 48%;
+        width: 0.8rem;
+        height: 0.8rem;
+        background: var(--orange);
+        box-shadow: 8rem 12rem 0 var(--amber);
+      }
+
+      .masthead-inner {
+        position: relative;
+        z-index: 1;
+        width: min(1220px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: clamp(3.5rem, 8vw, 7rem) 0 clamp(2.5rem, 6vw, 4.75rem);
+      }
+
+      .reference-label,
+      .eyebrow,
+      .folio,
+      .rail-title {
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .reference-label {
+        display: inline-block;
+        margin: 0 0 1.6rem;
+        padding: 0.36rem 0.65rem;
+        color: #fff4df;
+        border: 1px solid rgba(255, 244, 223, 0.48);
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .eyebrow {
+        margin: 0 0 0.8rem;
+        color: #aabdb3;
+      }
+
+      h1,
+      h2,
+      h3 {
+        font-family: var(--display);
+        font-weight: 600;
+        letter-spacing: -0.024em;
+        text-wrap: balance;
+      }
+
+      h1 {
+        max-width: 11ch;
+        margin: 0;
+        font-size: clamp(3.15rem, 8.4vw, 7rem);
+        line-height: 0.91;
+      }
+
+      .dek {
+        max-width: 65ch;
+        margin: 1.8rem 0 0;
+        color: #d5dfd8;
+        font-family: var(--display);
+        font-size: clamp(1.12rem, 2vw, 1.5rem);
+        line-height: 1.48;
+      }
+
+      .source-ledger {
+        display: grid;
+        grid-template-columns: 1.15fr 0.8fr 0.8fr 1.45fr;
+        max-width: 1040px;
+        margin: 2.6rem 0 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.27);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.27);
+      }
+
+      .source-ledger > div {
+        min-width: 0;
+        padding: 1rem 1.1rem 1rem 0;
+      }
+
+      .source-ledger > div + div {
+        padding-left: 1.1rem;
+        border-left: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .source-ledger dt {
+        margin: 0 0 0.25rem;
+        color: #99afa4;
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .source-ledger dd {
+        margin: 0;
+        color: #fffaf0;
+        font-size: 0.86rem;
+        overflow-wrap: anywhere;
+      }
+
+      .source-ledger a {
+        color: #fffaf0;
+      }
+
+      .mobile-toc {
+        display: none;
+        margin-top: 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.24);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.24);
+      }
+
+      .mobile-toc summary {
+        padding: 0.82rem 0;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .mobile-toc ol {
+        columns: 2;
+        margin: 0;
+        padding: 0 0 1rem 1.2rem;
+      }
+
+      .mobile-toc li {
+        break-inside: avoid;
+        margin: 0 0 0.42rem;
+      }
+
+      .mobile-toc a {
+        color: #edf4ef;
+      }
+
+      .page-shell {
+        display: grid;
+        grid-template-columns: minmax(200px, 255px) minmax(0, 900px);
+        gap: clamp(2.2rem, 6vw, 6.5rem);
+        width: min(1280px, calc(100% - 2rem));
+        margin: 0 auto;
+        align-items: start;
+      }
+
+      .section-rail {
+        position: sticky;
+        top: 1.5rem;
+        max-height: calc(100vh - 3rem);
+        padding: 3.5rem 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+
+      .rail-title {
+        margin: 0 0 1rem;
+        color: var(--orange);
+      }
+
+      .section-rail ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: rail;
+      }
+
+      .section-rail li {
+        counter-increment: rail;
+        border-top: 1px solid var(--rule);
+      }
+
+      .section-rail li:last-child {
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .section-rail a {
+        display: grid;
+        grid-template-columns: 2rem 1fr;
+        gap: 0.42rem;
+        padding: 0.62rem 0.2rem;
+        color: var(--ink-soft);
+        font-size: 0.8rem;
+        line-height: 1.25;
+        text-decoration: none;
+      }
+
+      .section-rail a::before {
+        content: counter(rail, decimal-leading-zero);
+        color: var(--sage);
+        font-family: var(--mono);
+        font-size: 0.65rem;
+      }
+
+      .section-rail a[aria-current="location"] {
+        color: var(--navy-deep);
+        font-weight: 800;
+      }
+
+      .section-rail a[aria-current="location"]::before {
+        color: var(--orange);
+      }
+
+      main {
+        min-width: 0;
+        padding-bottom: 7rem;
+      }
+
+      .source-contract {
+        margin: 3.5rem 0 2rem;
+        padding: 1.1rem 1.3rem;
+        color: var(--ink-soft);
+        background: rgba(251, 248, 239, 0.65);
+        border: 1px solid var(--rule);
+        border-left: 5px solid var(--orange);
+      }
+
+      .source-contract p {
+        margin: 0.2rem 0;
+      }
+
+      .chapter {
+        position: relative;
+        padding: clamp(3.8rem, 8vw, 7rem) 0 1rem;
+        border-top: 1px solid var(--rule-strong);
+        scroll-margin-top: 1rem;
+      }
+
+      .chapter:first-of-type {
+        border-top: 0;
+      }
+
+      .folio {
+        display: block;
+        margin-bottom: 0.7rem;
+        color: var(--orange);
+      }
+
+      h2 {
+        max-width: 17ch;
+        margin: 0 0 1.75rem;
+        color: var(--navy-deep);
+        font-size: clamp(2.25rem, 5vw, 4.2rem);
+        line-height: 0.99;
+      }
+
+      h3 {
+        margin: 3.1rem 0 0.85rem;
+        color: var(--navy);
+        font-size: clamp(1.45rem, 3vw, 2rem);
+        line-height: 1.14;
+        scroll-margin-top: 1rem;
+      }
+
+      p,
+      li {
+        max-width: var(--measure);
+      }
+
+      p {
+        margin: 0 0 1.15rem;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.35rem;
+      }
+
+      li {
+        margin: 0.42rem 0;
+        padding-left: 0.22rem;
+      }
+
+      li::marker {
+        color: var(--orange);
+        font-weight: 800;
+      }
+
+      strong {
+        color: var(--navy-deep);
+      }
+
+      .chapter > p:first-of-type {
+        font-size: 1.08rem;
+      }
+
+      #one-sentence-identity > p:first-of-type strong {
+        display: block;
+        max-width: 25ch;
+        margin: 1rem 0 2rem;
+        color: var(--navy-deep);
+        font-family: var(--display);
+        font-size: clamp(1.65rem, 3.2vw, 2.6rem);
+        line-height: 1.18;
+      }
+
+      #user-owned-data-and-scoped-authority {
+        margin-top: 3rem;
+        padding-right: clamp(1rem, 3vw, 2.2rem);
+        padding-left: clamp(1rem, 3vw, 2.2rem);
+        background:
+          linear-gradient(90deg, rgba(47, 113, 138, 0.08), transparent 68%),
+          rgba(251, 248, 239, 0.5);
+        border-right: 1px solid var(--rule);
+        border-left: 5px solid var(--blue);
+      }
+
+      #the-moving-loop ol {
+        counter-reset: moving-loop;
+        padding: 0;
+        list-style: none;
+      }
+
+      #the-moving-loop ol > li {
+        position: relative;
+        min-height: 3.1rem;
+        margin: 0;
+        padding: 0.9rem 0 0.9rem 4rem;
+        border-top: 1px solid var(--rule);
+        counter-increment: moving-loop;
+      }
+
+      #the-moving-loop ol > li:last-child {
+        border-bottom: 1px solid var(--rule);
+      }
+
+      #the-moving-loop ol > li::before {
+        position: absolute;
+        top: 0.75rem;
+        left: 0;
+        display: grid;
+        width: 2.7rem;
+        height: 2.7rem;
+        color: #fff8ed;
+        background: var(--navy);
+        border-radius: 50% 50% 50% 12%;
+        content: counter(moving-loop);
+        font-family: var(--mono);
+        font-size: 0.8rem;
+        font-weight: 800;
+        place-items: center;
+        transform: rotate(-8deg);
+      }
+
+      .table-wrap {
+        width: 100%;
+        margin: 1.6rem 0 2.2rem;
+        overflow-x: auto;
+        border: 1px solid var(--rule);
+        background: rgba(251, 248, 239, 0.72);
+        -webkit-overflow-scrolling: touch;
+      }
+
+      table {
+        width: 100%;
+        min-width: 640px;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+
+      th,
+      td {
+        padding: 0.78rem 0.9rem;
+        text-align: left;
+        vertical-align: top;
+        border-right: 1px solid var(--rule);
+        border-bottom: 1px solid var(--rule);
+      }
+
+      th:last-child,
+      td:last-child {
+        border-right: 0;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      th {
+        color: #fff8ed;
+        background: var(--navy);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .reading-map table {
+        min-width: 760px;
+      }
+
+      .capability-ledger table {
+        min-width: 880px;
+      }
+
+      .capability-ledger td:first-child {
+        width: 20%;
+        color: var(--navy-deep);
+        font-weight: 800;
+      }
+
+      .capability-ledger td:nth-child(2) {
+        width: 42%;
+      }
+
+      .status-table td:first-child {
+        width: 17%;
+        font-family: var(--mono);
+        font-weight: 800;
+      }
+
+      .status-now {
+        color: var(--now);
+        background: rgba(37, 99, 72, 0.08);
+      }
+
+      .status-soon {
+        color: var(--soon);
+        background: rgba(138, 93, 27, 0.08);
+      }
+
+      .status-later {
+        color: var(--later);
+        background: rgba(115, 86, 109, 0.08);
+      }
+
+      .evidence-warning {
+        position: relative;
+        margin: 1.4rem 0 1.8rem;
+        padding: 1.1rem 1.2rem 1.1rem 3.3rem;
+        color: #503816;
+        background: #f3e4c9;
+        border-color: #cfab6e;
+      }
+
+      .evidence-warning::before {
+        position: absolute;
+        top: 1.05rem;
+        left: 1.1rem;
+        content: "!";
+        font-family: var(--mono);
+        font-size: 1.25rem;
+        font-weight: 900;
+      }
+
+      #trust-boundaries-and-non-goals {
+        padding-right: clamp(1rem, 3vw, 2.2rem);
+        padding-left: clamp(1rem, 3vw, 2.2rem);
+        background:
+          linear-gradient(90deg, rgba(184, 79, 47, 0.08), transparent 70%),
+          rgba(251, 248, 239, 0.38);
+        border-right: 1px solid var(--rule);
+        border-left: 5px solid var(--orange);
+      }
+
+      #evidence-references ul {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.45rem 1rem;
+        padding: 0;
+        list-style: none;
+      }
+
+      #evidence-references li {
+        min-width: 0;
+        margin: 0;
+      }
+
+      .reader-footer {
+        color: #e2eae5;
+        background: var(--navy-deep);
+        border-top: 5px solid var(--orange);
+      }
+
+      .reader-footer-inner {
+        width: min(1220px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2.6rem 0 3rem;
+      }
+
+      .reader-footer p {
+        max-width: 80ch;
+      }
+
+      .reader-footer a {
+        color: #fff4df;
+      }
+
+      .source-hash {
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        overflow-wrap: anywhere;
+      }
+
+      .noscript-note {
+        width: min(760px, calc(100% - 2rem));
+        margin: 3rem auto;
+        padding: 1.5rem;
+        background: var(--sheet);
+        border: 2px solid var(--orange);
+      }
+
+      @media (max-width: 860px) {
+        .source-ledger {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .source-ledger > div:nth-child(3) {
+          padding-left: 0;
+          border-top: 1px solid rgba(255, 255, 255, 0.2);
+          border-left: 0;
+        }
+
+        .source-ledger > div:nth-child(4) {
+          border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section-rail {
+          display: none;
+        }
+
+        .mobile-toc {
+          display: block;
+        }
+
+        .page-shell {
+          display: block;
+          width: min(780px, calc(100% - 2rem));
+        }
+      }
+
+      @media (max-width: 560px) {
+        body {
+          background:
+            linear-gradient(
+              90deg,
+              transparent 0 15px,
+              rgba(184, 79, 47, 0.11) 16px,
+              transparent 17px
+            ),
+            var(--paper);
+        }
+
+        .masthead-inner,
+        .page-shell,
+        .reader-footer-inner {
+          width: min(100% - 1.5rem, 100%);
+        }
+
+        .source-ledger {
+          display: block;
+        }
+
+        .source-ledger > div,
+        .source-ledger > div + div {
+          padding: 0.72rem 0;
+          border-top: 1px solid rgba(255, 255, 255, 0.2);
+          border-left: 0;
+        }
+
+        .mobile-toc ol {
+          columns: 1;
+        }
+
+        h1 {
+          font-size: clamp(2.75rem, 17vw, 4.35rem);
+        }
+
+        .chapter {
+          padding-top: 3.8rem;
+        }
+
+        #user-owned-data-and-scoped-authority,
+        #trust-boundaries-and-non-goals {
+          padding-right: 0.8rem;
+          padding-left: 1rem;
+        }
+
+        #the-moving-loop ol > li {
+          padding-left: 3.4rem;
+        }
+
+        #evidence-references ul {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+
+      @media print {
+        body {
+          color: #000;
+          background: #fff;
+          font-size: 10.5pt;
+        }
+
+        .reading-progress,
+        .section-rail,
+        .mobile-toc,
+        .skip-link,
+        .route-mark {
+          display: none !important;
+        }
+
+        .masthead {
+          color: #000;
+          background: #fff;
+          border-bottom: 2px solid #000;
+        }
+
+        .masthead::before {
+          display: none;
+        }
+
+        .masthead-inner,
+        .page-shell,
+        .reader-footer-inner {
+          width: 100%;
+        }
+
+        .masthead-inner {
+          padding: 1.5rem 0;
+        }
+
+        .reference-label,
+        .eyebrow,
+        .dek,
+        .source-ledger dd,
+        .source-ledger dt,
+        .source-ledger a {
+          color: #000;
+        }
+
+        .page-shell {
+          display: block;
+        }
+
+        .chapter {
+          padding-top: 1.5rem;
+          break-inside: avoid-page;
+        }
+
+        .table-wrap {
+          overflow: visible;
+        }
+
+        table {
+          min-width: 0 !important;
+          font-size: 8pt;
+        }
+
+        th {
+          color: #fff;
+          background: #222 !important;
+        }
+
+        .reader-footer {
+          color: #000;
+          background: #fff;
+          border-top: 2px solid #000;
+        }
+
+        .reader-footer a {
+          color: #000;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to philosophy</a>
+    <div class="reading-progress" aria-hidden="true"></div>
+
+    <header class="masthead">
+      <div class="route-mark" aria-hidden="true"></div>
+      <div class="masthead-inner">
+        <p class="reference-label">Design/product reference — not a live public feature</p>
+        <p class="eyebrow">Canonical source · people + AI continuity</p>
+        <h1>Assist With Moving</h1>
+        <p class="dek">
+          A durable, user-controlled move-planning workspace shared by you and
+          your chosen AI—so the full changing plan can be understood, remembered,
+          and steered.
+        </p>
+
+        <dl class="source-ledger">
+          <div>
+            <dt>Authority</dt>
+            <dd>
+              <a href="assist-with-moving-core-philosophy.md">Markdown is canonical</a>
+            </dd>
+          </div>
+          <div>
+            <dt>Philosophy</dt>
+            <dd>Canonical</dd>
+          </div>
+          <div>
+            <dt>Evidence checked</dt>
+            <dd>2026-07-29</dd>
+          </div>
+          <div>
+            <dt>Source digest</dt>
+            <dd>fd1b1222…85a2186</dd>
+          </div>
+        </dl>
+
+        <details class="mobile-toc">
+          <summary>Open section map</summary>
+          <ol id="mobile-nav"></ol>
+        </details>
+      </div>
+    </header>
+
+    <div class="page-shell">
+      <nav class="section-rail" aria-label="Philosophy sections">
+        <p class="rail-title">Reading route</p>
+        <ol id="desktop-nav"></ol>
+      </nav>
+
+      <main id="main-content" tabindex="-1">
+        <article id="reader-content" aria-label="Assist With Moving core philosophy"></article>
+      </main>
+    </div>
+
+    <noscript>
+      <div class="noscript-note">
+        <strong>This visual reader needs JavaScript to format its embedded,
+        canonical content.</strong>
+        The complete source remains available in
+        <a href="assist-with-moving-core-philosophy.md">the Markdown document</a>.
+      </div>
+    </noscript>
+
+    <footer class="reader-footer">
+      <div class="reader-footer-inner">
+        <p class="reference-label">Design/product reference — not a live public feature</p>
+        <p>
+          Markdown is authoritative:
+          <a href="assist-with-moving-core-philosophy.md">
+            docs/planning/assist-with-moving-core-philosophy.md
+          </a>
+        </p>
+        <p>
+          The complete Markdown source is embedded in this reader and rendered
+          locally. No application runtime, external font, analytics, or network
+          dependency is required.
+        </p>
+        <p class="source-hash">
+          Source SHA-256:
+          fd1b1222abfc218d800f5d5615879b60a8bfa1512374ef709a6b819fa85a2186
+        </p>
+      </div>
+    </footer>
+
+    <script id="markdown-source" type="text/plain">
+# Assist With Moving Core Philosophy
+
+> **Philosophy status:** Canonical product identity and claim boundary
+>
+> **Capability evidence last verified:** 2026-07-29
+>
+> **Scope:** Product truth, language, trust, and design direction—not an
+> implementation, rename, release, or deployment claim
+
+This document defines what Assist With Moving is, how it fits the Assist
+family, and which claims its public and signed-in experiences may make. It
+supersedes checklist-first or inventory-only positioning when that positioning
+conflicts with this identity. The current repository and public pages still use
+the MovingManifest name in many places; this philosophy does not claim that an
+Assist With Moving rename, domain change, provider change, or production
+cutover has shipped. Execution plans, roadmaps, release notes, and provider
+runbooks remain authoritative for delivery status.
+
+## How to use this document
+
+Read the document in order when making a product-level decision. For focused
+work, use this reading map:
+
+| Reader | Start with | Questions answered |
+|---|---|---|
+| Product owners | [One-sentence identity](#one-sentence-identity), [Assist family model](#the-assist-family-model), [Shared authority](#user-owned-data-and-scoped-authority), and [Trust boundaries](#trust-boundaries-and-non-goals) | What Moving is, how responsibility is divided, who owns the data, and what the product must not imply |
+| Implementers | [Shared authority](#user-owned-data-and-scoped-authority), [Moving loop](#the-moving-loop), [Durable information model](#durable-information-model), [Visibility](#human-visibility-and-visualization), and [Maintenance](#maintenance-and-claim-verification) | What must persist, how work resumes, where controls belong, and which claims require proof |
+| AI workers and integration builders | [Assist family model](#the-assist-family-model), [Shared authority](#user-owned-data-and-scoped-authority), [Moving loop](#the-moving-loop), and [Trust boundaries](#trust-boundaries-and-non-goals) | What your AI does, how scoped tools may be used, and which move and operation boundaries apply |
+| User-facing writers and designers | [Capability ledger](#capability-truth-and-ledger), [Language rules](#language-rules), and [Design implications](#public-homepage-and-future-shell-implications) | What may be claimed now, which words to use, and how the philosophy should appear in the experience |
+
+Anyone publishing a capability claim must read both
+[Capability truth and ledger](#capability-truth-and-ledger) and
+[Maintenance and claim verification](#maintenance-and-claim-verification).
+
+## One-sentence identity
+
+**Assist With Moving is a durable, user-controlled move-planning workspace
+shared by you and your chosen AI, where the full changing plan can be organized,
+remembered, understood, and steered over time.**
+
+Inventory, packing, timelines, places, layouts, transport, vendors, costs,
+paperwork, and move-day coordination are capabilities that can live on this
+foundation. None of them alone is the product identity.
+
+## The Assist family model
+
+Assist products separate three responsibilities:
+
+- **Your AI reasons and does the work you direct.** It may help research
+  choices, compare places, organize possessions, build a timeline, prepare
+  questions, draft communications, identify risks, or carry out authorized
+  work in other services available to it.
+- **Assist With Moving supplies the durable moving layer.** It keeps structured
+  move context, records, evidence, instructions, questions, queues, decisions,
+  history, and views available beyond one chat or one AI session.
+- **You remain the authority.** You choose the people and AIs involved, decide
+  what each may observe or change, set practical review preferences, correct
+  the record, revoke access, and make the consequential moving decisions.
+
+The useful system is the combination. Your AI can reason across a large,
+changing project without depending on one conversation. Assist With Moving
+gives that work durable shape and gives you a legible plan you can inspect and
+steer.
+
+An AI may have capabilities in its own environment that Moving does not
+operate. If you authorize it, your AI may browse, research, communicate, use a
+calendar or map, request estimates, or arrange work elsewhere. Moving does not
+inherit that outside access. Only information deliberately submitted through a
+Moving interface becomes Moving data.
+
+The Assist family name does not create a shared database or a universal grant.
+Any connection between Moving and another Assist product must be explicit,
+understandable, reviewable, and revocable. A connection must identify which
+records or summaries may cross, in which direction, for which purpose, and
+under whose authority.
+
+## User-owned data and scoped authority
+
+The person owns their moving data. Opening a move, joining a household, or
+connecting an AI must never silently grant blanket authority over it.
+
+Each person and each chosen AI independently receives explicit authority for a
+selected move, area, or record. The following operations are separate grants:
+
+- **retrieve or read** information;
+- **add or create** new information;
+- **update** existing information;
+- **delete** information; and
+- **promote or publish** information when Moving supports a trusted, reusable,
+  shared, or public state.
+
+Read is not write. Create is not update or delete. Permission to propose work
+is not permission to accept it. Permission to update one move is not permission
+to update another. Permission to share one packet is not permission to publish
+the underlying private move.
+
+Every grant should make five facts visible:
+
+1. **Actor:** which person or chosen AI receives the authority;
+2. **Scope:** which move, area, record type, or record it covers;
+3. **Operations:** which of read, create, update, delete, and applicable
+   promote or publish are allowed;
+4. **Duration and status:** whether the grant expires, is active, or has been
+   revoked; and
+5. **History:** who granted or changed it, when, and what the actor did with it.
+
+An AI cannot grant itself authority, inherit another actor's authority, or
+expand a grant merely because it can see the workspace. Access should be
+editable and revocable, and material reads and changes should preserve acting
+identity, scope, time, and action in provenance or audit history.
+
+Permission and operating policy are different:
+
+- **Permission** answers whether the actor may perform an operation at all.
+- **Operating policy** answers how already-permitted work proceeds—for example
+  direct saving, a preview, batch review, or an explicit checkpoint.
+
+Automation and review preferences never create permission. A retrieve-only AI
+does not become able to update data because a user selected “automatic.” Within
+a real update grant, however, the user may choose efficient direct saving
+instead of requiring approval for every low-risk correction.
+
+The current repository has meaningful foundations for roles, move-specific
+participants, scoped and revocable API keys, move restrictions, sensitive-field
+visibility, share-link actions, owner kill switches, and audit events. It does
+not yet prove the complete independent per-person and per-AI operation matrix
+described here, nor a complete setup, editing, revocation, promotion, and
+publishing experience for every move area and record.
+
+## The moving loop
+
+A move should remain useful from the first idea through completion and later
+reference. Its durable loop is:
+
+1. **Frame the move.** Record the kind of move, people, places, timing,
+   constraints, goals, and what “done” means. The shape may be household,
+   business, temporary, travel-related, downsizing, renovation-adjacent, or
+   something else.
+2. **See the current state.** Retrieve a compact recap or the relevant detailed
+   context: decisions already made, active work, open questions, risks,
+   dependencies, recent changes, and next actions.
+3. **Add work and evidence.** Capture instructions, tasks, notes, questions,
+   photos, documents, estimates, research, items, places, or other evidence
+   with source and scope.
+4. **Reason and act within authority.** Your AI may organize, research, compare,
+   draft, calculate, or perform authorized outside work while Moving enforces
+   its own scoped data permissions.
+5. **Save the useful result.** Store structured records, the evidence and
+   reasoning that matter, uncertainty, responsible actor, time context, and
+   follow-up—not merely a chat transcript.
+6. **Review in proportion to risk.** Direct saves, previews, batch review, and
+   explicit approval are operating choices inside granted permission. Higher
+   consequence and lower confidence should create stronger checkpoints.
+7. **Revise without erasing the story.** A changed date, destination, vendor,
+   budget, disposition, or plan should preserve what changed, why, and what
+   downstream work must be reconsidered.
+8. **Resume and finish.** A person or later AI should be able to continue from a
+   compact current-state recap, drill into full history, close remaining work,
+   and retain the useful record after the move.
+
+The queue is the durable front door for new work or instructions to your AI. It
+coordinates work; it is not a gate that prevents the AI from making useful
+progress elsewhere within its authority. A queue item may finish, ask a
+question, wait on a dependency, split into more work, or produce records and
+evidence.
+
+The repository currently implements a narrower capture-and-ingestion queue with
+instructions, media, claims, expiry, AI questions, summaries, and result links.
+That is a strong foundation, not proof that the complete moving loop or a
+general move-wide work queue has shipped.
+
+## Durable information model
+
+A move is a long-lived, changing project—not a static checklist. Moving should
+preserve common structure where it helps comparison and retrieval, while
+allowing flexible details for moves that do not fit a household template.
+
+### Move and scope
+
+The **move** is the primary durable project boundary. It carries identity,
+purpose, status, time window, locations, participants, policies, and completion
+state. A household or organization may contain multiple moves, but records must
+not silently cross between them.
+
+A move may contain areas such as planning, inventory, transport, documentation,
+vendors, costs, or a room. These areas improve navigation and authority but do
+not need to become rigid silos. Scope provenance should identify the household
+or workspace, move, area, and relevant record.
+
+### Planning records
+
+The durable plan may include:
+
+- milestones, dates, phases, and completion criteria;
+- origin, destination, temporary, storage, route, and service places;
+- home or property criteria and candidate places;
+- tasks, owners, dependencies, blockers, and next actions;
+- decisions, alternatives, reasons, assumptions, and later revisions;
+- people, responsibilities, vendors, services, estimates, and appointments;
+- rooms, spaces, possessions, boxes, inventories, and desired future items;
+- transport resources, trips, capacities, load assignments, and exceptions;
+- costs, budgets, quotes, payments, reimbursements, and financial risk;
+- paperwork, photos, receipts, contracts, research, and other evidence;
+- notes, questions, risks, policies, and instructions; and
+- status, readiness, unresolved work, and completion state.
+
+Not every move needs every record. Common fields should remain structured;
+unusual details should remain possible without being forced into unsearchable
+free text.
+
+### Authoritative records, proposals, and views
+
+Moving must distinguish:
+
+- **authoritative records:** the user's current saved plan and facts;
+- **observations and evidence:** dated source material that supports or
+  challenges a record;
+- **proposals:** suggested changes not yet promoted to the authoritative plan;
+- **explanations:** reasoning or summaries that help a person understand; and
+- **derived views:** timelines, readiness indicators, maps, budgets, layouts,
+  and other visualizations calculated from traceable records.
+
+An AI explanation should not silently become a trusted fact. A visualization
+should not become a competing source of truth.
+
+## Planning, change, provenance, and history
+
+Moving plans change because the world changes. History is product value, not
+database residue.
+
+For a material choice or change, preserve as applicable:
+
+- what was chosen or changed;
+- the alternatives or prior value;
+- why it was chosen;
+- the source or evidence;
+- the responsible person or AI;
+- the observation time and the decision or update time;
+- confidence, assumptions, and known uncertainty;
+- the operating policy and review state;
+- follow-up work and affected dependencies; and
+- later revisions, supersession, or reversal.
+
+A current-state recap should be compact enough for a person or AI to orient
+quickly. It should name the move, current phase, important dates and places,
+settled decisions, active tasks, blocked dependencies, open questions, recent
+material changes, risks, and next actions. Drill-down should reveal the full
+plan and evidence without forcing every detail into the recap.
+
+The repository already records created and updated times across many objects,
+acting users or API keys on selected records, research sources and check times,
+move-scoped audit logs, AI review states, and reversible Layout Studio
+operations. Those pieces do not yet form a complete first-class decision and
+revision history across the whole move.
+
+## Tasks, dependencies, questions, notes, and queues
+
+### Tasks and dependencies
+
+A task is a unit of moving work with an outcome, state, responsible actor,
+timing, priority, scope, and next action. Tasks may depend on decisions,
+evidence, other tasks, external events, or time. A dependency should explain
+what is waiting and what would unblock it.
+
+Tasks should support both planned work and work discovered during execution.
+Completion should record the useful result rather than merely hiding the task.
+The current repository does not provide a general first-class task and
+dependency model; this is later product direction.
+
+### Questions and notes
+
+Questions and notes belong where they have meaning. They may attach to a move,
+task, place, item, room, decision, vendor, cost, piece of evidence, or another
+relevant record. A question should retain who asked, why it matters, who may
+answer, status, answer or resolution, and any resulting work.
+
+The repository currently derives structured unanswered move-readiness prompts,
+stores notes on several record types, and lets capture-queue work return an AI
+question. It does not yet prove a general attachable question-and-note system.
+
+### Queue
+
+The queue contains new work or instructions for your AI. Useful queue fields
+include requester, owner, scope, instructions, evidence, authority needed,
+state, claim or lease, blockers, question, result references, and resume
+context.
+
+Queue ownership and claim rules should prevent duplicate work without making
+an abandoned claim permanent. Delegation to run another person's queue must be
+explicit. An AI may continue useful unblocked work elsewhere rather than treat
+an unanswered queue item as a stop for the entire move.
+
+## Places, items, costs, and evidence
+
+### Places
+
+Places may include origins, destinations, candidate homes, temporary housing,
+storage, rooms, yards, routes, pickup or drop-off points, and service
+locations. A place should have stable identity even when its label, role, or
+details change. Private addresses and access details require tighter visibility
+than a general place name.
+
+The repository currently supports origin and destination fields, structured
+start and end locations, move spaces, transport-related spaces, and floor-plan
+entities. It does not yet prove maps, geocoding, route services, live traffic,
+property search, or a general place-candidate model.
+
+### Items and inventories
+
+Possessions and inventory may be owned, planned, packed, sold, donated, stored,
+discarded, claimed, or moved by different methods. Their durable records may
+include identity, quantity, condition, dimensions, weight, value, evidence,
+room or space, owner, disposition, box, transport assignment, destination, and
+review state.
+
+The repository has substantial structured support for items, planned items,
+boxes and contents, photos, rooms and spaces, disposition, sale preparation,
+transport assignment, and layout placement. This foundation should be extended
+rather than mistaken for the whole moving product.
+
+### Costs and budgets
+
+Moving costs may include estimates, quotes, deposits, purchases, services,
+travel, storage, reimbursements, actual costs, and contingency. Preserve
+currency, source, date, estimate range, status, responsible payer, related
+vendor or task, and whether a figure is proposed, approved, paid, reimbursed,
+or disputed.
+
+The repository currently stores item values, replacement values, sale pricing,
+planned-item estimated prices, and internal AI-job cost data. It does not yet
+provide a general move budget, vendor estimate, quote comparison, payment, or
+reimbursement model. Internal AI usage cost is not a user's moving budget.
+
+### Evidence
+
+Evidence may be a photo, file, receipt, contract, estimate, message, research
+source, observation, or signed document. Preserve source, observed date,
+capture or import method, relevant scope, visibility, and the record or
+decision it supports.
+
+Evidence can inform a fact without becoming the fact. A newer source may
+supersede a conclusion while the older observation remains part of history.
+Private evidence must not become public merely because a summary or packet is
+shared.
+
+## Human visibility and visualization
+
+The human workspace should answer these questions without technical knowledge:
+
+1. Which move and area am I viewing?
+2. Who and which chosen AIs may read here?
+3. Which of them may create, update, delete, promote, or publish here?
+4. What is the current plan, and how complete or ready is it?
+5. What is active, waiting, blocked, or resumable?
+6. What needs my judgment, information, or approval?
+7. Where did an important fact or decision come from, and how fresh is it?
+8. What changed, who or what changed it, and what was affected?
+9. What risks, dependencies, deadlines, costs, or capacity limits deserve
+   attention?
+10. What can I correct, export, delete, undo, revoke, or recover?
+
+Useful views may include:
+
+- a phase timeline with milestones, dependencies, and drift;
+- a place and route view with privacy-aware detail;
+- a room, box, and item hierarchy;
+- a layout or placement plan;
+- a transport and capacity plan;
+- a budget and estimate comparison;
+- a decisions-and-changes log;
+- a work board showing active, waiting, blocked, and completed work;
+- a risk and readiness view; and
+- a compact **current move recap** with drill-down.
+
+Every visualization should reveal its move and area scope, source, calculation,
+freshness, and uncertainty when those details affect interpretation. The
+repository currently has summary, capacity, move-day checklist, documentation,
+and Layout Studio foundations; it does not prove every view in this list.
+
+Human control means more than confirmation dialogs. It requires understandable
+scope, visible authority, status, provenance, correction paths, history,
+export, deletion, and revocation. Preview and review should increase with risk
+and uncertainty, while ordinary authorized work should remain efficient.
+
+## Capability truth and ledger
+
+Every user-facing capability must have exactly one public status:
+
+| Status | Meaning | Claim rule |
+|---|---|---|
+| **Now** | Shipped in the environment being described and verified through the relevant user path | May use present tense and a direct action only after current proof |
+| **Coming soon** | Approved and actively scheduled, with a defined user outcome and an owned delivery path | Must be labeled “coming soon”; no direct action, fake interaction, or implied availability |
+| **Later** | A desired direction, exploration, partial foundation, or unscheduled capability | May appear only as future direction, never as a promise or near-term commitment |
+
+If evidence is missing, stale, contradictory, or limited to local source code,
+the public claim does not qualify as **Now**. If desired work lacks an active
+delivery commitment, it is **Later**, not **Coming soon**.
+
+### Dated repository evidence ledger
+
+> **Time-sensitive evidence — verified 2026-07-29:** This table describes the
+> checked-out repository at commit `3c28649`. It is not proof that the same
+> capability is deployed, configured, reachable through a supported client, or
+> usable by a real account in production.
+
+| Capability area | Repository evidence | Honest product interpretation |
+|---|---|---|
+| Move projects | Structured move type, status, origin/destination, date range, notes, PCS fields, and archive state | **Repository-verified foundation.** Broader move shapes and flexible project details remain design direction |
+| People and scope | Households, memberships, move-only participants, roles, invitations, sensitive-field visibility, access disablement | **Partial foundation.** Not the complete independent per-actor read/create/update/delete/promote/publish matrix |
+| Inventory and packing | Items, planned items, boxes, contents, spaces, photos, disposition, values, review flags, archive or soft-delete paths | **Repository-verified foundation.** Inventory is a major capability, not the whole identity |
+| Transport and layouts | Resources, zones, trips, trip spaces, capacity, assignments, floor plans, proposals, reversible plan operations, SVG snapshots | **Repository-verified foundation.** No claim of maps, live routing, booking, or provider execution |
+| Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields, scoped and revocable share links | **Repository-verified foundation.** Sharing is explicit; nothing here supports automatic publication |
+| Questions and queue | Derived readiness questions; a per-user capture queue with instructions, media, claim expiry, delegation, AI question, summary, and result references | **Partial foundation.** Not a general attachable question system or move-wide task queue |
+| History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research checks, and plan operation inverses | **Partial foundation.** Not a complete decision, dependency, and revision history |
+| API and MCP source surfaces | Documented REST API, a remote OAuth MCP gateway in `convex/mcp*.ts`, and a separate stdio/HTTP MCP server in `mcp-server/`, with scoped operations | **Repository-verified source surface only.** Reverify deployment, auth, client setup, exact tools, and end-to-end behavior before a public **Now** claim |
+| Costs | Item and replacement values, sale prices and research, planned-item estimate, internal AI-job cost | **Partial foundation.** No general move budget, vendor quote, payment, or reimbursement system |
+| Collaboration and publishing | Household access, move participants, documentation profiles, explicit scoped share links and revocation | **Partial foundation.** Broader collaboration is not automatic; public or reusable promotion needs explicit scope and authority |
+| General tasks, dependencies, decisions, risks, vendors, and appointments | No complete first-class cross-move model verified | **Later** |
+| Automatic import, calendars, maps, live providers, vendor communication, service arrangement, signing, buying, or booking | No qualifying repository and user-path proof verified | **Later or outside Moving itself** |
+| Cross-product Assist connections | No qualifying connection contract or user-path proof verified | **Later** and must be explicit, reviewable, and revocable |
+
+No item in this philosophy is designated **Coming soon**. Inclusion here or in
+another planning document is not an active delivery commitment.
+
+The source tree provides unusually concrete MCP evidence, so technical
+documentation may describe those implementations precisely. Public copy must
+still wait for current proof of the real endpoint, authentication, caller and
+move isolation, supported-client setup, exact tool catalog, and an end-to-end
+retrieve → work → save → human-inspection result.
+
+## Trust boundaries and non-goals
+
+Assist With Moving must never imply that it:
+
+- stores passwords, browser cookies, browser sessions, or credentials for
+  vendors, services, calendars, maps, marketplaces, or the user's chosen AI;
+- secretly imports private data or watches external accounts;
+- itself browses, researches, communicates with vendors, requests quotes,
+  schedules appointments, or arranges services unless a separate
+  Moving-operated integration has shipped and been verified;
+- signs contracts, accepts legal terms, commits the user to a vendor, or
+  provides legal, insurance, tax, real-estate, or safety guarantees;
+- makes purchases, sends payments, books travel, reserves storage, or places
+  orders in an external service;
+- publishes or shares private moving data automatically;
+- grants unrestricted access across people, moves, areas, records, or Assist
+  products;
+- lets a person or AI change, delete, promote, or publish information merely
+  because that actor may retrieve it;
+- treats a review or automation preference as permission;
+- turns AI reasoning into an authoritative fact without appropriate scope,
+  operation authority, evidence, provenance, and policy; or
+- guarantees that an estimate, capacity calculation, inventory, route, plan,
+  deadline, or checklist is complete or correct.
+
+These boundaries apply to Moving, not to work the user authorizes their chosen
+AI to perform elsewhere. Your AI may research, communicate, browse, or arrange
+things through capabilities available in its own environment when you authorize
+it. Moving does not store or inherit those credentials or sessions, does not
+decide what the external AI may do, and does not represent that outside access
+as a Moving integration.
+
+Moving may issue its own scoped credentials or use its own authorization flow
+so an approved client can call Moving tools. That is different from collecting
+a password for a mover, bank, marketplace, browser, calendar, or AI provider.
+Moving authorization must derive and enforce the person, household, move,
+area, record, and operation scope; preserve acting identity and provenance; and
+support revocation.
+
+Explicit sharing that is already supported must remain recipient-safe and
+revocable. Future collaboration or promotion must begin private and require a
+deliberate choice of audience, content, allowed actions, duration, and
+revocation path. “Shared with my AI” never means “public.”
+
+## Language rules
+
+Public and product language should:
+
+- say **“your AI”** when referring to the AI the user chooses;
+- say **“move,” “plan,” “work,” “queue,” “question,” “decision,” “evidence,”
+  “history,”** and **“current recap”** instead of generic AI-platform jargon;
+- describe Moving as the durable place where the work lives, not as the AI
+  itself;
+- explain the person, AI, and Moving roles before naming protocols or technical
+  setup;
+- describe inventory, packing, layouts, transport, vendors, costs, paperwork,
+  and move-day coordination as capabilities, not the entire identity;
+- distinguish current, proposed, estimated, imported, observed, stale,
+  superseded, and completed states;
+- distinguish external user-authorized AI activity from a Moving-operated
+  connection or integration;
+- distinguish observing, searching, retrieving, and reading from creating,
+  updating, deleting, promoting, and publishing;
+- name the actual household, move, area, record, person or AI, and permitted
+  operations when describing access;
+- label uncertainty, freshness, authority, and future capability status
+  directly; and
+- use **“queue”** for new work or instructions to your AI, not as a blanket
+  approval gate or a synonym for every task.
+
+Avoid **“agent”** in user-facing copy when **“your AI”** communicates the idea.
+Technical documentation may retain established names such as API-key actor,
+agent context, or MCP tool when compatibility or implementation precision
+requires them.
+
+Do not say **“automatic import,” “connected calendar,” “live map,” “vendor
+booking,” “AI makes the arrangements,” “works with every AI,” “one click,”** or
+name a specific client as currently supported without exact current proof.
+Repository source, a route, a tool manifest, a mockup, or a plan is not enough
+for a public availability claim.
+
+The current implementation name **MovingManifest** may remain in technical,
+compatibility, historical, and delivery contexts until an approved product
+cutover says otherwise. Do not describe **Assist With Moving** branding,
+domains, redirects, OAuth identity, or provider configuration as shipped based
+on this philosophy.
+
+## Public homepage and future shell implications
+
+These are design constraints, not a UI specification or authorization to
+change the application.
+
+### Public homepage
+
+- Lead with the durable, evolving move plan shared by a person and their AI.
+- Show a move as a changing project, not a one-time checklist or inventory
+  catalog.
+- Explain the Assist family model: your AI reasons, Moving remembers and
+  organizes, and you remain the authority.
+- Show the moving loop before listing features.
+- Demonstrate timeline, places, work, decisions, inventory, costs, evidence,
+  and a current recap as one coherent system—even when future examples must be
+  clearly illustrative.
+- Explain user-owned data and actor-specific operation authority without
+  depicting read access as blanket write authority.
+- Use a visible **Now / Coming soon / Later** ledger when future work appears.
+- Keep current MovingManifest implementation naming distinct from an unshipped
+  Assist With Moving product or domain cutover.
+- Use synthetic, clearly labeled illustrations. Do not show fake live maps,
+  connected calendars, vendor conversations, bookings, cross-product data, or
+  autonomous purchases.
+- Prefer an editorial field-guide character—route notes, annotated plans,
+  packing labels, and a calm sense of forward motion—over chatbot, generic
+  SaaS, or mover-clip-art styling.
+
+### Future signed-in shell
+
+- Center the selected move, current phase, recent material changes, and compact
+  current-state recap.
+- Make **active**, **waiting**, **blocked**, **needs you**, and **resumable**
+  work immediately understandable.
+- Treat the queue as the front door for instructions to your AI while keeping
+  tasks, decisions, evidence, and records appropriately distinct.
+- Keep selected move and area scope, acting identity, independently allowed
+  operations, and revocation controls visible.
+- Let questions and notes appear in the context of the move, task, place, item,
+  decision, cost, vendor, or evidence they concern.
+- Put source, date, freshness, author, authority, review state, and uncertainty
+  near the information they qualify.
+- Make changes and downstream consequences inspectable; expose history,
+  reversal, or recovery only where the underlying capability supports it.
+- Connect timeline, places, inventory, transport, costs, documents, and
+  readiness through traceable views rather than duplicating truth.
+- Keep manual human workflows complete. AI assistance should extend the
+  workspace, not make a person's own plan inaccessible without an AI.
+- Keep connection and capability status honest inside the product as well as on
+  the public site.
+
+## Maintenance and claim verification
+
+This document is stable product philosophy; its capability examples are a
+dated evidence map and can drift.
+
+Before changing a public page, onboarding flow, signed-in shell, product
+description, AI setup guide, or integration guide:
+
+1. classify every material claim as **Now**, **Coming soon**, or **Later**;
+2. verify **Now** against the exact deployed environment and relevant user
+   path—not only source code, a merged pull request, provider configuration, or
+   an older production observation;
+3. attach an owner and active delivery reference to **Coming soon**;
+4. default unverified, partial, or unscheduled claims to **Later** or omit them;
+5. verify trust-sensitive wording against current authentication, data,
+   tool/API, actor-scope, operation-permission, sharing, and provider behavior;
+6. recheck both MCP implementations before claiming tool parity: the remote
+   OAuth gateway in `convex/mcp*.ts` and the separate server in `mcp-server/`;
+7. update the capability evidence date, source commit, and evidence when status
+   changes; and
+8. keep the Markdown and HTML companion synchronized in the same commit.
+
+Before naming MCP or a specific AI client as **Now**, prove the real endpoint,
+authentication flow, caller and move isolation, exact documented tool list,
+supported-client setup, and an end-to-end
+context → work → save → human-inspection result. Before naming a provider-style
+connection, prove consent, scope, credential handling, revocation, failure
+behavior, freshness, and the exact user path. Before naming an external action,
+prove authorization, preview or confirmation policy, execution receipt, error
+handling, and recovery boundaries.
+
+Changes to the one-sentence identity, Assist family model, user-owned-data and
+scoped-authority principle, user authority, cross-product boundary, or
+trust/non-goal boundaries require explicit product-owner approval.
+Evidence-led capability updates may change without redefining the philosophy.
+
+## Evidence references
+
+The verified repository-foundation boundary in this revision was reconciled
+against:
+
+- `README.md`
+- `docs/api-and-mcp.md`
+- `convex/schema.ts`
+- `convex/lib/permissions.ts`
+- `convex/lib/roles.ts`
+- `convex/lib/apiKeyAuth.ts`
+- `convex/lib/queueAccess.ts`
+- `convex/mcp.ts`
+- `convex/mcpToolsQueue.ts`
+- `mcp-server/capabilities.mjs`
+- `mcp-server/movingmanifest-mcp.mjs`
+- `src/app/(marketing)/page.tsx`
+- `src/app/(marketing)/features/page.tsx`
+- `src/app/(marketing)/ai/page.tsx`
+- `src/app/(marketing)/privacy/page.tsx`
+
+These sources describe the checked-out implementation and its current
+positioning. They do not prove production deployment, configuration, client
+compatibility, or authenticated user behavior. When they conflict with this
+document about product identity or language, this document governs identity;
+when they contain newer capability evidence, reverify the claim and update this
+document's dated ledger. Historical and machine-facing names must remain intact
+until their own compatibility and cutover plans authorize change.
+    </script>
+    <script>
+      (() => {
+        "use strict";
+
+        const sourceNode = document.getElementById("markdown-source");
+        const article = document.getElementById("reader-content");
+        const desktopNav = document.getElementById("desktop-nav");
+        const mobileNav = document.getElementById("mobile-nav");
+        const mobileMenu = document.querySelector(".mobile-toc");
+
+        if (!sourceNode || !article || !desktopNav || !mobileNav) return;
+
+        const source = sourceNode.textContent
+          .replace(/^\n/, "")
+          .replace(/\n {4}$/, "");
+        const lines = source.split(/\r?\n/);
+
+        const escapeHtml = (value) =>
+          value
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+
+        const inline = (value) => {
+          let output = escapeHtml(value);
+          output = output.replace(/`([^`]+)`/g, "<code>$1</code>");
+          output = output.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+          output = output.replace(
+            /\[([^\]]+)\]\(([^)]+)\)/g,
+            '<a href="$2">$1</a>'
+          );
+          return output;
+        };
+
+        const slugify = (value) =>
+          value
+            .toLowerCase()
+            .replace(/&amp;/g, "and")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "");
+
+        const isBoundary = (line, nextLine) =>
+          !line.trim() ||
+          /^#{1,3}\s/.test(line) ||
+          /^>\s?/.test(line) ||
+          /^-\s+/.test(line) ||
+          /^\d+\.\s+/.test(line) ||
+          (/^\|/.test(line) && nextLine && /^\|?[\s:|-]+\|/.test(nextLine));
+
+        const parseCells = (line) =>
+          line
+            .trim()
+            .replace(/^\|/, "")
+            .replace(/\|$/, "")
+            .split("|")
+            .map((cell) => cell.trim());
+
+        const renderTable = (start) => {
+          const headers = parseCells(lines[start]);
+          const rows = [];
+          let cursor = start + 2;
+          while (cursor < lines.length && /^\|/.test(lines[cursor])) {
+            rows.push(parseCells(lines[cursor]));
+            cursor += 1;
+          }
+
+          let className = "";
+          if (headers[0] === "Reader") className = "reading-map";
+          if (headers[0] === "Status") className = "status-table";
+          if (headers[0] === "Capability area") className = "capability-ledger";
+
+          const head = headers
+            .map((cell) => '<th scope="col">' + inline(cell) + "</th>")
+            .join("");
+          const body = rows
+            .map((row) => {
+              const cells = row
+                .map((cell, index) => {
+                  let cellClass = "";
+                  if (className === "status-table" && index === 0) {
+                    if (cell.includes("Now")) cellClass = "status-now";
+                    if (cell.includes("Coming soon")) cellClass = "status-soon";
+                    if (cell.includes("Later")) cellClass = "status-later";
+                  }
+                  return (
+                    "<td" +
+                    (cellClass ? ' class="' + cellClass + '"' : "") +
+                    ">" +
+                    inline(cell) +
+                    "</td>"
+                  );
+                })
+                .join("");
+              return "<tr>" + cells + "</tr>";
+            })
+            .join("");
+
+          return {
+            html:
+              '<div class="table-wrap ' +
+              className +
+              '" role="region" aria-label="' +
+              escapeHtml(headers[0]) +
+              ' table" tabindex="0"><table><thead><tr>' +
+              head +
+              "</tr></thead><tbody>" +
+              body +
+              "</tbody></table></div>",
+            cursor,
+          };
+        };
+
+        const renderList = (start, ordered) => {
+          const marker = ordered ? /^\d+\.\s+(.*)$/ : /^-\s+(.*)$/;
+          const items = [];
+          let cursor = start;
+
+          while (cursor < lines.length) {
+            const match = lines[cursor].match(marker);
+            if (!match) break;
+            const chunks = [match[1]];
+            cursor += 1;
+
+            while (
+              cursor < lines.length &&
+              lines[cursor].trim() &&
+              !marker.test(lines[cursor]) &&
+              !/^#{1,3}\s/.test(lines[cursor]) &&
+              !/^>\s?/.test(lines[cursor]) &&
+              !/^\|/.test(lines[cursor])
+            ) {
+              chunks.push(lines[cursor].trim());
+              cursor += 1;
+            }
+
+            items.push("<li>" + inline(chunks.join(" ")) + "</li>");
+            if (
+              cursor < lines.length &&
+              !lines[cursor].trim() &&
+              cursor + 1 < lines.length &&
+              marker.test(lines[cursor + 1])
+            ) {
+              cursor += 1;
+            }
+          }
+
+          const tag = ordered ? "ol" : "ul";
+          return {
+            html: "<" + tag + ">" + items.join("") + "</" + tag + ">",
+            cursor,
+          };
+        };
+
+        const parts = [];
+        let chapterOpen = false;
+        let chapterNumber = 0;
+        let index = 0;
+
+        while (index < lines.length) {
+          const line = lines[index];
+          const nextLine = lines[index + 1] || "";
+
+          if (!line.trim()) {
+            index += 1;
+            continue;
+          }
+
+          if (/^#\s+/.test(line)) {
+            index += 1;
+            continue;
+          }
+
+          const h2 = line.match(/^##\s+(.+)$/);
+          if (h2) {
+            if (chapterOpen) parts.push("</section>");
+            chapterOpen = true;
+            chapterNumber += 1;
+            const title = inline(h2[1]);
+            const id = slugify(title);
+            parts.push(
+              '<section class="chapter" id="' +
+                id +
+                '" data-chapter><span class="folio">Section · ' +
+                String(chapterNumber).padStart(2, "0") +
+                "</span><h2>" +
+                title +
+                "</h2>"
+            );
+            index += 1;
+            continue;
+          }
+
+          const h3 = line.match(/^###\s+(.+)$/);
+          if (h3) {
+            const title = inline(h3[1]);
+            parts.push('<h3 id="' + slugify(title) + '">' + title + "</h3>");
+            index += 1;
+            continue;
+          }
+
+          if (/^>\s?/.test(line)) {
+            const quoteLines = [];
+            while (index < lines.length && /^>\s?/.test(lines[index])) {
+              const content = lines[index].replace(/^>\s?/, "").trim();
+              if (content) quoteLines.push(content);
+              index += 1;
+            }
+            const quoteText = quoteLines.join(" ");
+            const warningClass = quoteText.includes("Time-sensitive evidence")
+              ? " evidence-warning"
+              : "";
+            parts.push(
+              '<aside class="source-contract' +
+                warningClass +
+                '"><p>' +
+                inline(quoteText) +
+                "</p></aside>"
+            );
+            continue;
+          }
+
+          if (/^\|/.test(line) && /^\|?[\s:|-]+\|/.test(nextLine)) {
+            const rendered = renderTable(index);
+            parts.push(rendered.html);
+            index = rendered.cursor;
+            continue;
+          }
+
+          if (/^-\s+/.test(line)) {
+            const rendered = renderList(index, false);
+            parts.push(rendered.html);
+            index = rendered.cursor;
+            continue;
+          }
+
+          if (/^\d+\.\s+/.test(line)) {
+            const rendered = renderList(index, true);
+            parts.push(rendered.html);
+            index = rendered.cursor;
+            continue;
+          }
+
+          const paragraph = [line.trim()];
+          index += 1;
+          while (
+            index < lines.length &&
+            !isBoundary(lines[index], lines[index + 1] || "")
+          ) {
+            paragraph.push(lines[index].trim());
+            index += 1;
+          }
+          parts.push("<p>" + inline(paragraph.join(" ")) + "</p>");
+        }
+
+        if (chapterOpen) parts.push("</section>");
+        article.innerHTML = parts.join("");
+
+        const sections = Array.from(article.querySelectorAll("[data-chapter]"));
+        for (const section of sections) {
+          const heading = section.querySelector("h2");
+          if (!heading) continue;
+          const label = heading.textContent || "";
+          const linkMarkup =
+            '<a href="#' + section.id + '">' + escapeHtml(label) + "</a>";
+          desktopNav.insertAdjacentHTML(
+            "beforeend",
+            "<li>" + linkMarkup + "</li>"
+          );
+          mobileNav.insertAdjacentHTML(
+            "beforeend",
+            "<li>" + linkMarkup + "</li>"
+          );
+        }
+
+        const links = Array.from(
+          desktopNav.querySelectorAll("a[href^='#']")
+        );
+
+        const setCurrent = (id) => {
+          for (const link of links) {
+            if (link.getAttribute("href") === "#" + id) {
+              link.setAttribute("aria-current", "location");
+            } else {
+              link.removeAttribute("aria-current");
+            }
+          }
+        };
+
+        if (links[0]) links[0].setAttribute("aria-current", "location");
+
+        for (const link of links) {
+          link.addEventListener("click", () => {
+            const targetId = link.getAttribute("href")?.slice(1);
+            if (targetId) setCurrent(targetId);
+          });
+        }
+
+        if ("IntersectionObserver" in window) {
+          const observer = new IntersectionObserver(
+            (entries) => {
+              const visible = entries
+                .filter((entry) => entry.isIntersecting)
+                .sort(
+                  (a, b) =>
+                    a.boundingClientRect.top - b.boundingClientRect.top
+                );
+              if (visible[0]) setCurrent(visible[0].target.id);
+            },
+            { rootMargin: "-15% 0px -70% 0px", threshold: [0, 0.1] }
+          );
+          sections.forEach((section) => observer.observe(section));
+        }
+
+        const updateProgress = () => {
+          const available =
+            document.documentElement.scrollHeight - window.innerHeight;
+          const progress = available > 0 ? (window.scrollY / available) * 100 : 0;
+          document.documentElement.style.setProperty(
+            "--reading-progress",
+            Math.min(100, Math.max(0, progress)) + "%"
+          );
+        };
+
+        window.addEventListener("scroll", updateProgress, { passive: true });
+        updateProgress();
+
+        if (mobileMenu) {
+          mobileMenu.addEventListener("click", (event) => {
+            if (event.target instanceof HTMLAnchorElement) {
+              mobileMenu.removeAttribute("open");
+            }
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
