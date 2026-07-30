@@ -120,12 +120,38 @@ does not become able to update data because a user selected “automatic.” Wit
 a real update grant, however, the user may choose efficient direct saving
 instead of requiring approval for every low-risk correction.
 
-The current repository has meaningful foundations for roles, move-specific
-participants, scoped and revocable API keys, move restrictions, sensitive-field
-visibility, share-link actions, owner kill switches, and audit events. It does
-not yet prove the complete independent per-person and per-AI operation matrix
-described here, nor a complete setup, editing, revocation, promotion, and
-publishing experience for every move area and record.
+### Two distinct sharing paths
+
+Across the Assist family, access for a named participant and access to a
+bounded shared view are separate foundations. Moving must make both prominent
+and must never blur them:
+
+1. **Invite a named person into the move or project.** A household member,
+   family member, colleague, helper, or vendor coordinator may need durable
+   access as an identified participant. The invitation must name the person,
+   move, role, allowed areas, and permitted operations. Their access can be
+   changed or revoked without changing anyone else's access.
+2. **Share one bounded view without workspace membership.** The user may share
+   a selected non-sensitive plan, checklist, item group, documentation packet,
+   or other deliberately bounded view through a revocable link. The link must
+   expose only the selected records and fields, identify any allowed recipient
+   actions, and carry an expiry or clear revocation path. Receiving the link
+   does not make someone a move participant or workspace member.
+
+Neither path grants the other. Inviting a person must not silently publish a
+link, and opening a link must not silently create membership. Both paths are
+explicit, revocable, and auditable: preserve who invited or shared, what scope
+and operations were granted, when access began or ended, and material access or
+changes. Nothing is shared automatically.
+
+The current repository has meaningful foundations for named household and
+move-specific participants, roles, invitations, move restrictions,
+sensitive-field visibility, scoped and revocable API keys, documentation
+profiles, expiring and revocable share links, allowed link actions, access
+metadata, owner kill switches, and audit events. It does not yet prove the
+complete independent per-person and per-AI operation matrix, every participant
+setup and revocation flow, or generalized bounded-link sharing for selected
+plans, checklists, item groups, and other move views.
 
 ## The moving loop
 
@@ -348,16 +374,18 @@ shared.
 The human workspace should answer these questions without technical knowledge:
 
 1. Which move and area am I viewing?
-2. Who and which chosen AIs may read here?
-3. Which of them may create, update, delete, promote, or publish here?
-4. What is the current plan, and how complete or ready is it?
-5. What is active, waiting, blocked, or resumable?
-6. What needs my judgment, information, or approval?
-7. Where did an important fact or decision come from, and how fresh is it?
-8. What changed, who or what changed it, and what was affected?
-9. What risks, dependencies, deadlines, costs, or capacity limits deserve
+2. Which named people and chosen AIs are participants in this move?
+3. Which of them may read, create, update, delete, promote, or publish here?
+4. Which bounded share links exist, exactly what does each expose, when does it
+   expire, and how can I revoke it?
+5. What is the current plan, and how complete or ready is it?
+6. What is active, waiting, blocked, or resumable?
+7. What needs my judgment, information, or approval?
+8. Where did an important fact or decision come from, and how fresh is it?
+9. What changed, who or what changed it, and what was affected?
+10. What risks, dependencies, deadlines, costs, or capacity limits deserve
    attention?
-10. What can I correct, export, delete, undo, revoke, or recover?
+11. What can I correct, export, delete, undo, revoke, or recover?
 
 Useful views may include:
 
@@ -406,15 +434,15 @@ delivery commitment, it is **Later**, not **Coming soon**.
 | Capability area | Repository evidence | Honest product interpretation |
 |---|---|---|
 | Move projects | Structured move type, status, origin/destination, date range, notes, PCS fields, and archive state | **Repository-verified foundation.** Broader move shapes and flexible project details remain design direction |
-| People and scope | Households, memberships, move-only participants, roles, invitations, sensitive-field visibility, access disablement | **Partial foundation.** Not the complete independent per-actor read/create/update/delete/promote/publish matrix |
+| Named participant access | Households, named invitations, household-backed and move-only participants, roles, sensitive-field visibility, and access disablement | **Repository-verified foundation for inviting identified people.** The complete independent per-actor read/create/update/delete/promote/publish matrix and every participant-management flow remain partial |
 | Inventory and packing | Items, planned items, boxes, contents, spaces, photos, disposition, values, review flags, archive or soft-delete paths | **Repository-verified foundation.** Inventory is a major capability, not the whole identity |
 | Transport and layouts | Resources, zones, trips, trip spaces, capacity, assignments, floor plans, proposals, reversible plan operations, SVG snapshots | **Repository-verified foundation.** No claim of maps, live routing, booking, or provider execution |
-| Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields, scoped and revocable share links | **Repository-verified foundation.** Sharing is explicit; nothing here supports automatic publication |
+| Evidence and documentation | Private photo records, research sources, documentation profiles, exports, and recipient-safe fields | **Repository-verified foundation.** Private evidence does not become shareable merely because a summary or packet exists |
 | Questions and queue | Derived readiness questions; a per-user capture queue with instructions, media, claim expiry, delegation, AI question, summary, and result references | **Partial foundation.** Not a general attachable question system or move-wide task queue |
 | History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research checks, and plan operation inverses | **Partial foundation.** Not a complete decision, dependency, and revision history |
 | API and MCP source surfaces | Documented REST API, a remote OAuth MCP gateway in `convex/mcp*.ts`, and a separate stdio/HTTP MCP server in `mcp-server/`, with scoped operations | **Repository-verified source surface only.** Reverify deployment, auth, client setup, exact tools, and end-to-end behavior before a public **Now** claim |
 | Costs | Item and replacement values, sale prices and research, planned-item estimate, internal AI-job cost | **Partial foundation.** No general move budget, vendor quote, payment, or reimbursement system |
-| Collaboration and publishing | Household access, move participants, documentation profiles, explicit scoped share links and revocation | **Partial foundation.** Broader collaboration is not automatic; public or reusable promotion needs explicit scope and authority |
+| Bounded link sharing | Documentation profiles plus move- or profile-scoped links with selected fields/actions, expiry, revocation, access metadata, and recipient comments | **Repository-verified bounded-sharing foundation.** General selected-plan, checklist, item-group, and arbitrary-view links are **Later** until their exact manifests and user paths are implemented and verified |
 | General tasks, dependencies, decisions, risks, vendors, and appointments | No complete first-class cross-move model verified | **Later** |
 | Automatic import, calendars, maps, live providers, vendor communication, service arrangement, signing, buying, or booking | No qualifying repository and user-path proof verified | **Later or outside Moving itself** |
 | Cross-product Assist connections | No qualifying connection contract or user-path proof verified | **Later** and must be explicit, reviewable, and revocable |
@@ -472,6 +500,12 @@ revocable. Future collaboration or promotion must begin private and require a
 deliberate choice of audience, content, allowed actions, duration, and
 revocation path. “Shared with my AI” never means “public.”
 
+A named participant invitation and a bounded share link are not
+interchangeable. A link must not silently create membership or inherit a
+participant's broader access. Membership must not silently create a public
+link. Removing one does not substitute for revoking the other; each access path
+needs its own visible status, revocation control, and audit history.
+
 ## Language rules
 
 Public and product language should:
@@ -491,6 +525,10 @@ Public and product language should:
   connection or integration;
 - distinguish observing, searching, retrieving, and reading from creating,
   updating, deleting, promoting, and publishing;
+- use **“invite”** for named participant access and **“share link”** for a
+  bounded view that does not require workspace membership;
+- name what a link exposes—such as a selected plan, checklist, item group, or
+  packet—rather than saying an entire move is “shared”;
 - name the actual household, move, area, record, person or AI, and permitted
   operations when describing access;
 - label uncertainty, freshness, authority, and future capability status
@@ -533,6 +571,9 @@ change the application.
   clearly illustrative.
 - Explain user-owned data and actor-specific operation authority without
   depicting read access as blanket write authority.
+- Show the two sharing paths separately: inviting a named person into the move
+  with scoped permissions, and sending a revocable link to one selected
+  non-sensitive view without granting membership.
 - Use a visible **Now / Coming soon / Later** ledger when future work appears.
 - Keep current MovingManifest implementation naming distinct from an unshipped
   Assist With Moving product or domain cutover.
@@ -553,6 +594,10 @@ change the application.
   tasks, decisions, evidence, and records appropriately distinct.
 - Keep selected move and area scope, acting identity, independently allowed
   operations, and revocation controls visible.
+- Give **People with move access** and **Shared links** separate surfaces.
+  People should show identity, role, scope, operations, and status; links should
+  show the selected view, exposed fields, recipient actions, expiry, access
+  history, and revoke control.
 - Let questions and notes appear in the context of the move, task, place, item,
   decision, cost, vendor, or evidence they concern.
 - Put source, date, freshness, author, authority, review state, and uncertainty
