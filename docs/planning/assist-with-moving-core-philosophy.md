@@ -16,22 +16,6 @@ Assist With Moving rename, domain change, provider change, or production
 cutover has shipped. Execution plans, roadmaps, release notes, and provider
 runbooks remain authoritative for delivery status.
 
-## How to use this document
-
-Read the document in order when making a product-level decision. For focused
-work, use this reading map:
-
-| Reader | Start with | Questions answered |
-|---|---|---|
-| Product owners | [One-sentence identity](#one-sentence-identity), [Assist family model](#the-assist-family-model), [Shared authority](#user-owned-data-and-scoped-authority), and [Trust boundaries](#trust-boundaries-and-non-goals) | What Moving is, how responsibility is divided, who owns the data, and what the product must not imply |
-| Implementers | [Shared authority](#user-owned-data-and-scoped-authority), [Moving loop](#the-moving-loop), [Durable information model](#durable-information-model), [Visibility](#human-visibility-and-visualization), and [Maintenance](#maintenance-and-claim-verification) | What must persist, how work resumes, where controls belong, and which claims require proof |
-| AI workers and integration builders | [Assist family model](#the-assist-family-model), [Shared authority](#user-owned-data-and-scoped-authority), [Moving loop](#the-moving-loop), and [Trust boundaries](#trust-boundaries-and-non-goals) | What your AI does, how scoped tools may be used, and which move and operation boundaries apply |
-| User-facing writers and designers | [Capability ledger](#capability-truth-and-ledger), [Language rules](#language-rules), and [Design implications](#public-homepage-and-future-shell-implications) | What may be claimed now, which words to use, and how the philosophy should appear in the experience |
-
-Anyone publishing a capability claim must read both
-[Capability truth and ledger](#capability-truth-and-ledger) and
-[Maintenance and claim verification](#maintenance-and-claim-verification).
-
 ## One-sentence identity
 
 **Assist With Moving is a durable, user-controlled move-planning workspace
@@ -42,9 +26,182 @@ Inventory, packing, timelines, places, layouts, transport, vendors, costs,
 paperwork, and move-day coordination are capabilities that can live on this
 foundation. None of them alone is the product identity.
 
+## Think of it as…
+
+Think of it first as one place that keeps a household home move coherent from
+the first possibility to the last loose end:
+
+- **A decision table.** Work out whether, where, when, and how to move; compare
+  places and property criteria; record what was chosen, why, and what would
+  change the decision.
+- **A living plan.** Turn goals into timing, phases, tasks, dependencies,
+  questions, and risks that can change without forcing everyone to start over.
+- **A map of places and belongings.** Connect origins, destinations, rooms,
+  layouts, inventories, items, boxes, evidence, and what stays, goes, sells, or
+  still needs a home.
+- **A moving desk.** Keep estimates, costs, budgets, research, photos,
+  documents, paperwork, and important proof close to the work they explain.
+- **A coordination board.** Make it clear who is doing what, what is waiting,
+  what needs the user, which deadline matters next, and what a household,
+  colleague, helper, or vendor coordinator can see or change.
+- **A return point, not a restart.** Come back after a day, a meeting, a changed
+  date, or a different AI session and retrieve the full plan or a compact recap
+  of what was decided, what changed, what is blocked, and what should happen
+  next.
+
+The same durable pattern can extend to an office relocation, business move,
+temporary move, downsizing, or renovation-adjacent move without becoming a
+collection of separate products. Those are legitimate compatible uses, not
+equal starting points for first-time product priorities or the default public
+story.
+
+These facets define the product's intended shape. They do not claim that every
+budget, vendor, task, communication, or collaboration workflow has shipped.
+The dated [capability ledger](#capability-truth-and-ledger) governs what may be
+presented as **Now**.
+
+The simple promise becomes durable through four things working together:
+
+- **Your chosen AI reasons and works.** It can research, compare, organize,
+  draft, calculate, and carry out authorized outside work under your direction.
+- **Assist With Moving remembers the move.** It preserves structured context,
+  instructions, decisions, evidence, history, open questions, and a current
+  recap beyond one chat or AI session.
+- **Assist With Moving organizes the work and provides moving tools.** It gives
+  plans, places, tasks, belongings, costs, documents, timing, and coordination
+  durable records, retrieval, queues, and understandable views.
+- **You can see and steer it.** You can understand the evolving plan, correct
+  it, choose who or which AI may observe or change each part, and revoke that
+  authority.
+
+That is the bridge from a simple promise to the deeper model: your AI supplies
+reasoning and authorized effort; Moving supplies durable move memory,
+organization, tools, and visibility; you remain in control.
+
+## What Moving is for—and what it is not
+
+Moving is for keeping a real move understandable from its first possibility to
+its last unresolved detail. It can hold the changing plan around places,
+timing, tasks, belongings, costs, documents, decisions, people, and evidence
+without reducing the project to any one of those parts.
+
+### Primary starting point: a household home move
+
+The primary first-time user is a person or household planning a move from one
+home to another. This is the default product-prioritization lens and the public
+homepage story.
+
+A household home move is the strongest place to begin because it brings the
+whole durable model into one recognizable project: consequential decisions,
+multiple people and helpers, candidate and confirmed places, rooms and
+belongings, changing dates, budgets and estimates, documents and evidence,
+outside services, dependencies, and many loose ends that outlive any one
+checklist or conversation. The person needs to understand and steer that
+changing whole, not merely complete move-day tasks.
+
+**Product-prioritization rule:** when first-time guidance, terminology,
+defaults, examples, or competing feature choices require a primary user, start
+with the household home move unless the product owner explicitly sets a
+different priority. Do not make every move type compete equally in the opening
+experience.
+
+Business moves and office relocations are expected to be substantially similar
+in the core model: they still have a move boundary, people and authority,
+places, timing, work, belongings or equipment, costs, documents, evidence,
+dependencies, history, and completion state. Temporary moves, downsizing, and
+renovation-adjacent moves are compatible extensions for the same reason. Their
+additional needs should extend common records and flexible details rather than
+create separate products or narrow the long-term scope.
+
+Its distinctive value is **continuity with control**. The plan can survive a
+changed date, a revised destination, a different helper, a later AI session, or
+a new piece of evidence. A person can return, understand what is true now,
+inspect why it changed, and decide what should happen next.
+
+Moving is not:
+
+- a static checklist, inventory catalog, or one-time move-day tool;
+- a replacement for the AI environment the person chooses;
+- a vendor, marketplace, calendar, map, booking, payment, or communication
+  provider merely because the user's AI may work with those services elsewhere;
+- a credential vault for external providers or the user's AI;
+- permission for any person or AI to observe, change, share, buy, book, sign, or
+  publish beyond an explicit grant; or
+- proof that every facet described in this philosophy has shipped.
+
+The human promise governs the product's direction. The dated
+[capability ledger](#capability-truth-and-ledger) governs what may be described
+as available now.
+
+## Why not just ask your AI to build a quick feature?
+
+Your AI can quickly make a packing checklist, comparison table, calculator,
+inventory view, or small purpose-built app. That can be genuinely useful. The
+difference is what happens after the immediate answer.
+
+A real move is an evolving system: places affect timing; rooms organize
+belongings; belongings affect packing and transport; plans depend on decisions;
+costs depend on choices; evidence supports claims; and a changed date, property,
+helper, or estimate can alter work elsewhere. A one-off page or chat result does
+not naturally become the durable record of those relationships.
+
+Assist With Moving gives the person's chosen AI a domain-shaped foundation:
+
+- **durable structure, not scattered output:** move, place, room, item,
+  transport, plan, task, decision, cost, document, evidence, and participant
+  records can retain their relationships;
+- **continuity with provenance:** important context can preserve source, actor,
+  time, reason, and revision instead of disappearing into an old conversation;
+- **resumable work:** the moving loop can return to the current state, save a
+  useful result, expose blockers and the exact next step, and continue in a
+  later AI session; and
+- **human control:** the person can inspect the plan, correct it, and decide
+  which person or AI may observe or change each part.
+
+This is not an argument against asking your AI to build or calculate something.
+It is the reason that useful output should return to an authorized, durable move
+record instead of becoming another disconnected artifact. The
+[capability ledger](#capability-truth-and-ledger) determines which parts of
+that foundation are verified now and which remain in design or later.
+
+## Why this instead of a conventional moving website?
+
+Information sites, mover marketplaces, catalogs, file storage, quote forms, and
+single-purpose moving utilities can each help with a slice of a move. Assist
+With Moving is not defined by replacing all of them. Its enduring role is to
+keep the person's own changing move coherent while their chosen AI reasons,
+organizes, and performs authorized work in the environments available to it.
+
+For a household home move, the same durable record can connect why a destination
+was chosen, which date controls the plan, where an item belongs, how it will
+travel, which estimate or document supports a decision, who is responsible, and
+what should happen next. That inspectable continuation is different from merely
+reading advice, finding a provider, uploading files, or completing one utility.
+
+Coordination is deliberate rather than automatic. Moving's model separates
+inviting a named person into the move with scoped access from sharing one
+selected non-sensitive view through a revocable link. The repository contains
+meaningful foundations for both paths, but the complete per-actor permission
+experience and generalized bounded sharing remain partial or later as stated in
+the [capability ledger](#capability-truth-and-ledger). Nothing private is shared
+merely because it is useful to the plan.
+
+### Marketing / PR takeaways
+
+These lines express the durable product philosophy. Pair any feature-specific
+version with current capability proof:
+
+- **One changing move, one understandable record—not a pile of disconnected
+  tools.**
+- **Your AI can help do the work; Assist With Moving keeps the plan, evidence,
+  decisions, and next step ready to understand and resume.**
+- **When the place, date, cost, belongings, or people change, the move should
+  remain traceable instead of forcing a restart.**
+
 ## The Assist family model
 
-Assist products separate three responsibilities:
+The plain-language promise above has a precise responsibility model. Assist
+products separate three responsibilities:
 
 - **Your AI reasons and does the work you direct.** It may help research
   choices, compare places, organize possessions, build a timeline, prepare
@@ -153,15 +310,151 @@ complete independent per-person and per-AI operation matrix, every participant
 setup and revocation flow, or generalized bounded-link sharing for selected
 plans, checklists, item groups, and other move views.
 
+## Why the family and trust model matters
+
+A move can outlast one conversation, one helper, one plan, and one AI session.
+The family model keeps that change from turning into lost context or invisible
+authority:
+
+- the person can change AI environments without surrendering the durable move
+  record;
+- an AI can be useful without becoming the owner of the plan or its
+  permissions;
+- named participants and bounded links can support coordination without making
+  private work public;
+- changes, evidence, questions, and results can remain inspectable instead of
+  disappearing into transcripts; and
+- automation preferences can improve flow without silently expanding anyone's
+  authority.
+
+This is why durable memory and human control belong together. Continuity
+without authority would be unsafe; authority without continuity would leave the
+person repeatedly rebuilding the move. The detailed
+[trust boundaries and non-goals](#trust-boundaries-and-non-goals) remain the
+normative limits.
+
+## How to use this document
+
+The philosophical heart is intentionally first. Read through
+[Why the family and trust model matters](#why-the-family-and-trust-model-matters)
+to understand the product before entering the builder reference.
+
+For focused work, use this reading map:
+
+| Reader | Start with | Questions answered |
+|---|---|---|
+| Product owners | [One-sentence identity](#one-sentence-identity), [Think of it as…](#think-of-it-as), [Scope and non-goals](#what-moving-is-for-and-what-it-is-not), [Why not a quick feature?](#why-not-just-ask-your-ai-to-build-a-quick-feature), [Why not a conventional site?](#why-this-instead-of-a-conventional-moving-website), [Assist family model](#the-assist-family-model), [Shared authority](#user-owned-data-and-scoped-authority), and [Why trust matters](#why-the-family-and-trust-model-matters) | What Moving promises, why it should endure beyond one output or utility, what belongs inside its scope, who owns the data, and why continuity and authority stay together |
+| Implementers | [Builder reference](#builder-reference-begins-here), [AI and queue](#how-your-ai-and-queue-work), [Moving loop](#the-moving-loop), [Durable information model](#durable-information-model), [Visibility](#human-visibility-and-visualization), and [Maintenance](#maintenance-and-claim-verification) | What must persist, how work begins and resumes, where controls belong, and which claims require proof |
+| AI workers and integration builders | [Builder reference](#builder-reference-begins-here), [AI and queue](#how-your-ai-and-queue-work), [Shared authority](#user-owned-data-and-scoped-authority), [Moving loop](#the-moving-loop), and [Trust boundaries](#trust-boundaries-and-non-goals) | Where work may begin, how queued handoffs and scoped tools work, and which move and operation boundaries apply |
+| User-facing writers and designers | [One-sentence identity](#one-sentence-identity), [Think of it as…](#think-of-it-as), [Scope and non-goals](#what-moving-is-for-and-what-it-is-not), [Why not a quick feature?](#why-not-just-ask-your-ai-to-build-a-quick-feature), [Why not a conventional site?](#why-this-instead-of-a-conventional-moving-website), [Capability ledger](#capability-truth-and-ledger), [Language rules](#language-rules), and [Design implications](#public-homepage-and-future-shell-implications) | How to explain the human promise and durable differentiation, what may be claimed now, which words to use, and how philosophy should shape the experience |
+
+Anyone publishing a capability claim must read both
+[Capability truth and ledger](#capability-truth-and-ledger) and
+[Maintenance and claim verification](#maintenance-and-claim-verification).
+
+## Builder reference begins here
+
+The sections above define the human product philosophy. The sections below
+translate it into durable operating models and claim boundaries for product,
+design, engineering, and AI feature work:
+
+- **AI and queue model:** where work starts, what crosses the connection, and
+  what a resumable handoff preserves;
+- **moving and information contracts:** how a changing move, its records,
+  provenance, questions, and completion state remain coherent;
+- **human visibility and capability truth:** what people must be able to
+  understand and what may honestly be described as available; and
+- **language, design, maintenance, and evidence:** how future work stays aligned
+  with the philosophy without outrunning proof.
+
+The builder reference is more detailed, not more authoritative. It must
+implement the identity, scope, family model, user authority, and trust
+principles above rather than reinterpret them.
+
+## How your AI and queue work
+
+Assist With Moving is not trying to replace the AI environment a person already
+chooses. They may keep working in ChatGPT, Codex, Claude, OpenClaude, Gemini,
+Hermes, or a future compatible system. No vendor is preferred, and naming one
+here does not claim that its connection is currently shipped or verified.
+
+The chosen AI remains the place for conversation, reasoning, research,
+synthesis, and authorized outside work. Moving is the durable moving layer
+beside it:
+
+- **Durable move memory** keeps structured context, instructions, decisions,
+  evidence, questions, history, and a current recap available beyond one AI
+  session.
+- **Scoped moving tools and records** let an authorized AI retrieve or change
+  only the move, area, records, and operations the user has allowed.
+- **A durable queue** carries requested and follow-up work forward when the
+  person and AI are not working in the same live conversation.
+- **A visual workspace** lets the person understand the plan, work state,
+  questions, progress, and saved results without reading an AI transcript.
+
+### Work can begin in either direction
+
+1. **A — Start in the person's preferred AI environment.** The person and their
+   AI reason or work there. When a compatible, authorized connection is
+   available, the AI may retrieve relevant move context, use scoped Moving
+   tools, and save durable records, evidence, questions, or results. The person
+   can then inspect and visualize that durable state in Moving.
+2. **B — Start in Assist With Moving.** The person creates a queue entry with
+   the request, instructions, context, and allowed scope. A compatible,
+   authorized AI can pick it up later, work through it, save the result or a
+   question, and leave the exact continuation state for the person or a later
+   AI session. The person does not need to keep one chat open for the work to
+   remain understandable.
+
+Neither direction makes the AI provider part of Moving or makes Moving the AI
+provider. The connection is a scoped bridge between the user's chosen
+environment and user-owned Moving data.
+
+### The queue carries the handoff
+
+A normal to-do item may say only what should happen. A durable AI work handoff
+must preserve enough meaning for useful progress across AI sessions:
+
+- **scope:** the move, area, records, people, places, or items involved;
+- **request and outcome:** the original instruction and what useful completion
+  should produce;
+- **priority and time context:** what matters first, relevant dates, and how
+  urgency was decided;
+- **context and evidence:** notes, sources, photos, documents, earlier
+  decisions, and uncertainty the work depends on;
+- **state and responsibility:** whether work is new, in progress, waiting,
+  blocked, needs the user, or complete, plus who or which chosen AI last acted;
+- **questions, blockers, and dependencies:** what prevents safe progress and
+  what answer or event would unblock it; and
+- **continuation and result:** the exact next step, saved outputs, material
+  changes, and the compact handoff a later session should retrieve.
+
+The queue coordinates asynchronous work; it is not a gate that prevents an
+authorized AI from making other useful progress. It should make interruption,
+questions, delegation, recovery, and resumption safer—not turn the move into a
+longer checklist.
+
+**Current truth:** the repository verifies source foundations for
+bring-your-own-AI access, compact move summaries and context, scoped API/MCP
+operations, and a narrower per-user capture queue with instructions, media,
+status, expiring claims, AI questions, summaries, and result references. It
+does **not** yet prove a general move-wide work queue, scheduled or automatic
+pickup, the complete two-direction experience above, or current compatibility
+with every named AI environment. Those claims remain **Partial**, **In
+design**, or **Later** descriptions—not **Now** promises—until the dated
+[capability ledger](#capability-truth-and-ledger) and end-to-end proof say
+otherwise.
+
 ## The moving loop
 
 A move should remain useful from the first idea through completion and later
 reference. Its durable loop is:
 
-1. **Frame the move.** Record the kind of move, people, places, timing,
-   constraints, goals, and what “done” means. The shape may be household,
-   business, temporary, travel-related, downsizing, renovation-adjacent, or
-   something else.
+1. **Frame the move.** For the primary home-move experience, record the
+   household, current and future home, people and helpers, timing, constraints,
+   goals, and what “done” means. A business, office, temporary, travel-related,
+   downsizing, renovation-adjacent, or other move uses the same loop with the
+   details appropriate to its shape.
 2. **See the current state.** Retrieve a compact recap or the relevant detailed
    context: decisions already made, active work, open questions, risks,
    dependencies, recent changes, and next actions.
@@ -199,7 +492,10 @@ general move-wide work queue has shipped.
 
 A move is a long-lived, changing project—not a static checklist. Moving should
 preserve common structure where it helps comparison and retrieval, while
-allowing flexible details for moves that do not fit a household template.
+allowing flexible details for moves beyond the primary household home-move
+experience. The household starting point must not hard-code one family
+structure, residence type, or move path; compatible extensions should reuse the
+same durable model rather than fork the product.
 
 ### Move and scope
 
@@ -523,18 +819,24 @@ Public and product language should:
   superseded, and completed states;
 - distinguish external user-authorized AI activity from a Moving-operated
   connection or integration;
+- name AI environments only as examples of user choice; never imply a preferred
+  vendor or currently verified compatibility without exact proof;
 - distinguish observing, searching, retrieving, and reading from creating,
   updating, deleting, promoting, and publishing;
 - use **“invite”** for named participant access and **“share link”** for a
   bounded view that does not require workspace membership;
+- lead first-time and public examples with a household home move; describe
+  business, office, temporary, downsizing, and renovation-adjacent moves as
+  compatible extensions, not equal opening personas or separate products;
 - name what a link exposes—such as a selected plan, checklist, item group, or
   packet—rather than saying an entire move is “shared”;
 - name the actual household, move, area, record, person or AI, and permitted
   operations when describing access;
 - label uncertainty, freshness, authority, and future capability status
   directly; and
-- use **“queue”** for new work or instructions to your AI, not as a blanket
-  approval gate or a synonym for every task.
+- use **“queue”** for a durable work handoff that preserves scope, instructions,
+  priority, evidence, state, blockers, questions, and the exact next step—not as
+  a blanket approval gate, a generic to-do list, or a synonym for every task.
 
 Avoid **“agent”** in user-facing copy when **“your AI”** communicates the idea.
 Technical documentation may retain established names such as API-key actor,
@@ -560,11 +862,25 @@ change the application.
 
 ### Public homepage
 
-- Lead with the durable, evolving move plan shared by a person and their AI.
+- Lead with a person or household moving from one home to another and the
+  durable, evolving plan they share with their AI. Make this primary user and
+  use case unmistakable before broadening the story.
+- Immediately make the promise tangible through the decision table, living
+  plan, map of places and belongings, moving desk, coordination board, and
+  return point—not through an undifferentiated feature list.
+- After the household home-move promise is clear, explain that the same durable
+  model can support business moves, office relocations, temporary moves,
+  downsizing, renovation-adjacent moves, and other compatible shapes. Present
+  this as extensibility of one product, not a set of equal hero narratives or
+  separate editions.
 - Show a move as a changing project, not a one-time checklist or inventory
   catalog.
-- Explain the Assist family model: your AI reasons, Moving remembers and
-  organizes, and you remain the authority.
+- Bridge the promise to the Assist model: your chosen AI reasons and works;
+  Moving provides durable move memory, organization, tools, and visibility; and
+  you remain the authority.
+- Explain both directions of work: save and retrieve durable move context from
+  the person's preferred AI environment, or start in Moving with scoped queue
+  instructions for an authorized AI to work through later.
 - Show the moving loop before listing features.
 - Demonstrate timeline, places, work, decisions, inventory, costs, evidence,
   and a current recap as one coherent system—even when future examples must be
@@ -586,12 +902,17 @@ change the application.
 
 ### Future signed-in shell
 
+- Default first-time guidance, examples, and move setup to a household home
+  move while allowing the person to choose another move type and add flexible
+  details without entering a separate product.
 - Center the selected move, current phase, recent material changes, and compact
   current-state recap.
 - Make **active**, **waiting**, **blocked**, **needs you**, and **resumable**
   work immediately understandable.
 - Treat the queue as the front door for instructions to your AI while keeping
-  tasks, decisions, evidence, and records appropriately distinct.
+  tasks, decisions, evidence, and records appropriately distinct. Each queue
+  item should expose scope, intended outcome, priority, context and evidence,
+  state, responsible actor, questions, blockers, and the exact next step.
 - Keep selected move and area scope, acting identity, independently allowed
   operations, and revocation controls visible.
 - Give **People with move access** and **Shared links** separate surfaces.
@@ -642,9 +963,10 @@ behavior, freshness, and the exact user path. Before naming an external action,
 prove authorization, preview or confirmation policy, execution receipt, error
 handling, and recovery boundaries.
 
-Changes to the one-sentence identity, Assist family model, user-owned-data and
-scoped-authority principle, user authority, cross-product boundary, or
-trust/non-goal boundaries require explicit product-owner approval.
+Changes to the one-sentence identity, “Think of it as…” facets, Assist family
+model, user-owned-data and scoped-authority principle, user authority,
+cross-product boundary, or trust/non-goal boundaries require explicit
+product-owner approval.
 Evidence-led capability updates may change without redefining the philosophy.
 
 ## Evidence references
