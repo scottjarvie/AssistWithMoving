@@ -2,11 +2,11 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.3.0
+> **Document version:** 1.3.1
 >
 > **Capability evidence last verified:** 2026-08-08 against `origin/main`
-> commit `465de65` plus the state-publication installation branch described in
-> the evidence record below
+> commit `4a3d9e7` and the state-publication receipts described in the evidence
+> record below
 >
 > **Scope:** Product truth, language, trust, and design direction—not an
 > implementation, rename, release, or deployment claim
@@ -17,11 +17,12 @@
 >
 > **Canonical:** `docs/planning/assist-with-moving-project-philosophy.md`
 >
-> **Family Core:** Assist With Sites — Core Philosophy v1.6.2 (2026-08-08)
+> **Family Core:** Assist With Sites — Core Philosophy v1.6.3 (2026-08-08)
 >
 > **Aligned:** 2026-08-08 — repository implementation, public source claims,
 > tracker, GitHub protection/workflow and Vercel integration reviewed against
-> the complete v1.6.2 contract
+> the complete v1.6.3 contract, including its clarified §16 operating contract
+> and §17 setup, retrofit and agent-handoff structure
 >
 > **Adopted:** the three-way promise and “your AI” language; shared route and
 > truth-surface direction; the four-state Queue and bounded directive rule;
@@ -46,8 +47,10 @@
 > destination. The current MovingManifest implementation name remains a
 > compatibility fact until an authorized cutover.
 >
-> **Evidence:** Core commit `561481843793a1d0fb97eee3984bccfd004c21a2`;
-> repository baseline `465de65`; `docs/tracker/`; the software PR and live
+> **Evidence:** Core commit `db658ab091bcfbb71f62db55d5b8b6d51b64e52f`
+> with source SHA-256
+> `6c354eb33422d6b48453c578b93d5a32551fbe3008ce58673a0f11437335a30c`;
+> repository baseline `4a3d9e7`; `docs/tracker/`; the software PR and live
 > proof receipts recorded in Card `MOV-0001`; the dated adoption/contradiction
 > matrix below; and the repository sources in
 > [Operational references](#operational-references) and
@@ -80,7 +83,13 @@ specific or expressive Moving direction remains authoritative unless it weakens
 one of those shared guarantees. This document records product deltas and
 evidence; it does not copy or publicly expose the private family contract.
 
-## Core v1.6.2 adoption and contradiction matrix
+## Core v1.6.3 adoption and contradiction matrix
+
+Core v1.6.3 reorganizes, but does not change, Moving's installed operating
+contract: §16.1 owns tracker rules, §16.2 owns state-versus-software publishing
+and provider proof, and §16.3 owns launch posture. Section 17 applies those
+rules through new-project setup, retrofit and agent-handoff packages; it is not
+a competing local policy or work tracker.
 
 The labels in this matrix are deliberately stricter than a feature inventory:
 
@@ -98,7 +107,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 |---|---|---|
 | Person / Assist workspace / your AI | The product philosophy, `/ai` copy, scoped keys and OAuth gateway separate the person's authority, Moving's durable record and the person's chosen AI. Older public copy still often says “AI assistant” and leads with inventory rather than the full three-way promise. | **Current/verified foundation; Later alignment gap.** Adopt “Assist your AI, so it can assist you with moving” and the house sentence “Assist you and your AI with every part of your move.” |
 | Domain promise and objects | Moves, households, people, spaces, items, planned items, boxes, photos/evidence, transport resources/zones/trips, layouts, documentation profiles, exports and share links are modeled in `convex/schema.ts`. General tasks, budgets, vendor records and decision objects are not complete first-class models. | **Current/verified foundation** for the named records; unscheduled extensions are **Later**. Moving's vocabulary is retained. |
-| Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Operational fast-lane proof remains pending until Card `MOV-0001` records all three provider gates. |
+| Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
 | Queue states | Stored capture states are `queued`, `claimed`, `processed`, `needsInput`, `resolved` and `discarded`; current UI groups them as To do, Working, Review/Needs action and Done/Archive. | **Current/verified but nonconforming.** The family destination is exactly **Needs you / Working / Waiting for your AI / Done**. Backend and frontend retrofit is **Later**, not a documentation rename of current behavior. |
 | Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. Older prose described broad authorized progress but did not state the family directive boundary. | **Family rule adopted now in product truth:** a directive authorizes only reversible, in-scope record changes it plainly requests. New objectives, destructive changes, publishing, purchases, identity/access changes and outside-world consequences return to **Needs you**. Implementation conformance beyond capture remains **Later**. |
 | MCP and `/ai` | Source routes exist at `/mcp` with `/mcp/connect` alias and a separate API-key `/api/mcp`; public `/ai` and `/ai/start` pages exist. The repo serves `llms.txt`/`llms-full.txt`, not `/ai.txt`; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified source surfaces; Unknown production proof.** `/ai.txt` and canonical `/settings/ai` are **Later alignment gaps**. `/ai` must list only live, end-to-end-proven tools. |
@@ -112,7 +121,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Distinct design and light/dark access | The product has a distinct MovingManifest earth/route aesthetic, accessible focus patterns, a responsive signed-in shell and light/dark token sets, but `src/app/layout.tsx` hard-locks the app to dark mode. The family contract names an Assist With Moving palette, but the shared chassis does not require visual homogenization. | Distinct design, phone shell and dark theme are **Current/verified foundations**. First-class accessible light mode is **Later**. Palette and typography remain product-design decisions; the philosophy reader's editorial route-note art direction is an **intentional product-specific difference**, not proof of app branding. |
 | Dense information | REST lists are bounded and paginated; several signed-in views provide tables/cards, filters and responsive detail. The repository does not prove every dense collection uses indexed bounded access, table-default behavior or remembered views. | **Current/verified partial foundation; Later** safety and performance conformance. Moving's useful information density and view design remain product-specific. |
 | Family navigation | No shared Assist With Life catalog row or fallback roster was found in the public shell. | **Later alignment gap.** |
-| Cards / Work Orders / Guide | `docs/tracker/` contains Moving-specific Cards, canonical Work Orders, Guide, metadata, generated Kanban/Work Orders readers, exact state helper, GitHub classifier and Vercel classifier. README and AI instructions link the package. | **Current/verified repository source.** Linear is optional historical context only. Provider proof is tracked separately in `MOV-0001`; configuration alone does not establish the fast lane. |
+| Cards / Work Orders / Guide | `docs/tracker/` contains Moving-specific Cards, canonical Work Orders, Guide, metadata, generated Kanban/Work Orders readers, exact state helper, GitHub classifier and Vercel classifier. README and AI instructions link the package. | **Current/verified repository source and provider proof.** These repository-owned records are the durable current-work truth; Linear is optional historical or portfolio context only and never a gate. Card `MOV-0001` preserves the exact proof that established the fast lane; configuration alone would not have done so. |
 | Launch stages and later native guardrail | README names a production domain and public copy says active development, but this local review does not prove that the real site is currently reachable, listed by Assist With Life, Tier A-complete or deliberately marketed. | **Unknown current stage.** Prioritize **soft website launch → big/public website launch**. Native/app-store work is only a concise **Later** guardrail after substantial recurring website use, not a current product requirement or design driver. |
 
 ### What this matrix changes—and what it does not
@@ -1231,6 +1240,13 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.3.1 · 2026-08-08** — reattested Moving against Assist With Sites Core
+  v1.6.3 and its source digest; aligned navigation to the clarified §16 tracker,
+  publishing and launch contract and §17 setup, retrofit and handoff packages;
+  reaffirmed Cards / Work Orders / Guide as durable current-work truth with
+  Linear optional only; and reconciled the philosophy's fast-lane status with
+  the completed provider receipts in Card `MOV-0001`. No tracker mechanics,
+  application behavior or provider policy changed.
 - **1.3.0 · 2026-08-08** — aligned to Assist With Sites Core v1.6.2;
   installed and linked Moving's repo-owned Cards / Work Orders / Guide tracker;
   adopted the exact fail-closed state-versus-software publication contract;
