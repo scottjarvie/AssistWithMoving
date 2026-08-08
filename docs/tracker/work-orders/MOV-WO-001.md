@@ -1,7 +1,7 @@
 ---
 id: MOV-WO-001
 title: Install and prove Moving's durable state path
-execution: active
+execution: complete
 audit: not-audited
 cards: MOV-0001 MOV-0002
 created: 2026-08-08
@@ -19,11 +19,12 @@ prove one useful direct-main state closeout skips only the application build.
 
 ## Current truth
 
-Execution is active under explicit portfolio authorization. PR #172 merged the
-tracker software, validators, workflows, package scripts and Vercel
-configuration through full CI. `MOV-0002` is complete. `MOV-0001` remains
-active until the useful state commit proves lightweight Actions, Vercel's
-ignored zero-build record and the retained production deployment.
+Execution is complete under explicit portfolio authorization. PR #172 merged
+the tracker software, validators, workflows, package scripts and Vercel
+configuration through full CI. Useful state commit `2844429` proved the
+lightweight GitHub path, Vercel's ignored zero-build record and the retained
+production deployment. Both included Cards are done. Independent audit remains
+honestly `not-audited`.
 
 ## Sequence
 
@@ -78,7 +79,15 @@ or an irreversible provider confirmation.
 - Preview `dpl_GfFZMYLpBzu6zJmfNdGUhFjaTfLF` built normally and reached Ready.
 - Production `dpl_HvtWoNirX1FQAev7YTBhJnKn9eop` built normally, reached Ready,
   and held `movingmanifest.com` plus `assistwithmoving.com` before state proof.
-- State-specific Actions, ignored record and retained-alias receipts pending.
+- State commit `2844429252a7d5e146a6776ccaa94f4c17364924` used the audited
+  direct-main owner bypass after the local helper accepted exactly four files.
+- Actions run `31272704809` completed both required contexts through only the
+  lightweight state steps; all dependency, test and build steps were skipped.
+- Vercel `dpl_7cGhWaqWatRvA39wX7KkirVpkRpJ` ended Canceled from the Ignored
+  Build Step after validating all four state changes, without application
+  output build or promotion.
+- Production `dpl_HvtWoNirX1FQAev7YTBhJnKn9eop` remained Ready with all live
+  aliases, and both public domains returned HTTP 200 after the state record.
 
 ## History
 
@@ -86,3 +95,5 @@ or an irreversible provider confirmation.
   explicit portfolio rollout authority; implementation and proof are underway.
 - 2026-08-08 · Codex — recorded the merged software/configuration path and
   closed the Linear-gate Card; state-provider proof remains active.
+- 2026-08-08 · Codex — verified the same-SHA GitHub, Vercel, and retained-live
+  gates and moved execution Active → Complete. Audit remains Not audited.
