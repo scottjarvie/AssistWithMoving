@@ -4,6 +4,8 @@ MovingManifest helps people plan and execute a move: capture belongings by photo
 
 **Production:** https://movingmanifest.com
 
+The canonical product identity, responsibility boundaries, domain model, design direction, capability truth and family alignment live in [Assist With Moving — Project Philosophy](docs/planning/assist-with-moving-project-philosophy.md).
+
 ## Stack
 
 | Layer | Tech |
@@ -32,7 +34,7 @@ mcp-server/         standalone stdio MCP server (npm package) that talks to the
                     REST API with an mmk_ API key — the second of two MCP surfaces
 scripts/            operational "doctor" checks, smoke tests, seeding
 tests/              Playwright e2e + Vitest unit tests
-docs/               deeper docs: api-and-mcp.md, audits/, original build spec
+docs/               Project Philosophy, API/MCP guide, audits, original build spec
 infra/              Cloudflare image worker
 patches/            patch-package patches applied on install
 ```
