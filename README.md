@@ -46,6 +46,15 @@ patches/            patch-package patches applied on install
 
 See [docs/api-and-mcp.md](docs/api-and-mcp.md) for details.
 
+## Project tracker
+
+Current project work, approved scope, handoff, and completion evidence live in
+the repo-owned [Assist With Moving tracker](docs/tracker/GUIDE.md). Its only
+top-level concepts are Cards, Work Orders, and Guide; open the generated
+[Kanban and Work Orders reader](docs/tracker/board.html) for the owner view.
+Linear ids may appear as optional historical context, but Linear is not a gate
+for intake, implementation, or normal progress.
+
 ## Local development
 
 ```sh
@@ -78,6 +87,7 @@ Merging to `main` on GitHub **is** the production deploy (Vercel builds and ship
 ## Conventions
 
 - Work happens on short-lived branches PR'd into `main`; branches are deleted after merge. Long-lived experiments get an `archive/*` branch on GitHub.
-- Issue tracking is in Linear (`MOVE-###`); PR titles reference the issue.
+- Cards and owner-approved Work Orders in `docs/tracker/` are the durable
+  source for current work. GitHub PRs carry implementation review and evidence.
 - Agent-facing Convex tools must throw `ConvexError` (plain `Error` gets redacted to "Tool execution failed" by the MCP gateway).
 - No fabricated demo data in the UI — real data or an honest empty/explainer state.

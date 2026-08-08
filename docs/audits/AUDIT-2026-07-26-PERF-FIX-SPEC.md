@@ -23,7 +23,9 @@ in a production `next build` + `next start`.
 4. **New domain: assistwithmoving.com** is connected and serving the app
    directly (verified 200, no redirect, same content as movingmanifest.com).
    This adds WP9 and one open decision: which domain is canonical.
-5. Linear reconnected; work packages are being filed as tracked issues.
+5. Historical work packages used Linear ids. Those ids remain optional
+   provenance only; current scope, approval, handoff, and completion truth now
+   live in the repo-owned Cards / Work Orders / Guide tracker.
 
 This spec turns every finding into a bounded work package (WP). Each WP names
 the change, the exact files, the test file / harness pattern / assertion layer
@@ -568,8 +570,9 @@ WP8 (last; depends on WP4's toInventoryListRow)
 Note for WP1 acceptance: run the measured checks against whichever domain WP9
 makes canonical, so the before/after numbers are comparable.
 
-One PR per WP, MOVE-ticket per PR, red-first locks stated in each PR body
-with the focused + full suite results, matching the #154–#160 house style.
+One PR per approved Work Order tranche, with red-first locks and the focused +
+full suite results stated in each PR body. A historical MOVE id may be linked
+when useful, but Linear is not required before implementation or progress.
 
 ## Global verification (after all WPs land)
 

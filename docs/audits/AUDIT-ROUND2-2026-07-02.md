@@ -11,11 +11,16 @@ This file is what's left: **new bugs introduced by the round-1 fixes, residuals 
 ## Ground rules (read before coding)
 
 - **Start state:** `git fetch origin && git checkout main && git pull` — main moves fast here; never build on a stale checkout. Expected baseline is `67da3ec` or later. Working tree should be clean apart from the two untracked audit `.md` files — leave those untracked, never commit them.
-- **Branching/PRs:** two PRs — **PR A "audit round 2: backend/REST"** (items 1, 8, 9, 10, 11, 12) and **PR B "audit round 2: frontend"** (items 2, 3, 4, 5, 6, 7, 13). Branch names like `codex/move-370-round2-backend`. Track under Linear **MOVE-370** (move to In Progress when starting, Done when merged; leave a closing comment listing anything you skipped and why).
+- **Historical branching/PR record:** this completed package used two PRs and
+  Linear MOVE-370. That id is provenance, not a current instruction or gate.
+  Future current work is scoped and handed off through `docs/tracker/` Cards
+  and owner-approved Work Orders, with GitHub carrying implementation proof.
 - **Merging a PR to main = production deploy** (Vercel + prod Convex fine-crocodile-51). Standing instruction from Scott: merge your own PRs once green AND verified — don't ask — but never run destructive operations against prod data.
 - **Convex/agent rules:** any error an agent can reach through the OAuth MCP gateway (`convex/mcp.ts` + `convex/mcpTools*.ts` and everything they call) must be `throw new ConvexError(...)` (import from `"convex/values"`) — plain `Error` gets redacted to an opaque "Tool execution failed". Plain `Error` is fine on the REST surface (`convex/restApi.ts`), where it becomes a 400 via `errorStatus`.
 - **Testing bar per PR:** unit tests for each behavioral change (named per item below), full `npm test` + `npx tsc --noEmit` green. For UI-visible changes, a browser smoke check via the Claude-in-Chrome extension against Scott's logged-in Chrome on localhost:3827 (`preview_start`/curl hit the auth wall — don't bother). If you changed any Convex function, push to the dev deployment first with `npx convex dev --once` (dev: gregarious-goldfinch-763) or the UI crashes with "Could not find public function".
-- If an item turns out to be wrong when you inspect the code, don't force it — note it in the MOVE-370 comment and move on. Do not start work outside this file's scope.
+- If a historical item is revisited and turns out to be wrong, do not force it;
+  record the finding in the current repo-owned Card or Work Order. Do not start
+  work outside the approved current scope.
 
 ---
 

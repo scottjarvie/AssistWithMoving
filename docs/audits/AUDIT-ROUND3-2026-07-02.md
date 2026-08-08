@@ -11,10 +11,14 @@ Round 3 = the leftovers from verifying round 2: one medium bug inside PR #128, p
 ## Ground rules
 
 - **Start state:** `git fetch origin && git checkout main && git pull` (expect `2ba97bf` or later). Leave the untracked `AUDIT-*.md` files alone (they're gitignored now).
-- **One PR**, branch like `codex/move-371-round3-cleanup`, tracked under Linear **MOVE-371**: In Progress when starting, Done when merged, closing comment listing what shipped per item.
+- **Historical coordination record:** this completed package used one PR and
+  Linear MOVE-371. The id remains provenance only. It is not a current gate;
+  future work uses `docs/tracker/` Cards and owner-approved Work Orders.
 - **Merging = production deploy** (Vercel + prod Convex fine-crocodile-51). Merge once green AND verified; never touch prod data destructively.
 - **Testing bar:** the named test per item, full `npm test` + `npx tsc --noEmit` green. Item 1 is UI-visible — browser smoke via Claude-in-Chrome on Scott's logged-in Chrome at localhost:3827 (preview_start/curl hit the auth wall). Convex function changes need `npx convex dev --once` (dev: gregarious-goldfinch-763) before browser testing.
-- **Scope discipline — this matters:** the round-2 worker merged out-of-scope work without disclosing it. Do NOT do that. If you notice something outside these 5 items, put it in your MOVE-371 closing comment; do not fix or merge it. Every PR you open must be listed in the closing comment.
+- **Scope discipline — this matters:** the round-2 worker merged out-of-scope
+  work without disclosing it. Do not repeat that. Record new findings in the
+  current repo-owned tracker; do not fix or merge them outside approved scope.
 
 ---
 

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en" data-mode="day"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assist With Moving — tracker guide</title><style>
+  :root { --paper:#eee9dc; --sheet:#fbf8ef; --ink:#172631; --muted:#4d5b61; --deep:#0d2634; --route:#2f718a; --sage:#657d70; --signal:#b84f2f; --amber:#c98732; --rule:#c9bfaa; --focus:#e36b35; }
+  html[data-mode="night"] { --paper:#14242d; --sheet:#1b2d36; --ink:#eef2ed; --muted:#bdc8c1; --deep:#f8f1e6; --route:#80bfd4; --sage:#a9beb2; --signal:#f18a60; --amber:#edb65f; --rule:#465964; --focus:#ff9a70; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  a { color:var(--route); }
+  button,.button { min-height:44px; border:1px solid var(--rule); border-radius:6px; background:var(--sheet); color:var(--ink); padding:9px 13px; font:inherit; cursor:pointer; text-decoration:none; }
+  :focus-visible { outline:3px solid var(--focus); outline-offset:2px; }
+  .skip { position:fixed; top:8px; left:10px; z-index:99; transform:translateY(-160%); background:var(--deep); color:var(--paper); padding:10px 14px; }
+  .skip:focus { transform:none; }
+  header { border-top:7px solid var(--signal); border-bottom:1px solid var(--rule); padding:18px clamp(14px,4vw,42px); background:var(--sheet); }
+  .eyebrow { margin:0 0 4px; text-transform:uppercase; letter-spacing:.14em; color:var(--signal); font-weight:800; font-size:12px; }
+  h1 { margin:0; font:700 clamp(24px,5vw,42px)/1.05 Georgia,serif; color:var(--deep); }
+  .sub { margin:8px 0 0; color:var(--muted); max-width:74ch; }
+  nav { display:flex; gap:7px; margin-top:15px; overflow-x:auto; padding-bottom:3px; }
+  nav a { white-space:nowrap; }
+  .mode { float:right; }
+  main { padding:24px clamp(12px,3vw,34px) 60px; }
+  .briefing { display:grid; grid-template-columns:repeat(5,minmax(110px,1fr)); gap:8px; margin-bottom:18px; overflow-x:auto; }
+  .metric { min-width:110px; background:var(--sheet); border:1px solid var(--rule); padding:12px; }
+  .metric strong { display:block; font:700 24px Georgia,serif; color:var(--deep); }
+  .viewbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 18px; }
+  .viewbar [aria-pressed="true"] { background:var(--deep); color:var(--paper); }
+  .needs { border-color:var(--signal); color:var(--signal); font-weight:800; }
+  .board { display:grid; grid-template-columns:repeat(4,minmax(245px,1fr)); gap:12px; overflow-x:auto; padding-bottom:12px; }
+  .lane { min-width:245px; background:color-mix(in srgb,var(--sheet) 82%,var(--paper)); border-top:4px solid var(--route); padding:10px; }
+  .lane[data-status="needs-you"] { border-color:var(--signal); }
+  .lane[data-status="backlog"] { opacity:.82; }
+  .lane h2 { margin:0 0 10px; font:700 19px Georgia,serif; }
+  article { background:var(--sheet); border:1px solid var(--rule); border-radius:5px; padding:12px; margin-bottom:9px; }
+  article h3 { margin:3px 0 7px; font:700 17px/1.2 Georgia,serif; }
+  .meta { color:var(--muted); font-size:12px; }
+  .tag { display:inline-block; border:1px solid var(--rule); border-radius:999px; padding:2px 7px; margin:3px 4px 3px 0; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  details { margin-top:9px; } summary { min-height:44px; padding:11px 0; cursor:pointer; font-weight:700; }
+  .body { border-top:1px solid var(--rule); padding-top:8px; overflow-wrap:anywhere; }
+  code { background:var(--paper); padding:2px 4px; border-radius:3px; }
+  pre { overflow-x:auto; background:var(--paper); border:1px solid var(--rule); padding:12px; }
+  pre code { padding:0; white-space:pre; }
+  blockquote { border-left:3px solid var(--amber); margin-left:0; padding-left:12px; color:var(--muted); }
+  .orders { max-width:1050px; } .order { border-left:5px solid var(--sage); }
+  .progress { height:8px; background:var(--paper); margin:10px 0; } .progress span { display:block; height:100%; background:var(--route); }
+  .empty { color:var(--muted); font-style:italic; }
+  .hidden { display:none !important; }
+  @media (max-width:700px) { header { padding:15px 12px; } .mode { float:none; margin-top:10px; } main { padding-inline:10px; } .board { display:block; overflow:visible; } .lane { min-width:0; margin-bottom:12px; } .briefing { grid-template-columns:repeat(5,150px); } }
+  @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; } }
+</style></head>
+<body><a class="skip button" href="#main">Skip to tracker</a><header><button class="mode" id="mode" type="button">Night mode</button><p class="eyebrow">Moving field desk</p><h1>Assist With Moving — tracker guide</h1><p class="sub">Durable Cards, bounded Work Orders, and a Guide for Assist With Moving. The board is a generated reader; Markdown remains the source.</p><nav aria-label="Tracker links"><a class="button" href="https://movingmanifest.com">Project</a><a class="button" href="../planning/assist-with-moving-project-philosophy.md">Project Philosophy</a><a class="button" href="https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md">Family Core</a><a class="button" href="GUIDE.md">Guide</a></nav></header><main id="main" tabindex="-1"><article class="order"><p class="eyebrow">One-minute orientation</p><h2>Assist With Moving tracker guide</h2>
+<p>This repo-owned tracker is the durable owner-and-AI view of work for Assist With Moving. It travels with every authorized clone. Markdown is canonical; <code>board.html</code> and <code>guide.html</code> are generated zero-setup readers.</p>
+<h2>The three concepts</h2>
+<ul>
+<li><strong>Cards</strong> preserve one outcome, why it matters, current truth, the next safe</li>
+</ul>
+<p>action, constraints, completion evidence, provenance, and dated history.</p>
+<ul>
+<li><strong>Work Orders</strong> bundle a bounded tranche. Scott approves Proposed → Ready;</li>
+</ul>
+<p>an AI executes approved scope; another AI records the independent audit.</p>
+<ul>
+<li><strong>Guide</strong> is this stable orientation. <code>tracker.json</code> and generated readers</li>
+</ul>
+<p>support these concepts without creating a fourth tracker.</p>
+<h2>One-minute orientation</h2>
+<p>Open <code>board.html</code>. Start with <strong>Needs You</strong>, then scan <strong>Doing</strong> and <strong>Next</strong>. Kanban shows motion; Work Orders show approved scope, derived Card progress, execution evidence, and independent audit as separate facts.</p>
+<p>Cards use exactly <code>backlog</code>, <code>next</code>, <code>doing</code>, <code>needs-you</code>, or <code>done</code>. Work Order execution uses <code>proposed</code>, <code>ready</code>, <code>active</code>, <code>complete</code>, or <code>superseded</code>. Audit uses <code>not-audited</code>, <code>passed</code>, or <code>follow-up-needed</code>. Complete does not mean independently audited. There is no automatic dispatch.</p>
+<h2>Authority and handoff</h2>
+<p>The loop is <strong>AI proposes; Scott approves scope; AI executes; a separate AI audits</strong>. Ordinary safe technical judgment belongs to the executor inside an approved Work Order. <code>needs-you</code> is only for a consequential product, access, money, security, production-data, identity, or irreversible choice, and its Card must teach before asking.</p>
+<p>Linear is not required for intake, approval, implementation, or normal project progress. Old Linear ids may remain as optional historical evidence. Current work, approval, handoff, and completion truth live in this repository's Cards, Work Orders, and Guide; GitHub records code review and integration evidence.</p>
+<h2>Durable authoring rules</h2>
+<ul>
+<li>Cards live in <code>docs/tracker/cards/</code> with stable <code>MOV-####</code> ids.</li>
+<li>Work Orders live in <code>docs/tracker/work-orders/</code> with <code>MOV-WO-###</code> ids.</li>
+<li>Append dated attributed history; do not erase evidence or invent provenance.</li>
+<li>Run <code>npm run tracker:build &amp;&amp; npm run tracker:verify</code> after state edits.</li>
+<li>Use <strong>Copy as prompt</strong> or <strong>Copy whole work order</strong> for cold-start handoff.</li>
+</ul>
+<h2>Safe publication classes</h2>
+<p>Tracker generators, validators, scripts, workflows, dependencies, repository instructions, app code, schemas, or Vercel configuration are software. They use a branch, PR, full required CI, merge, and deployment proof.</p>
+<p>Canonical tracker state and Project Philosophy content may use the narrow direct-main route only after local validation. Stage only allowlisted state, then run:</p>
+<pre><code>git add docs/tracker/GUIDE.md docs/tracker/cards docs/tracker/work-orders docs/tracker/board.html docs/tracker/guide.html docs/tracker/tracker.json docs/planning/assist-with-moving-project-philosophy.md docs/planning/assist-with-moving-project-philosophy.html
+npm run tracker:commit-state -- "Update Moving tracker state"
+git push origin HEAD:main</code></pre>
+<p>The helper adds <code>skip-checks: true</code> as the final trailer. It rejects mixed or uncertain paths. GitHub keeps required contexts visible but lightweight; Vercel may ignore a build only after independently validating the complete single-commit range. Missing history, renames, malformed input, software, or validator failure builds normally. Never open a skipped-check PR.</p>
+<h2>Moving-specific character</h2>
+<p>This tracker uses Moving's field-desk and route-note character: paper and ink, route blue, safety orange, useful density, and calm operational language. It does not borrow Music's Paper/Studio design or turn Moving into a generic portfolio dashboard.</p></article></main><script>
+const root=document.documentElement,mode=document.getElementById("mode");
+function setMode(value){root.dataset.mode=value;mode.textContent=value==="day"?"Night mode":"Day mode";localStorage.setItem("moving-tracker-mode",value)}
+setMode(localStorage.getItem("moving-tracker-mode")||(matchMedia("(prefers-color-scheme:dark)").matches?"night":"day"));
+mode.onclick=()=>setMode(root.dataset.mode==="day"?"night":"day");</script></body></html>

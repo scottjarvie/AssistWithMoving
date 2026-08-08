@@ -1,0 +1,94 @@
+#!/usr/bin/env node
+
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import vm from "node:vm";
+import { fileURLToPath } from "node:url";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DIR = join(ROOT, "docs", "tracker");
+const cardStatuses = new Set(["backlog", "next", "doing", "needs-you", "done"]);
+const executions = new Set(["proposed", "ready", "active", "complete", "superseded"]);
+const audits = new Set(["not-audited", "passed", "follow-up-needed"]);
+
+function parse(path) {
+  const raw = readFileSync(path, "utf8");
+  const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  assert(match, `${basename(path)}: missing frontmatter`);
+  const meta = {};
+  for (const line of match[1].split("\n")) {
+    const field = line.match(/^(\w[\w-]*):\s*(.*)$/);
+    if (field) meta[field[1]] = field[2].replace(/^"|"$/g, "").trim();
+  }
+  return { path, body: match[2].trim(), meta };
+}
+function list(folder) {
+  return readdirSync(folder).filter((name) => name.endsWith(".md")).sort().map((name) => parse(join(folder, name)));
+}
+function values(value = "") { return value.split(/[\s,]+/).filter(Boolean); }
+function headings(item, names) {
+  for (const name of names) assert.match(item.body, new RegExp(`^## ${name}$`, "m"), `${basename(item.path)}: missing ## ${name}`);
+}
+
+const metadata = JSON.parse(readFileSync(join(DIR, "tracker.json"), "utf8"));
+assert.equal(metadata.schemaVersion, 1);
+assert.equal(metadata.generatorVersion, 1);
+assert.equal(metadata.project, "Assist With Moving");
+assert.equal(metadata.idPrefix, "MOV");
+assert.equal(metadata.familyCore.label, "Assist With Sites Core Philosophy v1.6.2");
+assert.equal(metadata.familyCore.commit, "561481843793a1d0fb97eee3984bccfd004c21a2");
+assert.equal(metadata.projectPhilosophy, "../planning/assist-with-moving-project-philosophy.md");
+
+const cards = list(join(DIR, "cards"));
+const orders = list(join(DIR, "work-orders"));
+const cardIds = new Set();
+const orderIds = new Set();
+assert(cards.length > 0, "tracker needs at least one Card");
+assert(orders.length > 0, "tracker needs at least one Work Order");
+for (const item of cards) {
+  const { meta, body, path } = item;
+  assert.match(meta.id ?? "", /^MOV-\d{4}$/);
+  assert.equal(basename(path, ".md"), meta.id);
+  assert(!cardIds.has(meta.id), `duplicate Card ${meta.id}`); cardIds.add(meta.id);
+  assert(cardStatuses.has(meta.status), `${meta.id}: invalid status`);
+  for (const field of ["title", "type", "area", "priority", "created", "updated", "updated-by"]) assert(meta[field], `${meta.id}: missing ${field}`);
+  assert(body.length > 300, `${meta.id}: Card is not cold-start durable`);
+  headings(item, ["Why this exists", "Current truth", "Next safe action", "Constraints", "Completion evidence", "History"]);
+  if (meta.status === "needs-you") headings(item, ["Why Scott is needed", "Smallest decision or action", "Recommendation", "Alternatives and trade-offs", "What each choice changes", "Safe default", "Consequence of waiting", "Evidence"]);
+}
+for (const item of orders) {
+  const { meta, path } = item;
+  assert.match(meta.id ?? "", /^MOV-WO-\d{3}$/);
+  assert.equal(basename(path, ".md"), meta.id);
+  assert(!orderIds.has(meta.id), `duplicate Work Order ${meta.id}`); orderIds.add(meta.id);
+  assert(executions.has(meta.execution), `${meta.id}: invalid execution`);
+  assert(audits.has(meta.audit), `${meta.id}: invalid audit`);
+  for (const field of ["title", "cards", "created", "updated"]) assert(meta[field], `${meta.id}: missing ${field}`);
+  for (const id of values(meta.cards)) assert(cardIds.has(id), `${meta.id}: unknown Card ${id}`);
+  headings(item, ["Goal", "Current truth", "Sequence", "Dependencies", "Exclusions", "Stop rules", "Verification", "Human gates", "Execution evidence", "History"]);
+  if (["ready", "active", "complete"].includes(meta.execution)) assert(meta["approved-by"] && meta["approval-evidence"], `${meta.id}: executable order lacks approval provenance`);
+}
+for (const card of cards) {
+  for (const id of values(card.meta["work-orders"])) {
+    assert(orderIds.has(id), `${card.meta.id}: unknown Work Order ${id}`);
+    const order = orders.find((candidate) => candidate.meta.id === id);
+    assert(values(order.meta.cards).includes(card.meta.id), `${card.meta.id}: Work Order backlink mismatch`);
+  }
+}
+
+execFileSync(process.execPath, [join(ROOT, "scripts", "tracker-build.mjs"), "--check"], { cwd: ROOT, stdio: "inherit" });
+for (const name of ["board.html", "guide.html"]) {
+  const html = readFileSync(join(DIR, name), "utf8");
+  assert.match(html, /class="skip button" href="#main"/);
+  assert.match(html, /:focus-visible/);
+  assert.match(html, /@media \(max-width:700px\)/);
+  assert.match(html, /data-mode="day"/);
+  assert.doesNotMatch(html, /<(?:script|link|img)[^>]+(?:src|href)=["']https?:/i, `${name}: external runtime asset`);
+  for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(script[1], { filename: name });
+}
+const board = readFileSync(join(DIR, "board.html"), "utf8");
+for (const label of ["Project", "Project Philosophy", "Family Core", "Guide", "Kanban", "Work Orders", "Needs You", "Copy whole work order", "No automatic dispatch", "independent audit"]) assert(board.includes(label), `board missing ${label}`);
+assert(readFileSync(join(DIR, "GUIDE.md"), "utf8").includes("Linear is not required"));
+console.log(`tracker verified: ${cards.length} Cards, ${orders.length} Work Orders, source/render parity, links, and JavaScript`);
