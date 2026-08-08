@@ -81,14 +81,60 @@ for (const card of cards) {
 execFileSync(process.execPath, [join(ROOT, "scripts", "tracker-build.mjs"), "--check"], { cwd: ROOT, stdio: "inherit" });
 for (const name of ["board.html", "guide.html"]) {
   const html = readFileSync(join(DIR, name), "utf8");
-  assert.match(html, /class="skip button" href="#main"/);
+  assert.match(html, /class="skip" href="#(?:workspace|guide)"/);
   assert.match(html, /:focus-visible/);
   assert.match(html, /@media \(max-width:700px\)/);
+  assert.match(html, /@media \(max-width:420px\)/);
   assert.match(html, /data-mode="day"/);
   assert.doesNotMatch(html, /<(?:script|link|img)[^>]+(?:src|href)=["']https?:/i, `${name}: external runtime asset`);
   for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(script[1], { filename: name });
 }
 const board = readFileSync(join(DIR, "board.html"), "utf8");
-for (const label of ["Project", "Project Philosophy", "Family Core", "Guide", "Kanban", "Work Orders", "Needs You", "Copy whole work order", "No automatic dispatch", "independent audit"]) assert(board.includes(label), `board missing ${label}`);
+for (const label of [
+  "Project", "Project Philosophy", "Family Core", "Guide", "Cards",
+  "Work Orders", "Needs You", "Search every Card", "Backlog staging yard",
+  "Copy handoff prompt", "Open durable Markdown", "Copy whole Work Order",
+  "No automatic dispatch", "independent audit",
+]) assert(board.includes(label), `board missing ${label}`);
+
+// The entire Card tile is a native activation target. Native buttons provide
+// Enter/Space behavior without a custom key-handler contract to keep in sync.
+assert.match(board, /function cardButton\(card\)\{const button=document\.createElement\("button"\);button\.type="button";button\.className="card"/);
+assert.match(board, /setAttribute\("aria-label","Open "\+card\.id/);
+assert.doesNotMatch(board, /Open durable Card/);
+assert.doesNotMatch(board, /<details><summary>Open durable Card/);
+
+// Card detail is addressable without a server and owns both the canonical
+// Markdown link and copy-ready handoff. No Card copy control is rendered on
+// the board tiles themselves.
+assert.match(board, /#card-/);
+assert.match(board, /cardSource" href="cards\//);
+assert.match(board, /document\.getElementById\("cardSource"\)\.href=card\.relativePath/);
+assert.match(board, /<dialog id="cardDialog"/);
+assert.equal((board.match(/Copy handoff prompt/g) || []).length, 1, "Card handoff belongs only to the detail dialog");
+for (const card of cards) {
+  const href = `cards/${basename(card.path)}`;
+  assert(board.includes(`"relativePath":"${href}"`), `${card.meta.id}: missing stable local source link`);
+  assert(board.includes(`"id":"${card.meta.id}"`), `${card.meta.id}: missing from generated reader`);
+}
+
+// Large backlogs remain complete but navigable through hierarchy, search,
+// filters, and explicit progressive disclosure.
+for (const field of ["search", "priority", "area", "type"]) assert(board.includes(`id="${field}"`), `board missing ${field} control`);
+assert.match(board, /className="backlog-group"/);
+assert.match(board, /Show all "\+found\.length/);
+assert.match(board, /Showing "\+visible\.length\+" of "\+CARDS\.length/);
+assert.match(board, /card\.title,card\.status,card\.area/, "Needs You and status searches must inspect Card status");
+
+// Responsive layout avoids fixed-width board columns and keeps controls and
+// dialog actions at or above the 44px touch-target floor.
+assert.match(board, /@media \(max-width:960px\)/);
+assert.match(board, /\.card \{[\s\S]*?width:100%; min-height:118px/);
+assert.match(board, /dialog \{ width:min\(780px,calc\(100vw - 28px\)\)/);
+assert.match(board, /min-height:44px/);
+assert.match(board, /prefers-reduced-motion:reduce/);
+
+const guide = readFileSync(join(DIR, "guide.html"), "utf8");
+for (const label of ["whole card tile", "search and filters", "stable markdown source", "copy-ready handoff"]) assert(guide.toLowerCase().includes(label), `guide missing ${label}`);
 assert(readFileSync(join(DIR, "GUIDE.md"), "utf8").includes("Linear is not required"));
-console.log(`tracker verified: ${cards.length} Cards, ${orders.length} Work Orders, source/render parity, links, and JavaScript`);
+console.log(`tracker verified: ${cards.length} Cards, ${orders.length} Work Orders, source/render parity, local detail links, keyboard semantics, responsive contract, and JavaScript`);
