@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "generatorVersion": 1,
+  "project": "Assist With Moving",
+  "repository": "github.com/scottjarvie/movingmanifest",
+  "projectUrl": "https://movingmanifest.com",
+  "idPrefix": "MOV",
+  "projectPhilosophy": "../planning/assist-with-moving-project-philosophy.md",
+  "familyCore": {
+    "label": "Assist With Sites Core Philosophy v1.6.2",
+    "date": "2026-08-08",
+    "commit": "561481843793a1d0fb97eee3984bccfd004c21a2",
+    "url": "https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md"
+  },
+  "guide": "GUIDE.md",
+  "lastUpdated": "2026-08-08",
+  "palette": {
+    "paper": "#eee9dc",
+    "sheet": "#fbf8ef",
+    "ink": "#172631",
+    "deep": "#0d2634",
+    "route": "#2f718a",
+    "signal": "#b84f2f"
+  }
+}

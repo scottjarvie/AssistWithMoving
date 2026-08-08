@@ -8,6 +8,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - Start with [README.md](README.md) — product overview, stack, repo map, local dev, and conventions.
 - Read [Assist With Moving — Project Philosophy](docs/planning/assist-with-moving-project-philosophy.md) before product, UX, architecture, public-copy, or roadmap decisions. It is the canonical product-specific companion to the family Core Philosophy.
+- Read the repo-owned [project tracker Guide](docs/tracker/GUIDE.md) and the relevant Cards / Work Orders before continuing current work. Linear is optional historical context only; never reconnect, query, or require it before implementation or ordinary progress.
 - Working on the REST API or MCP tools? [docs/api-and-mcp.md](docs/api-and-mcp.md) is the authoritative guide. Note there are TWO MCP surfaces with separate code: the OAuth gateway (`convex/mcp*.ts`) and the stdio/HTTP server (`mcp-server/`) — check both before adding or assuming a capability.
 - Merging to `main` deploys production (Vercel + prod Convex). Keep `main` green: `npm run lint && npm run typecheck && npm run test` before merging.
 - Agent-facing Convex tools must throw `ConvexError`, never plain `Error` (the MCP gateway redacts plain errors to "Tool execution failed").

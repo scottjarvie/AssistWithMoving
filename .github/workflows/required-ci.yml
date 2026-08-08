@@ -20,32 +20,60 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Classify CI scope
+        id: scope
+        env:
+          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/classify-ci-change.mjs --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA" --event "${{ github.event_name }}" --github-output "$GITHUB_OUTPUT"
+
+      - name: Validate state-only publication
+        if: steps.scope.outputs.state_only == 'true'
+        run: node scripts/verify-tracker.mjs && node scripts/project-philosophy-docs.mjs --check
+
+      - name: Record lightweight state path
+        if: steps.scope.outputs.state_only == 'true'
+        run: echo "Validated the exact state-only range without dependency installation, application build, tests, credentials, seeding, or browser execution." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Use Node.js
+        if: steps.scope.outputs.run_full == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 20.20.0
           cache: npm
 
       - name: Install from the lockfile
+        if: steps.scope.outputs.run_full == 'true'
         run: npm ci
 
+      - name: Verify state-publication safeguards
+        if: steps.scope.outputs.run_full == 'true'
+        run: npm run verify:state-publication
+
       - name: Lint
+        if: steps.scope.outputs.run_full == 'true'
         run: npm run lint
 
       - name: Typecheck
+        if: steps.scope.outputs.run_full == 'true'
         run: npm run typecheck
 
       - name: Verify REST and MCP contract drift
+        if: steps.scope.outputs.run_full == 'true'
         run: npm run contract:drift
 
       - name: Verify anonymous OAuth and API-key refusal boundaries
+        if: steps.scope.outputs.run_full == 'true'
         run: >-
           npx vitest run
           tests/unit/mcp-oauth-config-lock.test.ts
           tests/unit/mcp-route-auth.test.ts
 
       - name: Build without credentials or deployment keys
+        if: steps.scope.outputs.run_full == 'true'
         run: npm run build
 
   full-tests:
@@ -55,15 +83,35 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Classify CI scope
+        id: scope
+        env:
+          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/classify-ci-change.mjs --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA" --event "${{ github.event_name }}" --github-output "$GITHUB_OUTPUT"
+
+      - name: Validate state-only publication
+        if: steps.scope.outputs.state_only == 'true'
+        run: node scripts/verify-tracker.mjs && node scripts/project-philosophy-docs.mjs --check
+
+      - name: Record lightweight state path
+        if: steps.scope.outputs.state_only == 'true'
+        run: echo "Validated the exact state-only range without dependency installation or the unit suite." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Use Node.js
+        if: steps.scope.outputs.run_full == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 20.20.0
           cache: npm
 
       - name: Install from the lockfile
+        if: steps.scope.outputs.run_full == 'true'
         run: npm ci
 
       - name: Run the full suite without making it a required policy check
+        if: steps.scope.outputs.run_full == 'true'
         run: npm run test
