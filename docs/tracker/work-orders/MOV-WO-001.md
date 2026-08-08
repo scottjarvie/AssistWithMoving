@@ -19,10 +19,11 @@ prove one useful direct-main state closeout skips only the application build.
 
 ## Current truth
 
-Execution is active under explicit portfolio authorization. Initial tracker
-state is traveling inside the normal software/configuration PR because its
-generator, validators, workflows, package scripts, and Vercel configuration
-must exist before a state-only publication can be trusted.
+Execution is active under explicit portfolio authorization. PR #172 merged the
+tracker software, validators, workflows, package scripts and Vercel
+configuration through full CI. `MOV-0002` is complete. `MOV-0001` remains
+active until the useful state commit proves lightweight Actions, Vercel's
+ignored zero-build record and the retained production deployment.
 
 ## Sequence
 
@@ -72,9 +73,16 @@ or an irreversible provider confirmation.
 
 ## Execution evidence
 
-Pending PR, CI, deployment, state commit, and provider receipts.
+- PR #172 merged at `d6eb556ccc9ef2a4db88c59119460e27627b975c`.
+- PR Actions run `31272427974` completed full required jobs.
+- Preview `dpl_GfFZMYLpBzu6zJmfNdGUhFjaTfLF` built normally and reached Ready.
+- Production `dpl_HvtWoNirX1FQAev7YTBhJnKn9eop` built normally, reached Ready,
+  and held `movingmanifest.com` plus `assistwithmoving.com` before state proof.
+- State-specific Actions, ignored record and retained-alias receipts pending.
 
 ## History
 
 - 2026-08-08 · Codex — moved Proposed → Ready → Active under the coordinator's
   explicit portfolio rollout authority; implementation and proof are underway.
+- 2026-08-08 · Codex — recorded the merged software/configuration path and
+  closed the Linear-gate Card; state-provider proof remains active.
