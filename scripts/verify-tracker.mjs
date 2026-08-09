@@ -86,6 +86,7 @@ for (const name of ["board.html", "guide.html"]) {
   assert.match(html, /@media \(max-width:700px\)/);
   assert.match(html, /@media \(max-width:420px\)/);
   assert.match(html, /data-mode="day"/);
+  assert.match(html, /<link rel="icon" href="data:," \/>/, `${name}: local reader must not request a missing favicon`);
   assert.doesNotMatch(html, /<(?:script|link|img)[^>]+(?:src|href)=["']https?:/i, `${name}: external runtime asset`);
   for (const script of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(script[1], { filename: name });
 }
@@ -94,15 +95,50 @@ for (const label of [
   "Project", "Project Philosophy", "Family Core", "Guide", "Cards",
   "Work Orders", "Needs You", "Search every Card", "Backlog staging yard",
   "Copy handoff prompt", "Open durable Markdown", "Copy whole Work Order",
-  "No automatic dispatch", "independent audit",
+  "No automatic dispatch", "independent audit", "Personal Card order",
+  "Reset to canonical order", "Shift + Arrow",
 ]) assert(board.includes(label), `board missing ${label}`);
 
 // The entire Card tile is a native activation target. Native buttons provide
-// Enter/Space behavior without a custom key-handler contract to keep in sync.
-assert.match(board, /function cardButton\(card\)\{const button=document\.createElement\("button"\);button\.type="button";button\.className="card"/);
+// click/Enter/Space detail behavior, while the same clean surface owns
+// thresholded pointer ordering and a documented modifier-key ordering path.
+assert.match(board, /function cardButton\(card,lane,visibleLane\)/);
+assert.match(board, /const button=document\.createElement\("button"\);button\.type="button";button\.className="card"/);
+assert.match(board, /wrap\.append\(button\)/);
 assert.match(board, /setAttribute\("aria-label","Open "\+card\.id/);
 assert.doesNotMatch(board, /Open durable Card/);
 assert.doesNotMatch(board, /<details><summary>Open durable Card/);
+assert.doesNotMatch(board, /order-tools|drag-handle|data-order-action|draggable="true"/i, "Cards must not reserve visible reorder chrome");
+
+// Personal ordering is browser-local, fail-soft, and cannot mutate canonical
+// lane, status, priority, source Cards, or Work Orders.
+assert.match(board, /assist-with-moving:personal-card-order:v1/);
+assert.match(board, /localStorage\.getItem\(PERSONAL_ORDER_KEY\)/);
+assert.match(board, /localStorage\.setItem\(PERSONAL_ORDER_KEY/);
+assert.match(board, /localStorage\.removeItem\(PERSONAL_ORDER_KEY\)/);
+assert.match(board, /orderStorageState="unavailable"/);
+assert.match(board, /Personal order is active for this viewing session only because browser storage is unavailable/);
+assert.match(board, /function cardLane\(card\)\{return card\.status==="backlog"\?"backlog:"\+\(card\.priority\|\|"P2"\):card\.status\}/);
+assert.match(board, /cardLane\(source\)!==lane\|\|cardLane\(target\)!==lane/);
+assert.match(board, /Cards can only be reordered inside the same lane/);
+assert.doesNotMatch(board, /card\.status\s*=(?!=)/, "reader must not mutate Card status");
+assert.doesNotMatch(board, /card\.priority\s*=(?!=)/, "reader must not mutate Card priority");
+
+// Pointer/touch and non-pointer paths remain distinct from Card activation.
+for (const event of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) assert(board.includes(`addEventListener("${event}"`), `board missing ${event} ordering path`);
+assert.match(board, /POINTER_DRAG_THRESHOLD=8,TOUCH_LONG_PRESS_MS=450/);
+assert.match(board, /Math\.hypot\(event\.clientX-dragState\.startX,event\.clientY-dragState\.startY\)/);
+assert.match(board, /event\.pointerType==="touch"/);
+assert.match(board, /setTimeout\(activatePointerOrder,TOUCH_LONG_PRESS_MS\)/);
+assert.match(board, /touch-action:pan-y/);
+assert.match(board, /aria-keyshortcuts","Shift\+ArrowUp Shift\+ArrowDown Shift\+ArrowLeft Shift\+ArrowRight"/);
+assert.match(board, /event\.shiftKey&&\["ArrowUp","ArrowLeft","ArrowDown","ArrowRight"\]\.includes\(event\.key\)/);
+assert.match(board, /if\(suppressClickId===card\.id\)/, "a completed drag must not open Card detail");
+assert.match(board, /openCard\(card,true\)/, "normal Card activation must still open detail");
+assert.match(board, /id="orderAnnouncer" aria-live="assertive" aria-atomic="true"/);
+assert.match(board, /announceOrder\("Moved "\+sourceId/);
+assert.match(board, /resetOrder"\)\.addEventListener\("click"/);
+assert.match(board, /Canonical Card order restored in every lane/);
 
 // Card detail is addressable without a server and owns both the canonical
 // Markdown link and copy-ready handoff. No Card copy control is rendered on
@@ -125,6 +161,7 @@ assert.match(board, /className="backlog-group"/);
 assert.match(board, /Show all "\+found\.length/);
 assert.match(board, /Showing "\+visible\.length\+" of "\+CARDS\.length/);
 assert.match(board, /card\.title,card\.status,card\.area/, "Needs You and status searches must inspect Card status");
+assert.match(board, /orderedLane\(key\)\.filter\(matches\)/, "filtered views must preserve personal lane order");
 
 // Responsive layout avoids fixed-width board columns and keeps controls and
 // dialog actions at or above the 44px touch-target floor.
@@ -135,6 +172,6 @@ assert.match(board, /min-height:44px/);
 assert.match(board, /prefers-reduced-motion:reduce/);
 
 const guide = readFileSync(join(DIR, "guide.html"), "utf8");
-for (const label of ["whole card tile", "search and filters", "stable markdown source", "copy-ready handoff"]) assert(guide.toLowerCase().includes(label), `guide missing ${label}`);
+for (const label of ["whole card tile", "search and filters", "stable markdown source", "copy-ready handoff", "personal card order", "normal click still opens detail", "long-press", "shift + an arrow key", "reset to canonical order", "never changes canonical card status"]) assert(guide.toLowerCase().includes(label), `guide missing ${label}`);
 assert(readFileSync(join(DIR, "GUIDE.md"), "utf8").includes("Linear is not required"));
-console.log(`tracker verified: ${cards.length} Cards, ${orders.length} Work Orders, source/render parity, local detail links, keyboard semantics, responsive contract, and JavaScript`);
+console.log(`tracker verified: ${cards.length} Cards, ${orders.length} Work Orders, source/render parity, local detail links, personal same-lane ordering, keyboard semantics, responsive contract, and JavaScript`);
