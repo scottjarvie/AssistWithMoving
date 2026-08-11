@@ -330,6 +330,38 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     ],
   },
   {
+    id: "queueHandoffs",
+    title: "Person and chosen-AI Queue handoffs",
+    status: "available",
+    purpose:
+      "Discover, claim, release, complete, or return bounded move work to the person with explicit state, concurrency, retry, and attribution rules.",
+    requiredScopes: ["queue/read", "queue/write"],
+    restEndpoints: [
+      "GET /api/v1/moves/:moveId/queue",
+      "GET /api/v1/moves/:moveId/queue/:queueItemId",
+      "POST /api/v1/moves/:moveId/queue/:queueItemId/claim",
+      "POST /api/v1/moves/:moveId/queue/:queueItemId/release",
+      "POST /api/v1/moves/:moveId/queue/:queueItemId/needs-you",
+      "POST /api/v1/moves/:moveId/queue/:queueItemId/complete",
+      "POST /api/v1/moves/:moveId/queue/:queueItemId/failure",
+    ],
+    mcpTools: [
+      "list_queue_items",
+      "get_queue_item",
+      "claim_queue_item",
+      "release_queue_item",
+      "request_queue_input",
+      "complete_queue_item",
+      "report_queue_failure",
+    ],
+    agentWorkflows: [
+      "Read only the caller's own or explicitly delegated move Queue.",
+      "Claim with an expiring lease and optimistic version before doing work.",
+      "Return exact human blockers as Needs You and attach readable results to Done.",
+      "Record bounded retry failures without silent loops or untraceable writes.",
+    ],
+  },
+  {
     id: "aiReviewVisibility",
     title: "AI job and intake review queues",
     status: "available",

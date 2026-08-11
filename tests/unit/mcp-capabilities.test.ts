@@ -136,7 +136,22 @@ describe("MovingManifest MCP capability discovery", () => {
         "transportPlanning",
         "documentationProfiles",
         "publicSharing",
+        "queueHandoffs",
       ])
+    );
+    expect(payload.capabilities).toContainEqual(
+      expect.objectContaining({
+        id: "queueHandoffs",
+        status: "available",
+        requiredScopes: ["queue/read", "queue/write"],
+        mcpTools: expect.arrayContaining([
+          "list_queue_items",
+          "claim_queue_item",
+          "request_queue_input",
+          "complete_queue_item",
+          "report_queue_failure",
+        ]),
+      }),
     );
     expect(payload.capabilities).toContainEqual(
       expect.objectContaining({
@@ -308,7 +323,7 @@ describe("MovingManifest MCP capability discovery", () => {
     });
     const toolNames = [...registrations.keys()].sort();
 
-    expect(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(26);
+    expect(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(33);
     expect(filter("save_box_intake")).toBe(true);
     expect(filter("create_box")).toBe(false);
     expect(toolNames).toContain("save_box_intake");

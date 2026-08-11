@@ -1159,6 +1159,63 @@ export async function listAiJobs(config, input) {
   });
 }
 
+export async function listQueueItems(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/queue`,
+    query: {
+      state: input.state,
+      ownerUserId: input.ownerUserId,
+      limit: input.limit,
+      before: input.before,
+    },
+  });
+}
+
+export async function getQueueItem(config, input) {
+  return await movingManifestRequest(config, {
+    path: `/moves/${input.moveId}/queue/${input.queueItemId}`,
+  });
+}
+
+async function queueCommand(config, input, action, body) {
+  return await movingManifestRequest(config, {
+    method: "POST",
+    path: `/moves/${input.moveId}/queue/${input.queueItemId}/${action}`,
+    idempotencyKey: input.idempotencyKey,
+    body: { expectedVersion: input.expectedVersion, ...body },
+  });
+}
+
+export async function claimQueueItem(config, input) {
+  return await queueCommand(config, input, "claim", { nextStep: input.nextStep });
+}
+
+export async function releaseQueueItem(config, input) {
+  return await queueCommand(config, input, "release", { reason: input.reason });
+}
+
+export async function requestQueueInput(config, input) {
+  return await queueCommand(config, input, "needs-you", {
+    requiredAction: input.requiredAction,
+  });
+}
+
+export async function completeQueueItem(config, input) {
+  return await queueCommand(config, input, "complete", {
+    resultSummary: input.resultSummary,
+    resultRefs: input.resultRefs,
+  });
+}
+
+export async function reportQueueFailure(config, input) {
+  return await queueCommand(config, input, "failure", {
+    code: input.code,
+    message: input.message,
+    retryable: input.retryable,
+    retryAfterMs: input.retryAfterMs,
+  });
+}
+
 export async function getAiProviderStatus(config, input) {
   const response = await movingManifestRequest(config, {
     path: `/moves/${input.moveId}/ai-jobs/provider-status`,

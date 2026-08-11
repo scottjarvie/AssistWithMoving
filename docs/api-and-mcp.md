@@ -39,6 +39,8 @@ API keys can include these scopes:
 | `moves/write` | Update move metadata and create/update transport resources and zones. |
 | `inventory/read` | Read items, boxes, assignments, and photo metadata. |
 | `inventory/write` | Create/update items, boxes, and assignments. |
+| `queue/read` | Discover canonical Queue handoffs and attributable activity for an allowed move/owner. |
+| `queue/write` | Claim, release, return, fail, or complete canonical Queue handoffs; does not grant inventory or other domain writes. |
 | `plans/read` | List/read Layout Studio plans, summaries, proposal lists, and SVG snapshots. |
 | `plans/write` | Apply Layout Studio op batches and create pending plan proposals. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
@@ -208,6 +210,55 @@ curl https://movingmanifest.com/api/v1/me \
 The context response includes the household id/name, key scopes, whether the
 key is move-restricted, and the restricted move when applicable. This endpoint
 does not return the raw key or secret hash.
+
+## Queue handoffs
+
+The canonical Queue is the durable handoff between a person and their chosen
+AI. It is not the inventory task list, the internal AI job monitor, or the
+suggestion approval queue. It uses exactly four user-facing states:
+
+| State | Contract |
+| --- | --- |
+| **Needs You** (`needsYou`) | The item names the exact human decision, fact, file, approval, or outside-world action required. |
+| **Working** (`working`) | An attributable actor holds an expiring lease and the current bounded next step is visible. |
+| **Waiting for your AI** (`waitingForAi`) | The handoff is accepted but no work is running. `waitingReason` distinguishes unknown connection truth, ready work, a proven AI connection requirement, or a scheduled retry. |
+| **Done** (`done`) | A readable result or durable result reference is recorded; canceled and expired handoffs use `terminalReason` without inventing extra states. |
+
+Queue reads require `queue/read`; commands require `queue/write`. Those scopes
+do not grant permission to change inventory, plans, members, exports, or any
+outside service. The key must independently carry the domain scopes needed for
+the work it performs. Every command requires the current `expectedVersion` and
+an `Idempotency-Key`, is restricted to the key creator's own or explicitly
+delegated Queue, and appends both Queue activity and an audit event.
+
+```text
+GET  /api/v1/moves/{moveId}/queue
+GET  /api/v1/moves/{moveId}/queue/{queueItemId}
+POST /api/v1/moves/{moveId}/queue/{queueItemId}/claim
+POST /api/v1/moves/{moveId}/queue/{queueItemId}/release
+POST /api/v1/moves/{moveId}/queue/{queueItemId}/needs-you
+POST /api/v1/moves/{moveId}/queue/{queueItemId}/complete
+POST /api/v1/moves/{moveId}/queue/{queueItemId}/failure
+```
+
+List accepts `state`, `ownerUserId`, `limit` (maximum 100), and the returned
+timestamp cursor as `before`. Non-manager reads default to the caller's own
+Queue so authorization filtering cannot create incomplete pages; the response
+lists `runnableOwnerIds` and an explicitly delegated owner can be selected.
+Managers may read the whole move or select one owner. Claim requires `nextStep`; release requires a
+reason; Needs You requires `requiredAction`; completion requires
+`resultSummary` or at least one `{type,id,label?}` result reference. Failure
+requires a stable code, readable message, and `retryable`; retryable work
+returns to Waiting for your AI until its attempt budget is exhausted, then
+becomes Needs You. Claims expire after 15 minutes and the bounded maintenance
+sweep records their release rather than leaving invisible stuck work.
+
+Queue directives are created by the signed-in product service, not by the
+agent tools. This prevents a connected AI from inventing objectives or using
+Queue access as broad write authorization. The existing capture pipeline keeps
+its `queued|claimed|processed|needsInput|resolved|discarded` storage vocabulary
+and is exposed through a non-destructive adapter; no production backfill is
+required for correctness.
 
 ## Household Members
 
@@ -1962,6 +2013,13 @@ Available MCP tools:
 | `get_agent_context` | Fetch one compact structured context payload for AI agents: move, spaces, transport, inventory, photos, sale pipeline, counts, and write guidance. |
 | `get_move_questions` | Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets. |
 | `get_move_day_checklist` | Fetch a crew-safe Move Day checklist with box status, item counts, load assignment names, warnings, exception notes, and progress counts. |
+| `list_queue_items` | List bounded canonical Queue handoffs using the exact four family states and optimistic versions. |
+| `get_queue_item` | Read one Queue handoff and its attributable activity history. |
+| `claim_queue_item` | Claim Waiting for your AI work with a visible next step, expiring lease, expected version, and idempotency key. |
+| `release_queue_item` | Return an active claim to Waiting for your AI with a durable reason. |
+| `request_queue_input` | Return active work to Needs You with the exact human action required. |
+| `complete_queue_item` | Complete claimed work with a readable result or durable result reference. |
+| `report_queue_failure` | Record retryable or exhausted failure without silent loops. |
 | `plans_list` | List Layout Studio floor plans for a move. |
 | `plan_get` | Fetch the full plan document before writing ops. |
 | `plan_summary` | Fetch a plain-text plan summary for text-only agents and sanity checks. |
@@ -2038,7 +2096,15 @@ Available MCP tools:
 | `create_share_link` | Create a scoped documentation share link, with `dryRun` support. |
 | `revoke_share_link` | Revoke a documentation share link, with `dryRun` support. |
 
-OAuth capture-queue tools (`list_queue`, `claim_queue`, and
+Canonical Queue tools (`list_queue_items`, `get_queue_item`,
+`claim_queue_item`, `release_queue_item`, `request_queue_input`,
+`complete_queue_item`, and `report_queue_failure`) are available through both
+the OAuth gateway and API-key MCP/stdio surfaces. The OAuth gateway derives the
+person and move access from the verified sign-in; API-key surfaces additionally
+require `queue/read` or `queue/write`. Neither surface can create a new objective
+or inherit inventory/plan/export/member permissions from Queue access.
+
+OAuth capture-queue compatibility tools (`list_queue`, `claim_queue`, and
 `submit_queue_result`) are served by the Convex MCP gateway for signed-in
 MovingManifest users. Queue entries expose structured capture hints such as
 `itemKind`, `estimatedWeightLb`, `dimensionsIn`, `disposition`,
@@ -2056,11 +2122,12 @@ Recommended MCP key scopes depend on the intended agent:
 | --- | --- |
 | Read-only helper | `moves/read`, `inventory/read`, `exports/read` |
 | Inventory intake helper | `moves/read`, `inventory/read`, `inventory/write` |
+| Queue runner | `moves/read`, `queue/read`, `queue/write`, plus only the domain scopes required by the approved handoff |
 | Load planning helper | `moves/read`, `moves/write`, `inventory/read`, `inventory/write` |
 | Photo intake helper | `moves/read`, `inventory/read`, `photos/write` |
 | Household setup helper | `moves/read`, `members/manage` |
 | Documentation helper | `moves/read`, `inventory/read`, `exports/read`, `exports/create` |
-| Broad move assistant | `moves/read`, `moves/write`, `inventory/read`, `inventory/write`, `plans/read`, `plans/write`, `photos/write`, `exports/read`, `exports/create`, `members/manage` |
+| Broad move assistant | `moves/read`, `moves/write`, `inventory/read`, `inventory/write`, `queue/read`, `queue/write`, `plans/read`, `plans/write`, `photos/write`, `exports/read`, `exports/create`, `members/manage` |
 | Layout Studio helper | `plans/read`, `plans/write`, plus `inventory/read` when placing real items or boxes |
 
 Prefer move-restricted API keys for headless or non-OAuth agents.

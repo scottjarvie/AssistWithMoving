@@ -29,6 +29,7 @@ export type AuditEventInput = {
     | "apiKey"
     | "export"
     | "ai"
+    | "queue"
     | "admin"
     | "system";
   action: string;

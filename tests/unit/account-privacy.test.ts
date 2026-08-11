@@ -104,6 +104,8 @@ describe("account privacy helpers", () => {
         exportJobs: [],
         apiKeys: [1],
         shareLinks: [1, 2],
+        queueItems: [1],
+        queueActivities: [1, 2, 3],
       })
     ).toEqual({
       households: 1,
@@ -114,6 +116,8 @@ describe("account privacy helpers", () => {
       exportJobs: 0,
       apiKeys: 1,
       shareLinks: 2,
+      queueItems: 1,
+      queueActivities: 3,
     });
   });
 
@@ -121,5 +125,6 @@ describe("account privacy helpers", () => {
     expect(retentionPolicy.accountExports).toContain("14 days");
     expect(retentionPolicy.deletion).toContain("7 days");
     expect(retentionPolicy.auditLogs).toContain("retained");
+    expect(retentionPolicy.queueHistory).toContain("remain with the move");
   });
 });

@@ -18,6 +18,8 @@ export const retentionPolicy = {
     "Deletion completion revokes API keys and share links created by the deleting user and disables that user's memberships and move-level grants.",
   auditLogs:
     "Audit logs are retained for security and abuse investigation with the user profile anonymized instead of hard-deleted.",
+  queueHistory:
+    "Queue items and attributable activity remain with the move so collaborators retain the work record; account deletion anonymizes the user profile and revokes that person's AI access.",
   storage:
     "Photo objects are retained with their household/move records unless a household owner deletes the source records or a future storage cleanup job removes archived data.",
 } as const;
@@ -105,6 +107,8 @@ export function summarizeExportPackage(packageData: {
   exportJobs: unknown[];
   apiKeys: unknown[];
   shareLinks: unknown[];
+  queueItems: unknown[];
+  queueActivities: unknown[];
 }) {
   return {
     households: packageData.households.length,
@@ -115,5 +119,7 @@ export function summarizeExportPackage(packageData: {
     exportJobs: packageData.exportJobs.length,
     apiKeys: packageData.apiKeys.length,
     shareLinks: packageData.shareLinks.length,
+    queueItems: packageData.queueItems.length,
+    queueActivities: packageData.queueActivities.length,
   };
 }

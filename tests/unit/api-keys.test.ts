@@ -116,6 +116,9 @@ describe("api key primitives", () => {
     expect(canApiKeyPerformAction(["plans/read"], "plan:read")).toBe(true);
     expect(canApiKeyPerformAction(["plans/read"], "plan:edit")).toBe(false);
     expect(canApiKeyPerformAction(["plans/write"], "plan:edit")).toBe(true);
+    expect(canApiKeyPerformAction(["queue/read"], "queue:read")).toBe(true);
+    expect(canApiKeyPerformAction(["queue/read"], "queue:run")).toBe(false);
+    expect(canApiKeyPerformAction(["queue/write"], "queue:run")).toBe(true);
     expect(
       canApiKeyPerformAction(["members/manage"], "household:manage_members")
     ).toBe(true);

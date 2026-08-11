@@ -62,6 +62,8 @@ const scopes = [
   "moves/write",
   "inventory/read",
   "inventory/write",
+  "queue/read",
+  "queue/write",
   "plans/read",
   "plans/write",
   "photos/write",

@@ -482,6 +482,8 @@ const MOVE_INDEXED_PURGE_TABLES: Array<{ table: string; index: string }> = [
   { table: "itemPhotos", index: "by_move_created" },
   { table: "photoUploadSessions", index: "by_move_status" },
   { table: "ingestionQueueEntries", index: "by_move_status_order" },
+  { table: "queueActivities", index: "by_move_created" },
+  { table: "queueItems", index: "by_move_updated" },
   { table: "aiJobs", index: "by_move_status" },
   { table: "aiTextSuggestions", index: "by_move_status" },
   { table: "aiPhotoSuggestions", index: "by_move_status" },

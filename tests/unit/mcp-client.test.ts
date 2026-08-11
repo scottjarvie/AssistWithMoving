@@ -13,6 +13,7 @@ import {
   archiveItem,
   archivePlannedItem,
   batchUpsertItems,
+  claimQueueItem,
   applyAssignments,
   archiveMovePerson,
   archiveDocumentationProfile,
@@ -47,6 +48,7 @@ import {
   listMovePeople,
   listPlannedItems,
   listPlanningSuggestions,
+  listQueueItems,
   listShareLinkComments,
   listShareLinks,
   planApplyOps,
@@ -218,6 +220,61 @@ describe("MovingManifest MCP API client", () => {
           "idempotency-key": "idem1",
         },
         body: JSON.stringify({ name: "Lamp" }),
+      }
+    );
+  });
+
+  it("lists and claims canonical Queue items through the bounded REST contract", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ data: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const config = {
+      baseUrl: "https://example.com/api/v1",
+      apiKey: "mmk_test_secret",
+    };
+
+    await listQueueItems(config, {
+      moveId: "move1",
+      state: "waitingForAi",
+      ownerUserId: "user1",
+      limit: 25,
+      before: 1234,
+    });
+    await claimQueueItem(config, {
+      moveId: "move1",
+      queueItemId: "queue1",
+      expectedVersion: 7,
+      idempotencyKey: "claim-queue1-v7",
+      nextStep: "Review the room inventory and return a durable result.",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      new URL(
+        "https://example.com/api/v1/moves/move1/queue?state=waitingForAi&ownerUserId=user1&limit=25&before=1234"
+      ),
+      {
+        method: "GET",
+        headers: { authorization: "Bearer mmk_test_secret" },
+      }
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      new URL("https://example.com/api/v1/moves/move1/queue/queue1/claim"),
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer mmk_test_secret",
+          "content-type": "application/json",
+          "idempotency-key": "claim-queue1-v7",
+        },
+        body: JSON.stringify({
+          expectedVersion: 7,
+          nextStep: "Review the room inventory and return a durable result.",
+        }),
       }
     );
   });

@@ -295,6 +295,8 @@ async function buildAccountExportPackage(
       acc.exportJobs.push(...entry.exportJobs);
       acc.apiKeys.push(...entry.apiKeys);
       acc.shareLinks.push(...entry.shareLinks);
+      acc.queueItems.push(...entry.queueItems);
+      acc.queueActivities.push(...entry.queueActivities);
       return acc;
     },
     {
@@ -306,6 +308,8 @@ async function buildAccountExportPackage(
       exportJobs: [] as unknown[],
       apiKeys: [] as unknown[],
       shareLinks: [] as unknown[],
+      queueItems: [] as unknown[],
+      queueActivities: [] as unknown[],
     }
   );
 
@@ -349,6 +353,8 @@ async function exportHouseholdData(
     exportJobs,
     apiKeys,
     shareLinks,
+    queueItems,
+    queueActivities,
   ] = await Promise.all([
     ctx.db
       .query("moves")
@@ -388,6 +394,18 @@ async function exportHouseholdData(
       .query("shareLinks")
       .withIndex("by_household_status", (q) =>
         q.eq("householdId", household._id)
+      )
+      .collect(),
+    ctx.db
+      .query("queueItems")
+      .withIndex("by_household_updated", (q) =>
+        q.eq("householdId", household._id),
+      )
+      .collect(),
+    ctx.db
+      .query("queueActivities")
+      .withIndex("by_household_created", (q) =>
+        q.eq("householdId", household._id),
       )
       .collect(),
   ]);
@@ -523,6 +541,51 @@ async function exportHouseholdData(
       lastAccessedAt: link.lastAccessedAt,
       createdAt: link.createdAt,
       updatedAt: link.updatedAt,
+    })),
+    queueItems: queueItems.map((item) => ({
+      id: item._id,
+      moveId: item.moveId,
+      ownerUserId: item.ownerUserId,
+      directive: item.directive,
+      summary: item.summary,
+      state: item.state,
+      priority: item.priority,
+      contextKind: item.contextKind,
+      contextRefId: item.contextRefId,
+      contextLabel: item.contextLabel,
+      domainKind: item.domainKind,
+      domainRefType: item.domainRefType,
+      domainRefId: item.domainRefId,
+      requiredAction: item.requiredAction,
+      nextStep: item.nextStep,
+      waitingReason: item.waitingReason,
+      latestHumanResponse: item.latestHumanResponse,
+      resultSummary: item.resultSummary,
+      resultRefs: item.resultRefs,
+      terminalReason: item.terminalReason,
+      failureCode: item.failureCode,
+      failureMessage: item.failureMessage,
+      attemptCount: item.attemptCount,
+      maxAttempts: item.maxAttempts,
+      version: item.version,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      completedAt: item.completedAt,
+    })),
+    queueActivities: queueActivities.map((activity) => ({
+      id: activity._id,
+      queueItemId: activity.queueItemId,
+      moveId: activity.moveId,
+      type: activity.type,
+      actorType: activity.actorType,
+      actorUserId: activity.actorUserId,
+      actorLabel: activity.actorLabel,
+      fromState: activity.fromState,
+      toState: activity.toState,
+      message: activity.message,
+      failureCode: activity.failureCode,
+      resultRefCount: activity.resultRefCount,
+      createdAt: activity.createdAt,
     })),
   };
 }

@@ -34,6 +34,9 @@ export type PermissionAction =
   | "inventory:read"
   | "inventory:edit"
   | "inventory:pack"
+  | "queue:read"
+  | "queue:write"
+  | "queue:run"
   | "plan:read"
   | "plan:edit"
   | "documentation:read"
@@ -50,6 +53,9 @@ const actionMinimumRole: Record<PermissionAction, HouseholdRole> = {
   "inventory:read": "guest",
   "inventory:edit": "editor",
   "inventory:pack": "packer",
+  "queue:read": "guest",
+  "queue:write": "guest",
+  "queue:run": "packer",
   "plan:read": "guest",
   "plan:edit": "editor",
   "documentation:read": "viewer",

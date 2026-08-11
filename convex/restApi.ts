@@ -102,6 +102,26 @@ import { suggestFromPhotoIntake } from "./lib/photoIntake";
 import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { parseTextIntakeSuggestions } from "./lib/textIntakeParser";
+import {
+  queueStates,
+  type QueueState,
+} from "./lib/queue";
+import {
+  claimQueueItem,
+  completeQueueItem,
+  releaseQueueItem,
+  reportQueueFailure,
+  requestQueueInput,
+  requireQueueItem,
+  requireQueueItemVisible,
+  shapeQueueItem,
+  type QueueAccessActor,
+} from "./lib/queueService";
+import {
+  canViewQueueEntry,
+  resolveRunnableQueueOwnerIds,
+} from "./lib/queueAccess";
+import { canPerformHouseholdAction } from "./lib/roles";
 import { getTransportResourcePreset } from "./lib/transportPresets";
 import { deriveTransportCapacity } from "./transportResources";
 import { insertMissingMovePlanningDefaults } from "./movePlanningDefaults";
@@ -628,6 +648,10 @@ async function routeRequest(
     return await routeMoveSpaces(ctx, args, auth, moveId, nestedId);
   }
 
+  if (nested === "queue") {
+    return await routeQueue(ctx, args, auth, moveId, nestedId, segments[4]);
+  }
+
   if (nested === "sale-listings") {
     return await routeSaleListings(ctx, args, auth, moveId, nestedId);
   }
@@ -734,6 +758,256 @@ async function routeRequest(
   }
 
   return restError({ status: 404, code: "not_found", message: "Not found." });
+}
+
+async function queueApiActor(
+  ctx: MutationCtx,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+): Promise<QueueAccessActor> {
+  const participant = await ctx.db
+    .query("moveParticipants")
+    .withIndex("by_move_user", (q) =>
+      q.eq("moveId", moveId).eq("userId", auth.createdByUserId),
+    )
+    .unique();
+  return {
+    userId: auth.createdByUserId,
+    actorType: "apiKey",
+    apiKeyId: auth.apiKeyId,
+    label: auth.apiKeyName,
+    isManager: canPerformHouseholdAction(
+      auth.effectiveRole,
+      "household:manage_members",
+    ),
+    delegatedOwnerIds:
+      participant?.status === "active"
+        ? (participant.canRunQueueForUserIds ?? [])
+        : [],
+  };
+}
+
+function restQueueState(value: string | undefined): QueueState | undefined {
+  if (!value) return undefined;
+  if ((queueStates as readonly string[]).includes(value)) {
+    return value as QueueState;
+  }
+  throw new Error(
+    "state must be needsYou, working, waitingForAi, or done.",
+  );
+}
+
+function restExpectedVersion(body: Record<string, unknown>) {
+  if (typeof body.expectedVersion !== "number" || !Number.isInteger(body.expectedVersion)) {
+    throw new Error("expectedVersion is required and must be an integer.");
+  }
+  return body.expectedVersion;
+}
+
+async function routeQueue(
+  ctx: MutationCtx,
+  args: RestRequestInput,
+  auth: Awaited<ReturnType<typeof authenticateApiKey>>,
+  moveId: Id<"moves">,
+  queueItemIdSegment?: string,
+  action?: string,
+) {
+  const actor = await queueApiActor(ctx, auth, moveId);
+  if (args.method === "GET" && !queueItemIdSegment) {
+    const limit = Math.min(
+      Math.max(Math.floor(Number(args.query.limit || "50")), 1),
+      100,
+    );
+    const state = restQueueState(args.query.state);
+    const requestedOwnerUserId = args.query.ownerUserId as Id<"users"> | undefined;
+    const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
+      ctx,
+      auth.householdId,
+      moveId,
+      actor,
+    );
+    const ownerUserId =
+      requestedOwnerUserId ?? (actor.isManager ? undefined : actor.userId);
+    if (ownerUserId && !runnableOwnerIds.includes(ownerUserId)) {
+      return restError({
+        status: 403,
+        code: "forbidden",
+        message: "You cannot view this Queue owner's items.",
+      });
+    }
+    const before = Number(args.query.before || Date.now() + 1);
+    let rows: Doc<"queueItems">[];
+    if (ownerUserId && state) {
+      rows = await ctx.db
+        .query("queueItems")
+        .withIndex("by_move_owner_state_updated", (q) =>
+          q
+            .eq("moveId", moveId)
+            .eq("ownerUserId", ownerUserId)
+            .eq("state", state)
+            .lt("updatedAt", before),
+        )
+        .order("desc")
+        .take(limit + 1);
+    } else if (ownerUserId) {
+      rows = await ctx.db
+        .query("queueItems")
+        .withIndex("by_move_owner_updated", (q) =>
+          q
+            .eq("moveId", moveId)
+            .eq("ownerUserId", ownerUserId)
+            .lt("updatedAt", before),
+        )
+        .order("desc")
+        .take(limit + 1);
+    } else if (state) {
+      rows = await ctx.db
+        .query("queueItems")
+        .withIndex("by_move_state_updated", (q) =>
+          q.eq("moveId", moveId).eq("state", state).lt("updatedAt", before),
+        )
+        .order("desc")
+        .take(limit + 1);
+    } else {
+      rows = await ctx.db
+        .query("queueItems")
+        .withIndex("by_move_updated", (q) =>
+          q.eq("moveId", moveId).lt("updatedAt", before),
+        )
+        .order("desc")
+        .take(limit + 1);
+    }
+    const visible = rows.filter((item) => {
+      if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
+      return canViewQueueEntry({
+        actorUserId: actor.userId,
+        ownerUserId: item.ownerUserId,
+        isManager: actor.isManager,
+        delegatedOwnerIds: actor.delegatedOwnerIds,
+      });
+    });
+    const page = visible.slice(0, limit);
+    return restOk({
+      data: page.map((item) => shapeQueueItem(item)),
+      page: {
+        limit,
+        nextCursor:
+          visible.length > limit && page.length
+            ? String(page[page.length - 1]!.updatedAt)
+            : null,
+      },
+      runnableOwnerIds,
+      defaultOwnerUserId: ownerUserId,
+    });
+  }
+
+  if (!queueItemIdSegment) {
+    return restError({
+      status: 404,
+      code: "not_found",
+      message: "Queue route not found.",
+    });
+  }
+  const queueItemId = queueItemIdSegment as Id<"queueItems">;
+  if (args.method === "GET" && !action) {
+    const item = await requireQueueItem(ctx, {
+      householdId: auth.householdId,
+      moveId,
+      queueItemId,
+    });
+    requireQueueItemVisible(actor, item);
+    const activities = await ctx.db
+      .query("queueActivities")
+      .withIndex("by_item_created", (q) => q.eq("queueItemId", item._id))
+      .order("desc")
+      .take(50);
+    return restOk({
+      data: shapeQueueItem(item),
+      activity: activities.map((entry) => ({
+        type: entry.type,
+        actorType: entry.actorType,
+        actorLabel: entry.actorLabel ?? null,
+        fromState: entry.fromState ?? null,
+        toState: entry.toState,
+        message: entry.message,
+        createdAt: entry.createdAt,
+      })),
+    });
+  }
+
+  if (args.method !== "POST") {
+    return restError({
+      status: 405,
+      code: "method_not_allowed",
+      message: "Queue commands use POST.",
+    });
+  }
+  if (!canPerformHouseholdAction(auth.effectiveRole, "queue:run")) {
+    throw new Error("This API key's participant role is not allowed to run Queue work.");
+  }
+  if (!args.idempotencyKey) {
+    throw new Error("Idempotency-Key is required for Queue commands.");
+  }
+  const body = bodyObject(args.body);
+  const base = {
+    householdId: auth.householdId,
+    moveId,
+    queueItemId,
+    expectedVersion: restExpectedVersion(body),
+    idempotencyKey: args.idempotencyKey,
+  };
+  if (action === "claim") {
+    const nextStep = asString(body.nextStep);
+    if (!nextStep) throw new Error("nextStep is required.");
+    return restOk({ data: shapeQueueItem(await claimQueueItem(ctx, actor, { ...base, nextStep })) });
+  }
+  if (action === "release") {
+    const reason = asString(body.reason);
+    if (!reason) throw new Error("reason is required.");
+    return restOk({ data: shapeQueueItem(await releaseQueueItem(ctx, actor, { ...base, reason })) });
+  }
+  if (action === "needs-you") {
+    const requiredAction = asString(body.requiredAction);
+    if (!requiredAction) throw new Error("requiredAction is required.");
+    return restOk({ data: shapeQueueItem(await requestQueueInput(ctx, actor, { ...base, requiredAction })) });
+  }
+  if (action === "complete") {
+    const resultRefs = Array.isArray(body.resultRefs)
+      ? (body.resultRefs as Array<{ type: string; id: string; label?: string }>)
+      : undefined;
+    return restOk({
+      data: shapeQueueItem(
+        await completeQueueItem(ctx, actor, {
+          ...base,
+          resultSummary: asString(body.resultSummary),
+          resultRefs,
+        }),
+      ),
+    });
+  }
+  if (action === "failure") {
+    const code = asString(body.code);
+    const message = asString(body.message);
+    if (!code || !message || typeof body.retryable !== "boolean") {
+      throw new Error("code, message, and retryable are required.");
+    }
+    return restOk({
+      data: shapeQueueItem(
+        await reportQueueFailure(ctx, actor, {
+          ...base,
+          code,
+          message,
+          retryable: body.retryable,
+          retryAfterMs: optionalNumber(body.retryAfterMs),
+        }),
+      ),
+    });
+  }
+  return restError({
+    status: 404,
+    code: "not_found",
+    message: "Queue command not found.",
+  });
 }
 
 async function routePlans(

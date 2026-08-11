@@ -239,6 +239,9 @@ export function requiredScopesForRestRoute({
     return ["exports/read"];
   }
   if (segments[0] !== "moves") return [];
+  if (segments[2] === "queue") {
+    return [method === "GET" ? "queue/read" : "queue/write"];
+  }
   if (segments[1] === "setup" && method === "POST") {
     return ["moves/read", "moves/write", "inventory/write"];
   }

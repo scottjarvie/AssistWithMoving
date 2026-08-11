@@ -6,6 +6,8 @@ export const apiKeyScopes = [
   "moves/write",
   "inventory/read",
   "inventory/write",
+  "queue/read",
+  "queue/write",
   "plans/read",
   "plans/write",
   "photos/write",
@@ -126,6 +128,11 @@ export function scopesForPermissionAction(action: PermissionAction): ApiKeyScope
     case "inventory:edit":
     case "inventory:pack":
       return ["inventory/write"];
+    case "queue:read":
+      return ["queue/read"];
+    case "queue:write":
+    case "queue:run":
+      return ["queue/write"];
     case "plan:read":
       return ["plans/read"];
     case "plan:edit":

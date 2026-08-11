@@ -99,6 +99,8 @@ const fullTrustedAccessScopes: ApiKeyScope[] = [
   "moves/write",
   "inventory/read",
   "inventory/write",
+  "queue/read",
+  "queue/write",
   "plans/read",
   "plans/write",
   "photos/write",
@@ -110,6 +112,7 @@ const fullTrustedAccessScopes: ApiKeyScope[] = [
 const readOnlyScopes: ApiKeyScope[] = [
   "moves/read",
   "inventory/read",
+  "queue/read",
   "exports/read",
 ];
 

@@ -17,4 +17,11 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "release or expire canonical Queue handoffs",
+  { minutes: 5 },
+  internal.queue.maintainLeasesAndExpiry,
+  {},
+);
+
 export default crons;

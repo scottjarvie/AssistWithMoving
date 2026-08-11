@@ -12,7 +12,7 @@ import {
   type McpToolRegistration,
 } from "convex-mcp-gateway";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   addImagesArgs,
   attachPhotosArgs,
@@ -23,6 +23,15 @@ import {
   listQueueArgs,
   submitQueueResultArgs,
 } from "./mcpToolsQueue";
+import {
+  claimQueueItemArgs,
+  completeQueueItemArgs,
+  getQueueItemArgs,
+  listQueueItemsArgs,
+  releaseQueueItemArgs,
+  reportQueueFailureArgs,
+  requestQueueInputArgs,
+} from "./mcpToolsCanonicalQueue";
 import {
   archiveItemArgs,
   convertItemToBoxArgs,
@@ -160,7 +169,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "list_queue",
     description:
-      "List capture-queue entries for a move — the work waiting to become inventory. Each entry has an ownerUserId (whose personal queue it belongs to), instructions, room/disposition hints, attached photo ids, status, and any agent question/summary/result items. Also returns runnableOwners: the queues you may run — your own plus any a move owner delegated to you (each with name + queuedCount). To help run someone else's shared queue, take their ownerUserId from runnableOwners and pass it to claim_queue. Pass status to filter (queued|claimed|processed|needsInput|resolved|discarded); omit it for the newest entries.",
+      "Compatibility view of Moving's specialized capture pipeline. It projects every entry into the family Queue states (Needs You, Working, Waiting for your AI, Done) while retaining legacyStatus for existing clients. Use list_queue_items for new general handoffs. The optional status filter uses the documented legacy capture vocabulary only.",
     fn: api.mcpToolsQueue.listQueue,
     args: listQueueArgs,
     identityArg: "caller",
@@ -179,6 +188,62 @@ export const tools: McpToolRegistration[] = [
       "Report what a claimed entry produced: link the inventory items you created (resultItemIds) AND/OR the boxes/totes you created (resultBoxIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items / pack_boxes / convert_item_to_box, which create the units. The capture's uploaded photos are AUTOMATICALLY attached to what you made — to the single item in resultItemIds, or (if you didn't create exactly one item) to the box/room/transport the entry targeted — so a capture's photos never get left behind. The result returns attachedPhotoCount. Exception: a capture that became MULTIPLE items can't be auto-split — attach each photo to the right item yourself with attach_photos (using the entry's mediaPhotoIds) before submitting.",
     fn: api.mcpToolsQueue.submitQueueResult,
     args: submitQueueResultArgs,
+    identityArg: "caller",
+  }),
+  defineMcpQuery({
+    name: "list_queue_items",
+    description:
+      "List canonical Queue handoffs using exactly Needs You, Working, Waiting for your AI, and Done. Results are bounded and move-scoped; only your own or explicitly delegated Queue items are returned.",
+    fn: internal.mcpToolsCanonicalQueue.listQueueItems,
+    args: listQueueItemsArgs,
+    identityArg: "caller",
+  }),
+  defineMcpQuery({
+    name: "get_queue_item",
+    description:
+      "Read one canonical Queue item plus attributable activity history. Use the returned version for concurrency-safe commands.",
+    fn: internal.mcpToolsCanonicalQueue.getQueueItem,
+    args: getQueueItemArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "claim_queue_item",
+    description:
+      "Claim one Waiting for your AI handoff before work begins. Requires a concrete nextStep, records the acting AI, and creates a 15-minute lease so abandoned work becomes claimable again.",
+    fn: internal.mcpToolsCanonicalQueue.claimQueueItem,
+    args: claimQueueItemArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "release_queue_item",
+    description:
+      "Release your active claim back to Waiting for your AI with a durable reason. This does not mark work complete.",
+    fn: internal.mcpToolsCanonicalQueue.releaseQueueItem,
+    args: releaseQueueItemArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "request_queue_input",
+    description:
+      "Move your actively claimed handoff to Needs You with the exact human decision, fact, file, approval, or outside-world action required. Do not use it for vague progress updates.",
+    fn: internal.mcpToolsCanonicalQueue.requestQueueInput,
+    args: requestQueueInputArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "complete_queue_item",
+    description:
+      "Finish your actively claimed handoff. Done requires a readable result summary or at least one durable result reference; activity and attribution are recorded.",
+    fn: internal.mcpToolsCanonicalQueue.completeQueueItem,
+    args: completeQueueItemArgs,
+    identityArg: "caller",
+  }),
+  defineMcpMutation({
+    name: "report_queue_failure",
+    description:
+      "Report a bounded work failure. Retryable failures return to Waiting for your AI until the attempt budget is exhausted; exhausted or non-retryable failures become Needs You with an exact review action.",
+    fn: internal.mcpToolsCanonicalQueue.reportQueueFailure,
+    args: reportQueueFailureArgs,
     identityArg: "caller",
   }),
   defineMcpMutation({
