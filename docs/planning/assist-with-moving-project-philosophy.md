@@ -2,11 +2,16 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.3.1
+> **Document version:** 1.5.0
+>
+> **Document date:** 2026-08-11
 >
 > **Capability evidence last verified:** 2026-08-08 against `origin/main`
 > commit `4a3d9e7` and the state-publication receipts described in the evidence
 > record below
+>
+> **Authority-policy consistency audited:** 2026-08-09 against the complete
+> family Core v1.6.3 and Scott's clarified person / product / chosen-AI boundary
 >
 > **Scope:** Product truth, language, trust, and design direction—not an
 > implementation, rename, release, or deployment claim
@@ -17,20 +22,25 @@
 >
 > **Canonical:** `docs/planning/assist-with-moving-project-philosophy.md`
 >
-> **Family Core:** Assist With Sites — Core Philosophy v1.6.3 (2026-08-08)
+> **Family Core:** Assist With Sites — Core Philosophy v1.6.3 (2026-08-08),
+> with Scott's controlling 2026-08-09 authority-boundary clarification
 >
 > **Aligned:** 2026-08-08 — repository implementation, public source claims,
 > tracker, GitHub protection/workflow and Vercel integration reviewed against
 > the complete v1.6.3 contract, including its clarified §16 operating contract
-> and §17 setup, retrofit and agent-handoff structure
+> and §17 setup, retrofit and agent-handoff structure; authority language
+> re-audited 2026-08-09 without reclassifying implementation capability
 >
 > **Adopted:** the three-way promise and “your AI” language; shared route and
 > truth-surface direction; the four-state Queue and bounded directive rule;
+> the distinction between the platform's boundary and the person's freedom to
+> direct their own AI; granular, revocable authority and attributable handoff;
 > activity, provenance, identity, privacy and access rules; the accessible
 > light/dark floor; website launch sequencing; Cards / Work Orders / Guide;
 > and the exact fail-closed state-versus-software publication boundary
 >
-> **Deferred/gaps:** exact Queue vocabulary and route; `/ai.txt`;
+> **Deferred/gaps:** exact Queue vocabulary and route; a verified granular
+> chosen-AI grant and external-action handoff contract; `/ai.txt`;
 > `/me`; `/settings/ai`; `/settings/data`; `/delete-account`; full personal-data
 > deletion; family navigation; Support Desk link; and first-class light mode.
 > These are requirements or later work, not
@@ -50,7 +60,8 @@
 > **Evidence:** Core commit `db658ab091bcfbb71f62db55d5b8b6d51b64e52f`
 > with source SHA-256
 > `6c354eb33422d6b48453c578b93d5a32551fbe3008ce58673a0f11437335a30c`;
-> repository baseline `4a3d9e7`; `docs/tracker/`; the software PR and live
+> Scott's 2026-08-09 authority-boundary direction; repository baseline
+> `4a3d9e7`; `docs/tracker/`; the software PR and live
 > proof receipts recorded in Card `MOV-0001`; the dated adoption/contradiction
 > matrix below; and the repository sources in
 > [Operational references](#operational-references) and
@@ -83,13 +94,28 @@ specific or expressive Moving direction remains authoritative unless it weakens
 one of those shared guarantees. This document records product deltas and
 evidence; it does not copy or publicly expose the private family contract.
 
+Scott's 2026-08-09 clarification resolves one contradiction in the current
+Core's older external-action wording. **“The platform does not act in the
+outside world” means Moving does not independently contact people, make offers,
+purchase, publish, or take another outside-world action. It does not mean a
+person is forbidden from discussing or directing that work with their own AI.**
+Moving controls only its own boundary: whether a particular AI may use Moving's
+tools, retrieve selected Moving data, change a Moving record, publish, share or
+export through Moving, or receive a recorded handoff carrying selected data and
+a specifically approved external-action intent. This clarification is
+controlling here and should be incorporated into a later family Core revision;
+it does not claim that Moving has implemented that complete grant or handoff
+model.
+
 ## Core v1.6.3 adoption and contradiction matrix
 
-Core v1.6.3 reorganizes, but does not change, Moving's installed operating
-contract: §16.1 owns tracker rules, §16.2 owns state-versus-software publishing
-and provider proof, and §16.3 owns launch posture. Section 17 applies those
-rules through new-project setup, retrofit and agent-handoff packages; it is not
-a competing local policy or work tracker.
+Core v1.6.3 organizes Moving's installed operating contract: §16.1 owns tracker
+rules, §16.2 owns state-versus-software publishing and provider proof, and §16.3
+owns launch posture. Section 17 applies those rules through new-project setup,
+retrofit and agent-handoff packages; it is not a competing local policy or work
+tracker. Scott's 2026-08-09 clarification changes one older authority
+interpretation only: the platform's outside-action prohibition is not a rule
+against what the person may ask their own AI to do.
 
 The labels in this matrix are deliberately stricter than a feature inventory:
 
@@ -106,13 +132,15 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Family concern | Evidence-backed Moving truth | Alignment label and decision |
 |---|---|---|
 | Person / Assist workspace / your AI | The product philosophy, `/ai` copy, scoped keys and OAuth gateway separate the person's authority, Moving's durable record and the person's chosen AI. Older public copy still often says “AI assistant” and leads with inventory rather than the full three-way promise. | **Current/verified foundation; Later alignment gap.** Adopt “Assist your AI, so it can assist you with moving” and the house sentence “Assist you and your AI with every part of your move.” |
-| Domain promise and objects | Moves, households, people, spaces, items, planned items, boxes, photos/evidence, transport resources/zones/trips, layouts, documentation profiles, exports and share links are modeled in `convex/schema.ts`. General tasks, budgets, vendor records and decision objects are not complete first-class models. | **Current/verified foundation** for the named records; unscheduled extensions are **Later**. Moving's vocabulary is retained. |
+| Domain promise and objects | Moves, households, people, spaces, items, planned items, boxes, photos/evidence, transport resources/zones/trips, layouts, documentation profiles, exports and share links are modeled in `convex/schema.ts`. These support a simple-to-complex direction, but general tasks, budgets, provider/vendor records and decision objects are not complete first-class models. | **Current/verified foundation** for the named records; progressive composition and unscheduled extensions are **Later**. Moving's vocabulary is retained. |
 | Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
 | Queue states | Stored capture states are `queued`, `claimed`, `processed`, `needsInput`, `resolved` and `discarded`; current UI groups them as To do, Working, Review/Needs action and Done/Archive. | **Current/verified but nonconforming.** The family destination is exactly **Needs you / Working / Waiting for your AI / Done**. Backend and frontend retrofit is **Later**, not a documentation rename of current behavior. |
-| Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. Older prose described broad authorized progress but did not state the family directive boundary. | **Family rule adopted now in product truth:** a directive authorizes only reversible, in-scope record changes it plainly requests. New objectives, destructive changes, publishing, purchases, identity/access changes and outside-world consequences return to **Needs you**. Implementation conformance beyond capture remains **Later**. |
+| Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. A Queue item records intent but does not itself create a missing tool, data, operation or external-action grant. | **Owner clarification adopted now in product truth:** Moving checks authority separately from the instruction. Missing authority returns the smallest exact **Needs you** question. When a separately visible grant already names the AI, scope, permitted data, operation or external-action category, approval and duration, Moving may hand the approved context and intent to that AI and record the result. Complete implementation remains **Later**. |
 | MCP and `/ai` | Source routes exist at `/mcp` with `/mcp/connect` alias and a separate API-key `/api/mcp`; public `/ai` and `/ai/start` pages exist. The repo serves `llms.txt`/`llms-full.txt`, not `/ai.txt`; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified source surfaces; Unknown production proof.** `/ai.txt` and canonical `/settings/ai` are **Later alignment gaps**. `/ai` must list only live, end-to-end-proven tools. |
-| Activity and provenance | `auditLogs`, move/object queries, item activity UI, plan journals and many user/API-key/agent write events preserve actor and time. Coverage and human-readable before/after/evidence detail are not universal. | **Current/verified partial foundation.** Complete “if an AI did it, the record says so” coverage is **Later**. |
-| Access and sharing | Clerk-backed household and move participants, roles, move restrictions, scoped/revocable API keys, documentation profiles and revocable `/share/<token>` links exist in source. New records do not share a single family visibility field, and current links may expire or permit selected recipient actions. | Private-by-default foundations are **Current/verified**. Family **Private / Unlisted / Trusted / Public** vocabulary and shared-data screen are **Later**. Action-capable recipient links are an **intentional product-specific difference**, not “Unlisted.” |
+| Activity and provenance | `auditLogs`, move/object queries, item activity UI, plan journals and many user/API-key/agent write events preserve actor and time. Coverage and human-readable before/after/evidence detail are not universal, and no complete external-action handoff/result receipt is verified. | **Current/verified partial foundation.** Complete “if an AI did it, the record says so,” including grant, handoff, result, failure or return, is **Later**. |
+| Access and sharing | Clerk-backed household and move participants, roles, move restrictions, scoped/revocable API keys, documentation profiles and revocable `/share/<token>` links exist in source. They are foundations for collaboration-first owner, partner, move-only helper, chosen-AI and recipient-link roles, but the complete per-operation scenarios are not proven. New records do not share a single family visibility field, and current links may expire or permit selected recipient actions. | Private-by-default and collaboration foundations are **Current/verified partial**. The complete role contract, family **Private / Unlisted / Trusted / Public** vocabulary and shared-data screen are **Later**. Action-capable recipient links are an **intentional product-specific difference**, not “Unlisted.” |
+| External conversations and action handoffs | A person may ask their own AI anything outside Moving. Moving neither controls those conversations nor polices the AI's overall behavior. Moving may control only whether its tools or data participate. No complete source-and-user-path proof establishes a grant that names actor, scope, permitted data, external-action category, approval, expiry/revocation and attributable handoff result. | The freedom/boundary distinction is **adopted product truth**. A granular external-action handoff is **Later / unverified**, not a current integration claim. Moving itself remains prohibited from independently taking the outside action. |
+| Move Brief and document memory | Compact move summaries, documentation profiles, evidence/photos, exports, recipient-safe fields and packet-oriented source exist. No complete permission-filtered Move Brief, original-artifact/version model, extracted-versus-confirmed facts, completed-form snapshot, requirements tracker or year-later packet-retrieval path is verified. | Existing pieces are **Current/verified partial foundations**. The connected Move Brief and Document Memory / Move Evidence Packet are **Later / unverified** and must not be claimed as an official PCS, claims or provider integration. |
 | Identity and deletion | Identity is site-specific Clerk. Settings can export JSON, stage deletion, anonymize the Convex profile, revoke keys/share links and disable memberships/grants. It does not prove Clerk identity deletion, attachment/Backblaze purge, or removal of all personal/content-bearing history; `/delete-account` is absent. | Per-site identity and export are **Current/verified**. Family-complete deletion and `/delete-account` are **Later gaps**. Never describe current anonymization as full account-data deletion. |
 | Public truth and Coming soon | Source includes home, separate FAQ, `/ai`, `llms.txt`, and `/updates`. The home page does not contain the FAQ, `/ai.txt` is absent, and source presence does not prove live claims. | **Current/verified source foundation; Unknown deployment.** Public claims require an environment/user-path proof. **Coming soon** is reserved for approved, scheduled soft-launch work; none is assigned here. |
 | `/me`, `/admin`, and stats | A REST `/api/v1/me` context endpoint and an owner-gated app `/admin` surface exist. There is no family `/me` page; current admin source focuses operations and does not prove the family split between meaningful personal stats at `/me` and owner usage/operations stats at `/admin`, or every public-content maintenance job. | `/admin` is a **Current/verified source foundation** with **Unknown production proof**. Family `/me`, the personal/owner stats split and full admin destination are **Later**. |
@@ -179,7 +207,9 @@ presented as deployed **Current/verified**.
 The simple promise becomes durable through four things working together:
 
 - **Your chosen AI reasons and works.** It can research, compare, organize,
-  draft, calculate, and carry out authorized outside work under your direction.
+  draft, calculate, and carry out work you direct in its own environment.
+  Moving does not control that conversation. Moving participates only when a
+  separate grant allows that AI to use selected Moving tools or data.
 - **Assist With Moving remembers the move.** It preserves structured context,
   instructions, decisions, evidence, history, open questions, and a current
   recap beyond one chat or AI session.
@@ -187,7 +217,8 @@ The simple promise becomes durable through four things working together:
   plans, places, tasks, belongings, costs, documents, timing, and coordination
   durable records, retrieval, queues, and understandable views.
 - **You can see and steer it.** You can understand the evolving plan, correct
-  it, choose who or which AI may observe or change each part, and revoke that
+  it, choose who or which AI may observe or change each part, specifically
+  approve a recorded external-action handoff when desired, and revoke that
   authority.
 
 That is the bridge from a simple promise to the deeper model: your AI supplies
@@ -221,6 +252,40 @@ with the household home move unless the product owner explicitly sets a
 different priority. Do not make every move type compete equally in the opening
 experience.
 
+### Complexity grows with the move, not with setup
+
+Assist With Moving must handle a small personal move and an evidence-heavy,
+multi-party transition without forcing both people through the same setup. This
+is one progressive model, not four editions or a maturity test:
+
+1. **Simple move.** Start with origin, destination, a small inventory or a few
+   boxes, one vehicle, and a basic pack → transport → check-off plan. A person
+   can be useful immediately without creating vendors, roles, packets or every
+   possible field.
+2. **Coordinated household move.** Add a partner or household members, rooms and
+   spaces, many items and boxes, multiple vehicles or trips, dates,
+   assignments, dependencies, and one shared plan when the move needs them.
+3. **Provider-assisted move.** Add movers, storage, shipping,
+   landlords/agents, employers or other companies; keep the relevant contacts,
+   quotes, agreements, handoffs and scoped evidence beside the work they
+   affect. A provider does not receive household membership by default.
+4. **Documented or claim move.** Add condition photos, inventory identifiers,
+   receipts, forms, deadlines, policy or requirement checklists, and
+   claim/reimbursement packets—for example a damage claim or military PCS
+   documentation—when proof and later retrieval matter.
+
+The person begins with only what is useful now. Additional people, providers,
+evidence and controls appear as the move calls for them; skipped layers do not
+block the core plan. The same records should compose across levels so growing a
+move does not require migration to a separate “advanced” product or duplicate
+its truth.
+
+**Current truth:** households and move participants, items, boxes, photos,
+transport resources/zones/trips, documentation profiles, exports and recipient
+workflow links are **Current/verified repository foundations**. Their complete
+progressive composition, provider model, Move Brief and document-memory flow
+are **Later** until exact product paths are implemented and proven.
+
 Business moves and office relocations are expected to be substantially similar
 in the core model: they still have a move boundary, people and authority,
 places, timing, work, belongings or equipment, costs, documents, evidence,
@@ -241,8 +306,11 @@ Moving is not:
 - a vendor, marketplace, calendar, map, booking, payment, or communication
   provider merely because the user's AI may work with those services elsewhere;
 - a credential vault for external providers or the user's AI;
-- permission for any person or AI to observe, change, share, buy, book, sign, or
-  publish beyond an explicit grant; or
+- a monitor or governor of what a person discusses with or asks of their own AI
+  outside the product;
+- permission for any person or AI to use Moving tools or data, receive sensitive
+  Moving context, change records, publish/share/export through Moving, or
+  receive a Moving external-action handoff beyond an explicit grant; or
 - proof that every facet described in this philosophy has shipped.
 
 The human promise governs the product's direction. The dated
@@ -322,7 +390,8 @@ products separate three responsibilities:
 - **Your AI reasons and does the work you direct.** It may help research
   choices, compare places, organize possessions, build a timeline, prepare
   questions, draft communications, identify risks, or carry out authorized
-  work in other services available to it.
+  work in other services available to it. The person's external conversation
+  with that AI is not controlled or policed by Moving.
 - **Assist With Moving supplies the durable moving layer.** It keeps structured
   move context, records, evidence, instructions, questions, queues, decisions,
   history, and views available beyond one chat or one AI session.
@@ -341,6 +410,15 @@ calendar or map, request estimates, or arrange work elsewhere. Moving does not
 inherit that outside access. Only information deliberately submitted through a
 Moving interface becomes Moving data.
 
+The inverse is equally important: the person's freedom to talk to their AI does
+not give that AI access to Moving. Moving's settings and grants decide only
+Moving-side questions: which AI may call which tools, retrieve which selected
+data, receive sensitive context, create/update/delete which records,
+publish/share/export through the product, or receive a recorded handoff with a
+specifically approved external-action intent. If a Moving-side operation is not
+allowed, Moving denies that tool, data or handoff operation. It does not tell
+the person what they may discuss outside the product.
+
 The Assist family name does not create a shared database or a universal grant.
 Any connection between Moving and another Assist product must be explicit,
 understandable, reviewable, and revocable. A connection must identify which
@@ -353,34 +431,54 @@ The person owns their moving data. Opening a move, joining a household, or
 connecting an AI must never silently grant blanket authority over it.
 
 Each person and each chosen AI independently receives explicit authority for a
-selected move, area, or record. The following operations are separate grants:
+selected move, area, record, data class and purpose. The following Moving-side
+operations are separate grants:
 
 - **retrieve or read** information;
 - **add or create** new information;
 - **update** existing information;
 - **delete** information; and
-- **promote or publish** information when Moving supports a trusted, reusable,
-  shared, or public state.
+- **promote, publish, share, or export** information when Moving supports that
+  operation.
+
+Receiving selected Moving data plus a recorded **external-action handoff** is a
+separate authority category. It must name the intended outside action—such as
+contacting one mover for one estimate—without giving Moving or the AI a general
+licence to contact, offer, purchase, book, sign, pay, or publish.
 
 Read is not write. Create is not update or delete. Permission to propose work
 is not permission to accept it. Permission to update one move is not permission
 to update another. Permission to share one packet is not permission to publish
 the underlying private move.
 
-Every grant should make five facts visible:
+Every grant should make eight facts visible:
 
 1. **Actor:** which person or chosen AI receives the authority;
 2. **Scope:** which move, area, record type, or record it covers;
-3. **Operations:** which of read, create, update, delete, and applicable
-   promote or publish are allowed;
-4. **Duration and status:** whether the grant expires, is active, or has been
+3. **Permitted data:** which fields, files, evidence, sensitive categories or
+   derived summaries may cross the boundary;
+4. **Product operations:** which of read, create, update, delete, promote,
+   publish, share or export are allowed;
+5. **External-action category and intent:** whether a handoff is allowed and
+   the exact outside action it may carry;
+6. **Approval:** the owner approval or policy that applies to this operation or
+   handoff, without treating a Queue item as silent authority expansion;
+7. **Duration and status:** whether the grant expires, is active, or has been
    revoked; and
-5. **History:** who granted or changed it, when, and what the actor did with it.
+8. **Activity and result:** who granted or changed it, when it was used, what
+   was handed off, and the attributable result, failure or return.
 
 An AI cannot grant itself authority, inherit another actor's authority, or
 expand a grant merely because it can see the workspace. Access should be
 editable and revocable, and material reads and changes should preserve acting
 identity, scope, time, and action in provenance or audit history.
+
+A Queue directive or external conversation may express what the person wants;
+neither silently expands the Moving grant. When the required grant is missing,
+Moving uses **Needs you** to ask the smallest exact authority question. When it
+already exists, Moving may make the specifically approved data-and-intent
+handoff to that chosen AI and record actor, scope, approval, time, result and
+any failure or return. Moving still does not perform the outside action itself.
 
 Permission and operating policy are different:
 
@@ -397,6 +495,14 @@ Identity remains site-specific. A Moving login, session, grant or deletion does
 not silently sign the person into another Assist site, reach into another
 site's records or delete another site's account.
 
+The owner can view, correct, export and delete their own Moving data. Sensitive
+data—addresses, access details, identity and financial documents, valuables,
+photos, private communications and equivalent evidence—remains private by
+default. It is excluded from public surfaces, generic sharing, collaborators
+and AI handoffs unless the owner explicitly grants the relevant actor, scope,
+data and operation. The current implementation is only a partial foundation
+for that complete contract, as the matrix and ledger state.
+
 The family deletion destination is removal, not deactivation or anonymization:
 record deletion removes the record, its attachments and content-bearing
 history, allowing only a minimal content-free tombstone when necessary; account
@@ -405,6 +511,39 @@ records, media objects, attachments, share links and AI grants across every
 processor. The current source only proves a narrower export-plus-anonymization
 workflow that revokes access paths and leaves shared household records. It is a
 **Current/verified partial foundation**, not proof of family-complete deletion.
+
+### Moving is collaboration-first
+
+A household move is usually shared work. Moving should make collaboration
+natural without making every participant equal, exposing the whole household,
+or forcing a solo mover to configure a team. These roles describe the intended
+plain-language contract:
+
+| Role | Intended scope and typical safe actions | Visibility, revocation and attribution |
+|---|---|---|
+| **Household owner / organizer** | Owns the household boundary; creates and steers moves; invites or removes people; grants AI access; approves sensitive sharing, export and external-action handoffs. | Can review active people, AIs, keys and links. Revoking access ends future use without erasing attributed history. Ownership is not a licence to browse another person's unrelated private data. |
+| **Household member / partner** | Shares the household and the moves explicitly available to them; may plan dates, rooms, boxes, assignments, transport or evidence only within granted data and operations. | Sees the shared plan plus their own private work—not another member's Queue or excluded sensitive fields. Every material action names the member or their separately authorized AI. |
+| **Move-only helper or professional** | Walled to one named move and purpose—for example a family helper, mover coordinator, organizer or claims professional. May view or update only assigned areas, records and actions. | Cannot see other household moves or unrelated household data. The owner can narrow, expire or revoke the grant independently; actions remain attributed after revocation. |
+| **Chosen AI** | Uses Moving only through the grant provided by the owner or an authorized participant: named move/records, permitted data, allowed operations, approval and duration. May receive a specifically approved external-action handoff. | Never inherits its person's full access automatically, another participant's access, or authority from Queue text alone. Moving records its tool use, changes, handoffs and results; revocation/expiry blocks later Moving access. |
+| **Bounded share-link recipient** | Is not a member. Opens one deliberately selected recipient workflow or non-sensitive view and may take only the actions named on that link. | Sees no Queue, account, other move or unrelated household data. The link states audience, exposed fields, actions and expiry/revocation; access and changes are attributable where supported. |
+
+The complete implementation must prove ordinary household scenarios, not only
+permission tables:
+
+1. invite a partner and let both people contribute to one shared move plan;
+2. keep each person's excluded/private data and Queue work separate;
+3. grant a helper or professional limited access to one move and no other
+   household data;
+4. revoke or expire person and AI access and prove later calls/actions fail
+   while history remains understandable; and
+5. send a bounded recipient workflow without creating membership or exposing
+   unrelated household, move, account or sensitive data.
+
+**Current truth:** memberships, named invitations, roles, move restrictions,
+sensitive-field visibility, Queue delegation, scoped keys, private photo
+defaults and bounded recipient links are **Current/verified repository
+foundations**. The unified role experience, complete per-operation matrix and
+all five end-to-end scenarios are **Partial / Later** and not live-proven.
 
 ### Two distinct sharing paths
 
@@ -442,6 +581,12 @@ link, and opening a link must not silently create membership. Both paths are
 explicit, revocable, and auditable: preserve who invited or shared, what scope
 and operations were granted, when access began or ended, and material access or
 changes. Nothing is shared automatically.
+
+Neither path grants an AI access either. A collaborator's permission does not
+become their AI's permission, and a share recipient's allowed action does not
+become a general external-action handoff. Any AI access to participant or
+shared data requires its own actor, data, scope, operation, approval and
+duration. Sensitive fields remain excluded unless that grant names them.
 
 The current repository has meaningful foundations for named household and
 move-specific participants, roles, invitations, move restrictions,
@@ -485,9 +630,9 @@ For focused work, use this reading map:
 
 | Reader | Start with | Questions answered |
 |---|---|---|
-| Product owners | [One-sentence identity](#one-sentence-identity), [Think of it as…](#think-of-it-as), [Scope and non-goals](#what-moving-is-for-and-what-it-is-not), [Why not a quick feature?](#why-not-just-ask-your-ai-to-build-a-quick-feature), [Why not a conventional site?](#why-this-instead-of-a-conventional-moving-website), [Assist family model](#the-assist-family-model), [Shared authority](#user-owned-data-and-scoped-authority), and [Why trust matters](#why-the-family-and-trust-model-matters) | What Moving promises, why it should endure beyond one output or utility, what belongs inside its scope, who owns the data, and why continuity and authority stay together |
-| Implementers | [Builder reference](#builder-reference-begins-here), [AI and queue](#how-your-ai-and-queue-work), [Moving loop](#the-moving-loop), [Durable information model](#durable-information-model), [Visibility](#human-visibility-and-visualization), [Operational references](#operational-references), and [Maintenance](#maintenance-and-claim-verification) | What must persist, how work begins and resumes, where controls belong, which changing implementation sources govern, and which claims require proof |
-| AI workers and integration builders | [Builder reference](#builder-reference-begins-here), [AI and queue](#how-your-ai-and-queue-work), [Shared authority](#user-owned-data-and-scoped-authority), [Moving loop](#the-moving-loop), and [Trust boundaries](#trust-boundaries-and-non-goals) | Where work may begin, how queued handoffs and scoped tools work, and which move and operation boundaries apply |
+| Product owners | [One-sentence identity](#one-sentence-identity), [Think of it as…](#think-of-it-as), [Progressive complexity](#complexity-grows-with-the-move-not-with-setup), [Scope and non-goals](#what-moving-is-for-and-what-it-is-not), [Assist family model](#the-assist-family-model), [Shared authority](#user-owned-data-and-scoped-authority), [Collaboration](#moving-is-collaboration-first), and [Why trust matters](#why-the-family-and-trust-model-matters) | What Moving promises, how it grows without enterprise-first setup, who participates, who owns the data, and why continuity and authority stay together |
+| Implementers | [Builder reference](#builder-reference-begins-here), [AI and queue](#how-your-ai-and-queue-work), [Move Brief](#the-move-brief-authorized-context-not-another-record), [Moving loop](#the-moving-loop), [Durable information model](#durable-information-model), [Document Memory](#document-memory-and-move-evidence-packets), [Visibility](#human-visibility-and-visualization), [Operational references](#operational-references), and [Maintenance](#maintenance-and-claim-verification) | What must persist, how work begins and resumes, where controls belong, how paperwork stays attributable, which implementation sources govern, and which claims require proof |
+| AI workers and integration builders | [Builder reference](#builder-reference-begins-here), [AI and queue](#how-your-ai-and-queue-work), [Move Brief](#the-move-brief-authorized-context-not-another-record), [Shared authority](#user-owned-data-and-scoped-authority), [Collaboration](#moving-is-collaboration-first), [Moving loop](#the-moving-loop), and [Trust boundaries](#trust-boundaries-and-non-goals) | Where work may begin, what context may be retrieved, how queued handoffs and scoped tools work, and which participant, data and operation boundaries apply |
 | User-facing writers and designers | [One-sentence identity](#one-sentence-identity), [Think of it as…](#think-of-it-as), [Scope and non-goals](#what-moving-is-for-and-what-it-is-not), [Why not a quick feature?](#why-not-just-ask-your-ai-to-build-a-quick-feature), [Why not a conventional site?](#why-this-instead-of-a-conventional-moving-website), [Capability ledger](#capability-truth-and-ledger), [Language rules](#language-rules), and [Design implications](#public-homepage-and-future-shell-implications) | How to explain the human promise and durable differentiation, what may be claimed now, which words to use, and how philosophy should shape the experience |
 
 Anyone publishing a capability claim must read both
@@ -502,8 +647,10 @@ design, engineering, and AI feature work:
 
 - **AI and queue model:** where work starts, what crosses the connection, and
   what a resumable handoff preserves;
-- **moving and information contracts:** how a changing move, its records,
-  provenance, questions, and completion state remain coherent;
+- **moving and information contracts:** how a move grows from simple to
+  multi-party, how the Move Brief carries permitted current context, and how
+  records, document memory, provenance, questions and completion remain
+  coherent;
 - **human visibility and capability truth:** what people must be able to
   understand and what may honestly be described as available; and
 - **language, design, maintenance, and evidence:** how future work stays aligned
@@ -533,6 +680,35 @@ beside it:
   person and AI are not working in the same live conversation.
 - **A visual workspace** lets the person understand the plan, work state,
   questions, progress, and saved results without reading an AI transcript.
+
+### The Move Brief: authorized context, not another record
+
+The **Move Brief** is the compact, AI-readable current context for one move. It
+is assembled from the durable record at retrieval time, so it does not become a
+second source of truth or a stale exported summary. It should include only what
+the requesting person or chosen AI is allowed to receive:
+
+- origin, destination, current phase and timeline;
+- people, roles, assignments and relevant providers;
+- inventory, boxes, rooms/spaces, transport resources, trips and constraints;
+- provider context, documentation requirements and permitted evidence;
+- important decisions, their sources, freshness and unresolved uncertainty;
+- open questions, blockers, deadlines and the exact next Queue work; and
+- the active authority boundary: actor, permitted data and operations, any
+  approved external-action handoff category, expiry and revocation state.
+
+With the appropriate grant, the chosen AI can use the Brief to find missing
+evidence, prepare a checklist or packet, organize permitted records, compare
+options, and return attributed results. The person decides approvals,
+submissions, money, signing and any external-action handoff. Moving records the
+scope and activity; it does not submit a claim, send a form, hire a mover or act
+as the mover.
+
+The repository already verifies compact move-summary and context foundations.
+A permission-filtered Brief containing the complete fields above, current Queue
+work and document-memory recap is **Later / unverified**. Until proven, public
+or AI-facing copy must describe the current summary tools precisely rather than
+claiming the full Move Brief exists.
 
 ### Work can begin in either direction
 
@@ -574,13 +750,26 @@ their own words without selecting a category or attaching evidence. Moving may
 offer one-tap optional context—for this domain, a **move**, **room/space**, or
 selected **belongings**—but missing context must not block submission.
 
-**A directive grants bounded authority, not blanket control.** It authorizes
-the person's AI to make reversible, in-scope Moving record changes that the
-words plainly request and that an existing grant permits. It does not authorize
-a new objective, destructive work, publishing, purchases, identity or access
-changes, or consequential action outside Moving. Crossing one of those
-boundaries, or encountering genuinely unclear scope, moves the item to **Needs
-you** with the smallest exact question that unlocks it.
+**A directive is bounded intent, not blanket authority.** It records the
+request, not a silent expansion of the person's AI grant. Moving may allow
+only the tools, data and operations already covered by an explicit grant. A new
+objective, destructive change, additional sensitive data, publish/share/export
+operation, identity or access change, or external-action category needs its own
+authority. Missing authority or genuinely unclear scope moves the item to
+**Needs you** with the smallest exact question that unlocks it.
+
+When a visible, unexpired grant already names the chosen AI, scope, permitted
+data, operation or outside-action category and approval, the Queue may hand
+that AI the specifically approved context and intent. The AI—not Moving—may
+then act through capabilities in its own environment. The durable item records
+the grant, actor, scope, approval and handoff time, followed by the result,
+failure or return. A Queue item never makes Moving an autonomous task runner.
+
+A person may also discuss or direct any work with their AI entirely outside
+Moving, including work broader than their Moving settings permit. Moving does
+not control or police that conversation or the AI's overall behavior. If the AI
+then attempts a disallowed Moving tool, data or handoff operation, Moving denies
+that operation at its own boundary.
 
 A normal to-do item may say only what should happen. A durable AI work handoff
 must preserve enough meaning for useful progress across AI sessions:
@@ -592,12 +781,15 @@ must preserve enough meaning for useful progress across AI sessions:
   urgency was decided;
 - **context and evidence:** notes, sources, photos, documents, earlier
   decisions, and uncertainty the work depends on;
+- **authority:** the chosen AI, permitted scope and data, Moving operation or
+  outside-action category, approval, and expiry/revocation state;
 - **state and responsibility:** one of the four family states, plus who or which
   chosen AI last acted and when;
 - **questions, blockers, and dependencies:** what prevents safe progress and
   what answer or event would unblock it; and
 - **continuation and result:** the exact next step, saved outputs, material
-  changes, and the compact handoff a later session should retrieve.
+  changes, any external-action handoff and its result/failure/return, and the
+  compact continuation a later session should retrieve.
 
 The Queue is a handoff, not an autonomous task runner. Nothing starts merely
 because a directive was saved; the person's AI must pick it up. The Queue should
@@ -627,27 +819,30 @@ reference. Its durable loop is:
    goals, and what “done” means. A business, office, temporary, travel-related,
    downsizing, renovation-adjacent, or other move uses the same loop with the
    details appropriate to its shape.
-2. **See the current state.** Retrieve a compact recap or the relevant detailed
-   context: decisions already made, active work, open questions, risks,
-   dependencies, recent changes, and next actions.
+2. **See the current state.** Retrieve the permission-filtered Move Brief or the
+   relevant detailed context: decisions already made, active work, open
+   questions, risks, dependencies, recent changes, authority and next actions.
 3. **Add work and evidence.** Capture instructions, tasks, notes, questions,
    photos, documents, estimates, research, items, places, or other evidence
    with source and scope.
 4. **Reason and act within authority.** Your AI may organize, research, compare,
-   draft, calculate, or perform authorized outside work while Moving enforces
-   its own scoped data permissions.
+   draft, calculate, or perform outside work you direct. Moving enforces only
+   its own tool, data, record-operation and handoff boundary; it does not govern
+   the AI's broader environment.
 5. **Save the useful result.** Store structured records, the evidence and
-   reasoning that matter, uncertainty, responsible actor, time context, and
-   follow-up—not merely a chat transcript.
+   reasoning that matter, uncertainty, responsible actor, authority and time
+   context, plus any handoff result, failure, return and follow-up—not merely a
+   chat transcript.
 6. **Review in proportion to risk.** Direct saves, previews, batch review, and
    explicit approval are operating choices inside granted permission. Higher
    consequence and lower confidence should create stronger checkpoints.
 7. **Revise without erasing the story.** A changed date, destination, vendor,
    budget, disposition, or plan should preserve what changed, why, and what
    downstream work must be reconsidered.
-8. **Resume and finish.** A person or later AI should be able to continue from a
-   compact current-state recap, drill into full history, close remaining work,
-   and retain the useful record after the move.
+8. **Resume, finish, and return later.** A person or later authorized AI should
+   be able to continue from a compact Move Brief, drill into full history,
+   close remaining work, and retain the useful record after move day for
+   claims, reimbursement, tax source material, warranties and reusable lessons.
 
 The queue is the durable front door for new work or instructions to your AI. It
 coordinates work; it is not a gate that prevents the AI from making useful
@@ -775,9 +970,10 @@ question. It does not yet prove a general attachable question-and-note system.
 ### Queue
 
 The queue contains new work or instructions for your AI. Useful queue fields
-include requester, owner, scope, instructions, evidence, authority needed,
-state, claim or lease, blockers, question, result references, and resume
-context.
+include requester, owner, chosen AI, scope, permitted data, instructions,
+evidence, Moving operation or external-action category, approval, expiry or
+revocation, state, claim or lease, blockers, question, handoff/activity/result
+references, and resume context.
 
 Queue ownership and claim rules should prevent duplicate work without making
 an abandoned claim permanent. Delegation to run another person's queue must be
@@ -837,23 +1033,83 @@ supersede a conclusion while the older observation remains part of history.
 Private evidence must not become public merely because a summary or packet is
 shared.
 
+### Document Memory and Move Evidence Packets
+
+Paperwork-heavy moves need more than loose file storage. The future
+**Document Memory / Move Evidence Packet** is a private, permissioned record
+that helps the owner and their chosen AI prepare work now and explain a year
+later what was filed, which evidence supported it, what changed and why.
+
+Its connected parts are:
+
+1. **Original artifact.** Preserve the supplied photo, PDF, document or
+   externally referenced record with document type, issuer/source, relevant
+   date, version or hash where practical, and retention/access state. The
+   original stays distinguishable from summaries and extracted fields.
+2. **Structured facts.** Store permitted user- or AI-extracted addresses,
+   dates, inventory identifiers, claim numbers, amounts, requirements,
+   deadlines and form answers. Each value says whether it is extracted,
+   proposed or person-confirmed; extraction never silently becomes truth.
+3. **Completed-form snapshot.** Preserve what the person actually approved or
+   submitted at that time, with source, date and later revisions/corrections.
+   An older answer may be compared or suggested, but never silently reused as
+   current.
+4. **Documentation / Evidence Packet.** Group the relevant inventory, condition
+   photos, receipts, completed forms, source instructions and communication
+   notes for one claim, reimbursement, move requirement or PCS need without
+   exposing unrelated household material.
+5. **Requirements and progress.** Show needed evidence, missing information,
+   deadlines, state and the exact next step rather than treating a folder of
+   uploads as complete.
+6. **Provenance and retrieval.** Preserve who supplied, extracted, confirmed,
+   approved or submitted each record; its source and time; what changed; and a
+   bounded AI-readable recap that can feed the Move Brief.
+
+With an explicit grant, the chosen AI may retrieve permitted records, identify
+missing evidence, compare an old packet with a new requirement, prepare a
+draft/checklist, organize data and save attributed results. The owner controls
+read, create/update, deletion, export, sharing and any external submission
+handoff. Moving does not itself submit claims or forms, guarantee acceptance or
+compliance, provide legal/military advice, or claim an official military PCS,
+employer, insurer, mover or government integration.
+
+After move day, this record remains useful for damage claims, reimbursements,
+tax preparation source material, warranties, later questions and lessons worth
+reusing. Post-move continuity must preserve the evidence and decision story
+without keeping data the owner has deleted or extending an expired grant.
+
+**Current truth:** documentation profiles, private photos/evidence, exports,
+recipient-safe fields and packet-oriented source are **Current/verified
+repository foundations**. The full Document Memory model, structured
+extraction/confirmation states, completed-form snapshots, requirements
+tracking, permission-filtered recap and post-move retrieval scenario are
+**Later / unverified**. They are philosophy direction, not a current feature or
+official integration claim.
+
 ## Human visibility and visualization
 
 The human workspace should answer these questions without technical knowledge:
 
 1. Which move and area am I viewing?
 2. Which named people and chosen AIs are participants in this move?
-3. Which of them may read, create, update, delete, promote, or publish here?
+3. Which of them may receive which data and read, create, update, delete,
+   promote, publish, share, export, or receive an external-action handoff here?
 4. Which bounded share links exist, exactly what does each expose, when does it
    expire, and how can I revoke it?
 5. What is the current plan, and how complete or ready is it?
 6. What is active, waiting, blocked, or resumable?
 7. What needs my judgment, information, or approval?
 8. Where did an important fact or decision come from, and how fresh is it?
-9. What changed, who or what changed it, and what was affected?
+9. What changed or was handed off, who or what did it, under which approval,
+   and what result, failure, return or affected record followed?
 10. What risks, dependencies, deadlines, costs, or capacity limits deserve
    attention?
 11. What can I correct, export, delete, undo, revoke, or recover?
+12. Which paperwork requirements are complete or missing, which values are
+    extracted versus confirmed, and what completed-form snapshot was actually
+    approved or submitted?
+13. After move day, what evidence, decision history, claim/reimbursement work,
+    warranties and reusable lessons remain—and who may still retrieve them?
 
 Useful views may include:
 
@@ -865,6 +1121,9 @@ Useful views may include:
 - a budget and estimate comparison;
 - a decisions-and-changes log;
 - a work board showing active, waiting, blocked, and completed work;
+- a permission-filtered Move Brief for the person or chosen AI;
+- a Document Memory / Move Evidence Packet with requirements, provenance and
+  exact next steps;
 - a risk and readiness view; and
 - a compact **current move recap** with drill-down.
 
@@ -877,6 +1136,9 @@ Human control means more than confirmation dialogs. It requires understandable
 scope, visible authority, status, provenance, correction paths, history,
 export, deletion, and revocation. Preview and review should increase with risk
 and uncertainty, while ordinary authorized work should remain efficient.
+Control at Moving's boundary must not be described as control over the person's
+external AI conversation: the product denies disallowed tool, data, record or
+handoff operations and goes no further.
 
 ## Capability truth and ledger
 
@@ -904,18 +1166,19 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 
 | Capability area | Repository evidence | Honest product interpretation |
 |---|---|---|
-| Move projects | Structured move type, status, origin/destination, date range, notes, PCS fields, and archive state | **Current/verified repository foundation.** Broader move shapes and flexible project details are **Later** |
-| Named participant access | Households, named invitations, household-backed and move-only participants, roles, sensitive-field visibility, and access disablement | **Current/verified repository foundation** for inviting identified people. The complete independent per-actor operation matrix and every participant-management flow are **Later** |
+| Move projects | Structured move type, status, origin/destination, date range, notes, PCS fields, and archive state | **Current/verified repository foundation.** The graduated simple → coordinated household → provider-assisted → documented/claim composition and broader flexible project details are **Later** |
+| Named participant access | Households, named invitations, household-backed and move-only participants, roles, sensitive-field visibility, and access disablement | **Current/verified repository foundation** for inviting identified people. The owner/member/helper/chosen-AI/link-recipient contract and invite, shared-plan, move-only, revoke and bounded-recipient scenarios are **Later / unverified** |
 | Inventory and packing | Items, planned items, boxes, contents, spaces, photos, disposition, values, review flags, archive or soft-delete paths | **Current/verified repository foundation.** Inventory is a major capability, not the whole identity |
 | Transport and layouts | Resources, zones, trips, trip spaces, capacity, assignments, floor plans, proposals, reversible plan operations, SVG snapshots | **Current/verified repository foundation.** Maps, live routing, booking and provider execution are **Later or outside Moving** |
-| Evidence and documentation | Private photo records, research sources, documentation profiles, exports, and recipient-safe fields | **Current/verified repository foundation.** Private evidence does not become shareable merely because a summary or packet exists |
-| Questions and queue | Derived readiness questions; a per-user capture queue with instructions, media, claim expiry, delegation, AI question, summary, and result references | **Current/verified partial foundation.** A family-conforming general Queue and attachable question system are **Later** |
+| Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields and packet-oriented source | **Current/verified repository foundation.** Full Document Memory / Move Evidence Packets, extraction-confirmation states, completed-form snapshots, requirements progress and post-move retrieval are **Later / unverified**. Private evidence does not become shareable merely because a summary or packet exists |
+| Questions, Move Brief and queue | Derived readiness questions; compact move/context summaries; a per-user capture queue with instructions, media, claim expiry, delegation, AI question, summary, and result references | **Current/verified partial foundation.** A permission-filtered Move Brief, family-conforming general Queue and attachable question system are **Later** |
 | History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research checks, and plan operation inverses | **Current/verified partial foundation.** Complete decision, dependency, revision and AI-activity coverage is **Later** |
 | API and MCP source surfaces | Documented REST API, a remote OAuth MCP gateway in `convex/mcp*.ts`, and a separate stdio/HTTP MCP server in `mcp-server/`, with scoped operations | **Current/verified source surface only; Unknown deployment.** Reverify deployment, auth, client setup, exact tools, and end-to-end behavior before a public availability claim |
+| Granular chosen-AI grants and external-action handoffs | Scoped API keys, OAuth/client foundations, Queue claims and selected audit fields exist, but no complete verified contract names actor, scope, permitted data, product operation or external-action category, approval, expiry/revocation and attributable result together | **Current/verified partial foundations; Later complete contract.** Do not claim that Moving can currently pass an approved external-action handoff or that every AI can receive one |
 | Costs | Item and replacement values, sale prices and research, planned-item estimate, internal AI-job cost | **Current/verified partial foundation.** General move budgets, vendor quotes, payments and reimbursements are **Later** |
 | Bounded link sharing | Documentation profiles plus move- or profile-scoped links with selected fields/actions, expiry, revocation, access metadata, and recipient comments | **Current/verified recipient-workflow foundation** and **intentional product-specific difference** from family Unlisted. General selected-plan, checklist, item-group and arbitrary-view links are **Later** |
 | General tasks, dependencies, decisions, risks, vendors, and appointments | No complete first-class cross-move model verified | **Later** |
-| Automatic import, calendars, maps, live providers, vendor communication, service arrangement, signing, buying, or booking | No qualifying repository and user-path proof verified | **Later or outside Moving itself** |
+| Automatic import, calendars, maps, live providers, vendor communication, service arrangement, signing, buying, or booking | No qualifying repository and user-path proof verifies a Moving-operated integration or a granular chosen-AI handoff | **Later or outside Moving itself.** The owner may still direct their AI externally; that freedom is not a Moving capability claim |
 | Cross-product Assist connections | No qualifying connection contract or user-path proof verified | **Later** and must be explicit, reviewable, and revocable |
 
 No item in this philosophy is designated **In design / committed — Coming
@@ -960,6 +1223,21 @@ it. Moving does not store or inherit those credentials or sessions, does not
 decide what the external AI may do, and does not represent that outside access
 as a Moving integration.
 
+People may discuss or direct their own AI however they want outside Moving,
+including requests broader than Moving's settings allow. Moving neither
+controls nor polices those conversations or the AI's overall behavior. It
+controls only whether its own tools and data participate. If the owner has
+disallowed a read, sensitive-data transfer, record change,
+publish/share/export operation or external-action handoff, Moving denies that
+operation; it does not forbid the external discussion.
+
+Moving also does not independently contact people, make offers, purchase,
+publish, book, sign, pay or take another outside-world action. A separately
+authorized handoff does not change that boundary: Moving passes only the
+approved data and intent to the named AI, and records the grant, actor, scope,
+approval, time and later result, failure or return. The chosen AI performs any
+outside action through its own environment and capabilities.
+
 Moving may issue its own scoped credentials or use its own authorization flow
 so an approved client can call Moving tools. That is different from collecting
 a password for a mover, bank, marketplace, browser, calendar, or AI provider.
@@ -985,6 +1263,8 @@ Public and product language should:
 - say **“your AI”** when referring to the AI the user chooses;
 - say **“move,” “plan,” “work,” “queue,” “question,” “decision,” “evidence,”
   “history,”** and **“current recap”** instead of generic AI-platform jargon;
+- use **“Move Brief”** only for the permission-filtered current context
+  assembled for a person or chosen AI, never for a stale duplicate record;
 - describe Moving as the durable place where the work lives, not as the AI
   itself;
 - explain the person, AI, and Moving roles before naming protocols or technical
@@ -995,21 +1275,32 @@ Public and product language should:
   superseded, and completed states;
 - distinguish external user-authorized AI activity from a Moving-operated
   connection or integration;
+- say plainly that the person may direct their AI outside Moving while Moving
+  governs only access to its own tools, data, record operations and handoffs;
+- describe an external-action handoff as a recorded, owner-approved transfer of
+  selected data and intent to one named AI—not as Moving taking the action;
 - name AI environments only as examples of user choice; never imply a preferred
   vendor or currently verified compatibility without exact proof;
 - distinguish observing, searching, retrieving, and reading from creating,
   updating, deleting, promoting, and publishing;
 - use **“invite”** for named participant access and **“share link”** for a
   bounded view that does not require workspace membership;
+- distinguish **owner/organizer**, **household member/partner**, **move-only
+  helper/professional**, **chosen AI**, and **share-link recipient** rather than
+  flattening them into generic collaborators;
 - lead first-time and public examples with a household home move; describe
   business, office, temporary, downsizing, and renovation-adjacent moves as
   compatible extensions, not equal opening personas or separate products;
 - name what a link exposes—such as a selected plan, checklist, item group, or
   packet—rather than saying an entire move is “shared”;
 - name the actual household, move, area, record, person or AI, and permitted
-  operations when describing access;
+  data, operations, external-action category, approval and duration when
+  describing access;
 - label uncertainty, freshness, authority, and future capability status
   directly; and
+- label document values **extracted**, **proposed**, **person-confirmed**, or
+  **submitted snapshot** rather than presenting every parsed field as current
+  truth; and
 - use **“queue”** for a durable work handoff that preserves scope, instructions,
   priority, evidence, state, blockers, questions, and the exact next step—not as
   a blanket approval gate, a generic to-do list, or a synonym for every task.
@@ -1055,9 +1346,16 @@ change the application.
   separate editions.
 - Show a move as a changing project, not a one-time checklist or inventory
   catalog.
+- Show that the same product can begin with two places, a few boxes and one
+  vehicle, then progressively add household coordination, providers and
+  evidence packets only when the move needs them.
 - Bridge the promise to the Assist model: your chosen AI reasons and works;
   Moving provides durable move memory, organization, tools, and visibility; and
   you remain the authority.
+- Explain the boundary in one direct contrast: people may direct their AI
+  outside Moving as they choose; Moving controls only whether that AI may use
+  selected Moving tools/data or receive a recorded approved handoff. Moving
+  itself does not take the outside action.
 - Explain both directions of work: save and retrieve durable move context from
   the person's preferred AI environment, or start in Moving with scoped queue
   instructions for an authorized AI to work through later.
@@ -1092,8 +1390,11 @@ change the application.
 - Default first-time guidance, examples, and move setup to a household home
   move while allowing the person to choose another move type and add flexible
   details without entering a separate product.
+- Ask only for the simple move essentials first. Reveal participant, provider,
+  transport, evidence and packet structure progressively; never make an
+  evidence-heavy workflow the price of starting a small move.
 - Center the selected move, current phase, recent material changes, and compact
-  current-state recap.
+  permission-filtered Move Brief.
 - Make **Needs you**, **Working**, **Waiting for your AI**, and **Done** work
   immediately understandable. Resumability, blockers and the exact next step
   belong inside those states, not in additional state names.
@@ -1102,11 +1403,19 @@ change the application.
   item should expose scope, intended outcome, priority, context and evidence,
   state, responsible actor, questions, blockers, and the exact next step.
 - Keep selected move and area scope, acting identity, independently allowed
-  operations, and revocation controls visible.
+  data and operations, external-action handoff category and approval, expiry,
+  and revocation controls visible.
+- When a Queue item needs authority, ask the smallest exact **Needs you**
+  question. When authority already exists, show the chosen AI, approved data
+  and intent, handoff time, and later result/failure/return without inserting a
+  redundant approval gate.
 - Give **People with move access** and **Shared links** separate surfaces.
   People should show identity, role, scope, operations, and status; links should
   show the selected view, exposed fields, recipient actions, expiry, access
   history, and revoke control.
+- Make owner/organizer, household member/partner and move-only helper roles
+  understandable in ordinary Moving language. A helper's wall to one move and
+  a link recipient's non-member status must be visible, not hidden in policy.
 - Let questions and notes appear in the context of the move, task, place, item,
   decision, cost, vendor, or evidence they concern.
 - Put source, date, freshness, author, authority, review state, and uncertainty
@@ -1115,8 +1424,14 @@ change the application.
   reversal, or recovery only where the underlying capability supports it.
 - Connect timeline, places, inventory, transport, costs, documents, and
   readiness through traceable views rather than duplicating truth.
+- For document work, keep the original artifact, extracted/proposed facts,
+  person-confirmed facts, completed-form snapshot, packet requirements and
+  post-move history visibly distinct. Never make an old form answer look
+  current merely because it is convenient to reuse.
 - Keep manual human workflows complete. AI assistance should extend the
   workspace, not make a person's own plan inaccessible without an AI.
+- Deny disallowed Moving operations at the product boundary without language
+  that suggests Moving controls what the person may ask their AI elsewhere.
 - Keep connection and capability status honest inside the product as well as on
   the public site.
 
@@ -1229,8 +1544,10 @@ supported-client setup, and an end-to-end
 context → work → save → human-inspection result. Before naming a provider-style
 connection, prove consent, scope, credential handling, revocation, failure
 behavior, freshness, and the exact user path. Before naming an external action,
-prove authorization, preview or confirmation policy, execution receipt, error
-handling, and recovery boundaries.
+prove the chosen AI, scope, permitted data, operation/action category, owner
+approval, expiry/revocation, handoff receipt, attributable result or failure,
+error handling, and recovery boundaries. Keep the proof explicit that Moving
+passed an authorized handoff rather than taking the outside action itself.
 
 Changes to the one-sentence identity, “Think of it as…” facets, Assist family
 model, user-owned-data and scoped-authority principle, user authority,
@@ -1240,6 +1557,23 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.5.0 · 2026-08-11** — synthesized Scott's approved Moving direction into
+  one connected product model: simple-to-complex progression; a
+  permission-filtered Move Brief; collaboration-first owner, partner,
+  move-only helper, chosen-AI and link-recipient roles; Document Memory / Move
+  Evidence Packets; source/time/actor decision history; and post-move claims,
+  reimbursement, tax-source, warranty and lessons continuity. Existing
+  repository pieces remain labeled **Current/verified partial foundations**;
+  the connected experiences remain **Later / unverified**. No Queue code,
+  schema, workflow, provider, user data or production behavior changed.
+- **1.4.0 · 2026-08-09** — applied Scott's clarified person / product /
+  chosen-AI boundary throughout identity, Queue, grants, privacy, sharing,
+  provenance, capability truth, trust, language and design guidance. Moving
+  governs only its own tools, data, record operations and recorded handoffs;
+  it does not police external conversations or independently act in the world.
+  Added the complete authority dimensions and honest **Later / unverified**
+  handoff label without changing Queue code, schemas, providers, data or public
+  capability claims.
 - **1.3.1 · 2026-08-08** — reattested Moving against Assist With Sites Core
   v1.6.3 and its source digest; aligned navigation to the clarified §16 tracker,
   publishing and launch contract and §17 setup, retrofit and handoff packages;
