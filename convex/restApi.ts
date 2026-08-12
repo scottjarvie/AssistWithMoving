@@ -9853,6 +9853,7 @@ export function errorStatus(error: unknown) {
     message.includes("not authorized") ||
     message.includes("cannot view") ||
     message.includes("only act on") ||
+    message.includes("restricted to a different move") ||
     message.includes("active household access") ||
     message.includes("turned off by an owner")
   ) {

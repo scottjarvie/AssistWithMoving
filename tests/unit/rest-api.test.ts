@@ -798,6 +798,9 @@ describe("REST API helpers", () => {
         new Error("The API key creator no longer has active household access."),
       ),
     ).toBe(403);
+    expect(
+      errorStatus(new Error("API key is restricted to a different move.")),
+    ).toBe(403);
   });
 
   it("builds API rate-limit windows and headers", () => {

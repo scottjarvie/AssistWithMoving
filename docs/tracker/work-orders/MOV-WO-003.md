@@ -145,6 +145,16 @@ gate; no production data or broad access decision is requested.
 - A marked authenticated browser probe stopped before data access when the
   configured Clerk testing ticket was invalid for production. No real session,
   production record, provider policy, or cleanup setting was used as a workaround.
+- A later authenticated Vercel-preview pass used two clearly marked disposable
+  moves and a one-day move-restricted key to prove the complete person/AI Queue
+  lifecycle, activity, cursor continuation, stale-write conflict, cross-move
+  denial, key invalidation, and permanent cleanup. It exposed no other move and
+  touched no real household data. Production-authenticated and second-identity
+  isolation remain separate unproved layers.
+- That pass found the test cleanup helper omitted canonical Queue items,
+  activity, and capture-adapter entries, and that a correct cross-move denial
+  returned `400` instead of `403`; protected repair PR `#179` adds the complete
+  cleanup cascade and semantic authorization mapping with regression tests.
 
 ## Independent audit
 
@@ -178,3 +188,6 @@ audit against Core §4, §5, §7, §8, §14, §16, and Moving's Project Philosop
 - 2026-08-12 · Codex — timeboxed the silent fourth review, merged through the
   protected path, proved exact-SHA main CI/Convex/Vercel/public discovery, and
   recorded the production test-identity/cleanup boundary without using real data.
+- 2026-08-12 · Codex — completed the disposable authenticated preview acceptance
+  proof, removed every generated record/key, and opened protected cleanup/status
+  repair PR `#179` while preserving the production-auth boundary.
