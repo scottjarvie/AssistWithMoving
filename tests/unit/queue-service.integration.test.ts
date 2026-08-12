@@ -230,6 +230,9 @@ describe("Queue service integration", () => {
       "completed",
     ]);
     expect(db.tables.get("auditLogs")).toHaveLength(activities.length);
+    expect(activities[5]?.message).toBe(
+      "Human response: Page 3 is now attached to the move documents.",
+    );
   });
 
   it("enforces owner/delegation access before a claim", async () => {

@@ -109,7 +109,7 @@ gate; no production data or broad access decision is requested.
   2026-08-09; authenticated/private behavior remains unverified.
 - Targeted Queue/REST/API-key/role/export/MCP tests pass locally, including
   export/authority/capability regressions and direct API-client transport proof.
-- The complete repository suite passes 1,014 tests. Lint, typecheck, production build, contract
+- The complete repository suite passes 1,016 tests. Lint, typecheck, production build, contract
   drift, philosophy synchronization, and tracker verification pass locally.
 - A full-suite run exposed missing Queue move-purge coverage; Queue activity and
   items were added to the verified purge cascade, and the full suite then passed.
@@ -126,6 +126,9 @@ gate; no production data or broad access decision is requested.
 - A second independent review found and locally repaired expired-lease
   maintenance, reclaimed human-input continuity, legacy `status` response
   compatibility, terminal expiry-sweep starvation, and cross-table reference typing.
+- A third independent review found and locally repaired immutable human-response
+  activity evidence, semantic REST authorization/version statuses, and Queue
+  route publication in the advertised OpenAPI contract.
 - Ready protected PR #175 contains the focused package. After concurrent `main`
   movement, the branch was rebased onto `e59e31f`, the unrelated MOV-0023 trust
   card was preserved, the Queue agent card moved to MOV-0027, and all local
@@ -133,8 +136,9 @@ gate; no production data or broad access decision is requested.
 
 ## Independent audit
 
-Follow-up needed. Separate reviews found eleven authority, lifecycle,
-pagination, compatibility, reference, and export gaps; after the repairs, an independent reviewer must re-evaluate
+Follow-up needed. Separate reviews found fourteen authority, lifecycle,
+pagination, compatibility, reference, provenance, contract-publication, and
+export gaps; after the repairs, an independent reviewer must re-evaluate
 the final PR/deployment against Core §4 Queue semantics, §5 agent boundaries,
 §7 history, §8 privacy, §14 bounded queries, §16 publication controls, and
 Moving's Project Philosophy.
@@ -157,3 +161,5 @@ Moving's Project Philosophy.
   lifecycle, pagination, and export repairs with local regression proof.
 - 2026-08-12 · Codex — repaired all five findings from the second independent
   review and reran the full local release gates before final rereview.
+- 2026-08-12 · Codex — repaired all three findings from the third independent
+  review and retained the protected merge gate pending a clean final review.

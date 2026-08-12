@@ -712,7 +712,7 @@ export async function provideQueueInput(
     type: "inputProvided",
     fromState: "needsYou",
     toState: "waitingForAi",
-    message: "The requested human input was provided.",
+    message: `Human response: ${response}`,
     idempotencyKey: input.idempotencyKey,
   });
   return (await ctx.db.get(item._id))!;

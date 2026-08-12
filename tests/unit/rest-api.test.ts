@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Id } from "../../convex/_generated/dataModel";
 import {
   createMoveWeightAllowanceLb,
+  errorStatus,
   movePatch,
   routeMovableUnits,
   saleListingPatchFromBody,
@@ -783,6 +784,20 @@ describe("REST API helpers", () => {
         },
       },
     });
+  });
+
+  it("maps Queue authority and concurrency failures to semantic statuses", () => {
+    expect(errorStatus(new Error("You are not authorized to run this Queue."))).toBe(
+      403,
+    );
+    expect(errorStatus(new Error("This Queue item changed since you last read it."))).toBe(
+      409,
+    );
+    expect(
+      errorStatus(
+        new Error("The API key creator no longer has active household access."),
+      ),
+    ).toBe(403);
   });
 
   it("builds API rate-limit windows and headers", () => {

@@ -9844,12 +9844,26 @@ function includesLiteral(values: readonly string[], value: unknown) {
   return typeof value === "string" && values.includes(value);
 }
 
-function errorStatus(error: unknown) {
+export function errorStatus(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : "";
   if (message.includes("invalid api key") || message.includes("bearer")) return 401;
-  if (message.includes("not allowed") || message.includes("scope")) return 403;
+  if (
+    message.includes("not allowed") ||
+    message.includes("scope") ||
+    message.includes("not authorized") ||
+    message.includes("cannot view") ||
+    message.includes("only act on") ||
+    message.includes("active household access") ||
+    message.includes("turned off by an owner")
+  ) {
+    return 403;
+  }
   if (message.includes("not found")) return 404;
-  if (message.includes("idempotency") || message.includes("already exists")) {
+  if (
+    message.includes("idempotency") ||
+    message.includes("already exists") ||
+    message.includes("changed since")
+  ) {
     return 409;
   }
   return 400;

@@ -196,6 +196,23 @@ describe("canonical Queue behavior contract", () => {
     expect(source).toContain("legacyStatus: nextStatus");
   });
 
+  it("publishes every canonical REST Queue route in OpenAPI", () => {
+    const contract = JSON.parse(readFileSync("public/openapi.json", "utf8")) as {
+      paths: Record<string, unknown>;
+    };
+    for (const path of [
+      "/moves/{moveId}/queue",
+      "/moves/{moveId}/queue/{queueItemId}",
+      "/moves/{moveId}/queue/{queueItemId}/claim",
+      "/moves/{moveId}/queue/{queueItemId}/release",
+      "/moves/{moveId}/queue/{queueItemId}/needs-you",
+      "/moves/{moveId}/queue/{queueItemId}/complete",
+      "/moves/{moveId}/queue/{queueItemId}/failure",
+    ]) {
+      expect(contract.paths).toHaveProperty(path);
+    }
+  });
+
   it("routes every agent Queue entry point through the human-only recovery gate", () => {
     for (const sourcePath of [
       "convex/mcpToolsCanonicalQueue.ts",
