@@ -74,7 +74,11 @@ describe("Queue-capable AI connection status", () => {
         key: { ...baseKey, createdByUserId: erin, moveId: move },
         moveId: move,
         ownerUserId: scott,
-        participant: { status: "active", canRunQueueForUserIds: [scott] },
+        participant: {
+          status: "active",
+          accessKind: "moveOnly",
+          canRunQueueForUserIds: [scott],
+        },
       }),
     ).toBe(true);
     expect(
@@ -83,7 +87,34 @@ describe("Queue-capable AI connection status", () => {
         key: { ...baseKey, createdByUserId: erin, moveId: move },
         moveId: move,
         ownerUserId: scott,
-        participant: { status: "active", canRunQueueForUserIds: [] },
+        participant: {
+          status: "active",
+          accessKind: "moveOnly",
+          canRunQueueForUserIds: [],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("honors either kill switch for a household member's move key", () => {
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, moveId: move },
+        moveId: move,
+        ownerUserId: scott,
+        membership: activeMembership,
+        participant: { status: "active", agentAccessStatus: "disabled" },
+      }),
+    ).toBe(false);
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, moveId: move },
+        moveId: move,
+        ownerUserId: scott,
+        membership: { status: "active", apiAccessStatus: "disabled" },
+        participant: { status: "active" },
       }),
     ).toBe(false);
   });

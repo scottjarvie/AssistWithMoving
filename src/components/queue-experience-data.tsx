@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 
@@ -10,6 +10,7 @@ import {
   QueueDesk,
   type QueueDeskActivity,
   type QueueDeskItem,
+  type QueueState,
 } from "@/components/queue-experience";
 import { describeMutationError } from "@/lib/mutation-error";
 import { toastError, toastSaved } from "@/lib/toast";
@@ -99,6 +100,7 @@ export function QueueExperience({
     null,
   );
   const [ownerScope, setOwnerScope] = useState<string>("default");
+  const [activeState, setActiveState] = useState<QueueState>("needsYou");
 
   const currentUser = useQuery(api.users.current);
   const scopes = useQuery(api.moveParticipants.queueScopes, {
@@ -126,22 +128,35 @@ export function QueueExperience({
   const handoffs = usePaginatedQuery(
     api.queue.listForMove,
     paginationReady
-      ? { householdId, moveId, ownerUserId: selectedOwnerUserId }
+      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: activeState }
       : "skip",
     { initialNumItems: 50 },
   );
   const captures = usePaginatedQuery(
     api.queue.listCaptureAdapter,
     paginationReady
-      ? { householdId, moveId, ownerUserId: selectedOwnerUserId }
+      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: activeState }
       : "skip",
     { initialNumItems: 50 },
   );
-  const connectionStatus = useQuery(api.queue.connectionStatus, {
-    householdId,
-    moveId,
-    ownerUserId: selectedOwnerUserId,
-  });
+  const legacyCaptures = usePaginatedQuery(
+    api.queue.listLegacyCaptureAdapter,
+    paginationReady && selectedOwnerUserId
+      ? {
+          householdId,
+          moveId,
+          ownerUserId: selectedOwnerUserId,
+          state: activeState,
+        }
+      : "skip",
+    { initialNumItems: 50 },
+  );
+  const connectionStatus = useQuery(
+    api.queue.connectionStatus,
+    paginationReady
+      ? { householdId, moveId, ownerUserId: selectedOwnerUserId }
+      : "skip",
+  );
   const activities = usePaginatedQuery(
     api.queue.listActivity,
     selectedCanonicalId
@@ -157,6 +172,25 @@ export function QueueExperience({
   const provideInput = useMutation(api.queue.provideInput);
   const cancelQueueItem = useMutation(api.queue.cancel);
 
+  // State projection happens after the indexed read because expired leases can
+  // change the effective state without a write. Keep paging automatically only
+  // while the selected state has no visible record, so “Nothing needs you” is
+  // not shown merely because newer records belong to other states.
+  useEffect(() => {
+    const visibleCount =
+      handoffs.results.length +
+      captures.results.length +
+      legacyCaptures.results.length;
+    if (visibleCount > 0) return;
+    if (handoffs.status === "CanLoadMore") handoffs.loadMore(50);
+    if (captures.status === "CanLoadMore") captures.loadMore(50);
+    if (legacyCaptures.status === "CanLoadMore") legacyCaptures.loadMore(50);
+  }, [
+    captures,
+    handoffs,
+    legacyCaptures,
+  ]);
+
   const currentHandoffs =
     handoffs.results.map((item) =>
       mapCanonicalItem(
@@ -166,7 +200,7 @@ export function QueueExperience({
           : null,
       ),
     );
-  const currentCaptures = captures.results.map((item) =>
+  const currentCaptures = [...captures.results, ...legacyCaptures.results].map((item) =>
     mapCaptureItem(
       item,
       effectiveOwnerScope === "all"
@@ -196,12 +230,22 @@ export function QueueExperience({
         ) === index,
     )
     .sort((a, b) => b.updatedAt - a.updatedAt);
+  const stateDiscoveryLoading =
+    items.length === 0 &&
+    [handoffs.status, captures.status, legacyCaptures.status].some(
+      (status) => status === "LoadingFirstPage" || status === "LoadingMore",
+    );
 
   async function handleCreateDirective(directive: string) {
+    if (!selectedOwnerUserId) {
+      toastError("Choose one person's Queue before saving a handoff.");
+      return false;
+    }
     try {
       await createDirective({
         householdId,
         moveId,
+        ownerUserId: selectedOwnerUserId,
         directive,
         idempotencyKey: crypto.randomUUID(),
       });
@@ -252,15 +296,26 @@ export function QueueExperience({
   return (
     <QueueDesk
       items={items}
-      activeApiKeyCount={connectionStatus?.queueCapableApiKeyCount ?? null}
-      loading={
-        handoffs.status === "LoadingFirstPage" ||
-        captures.status === "LoadingFirstPage"
+      selectedState={activeState}
+      onStateChange={setActiveState}
+      canCreateDirective={selectedOwnerUserId !== undefined}
+      directiveTargetLabel={
+        selectedOwnerUserId
+          ? ownerLabels.get(selectedOwnerUserId) ?? "Selected person's Queue"
+          : "Choose one person's Queue"
       }
+      activeApiKeyCount={connectionStatus?.queueCapableApiKeyCount ?? null}
+      loading={stateDiscoveryLoading}
       hasMoreHandoffs={handoffs.status === "CanLoadMore"}
-      hasMoreCaptures={captures.status === "CanLoadMore"}
+      hasMoreCaptures={
+        captures.status === "CanLoadMore" ||
+        legacyCaptures.status === "CanLoadMore"
+      }
       onLoadMoreHandoffs={() => handoffs.loadMore(50)}
-      onLoadMoreCaptures={() => captures.loadMore(50)}
+      onLoadMoreCaptures={() => {
+        if (captures.status === "CanLoadMore") captures.loadMore(50);
+        if (legacyCaptures.status === "CanLoadMore") legacyCaptures.loadMore(50);
+      }}
       onCreateDirective={handleCreateDirective}
       onSelectItem={(item) =>
         setSelectedCanonicalId(item?.source === "handoff" ? item.id : null)

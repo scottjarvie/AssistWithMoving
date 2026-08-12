@@ -39,37 +39,6 @@ import {
   resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
 
-type CapturePaginationCursor = {
-  current: string | null;
-  legacy: string | null;
-  currentDone: boolean;
-  legacyDone: boolean;
-};
-
-function parseCapturePaginationCursor(
-  cursor: string | null,
-): CapturePaginationCursor {
-  if (!cursor) {
-    return {
-      current: null,
-      legacy: null,
-      currentDone: false,
-      legacyDone: false,
-    };
-  }
-  try {
-    const parsed = JSON.parse(cursor) as Partial<CapturePaginationCursor>;
-    return {
-      current: typeof parsed.current === "string" ? parsed.current : null,
-      legacy: typeof parsed.legacy === "string" ? parsed.legacy : null,
-      currentDone: parsed.currentDone === true,
-      legacyDone: parsed.legacyDone === true,
-    };
-  } catch {
-    throw new ConvexError("The capture Queue cursor is invalid or expired.");
-  }
-}
-
 async function getQueueDirectiveReference<
   TableName extends
     | "moveSpaces"
@@ -272,7 +241,7 @@ export const listForMove = query({
           }
           return searchQuery;
         })
-        .paginate({ cursor: args.paginationOpts.cursor, numItems: limit });
+        .paginate({ ...args.paginationOpts, numItems: limit });
     } else if (ownerUserId) {
       page = await ctx.db
         .query("queueItems")
@@ -280,16 +249,17 @@ export const listForMove = query({
           q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
         )
         .order("desc")
-        .paginate({ cursor: args.paginationOpts.cursor, numItems: limit });
+        .paginate({ ...args.paginationOpts, numItems: limit });
     } else {
       page = await ctx.db
         .query("queueItems")
         .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
         .order("desc")
-        .paginate({ cursor: args.paginationOpts.cursor, numItems: limit });
+        .paginate({ ...args.paginationOpts, numItems: limit });
     }
     const now = Date.now();
     return {
+      ...page,
       page: page.page
         .filter((item) => {
           if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
@@ -302,17 +272,62 @@ export const listForMove = query({
           });
         })
         .map((item) => shapeQueueItem(item, now)),
-      continueCursor: page.continueCursor,
-      isDone: page.isDone,
     };
   },
 });
+
+function shapeCaptureAdapterEntry(
+  entry: Doc<"ingestionQueueEntries">,
+  now: number,
+) {
+  const state = ingestionStatusToQueueState(
+    entry.status,
+    entry.claimExpiresAt,
+    now,
+  );
+  return {
+    adapter: "legacyCapture" as const,
+    domainRef: {
+      kind: "capture" as const,
+      refType: "ingestionQueueEntries",
+      refId: entry._id,
+    },
+    ownerUserId: queueEntryOwnerUserId(entry),
+    directive: entry.instructions ?? entry.targetLabel ?? "Review this capture",
+    state,
+    stateLabel: queueStateLabels[state],
+    legacyStatus: entry.status,
+    requiredAction:
+      state === "needsYou"
+        ? (entry.agentQuestion ??
+          (entry.status === "processed"
+            ? "Review the captured result and mark it resolved or requeue it."
+            : "Review this capture."))
+        : null,
+    nextStep:
+      state === "working"
+        ? "Process this capture into durable move records."
+        : null,
+    claim:
+      state === "working"
+        ? {
+            label: entry.claimedByAgentLabel ?? null,
+            expiresAt: entry.claimExpiresAt ?? null,
+          }
+        : null,
+    resultSummary: entry.agentSummary ?? null,
+    resultRefs: entry.resultRefs ?? [],
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
 
 export const listCaptureAdapter = query({
   args: {
     householdId: v.id("households"),
     moveId: v.id("moves"),
     ownerUserId: v.optional(v.id("users")),
+    state: v.optional(queueStateValidator),
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
@@ -335,124 +350,102 @@ export const listCaptureAdapter = query({
       }
     }
     const limit = normalizeQueueLimit(args.paginationOpts.numItems);
-    let page: {
-      page: Doc<"ingestionQueueEntries">[];
-      continueCursor: string;
-      isDone: boolean;
-    };
-    if (ownerUserId) {
-      // Current rows and pre-ownerUserId rows are disjoint streams. Paginating
-      // both keeps creator-owned legacy captures visible without reverting to
-      // post-pagination filtering (which can create empty/incomplete pages).
-      const cursor = parseCapturePaginationCursor(args.paginationOpts.cursor);
-      const currentLimit = Math.ceil(limit / 2);
-      const legacyLimit = Math.max(1, limit - currentLimit);
-      const currentPage = cursor.currentDone
-        ? {
-            page: [] as Doc<"ingestionQueueEntries">[],
-            continueCursor: cursor.current ?? "",
-            isDone: true,
-          }
-        : await ctx.db
-            .query("ingestionQueueEntries")
-            .withIndex("by_move_owner_created", (q) =>
-              q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
-            )
-            .order("desc")
-            .paginate({ cursor: cursor.current, numItems: currentLimit });
-      const legacyPage = cursor.legacyDone
-        ? {
-            page: [] as Doc<"ingestionQueueEntries">[],
-            continueCursor: cursor.legacy ?? "",
-            isDone: true,
-          }
-        : await ctx.db
-            .query("ingestionQueueEntries")
-            .withIndex("by_move_creator_owner_created", (q) =>
-              q
-                .eq("moveId", args.moveId)
-                .eq("createdByUserId", ownerUserId)
-                .eq("ownerUserId", undefined),
-            )
-            .order("desc")
-            .paginate({ cursor: cursor.legacy, numItems: legacyLimit });
-      page = {
-        page: [...currentPage.page, ...legacyPage.page].sort(
-          (left, right) => right.createdAt - left.createdAt,
-        ),
-        continueCursor: JSON.stringify({
-          current: currentPage.continueCursor,
-          legacy: legacyPage.continueCursor,
-          currentDone: currentPage.isDone,
-          legacyDone: legacyPage.isDone,
-        } satisfies CapturePaginationCursor),
-        isDone: currentPage.isDone && legacyPage.isDone,
-      };
-    } else {
-      page = await ctx.db
+    const page = ownerUserId
+      ? await ctx.db
+          .query("ingestionQueueEntries")
+          .withIndex("by_move_owner_created", (q) =>
+            q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
+          )
+          .order("desc")
+          .paginate({ ...args.paginationOpts, numItems: limit })
+      : await ctx.db
           .query("ingestionQueueEntries")
           .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
           .order("desc")
-          .paginate({
-            cursor: args.paginationOpts.cursor,
-            numItems: limit,
-          });
-    }
+          .paginate({ ...args.paginationOpts, numItems: limit });
     const now = Date.now();
     return {
+      ...page,
       page: page.page
-        .filter((entry) =>
-          canViewQueueEntry({
-            actorUserId: actor.userId,
-            ownerUserId: queueEntryOwnerUserId(entry),
-            isManager: actor.isManager,
-            delegatedOwnerIds: actor.delegatedOwnerIds,
-          }),
-        )
-        .map((entry) => {
+        .filter((entry) => {
           const state = ingestionStatusToQueueState(
             entry.status,
             entry.claimExpiresAt,
             now,
           );
-          return {
-            adapter: "legacyCapture" as const,
-            domainRef: {
-              kind: "capture" as const,
-              refType: "ingestionQueueEntries",
-              refId: entry._id,
-            },
-            ownerUserId: queueEntryOwnerUserId(entry),
-            directive: entry.instructions ?? entry.targetLabel ?? "Review this capture",
-            state,
-            stateLabel: queueStateLabels[state],
-            legacyStatus: entry.status,
-            requiredAction:
-              state === "needsYou"
-                ? (entry.agentQuestion ??
-                  (entry.status === "processed"
-                    ? "Review the captured result and mark it resolved or requeue it."
-                    : "Review this capture."))
-                : null,
-            nextStep:
-              state === "working"
-                ? "Process this capture into durable move records."
-                : null,
-            claim:
-              state === "working"
-                ? {
-                    label: entry.claimedByAgentLabel ?? null,
-                    expiresAt: entry.claimExpiresAt ?? null,
-                  }
-                : null,
-            resultSummary: entry.agentSummary ?? null,
-            resultRefs: entry.resultRefs ?? [],
-            createdAt: entry.createdAt,
-            updatedAt: entry.updatedAt,
-          };
-        }),
-      continueCursor: page.continueCursor,
-      isDone: page.isDone,
+          return (
+            (!args.state || state === args.state) &&
+            canViewQueueEntry({
+              actorUserId: actor.userId,
+              ownerUserId: queueEntryOwnerUserId(entry),
+              isManager: actor.isManager,
+              delegatedOwnerIds: actor.delegatedOwnerIds,
+            })
+          );
+        })
+        .map((entry) => shapeCaptureAdapterEntry(entry, now)),
+    };
+  },
+});
+
+export const listLegacyCaptureAdapter = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    ownerUserId: v.id("users"),
+    state: v.optional(queueStateValidator),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "queue:read",
+    );
+    const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
+      ctx,
+      args.householdId,
+      args.moveId,
+      actor,
+    );
+    if (!runnableOwnerIds.includes(args.ownerUserId)) {
+      throw new ConvexError("You cannot view this Queue owner's captures.");
+    }
+    const page = await ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_move_creator_owner_created", (q) =>
+        q
+          .eq("moveId", args.moveId)
+          .eq("createdByUserId", args.ownerUserId)
+          .eq("ownerUserId", undefined),
+      )
+      .order("desc")
+      .paginate({
+        ...args.paginationOpts,
+        numItems: normalizeQueueLimit(args.paginationOpts.numItems),
+      });
+    const now = Date.now();
+    return {
+      ...page,
+      page: page.page
+        .filter((entry) => {
+          const state = ingestionStatusToQueueState(
+            entry.status,
+            entry.claimExpiresAt,
+            now,
+          );
+          return (
+            (!args.state || state === args.state) &&
+            canViewQueueEntry({
+              actorUserId: actor.userId,
+              ownerUserId: queueEntryOwnerUserId(entry),
+              isManager: actor.isManager,
+              delegatedOwnerIds: actor.delegatedOwnerIds,
+            })
+          );
+        })
+        .map((entry) => shapeCaptureAdapterEntry(entry, now)),
     };
   },
 });
@@ -564,10 +557,11 @@ export const listActivity = query({
       .withIndex("by_item_created", (q) => q.eq("queueItemId", item._id))
       .order("desc")
       .paginate({
-        cursor: args.paginationOpts.cursor,
+        ...args.paginationOpts,
         numItems: normalizeQueueLimit(args.paginationOpts.numItems),
       });
     return {
+      ...page,
       page: page.page.map((activity) => ({
         activityId: activity._id,
         type: activity.type,
@@ -582,8 +576,6 @@ export const listActivity = query({
         resultRefCount: activity.resultRefCount ?? null,
         createdAt: activity.createdAt,
       })),
-      continueCursor: page.continueCursor,
-      isDone: page.isDone,
     };
   },
 });

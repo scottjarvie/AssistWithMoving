@@ -31,18 +31,22 @@ export function apiKeyCanReachQueueOwner(input: {
   };
   participant?: {
     status: string;
+    accessKind?: string;
     agentAccessStatus?: string;
     canRunQueueForUserIds?: Id<"users">[];
   };
 }): boolean {
   const { key, membership, participant } = input;
+  const activeMembership = membership?.status === "active";
+  const activeParticipant = participant?.status === "active";
   const hasLiveAccess = key.moveId
-    ? (membership?.status === "active" &&
-        membership.apiAccessStatus !== "disabled") ||
-      (participant?.status === "active" &&
-        participant.agentAccessStatus !== "disabled")
-    : membership?.status === "active" &&
-      membership.apiAccessStatus !== "disabled";
+    ? activeMembership
+      ? membership.apiAccessStatus !== "disabled" &&
+        (!activeParticipant || participant.agentAccessStatus !== "disabled")
+      : activeParticipant &&
+        participant.accessKind === "moveOnly" &&
+        participant.agentAccessStatus !== "disabled"
+    : activeMembership && membership.apiAccessStatus !== "disabled";
   const canRunSelectedOwner =
     input.ownerUserId === undefined ||
     key.createdByUserId === input.ownerUserId ||

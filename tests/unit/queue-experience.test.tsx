@@ -257,4 +257,27 @@ describe("QueueDesk", () => {
 
     expect(onLoadMoreActivities).toHaveBeenCalledOnce();
   });
+
+  it("disables the composer until one person's Queue is selected", () => {
+    renderDesk({
+      canCreateDirective: false,
+      directiveTargetLabel: "Choose one person's Queue",
+    });
+
+    expect(screen.getByLabelText("What should your AI pick up next?")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save handoff" })).toBeDisabled();
+    expect(
+      screen.getByText("Choose one person's Queue before saving a handoff."),
+    ).toBeInTheDocument();
+  });
+
+  it("reports state changes to the data controller", async () => {
+    const user = userEvent.setup();
+    const onStateChange = vi.fn();
+    renderDesk({ selectedState: "needsYou", onStateChange });
+
+    await user.click(screen.getByRole("button", { name: /Waiting for your AI/ }));
+
+    expect(onStateChange).toHaveBeenCalledWith("waitingForAi");
+  });
 });

@@ -106,8 +106,12 @@ production-authenticated mutation/revocation/cleanup proof.
   visible and no mutation was issued.
 - Shared development Convex push failed closed on the unrelated synthetic
   `nextItemCodeSeq` field; no data or deployed functions were overwritten.
-- Eleven focused Queue UI/error component tests and 53 Queue foundation tests pass.
-- The complete repository suite passes 1,030 tests across 185 files.
+- Thirteen focused Queue UI/error component tests and 45 focused
+  Queue/authority/error tests pass on the replacement exact head.
+- The replacement full local run passed 1,031 of 1,033 tests across 185 files;
+  the unrelated move-list and load-planner tests that exceeded their parallel
+  timeouts both pass in a 33-test isolated rerun. Protected CI remains the
+  authoritative complete replacement-head gate.
 - Deterministic rendered phone (390 px) and desktop (1366 px) fixtures had zero
   axe violations and no horizontal overflow; the fixtures were removed before
   publication and never shipped.
@@ -143,6 +147,22 @@ Focused regression tests cover all seven review findings. A clean exact-head
 independent rereview remains required before merge, so the audit state is
 `follow-up-needed` rather than passed.
 
+The second exact-head rereview found five further pagination/status/composer
+gaps, also repaired before merge:
+
+- every Convex-native paginated query forwards split/page-status metadata and
+  honors `endCursor`, preserving reactive page splitting;
+- each selected person-facing state is queried independently and automatically
+  advances past empty filtered pages before claiming the state is empty;
+- both membership and per-move AI-access kill switches are honored exactly;
+- current and legacy capture rows use independent native cursors and merge by
+  timestamp in the client instead of using a lossy half-page allocation; and
+- the directive composer is disabled for Everyone's Queue and passes the exact
+  selected `ownerUserId` for a personal/delegated Queue.
+
+Focused regression proof now covers all twelve review findings. The audit stays
+`follow-up-needed` until the replacement exact head receives a clean rereview.
+
 ## History
 
 - 2026-08-12 · Scott via coordinator task — approved the Queue UI and safe
@@ -155,3 +175,5 @@ independent rereview remains required before merge, so the audit state is
   findings, and added focused regression proof before exact-head rereview.
 - 2026-08-12 · Codex — completed the first exact-head rereview, repaired its
   three findings, and retained the protected merge gate for a clean rereview.
+- 2026-08-12 · Codex — completed the second exact-head rereview, repaired its
+  five findings, and kept publication closed pending a clean replacement review.

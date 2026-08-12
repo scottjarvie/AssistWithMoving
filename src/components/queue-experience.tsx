@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   Bot,
@@ -501,6 +501,10 @@ function QueueDetailSheet({
 
 export function QueueDesk({
   items,
+  selectedState,
+  onStateChange,
+  canCreateDirective = true,
+  directiveTargetLabel = "My Queue",
   activeApiKeyCount,
   loading,
   hasMoreHandoffs,
@@ -521,6 +525,10 @@ export function QueueDesk({
   captureWorkspacePath,
 }: {
   items: QueueDeskItem[];
+  selectedState?: QueueState;
+  onStateChange?: (state: QueueState) => void;
+  canCreateDirective?: boolean;
+  directiveTargetLabel?: string;
   activeApiKeyCount: number | null;
   loading: boolean;
   hasMoreHandoffs: boolean;
@@ -540,7 +548,9 @@ export function QueueDesk({
   onCancel: (item: QueueDeskItem) => Promise<boolean>;
   captureWorkspacePath: string | null;
 }) {
-  const [activeState, setActiveState] = useState<QueueState>("needsYou");
+  const [internalActiveState, setInternalActiveState] =
+    useState<QueueState>("needsYou");
+  const activeState = selectedState ?? internalActiveState;
   const [directive, setDirective] = useState("");
   const [selectedItemKey, setSelectedItemKey] = useState<{
     source: QueueDeskItem["source"];
@@ -549,13 +559,11 @@ export function QueueDesk({
   const [response, setResponse] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const counts = useMemo(
-    () =>
-      Object.fromEntries(
-        stateOrder.map((state) => [state, items.filter((item) => item.state === state).length]),
-      ) as Record<QueueState, number>,
-    [items],
-  );
+  function selectState(state: QueueState) {
+    setInternalActiveState(state);
+    onStateChange?.(state);
+  }
+
   const visibleItems = items.filter((item) => item.state === activeState);
   const selectedItem = selectedItemKey
     ? items.find(
@@ -565,13 +573,13 @@ export function QueueDesk({
     : null;
 
   async function createDirective() {
-    if (!directive.trim() || busy) return;
+    if (!canCreateDirective || !directive.trim() || busy) return;
     setBusy(true);
     const saved = await onCreateDirective(directive.trim());
     setBusy(false);
     if (saved) {
       setDirective("");
-      setActiveState("waitingForAi");
+      selectState("waitingForAi");
     }
   }
 
@@ -584,7 +592,7 @@ export function QueueDesk({
       setResponse("");
       setSelectedItemKey(null);
       onSelectItem(null);
-      setActiveState("waitingForAi");
+      selectState("waitingForAi");
     }
   }
 
@@ -596,7 +604,7 @@ export function QueueDesk({
     if (saved) {
       setSelectedItemKey(null);
       onSelectItem(null);
-      setActiveState("done");
+      selectState("done");
     }
   }
 
@@ -625,15 +633,26 @@ export function QueueDesk({
               placeholder="Example: Compare the two mover estimates and flag anything that needs my decision."
               maxLength={4000}
               className="mt-3 min-h-24 bg-background"
+              disabled={!canCreateDirective}
             />
           </div>
           <div className="flex flex-col items-start gap-2 lg:w-52">
-            <Button onClick={createDirective} disabled={busy || !directive.trim()} className="w-full">
+            <Button
+              onClick={createDirective}
+              disabled={!canCreateDirective || busy || !directive.trim()}
+              className="w-full"
+            >
               {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ClipboardList aria-hidden="true" />}
               Save handoff
             </Button>
             <p className="text-xs leading-5 text-muted-foreground">
-              Saves to <strong className="font-medium text-foreground">Waiting for your AI</strong>. Nothing runs until an AI claims it.
+              {canCreateDirective ? (
+                <>
+                  Saves to <strong className="font-medium text-foreground">{directiveTargetLabel}</strong> in Waiting for your AI. Nothing runs until an AI claims it.
+                </>
+              ) : (
+                <>Choose one person&apos;s Queue before saving a handoff.</>
+              )}
             </p>
           </div>
         </div>
@@ -650,7 +669,7 @@ export function QueueDesk({
                 key={state}
                 type="button"
                 aria-current={active ? "page" : undefined}
-                onClick={() => setActiveState(state)}
+                onClick={() => selectState(state)}
                 className={cn(
                   "relative overflow-hidden rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                   active ? "border-primary/35 bg-primary/[0.065] shadow-sm" : "border-border bg-card hover:border-primary/25",
@@ -660,7 +679,9 @@ export function QueueDesk({
                 <div className="flex items-center gap-2 pl-1">
                   <Icon className={cn("size-4 shrink-0", state === "working" && active && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
                   <span className="min-w-0 flex-1 text-sm font-semibold">{stateMeta.label}</span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">{counts[state]}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                    {active ? visibleItems.length : "—"}
+                  </span>
                 </div>
                 <p className="mt-2 hidden pl-1 text-xs leading-5 text-muted-foreground lg:block">{stateMeta.shortDescription}</p>
               </button>
