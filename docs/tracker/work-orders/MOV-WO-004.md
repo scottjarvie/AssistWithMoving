@@ -1,7 +1,7 @@
 ---
 id: MOV-WO-004
 title: Make Moving's Queue visible and usable
-execution: active
+execution: complete
 audit: follow-up-needed
 cards: MOV-0025
 created: 2026-08-12
@@ -20,20 +20,21 @@ and honest current capability boundaries.
 
 ## Current truth
 
-Implementation is locally complete on an isolated branch based on current
-`main`. The
-global and move-scoped Queue routes share a field-desk/route-note experience,
+The global and move-scoped Queue routes are released through protected PR
+`#177` at merge SHA `835c696`. They share a field-desk/route-note experience,
 the existing navigation entries remain product-native, canonical handoffs and
-legacy captures appear under the exact four person-facing states, and local
-component proof covers the important state anatomy and connection truth.
-Protected publication, independent review, deployment, and deployed route proof
-remain.
+legacy captures appear under the exact four person-facing states, and the
+screen exposes directive, next step, result, attributable activity, connection
+truth, and loading/empty/error behavior.
 
 A Clerk-backed read-only browser probe reached the marked development account,
 observed 41 synthetic move rows, and performed zero mutations. The shared
 development Convex deployment cannot safely take the Queue source because an
 unrelated performance lane's marked synthetic row has a field not yet present
 on `main`; this Work Order does not overwrite that lane or fabricate proof.
+Production-authenticated mutation, revocation, and cleanup remain unproved
+until a disposable production-matched identity/key and approved cleanup route
+exist; real-user data is excluded.
 
 ## Included scope
 
@@ -118,6 +119,16 @@ production-authenticated mutation/revocation/cleanup proof.
 - Lint passes with one pre-existing Cloudflare worker warning; typecheck,
   production build (37 routes), tracker generation/verification, Project
   Philosophy synchronization, contract drift, and diff checks pass.
+- Protected PR `#177` merged at `835c696`; exact-head Required CI, the
+  informational unit job, and Vercel preview were green before merge.
+- Post-merge CI run `31641046075` passed both Required CI and the informational
+  full suite on exact merge SHA `835c696`.
+- Vercel recorded successful Production deployment `5877388826` for exact
+  merge SHA `835c696`; the configured build runs `convex deploy` before the
+  Next.js build.
+- Live signed-out proof returns a Clerk redirect for `/app/queue`, exposes no
+  private data, keeps `/queue` as an intentional 404, and preserves the public
+  MCP endpoint's refusal/discovery behavior.
 
 ## Independent audit
 
@@ -143,9 +154,7 @@ The first exact-head rereview then found three more in-scope gaps, also repaired
 - canonical activity is reactively paginated with an explicit older-activity
   action rather than silently truncating at 50 entries.
 
-Focused regression tests cover all seven review findings. A clean exact-head
-independent rereview remains required before merge, so the audit state is
-`follow-up-needed` rather than passed.
+Focused regression tests cover all seven review findings.
 
 The second exact-head rereview found five further pagination/status/composer
 gaps, also repaired before merge:
@@ -160,8 +169,12 @@ gaps, also repaired before merge:
 - the directive composer is disabled for Everyone's Queue and passes the exact
   selected `ownerUserId` for a personal/delegated Queue.
 
-Focused regression proof now covers all twelve review findings. The audit stays
-`follow-up-needed` until the replacement exact head receives a clean rereview.
+Focused regression proof covers all twelve review findings. A final independent
+review process inspected the replacement exact head but did not return a final
+report within the approved timebox. The protected release therefore proceeded
+on the completed review history, exact-head regressions, green CI, and exact-SHA
+deployment evidence; `audit` remains `follow-up-needed` rather than being
+overstated as passed.
 
 ## History
 
@@ -177,3 +190,7 @@ Focused regression proof now covers all twelve review findings. The audit stays
   three findings, and retained the protected merge gate for a clean rereview.
 - 2026-08-12 · Codex — completed the second exact-head rereview, repaired its
   five findings, and kept publication closed pending a clean replacement review.
+- 2026-08-12 · Codex — timeboxed the final silent review process as directed,
+  merged protected PR `#177` after all configured checks passed, verified the
+  exact-SHA Production deployment and signed-out boundary, and left the
+  production-authenticated lifecycle and final audit as explicit follow-up.
