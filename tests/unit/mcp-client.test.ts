@@ -241,7 +241,7 @@ describe("MovingManifest MCP API client", () => {
       state: "waitingForAi",
       ownerUserId: "user1",
       limit: 25,
-      before: 1234,
+      cursor: "opaque-queue-cursor",
     });
     await claimQueueItem(config, {
       moveId: "move1",
@@ -254,7 +254,7 @@ describe("MovingManifest MCP API client", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       new URL(
-        "https://example.com/api/v1/moves/move1/queue?state=waitingForAi&ownerUserId=user1&limit=25&before=1234"
+        "https://example.com/api/v1/moves/move1/queue?state=waitingForAi&ownerUserId=user1&limit=25&cursor=opaque-queue-cursor"
       ),
       {
         method: "GET",

@@ -138,12 +138,13 @@ explicit confirmation authorizes them.
   writes fail with refresh guidance; exact replays return without duplicate
   transition activity.
 - Queue list/activity bounds are 100. Canonical app search uses the indexed
-  directive field and filterable move/state/owner fields; REST uses a stable
-  `before` cursor. Non-manager lists default to the caller's own Queue and
-  expose `runnableOwnerIds` for deliberate delegated-owner selection, avoiding
-  incomplete pages caused by filtering unauthorized owners after pagination.
+  directive field; all readers paginate indexed move/owner retrieval with
+  opaque cursors, then apply the lease-aware effective-state filter.
+  Non-manager lists default to the caller's own Queue and expose
+  `runnableOwnerIds` for deliberate delegated-owner selection.
 - Account exports include only the exporting person's Queue items and
-  attributable activity, even when that person manages a shared household.
+  attributable activity, including move-only continuity not backed by an
+  active household membership.
   Account deletion revokes the person's AI access and anonymizes the user
   profile while retaining shared move work/history for collaborators, matching
   the existing product policy. Queue is private move data and is never exposed

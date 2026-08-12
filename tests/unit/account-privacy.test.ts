@@ -18,7 +18,7 @@ import {
 } from "../../convex/lib/accountPrivacy";
 
 describe("account privacy helpers", () => {
-  it("keeps Queue exports personal even for members of the same household", () => {
+  it("keeps Queue exports personal across household and move-only access", () => {
     const householdId = "household1" as never;
     const accountUserId = "user1" as never;
 
@@ -26,29 +26,29 @@ describe("account privacy helpers", () => {
       queueRecordBelongsToAccountExport(
         { ownerUserId: accountUserId, householdId },
         accountUserId,
-        householdId,
       ),
     ).toBe(true);
     expect(
       queueRecordBelongsToAccountExport(
         { ownerUserId: "user2" as never, householdId },
         accountUserId,
-        householdId,
       ),
     ).toBe(false);
     expect(
       queueRecordBelongsToAccountExport(
         { ownerUserId: accountUserId, householdId: "household2" as never },
         accountUserId,
-        householdId,
       ),
-    ).toBe(false);
+    ).toBe(true);
 
     const exportSource = readFileSync("convex/accountPrivacy.ts", "utf8");
     expect(exportSource).toContain('.withIndex("by_owner_updated"');
     expect(exportSource).toContain('.withIndex("by_owner_created"');
-    expect(exportSource).toContain("queueRecordBelongsToAccountExport(item");
-    expect(exportSource).toContain("queueRecordBelongsToAccountExport(activity");
+    expect(exportSource).toContain("queueRecordBelongsToAccountExport(item, user._id)");
+    expect(exportSource).toContain("queueRecordBelongsToAccountExport(activity, user._id)");
+    expect(exportSource.indexOf('.withIndex("by_owner_updated"')).toBeLessThan(
+      exportSource.indexOf("const householdData"),
+    );
   });
 
   it("uses deterministic export and deletion windows", () => {

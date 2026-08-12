@@ -412,10 +412,18 @@ function requireTransition(from: QueueState, to: QueueState) {
 }
 
 function requireActiveClaim(item: Doc<"queueItems">, actor: QueueAccessActor) {
-  const sameApiKey =
-    actor.apiKeyId && item.claimedByApiKeyId === actor.apiKeyId;
-  const sameUser = item.claimedByUserId === actor.userId;
-  if (!sameApiKey && !sameUser && !actor.isManager) {
+  const now = Date.now();
+  if (item.expiresAt !== undefined && item.expiresAt <= now) {
+    throw new ConvexError("This Queue handoff has expired and cannot be changed.");
+  }
+  if (item.claimExpiresAt === undefined || item.claimExpiresAt <= now) {
+    throw new ConvexError("This Queue claim lease has expired.");
+  }
+  const humanManager = actor.actorType === "user" && actor.isManager;
+  const actorOwnsClaim = item.claimedByApiKeyId
+    ? actor.apiKeyId === item.claimedByApiKeyId
+    : item.claimedByUserId === actor.userId;
+  if (!actorOwnsClaim && !humanManager) {
     throw new ConvexError("This Queue item is claimed by another actor.");
   }
 }

@@ -1166,7 +1166,7 @@ export async function listQueueItems(config, input) {
       state: input.state,
       ownerUserId: input.ownerUserId,
       limit: input.limit,
-      before: input.before,
+      cursor: input.cursor,
     },
   });
 }

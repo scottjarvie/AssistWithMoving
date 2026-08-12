@@ -17,6 +17,7 @@ import {
   queueWaitingReasonValidator,
   ingestionStatusToQueueState,
   normalizeQueueLimit,
+  queueItemMatchesEffectiveState,
 } from "./lib/queue";
 import {
   createQueueItem,
@@ -192,37 +193,17 @@ export const listForMove = query({
         .query("queueItems")
         .withSearchIndex("search_directive", (q) => {
           let searchQuery = q.search("directive", search).eq("moveId", args.moveId);
-          if (args.state) searchQuery = searchQuery.eq("state", args.state);
           if (ownerUserId) {
             searchQuery = searchQuery.eq("ownerUserId", ownerUserId);
           }
           return searchQuery;
         })
         .paginate({ cursor: args.cursor ?? null, numItems: limit });
-    } else if (ownerUserId && args.state) {
-      page = await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_owner_state_updated", (q) =>
-          q
-            .eq("moveId", args.moveId)
-            .eq("ownerUserId", ownerUserId)
-            .eq("state", args.state!),
-        )
-        .order("desc")
-        .paginate({ cursor: args.cursor ?? null, numItems: limit });
     } else if (ownerUserId) {
       page = await ctx.db
         .query("queueItems")
         .withIndex("by_move_owner_updated", (q) =>
           q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
-        )
-        .order("desc")
-        .paginate({ cursor: args.cursor ?? null, numItems: limit });
-    } else if (args.state) {
-      page = await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_state_updated", (q) =>
-          q.eq("moveId", args.moveId).eq("state", args.state!),
         )
         .order("desc")
         .paginate({ cursor: args.cursor ?? null, numItems: limit });
@@ -238,6 +219,7 @@ export const listForMove = query({
       items: page.page
         .filter((item) => {
           if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
+          if (!queueItemMatchesEffectiveState(item, args.state, now)) return false;
           return canViewQueueEntry({
             actorUserId: actor.userId,
             ownerUserId: item.ownerUserId,

@@ -272,7 +272,17 @@ async function buildAccountExportPackage(
   ctx: MutationCtx,
   user: Doc<"users">
 ) {
-  const memberships = await activeMembershipsForUser(ctx, user._id);
+  const [memberships, ownedQueueItems, ownedQueueActivities] = await Promise.all([
+    activeMembershipsForUser(ctx, user._id),
+    ctx.db
+      .query("queueItems")
+      .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", user._id))
+      .collect(),
+    ctx.db
+      .query("queueActivities")
+      .withIndex("by_owner_created", (q) => q.eq("ownerUserId", user._id))
+      .collect(),
+  ]);
   const householdIds = memberships.map((membership) => membership.householdId);
   const roleByHousehold = new Map(
     memberships.map((membership) => [membership.householdId, membership.role])
@@ -282,12 +292,7 @@ async function buildAccountExportPackage(
   ).filter((household): household is Doc<"households"> => Boolean(household));
   const householdData = await Promise.all(
     households.map((household) =>
-      exportHouseholdData(
-        ctx,
-        household,
-        roleByHousehold.get(household._id)!,
-        user._id,
-      )
+      exportHouseholdData(ctx, household, roleByHousehold.get(household._id)!)
     )
   );
 
@@ -301,8 +306,6 @@ async function buildAccountExportPackage(
       acc.exportJobs.push(...entry.exportJobs);
       acc.apiKeys.push(...entry.apiKeys);
       acc.shareLinks.push(...entry.shareLinks);
-      acc.queueItems.push(...entry.queueItems);
-      acc.queueActivities.push(...entry.queueActivities);
       return acc;
     },
     {
@@ -314,8 +317,6 @@ async function buildAccountExportPackage(
       exportJobs: [] as unknown[],
       apiKeys: [] as unknown[],
       shareLinks: [] as unknown[],
-      queueItems: [] as unknown[],
-      queueActivities: [] as unknown[],
     }
   );
 
@@ -342,6 +343,14 @@ async function buildAccountExportPackage(
     })),
     households: householdData.map((entry) => entry.household),
     ...flattened,
+    queueItems: ownedQueueItems
+      .filter((item) => queueRecordBelongsToAccountExport(item, user._id))
+      .map(exportQueueItem),
+    queueActivities: ownedQueueActivities
+      .filter((activity) =>
+        queueRecordBelongsToAccountExport(activity, user._id),
+      )
+      .map(exportQueueActivity),
   };
 }
 
@@ -349,7 +358,6 @@ async function exportHouseholdData(
   ctx: MutationCtx,
   household: Doc<"households">,
   role: Doc<"householdMemberships">["role"],
-  accountUserId: Id<"users">,
 ) {
   const [
     moves,
@@ -360,8 +368,6 @@ async function exportHouseholdData(
     exportJobs,
     apiKeys,
     shareLinks,
-    queueItems,
-    queueActivities,
   ] = await Promise.all([
     ctx.db
       .query("moves")
@@ -403,26 +409,8 @@ async function exportHouseholdData(
         q.eq("householdId", household._id)
       )
       .collect(),
-    ctx.db
-      .query("queueItems")
-      .withIndex("by_owner_updated", (q) =>
-        q.eq("ownerUserId", accountUserId),
-      )
-      .collect(),
-    ctx.db
-      .query("queueActivities")
-      .withIndex("by_owner_created", (q) =>
-        q.eq("ownerUserId", accountUserId),
-      )
-      .collect(),
   ]);
   const visibility = visibilityForHouseholdRole(role);
-  const accountQueueItems = queueItems.filter((item) =>
-    queueRecordBelongsToAccountExport(item, accountUserId, household._id),
-  );
-  const accountQueueActivities = queueActivities.filter((activity) =>
-    queueRecordBelongsToAccountExport(activity, accountUserId, household._id),
-  );
 
   return {
     household: {
@@ -555,51 +543,57 @@ async function exportHouseholdData(
       createdAt: link.createdAt,
       updatedAt: link.updatedAt,
     })),
-    queueItems: accountQueueItems.map((item) => ({
-      id: item._id,
-      moveId: item.moveId,
-      ownerUserId: item.ownerUserId,
-      directive: item.directive,
-      summary: item.summary,
-      state: item.state,
-      priority: item.priority,
-      contextKind: item.contextKind,
-      contextRefId: item.contextRefId,
-      contextLabel: item.contextLabel,
-      domainKind: item.domainKind,
-      domainRefType: item.domainRefType,
-      domainRefId: item.domainRefId,
-      requiredAction: item.requiredAction,
-      nextStep: item.nextStep,
-      waitingReason: item.waitingReason,
-      latestHumanResponse: item.latestHumanResponse,
-      resultSummary: item.resultSummary,
-      resultRefs: item.resultRefs,
-      terminalReason: item.terminalReason,
-      failureCode: item.failureCode,
-      failureMessage: item.failureMessage,
-      attemptCount: item.attemptCount,
-      maxAttempts: item.maxAttempts,
-      version: item.version,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      completedAt: item.completedAt,
-    })),
-    queueActivities: accountQueueActivities.map((activity) => ({
-      id: activity._id,
-      queueItemId: activity.queueItemId,
-      moveId: activity.moveId,
-      type: activity.type,
-      actorType: activity.actorType,
-      actorUserId: activity.actorUserId,
-      actorLabel: activity.actorLabel,
-      fromState: activity.fromState,
-      toState: activity.toState,
-      message: activity.message,
-      failureCode: activity.failureCode,
-      resultRefCount: activity.resultRefCount,
-      createdAt: activity.createdAt,
-    })),
+  };
+}
+
+function exportQueueItem(item: Doc<"queueItems">) {
+  return {
+    id: item._id,
+    moveId: item.moveId,
+    ownerUserId: item.ownerUserId,
+    directive: item.directive,
+    summary: item.summary,
+    state: item.state,
+    priority: item.priority,
+    contextKind: item.contextKind,
+    contextRefId: item.contextRefId,
+    contextLabel: item.contextLabel,
+    domainKind: item.domainKind,
+    domainRefType: item.domainRefType,
+    domainRefId: item.domainRefId,
+    requiredAction: item.requiredAction,
+    nextStep: item.nextStep,
+    waitingReason: item.waitingReason,
+    latestHumanResponse: item.latestHumanResponse,
+    resultSummary: item.resultSummary,
+    resultRefs: item.resultRefs,
+    terminalReason: item.terminalReason,
+    failureCode: item.failureCode,
+    failureMessage: item.failureMessage,
+    attemptCount: item.attemptCount,
+    maxAttempts: item.maxAttempts,
+    version: item.version,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    completedAt: item.completedAt,
+  };
+}
+
+function exportQueueActivity(activity: Doc<"queueActivities">) {
+  return {
+    id: activity._id,
+    queueItemId: activity.queueItemId,
+    moveId: activity.moveId,
+    type: activity.type,
+    actorType: activity.actorType,
+    actorUserId: activity.actorUserId,
+    actorLabel: activity.actorLabel,
+    fromState: activity.fromState,
+    toState: activity.toState,
+    message: activity.message,
+    failureCode: activity.failureCode,
+    resultRefCount: activity.resultRefCount,
+    createdAt: activity.createdAt,
   };
 }
 

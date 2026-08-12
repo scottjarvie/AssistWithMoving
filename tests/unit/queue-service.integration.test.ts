@@ -8,6 +8,7 @@ import {
   createQueueItem,
   provideQueueInput,
   reportQueueFailure,
+  releaseQueueItem,
   requestQueueInput,
   shapeQueueItem,
   type QueueAccessActor,
@@ -303,6 +304,103 @@ describe("Queue service integration", () => {
     expect(
       (db.tables.get("queueActivities") ?? []).map((activity) => activity.type),
     ).toEqual(["created", "claimed", "released", "claimed"]);
+  });
+
+  it("binds an API-key claim to the exact key instead of its creator account", async () => {
+    const db = new FakeDb();
+    const ctx = { db } as unknown as MutationCtx;
+    const householdId = "household" as Id<"households">;
+    const moveId = "move" as Id<"moves">;
+    const userId = "user" as Id<"users">;
+    const human: QueueAccessActor = {
+      userId,
+      actorType: "user",
+      isManager: false,
+      delegatedOwnerIds: [],
+    };
+    const claimant: QueueAccessActor = {
+      ...human,
+      actorType: "apiKey",
+      apiKeyId: "key_1" as Id<"apiKeys">,
+    };
+    const siblingKey: QueueAccessActor = {
+      ...claimant,
+      apiKeyId: "key_2" as Id<"apiKeys">,
+    };
+    const item = await createQueueItem(ctx, human, {
+      householdId,
+      moveId,
+      directive: "Verify the inventory exception.",
+    });
+    const claimed = await claimQueueItem(ctx, claimant, {
+      householdId,
+      moveId,
+      queueItemId: item._id,
+      nextStep: "Read the exception evidence.",
+      expectedVersion: 1,
+      idempotencyKey: "claim-key-1",
+    });
+    await expect(
+      completeQueueItem(ctx, siblingKey, {
+        householdId,
+        moveId,
+        queueItemId: item._id,
+        resultSummary: "Sibling key must not be able to submit this result.",
+        expectedVersion: claimed.version,
+        idempotencyKey: "complete-key-2",
+      }),
+    ).rejects.toThrow(/claimed by another actor/i);
+  });
+
+  it("rejects mutations after either the claim lease or handoff expires", async () => {
+    const db = new FakeDb();
+    const ctx = { db } as unknown as MutationCtx;
+    const householdId = "household" as Id<"households">;
+    const moveId = "move" as Id<"moves">;
+    const actor: QueueAccessActor = {
+      userId: "user" as Id<"users">,
+      actorType: "agent",
+      isManager: false,
+      delegatedOwnerIds: [],
+    };
+    const item = await createQueueItem(ctx, { ...actor, actorType: "user" }, {
+      householdId,
+      moveId,
+      directive: "Check the mover certificate.",
+    });
+    const claimed = await claimQueueItem(ctx, actor, {
+      householdId,
+      moveId,
+      queueItemId: item._id,
+      nextStep: "Open the certificate.",
+      expectedVersion: 1,
+      idempotencyKey: "claim",
+    });
+    await db.patch(item._id, { claimExpiresAt: Date.now() - 1 });
+    await expect(
+      releaseQueueItem(ctx, actor, {
+        householdId,
+        moveId,
+        queueItemId: item._id,
+        reason: "Late release",
+        expectedVersion: claimed.version,
+        idempotencyKey: "late-release",
+      }),
+    ).rejects.toThrow(/claim lease has expired/i);
+    await db.patch(item._id, {
+      claimExpiresAt: Date.now() + 60_000,
+      expiresAt: Date.now() - 1,
+    });
+    await expect(
+      completeQueueItem(ctx, actor, {
+        householdId,
+        moveId,
+        queueItemId: item._id,
+        resultSummary: "Late completion",
+        expectedVersion: claimed.version,
+        idempotencyKey: "late-complete",
+      }),
+    ).rejects.toThrow(/handoff has expired/i);
   });
 
   it("rejects result references from another move", async () => {

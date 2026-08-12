@@ -242,7 +242,7 @@ POST /api/v1/moves/{moveId}/queue/{queueItemId}/failure
 ```
 
 List accepts `state`, `ownerUserId`, `limit` (maximum 100), and the returned
-timestamp cursor as `before`. API-key reads default to the key creator's own
+opaque `cursor`. API-key reads default to the key creator's own
 Queue so authorization filtering cannot create incomplete pages; the response
 lists `runnableOwnerIds` and an explicitly delegated owner can be selected.
 A human manager's in-product recovery authority is never inherited by an API

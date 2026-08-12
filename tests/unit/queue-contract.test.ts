@@ -8,6 +8,7 @@ import {
   effectiveQueueState,
   ingestionStatusToQueueState,
   normalizeQueueLimit,
+  queueItemMatchesEffectiveState,
   queueFailureTransition,
   queueStateInvariantError,
   queueStateLabels,
@@ -88,6 +89,20 @@ describe("canonical Queue behavior contract", () => {
         1000,
       ),
     ).toBe("working");
+    expect(
+      queueItemMatchesEffectiveState(
+        { state: "working", claimExpiresAt: 999 },
+        "waitingForAi",
+        1000,
+      ),
+    ).toBe(true);
+    expect(
+      queueItemMatchesEffectiveState(
+        { state: "working", claimExpiresAt: 999 },
+        "working",
+        1000,
+      ),
+    ).toBe(false);
   });
 
   it("maps every legacy capture state without changing stored domain truth", () => {
@@ -171,5 +186,20 @@ describe("canonical Queue behavior contract", () => {
       const source = readFileSync(sourcePath, "utf8");
       expect(source).toContain("isManager: queueManagerRecoveryAllowed({");
     }
+  });
+
+  it("filters list pages by effective state after indexed retrieval", () => {
+    for (const sourcePath of [
+      "convex/queue.ts",
+      "convex/mcpToolsCanonicalQueue.ts",
+      "convex/restApi.ts",
+    ]) {
+      const source = readFileSync(sourcePath, "utf8");
+      expect(source).toContain("queueItemMatchesEffectiveState(");
+      expect(source).not.toContain('.eq("state", args.state');
+    }
+    const restSource = readFileSync("convex/restApi.ts", "utf8");
+    expect(restSource).not.toContain("args.query.before");
+    expect(restSource).toContain(".paginate({ cursor, numItems: limit })");
   });
 });

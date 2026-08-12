@@ -103,6 +103,7 @@ import { canUsePhotoDerivativeForAi } from "./lib/photoVisibility";
 import { suggestAssignmentForBox } from "./lib/planningSuggestions";
 import { parseTextIntakeSuggestions } from "./lib/textIntakeParser";
 import {
+  queueItemMatchesEffectiveState,
   queueStates,
   type QueueState,
 } from "./lib/queue";
@@ -839,50 +840,26 @@ async function routeQueue(
         message: "You cannot view this Queue owner's items.",
       });
     }
-    const before = Number(args.query.before || Date.now() + 1);
-    let rows: Doc<"queueItems">[];
-    if (ownerUserId && state) {
-      rows = await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_owner_state_updated", (q) =>
-          q
-            .eq("moveId", moveId)
-            .eq("ownerUserId", ownerUserId)
-            .eq("state", state)
-            .lt("updatedAt", before),
-        )
-        .order("desc")
-        .take(limit + 1);
-    } else if (ownerUserId) {
-      rows = await ctx.db
+    const cursor = args.query.cursor || null;
+    const page = ownerUserId
+      ? await ctx.db
         .query("queueItems")
         .withIndex("by_move_owner_updated", (q) =>
           q
             .eq("moveId", moveId)
-            .eq("ownerUserId", ownerUserId)
-            .lt("updatedAt", before),
+            .eq("ownerUserId", ownerUserId),
         )
         .order("desc")
-        .take(limit + 1);
-    } else if (state) {
-      rows = await ctx.db
+        .paginate({ cursor, numItems: limit })
+      : await ctx.db
         .query("queueItems")
-        .withIndex("by_move_state_updated", (q) =>
-          q.eq("moveId", moveId).eq("state", state).lt("updatedAt", before),
-        )
+        .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
         .order("desc")
-        .take(limit + 1);
-    } else {
-      rows = await ctx.db
-        .query("queueItems")
-        .withIndex("by_move_updated", (q) =>
-          q.eq("moveId", moveId).lt("updatedAt", before),
-        )
-        .order("desc")
-        .take(limit + 1);
-    }
-    const visible = rows.filter((item) => {
+        .paginate({ cursor, numItems: limit });
+    const now = Date.now();
+    const visible = page.page.filter((item) => {
       if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
+      if (!queueItemMatchesEffectiveState(item, state, now)) return false;
       return canViewQueueEntry({
         actorUserId: actor.userId,
         ownerUserId: item.ownerUserId,
@@ -890,15 +867,11 @@ async function routeQueue(
         delegatedOwnerIds: actor.delegatedOwnerIds,
       });
     });
-    const page = visible.slice(0, limit);
     return restOk({
-      data: page.map((item) => shapeQueueItem(item)),
+      data: visible.map((item) => shapeQueueItem(item, now)),
       page: {
         limit,
-        nextCursor:
-          visible.length > limit && page.length
-            ? String(page[page.length - 1]!.updatedAt)
-            : null,
+        nextCursor: page.isDone ? null : page.continueCursor,
       },
       runnableOwnerIds,
       defaultOwnerUserId: ownerUserId,

@@ -39,8 +39,8 @@ export function accountExportFilename(now: number) {
 
 /**
  * Queue is personal continuity, not household-wide move data. An account
- * export includes only Queue records owned by the exporting person and still
- * verifies the household boundary as a defense-in-depth check.
+ * export includes every Queue record owned by the exporting person, including
+ * records reached through a move-only grant rather than household membership.
  */
 export function queueRecordBelongsToAccountExport(
   record: {
@@ -48,12 +48,8 @@ export function queueRecordBelongsToAccountExport(
     householdId: Id<"households">;
   },
   accountUserId: Id<"users">,
-  householdId: Id<"households">,
 ): boolean {
-  return (
-    record.ownerUserId === accountUserId &&
-    record.householdId === householdId
-  );
+  return record.ownerUserId === accountUserId;
 }
 
 export function anonymizedUserPatch(now: number) {

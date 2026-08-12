@@ -24,10 +24,11 @@ real contract to Claude Design without inventing the final UI.
 The design-independent implementation exists on protected
 `codex/queue-foundation` PR #175. A read-only contract audit found household-wide
 Queue export and agent inheritance of human manager recovery; this first
-remediation tranche isolates exports, contains the bypass, and holds canonical
-OAuth registration until distinct chosen-AI grants exist. Provider, marked-data,
-and independent-review proof remain under Card `MOV-0026`; final UI design is
-intentionally separate.
+remediation work isolates exports, contains the bypass, requires live key
+authority, binds claims to the exact key and lease, aligns effective-state
+pagination, and holds canonical OAuth registration until distinct chosen-AI
+grants exist. Provider, marked-data, and refreshed independent-review proof
+remain under Card `MOV-0026`; final UI design is intentionally separate.
 
 ## Included scope
 
@@ -43,7 +44,7 @@ this Work Order.
 
 ## Execution state
 
-Active. Audit/reconciliation, first-tranche authority repairs, refreshed local
+Active. Audit/reconciliation, authority/lifecycle repairs, refreshed local
 and CI proof, and the protected PR are complete for this tranche. Provider
 deployment, marked-account proof, and independent audit remain. The shared dev Convex
 deployment has unrelated active performance-branch synthetic schema state;
@@ -104,9 +105,9 @@ gate; no production data or broad access decision is requested.
   rights workflows inventoried in the Queue design handoff.
 - Live signed-out `/queue` 404 and `/app/queue` Clerk redirect verified on
   2026-08-09; authenticated/private behavior remains unverified.
-- Targeted Queue/REST/API-key/role/export/MCP tests pass locally, including 49
-  focused export/authority/capability regressions and direct API-client transport proof.
-- The complete repository suite passes 1,006 tests. Lint, typecheck, production build, contract
+- Targeted Queue/REST/API-key/role/export/MCP tests pass locally, including
+  export/authority/capability regressions and direct API-client transport proof.
+- The complete repository suite passes 1,012 tests. Lint, typecheck, production build, contract
   drift, philosophy synchronization, and tracker verification pass locally.
 - A full-suite run exposed missing Queue move-purge coverage; Queue activity and
   items were added to the verified purge cascade, and the full suite then passed.
@@ -117,6 +118,9 @@ gate; no production data or broad access decision is requested.
   expired-lease history, strict result/retry bounds, active owner assignment,
   personal-only Queue export, agent manager-bypass containment, and an honest
   hold on canonical OAuth Queue registration.
+- Independent read-only review found and locally repaired inactive key creators,
+  late lease/handoff mutation, sibling-key claim takeover, effective-state
+  filtering drift, timestamp-cursor ties, and move-only export omission.
 - Ready protected PR #175 contains the focused package. After concurrent `main`
   movement, the branch was rebased onto `e59e31f`, the unrelated MOV-0023 trust
   card was preserved, the Queue agent card moved to MOV-0027, and all local
@@ -124,8 +128,8 @@ gate; no production data or broad access decision is requested.
 
 ## Independent audit
 
-Follow-up needed. A separate reviewer found export isolation and agent authority
-gaps; after this remediation tranche, an independent reviewer must re-evaluate
+Follow-up needed. A separate reviewer found six additional authority, lifecycle,
+pagination, and export gaps; after the repairs, an independent reviewer must re-evaluate
 the final PR/deployment against Core §4 Queue semantics, §5 agent boundaries,
 §7 history, §8 privacy, §14 bounded queries, §16 publication controls, and
 Moving's Project Philosophy.
@@ -144,3 +148,5 @@ Moving's Project Philosophy.
   the concurrent Core/trust publication before protected CI and review.
 - 2026-08-12 · Codex — recorded audit follow-up and implemented the smallest
   export/authority/OAuth truthfulness remediation tranche without final UI scope.
+- 2026-08-12 · Codex — completed six independently identified authority,
+  lifecycle, pagination, and export repairs with local regression proof.

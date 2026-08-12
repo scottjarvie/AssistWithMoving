@@ -159,6 +159,14 @@ export function effectiveQueueState(
   return queueClaimIsExpired(item, now) ? "waitingForAi" : item.state;
 }
 
+export function queueItemMatchesEffectiveState(
+  item: { state: QueueState; claimExpiresAt?: number },
+  requestedState: QueueState | undefined,
+  now: number,
+): boolean {
+  return requestedState === undefined || effectiveQueueState(item, now) === requestedState;
+}
+
 export type QueueStateInvariantInput = {
   state: QueueState;
   requiredAction?: string;

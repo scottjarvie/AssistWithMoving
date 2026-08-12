@@ -10,6 +10,7 @@ import {
 } from "./_generated/server";
 import {
   normalizeQueueLimit,
+  queueItemMatchesEffectiveState,
   queueResultRefValidator,
   queueStateLabels,
   queueStateValidator,
@@ -106,18 +107,7 @@ export const listQueueItems = internalQuery({
       throw new ConvexError("You cannot view this Queue owner's items.");
     }
     const limit = normalizeQueueLimit(args.limit);
-    const page = ownerUserId && args.state
-      ? await ctx.db
-          .query("queueItems")
-          .withIndex("by_move_owner_state_updated", (q) =>
-            q
-              .eq("moveId", args.moveId)
-              .eq("ownerUserId", ownerUserId)
-              .eq("state", args.state!),
-          )
-          .order("desc")
-          .paginate({ cursor: args.cursor ?? null, numItems: limit })
-      : ownerUserId
+    const page = ownerUserId
         ? await ctx.db
             .query("queueItems")
             .withIndex("by_move_owner_updated", (q) =>
@@ -125,15 +115,7 @@ export const listQueueItems = internalQuery({
             )
             .order("desc")
             .paginate({ cursor: args.cursor ?? null, numItems: limit })
-      : args.state
-        ? await ctx.db
-            .query("queueItems")
-            .withIndex("by_move_state_updated", (q) =>
-              q.eq("moveId", args.moveId).eq("state", args.state!),
-            )
-            .order("desc")
-            .paginate({ cursor: args.cursor ?? null, numItems: limit })
-        : await ctx.db
+      : await ctx.db
             .query("queueItems")
             .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
             .order("desc")
@@ -143,6 +125,7 @@ export const listQueueItems = internalQuery({
       items: page.page
         .filter((item) => {
           if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
+          if (!queueItemMatchesEffectiveState(item, args.state, now)) return false;
           return canViewQueueEntry({
             actorUserId: actor.userId,
             ownerUserId: item.ownerUserId,

@@ -1738,7 +1738,7 @@ export function registerTools(target, apiConfig, options = {}) {
       state: queueStateSchema.optional(),
       ownerUserId: z.string().optional(),
       limit: z.number().int().min(1).max(100).optional(),
-      before: z.number().optional(),
+      cursor: z.string().optional(),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listQueueItems(apiConfig, input),
