@@ -4,19 +4,15 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 
 import { AddToQueueButton } from "@/components/add-to-queue-button";
-import { ConnectAgentOnboarding } from "@/components/connect-agent-onboarding";
-import { IngestionQueueList } from "@/components/ingestion-queue-list";
 import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { QueueExperience } from "@/components/queue-experience-data";
 import { Button } from "@/components/ui/button";
 import { moveWorkspacePath } from "@/lib/move-links";
 
-// The move's queue tab (MOVE-311): everything the user's AI agent works on,
-// reached from the move operations nav (it replaced the confusing "AI Review"
-// tab). Shows queued / agent-working / processed / needs-input captures plus a
-// move-scoped "Add to Queue" that targets THIS move (MOVE-312). The old
-// AI-suggestion approve/reject review is demoted to a secondary link.
+// Move-scoped Queue: the same durable handoff desk as the global Queue route,
+// with the selected move's operational navigation around it.
 export function QueueWorkspacePage() {
   const { householdId, moveId } = useMoveWorkspace();
 
@@ -24,7 +20,7 @@ export function QueueWorkspacePage() {
     <div className="space-y-6 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title="Queue"
-        description="Everything you captured for your AI agent lives here. Drop in photos, voice notes, and directions — then let your connected agent turn them into reviewed inventory."
+        description="Leave durable route notes for your chosen AI, answer the exact questions that block it, and keep results attached to this move. Saving a handoff does not start an autonomous runner."
       />
       <MoveOperationsNav />
 
@@ -40,8 +36,13 @@ export function QueueWorkspacePage() {
         ) : null}
       </div>
 
-      <ConnectAgentOnboarding householdId={householdId} />
-      <IngestionQueueList householdId={householdId} moveId={moveId} />
+      {householdId && moveId ? (
+        <QueueExperience
+          key={`${householdId}:${moveId}`}
+          householdId={householdId}
+          moveId={moveId}
+        />
+      ) : null}
     </div>
   );
 }

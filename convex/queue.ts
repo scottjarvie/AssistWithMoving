@@ -341,6 +341,13 @@ export const listCaptureAdapter = query({
               state === "working"
                 ? "Process this capture into durable move records."
                 : null,
+            claim:
+              state === "working"
+                ? {
+                    label: entry.claimedByAgentLabel ?? null,
+                    expiresAt: entry.claimExpiresAt ?? null,
+                  }
+                : null,
             resultSummary: entry.agentSummary ?? null,
             resultRefs: entry.resultRefs ?? [],
             createdAt: entry.createdAt,

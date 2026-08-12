@@ -3,9 +3,8 @@
 import Link from "next/link";
 
 import { AddToQueueButton } from "@/components/add-to-queue-button";
-import { ConnectAgentOnboarding } from "@/components/connect-agent-onboarding";
-import { IngestionQueueList } from "@/components/ingestion-queue-list";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
+import { QueueExperience } from "@/components/queue-experience-data";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,10 +15,9 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Top-level Queue surface (the fourth global destination). Shows the active
-// move's agent queue with a To-do / Done toggle, an inline Add to Queue action,
-// and the connect-your-agent push. Mirrors the Movable Units / Items global
-// pages: scoped to the selected move, with a friendly prompt when none is set.
+// Top-level Queue surface: durable person-to-AI handoffs for the selected move.
+// Captures coexist through the compatibility adapter, but every person-facing
+// status uses the canonical four-state Queue language.
 export function QueueHome() {
   const { householdId, moveId, selectedMove, loadingMoves } =
     useMoveWorkspace();
@@ -39,7 +37,7 @@ export function QueueHome() {
           <CardHeader>
             <CardTitle className="text-base">No active move</CardTitle>
             <CardDescription>
-              Select or create a move to see its capture queue.
+              Select or create a move to leave and follow AI handoffs.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -53,20 +51,24 @@ export function QueueHome() {
   }
 
   return (
-    <div className="space-y-4 p-3 sm:p-6">
+    <div className="space-y-5 p-3 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
             Workspace
           </p>
           <h1 className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl">
-            Queue
+            Queue for this move
             {selectedMove ? (
               <span className="ml-2 text-sm font-normal text-muted-foreground">
                 {selectedMove.title}
               </span>
             ) : null}
           </h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Leave durable route notes for your chosen AI, see what is waiting,
+            and keep every answer and result with the move.
+          </p>
         </div>
         {/* On mobile the bottom-bar "+ Add" (MobileCaptureAction) is the single
             Add-to-Queue entry point, so hide this in-page button there to avoid
@@ -76,12 +78,22 @@ export function QueueHome() {
         </div>
       </header>
 
-      <ConnectAgentOnboarding householdId={householdId} />
-      <IngestionQueueList
-        householdId={householdId}
-        moveId={moveId}
-        view="todo-done"
-      />
+      {householdId ? (
+        <QueueExperience
+          key={`${householdId}:${moveId}`}
+          householdId={householdId}
+          moveId={moveId}
+        />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Queue access is still loading</CardTitle>
+            <CardDescription>
+              The move is selected, but its household access has not resolved yet.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
     </div>
   );
 }
