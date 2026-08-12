@@ -21,16 +21,17 @@ real contract to Claude Design without inventing the final UI.
 
 ## Current truth
 
-The design-independent implementation exists on protected
-`codex/queue-foundation` PR #175. A read-only contract audit found household-wide
+The design-independent implementation shipped through protected PR #175 at
+merge `3566dc8`. A read-only contract audit found household-wide
 Queue export and agent inheritance of human manager recovery; this first
 remediation work isolates exports, contains the bypass, requires live key
 authority, binds claims to the exact key and lease, aligns effective-state
 pagination, and holds canonical OAuth registration until distinct chosen-AI
-grants exist. Two independent review passes also drove claim-maintenance,
-human-input continuity, legacy-response compatibility, terminal-expiry, and
-typed-reference repairs. Provider, marked-data, and final rereview proof
-remain under Card `MOV-0026`; final UI design is intentionally separate.
+grants exist. Three completed independent review passes drove fourteen repairs.
+Exact-SHA main CI, Vercel, production Convex, public REST/OpenAPI, signed-out,
+and MCP discovery proof pass. Authenticated marked-data/revocation/cleanup proof
+and a concluded independent post-deploy audit remain under Card `MOV-0026`;
+final UI design is intentionally separate.
 
 ## Included scope
 
@@ -46,11 +47,11 @@ this Work Order.
 
 ## Execution state
 
-Active. Audit/reconciliation, authority/lifecycle repairs, refreshed local
-and CI proof, and the protected PR are complete for this tranche. Provider
-deployment, marked-account proof, and independent audit remain. The shared dev Convex
-deployment has unrelated active performance-branch synthetic schema state;
-Card `MOV-0026` records that limitation without turning it into a Scott gate.
+Active. Audit/reconciliation, authority/lifecycle repairs, protected merge,
+main CI, production Convex/Vercel deployment, and public discovery/refusal proof
+are complete for this tranche. Marked authenticated/API-key lifecycle proof and
+a concluded post-deploy independent audit remain. Card `MOV-0026` records the
+test-identity and cleanup limitation without turning it into a software rollback.
 
 ## Sequence
 
@@ -133,15 +134,26 @@ gate; no production data or broad access decision is requested.
   movement, the branch was rebased onto `e59e31f`, the unrelated MOV-0023 trust
   card was preserved, the Queue agent card moved to MOV-0027, and all local
   release checks passed again.
+- PR #175 merged without bypass at `3566dc8`. Main Actions run `31621559982`
+  passed Required CI and the full 1,016-test suite on that exact SHA.
+- The exact-SHA Vercel production build finished Ready after deploying Convex
+  schema/functions and adding Queue indexes with no index deletions.
+- Live OpenAPI advertises all seven Queue routes and only the four contract
+  states. Signed-out `/app/queue` redirects to Clerk, `/queue` remains an honest
+  404, unauthenticated REST returns the documented bearer-key 401, stdio
+  discovery passed 20/20, and OAuth discovery passed 10/10 without mutation.
+- A marked authenticated browser probe stopped before data access when the
+  configured Clerk testing ticket was invalid for production. No real session,
+  production record, provider policy, or cleanup setting was used as a workaround.
 
 ## Independent audit
 
-Follow-up needed. Separate reviews found fourteen authority, lifecycle,
+Follow-up needed. Three completed reviews found fourteen authority, lifecycle,
 pagination, compatibility, reference, provenance, contract-publication, and
-export gaps; after the repairs, an independent reviewer must re-evaluate
-the final PR/deployment against Core §4 Queue semantics, §5 agent boundaries,
-§7 history, §8 privacy, §14 bounded queries, §16 publication controls, and
-Moving's Project Philosophy.
+export gaps; all fourteen were repaired. A fourth exact-head reviewer inspected
+the final diff and passed 109 focused tests but was timeboxed after issuing no
+finding or conclusion. An independent reviewer must still conclude a post-deploy
+audit against Core §4, §5, §7, §8, §14, §16, and Moving's Project Philosophy.
 
 ## History
 
@@ -163,3 +175,6 @@ Moving's Project Philosophy.
   review and reran the full local release gates before final rereview.
 - 2026-08-12 · Codex — repaired all three findings from the third independent
   review and retained the protected merge gate pending a clean final review.
+- 2026-08-12 · Codex — timeboxed the silent fourth review, merged through the
+  protected path, proved exact-SHA main CI/Convex/Vercel/public discovery, and
+  recorded the production test-identity/cleanup boundary without using real data.
