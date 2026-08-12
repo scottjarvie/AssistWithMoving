@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -207,8 +208,7 @@ export const listForMove = query({
     state: v.optional(queueStateValidator),
     ownerUserId: v.optional(v.id("users")),
     search: v.optional(v.string()),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     const actor = await resolveWebQueueActor(
@@ -227,7 +227,7 @@ export const listForMove = query({
     if (ownerUserId && !runnableOwnerIds.includes(ownerUserId)) {
       throw new ConvexError("You cannot view this Queue owner's items.");
     }
-    const limit = normalizeQueueLimit(args.limit);
+    const limit = normalizeQueueLimit(args.paginationOpts.numItems);
     const search = args.search?.trim();
     let page;
     if (search) {
@@ -240,7 +240,7 @@ export const listForMove = query({
           }
           return searchQuery;
         })
-        .paginate({ cursor: args.cursor ?? null, numItems: limit });
+        .paginate({ cursor: args.paginationOpts.cursor, numItems: limit });
     } else if (ownerUserId) {
       page = await ctx.db
         .query("queueItems")
@@ -248,17 +248,17 @@ export const listForMove = query({
           q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
         )
         .order("desc")
-        .paginate({ cursor: args.cursor ?? null, numItems: limit });
+        .paginate({ cursor: args.paginationOpts.cursor, numItems: limit });
     } else {
       page = await ctx.db
         .query("queueItems")
         .withIndex("by_move_updated", (q) => q.eq("moveId", args.moveId))
         .order("desc")
-        .paginate({ cursor: args.cursor ?? null, numItems: limit });
+        .paginate({ cursor: args.paginationOpts.cursor, numItems: limit });
     }
     const now = Date.now();
     return {
-      items: page.page
+      page: page.page
         .filter((item) => {
           if (ownerUserId && item.ownerUserId !== ownerUserId) return false;
           if (!queueItemMatchesEffectiveState(item, args.state, now)) return false;
@@ -270,11 +270,8 @@ export const listForMove = query({
           });
         })
         .map((item) => shapeQueueItem(item, now)),
-      cursor: page.continueCursor,
+      continueCursor: page.continueCursor,
       isDone: page.isDone,
-      stateLabels: queueStateLabels,
-      runnableOwnerIds,
-      defaultOwnerUserId: ownerUserId,
     };
   },
 });
@@ -283,8 +280,8 @@ export const listCaptureAdapter = query({
   args: {
     householdId: v.id("households"),
     moveId: v.id("moves"),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.string()),
+    ownerUserId: v.optional(v.id("users")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     const actor = await resolveWebQueueActor(
@@ -293,17 +290,41 @@ export const listCaptureAdapter = query({
       args.moveId,
       "queue:read",
     );
-    const page = await ctx.db
-      .query("ingestionQueueEntries")
-      .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
-      .order("desc")
-      .paginate({
-        cursor: args.cursor ?? null,
-        numItems: normalizeQueueLimit(args.limit),
-      });
+    const ownerUserId = args.ownerUserId ?? (actor.isManager ? undefined : actor.userId);
+    if (ownerUserId) {
+      const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
+        ctx,
+        args.householdId,
+        args.moveId,
+        actor,
+      );
+      if (!runnableOwnerIds.includes(ownerUserId)) {
+        throw new ConvexError("You cannot view this Queue owner's captures.");
+      }
+    }
+    const limit = normalizeQueueLimit(args.paginationOpts.numItems);
+    const page = ownerUserId
+      ? await ctx.db
+          .query("ingestionQueueEntries")
+          .withIndex("by_move_owner_created", (q) =>
+            q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
+          )
+          .order("desc")
+          .paginate({
+            cursor: args.paginationOpts.cursor,
+            numItems: limit,
+          })
+      : await ctx.db
+          .query("ingestionQueueEntries")
+          .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
+          .order("desc")
+          .paginate({
+            cursor: args.paginationOpts.cursor,
+            numItems: limit,
+          });
     const now = Date.now();
     return {
-      items: page.page
+      page: page.page
         .filter((entry) =>
           canViewQueueEntry({
             actorUserId: actor.userId,
@@ -354,9 +375,8 @@ export const listCaptureAdapter = query({
             updatedAt: entry.updatedAt,
           };
         }),
-      cursor: page.continueCursor,
+      continueCursor: page.continueCursor,
       isDone: page.isDone,
-      migrationRequired: false,
     };
   },
 });

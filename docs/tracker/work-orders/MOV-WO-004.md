@@ -2,7 +2,7 @@
 id: MOV-WO-004
 title: Make Moving's Queue visible and usable
 execution: active
-audit: not-audited
+audit: follow-up-needed
 cards: MOV-0025
 created: 2026-08-12
 updated: 2026-08-12
@@ -106,8 +106,8 @@ production-authenticated mutation/revocation/cleanup proof.
   visible and no mutation was issued.
 - Shared development Convex push failed closed on the unrelated synthetic
   `nextItemCodeSeq` field; no data or deployed functions were overwritten.
-- Eight focused Queue UI/error component tests and 50 Queue foundation tests pass.
-- The complete repository suite passes 1,024 tests across 185 files.
+- Ten focused Queue UI/error component tests and 51 Queue foundation tests pass.
+- The complete repository suite passes 1,027 tests across 185 files.
 - Deterministic rendered phone (390 px) and desktop (1366 px) fixtures had zero
   axe violations and no horizontal overflow; the fixtures were removed before
   publication and never shipped.
@@ -117,8 +117,21 @@ production-authenticated mutation/revocation/cleanup proof.
 
 ## Independent audit
 
-Not yet audited. Independent review follows the complete local implementation
-and must keep unrelated product work out of this Work Order.
+The first independent review found four in-scope usability/correctness gaps,
+all repaired before merge:
+
+- the specialized capture workspace and its evidence/retry/delete actions are
+  reachable again alongside the canonical Queue;
+- capture-owner scope is applied by an indexed query before pagination;
+- canonical and capture pagination remain live with `usePaginatedQuery` rather
+  than freezing earlier pages; and
+- an open detail resolves from the latest item/version instead of a stale
+  object snapshot.
+
+Focused regression tests cover the restored workspace, indexed owner scope,
+reactive pagination contract, and live detail. A clean exact-head independent
+rereview remains required before merge, so the audit state is
+`follow-up-needed` rather than passed.
 
 ## History
 
@@ -128,3 +141,5 @@ and must keep unrelated product work out of this Work Order.
   preserved the incompatible shared-development lane, and began implementation.
 - 2026-08-12 · Scott via coordinator correction — kept the separate portfolio
   stateless-MCP philosophy direction out of this product Work Order and tracker.
+- 2026-08-12 · Codex — completed the first independent review, repaired all four
+  findings, and added focused regression proof before exact-head rereview.

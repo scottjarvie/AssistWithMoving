@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 
 import { api } from "../../convex/_generated/api";
@@ -19,7 +19,7 @@ type CaptureListResult = FunctionReturnType<typeof api.queue.listCaptureAdapter>
 type ActivityResult = FunctionReturnType<typeof api.queue.listActivity>;
 
 function mapCanonicalItem(
-  item: QueueListResult["items"][number],
+  item: QueueListResult["page"][number],
   ownerLabel: string | null,
 ): QueueDeskItem {
   return {
@@ -47,7 +47,7 @@ function mapCanonicalItem(
 }
 
 function mapCaptureItem(
-  item: CaptureListResult["items"][number],
+  item: CaptureListResult["page"][number],
   ownerLabel: string | null,
 ): QueueDeskItem {
   return {
@@ -95,10 +95,6 @@ export function QueueExperience({
   householdId: Id<"households">;
   moveId: Id<"moves">;
 }) {
-  const [handoffCursor, setHandoffCursor] = useState<string | undefined>();
-  const [captureCursor, setCaptureCursor] = useState<string | undefined>();
-  const [olderHandoffs, setOlderHandoffs] = useState<QueueDeskItem[]>([]);
-  const [olderCaptures, setOlderCaptures] = useState<QueueDeskItem[]>([]);
   const [selectedCanonicalId, setSelectedCanonicalId] = useState<string | null>(
     null,
   );
@@ -113,7 +109,7 @@ export function QueueExperience({
     ownerScope === "default"
       ? scopes?.canManage
         ? "all"
-        : currentUser?._id ?? "all"
+        : currentUser?._id ?? "loading"
       : ownerScope;
   const ownerLabels = new Map<string, string>([
     ...(currentUser ? [[currentUser._id, "My Queue"] as const] : []),
@@ -122,22 +118,25 @@ export function QueueExperience({
     ) ?? []),
   ]);
 
-  const handoffPage = useQuery(api.queue.listForMove, {
-    householdId,
-    moveId,
-    ownerUserId:
-      effectiveOwnerScope === "all"
-        ? undefined
-        : (effectiveOwnerScope as Id<"users">),
-    limit: 50,
-    cursor: handoffCursor,
-  });
-  const capturePage = useQuery(api.queue.listCaptureAdapter, {
-    householdId,
-    moveId,
-    limit: 50,
-    cursor: captureCursor,
-  });
+  const selectedOwnerUserId =
+    effectiveOwnerScope === "all" || effectiveOwnerScope === "loading"
+      ? undefined
+      : (effectiveOwnerScope as Id<"users">);
+  const paginationReady = effectiveOwnerScope !== "loading";
+  const handoffs = usePaginatedQuery(
+    api.queue.listForMove,
+    paginationReady
+      ? { householdId, moveId, ownerUserId: selectedOwnerUserId }
+      : "skip",
+    { initialNumItems: 50 },
+  );
+  const captures = usePaginatedQuery(
+    api.queue.listCaptureAdapter,
+    paginationReady
+      ? { householdId, moveId, ownerUserId: selectedOwnerUserId }
+      : "skip",
+    { initialNumItems: 50 },
+  );
   const stats = useQuery(api.households.summaryStats, { householdId }) as
     | { activeApiKeyCount: number }
     | undefined;
@@ -157,29 +156,22 @@ export function QueueExperience({
   const cancelQueueItem = useMutation(api.queue.cancel);
 
   const currentHandoffs =
-    handoffPage?.items.map((item) =>
+    handoffs.results.map((item) =>
       mapCanonicalItem(
         item,
         effectiveOwnerScope === "all"
           ? ownerLabels.get(item.ownerUserId) ?? "Move participant"
           : null,
       ),
-    ) ?? [];
-  const currentCaptures =
-    capturePage?.items
-      .filter(
-        (item) =>
-          effectiveOwnerScope === "all" ||
-          item.ownerUserId === effectiveOwnerScope,
-      )
-      .map((item) =>
-        mapCaptureItem(
-          item,
-          effectiveOwnerScope === "all"
-            ? ownerLabels.get(item.ownerUserId) ?? "Move participant"
-            : null,
-        ),
-      ) ?? [];
+    );
+  const currentCaptures = captures.results.map((item) =>
+    mapCaptureItem(
+      item,
+      effectiveOwnerScope === "all"
+        ? ownerLabels.get(item.ownerUserId) ?? "Move participant"
+        : null,
+    ),
+  );
   const ownerOptions = [
     { value: currentUser?._id ?? "mine", label: "My Queue" },
     ...(scopes?.delegatedOwners.map((owner) => ({
@@ -193,12 +185,7 @@ export function QueueExperience({
     (option, index, all) =>
       all.findIndex((candidate) => candidate.value === option.value) === index,
   );
-  const items = [
-    ...olderHandoffs,
-    ...currentHandoffs,
-    ...olderCaptures,
-    ...currentCaptures,
-  ]
+  const items = [...currentHandoffs, ...currentCaptures]
     .filter(
       (item, index, all) =>
         all.findIndex(
@@ -264,19 +251,14 @@ export function QueueExperience({
     <QueueDesk
       items={items}
       activeApiKeyCount={stats?.activeApiKeyCount ?? null}
-      loading={handoffPage === undefined || capturePage === undefined}
-      hasMoreHandoffs={handoffPage ? !handoffPage.isDone : false}
-      hasMoreCaptures={capturePage ? !capturePage.isDone : false}
-      onLoadMoreHandoffs={() => {
-        if (!handoffPage || handoffPage.isDone) return;
-        setOlderHandoffs((current) => [...current, ...currentHandoffs]);
-        setHandoffCursor(handoffPage.cursor);
-      }}
-      onLoadMoreCaptures={() => {
-        if (!capturePage || capturePage.isDone) return;
-        setOlderCaptures((current) => [...current, ...currentCaptures]);
-        setCaptureCursor(capturePage.cursor);
-      }}
+      loading={
+        handoffs.status === "LoadingFirstPage" ||
+        captures.status === "LoadingFirstPage"
+      }
+      hasMoreHandoffs={handoffs.status === "CanLoadMore"}
+      hasMoreCaptures={captures.status === "CanLoadMore"}
+      onLoadMoreHandoffs={() => handoffs.loadMore(50)}
+      onLoadMoreCaptures={() => captures.loadMore(50)}
       onCreateDirective={handleCreateDirective}
       onSelectItem={(item) =>
         setSelectedCanonicalId(item?.source === "handoff" ? item.id : null)
@@ -284,10 +266,6 @@ export function QueueExperience({
       ownerScope={effectiveOwnerScope === "all" ? "all" : effectiveOwnerScope}
       ownerOptions={ownerOptions}
       onOwnerScopeChange={(value) => {
-        setOlderHandoffs([]);
-        setOlderCaptures([]);
-        setHandoffCursor(undefined);
-        setCaptureCursor(undefined);
         setOwnerScope(value);
       }}
       activities={activityPage?.activities.map(mapActivity) ?? []}
@@ -296,6 +274,7 @@ export function QueueExperience({
       }
       onProvideInput={handleProvideInput}
       onCancel={handleCancel}
+      captureWorkspacePath={`/app/moves/${encodeURIComponent(moveId)}/capture`}
     />
   );
 }

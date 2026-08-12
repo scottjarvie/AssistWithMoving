@@ -293,6 +293,7 @@ function QueueDetailSheet({
   onProvideInput,
   onCancel,
   busy,
+  captureWorkspacePath,
   onClose,
 }: {
   item: QueueDeskItem | null;
@@ -303,6 +304,7 @@ function QueueDetailSheet({
   onProvideInput: () => void;
   onCancel: () => void;
   busy: boolean;
+  captureWorkspacePath: string | null;
   onClose: () => void;
 }) {
   if (!item) return null;
@@ -430,9 +432,16 @@ function QueueDetailSheet({
               <h3 className="font-semibold">Activity</h3>
             </div>
             {item.source === "capture" ? (
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                This capture is shown through the compatibility view. Its detailed evidence remains attached to the capture record.
-              </p>
+              <div className="mt-3 space-y-3">
+                <p className="text-sm leading-6 text-muted-foreground">
+                  This capture is shown through the compatibility view. Its detailed evidence and capture-specific actions remain attached to the capture record.
+                </p>
+                {captureWorkspacePath ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={captureWorkspacePath}>Open capture workspace</Link>
+                  </Button>
+                ) : null}
+              </div>
             ) : activitiesLoading ? (
               <div className="mt-3 space-y-2" aria-label="Loading activity">
                 <Skeleton className="h-16" />
@@ -496,6 +505,7 @@ export function QueueDesk({
   activitiesLoading,
   onProvideInput,
   onCancel,
+  captureWorkspacePath,
 }: {
   items: QueueDeskItem[];
   activeApiKeyCount: number | null;
@@ -513,10 +523,14 @@ export function QueueDesk({
   activitiesLoading: boolean;
   onProvideInput: (item: QueueDeskItem, response: string) => Promise<boolean>;
   onCancel: (item: QueueDeskItem) => Promise<boolean>;
+  captureWorkspacePath: string | null;
 }) {
   const [activeState, setActiveState] = useState<QueueState>("needsYou");
   const [directive, setDirective] = useState("");
-  const [selectedItem, setSelectedItem] = useState<QueueDeskItem | null>(null);
+  const [selectedItemKey, setSelectedItemKey] = useState<{
+    source: QueueDeskItem["source"];
+    id: string;
+  } | null>(null);
   const [response, setResponse] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -528,6 +542,12 @@ export function QueueDesk({
     [items],
   );
   const visibleItems = items.filter((item) => item.state === activeState);
+  const selectedItem = selectedItemKey
+    ? items.find(
+        (item) =>
+          item.source === selectedItemKey.source && item.id === selectedItemKey.id,
+      ) ?? null
+    : null;
 
   async function createDirective() {
     if (!directive.trim() || busy) return;
@@ -547,7 +567,7 @@ export function QueueDesk({
     setBusy(false);
     if (saved) {
       setResponse("");
-      setSelectedItem(null);
+      setSelectedItemKey(null);
       onSelectItem(null);
       setActiveState("waitingForAi");
     }
@@ -559,7 +579,7 @@ export function QueueDesk({
     const saved = await onCancel(selectedItem);
     setBusy(false);
     if (saved) {
-      setSelectedItem(null);
+      setSelectedItemKey(null);
       onSelectItem(null);
       setActiveState("done");
     }
@@ -673,7 +693,10 @@ export function QueueDesk({
                   item={item}
                   onOpen={(nextItem) => {
                     setResponse("");
-                    setSelectedItem(nextItem);
+                    setSelectedItemKey({
+                      source: nextItem.source,
+                      id: nextItem.id,
+                    });
                     onSelectItem(nextItem);
                   }}
                 />
@@ -711,9 +734,10 @@ export function QueueDesk({
         onProvideInput={provideInput}
         onCancel={cancel}
         busy={busy}
+        captureWorkspacePath={captureWorkspacePath}
         onClose={() => {
           setResponse("");
-          setSelectedItem(null);
+          setSelectedItemKey(null);
           onSelectItem(null);
         }}
       />

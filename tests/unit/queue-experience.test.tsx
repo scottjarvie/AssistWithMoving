@@ -84,6 +84,7 @@ function renderDesk(
     activitiesLoading: false,
     onProvideInput: vi.fn().mockResolvedValue(true),
     onCancel: vi.fn().mockResolvedValue(true),
+    captureWorkspacePath: "/app/moves/move_1/capture",
     ...overrides,
   };
   return { ...render(<QueueDesk {...props} />), props };
@@ -108,7 +109,9 @@ describe("QueueDesk", () => {
     const user = userEvent.setup();
     renderDesk();
 
-    expect(screen.getByText("Which mover should receive the inventory?")).toBeInTheDocument();
+    expect(
+      screen.getByText("Which mover should receive the inventory?"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Working/ }));
     expect(screen.getByText("Compare the two mover estimates.")).toBeInTheDocument();
@@ -192,5 +195,53 @@ describe("QueueDesk", () => {
     expect(screen.getAllByText("Alex's Queue")).toHaveLength(2);
     await user.selectOptions(screen.getByLabelText("Queue owner"), "user_2");
     expect(onOwnerScopeChange).toHaveBeenCalledWith("user_2");
+  });
+
+  it("keeps capture evidence and specialized actions reachable", async () => {
+    const user = userEvent.setup();
+    renderDesk({
+      items: [
+        queueItem("needsYou", {
+          id: "capture_1",
+          source: "capture",
+          directive: "Review the garage photos",
+        }),
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: /Review the garage photos/ }));
+    expect(
+      screen.getByRole("link", { name: "Open capture workspace" }),
+    ).toHaveAttribute("href", "/app/moves/move_1/capture");
+  });
+
+  it("keeps an open handoff detail synchronized with live Queue state", async () => {
+    const user = userEvent.setup();
+    const { rerender, props } = renderDesk();
+
+    await user.click(screen.getByRole("button", { name: /needsYou route note/i }));
+    expect(
+      screen.getAllByText("Which mover should receive the inventory?"),
+    ).toHaveLength(2);
+
+    rerender(
+      <QueueDesk
+        {...props}
+        items={[
+          queueItem("working", {
+            id: "queue_needsYou",
+            directive: "needsYou route note",
+            nextStep: "Read the newly attached estimate.",
+            claimLabel: "Scott's chosen AI",
+            version: 2,
+          }),
+          ...items.slice(1),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Read the newly attached estimate.")).toBeInTheDocument();
+    expect(screen.getByText("Claimed by Scott's chosen AI")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Your answer")).not.toBeInTheDocument();
   });
 });
