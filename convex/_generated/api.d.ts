@@ -110,6 +110,7 @@ import type * as lib_subManifest from "../lib/subManifest.js";
 import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
 import type * as mcp from "../mcp.js";
+import type * as mcpPlanning from "../mcpPlanning.js";
 import type * as mcpSetup from "../mcpSetup.js";
 import type * as mcpTools from "../mcpTools.js";
 import type * as mcpToolsCanonicalQueue from "../mcpToolsCanonicalQueue.js";
@@ -256,6 +257,7 @@ declare const fullApi: ApiFromModules<{
   "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;
   mcp: typeof mcp;
+  mcpPlanning: typeof mcpPlanning;
   mcpSetup: typeof mcpSetup;
   mcpTools: typeof mcpTools;
   mcpToolsCanonicalQueue: typeof mcpToolsCanonicalQueue;

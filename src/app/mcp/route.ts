@@ -87,7 +87,10 @@ async function proxy(request: Request): Promise<Response> {
     );
   }
   responseHeaders.set("Access-Control-Allow-Origin", "*");
-  responseHeaders.set("Access-Control-Expose-Headers", "mcp-session-id");
+  responseHeaders.set(
+    "Access-Control-Expose-Headers",
+    "mcp-method, mcp-name, mcp-protocol-version",
+  );
 
   return new Response(upstream.body, {
     status: upstream.status,
@@ -106,8 +109,9 @@ export function OPTIONS(): Response {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers":
-        "authorization, content-type, mcp-session-id, mcp-protocol-version, accept",
-      "Access-Control-Expose-Headers": "mcp-session-id",
+        "authorization, content-type, mcp-protocol-version, mcp-method, mcp-name, mcp-client-name, accept",
+      "Access-Control-Expose-Headers":
+        "mcp-method, mcp-name, mcp-protocol-version",
       "Access-Control-Max-Age": "86400",
     },
   });

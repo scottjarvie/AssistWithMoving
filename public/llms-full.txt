@@ -149,7 +149,7 @@ Family helper or mover:
 ## Box Intake Guidance
 
 When a user says they packed, measured, photographed, or wants to add one box,
-prefer `save_box_intake` over separate low-level calls. Put the box label/code,
+API-key MCP agents should prefer `save_box_intake` over separate low-level calls. Put the box label/code,
 dimensions, weight, room, destination, and description in `box`; put label or
 contents photos in `photos`; put newly described contents in `contents`; and
 put already-known item IDs in `linkedItems`. Use `dryRun: true` first when the
@@ -158,7 +158,7 @@ user has not already approved the write. A live new box requires a stable
 
 ## Image Upload Guidance
 
-One user photo should normally be one upload call. MCP agents should use
+One user photo should normally be one upload call. API-key MCP agents should use
 `upload_image`, `upload_photo`, or `upload_evidence_image` with a public
 `sourceUrl`, `dataUrl`, or `fileBase64`. When the user gives several ordinary
 photos from the same room/context or for one existing item, use `upload_images`,
@@ -297,17 +297,19 @@ Use `/openapi.json` for machine-readable endpoint details.
 
 ## MCP
 
-MovingManifest exposes two remote MCP doors. Hosted OAuth is the default for
-clients that support browser sign-in; the API-key door is an advanced fallback
-for headless or non-OAuth clients. No repository clone is required. Hosted OAuth
-defaults to a narrower trusted-helper surface than broad API-key setups.
+MovingManifest exposes a canonical stateless OAuth door, a compatibility OAuth
+door, and an API-key door. New browser-sign-in clients use the canonical door;
+headless or non-OAuth clients use the API-key door. No repository clone is
+required.
 
 Remote MCP (claude.ai custom connectors, Claude Cowork, any Streamable HTTP
 client — no install needed):
 
 ```
-MCP door (RECOMMENDED):   https://movingmanifest.com/mcp   (/mcp/connect is an alias)
+MCP door (RECOMMENDED):   https://movingmanifest.com/mcp
   Auth: OAuth browser sign-in (Clerk) — no key to paste. Uses the subscription.
+Legacy OAuth catalog:     https://movingmanifest.com/mcp/connect
+  Compatibility for already-connected clients; not an alias of /mcp.
 API-key door (advanced):  https://movingmanifest.com/api/mcp
   Auth: Authorization: Bearer mmk_replace_with_a_scoped_api_key
   (rejects OAuth tokens — use the MCP door above for sign-in)
@@ -346,37 +348,31 @@ bearer_token_env_var = "MOVINGMANIFEST_API_KEY"
 
 After configuring MCP for Codex, restart Codex or start a fresh session. The
 agent should confirm `movingmanifest` appears in `/mcp` or `codex mcp list`,
-then call `get_api_context` before accessing private data. If the current
+then call `get_move_brief` before accessing private data. API-key connections
+call `get_api_capabilities` and `get_api_context` instead. If the current
 Codex session cannot see newly added MCP tools, tell the user a fresh Codex
 session is needed rather than assuming the key or API is broken.
 
-Suggested first MCP tools:
+Canonical OAuth tools:
 
-- `get_api_capabilities`
-- `get_api_context`
-- `list_moves`
-- `get_agent_context`
+- `get_move_brief` (first call)
+- `search_move_records`
+- `get_move_records`
+- `get_evidence_media`
+- `save_move_context`
+- `save_inventory`
+- `save_planning_record`
+- `save_complete_result` (preferred finished-work save)
 
-Hosted OAuth trusted-helper tools:
+This OAuth catalog can read Queue summaries and link a planning result, but it
+cannot claim or complete Queue work. New photo upload, boxes, member management,
+publishing, export, and canonical Queue transitions remain API-key workflows.
 
-- `setup_move`
-- `add_item_from_photo`
-- `batch_upsert_items`
-- `save_box_intake`
-- `upload_photo`
-- `upload_photos`
-- `upload_evidence_image`
-- `upload_evidence_images`
-- `list_move_spaces`
-- `create_move_space`
-- `suggest_assignments`
-- `apply_assignments`
-- `get_move_summary`
-- `get_move_questions`
-- `get_move_day_checklist`
-- `list_planned_items`
-- `create_planned_item`
-- `update_planned_item`
+API-key MCP starts with `get_api_capabilities` and `get_api_context`. Its larger
+catalog includes `setup_move`, `add_item_from_photo`, `batch_upsert_items`,
+`save_box_intake`, `upload_photo`, `upload_photos`, `upload_image`,
+`upload_images`, and `upload_evidence_images` when the key has the matching
+scopes.
 
 API-key extended tools may include broader categories when the user
 intentionally grants them:

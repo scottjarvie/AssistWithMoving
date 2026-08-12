@@ -42,6 +42,7 @@ import {
   photoVisibilityScopeValidator,
 } from "./lib/moveFields";
 import {
+  canViewPhotoAssets,
   canDownloadOriginalPhoto,
   redactPhotoForVisibility,
 } from "./lib/photoVisibility";
@@ -1075,6 +1076,9 @@ export const getPhotoForDeliveryForSubject = internalQuery({
       photo.moveId !== args.moveId ||
       photo.archivedAt
     ) {
+      throw new ConvexError("Photo not found.");
+    }
+    if (!canViewPhotoAssets(photo, policy.visibility)) {
       throw new ConvexError("Photo not found.");
     }
     return { photo, visibility: policy.visibility };

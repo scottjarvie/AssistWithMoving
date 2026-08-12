@@ -1,5 +1,5 @@
 // RFC 9728 protected-resource metadata for the MCP front door
-// (https://<site>/mcp). The /mcp proxy rewrites the gateway's 401
+// (https://<site>/mcp). The /mcp proxy rewrites the stateless resource's 401
 // WWW-Authenticate to point here. `resource` matches the URL the client
 // connects to (.../mcp); `authorization_servers` is Clerk. Mirrors the
 // /mcp/connect metadata. A specific segment route, so it takes precedence over
@@ -22,6 +22,7 @@ export function GET(request: Request): Response {
       scopes_supported: [...mcpOauthScopes],
       bearer_methods_supported: ["header"],
       resource_name: "MovingManifest",
+      resource_documentation: `${origin}/ai`,
     },
     {
       headers: {

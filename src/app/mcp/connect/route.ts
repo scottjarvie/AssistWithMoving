@@ -1,6 +1,7 @@
 // Branded entry point for the OAuth MCP gateway:  https://<site>/mcp/connect
 //
-// The gateway itself runs as a Convex HTTP action on `<deployment>.convex.site`
+// The compatibility gateway itself runs as a Convex HTTP action on
+// `<deployment>.convex.site` at /mcp/legacy
 // — not something we want users pasting into their AI client. This route proxies
 // straight through to it, and rewrites the one place the gateway leaks its own
 // origin: the `WWW-Authenticate` header on the 401, whose `resource_metadata`
@@ -17,12 +18,12 @@ export const maxDuration = 60;
 
 function convexMcpUrl(): string {
   const site = process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim();
-  if (site) return `${site.replace(/\/+$/, "")}/mcp`;
+  if (site) return `${site.replace(/\/+$/, "")}/mcp/legacy`;
   const cloud = process.env.NEXT_PUBLIC_CONVEX_URL?.trim();
   if (cloud) {
     return `${cloud
       .replace(/\.convex\.cloud\/?$/, ".convex.site")
-      .replace(/\/+$/, "")}/mcp`;
+      .replace(/\/+$/, "")}/mcp/legacy`;
   }
   throw new Error("Convex site URL is not configured.");
 }

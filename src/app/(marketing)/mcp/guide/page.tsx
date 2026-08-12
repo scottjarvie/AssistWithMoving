@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 const mcpCards = [
   {
     title: "Tool-based move work",
-    copy: "MCP exposes structured tools for move setup, inventory intake, rooms, boxes, planning, photos, and capacity checks. Hosted OAuth defaults to a trusted-helper surface for normal move help.",
+    copy: "The canonical OAuth MCP exposes eight structured tools for a move brief, bounded search and evidence reads, durable context and inventory, planning records, and complete-result saves.",
     icon: Bot,
   },
   {
@@ -38,7 +38,7 @@ const mcpCards = [
   },
   {
     title: "Capability discovery",
-    copy: "Agents should call get_api_capabilities first, then get_api_context and get_agent_context before writing.",
+    copy: "Canonical OAuth agents call get_move_brief first. API-key agents use get_api_capabilities because that separate automation catalog is larger.",
     icon: FileJson,
   },
   {
@@ -48,7 +48,7 @@ const mcpCards = [
   },
   {
     title: "Batch over chatty loops",
-    copy: "The MCP tool list favors workflow operations such as setup_move, save_box_intake, batch_upsert_items, and apply_assignments so agents use fewer tokens and make fewer mistakes.",
+    copy: "save_complete_result keeps a finished plan, its inventory, locations, decisions, estimates, and source checks together in one replay-safe operation.",
     icon: Cable,
   },
   {
@@ -59,13 +59,13 @@ const mcpCards = [
 ];
 
 const trustedHelperToolGroups = [
-  "Start here: get_api_capabilities, get_api_context",
-  "Move context: list_moves, setup_move, get_move_summary, get_agent_context, get_move_questions, get_move_day_checklist",
-  "Inventory workflows: search_inventory, save_box_intake, add_item_from_photo, batch_upsert_items",
-  "Box workflow: save_box_intake for one box, dimensions, weight, photos, described contents, and linked existing items",
-  "Photos and evidence: upload_photo, upload_photos, upload_evidence_image, upload_evidence_images",
-  "Spaces and planning: list_move_spaces, create_move_space, suggest_assignments, apply_assignments",
-  "Move-day and planning helpers: list_planned_items, create_planned_item, update_planned_item",
+  "Start here: get_move_brief",
+  "Find and read: search_move_records, get_move_records",
+  "Private evidence: get_evidence_media",
+  "Move and rooms: save_move_context",
+  "Inventory: save_inventory",
+  "Corrections: save_planning_record",
+  "Finished work: save_complete_result",
 ];
 
 const apiKeyExtendedToolGroups = [
@@ -78,9 +78,8 @@ const apiKeyExtendedToolGroups = [
   "Raw upload sessions for clients that cannot use workflow photo tools",
 ];
 
-// THE front door (OAuth sign-in): https://movingmanifest.com/mcp. /mcp/connect
-// is a still-working alias. The API-key door is /api/mcp — a DIFFERENT, advanced
-// endpoint for local/non-OAuth clients only (see src/lib/mcp-oauth.ts).
+// THE canonical stateless front door (OAuth sign-in). /mcp/connect preserves
+// the older persisted OAuth catalog; /api/mcp is the separate API-key catalog.
 const remoteEndpointUrl = "https://movingmanifest.com/mcp";
 
 const remoteOAuthExample = `Paste this MCP URL into an OAuth-capable hosted client (recommended):
@@ -232,7 +231,8 @@ export default function McpPage() {
               Keep the key in your shell or secret manager, not in the
               checked-in config. Restart Codex after adding the server. In a new
               Codex thread, check MCP tools for movingmanifest, then call
-              get_api_context.
+              get_move_brief. API-key connections start with
+              get_api_capabilities instead.
             </p>
           </div>
         </div>
@@ -247,9 +247,10 @@ export default function McpPage() {
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               The hosted OAuth launch surface is a trusted-helper set: enough
-              for move setup, item intake, photos, boxes, transport planning,
-              and review, without publicly advertising sale, export, household
-              admin, or low-level box primitives as hosted-default tools.
+              to orient to the move, read relevant records and private evidence,
+              save inventory, and preserve finished decisions, estimates,
+              plans, and source checks without publicly advertising sale,
+              export, household admin, Queue transitions, or raw CRUD.
             </p>
           </div>
           <div className="grid gap-6 md:grid-cols-2">
@@ -288,6 +289,38 @@ export default function McpPage() {
               </div>
             </section>
           </div>
+        </div>
+      </PublicBand>
+
+      <PublicBand>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <section className="rounded-md border border-border p-4">
+            <Badge variant="secondary">Current</Badge>
+            <h2 className="mt-3 text-base font-semibold">Durable move work</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              The canonical connection can brief, search, read private evidence,
+              save move context and inventory, and keep complete planning results
+              visible in the move workspace.
+            </p>
+          </section>
+          <section className="rounded-md border border-border p-4">
+            <Badge variant="outline">Partial</Badge>
+            <h2 className="mt-3 text-base font-semibold">Client compatibility</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              OAuth and stateless protocol behavior are implemented. Individual
+              hosted clients may still need their own consent, refresh, media,
+              and reconnect proof.
+            </p>
+          </section>
+          <section className="rounded-md border border-border p-4">
+            <Badge variant="outline">Later</Badge>
+            <h2 className="mt-3 text-base font-semibold">OAuth Queue actions</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              The canonical OAuth connection can read Queue summaries but cannot
+              claim or complete Queue work until a distinct chosen-AI grant is
+              proven. Scoped API-key automation remains separate.
+            </p>
+          </section>
         </div>
       </PublicBand>
     </PublicPageChrome>

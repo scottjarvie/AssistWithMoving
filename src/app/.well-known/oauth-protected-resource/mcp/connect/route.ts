@@ -21,6 +21,7 @@ export function GET(request: Request): Response {
       scopes_supported: [...mcpOauthScopes],
       bearer_methods_supported: ["header"],
       resource_name: "MovingManifest",
+      resource_documentation: `${origin}/mcp/guide`,
     },
     {
       headers: {
