@@ -43,9 +43,9 @@ this Work Order.
 
 ## Execution state
 
-Active. Audit/reconciliation, first-tranche authority repairs, writable branch
-creation, and ready protected PR are in progress. Required refreshed local/CI,
-provider deployment, marked-account proof, and independent audit remain. The shared dev Convex
+Active. Audit/reconciliation, first-tranche authority repairs, refreshed local
+and CI proof, and the protected PR are complete for this tranche. Provider
+deployment, marked-account proof, and independent audit remain. The shared dev Convex
 deployment has unrelated active performance-branch synthetic schema state;
 Card `MOV-0026` records that limitation without turning it into a Scott gate.
 
