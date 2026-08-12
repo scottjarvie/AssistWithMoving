@@ -67,6 +67,54 @@ export const appVersion = packageJson.version;
 
 export const releaseEntries: ReleaseEntry[] = [
   {
+    version: "0.4.0",
+    releasedAt: "2026-08-12T23:46:53.000Z",
+    timezone: "America/Phoenix",
+    title: "AI work that stays with the move",
+    summary:
+      "Assist With Moving now gives each person a clearer handoff desk and a durable chosen-AI workflow: Queue work stays attributable, and finished plans, estimates, decisions, inventory, locations, evidence, and source checks return to the move workspace instead of disappearing in chat.",
+    backfillNote:
+      "Every first-parent source after the v0.3.0 release-record marker through the verified August 12 production deployment was classified in the v0.4.0 completeness ledger.",
+    items: [
+      {
+        id: "durable-ai-move-work",
+        category: "created",
+        impactTier: "major",
+        impactRank: 1,
+        short:
+          "A chosen AI can now do bounded move-planning work and save a complete, readable result back into the move workspace.",
+        long: {
+          what:
+            "The canonical OAuth MCP provides eight focused tools to brief and search a move, read selected records and private evidence, save move context and inventory, correct planning records, and preserve one complete result with decisions, estimates, plan sections, and honest source checks.",
+          why:
+            "Useful AI work should become part of the durable move record, with provenance, replay protection, tenant boundaries, and human-visible results rather than remaining an unauditable chat answer.",
+          where:
+            "Connect from AI Connections or the AI setup guide, then inspect returned work in a moves Overview under Saved work.",
+        },
+        sourceRefs: ["pr-180"],
+        audiences: ["signed-in", "agent"],
+      },
+      {
+        id: "four-state-ai-queue",
+        category: "created",
+        impactTier: "major",
+        impactRank: 2,
+        short:
+          "The Queue now shows Needs you, Working, Waiting for your AI, and Done as one clear, attributable handoff flow.",
+        long: {
+          what:
+            "Moving gained durable Queue records, bounded AI claims, exact ownership and delegation rules, readable activity and results, and responsive global and move-specific Queue workspaces while retaining compatible capture history.",
+          why:
+            "A person needs to know what requires their answer, what an AI is doing, what is waiting to be picked up, and what finished without confusing operational retries or leases for extra product states.",
+          where:
+            "Open Queue globally or inside a move; capture and specialized review paths remain available beside the canonical handoff flow.",
+        },
+        sourceRefs: ["pr-175", "pr-177"],
+        audiences: ["signed-in", "agent"],
+      },
+    ],
+  },
+  {
     version: "0.3.0",
     releasedAt: "2026-07-27T17:08:59.000Z",
     timezone: "America/Phoenix",

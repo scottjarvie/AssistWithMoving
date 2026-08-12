@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "version": "0.4.0",
+    "from": "3c2864968a34d661aa928f1343a92bd48e252f48",
+    "to": "0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c",
+    "cutoff": "2026-08-12T23:46:53.000Z",
+    "cutoffTimezone": "America/Phoenix",
+    "posture": "release-ready",
+    "recordType": "verified production release record"
+  },
+  "reconciliation": {
+    "git": {
+      "selection": "3c28649..0a5e0eb",
+      "exactAncestorRange": true,
+      "sourceCount": 19,
+      "pullRequestSources": 9,
+      "directCommitSources": 10,
+      "markerMeaning": "Merge commit of PR #171, which published the complete v0.3.0 release record and is excluded from the next release range."
+    },
+    "github": {
+      "repository": "scottjarvie/movingmanifest",
+      "productPullRequest": 180,
+      "productionDeployment": {
+        "commit": "0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c",
+        "deploymentId": "dpl_AxReSqDrxvy6vMoL13Q5PYumxmPz",
+        "statusContext": "Vercel",
+        "environment": "Production",
+        "state": "success",
+        "deployedAt": "2026-08-12T23:46:53.000Z",
+        "buildCommand": "npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL"
+      },
+      "checks": [
+        {
+          "name": "Required CI",
+          "runId": 31652048912,
+          "conclusion": "success",
+          "completedAt": "2026-08-12T23:47:14.000Z"
+        },
+        {
+          "name": "Unit tests (informational)",
+          "runId": 31652048912,
+          "conclusion": "success",
+          "completedAt": "2026-08-12T23:48:37.000Z"
+        }
+      ]
+    },
+    "publicProof": {
+      "canonicalMcpChallenge": {
+        "url": "https://movingmanifest.com/mcp",
+        "status": 401,
+        "resourceMetadata": "https://movingmanifest.com/.well-known/oauth-protected-resource/mcp"
+      },
+      "protectedResource": {
+        "url": "https://movingmanifest.com/.well-known/oauth-protected-resource/mcp",
+        "status": 200,
+        "resource": "https://movingmanifest.com/mcp",
+        "authorizationServer": "https://clerk.movingmanifest.com"
+      },
+      "compatibilityMcpChallenge": {
+        "url": "https://movingmanifest.com/mcp/connect",
+        "status": 401
+      },
+      "apiKeyDoorRefusal": {
+        "url": "https://movingmanifest.com/api/mcp",
+        "status": 401
+      },
+      "guide": {
+        "url": "https://movingmanifest.com/mcp/guide",
+        "status": 200
+      },
+      "agentGuide": {
+        "url": "https://movingmanifest.com/ai.txt",
+        "status": 200
+      },
+      "signedOutMoveList": {
+        "url": "https://movingmanifest.com/app/moves",
+        "status": 307,
+        "redirect": "/sign-in"
+      },
+      "oauthDiscoveryDoctor": "10 pass, 0 warn, 0 blocked, 0 fail",
+      "officialSdkClient": "The official TypeScript SDK received the production invalid_token challenge and stopped before OAuth or data access.",
+      "namedClientAuthenticated": "not run; requires a sanctioned disposable account and consent path"
+    },
+    "dispositionCounts": {
+      "include": 2,
+      "group": 1,
+      "exclude": 16,
+      "unshipped": 0
+    },
+    "completenessGate": "pass"
+  },
+  "releaseItems": [
+    {
+      "id": "durable-ai-move-work",
+      "sourceCount": 1
+    },
+    {
+      "id": "four-state-ai-queue",
+      "sourceCount": 2
+    }
+  ],
+  "sources": [
+    {
+      "id": "commit-25f4c395e818",
+      "kind": "direct_commit",
+      "title": "Add Moving core philosophy",
+      "commits": ["25f4c395e8183876d394d215dab18820e640e348"],
+      "firstSeenAt": "2026-07-29T18:30:13-07:00",
+      "lastSeenAt": "2026-07-29T18:30:13-07:00",
+      "disposition": "exclude",
+      "reason": "Product-direction state only; it did not independently ship application behavior."
+    },
+    {
+      "id": "commit-9662a4bc1b46",
+      "kind": "direct_commit",
+      "title": "Clarify Moving sharing foundations",
+      "commits": ["9662a4bc1b4659a55c7afcbed6cea78b89c961e4"],
+      "firstSeenAt": "2026-07-30T09:59:32-07:00",
+      "lastSeenAt": "2026-07-30T09:59:32-07:00",
+      "disposition": "exclude",
+      "reason": "Product-direction clarification only; it did not independently ship application behavior."
+    },
+    {
+      "id": "commit-0d30a9cd3a11",
+      "kind": "direct_commit",
+      "title": "Clarify Moving core philosophy",
+      "commits": ["0d30a9cd3a113ef89f37924696b073df4de7dd93"],
+      "firstSeenAt": "2026-07-30T17:11:37-07:00",
+      "lastSeenAt": "2026-07-30T17:11:37-07:00",
+      "disposition": "exclude",
+      "reason": "Product-direction clarification only; it did not independently ship application behavior."
+    },
+    {
+      "id": "commit-465de6527f18",
+      "kind": "direct_commit",
+      "title": "Establish Moving Project Philosophy",
+      "commits": ["465de6527f18dc644bb8e00204ec765fdf297a97"],
+      "firstSeenAt": "2026-08-08T09:32:08-06:00",
+      "lastSeenAt": "2026-08-08T09:32:08-06:00",
+      "disposition": "exclude",
+      "reason": "Canonical repository philosophy state with no independent product behavior."
+    },
+    {
+      "id": "pr-172",
+      "kind": "pull_request",
+      "prNumber": 172,
+      "title": "Install Moving state-publication safeguards",
+      "commits": ["d6eb556ccc9ef2a4db88c59119460e27627b975c"],
+      "firstSeenAt": "2026-08-08T18:41:46.000Z",
+      "lastSeenAt": "2026-08-08T18:41:46.000Z",
+      "disposition": "exclude",
+      "reason": "Repository delivery safeguard with no direct person-facing or agent-facing product outcome."
+    },
+    {
+      "id": "commit-2844429252a7",
+      "kind": "direct_commit",
+      "title": "Close Linear gate migration",
+      "commits": ["2844429252a7d5e146a6776ccaa94f4c17364924"],
+      "firstSeenAt": "2026-08-08T12:45:03-06:00",
+      "lastSeenAt": "2026-08-08T12:45:03-06:00",
+      "disposition": "exclude",
+      "reason": "Repository tracker state publication only."
+    },
+    {
+      "id": "commit-4a3d9e710157",
+      "kind": "direct_commit",
+      "title": "Record state publication proof",
+      "commits": ["4a3d9e7101576c3c842d12cfc3715ace65fd9a71"],
+      "firstSeenAt": "2026-08-08T12:46:35-06:00",
+      "lastSeenAt": "2026-08-08T12:46:35-06:00",
+      "disposition": "exclude",
+      "reason": "Evidence-only repository state."
+    },
+    {
+      "id": "commit-48b24330c50d",
+      "kind": "direct_commit",
+      "title": "Reattest Moving to Core v1.6.3",
+      "commits": ["48b24330c50d53a30c4809c625cd4fb0dfaa0f8a"],
+      "firstSeenAt": "2026-08-08T13:00:29-06:00",
+      "lastSeenAt": "2026-08-08T13:00:29-06:00",
+      "disposition": "exclude",
+      "reason": "Product-direction evidence only."
+    },
+    {
+      "id": "commit-30a84d9807d5",
+      "kind": "direct_commit",
+      "title": "Record Core audit product gaps",
+      "commits": ["30a84d9807d534c3d270ebd9d9587d195caf644a"],
+      "firstSeenAt": "2026-08-08T17:17:42-06:00",
+      "lastSeenAt": "2026-08-08T17:17:42-06:00",
+      "disposition": "exclude",
+      "reason": "Planning state only; recorded gaps are not shipped capability."
+    },
+    {
+      "id": "commit-1ceee4842b06",
+      "kind": "direct_commit",
+      "title": "Record complete Core retrofit backlog",
+      "commits": ["1ceee4842b0607fe7086a67a13983726bdf52b8d"],
+      "firstSeenAt": "2026-08-08T17:23:45-06:00",
+      "lastSeenAt": "2026-08-08T17:23:45-06:00",
+      "disposition": "exclude",
+      "reason": "Backlog state only; unimplemented work is not a release outcome."
+    },
+    {
+      "id": "pr-173",
+      "kind": "pull_request",
+      "prNumber": 173,
+      "title": "Redesign the Moving tracker reader",
+      "commits": ["b65e7ac9464e954d78a53a7027bc1ab32644ac52"],
+      "firstSeenAt": "2026-08-09T00:00:11.000Z",
+      "lastSeenAt": "2026-08-09T00:00:11.000Z",
+      "disposition": "exclude",
+      "reason": "Internal repository tracker reader, not a Moving product surface."
+    },
+    {
+      "id": "pr-174",
+      "kind": "pull_request",
+      "prNumber": 174,
+      "title": "Add accessible personal Card ordering",
+      "commits": ["04612655bf3d036e1d2509bd251fa6e94b17c322"],
+      "firstSeenAt": "2026-08-09T13:32:09.000Z",
+      "lastSeenAt": "2026-08-09T13:32:09.000Z",
+      "disposition": "exclude",
+      "reason": "Internal repository tracker ordering, not a Moving product surface."
+    },
+    {
+      "id": "commit-e59e31f25968",
+      "kind": "direct_commit",
+      "title": "Align Moving philosophy and trust model",
+      "commits": ["e59e31f2596872c1c26bc472c94d48d27810d55b"],
+      "firstSeenAt": "2026-08-11T00:22:57-07:00",
+      "lastSeenAt": "2026-08-11T00:22:57-07:00",
+      "disposition": "exclude",
+      "reason": "Canonical product-direction state only; later product PRs provide the shipped outcomes."
+    },
+    {
+      "id": "pr-175",
+      "kind": "pull_request",
+      "prNumber": 175,
+      "title": "Add durable Queue foundation with contained AI authority",
+      "commits": ["3566dc8707a8e09ff08cfdbc592d3ec12e140029"],
+      "firstSeenAt": "2026-08-12T17:13:40.000Z",
+      "lastSeenAt": "2026-08-12T17:13:40.000Z",
+      "disposition": "include",
+      "releaseItemId": "four-state-ai-queue"
+    },
+    {
+      "id": "pr-176",
+      "kind": "pull_request",
+      "prNumber": 176,
+      "title": "Record Queue release proof and the remaining private-test boundary",
+      "commits": ["7a6e3fbefb2ff4b8cc7d8718f74cc4893c6e2aba"],
+      "firstSeenAt": "2026-08-12T17:25:24.000Z",
+      "lastSeenAt": "2026-08-12T17:25:24.000Z",
+      "disposition": "exclude",
+      "reason": "Evidence and tracker publication for the already classified Queue source."
+    },
+    {
+      "id": "pr-177",
+      "kind": "pull_request",
+      "prNumber": 177,
+      "title": "Make Moving's four-state Queue visible and usable",
+      "commits": ["835c696cdf6645a2d04dfc684510f4c5b05b9dff"],
+      "firstSeenAt": "2026-08-12T21:07:35.000Z",
+      "lastSeenAt": "2026-08-12T21:07:35.000Z",
+      "disposition": "group",
+      "releaseItemId": "four-state-ai-queue"
+    },
+    {
+      "id": "pr-178",
+      "kind": "pull_request",
+      "prNumber": 178,
+      "title": "Record the released Queue experience honestly",
+      "commits": ["148032a0e084c4fc6346748ef4820915962b4be0"],
+      "firstSeenAt": "2026-08-12T21:16:16.000Z",
+      "lastSeenAt": "2026-08-12T21:16:16.000Z",
+      "disposition": "exclude",
+      "reason": "Evidence and tracker publication for the already classified Queue sources."
+    },
+    {
+      "id": "pr-179",
+      "kind": "pull_request",
+      "prNumber": 179,
+      "title": "Clean up synthetic Queue proof completely",
+      "commits": ["908f8744e4231ca33b30d40eab9c09e12cb8f8e8"],
+      "firstSeenAt": "2026-08-12T23:20:04.000Z",
+      "lastSeenAt": "2026-08-12T23:20:04.000Z",
+      "disposition": "exclude",
+      "reason": "Synthetic acceptance-fixture cleanup and proof support; no independent user capability."
+    },
+    {
+      "id": "pr-180",
+      "kind": "pull_request",
+      "prNumber": 180,
+      "title": "Give chosen AI a durable move-planning loop",
+      "commits": ["0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c"],
+      "firstSeenAt": "2026-08-12T23:45:32.000Z",
+      "lastSeenAt": "2026-08-12T23:45:32.000Z",
+      "disposition": "include",
+      "releaseItemId": "durable-ai-move-work"
+    }
+  ]
+}
