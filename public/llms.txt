@@ -29,7 +29,7 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
 - https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to sign in, connect hosted MCP OAuth, or make a fallback helper key.
 - https://movingmanifest.com/api - public REST API overview, scopes, and assistant workflow.
 - https://movingmanifest.com/mcp - THE MCP endpoint. RECOMMENDED. OAuth-capable hosted clients (claude.ai, Claude Cowork, ChatGPT) connect by pasting this URL and signing in with their MovingManifest account — no API key. Easiest path; uses the user's subscription.
-- https://movingmanifest.com/mcp/connect - alias of the MCP endpoint above (identical OAuth flow); either URL works.
+- https://movingmanifest.com/mcp/connect - compatibility-only OAuth door preserving the older 29-tool catalog for existing connections. New clients should use /mcp.
 - https://movingmanifest.com/mcp/guide - human-readable MCP setup guide.
 - https://movingmanifest.com/api/mcp - ADVANCED, API-KEY ONLY. A SEPARATE door for local/headless or non-OAuth automation; authenticate with a scoped mmk_ key. It does NOT do OAuth sign-in and will REJECT OAuth tokens — never point a hosted/OAuth client (claude.ai, Cowork) here, it will fail to register. For sign-in, use https://movingmanifest.com/mcp.
 - https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
@@ -79,15 +79,16 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
   `export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key`, then
   `codex mcp add movingmanifest --url https://movingmanifest.com/api/mcp --bearer-token-env-var MOVINGMANIFEST_API_KEY`.
   Restart Codex or start a fresh session, verify `movingmanifest` appears in
-  `/mcp` or `codex mcp list`, then call `get_api_context`. Keep the key in an
+  `/mcp` or `codex mcp list`, then call `get_move_brief` for OAuth or
+  `get_api_context` for an API-key connection. Keep the key in an
   environment variable or secret manager, never in source or the command URL.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
-- Start MCP work with `get_api_capabilities`, then `get_api_context`, then
-  `list_moves` or `setup_move`. Hosted OAuth defaults to a trusted-helper tool
-  surface; API-key connections can expose broader tools when the user
-  intentionally grants them.
+- Start canonical OAuth MCP work with `get_move_brief`, then
+  `search_move_records`, and use `save_complete_result` for ordinary finished
+  work. Start API-key MCP work with `get_api_capabilities`, then
+  `get_api_context`, then `list_moves` or `setup_move`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
-- For image upload, use one call by default. MCP agents should call
+- For image upload, use one call by default. API-key MCP agents should call
   `upload_image`, `upload_photo`, or `upload_evidence_image` with a public
   `sourceUrl`, `dataUrl`, or `fileBase64`; when the user gives several ordinary
   photos from the same room/context or for one existing item, call
@@ -150,17 +151,21 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
 
 ## Hosted MCP Tool Surface
 
-The hosted OAuth default is a trusted-helper surface. It should include normal
-move-helper tools such as `get_api_capabilities`, `get_api_context`,
-`list_moves`, `setup_move`, `get_move_summary`, `get_agent_context`,
-`search_inventory`, `save_box_intake`, `add_item_from_photo`,
-`batch_upsert_items`, photo/evidence uploads, space helpers, assignment helpers,
-and planned-item helpers.
+The canonical `/mcp` OAuth resource exposes exactly eight workflow tools:
+`get_move_brief`, `search_move_records`, `get_move_records`,
+`get_evidence_media`, `save_move_context`, `save_inventory`,
+`save_planning_record`, and `save_complete_result`.
 
-Do not assume hosted OAuth exposes sale, export, household-member management, or
-low-level item/box primitives by default. Those broader categories belong to
-API-key setups only when the user intentionally grants them. Always trust
-`get_api_capabilities` over old public examples.
+It may read the signed-in person's Queue summaries and link a result for human
+inspection, but it cannot claim or complete canonical Queue work. It does not
+upload new photos, create boxes, manage members, publish, export, or expose raw
+CRUD. Use a deliberately scoped API-key setup for those separate workflows.
+
+The compatibility `/mcp/connect` door retains the older OAuth catalog for
+existing clients; it is not an alias for `/mcp`. The API-key HTTP/stdio registry
+contains tools such as `get_api_capabilities`, `get_api_context`, `setup_move`,
+`save_box_intake`, `add_item_from_photo`, photo/evidence uploads, and the scoped
+Queue tools. Always trust the live catalog for the connected door.
 
 ## Common Workflows
 

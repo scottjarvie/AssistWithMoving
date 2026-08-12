@@ -2,6 +2,7 @@
 
 import { MovePeopleManager } from "@/components/move-people-manager";
 import { MoveQuestionsPanel } from "@/components/move-questions-panel";
+import { MovePlanningResultsPanel } from "@/components/move-planning-results-panel";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { PackingDebtDashboard } from "@/components/packing-debt-dashboard";
@@ -11,6 +12,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 
 const overviewTabHashes = {
+  "#planning-results": "results",
   "#move-questions": "decisions",
   "#packing-debt": "readiness",
   "#move-contacts": "people",
@@ -18,6 +20,12 @@ const overviewTabHashes = {
 } as const;
 
 const overviewTabs = [
+  {
+    value: "results",
+    label: "Saved work",
+    description:
+      "Review decisions, estimates, plans, and source checks saved by your AI.",
+  },
   {
     value: "decisions",
     label: "Decisions",
@@ -57,6 +65,9 @@ export function MoveOverviewPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList tabs={overviewTabs} activeValue={activeTab} />
 
+        <TabsContent value="results">
+          <MovePlanningResultsPanel householdId={householdId} moveId={moveId} />
+        </TabsContent>
         <TabsContent value="decisions">
           <MoveQuestionsPanel householdId={householdId} moveId={moveId} />
         </TabsContent>

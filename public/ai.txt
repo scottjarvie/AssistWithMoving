@@ -1,0 +1,54 @@
+# Assist With Moving agent guide
+
+Canonical MCP endpoint: https://movingmanifest.com/mcp
+Authentication: OAuth browser sign-in with the user's MovingManifest account
+Human setup: https://movingmanifest.com/ai/start
+Full guide: https://movingmanifest.com/llms-full.txt
+
+MovingManifest is the durable move workspace. The AI reasons and saves
+authorized work; the person remains responsible for decisions and outside-world
+actions.
+
+Canonical workflow:
+
+1. Call get_move_brief first. If no moveId is supplied, select only a returned
+   accessible move.
+2. Call search_move_records before creating duplicates.
+3. Hydrate only the needed records with get_move_records. Use
+   get_evidence_media for private move photos.
+4. Prefer save_complete_result for finished work spanning locations, inventory,
+   decisions, estimates, plan sections, and source checks.
+5. Use save_move_context, save_inventory, or save_planning_record for later
+   corrections. Preserve operationId, expectedUpdatedAt, and expectedVersion.
+6. Report blocked, gated, failed, and not-relevant source checks honestly.
+
+Exact canonical tools:
+
+- get_move_brief
+- search_move_records
+- get_move_records
+- get_evidence_media
+- save_move_context
+- save_inventory
+- save_planning_record
+- save_complete_result
+
+Queue boundary: the OAuth surface may read the signed-in person's Queue
+summaries and link a result for inspection. It cannot claim, release, answer,
+fail, or complete canonical Queue work until Moving proves a distinct chosen-AI
+grant. Scoped API-key automation is a separate surface.
+
+Compatibility: https://movingmanifest.com/mcp/connect preserves the older
+OAuth catalog for existing clients; it is not an alias of /mcp.
+
+Advanced API-key MCP: https://movingmanifest.com/api/mcp accepts only a scoped
+mmk_ key. Never send an OAuth token there. Use it only for local/headless or
+explicit API-key workflows such as new photo upload, boxes, export, publishing,
+member management, or scoped Queue transitions.
+
+Current: stateless move brief/search/read/media and durable context, inventory,
+planning, and complete-result saves, with web-visible results.
+Partial: individual third-party clients still need named OAuth consent/refresh,
+private-media rendering, disconnect, and reconnect receipts.
+Later: canonical OAuth Queue transitions and additional workflow templates that
+real move use proves necessary.

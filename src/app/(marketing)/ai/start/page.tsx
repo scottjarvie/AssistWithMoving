@@ -122,9 +122,9 @@ export default function AiStartPage() {
             </pre>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Paste this URL into hosted MCP clients that support browser
-              sign-in. The hosted OAuth tool surface is intentionally narrower
-              than the local/API-key surface and prefers workflow tools such as
-              save_box_intake.
+              sign-in. Ask the assistant to call get_move_brief first, search
+              before creating duplicates, and use save_complete_result to keep
+              finished decisions, estimates, plans, and source checks together.
             </p>
           </div>
           <div className="rounded-md border border-border p-4">

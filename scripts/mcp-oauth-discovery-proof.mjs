@@ -2,12 +2,11 @@
 import { pathToFileURL } from "node:url";
 
 const requiredScopes = ["openid", "profile", "email"];
-// The OAuth door — /mcp/connect, NOT /api/mcp. /api/mcp is the API-key door and
-// advertises no OAuth, so this proof targets the endpoint that actually runs the
-// OAuth flow. See src/lib/mcp-oauth.ts.
+// The canonical stateless OAuth door — /mcp, NOT /api/mcp. /mcp/connect can be
+// passed explicitly to probe the persisted compatibility catalog.
 const defaultEndpoint =
   process.env.MOVINGMANIFEST_MCP_ENDPOINT ??
-  "https://movingmanifest.com/mcp/connect";
+  "https://movingmanifest.com/mcp";
 
 function record(results, status, label, detail) {
   results.push({ status, label, detail });
@@ -261,7 +260,7 @@ function parseArgs(args) {
 function usage() {
   console.log(`Usage:
   node scripts/mcp-oauth-discovery-proof.mjs
-  node scripts/mcp-oauth-discovery-proof.mjs --endpoint https://movingmanifest.com/mcp/connect
+  node scripts/mcp-oauth-discovery-proof.mjs --endpoint https://movingmanifest.com/mcp
 
 This proof is read-only. It sends one unauthenticated MCP initialize (rejected at
 the auth gate) plus HTTP GET discovery, and never performs OAuth dynamic client

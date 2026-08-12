@@ -169,6 +169,9 @@ vi.mock("@/components/disposition-pipeline-panel", () => ({
 vi.mock("@/components/estimate-summary", () => ({
   EstimateSummary: () => <div>Estimate summary surface</div>,
 }));
+vi.mock("@/components/move-planning-results-panel", () => ({
+  MovePlanningResultsPanel: () => <div>Saved move work surface</div>,
+}));
 
 import { AiReviewWorkspacePage } from "@/components/move-pages/ai-review-page";
 import { MoveConfigurePage } from "@/components/move-pages/configure-page";
@@ -191,6 +194,7 @@ describe("move workspace task tabs", () => {
       "data-state",
       "active"
     );
+    expect(screen.getByRole("tab", { name: "Saved work" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Readiness" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "People" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Defaults" })).toBeInTheDocument();

@@ -3,8 +3,8 @@
 //
 //   /api/mcp      — API-KEY door. Accepts mmk_ keys only. Must NOT advertise
 //                   OAuth (doing so dead-ends OAuth clients).
-//   /mcp/connect  — OAUTH door. Advertises Clerk + scopes. This is the URL
-//                   surfaced to OAuth clients (claude.ai, Cowork).
+//   /mcp          — canonical stateless OAUTH door for new clients.
+//   /mcp/connect  — persisted OAUTH compatibility catalog for old clients.
 //
 // If any of these tests fail, someone re-crossed the doors — typically by
 // pointing a user-facing "connect" URL at /api/mcp, or by making /api/mcp
@@ -29,12 +29,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// The canonical OAuth front door is the bare /mcp (/mcp/connect is a working
-// alias). The API-key door is /api/mcp and must never advertise OAuth.
+// The canonical OAuth front door is bare /mcp. /mcp/connect intentionally
+// preserves a different compatibility catalog. /api/mcp is key-only.
 const OAUTH_DOOR = "https://movingmanifest.com/mcp";
 const API_KEY_DOOR = "https://movingmanifest.com/api/mcp";
 
-describe("MCP two-door separation (API key vs OAuth)", () => {
+describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", () => {
+  it("keeps canonical stateless and persisted compatibility routes distinct", () => {
+    const convexHttp = readFileSync("convex/http.ts", "utf8");
+    const canonical = readFileSync("convex/httpRoutes/mcp.ts", "utf8");
+    const compatibilityProxy = readFileSync("src/app/mcp/connect/route.ts", "utf8");
+
+    expect(canonical).toContain('path: "/mcp"');
+    expect(canonical).toContain('legacy: "stateless"');
+    expect(convexHttp).toContain('"/mcp/legacy"');
+    expect(compatibilityProxy).toContain('/mcp/legacy');
+  });
+
   describe("/api/mcp (API-key door) must NOT advertise OAuth", () => {
     it("emits a key-only protected-resource doc with no authorization server", () => {
       process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";

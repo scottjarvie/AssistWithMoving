@@ -27,12 +27,12 @@ export const metadata: Metadata = {
 };
 
 const starterPrompt =
-  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If I provide photos, upload the originals through the easiest image/photo tool and let MovingManifest create web-ready versions. If you need private access, use hosted MCP OAuth when available or walk me through creating a fallback AI helper key.";
+  "Go to movingmanifest.com/ai and help me plan my move. Connect to https://movingmanifest.com/mcp with OAuth when available, call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result. Use a fallback helper key only when OAuth is unavailable or I ask for an API-key-only workflow.";
 
 const quickCapabilities = [
   {
-    title: "Turn photos into inventory",
-    copy: "Your assistant can upload originals, create item records from a few words, and mark uncertain dimensions or weights for review.",
+    title: "Use evidence with inventory",
+    copy: "Your connected assistant can inspect existing private move photos, create inventory records, preserve source notes, and mark uncertain dimensions or weights for review.",
     icon: Camera,
   },
   {
@@ -41,8 +41,8 @@ const quickCapabilities = [
     icon: Truck,
   },
   {
-    title: "Prepare selling and packets",
-    copy: "It can save box intake with photos and contents, draft sale listings, and prepare mover-safe or owner packets.",
+    title: "Keep finished planning work",
+    copy: "It can save decisions, estimates, readable plan results, and honest source checks so the work remains visible outside the chat.",
     icon: ClipboardList,
   },
   {

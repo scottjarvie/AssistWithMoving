@@ -19,6 +19,7 @@ import {
   assertOAuthImageSource,
 } from "./lib/mcpMediaIngress";
 import { imageDimensions } from "./lib/mediaStorage";
+import { canViewPhotoAssets } from "./lib/photoVisibility";
 
 const imageFilterValidator = v.object({
   // Pull specific photos by id — e.g. the mediaPhotoIds on a queue capture that
@@ -46,7 +47,7 @@ export const mcpResolvePhotosArgs = {
 export const mcpResolvePhotos = query({
   args: mcpResolvePhotosArgs,
   handler: async (ctx, args) => {
-    await requireMoveForSubject(
+    const policy = await requireMoveForSubject(
       ctx,
       args.caller.subject,
       args.householdId,
@@ -117,7 +118,8 @@ export const mcpResolvePhotos = query({
           // Scope to THIS move — an itemId/boxId/spaceId/transportId from another
           // move in the same household must not leak its photos across moves.
           p.moveId === args.moveId &&
-          p.archivedAt === undefined,
+          p.archivedAt === undefined &&
+          canViewPhotoAssets(p, policy.visibility),
       )
       .map((p) => ({
         photoId: p._id,

@@ -655,6 +655,36 @@ export const itemResearchSource = v.object({
   checkedAt: v.optional(v.number()),
 });
 
+// Durable move-planning records written by a person's connected AI. These are
+// intentionally product records rather than raw tool transcripts: decisions,
+// estimates, readable planning results, and honest source checks all keep
+// stable identity, links back to the move, and human-visible provenance.
+export const movePlanningRecordKind = v.union(
+  v.literal("decision"),
+  v.literal("estimate"),
+  v.literal("planResult"),
+  v.literal("sourceCheck"),
+);
+
+export const movePlanningRecordStatus = v.union(
+  v.literal("draft"),
+  v.literal("current"),
+  v.literal("needsReview"),
+  v.literal("confirmed"),
+  v.literal("superseded"),
+  v.literal("blocked"),
+  v.literal("failed"),
+  v.literal("notRelevant"),
+);
+
+export const moveSourceCheckStatus = v.union(
+  v.literal("checked"),
+  v.literal("blocked"),
+  v.literal("gated"),
+  v.literal("failed"),
+  v.literal("notRelevant"),
+);
+
 const photoDerivativeRefs = v.object({
   thumb: v.optional(v.string()),
   card: v.optional(v.string()),
@@ -1335,6 +1365,81 @@ export default defineSchema({
     .index("by_move_sort", ["moveId", "sortOrder"])
     .index("by_move_key", ["moveId", "key"])
     .index("by_household", ["householdId"]),
+
+  movePlanningRecords: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    kind: movePlanningRecordKind,
+    // A caller-stable semantic key, namespaced to the verified OAuth client on
+    // write. It makes a retried complete-result save update instead of clone.
+    stableKey: v.string(),
+    title: v.string(),
+    summary: v.string(),
+    details: v.optional(v.string()),
+    status: movePlanningRecordStatus,
+    confidence: v.optional(estimateConfidence),
+    decision: v.optional(v.string()),
+    alternatives: v.optional(v.array(v.string())),
+    rationale: v.optional(v.string()),
+    estimateMetric: v.optional(v.string()),
+    estimateLow: v.optional(v.number()),
+    estimateValue: v.optional(v.number()),
+    estimateHigh: v.optional(v.number()),
+    estimateUnit: v.optional(v.string()),
+    estimateCurrency: v.optional(v.string()),
+    assumptions: v.optional(v.array(v.string())),
+    sectionKey: v.optional(v.string()),
+    body: v.optional(v.string()),
+    sourceTitle: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    sourcePublisher: v.optional(v.string()),
+    sourceStatus: v.optional(moveSourceCheckStatus),
+    checkedAt: v.optional(v.number()),
+    relatedItemIds: v.array(v.id("items")),
+    relatedBoxIds: v.array(v.id("boxes")),
+    relatedSpaceIds: v.array(v.id("moveSpaces")),
+    relatedQueueItemId: v.optional(v.id("queueItems")),
+    searchText: v.string(),
+    createdByUserId: v.id("users"),
+    createdByMcpClientId: v.string(),
+    updatedByUserId: v.id("users"),
+    updatedByMcpClientId: v.string(),
+    operationId: v.string(),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_move_kind_updated", ["moveId", "kind", "updatedAt"])
+    .index("by_move_stable_key", ["moveId", "stableKey"])
+    .index("by_household_updated", ["householdId", "updatedAt"])
+    .searchIndex("search_move_records", {
+      searchField: "searchText",
+      filterFields: ["moveId", "kind", "status"],
+    }),
+
+  // Bounded replay receipts for stateless OAuth MCP writes. This is protocol
+  // reliability state, not a second product record or a conversational session.
+  mcpOperations: defineTable({
+    actorUserId: v.id("users"),
+    moveId: v.id("moves"),
+    clientId: v.string(),
+    tool: v.string(),
+    operationId: v.string(),
+    requestHash: v.string(),
+    result: v.any(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_actor_client_tool_operation", [
+      "actorUserId",
+      "clientId",
+      "tool",
+      "operationId",
+    ])
+    .index("by_move", ["moveId"])
+    .index("by_expires", ["expiresAt"]),
 
   floorPlans: defineTable({
     householdId: v.id("households"),

@@ -1,9 +1,9 @@
 import { product } from "@/lib/product";
 
 // ============================================================================
-// TWO MCP ENDPOINTS — DO NOT CONFLATE THEM. (Read this before editing.)
+// THREE MCP DOORS — DO NOT CONFLATE THEM. (Read this before editing.)
 //
-// MovingManifest exposes agent access through two SEPARATE doors that must stay
+// MovingManifest exposes agent access through separate doors that must stay
 // apart. Crossing them is the recurring bug that 401s every connection:
 //
 //   1. /api/mcp        — API-KEY door. Accepts mmk_ keys ONLY. It forwards the
@@ -16,15 +16,18 @@ import { product } from "@/lib/product";
 //                           rejects as "Invalid API key format". That is the
 //                           exact dead-end users keep hitting.
 //
-//   2. /mcp/connect    — OAUTH door. The real OAuth 2.1 flow (Clerk) via the
-//                        convex-mcp-gateway. Lives in src/app/mcp/connect/route.ts
-//                        + convex/http.ts + the /mcp/connect well-known route.
-//                        This is what hosted clients (claude.ai) should use.
+//   2. /mcp            — canonical stateless OAUTH door for new clients. It
+//                        verifies Clerk tokens and exposes eight move workflows.
 //
-// RULE: the OAuth/Clerk advertisement belongs to /mcp/connect, never /api/mcp.
+//   3. /mcp/connect    — persisted OAUTH compatibility door via the older
+//                        convex-mcp-gateway catalog. It stays available for
+//                        already-connected clients but is not an alias of /mcp.
+//
+// RULE: the OAuth/Clerk advertisement belongs to /mcp and /mcp/connect, never
+// /api/mcp.
 // If you find yourself adding `authorization_servers`, Clerk, or a
 // `resource_metadata` pointer to the /api/mcp helpers below, STOP — you are
-// about to re-break agent connections. Surface /mcp/connect to OAuth clients
+// about to re-break agent connections. Surface /mcp to new OAuth clients
 // instead (see mcpOAuthConnectUrl). Guarded by tests/unit/mcp-endpoint-
 // separation.test.ts.
 // ============================================================================
@@ -49,7 +52,7 @@ export function mcpResourceUrl(request: Request) {
 
 // The OAuth front door. This is the URL OAuth-capable clients (claude.ai,
 // Cowork) should connect to — NOT /api/mcp. The canonical URL is the bare /mcp
-// (see src/app/mcp/route.ts); /mcp/connect remains a working alias. Surface this
+// (see src/app/mcp/route.ts); /mcp/connect is compatibility-only. Surface this
 // anywhere a user is told to "connect with sign-in / OAuth".
 export function mcpOAuthConnectUrl(request: Request) {
   return `${siteOriginFromRequest(request)}/mcp`;

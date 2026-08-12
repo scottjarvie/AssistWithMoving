@@ -29,9 +29,10 @@ src/components/     React components (ui/ = shadcn primitives)
 src/lib/            shared client/server helpers (sorting, labels, geometry …)
 convex/             the entire backend — one file per API namespace
                     (items.ts, boxes.ts, moves.ts …); schema.ts is the DB schema;
-                    mcp*.ts are the OAuth-gateway agent tools; lib/ = shared logic
+                    httpRoutes/mcp.ts + mcpPlanning.ts are canonical stateless
+                    OAuth; mcp*.ts retain the legacy OAuth catalog
 mcp-server/         standalone stdio MCP server (npm package) that talks to the
-                    REST API with an mmk_ API key — the second of two MCP surfaces
+                    REST API with an mmk_ API key
 scripts/            operational "doctor" checks, smoke tests, seeding
 tests/              Playwright e2e + Vitest unit tests
 docs/               Project Philosophy, API/MCP guide, audits, original build spec
@@ -39,10 +40,19 @@ infra/              Cloudflare image worker
 patches/            patch-package patches applied on install
 ```
 
-**The two MCP surfaces** (easy to confuse — check both before assuming a capability is missing):
+**The MCP compatibility doors** (easy to confuse — check the right catalog
+before assuming a capability is missing):
 
-1. **Remote OAuth gateway** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served at `movingmanifest.com/mcp/connect`. Users connect from claude.ai/ChatGPT via OAuth.
-2. **Stdio server** — `mcp-server/`, installed locally, authenticates with an `mmk_` API key against the REST API.
+1. **Canonical stateless OAuth** — `convex/httpRoutes/mcp.ts` +
+   `convex/mcpPlanning.ts`, served at `movingmanifest.com/mcp`. It exposes eight
+   workflow-level tools for a durable move brief, bounded search/read/media,
+   move context, inventory, planning records, and complete-result saves.
+2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served
+   at `movingmanifest.com/mcp/connect`. It preserves the older 29-tool catalog
+   for already-connected clients.
+3. **API-key HTTP/stdio** — `src/app/api/mcp/route.ts` and `mcp-server/`, using
+   an `mmk_` key against REST. This is the granular automation surface and the
+   only MCP surface with canonical scoped Queue transitions today.
 
 See [docs/api-and-mcp.md](docs/api-and-mcp.md) for details.
 
@@ -89,5 +99,5 @@ Merging to `main` on GitHub **is** the production deploy (Vercel builds and ship
 - Work happens on short-lived branches PR'd into `main`; branches are deleted after merge. Long-lived experiments get an `archive/*` branch on GitHub.
 - Cards and owner-approved Work Orders in `docs/tracker/` are the durable
   source for current work. GitHub PRs carry implementation review and evidence.
-- Agent-facing Convex tools must throw `ConvexError` (plain `Error` gets redacted to "Tool execution failed" by the MCP gateway).
+- Agent-facing Convex tools must throw `ConvexError` (plain `Error` may be redacted by an MCP transport).
 - No fabricated demo data in the UI — real data or an honest empty/explainer state.

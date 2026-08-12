@@ -23,6 +23,7 @@ import {
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { components } from "./_generated/api";
 import { tools as mcpTools } from "./mcp";
+import { registerMcpRoutes } from "./httpRoutes/mcp";
 
 const http = httpRouter();
 
@@ -1078,24 +1079,14 @@ const mcpHttpAction = httpAction((ctx, request) =>
   }),
 );
 
-for (const path of ["/mcp", "/mcp/"]) {
+// Keep the persisted gateway at a compatibility-only path. The canonical
+// /mcp resource is the stateless workflow surface registered below.
+for (const path of ["/mcp/legacy", "/mcp/legacy/"]) {
   for (const method of ["POST", "GET", "DELETE"] as const) {
     http.route({ path, method, handler: mcpHttpAction });
   }
 }
 
-const mcpMetadataAction = httpAction((ctx, request) =>
-  mcpGatewayClient.serveProtectedResourceMetadata(ctx, request),
-);
-http.route({
-  path: "/.well-known/oauth-protected-resource/mcp",
-  method: "GET",
-  handler: mcpMetadataAction,
-});
-http.route({
-  pathPrefix: "/.well-known/oauth-protected-resource/",
-  method: "GET",
-  handler: mcpMetadataAction,
-});
+registerMcpRoutes(http);
 
 export default http;

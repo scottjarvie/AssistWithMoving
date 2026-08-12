@@ -1,6 +1,7 @@
 # MovingManifest API and MCP Guide
 
-This guide covers the shipped `v1` REST API, the two remote MCP doors, and the
+This guide covers the shipped `v1` REST API, the canonical stateless OAuth MCP,
+the compatibility OAuth and API-key doors, and the
 maintainer-only stdio server.
 The API is designed for controlled automation: API keys carry explicit scopes,
 may be restricted to one move, and all write paths are auditable.
@@ -708,7 +709,7 @@ curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/boxes \
   -d '{ "code": "OFFICE-1", "label": "Office books", "room": "Office" }'
 ```
 
-For MCP agents, prefer `save_box_intake` when the user wants to add or update a
+For API-key MCP agents, prefer `save_box_intake` when the user wants to add or update a
 box with dimensions, weight, photos, a description of what is inside, or
 existing item IDs. It composes box create/update, photo upload, item batch
 upsert, and item-to-box linking behind one workflow call. Use `dryRun: true`
@@ -1335,13 +1336,13 @@ Evidence media upload is a presigned storage flow. The current product UI is
 still photo-first, but the storage contract accepts image, audio, and video
 originals. Image derivatives remain image-only.
 
-For MCP agents, prefer the plain `upload_image` or `upload_photo` alias, or
+For API-key MCP agents, prefer the plain `upload_image` or `upload_photo` alias, or
 `upload_evidence_image` when the client already knows that name, for normal
 single-image work. The assistant can pass a public HTTPS `sourceUrl`, `dataUrl`,
 or `fileBase64`; the maintainer-only local stdio server can additionally use an
 approved `filePath`. MovingManifest stores the original, finalizes evidence
 metadata, creates web-ready derivatives server-side, and returns the `photoId`.
-Hosted MCP always rejects `filePath`. Local stdio enables it only for paths
+Remote API-key MCP rejects `filePath`. Local stdio enables it only for paths
 whose resolved real path is inside a directory named in
 `MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS`; symlinks, non-regular files, and paths
 outside those roots are rejected. The local helper sends approved original
@@ -1370,7 +1371,7 @@ duplicate evidence, set `generateAiSuggestions: true`. Upload still succeeds
 when AI review queueing fails or the key only has `photos/write`; the response
 will include `aiReview.status` and any queueing error.
 
-When the photo is meant to become one new inventory item, MCP agents should use
+When the photo is meant to become one new inventory item, API-key MCP agents should use
 `add_item_from_photo`. It accepts the item name plus one image source at the top
 level, defaults `quantity` to `1` when omitted, leaves missing weight,
 dimensions, disposition, and condition blank, attaches the uploaded photo to the
@@ -1460,9 +1461,10 @@ without embedded credentials. MovingManifest validates every DNS result and
 redirect hop, pins the accepted address for the connection, applies a timeout,
 and enforces a 25 MB limit from both headers and streamed bytes. Claimed image
 types must also match JPEG, PNG, or WebP file signatures. API-key REST/MCP
-clients may pass a public `sourceUrl`, `dataUrl`, or `fileBase64`. Hosted OAuth
-MCP accepts base64 only because its runtime cannot safely pin DNS resolution;
-the maintainer-only stdio server can also read an approved local `filePath`.
+clients may pass a public `sourceUrl`, `dataUrl`, or `fileBase64`; the
+maintainer-only stdio server can also read an approved local `filePath`. The
+canonical OAuth catalog reads existing evidence with `get_evidence_media` but
+does not expose a new-photo upload tool.
 Set `generateAiSuggestions` when the same upload
 should also place
 the photo into AI review; that queueing step requires `inventory/write` in
@@ -1822,15 +1824,20 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 
 ## MCP Server
 
-Hosted assistants reach MovingManifest through **two separate doors — do not
-confuse them** (crossing them is the recurring "Invalid API key format" 401):
+Hosted assistants reach MovingManifest through **three deliberately separate
+doors — do not confuse their catalogs or credentials**:
 
-- **OAuth door (recommended):** `https://movingmanifest.com/mcp` — sign in
-  with your MovingManifest account, no key to copy. This is the OAuth 2.1 flow
-  (Clerk) via the convex-mcp-gateway. **Use this URL for any client that
-  supports browser sign-in.** Discovery:
-  `/.well-known/oauth-protected-resource/mcp`. The older `/mcp/connect` URL is
-  a working alias, not the default users should copy.
+- **Canonical stateless OAuth (recommended):**
+  `https://movingmanifest.com/mcp` — sign in with your MovingManifest account,
+  no key to copy. It verifies an issuer-signed, exact-audience Clerk access
+  token and creates a fresh MCP server for each request. **Use this URL for new
+  browser-sign-in clients.** Discovery:
+  `/.well-known/oauth-protected-resource/mcp`.
+- **Legacy persisted OAuth compatibility:**
+  `https://movingmanifest.com/mcp/connect` — preserves the older 29-tool
+  Convex-gateway catalog for already-connected clients. It is not an alias for
+  the new eight-tool catalog; do not use it for new setup unless compatibility
+  is specifically required.
 - **API-key door:** `https://movingmanifest.com/api/mcp` — accepts `mmk_` API
   keys ONLY (forwarded to REST as a key). It **cannot** consume an OAuth/JWT
   token, so do not point an OAuth sign-in at it. For local/headless tools, CI,
@@ -1840,25 +1847,20 @@ confuse them** (crossing them is the recurring "Invalid API key format" 401):
 > sign-in completes but every tool call 401s ("Invalid API key format"). Use
 > `/mcp` for OAuth. See `src/lib/mcp-oauth.ts` for the full rationale.
 
-The tool implementations are available over transports that share one tool
-registry (`mcp-server/movingmanifest-mcp.mjs`), so they cannot drift:
+The canonical OAuth surface is workflow-curated and does not wrap REST. The
+API-key HTTP and stdio transports share the larger REST-backed registry:
 
-- **Remote (Streamable HTTP)** at `https://movingmanifest.com/api/mcp` (API key)
-  or `https://movingmanifest.com/mcp` (OAuth) — for hosted, desktop, CLI, and
-  headless clients. Served by `src/app/api/mcp/route.ts` and
-  `src/app/mcp/route.ts`; `/mcp/connect` remains an OAuth alias.
-- **Maintainer-only local stdio** via
+- **Canonical OAuth Streamable HTTP** at `https://movingmanifest.com/mcp`,
+  served by `convex/httpRoutes/mcp.ts` through `src/app/mcp/route.ts`.
+- **Legacy OAuth compatibility** at
+  `https://movingmanifest.com/mcp/connect`, proxying the persisted gateway at
+  the private `/mcp/legacy` Convex route.
+- **API-key Streamable HTTP** at `https://movingmanifest.com/api/mcp`, served
+  by `src/app/api/mcp/route.ts` and backed by REST.
+- **Maintainer-only API-key stdio** via
   `mcp-server/movingmanifest-mcp.mjs`, run with Node from a clone of this repo
   for development and transport debugging. It is not the public installation
   path and the package is not published to npm.
-
-Both wrap the REST API. Neither connects directly to Convex or Clerk.
-
-Agents should usually call `get_api_capabilities` first. It returns a
-code-backed capability matrix with supported workflows, required scopes,
-REST endpoints, MCP tool names, and known launch blockers. This keeps agents
-from guessing from a long tool list and makes operational gaps explicit without
-treating verified storage/upload support as unavailable.
 
 ### Remote MCP — OAuth door (recommended default)
 
@@ -1869,7 +1871,26 @@ Auth:     OAuth 2.1 sign-in (Clerk) — no key to paste
 
 In claude.ai or Claude Cowork: Settings → Connectors → Add custom connector →
 paste `https://movingmanifest.com/mcp`. The client opens MovingManifest sign-in
-and consent; on approval it can call the tools. No `mmk_` key needed.
+and consent; on approval it can call the eight workflow tools below. No `mmk_`
+key needed.
+
+Canonical OAuth tool catalog:
+
+| Tool | Purpose |
+| --- | --- |
+| `get_move_brief` | First call. List bounded accessible moves or return one move's route, spaces, counts, review attention, saved planning records, and Queue summaries. |
+| `search_move_records` | Search bounded items, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue summaries. |
+| `get_move_records` | Hydrate up to 25 selected records with role-filtered detail. |
+| `get_evidence_media` | Return selected private move photos as native MCP image content. |
+| `save_move_context` | Replay-safe move route/timing/note correction plus room/location upserts. |
+| `save_inventory` | Replay-safe inventory creation and optimistic corrections with estimates, review flags, and source provenance. |
+| `save_planning_record` | Create or optimistically correct a decision, estimate, plan result, or source check. |
+| `save_complete_result` | Preferred happy path: atomically save a readable result and its related locations, inventory, decisions, estimates, plan sections, and source checks. |
+
+Start with `get_move_brief`. Search before creating duplicates. For normal
+finished work, prefer `save_complete_result`; use granular saves for later
+corrections. This OAuth catalog may read Queue summaries and link a result for
+human inspection, but it does not claim or complete canonical Queue work.
 
 Codex CLI/App:
 
@@ -1998,7 +2019,11 @@ If that decision changes, maintainers must bump the version in
 `mcp-server/movingmanifest-mcp.mjs`, publish from `mcp-server`, verify a clean
 install, and update every public setup surface in the same release.
 
-Available MCP tools:
+Available API-key HTTP/stdio MCP tools:
+
+Agents using this larger registry should usually call `get_api_capabilities`
+first. It returns supported workflows, required scopes, REST endpoints, tool
+names, and known launch blockers.
 
 | Tool | Purpose |
 | --- | --- |
@@ -2069,7 +2094,7 @@ Available MCP tools:
 | `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos or several new photos attached to one existing item. |
 | `upload_image` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload when the user or agent says image instead of photo. |
 | `upload_images` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload when the user or agent says images instead of photos, including several new images for one existing item. |
-| `upload_evidence_image` | Easiest MCP single-image upload: pass public HTTPS `sourceUrl`, `dataUrl`, or `fileBase64`; hosted OAuth accepts base64 only, while maintainer-only local stdio can also read a `filePath` inside an explicitly configured real-path root. MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
+| `upload_evidence_image` | Easiest API-key MCP single-image upload: pass public HTTPS `sourceUrl`, `dataUrl`, or `fileBase64`; maintainer-only local stdio can also read a `filePath` inside an explicitly configured real-path root. MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
 | `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status plus `agentReview`. |
 | `upload_evidence_file` | Maintainer-only local stdio media upload: pass a `filePath` inside an explicitly configured real-path root or a bounded public HTTPS `sourceUrl`; hosted transports reject filesystem paths. The tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
 | `start_photo_upload` | Start an evidence media upload session and return presigned original/optional derivative upload information. |
@@ -2107,7 +2132,8 @@ objective, inherit the person's manager recovery, or inherit inventory, plan,
 export, or member permissions.
 
 OAuth capture-queue compatibility tools (`list_queue`, `claim_queue`, and
-`submit_queue_result`) are served by the Convex MCP gateway for signed-in
+`submit_queue_result`) are served only by the legacy `/mcp/connect` Convex MCP
+gateway for signed-in
 MovingManifest users. They are legacy person-authorized capture processing,
 not the canonical chosen-AI Queue authority surface, and a manager role does
 not widen their Queue ownership. Queue entries expose structured capture hints such as
