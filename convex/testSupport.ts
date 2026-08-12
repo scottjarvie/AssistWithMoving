@@ -63,6 +63,9 @@ type CleanupCounts = {
   items: number;
   boxes: number;
   boxItems: number;
+  ingestionQueueEntries: number;
+  queueActivities: number;
+  queueItems: number;
   itemPhotos: number;
   photoUploadSessions: number;
   documentationProfiles: number;
@@ -204,6 +207,9 @@ function emptyCounts(): CleanupCounts {
     items: 0,
     boxes: 0,
     boxItems: 0,
+    ingestionQueueEntries: 0,
+    queueActivities: 0,
+    queueItems: 0,
     itemPhotos: 0,
     photoUploadSessions: 0,
     documentationProfiles: 0,
@@ -288,6 +294,31 @@ async function cleanupMove(
         .collect()
     );
   }
+
+  // Queue activity points at canonical items, and capture rows can point at
+  // photos/items. Remove the Queue records first so a marked E2E move leaves
+  // no private handoff or capture provenance behind after cleanup.
+  counts.queueActivities += await deleteDocs(
+    ctx,
+    await ctx.db
+      .query("queueActivities")
+      .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+      .collect()
+  );
+  counts.queueItems += await deleteDocs(
+    ctx,
+    await ctx.db
+      .query("queueItems")
+      .withIndex("by_move_updated", (q) => q.eq("moveId", moveId))
+      .collect()
+  );
+  counts.ingestionQueueEntries += await deleteDocs(
+    ctx,
+    await ctx.db
+      .query("ingestionQueueEntries")
+      .withIndex("by_move_created", (q) => q.eq("moveId", moveId))
+      .collect()
+  );
 
   counts.itemPhotos += await deleteDocs(
     ctx,
