@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,12 +11,46 @@ import {
   accountExportFilename,
   anonymizedUserPatch,
   assertDeletionConfirmation,
+  queueRecordBelongsToAccountExport,
   redactItemForExport,
   retentionPolicy,
   summarizeExportPackage,
 } from "../../convex/lib/accountPrivacy";
 
 describe("account privacy helpers", () => {
+  it("keeps Queue exports personal even for members of the same household", () => {
+    const householdId = "household1" as never;
+    const accountUserId = "user1" as never;
+
+    expect(
+      queueRecordBelongsToAccountExport(
+        { ownerUserId: accountUserId, householdId },
+        accountUserId,
+        householdId,
+      ),
+    ).toBe(true);
+    expect(
+      queueRecordBelongsToAccountExport(
+        { ownerUserId: "user2" as never, householdId },
+        accountUserId,
+        householdId,
+      ),
+    ).toBe(false);
+    expect(
+      queueRecordBelongsToAccountExport(
+        { ownerUserId: accountUserId, householdId: "household2" as never },
+        accountUserId,
+        householdId,
+      ),
+    ).toBe(false);
+
+    const exportSource = readFileSync("convex/accountPrivacy.ts", "utf8");
+    expect(exportSource).toContain('.withIndex("by_owner_updated"');
+    expect(exportSource).toContain('.withIndex("by_owner_created"');
+    expect(exportSource).toContain("queueRecordBelongsToAccountExport(item");
+    expect(exportSource).toContain("queueRecordBelongsToAccountExport(activity");
+  });
+
   it("uses deterministic export and deletion windows", () => {
     const now = Date.UTC(2026, 5, 8, 12);
 

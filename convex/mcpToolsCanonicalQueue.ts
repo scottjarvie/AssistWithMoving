@@ -29,6 +29,7 @@ import {
 } from "./lib/queueService";
 import {
   canViewQueueEntry,
+  queueManagerRecoveryAllowed,
   resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
 
@@ -56,10 +57,13 @@ async function resolveQueueSubject(
     userId: policy.actor.userId,
     actorType: "agent",
     label: "Connected AI",
-    isManager: canPerformHouseholdAction(
-      policy.role,
-      "household:manage_members",
-    ),
+    isManager: queueManagerRecoveryAllowed({
+      actorType: "agent",
+      hasManagerRole: canPerformHouseholdAction(
+        policy.role,
+        "household:manage_members",
+      ),
+    }),
     delegatedOwnerIds:
       participant?.status === "active"
         ? (participant.canRunQueueForUserIds ?? [])

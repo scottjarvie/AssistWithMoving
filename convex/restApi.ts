@@ -119,6 +119,7 @@ import {
 } from "./lib/queueService";
 import {
   canViewQueueEntry,
+  queueManagerRecoveryAllowed,
   resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
 import { canPerformHouseholdAction } from "./lib/roles";
@@ -776,10 +777,13 @@ async function queueApiActor(
     actorType: "apiKey",
     apiKeyId: auth.apiKeyId,
     label: auth.apiKeyName,
-    isManager: canPerformHouseholdAction(
-      auth.effectiveRole,
-      "household:manage_members",
-    ),
+    isManager: queueManagerRecoveryAllowed({
+      actorType: "apiKey",
+      hasManagerRole: canPerformHouseholdAction(
+        auth.effectiveRole,
+        "household:manage_members",
+      ),
+    }),
     delegatedOwnerIds:
       participant?.status === "active"
         ? (participant.canRunQueueForUserIds ?? [])

@@ -242,10 +242,11 @@ POST /api/v1/moves/{moveId}/queue/{queueItemId}/failure
 ```
 
 List accepts `state`, `ownerUserId`, `limit` (maximum 100), and the returned
-timestamp cursor as `before`. Non-manager reads default to the caller's own
+timestamp cursor as `before`. API-key reads default to the key creator's own
 Queue so authorization filtering cannot create incomplete pages; the response
 lists `runnableOwnerIds` and an explicitly delegated owner can be selected.
-Managers may read the whole move or select one owner. Claim requires `nextStep`; release requires a
+A human manager's in-product recovery authority is never inherited by an API
+key or OAuth agent. Claim requires `nextStep`; release requires a
 reason; Needs You requires `requiredAction`; completion requires
 `resultSummary` or at least one `{type,id,label?}` result reference. Failure
 requires a stable code, readable message, and `retryable`; retryable work
@@ -2098,15 +2099,18 @@ Available MCP tools:
 
 Canonical Queue tools (`list_queue_items`, `get_queue_item`,
 `claim_queue_item`, `release_queue_item`, `request_queue_input`,
-`complete_queue_item`, and `report_queue_failure`) are available through both
-the OAuth gateway and API-key MCP/stdio surfaces. The OAuth gateway derives the
-person and move access from the verified sign-in; API-key surfaces additionally
-require `queue/read` or `queue/write`. Neither surface can create a new objective
-or inherit inventory/plan/export/member permissions from Queue access.
+`complete_queue_item`, and `report_queue_failure`) are available through the
+API-key REST/MCP/stdio surface with `queue/read` or `queue/write`. They are
+deliberately not registered on the OAuth gateway yet: a person's OAuth identity
+does not prove a distinct chosen-AI grant. Queue access cannot create a new
+objective, inherit the person's manager recovery, or inherit inventory, plan,
+export, or member permissions.
 
 OAuth capture-queue compatibility tools (`list_queue`, `claim_queue`, and
 `submit_queue_result`) are served by the Convex MCP gateway for signed-in
-MovingManifest users. Queue entries expose structured capture hints such as
+MovingManifest users. They are legacy person-authorized capture processing,
+not the canonical chosen-AI Queue authority surface, and a manager role does
+not widen their Queue ownership. Queue entries expose structured capture hints such as
 `itemKind`, `estimatedWeightLb`, `dimensionsIn`, `disposition`,
 `startingSpaceId`, `presentSpaceId`, `presentTransportId`, `targetSpaceId`, and
 `targetTransportId` so agents do not have to re-parse the user's instructions.

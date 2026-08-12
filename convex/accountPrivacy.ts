@@ -9,6 +9,7 @@ import {
   accountExportFilename,
   anonymizedUserPatch,
   assertDeletionConfirmation,
+  queueRecordBelongsToAccountExport,
   redactItemForExport,
   retentionPolicy,
   summarizeExportPackage,
@@ -281,7 +282,12 @@ async function buildAccountExportPackage(
   ).filter((household): household is Doc<"households"> => Boolean(household));
   const householdData = await Promise.all(
     households.map((household) =>
-      exportHouseholdData(ctx, household, roleByHousehold.get(household._id)!)
+      exportHouseholdData(
+        ctx,
+        household,
+        roleByHousehold.get(household._id)!,
+        user._id,
+      )
     )
   );
 
@@ -342,7 +348,8 @@ async function buildAccountExportPackage(
 async function exportHouseholdData(
   ctx: MutationCtx,
   household: Doc<"households">,
-  role: Doc<"householdMemberships">["role"]
+  role: Doc<"householdMemberships">["role"],
+  accountUserId: Id<"users">,
 ) {
   const [
     moves,
@@ -398,18 +405,24 @@ async function exportHouseholdData(
       .collect(),
     ctx.db
       .query("queueItems")
-      .withIndex("by_household_updated", (q) =>
-        q.eq("householdId", household._id),
+      .withIndex("by_owner_updated", (q) =>
+        q.eq("ownerUserId", accountUserId),
       )
       .collect(),
     ctx.db
       .query("queueActivities")
-      .withIndex("by_household_created", (q) =>
-        q.eq("householdId", household._id),
+      .withIndex("by_owner_created", (q) =>
+        q.eq("ownerUserId", accountUserId),
       )
       .collect(),
   ]);
   const visibility = visibilityForHouseholdRole(role);
+  const accountQueueItems = queueItems.filter((item) =>
+    queueRecordBelongsToAccountExport(item, accountUserId, household._id),
+  );
+  const accountQueueActivities = queueActivities.filter((activity) =>
+    queueRecordBelongsToAccountExport(activity, accountUserId, household._id),
+  );
 
   return {
     household: {
@@ -542,7 +555,7 @@ async function exportHouseholdData(
       createdAt: link.createdAt,
       updatedAt: link.updatedAt,
     })),
-    queueItems: queueItems.map((item) => ({
+    queueItems: accountQueueItems.map((item) => ({
       id: item._id,
       moveId: item.moveId,
       ownerUserId: item.ownerUserId,
@@ -572,7 +585,7 @@ async function exportHouseholdData(
       updatedAt: item.updatedAt,
       completedAt: item.completedAt,
     })),
-    queueActivities: queueActivities.map((activity) => ({
+    queueActivities: accountQueueActivities.map((activity) => ({
       id: activity._id,
       queueItemId: activity.queueItemId,
       moveId: activity.moveId,

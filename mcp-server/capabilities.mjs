@@ -334,7 +334,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
     title: "Person and chosen-AI Queue handoffs",
     status: "available",
     purpose:
-      "Discover, claim, release, complete, or return bounded move work to the person with explicit state, concurrency, retry, and attribution rules.",
+      "Use an explicitly scoped API key to discover, claim, release, complete, or return bounded move work with explicit state, concurrency, retry, and attribution rules. Canonical Queue tools are not registered on the OAuth gateway until distinct chosen-AI grants exist.",
     requiredScopes: ["queue/read", "queue/write"],
     restEndpoints: [
       "GET /api/v1/moves/:moveId/queue",
@@ -355,6 +355,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "report_queue_failure",
     ],
     agentWorkflows: [
+      "Use the API-key REST/MCP/stdio surface; canonical OAuth Queue registration is intentionally held back.",
       "Read only the caller's own or explicitly delegated move Queue.",
       "Claim with an expiring lease and optimistic version before doing work.",
       "Return exact human blockers as Needs You and attach readable results to Done.",

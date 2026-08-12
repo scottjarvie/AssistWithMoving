@@ -11,6 +11,19 @@
 // gateway twin) both call them so the two surfaces can't drift.
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { QueueActorType } from "./queue";
+
+/**
+ * Manager recovery is a person-only product capability. Agent and API-key
+ * actors may use only their own Queue or an explicit Queue delegation, even
+ * when their underlying human account manages the move.
+ */
+export function queueManagerRecoveryAllowed(input: {
+  actorType: QueueActorType;
+  hasManagerRole: boolean;
+}): boolean {
+  return input.actorType === "user" && input.hasManagerRole;
+}
 
 // A friendly label for a queue owner shown in the picker / agent list. Prefers
 // the real display name; falls back to the email's capitalized local part (so it

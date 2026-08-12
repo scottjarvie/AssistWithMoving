@@ -139,7 +139,7 @@ describe("canonical Queue behavior contract", () => {
     expect(() => assertExpectedQueueVersion(4, 4)).not.toThrow();
   });
 
-  it("excludes missing expiries and keeps OAuth Queue functions gateway-only", () => {
+  it("excludes missing expiries and holds canonical OAuth Queue registration", () => {
     const queueSource = readFileSync("convex/queue.ts", "utf8");
     expect(queueSource).toContain(
       'q.gt("expiresAt", undefined).lt("expiresAt", now)',
@@ -154,11 +154,22 @@ describe("canonical Queue behavior contract", () => {
     expect(oauthFunctions).not.toMatch(/export const \w+ = (query|mutation)\(\{/);
 
     const gatewayRegistry = readFileSync("convex/mcp.ts", "utf8");
+    expect(gatewayRegistry).not.toContain("mcpToolsCanonicalQueue");
+    expect(gatewayRegistry).not.toMatch(/name: "list_queue_items"/);
+    expect(gatewayRegistry).not.toMatch(/name: "claim_queue_item"/);
     expect(gatewayRegistry).toContain(
-      "internal.mcpToolsCanonicalQueue.listQueueItems",
+      "not a canonical chosen-AI Queue claim",
     );
-    expect(gatewayRegistry).toContain(
-      "internal.mcpToolsCanonicalQueue.reportQueueFailure",
-    );
+  });
+
+  it("routes every agent Queue entry point through the human-only recovery gate", () => {
+    for (const sourcePath of [
+      "convex/mcpToolsCanonicalQueue.ts",
+      "convex/mcpToolsQueue.ts",
+      "convex/restApi.ts",
+    ]) {
+      const source = readFileSync(sourcePath, "utf8");
+      expect(source).toContain("isManager: queueManagerRecoveryAllowed({");
+    }
   });
 });

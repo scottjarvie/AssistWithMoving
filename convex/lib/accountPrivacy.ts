@@ -1,6 +1,6 @@
 import { ConvexError } from "convex/values";
 
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { visibilityForHouseholdRole, type HouseholdRole } from "./roles";
 
 export const ACCOUNT_EXPORT_EXPIRATION_MS = 14 * 24 * 60 * 60 * 1000;
@@ -35,6 +35,25 @@ export function accountDeletionScheduledAt(now: number) {
 export function accountExportFilename(now: number) {
   const date = new Date(now).toISOString().slice(0, 10);
   return `movingmanifest-account-export-${date}.json`;
+}
+
+/**
+ * Queue is personal continuity, not household-wide move data. An account
+ * export includes only Queue records owned by the exporting person and still
+ * verifies the household boundary as a defense-in-depth check.
+ */
+export function queueRecordBelongsToAccountExport(
+  record: {
+    ownerUserId: Id<"users">;
+    householdId: Id<"households">;
+  },
+  accountUserId: Id<"users">,
+  householdId: Id<"households">,
+): boolean {
+  return (
+    record.ownerUserId === accountUserId &&
+    record.householdId === householdId
+  );
 }
 
 export function anonymizedUserPatch(now: number) {

@@ -39,6 +39,7 @@ import {
   canRunQueueForOwner,
   canViewQueueEntry,
   queueEntryOwnerUserId,
+  queueManagerRecoveryAllowed,
   queueOwnerDisplayName,
   resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
@@ -78,10 +79,13 @@ async function resolveQueueSubject(
       : [];
   return {
     userId,
-    isManager: canPerformHouseholdAction(
-      policy.role,
-      "household:manage_members",
-    ),
+    isManager: queueManagerRecoveryAllowed({
+      actorType: "agent",
+      hasManagerRole: canPerformHouseholdAction(
+        policy.role,
+        "household:manage_members",
+      ),
+    }),
     delegatedOwnerIds,
   };
 }

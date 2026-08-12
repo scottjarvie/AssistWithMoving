@@ -12,7 +12,7 @@ import {
   type McpToolRegistration,
 } from "convex-mcp-gateway";
 
-import { api, internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import {
   addImagesArgs,
   attachPhotosArgs,
@@ -23,15 +23,6 @@ import {
   listQueueArgs,
   submitQueueResultArgs,
 } from "./mcpToolsQueue";
-import {
-  claimQueueItemArgs,
-  completeQueueItemArgs,
-  getQueueItemArgs,
-  listQueueItemsArgs,
-  releaseQueueItemArgs,
-  reportQueueFailureArgs,
-  requestQueueInputArgs,
-} from "./mcpToolsCanonicalQueue";
 import {
   archiveItemArgs,
   convertItemToBoxArgs,
@@ -169,7 +160,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "list_queue",
     description:
-      "Compatibility view of Moving's specialized capture pipeline. It projects every entry into the family Queue states (Needs You, Working, Waiting for your AI, Done) while retaining legacyStatus for existing clients. Use list_queue_items for new general handoffs. The optional status filter uses the documented legacy capture vocabulary only.",
+      "Legacy person-authorized compatibility view of Moving's specialized capture pipeline. It projects every entry into the family Queue states while retaining legacyStatus for existing clients. This is not the canonical chosen-AI Queue authority surface. The optional status filter uses the documented legacy capture vocabulary only.",
     fn: api.mcpToolsQueue.listQueue,
     args: listQueueArgs,
     identityArg: "caller",
@@ -177,7 +168,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "claim_queue",
     description:
-      "Claim the oldest queued capture entries so two agent runs never process the same one. Defaults to YOUR own queue; to help run a queue a move owner delegated to you (share a subscription), pass ownerUserId from list_queue's runnableOwners. Returns the claimed entries — each includes mediaPhotoIds, the already-uploaded photos for that capture. A claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry: turn it into inventory (upsert_items / pack_boxes / convert_item_to_box), then call submit_queue_result — which files the entry's photos onto what you created. For a capture that becomes SEVERAL items, attach each photo to the right one with attach_photos first. Entries whose photo upload FAILED are still returned here and can be claimed + processed normally (a failed upload may never complete); only entries with an upload still actively in flight are held back.",
+      "Legacy person-authorized capture processing, not a canonical chosen-AI Queue claim. Claim the oldest capture entries from only your own or an explicitly delegated Queue; a human manager role does not widen agent access. Each claim expires after 15 minutes. Turn entries into inventory, then call submit_queue_result.",
     fn: api.mcpToolsQueue.claimQueue,
     args: claimQueueArgs,
     identityArg: "caller",
@@ -185,65 +176,9 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "submit_queue_result",
     description:
-      "Report what a claimed entry produced: link the inventory items you created (resultItemIds) AND/OR the boxes/totes you created (resultBoxIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items / pack_boxes / convert_item_to_box, which create the units. The capture's uploaded photos are AUTOMATICALLY attached to what you made — to the single item in resultItemIds, or (if you didn't create exactly one item) to the box/room/transport the entry targeted — so a capture's photos never get left behind. The result returns attachedPhotoCount. Exception: a capture that became MULTIPLE items can't be auto-split — attach each photo to the right item yourself with attach_photos (using the entry's mediaPhotoIds) before submitting.",
+      "Report the result of a legacy person-authorized capture claim. Link created inventory or ask the user a question; this compatibility tool does not represent canonical chosen-AI Queue authority. Uploaded capture photos are attached using the existing capture rules.",
     fn: api.mcpToolsQueue.submitQueueResult,
     args: submitQueueResultArgs,
-    identityArg: "caller",
-  }),
-  defineMcpQuery({
-    name: "list_queue_items",
-    description:
-      "List canonical Queue handoffs using exactly Needs You, Working, Waiting for your AI, and Done. Results are bounded and move-scoped; only your own or explicitly delegated Queue items are returned.",
-    fn: internal.mcpToolsCanonicalQueue.listQueueItems,
-    args: listQueueItemsArgs,
-    identityArg: "caller",
-  }),
-  defineMcpQuery({
-    name: "get_queue_item",
-    description:
-      "Read one canonical Queue item plus attributable activity history. Use the returned version for concurrency-safe commands.",
-    fn: internal.mcpToolsCanonicalQueue.getQueueItem,
-    args: getQueueItemArgs,
-    identityArg: "caller",
-  }),
-  defineMcpMutation({
-    name: "claim_queue_item",
-    description:
-      "Claim one Waiting for your AI handoff before work begins. Requires a concrete nextStep, records the acting AI, and creates a 15-minute lease so abandoned work becomes claimable again.",
-    fn: internal.mcpToolsCanonicalQueue.claimQueueItem,
-    args: claimQueueItemArgs,
-    identityArg: "caller",
-  }),
-  defineMcpMutation({
-    name: "release_queue_item",
-    description:
-      "Release your active claim back to Waiting for your AI with a durable reason. This does not mark work complete.",
-    fn: internal.mcpToolsCanonicalQueue.releaseQueueItem,
-    args: releaseQueueItemArgs,
-    identityArg: "caller",
-  }),
-  defineMcpMutation({
-    name: "request_queue_input",
-    description:
-      "Move your actively claimed handoff to Needs You with the exact human decision, fact, file, approval, or outside-world action required. Do not use it for vague progress updates.",
-    fn: internal.mcpToolsCanonicalQueue.requestQueueInput,
-    args: requestQueueInputArgs,
-    identityArg: "caller",
-  }),
-  defineMcpMutation({
-    name: "complete_queue_item",
-    description:
-      "Finish your actively claimed handoff. Done requires a readable result summary or at least one durable result reference; activity and attribution are recorded.",
-    fn: internal.mcpToolsCanonicalQueue.completeQueueItem,
-    args: completeQueueItemArgs,
-    identityArg: "caller",
-  }),
-  defineMcpMutation({
-    name: "report_queue_failure",
-    description:
-      "Report a bounded work failure. Retryable failures return to Waiting for your AI until the attempt budget is exhausted; exhausted or non-retryable failures become Needs You with an exact review action.",
-    fn: internal.mcpToolsCanonicalQueue.reportQueueFailure,
-    args: reportQueueFailureArgs,
     identityArg: "caller",
   }),
   defineMcpMutation({

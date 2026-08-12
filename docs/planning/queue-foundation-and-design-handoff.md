@@ -25,8 +25,9 @@ Repository implementation now provides:
 - expiring claims, optimistic versions, idempotent commands, bounded retries,
   cancellation, item expiry, and attributable system maintenance;
 - signed-in Convex commands for directive creation, human response, and cancel;
-- OAuth MCP and API-key REST/MCP read/claim/release/Needs You/complete/failure
-  commands;
+- API-key REST/MCP read/claim/release/Needs You/complete/failure commands;
+- legacy OAuth capture compatibility tools explicitly labeled as
+  person-authorized rather than canonical chosen-AI Queue authority;
 - independent `queue/read` and `queue/write` API-key scopes that do not imply
   inventory, plan, export, member, or outside-world authority;
 - account-export coverage and an explicit retention/anonymization policy; and
@@ -97,8 +98,8 @@ and results append history; they do not overwrite provenance.
 - Add a directive, with move context automatic and room/belongings optional.
 - Answer the exact Needs You request; the item returns to Waiting for your AI.
 - Cancel a non-Done item with a reason; it becomes Done/canceled.
-- Read only the person's own, explicitly delegated, or manager-recoverable
-  Queue and activity.
+- Read the person's own, explicitly delegated, or manager-recoverable Queue and
+  activity. Manager recovery is a human in-product capability only.
 
 ### Chosen AI / external agent
 
@@ -125,8 +126,9 @@ explicit confirmation authorizes them.
 - Every read/write resolves a verified user or API-key creator, household,
   move, effective role, active participant status, owner, and explicit Queue
   delegation. The client cannot choose a tenant by assertion alone.
-- Move managers can recover move Queue work; other actors see/run only their
-  own or explicitly delegated owner's items.
+- Move managers can recover move Queue work in the product. OAuth agents and
+  API keys never inherit that shortcut; they see/run only their creator's own
+  or explicitly delegated owner's items.
 - API keys have a live owner kill-switch, optional move restriction, expiry,
   revocation, rate limit, and independent Queue scopes.
 - Working has a 15-minute claim lease. The five-minute bounded maintenance
@@ -140,11 +142,12 @@ explicit confirmation authorizes them.
   `before` cursor. Non-manager lists default to the caller's own Queue and
   expose `runnableOwnerIds` for deliberate delegated-owner selection, avoiding
   incomplete pages caused by filtering unauthorized owners after pagination.
-- Account exports include Queue items and attributable activity. Account
-  deletion revokes the person's AI access and anonymizes the user profile while
-  retaining shared move work/history for collaborators, matching the existing
-  product policy. Queue is private move data and is never exposed through share
-  links by this package.
+- Account exports include only the exporting person's Queue items and
+  attributable activity, even when that person manages a shared household.
+  Account deletion revokes the person's AI access and anonymizes the user
+  profile while retaining shared move work/history for collaborators, matching
+  the existing product policy. Queue is private move data and is never exposed
+  through share links by this package.
 
 ## Required UI/system states for Claude Design
 
@@ -201,8 +204,9 @@ Before calling the final UI complete, prove with synthetic/marked data:
 7. disconnected/unknown AI truth, empty/loading/permission/error states;
 8. keyboard, screen-reader, phone/tablet/desktop, reduced-motion, long-text, and
    dense-history behavior; and
-9. both OAuth and API-key MCP surfaces plus REST scopes, followed by safe
-   human inspection of the durable result.
+9. API-key MCP/REST scopes, revocation, and multi-client behavior, followed by
+   safe human inspection of the durable result; canonical OAuth Queue proof
+   follows only after a distinct chosen-AI grant exists.
 
 Authenticated production data remains unverified until a dedicated marked
 account and provider credentials are available. Do not use real household data

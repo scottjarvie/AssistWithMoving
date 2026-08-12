@@ -144,6 +144,7 @@ describe("MovingManifest MCP capability discovery", () => {
         id: "queueHandoffs",
         status: "available",
         requiredScopes: ["queue/read", "queue/write"],
+        purpose: expect.stringContaining("API key"),
         mcpTools: expect.arrayContaining([
           "list_queue_items",
           "claim_queue_item",
