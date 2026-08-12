@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import {
+  apiKeyCanReachQueueOwner,
   canActOnQueueEntry,
   canRunQueueForOwner,
   canViewQueueEntry,
@@ -17,6 +18,107 @@ const mover = "user_mover" as Id<"users">;
 const helper = "user_helper" as Id<"users">;
 const household = "household_1" as Id<"households">;
 const move = "move_1" as Id<"moves">;
+const otherMove = "move_2" as Id<"moves">;
+
+describe("Queue-capable AI connection status", () => {
+  const baseKey = {
+    status: "active" as const,
+    scopes: ["queue/read", "queue/write"],
+    createdByUserId: scott,
+  };
+  const activeMembership = { status: "active" };
+
+  it("requires live access, both Queue scopes, and a matching move", () => {
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: baseKey,
+        moveId: move,
+        ownerUserId: scott,
+        membership: activeMembership,
+      }),
+    ).toBe(true);
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, scopes: ["queue/read"] },
+        moveId: move,
+        ownerUserId: scott,
+        membership: activeMembership,
+      }),
+    ).toBe(false);
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, moveId: otherMove },
+        moveId: move,
+        ownerUserId: scott,
+        membership: activeMembership,
+      }),
+    ).toBe(false);
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: baseKey,
+        moveId: move,
+        ownerUserId: scott,
+        membership: { status: "active", apiAccessStatus: "disabled" },
+      }),
+    ).toBe(false);
+  });
+
+  it("reports another person's Queue only for an explicit AI delegation", () => {
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, createdByUserId: erin, moveId: move },
+        moveId: move,
+        ownerUserId: scott,
+        participant: {
+          status: "active",
+          accessKind: "moveOnly",
+          canRunQueueForUserIds: [scott],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, createdByUserId: erin, moveId: move },
+        moveId: move,
+        ownerUserId: scott,
+        participant: {
+          status: "active",
+          accessKind: "moveOnly",
+          canRunQueueForUserIds: [],
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("honors either kill switch for a household member's move key", () => {
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, moveId: move },
+        moveId: move,
+        ownerUserId: scott,
+        membership: activeMembership,
+        participant: { status: "active", agentAccessStatus: "disabled" },
+      }),
+    ).toBe(false);
+    expect(
+      apiKeyCanReachQueueOwner({
+        now: 2_000,
+        key: { ...baseKey, moveId: move },
+        moveId: move,
+        ownerUserId: scott,
+        membership: { status: "active", apiAccessStatus: "disabled" },
+        participant: { status: "active" },
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("queueOwnerDisplayName", () => {
   it("prefers a real name", () => {

@@ -12,6 +12,55 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { QueueActorType } from "./queue";
+import { apiKeyEffectiveStatus } from "./apiKeys";
+
+export function apiKeyCanReachQueueOwner(input: {
+  now: number;
+  key: {
+    status: "active" | "revoked";
+    expiresAt?: number;
+    moveId?: Id<"moves">;
+    scopes: readonly string[];
+    createdByUserId: Id<"users">;
+  };
+  moveId: Id<"moves">;
+  ownerUserId?: Id<"users">;
+  membership?: {
+    status: string;
+    apiAccessStatus?: string;
+  };
+  participant?: {
+    status: string;
+    accessKind?: string;
+    agentAccessStatus?: string;
+    canRunQueueForUserIds?: Id<"users">[];
+  };
+}): boolean {
+  const { key, membership, participant } = input;
+  const activeMembership = membership?.status === "active";
+  const activeParticipant = participant?.status === "active";
+  const hasLiveAccess = key.moveId
+    ? activeMembership
+      ? membership.apiAccessStatus !== "disabled" &&
+        (!activeParticipant || participant.agentAccessStatus !== "disabled")
+      : activeParticipant &&
+        participant.accessKind === "moveOnly" &&
+        participant.agentAccessStatus !== "disabled"
+    : activeMembership && membership.apiAccessStatus !== "disabled";
+  const canRunSelectedOwner =
+    input.ownerUserId === undefined ||
+    key.createdByUserId === input.ownerUserId ||
+    (participant?.status === "active" &&
+      participant.canRunQueueForUserIds?.includes(input.ownerUserId) === true);
+  return (
+    apiKeyEffectiveStatus(key, input.now) === "active" &&
+    (key.moveId === undefined || key.moveId === input.moveId) &&
+    key.scopes.includes("queue/read") &&
+    key.scopes.includes("queue/write") &&
+    hasLiveAccess &&
+    canRunSelectedOwner
+  );
+}
 
 /**
  * Manager recovery is a person-only product capability. Agent and API-key

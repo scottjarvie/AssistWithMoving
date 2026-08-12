@@ -238,4 +238,34 @@ describe("canonical Queue behavior contract", () => {
     expect(restSource).not.toContain("args.query.before");
     expect(restSource).toContain(".paginate({ cursor, numItems: limit })");
   });
+
+  it("keeps web Queue pages reactive and filters capture owners before pagination", () => {
+    const queueSource = readFileSync("convex/queue.ts", "utf8");
+    expect(queueSource).toContain("paginationOptsValidator");
+    expect(queueSource).toContain('withIndex("by_move_owner_created"');
+    expect(queueSource).toContain('withIndex("by_move_creator_owner_created"');
+    expect(queueSource).toContain('.eq("createdByUserId", args.ownerUserId)');
+    expect(queueSource).toContain('.eq("ownerUserId", undefined)');
+    expect(queueSource).toContain("You cannot view this Queue owner's captures.");
+    expect(queueSource).toContain("apiKeyCanReachQueueOwner({");
+    expect(queueSource).toContain("...page,");
+    expect(queueSource).toContain("listLegacyCaptureAdapter");
+
+    const schemaSource = readFileSync("convex/schema.ts", "utf8");
+    expect(schemaSource).toContain('.index("by_move_owner_created"');
+    expect(schemaSource).toContain('.index("by_move_creator_owner_created"');
+
+    const dataSource = readFileSync(
+      "src/components/queue-experience-data.tsx",
+      "utf8",
+    );
+    expect(dataSource).toContain("usePaginatedQuery(");
+    expect(dataSource).toContain("api.queue.listActivity");
+    expect(dataSource).toContain("activities.loadMore(50)");
+    expect(dataSource).toContain("state: activeState");
+    expect(dataSource).toContain("ownerUserId: selectedOwnerUserId");
+    expect(dataSource).toContain('handoffs.status === "CanLoadMore"');
+    expect(dataSource).not.toContain("setOlderHandoffs");
+    expect(dataSource).not.toContain("setOlderCaptures");
+  });
 });

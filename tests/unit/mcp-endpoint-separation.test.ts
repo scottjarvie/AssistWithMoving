@@ -109,15 +109,16 @@ describe("MCP two-door separation (API key vs OAuth)", () => {
     });
   });
 
-  // The bug that keeps recurring is user-facing copy/constants pointing OAuth
-  // clients at /api/mcp. Lock the connect URL surfaced in each entry point.
-  describe("user-facing 'connect your agent' surfaces use the OAuth door", () => {
-    it("the in-app onboarding banner shows /mcp/connect, not /api/mcp", () => {
-      const src = readFileSync(
-        "src/components/connect-agent-onboarding.tsx",
-        "utf8",
-      );
-      expect(src).toContain(OAUTH_DOOR);
+  // General MCP setup uses the OAuth door. Canonical Queue stays on the scoped
+  // API-key surface until distinct chosen-AI OAuth grants exist, so the Queue
+  // UI names access readiness without publishing either protocol URL.
+  describe("user-facing agent surfaces advertise only their supported door", () => {
+    it("the Queue screen does not advertise canonical Queue access through OAuth", () => {
+      const src = readFileSync("src/components/queue-experience.tsx", "utf8");
+      expect(src).toContain("API-key access is available");
+      expect(src).toContain("cannot tell whether an AI client is currently online");
+      expect(src).toContain('/settings/ai-connections');
+      expect(src).not.toContain(OAUTH_DOOR);
       expect(src).not.toContain(API_KEY_DOOR);
     });
 
