@@ -129,6 +129,15 @@ production-authenticated mutation/revocation/cleanup proof.
 - Live signed-out proof returns a Clerk redirect for `/app/queue`, exposes no
   private data, keeps `/queue` as an intentional 404, and preserves the public
   MCP endpoint's refusal/discovery behavior.
+- A later authenticated Vercel-preview pass created only clearly marked
+  synthetic data and exercised canonical Queue creation, the capture adapter,
+  exact four-state navigation, two AI claims, Needs You response, readable Done
+  result, full actor activity, empty/loading behavior, cursor continuation,
+  stale-version rejection, and cross-move key denial without exposure.
+- Both temporary moves were permanently purged; the scoped key then returned
+  `401 Invalid API key`, and the move list contained no acceptance-run marker.
+  No new identity was created. Production-authenticated and live second-identity
+  behavior remain unproved rather than inferred from preview/local evidence.
 
 ## Independent audit
 
@@ -194,3 +203,6 @@ overstated as passed.
   merged protected PR `#177` after all configured checks passed, verified the
   exact-SHA Production deployment and signed-out boundary, and left the
   production-authenticated lifecycle and final audit as explicit follow-up.
+- 2026-08-12 · Codex — completed the disposable authenticated preview Queue and
+  capture acceptance pass, verified cleanup/key invalidation, and kept the
+  remaining production-authenticated and second-identity boundary explicit.
