@@ -106,8 +106,8 @@ production-authenticated mutation/revocation/cleanup proof.
   visible and no mutation was issued.
 - Shared development Convex push failed closed on the unrelated synthetic
   `nextItemCodeSeq` field; no data or deployed functions were overwritten.
-- Ten focused Queue UI/error component tests and 51 Queue foundation tests pass.
-- The complete repository suite passes 1,027 tests across 185 files.
+- Eleven focused Queue UI/error component tests and 53 Queue foundation tests pass.
+- The complete repository suite passes 1,030 tests across 185 files.
 - Deterministic rendered phone (390 px) and desktop (1366 px) fixtures had zero
   axe violations and no horizontal overflow; the fixtures were removed before
   publication and never shipped.
@@ -128,9 +128,19 @@ all repaired before merge:
 - an open detail resolves from the latest item/version instead of a stale
   object snapshot.
 
-Focused regression tests cover the restored workspace, indexed owner scope,
-reactive pagination contract, and live detail. A clean exact-head independent
-rereview remains required before merge, so the audit state is
+The first exact-head rereview then found three more in-scope gaps, also repaired:
+
+- owner-scoped pagination now merges the indexed owner stream with a separate
+  indexed creator/undefined-owner stream, preserving legacy captures without
+  post-pagination filtering;
+- Queue connection status counts only active, unexpired keys with both
+  `queue/read` and `queue/write` whose move restriction, live creator access,
+  and own/delegated Queue authority match this move and selected person; and
+- canonical activity is reactively paginated with an explicit older-activity
+  action rather than silently truncating at 50 entries.
+
+Focused regression tests cover all seven review findings. A clean exact-head
+independent rereview remains required before merge, so the audit state is
 `follow-up-needed` rather than passed.
 
 ## History
@@ -143,3 +153,5 @@ rereview remains required before merge, so the audit state is
   stateless-MCP philosophy direction out of this product Work Order and tracker.
 - 2026-08-12 · Codex — completed the first independent review, repaired all four
   findings, and added focused regression proof before exact-head rereview.
+- 2026-08-12 · Codex — completed the first exact-head rereview, repaired its
+  three findings, and retained the protected merge gate for a clean rereview.

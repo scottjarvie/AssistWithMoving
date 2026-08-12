@@ -82,6 +82,8 @@ function renderDesk(
     onOwnerScopeChange: vi.fn(),
     activities: activity,
     activitiesLoading: false,
+    hasMoreActivities: false,
+    onLoadMoreActivities: vi.fn(),
     onProvideInput: vi.fn().mockResolvedValue(true),
     onCancel: vi.fn().mockResolvedValue(true),
     captureWorkspacePath: "/app/moves/move_1/capture",
@@ -243,5 +245,16 @@ describe("QueueDesk", () => {
     expect(screen.getByText("Read the newly attached estimate.")).toBeInTheDocument();
     expect(screen.getByText("Claimed by Scott's chosen AI")).toBeInTheDocument();
     expect(screen.queryByLabelText("Your answer")).not.toBeInTheDocument();
+  });
+
+  it("keeps older attributable activity reachable", async () => {
+    const user = userEvent.setup();
+    const onLoadMoreActivities = vi.fn();
+    renderDesk({ hasMoreActivities: true, onLoadMoreActivities });
+
+    await user.click(screen.getByRole("button", { name: /needsYou route note/i }));
+    await user.click(screen.getByRole("button", { name: "Load older activity" }));
+
+    expect(onLoadMoreActivities).toHaveBeenCalledOnce();
   });
 });

@@ -288,6 +288,8 @@ function QueueDetailSheet({
   item,
   activities,
   activitiesLoading,
+  hasMoreActivities,
+  onLoadMoreActivities,
   response,
   onResponseChange,
   onProvideInput,
@@ -299,6 +301,8 @@ function QueueDetailSheet({
   item: QueueDeskItem | null;
   activities: QueueDeskActivity[];
   activitiesLoading: boolean;
+  hasMoreActivities: boolean;
+  onLoadMoreActivities: () => void;
   response: string;
   onResponseChange: (value: string) => void;
   onProvideInput: () => void;
@@ -448,24 +452,31 @@ function QueueDetailSheet({
                 <Skeleton className="h-16" />
               </div>
             ) : activities.length ? (
-              <ol className="mt-3 space-y-3 border-l border-border pl-4">
-                {activities.map((activity) => (
-                  <li key={activity.id} className="relative">
-                    <CircleDot className="absolute -left-[1.35rem] top-0.5 size-3.5 bg-popover text-primary" aria-hidden="true" />
-                    <div className="flex flex-wrap items-baseline gap-x-2">
-                      <p className="text-sm font-medium">{activityTypeLabel(activity.type)}</p>
-                      <time className="text-xs text-muted-foreground">{formatWhen(activity.createdAt)}</time>
-                    </div>
-                    <p className="mt-1 text-sm leading-5 text-muted-foreground">{activity.message}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {activity.actorLabel}
-                      {activity.fromState
-                        ? ` · ${stateLabel(activity.fromState)} → ${stateLabel(activity.toState)}`
-                        : ` · ${stateLabel(activity.toState)}`}
-                    </p>
-                  </li>
-                ))}
-              </ol>
+              <div className="mt-3 space-y-3">
+                <ol className="space-y-3 border-l border-border pl-4">
+                  {activities.map((activity) => (
+                    <li key={activity.id} className="relative">
+                      <CircleDot className="absolute -left-[1.35rem] top-0.5 size-3.5 bg-popover text-primary" aria-hidden="true" />
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <p className="text-sm font-medium">{activityTypeLabel(activity.type)}</p>
+                        <time className="text-xs text-muted-foreground">{formatWhen(activity.createdAt)}</time>
+                      </div>
+                      <p className="mt-1 text-sm leading-5 text-muted-foreground">{activity.message}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {activity.actorLabel}
+                        {activity.fromState
+                          ? ` · ${stateLabel(activity.fromState)} → ${stateLabel(activity.toState)}`
+                          : ` · ${stateLabel(activity.toState)}`}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+                {hasMoreActivities ? (
+                  <Button variant="outline" size="sm" onClick={onLoadMoreActivities}>
+                    Load older activity
+                  </Button>
+                ) : null}
+              </div>
             ) : (
               <p className="mt-3 text-sm text-muted-foreground">No activity is recorded yet.</p>
             )}
@@ -503,6 +514,8 @@ export function QueueDesk({
   onOwnerScopeChange,
   activities,
   activitiesLoading,
+  hasMoreActivities,
+  onLoadMoreActivities,
   onProvideInput,
   onCancel,
   captureWorkspacePath,
@@ -521,6 +534,8 @@ export function QueueDesk({
   onOwnerScopeChange: (value: string) => void;
   activities: QueueDeskActivity[];
   activitiesLoading: boolean;
+  hasMoreActivities: boolean;
+  onLoadMoreActivities: () => void;
   onProvideInput: (item: QueueDeskItem, response: string) => Promise<boolean>;
   onCancel: (item: QueueDeskItem) => Promise<boolean>;
   captureWorkspacePath: string | null;
@@ -729,6 +744,8 @@ export function QueueDesk({
         item={selectedItem}
         activities={activities}
         activitiesLoading={activitiesLoading}
+        hasMoreActivities={hasMoreActivities}
+        onLoadMoreActivities={onLoadMoreActivities}
         response={response}
         onResponseChange={setResponse}
         onProvideInput={provideInput}

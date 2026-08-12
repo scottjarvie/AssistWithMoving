@@ -33,10 +33,42 @@ import {
 import { requireMovePermission } from "./lib/permissions";
 import { canPerformHouseholdAction } from "./lib/roles";
 import {
+  apiKeyCanReachQueueOwner,
   canViewQueueEntry,
   queueEntryOwnerUserId,
   resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
+
+type CapturePaginationCursor = {
+  current: string | null;
+  legacy: string | null;
+  currentDone: boolean;
+  legacyDone: boolean;
+};
+
+function parseCapturePaginationCursor(
+  cursor: string | null,
+): CapturePaginationCursor {
+  if (!cursor) {
+    return {
+      current: null,
+      legacy: null,
+      currentDone: false,
+      legacyDone: false,
+    };
+  }
+  try {
+    const parsed = JSON.parse(cursor) as Partial<CapturePaginationCursor>;
+    return {
+      current: typeof parsed.current === "string" ? parsed.current : null,
+      legacy: typeof parsed.legacy === "string" ? parsed.legacy : null,
+      currentDone: parsed.currentDone === true,
+      legacyDone: parsed.legacyDone === true,
+    };
+  } catch {
+    throw new ConvexError("The capture Queue cursor is invalid or expired.");
+  }
+}
 
 async function getQueueDirectiveReference<
   TableName extends
@@ -303,18 +335,61 @@ export const listCaptureAdapter = query({
       }
     }
     const limit = normalizeQueueLimit(args.paginationOpts.numItems);
-    const page = ownerUserId
-      ? await ctx.db
-          .query("ingestionQueueEntries")
-          .withIndex("by_move_owner_created", (q) =>
-            q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
-          )
-          .order("desc")
-          .paginate({
-            cursor: args.paginationOpts.cursor,
-            numItems: limit,
-          })
-      : await ctx.db
+    let page: {
+      page: Doc<"ingestionQueueEntries">[];
+      continueCursor: string;
+      isDone: boolean;
+    };
+    if (ownerUserId) {
+      // Current rows and pre-ownerUserId rows are disjoint streams. Paginating
+      // both keeps creator-owned legacy captures visible without reverting to
+      // post-pagination filtering (which can create empty/incomplete pages).
+      const cursor = parseCapturePaginationCursor(args.paginationOpts.cursor);
+      const currentLimit = Math.ceil(limit / 2);
+      const legacyLimit = Math.max(1, limit - currentLimit);
+      const currentPage = cursor.currentDone
+        ? {
+            page: [] as Doc<"ingestionQueueEntries">[],
+            continueCursor: cursor.current ?? "",
+            isDone: true,
+          }
+        : await ctx.db
+            .query("ingestionQueueEntries")
+            .withIndex("by_move_owner_created", (q) =>
+              q.eq("moveId", args.moveId).eq("ownerUserId", ownerUserId),
+            )
+            .order("desc")
+            .paginate({ cursor: cursor.current, numItems: currentLimit });
+      const legacyPage = cursor.legacyDone
+        ? {
+            page: [] as Doc<"ingestionQueueEntries">[],
+            continueCursor: cursor.legacy ?? "",
+            isDone: true,
+          }
+        : await ctx.db
+            .query("ingestionQueueEntries")
+            .withIndex("by_move_creator_owner_created", (q) =>
+              q
+                .eq("moveId", args.moveId)
+                .eq("createdByUserId", ownerUserId)
+                .eq("ownerUserId", undefined),
+            )
+            .order("desc")
+            .paginate({ cursor: cursor.legacy, numItems: legacyLimit });
+      page = {
+        page: [...currentPage.page, ...legacyPage.page].sort(
+          (left, right) => right.createdAt - left.createdAt,
+        ),
+        continueCursor: JSON.stringify({
+          current: currentPage.continueCursor,
+          legacy: legacyPage.continueCursor,
+          currentDone: currentPage.isDone,
+          legacyDone: legacyPage.isDone,
+        } satisfies CapturePaginationCursor),
+        isDone: currentPage.isDone && legacyPage.isDone,
+      };
+    } else {
+      page = await ctx.db
           .query("ingestionQueueEntries")
           .withIndex("by_move_created", (q) => q.eq("moveId", args.moveId))
           .order("desc")
@@ -322,6 +397,7 @@ export const listCaptureAdapter = query({
             cursor: args.paginationOpts.cursor,
             numItems: limit,
           });
+    }
     const now = Date.now();
     return {
       page: page.page
@@ -381,6 +457,73 @@ export const listCaptureAdapter = query({
   },
 });
 
+export const connectionStatus = query({
+  args: {
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    ownerUserId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const actor = await resolveWebQueueActor(
+      ctx,
+      args.householdId,
+      args.moveId,
+      "queue:read",
+    );
+    if (args.ownerUserId) {
+      const runnableOwnerIds = await resolveRunnableQueueOwnerIds(
+        ctx,
+        args.householdId,
+        args.moveId,
+        actor,
+      );
+      if (!runnableOwnerIds.includes(args.ownerUserId)) {
+        throw new ConvexError("You cannot view this Queue owner's connection status.");
+      }
+    }
+    const [activeKeys, memberships, participants] = await Promise.all([
+      ctx.db
+        .query("apiKeys")
+        .withIndex("by_household_status", (q) =>
+          q.eq("householdId", args.householdId).eq("status", "active"),
+        )
+        .take(100),
+      ctx.db
+        .query("householdMemberships")
+        .withIndex("by_household", (q) => q.eq("householdId", args.householdId))
+        .take(200),
+      ctx.db
+        .query("moveParticipants")
+        .withIndex("by_household_move", (q) =>
+          q.eq("householdId", args.householdId).eq("moveId", args.moveId),
+        )
+        .take(200),
+    ]);
+    const membershipByUser = new Map(
+      memberships.map((membership) => [membership.userId, membership]),
+    );
+    const participantByUser = new Map(
+      participants.flatMap((participant) =>
+        participant.userId ? [[participant.userId, participant] as const] : [],
+      ),
+    );
+    const now = Date.now();
+    return {
+      queueCapableApiKeyCount: activeKeys.filter(
+        (key) =>
+          apiKeyCanReachQueueOwner({
+            now,
+            key,
+            moveId: args.moveId,
+            ownerUserId: args.ownerUserId,
+            membership: membershipByUser.get(key.createdByUserId),
+            participant: participantByUser.get(key.createdByUserId),
+          }),
+      ).length,
+    };
+  },
+});
+
 export const get = query({
   args: {
     householdId: v.id("households"),
@@ -405,8 +548,7 @@ export const listActivity = query({
     householdId: v.id("households"),
     moveId: v.id("moves"),
     queueItemId: v.id("queueItems"),
-    limit: v.optional(v.number()),
-    cursor: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
     const actor = await resolveWebQueueActor(
@@ -422,11 +564,11 @@ export const listActivity = query({
       .withIndex("by_item_created", (q) => q.eq("queueItemId", item._id))
       .order("desc")
       .paginate({
-        cursor: args.cursor ?? null,
-        numItems: normalizeQueueLimit(args.limit),
+        cursor: args.paginationOpts.cursor,
+        numItems: normalizeQueueLimit(args.paginationOpts.numItems),
       });
     return {
-      activities: page.page.map((activity) => ({
+      page: page.page.map((activity) => ({
         activityId: activity._id,
         type: activity.type,
         actor: {
@@ -440,7 +582,7 @@ export const listActivity = query({
         resultRefCount: activity.resultRefCount ?? null,
         createdAt: activity.createdAt,
       })),
-      cursor: page.continueCursor,
+      continueCursor: page.continueCursor,
       isDone: page.isDone,
     };
   },

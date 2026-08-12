@@ -243,16 +243,23 @@ describe("canonical Queue behavior contract", () => {
     const queueSource = readFileSync("convex/queue.ts", "utf8");
     expect(queueSource).toContain("paginationOptsValidator");
     expect(queueSource).toContain('withIndex("by_move_owner_created"');
+    expect(queueSource).toContain('withIndex("by_move_creator_owner_created"');
+    expect(queueSource).toContain('.eq("createdByUserId", ownerUserId)');
+    expect(queueSource).toContain('.eq("ownerUserId", undefined)');
     expect(queueSource).toContain("You cannot view this Queue owner's captures.");
+    expect(queueSource).toContain("apiKeyCanReachQueueOwner({");
 
     const schemaSource = readFileSync("convex/schema.ts", "utf8");
     expect(schemaSource).toContain('.index("by_move_owner_created"');
+    expect(schemaSource).toContain('.index("by_move_creator_owner_created"');
 
     const dataSource = readFileSync(
       "src/components/queue-experience-data.tsx",
       "utf8",
     );
     expect(dataSource).toContain("usePaginatedQuery(");
+    expect(dataSource).toContain("api.queue.listActivity");
+    expect(dataSource).toContain("activities.loadMore(50)");
     expect(dataSource).not.toContain("setOlderHandoffs");
     expect(dataSource).not.toContain("setOlderCaptures");
   });

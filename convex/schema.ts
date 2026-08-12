@@ -1711,6 +1711,12 @@ export default defineSchema({
     .index("by_move_status_order", ["moveId", "status", "sortOrder"])
     .index("by_move_owner_status", ["moveId", "ownerUserId", "status", "sortOrder"])
     .index("by_move_owner_created", ["moveId", "ownerUserId", "createdAt"])
+    .index("by_move_creator_owner_created", [
+      "moveId",
+      "createdByUserId",
+      "ownerUserId",
+      "createdAt",
+    ])
     .index("by_move_created", ["moveId", "createdAt"])
     .index("by_household_status", ["householdId", "status"])
     // Global sweep for captures stuck mid-upload (cron ages them out to "failed"

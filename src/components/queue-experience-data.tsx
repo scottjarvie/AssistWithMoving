@@ -75,7 +75,7 @@ function mapCaptureItem(
 }
 
 function mapActivity(
-  activity: ActivityResult["activities"][number],
+  activity: ActivityResult["page"][number],
 ): QueueDeskActivity {
   return {
     id: activity.activityId,
@@ -137,19 +137,21 @@ export function QueueExperience({
       : "skip",
     { initialNumItems: 50 },
   );
-  const stats = useQuery(api.households.summaryStats, { householdId }) as
-    | { activeApiKeyCount: number }
-    | undefined;
-  const activityPage = useQuery(
+  const connectionStatus = useQuery(api.queue.connectionStatus, {
+    householdId,
+    moveId,
+    ownerUserId: selectedOwnerUserId,
+  });
+  const activities = usePaginatedQuery(
     api.queue.listActivity,
     selectedCanonicalId
       ? {
           householdId,
           moveId,
           queueItemId: selectedCanonicalId as Id<"queueItems">,
-          limit: 50,
         }
       : "skip",
+    { initialNumItems: 50 },
   );
   const createDirective = useMutation(api.queue.createDirective);
   const provideInput = useMutation(api.queue.provideInput);
@@ -250,7 +252,7 @@ export function QueueExperience({
   return (
     <QueueDesk
       items={items}
-      activeApiKeyCount={stats?.activeApiKeyCount ?? null}
+      activeApiKeyCount={connectionStatus?.queueCapableApiKeyCount ?? null}
       loading={
         handoffs.status === "LoadingFirstPage" ||
         captures.status === "LoadingFirstPage"
@@ -268,10 +270,12 @@ export function QueueExperience({
       onOwnerScopeChange={(value) => {
         setOwnerScope(value);
       }}
-      activities={activityPage?.activities.map(mapActivity) ?? []}
+      activities={activities.results.map(mapActivity)}
       activitiesLoading={
-        selectedCanonicalId !== null && activityPage === undefined
+        selectedCanonicalId !== null && activities.status === "LoadingFirstPage"
       }
+      hasMoreActivities={activities.status === "CanLoadMore"}
+      onLoadMoreActivities={() => activities.loadMore(50)}
       onProvideInput={handleProvideInput}
       onCancel={handleCancel}
       captureWorkspacePath={`/app/moves/${encodeURIComponent(moveId)}/capture`}
