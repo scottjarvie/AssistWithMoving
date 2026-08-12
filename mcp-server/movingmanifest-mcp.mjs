@@ -46,6 +46,13 @@ import {
   getMoveSummary,
   listHouseholdMembers,
   listAiJobs,
+  listQueueItems,
+  getQueueItem,
+  claimQueueItem,
+  releaseQueueItem,
+  requestQueueInput,
+  completeQueueItem,
+  reportQueueFailure,
   listAiPhotoSuggestions,
   listAiTextSuggestions,
   listDocumentationProfiles,
@@ -183,6 +190,19 @@ const aiJobStatusSchema = z.enum([
   "failed",
   "canceled",
 ]);
+
+const queueStateSchema = z.enum([
+  "needsYou",
+  "working",
+  "waitingForAi",
+  "done",
+]);
+
+const queueResultRefSchema = z.object({
+  type: z.string().min(1).max(100),
+  id: z.string().min(1).max(200),
+  label: z.string().max(200).optional(),
+});
 
 const aiSuggestionStatusSchema = z.enum([
   "pending",
@@ -879,6 +899,13 @@ export const MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS = [
   "get_agent_context",
   "get_move_questions",
   "get_move_day_checklist",
+  "list_queue_items",
+  "get_queue_item",
+  "claim_queue_item",
+  "release_queue_item",
+  "request_queue_input",
+  "complete_queue_item",
+  "report_queue_failure",
   "search_inventory",
   "save_box_intake",
   "add_item_from_photo",
@@ -1700,6 +1727,109 @@ export function registerTools(target, apiConfig, options = {}) {
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listAiJobs(apiConfig, input),
+  });
+
+  registerTool(target, "list_queue_items", {
+    title: "List Queue handoffs",
+    description:
+      "List move-scoped handoffs using exactly Needs You, Working, Waiting for your AI, and Done. Results include version numbers required by safe write commands.",
+    inputSchema: {
+      moveId: z.string(),
+      state: queueStateSchema.optional(),
+      ownerUserId: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => listQueueItems(apiConfig, input),
+  });
+
+  registerTool(target, "get_queue_item", {
+    title: "Get Queue handoff",
+    description:
+      "Read one Queue handoff and its attributable activity history before deciding whether to claim it.",
+    inputSchema: { moveId: z.string(), queueItemId: z.string() },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    handler: (input) => getQueueItem(apiConfig, input),
+  });
+
+  registerTool(target, "claim_queue_item", {
+    title: "Claim Queue handoff",
+    description:
+      "Begin bounded work on one Waiting for your AI item. Requires the current version and a concrete visible next step; the claim expires after 15 minutes.",
+    inputSchema: {
+      moveId: z.string(),
+      queueItemId: z.string(),
+      expectedVersion: z.number().int().positive(),
+      nextStep: z.string().min(1).max(1000),
+      idempotencyKey: z.string().min(1).max(200),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => claimQueueItem(apiConfig, input),
+  });
+
+  registerTool(target, "release_queue_item", {
+    title: "Release Queue handoff",
+    description:
+      "Return your active claim to Waiting for your AI with a durable reason. It does not mark the work complete.",
+    inputSchema: {
+      moveId: z.string(),
+      queueItemId: z.string(),
+      expectedVersion: z.number().int().positive(),
+      reason: z.string().min(1).max(1000),
+      idempotencyKey: z.string().min(1).max(200),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => releaseQueueItem(apiConfig, input),
+  });
+
+  registerTool(target, "request_queue_input", {
+    title: "Request human Queue input",
+    description:
+      "Move your claimed handoff to Needs You with the exact decision, fact, file, approval, or outside-world action required.",
+    inputSchema: {
+      moveId: z.string(),
+      queueItemId: z.string(),
+      expectedVersion: z.number().int().positive(),
+      requiredAction: z.string().min(1).max(2000),
+      idempotencyKey: z.string().min(1).max(200),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => requestQueueInput(apiConfig, input),
+  });
+
+  registerTool(target, "complete_queue_item", {
+    title: "Complete Queue handoff",
+    description:
+      "Finish your claimed handoff. Done requires a readable result summary or a durable result reference and records attribution.",
+    inputSchema: {
+      moveId: z.string(),
+      queueItemId: z.string(),
+      expectedVersion: z.number().int().positive(),
+      resultSummary: z.string().max(4000).optional(),
+      resultRefs: z.array(queueResultRefSchema).max(50).optional(),
+      idempotencyKey: z.string().min(1).max(200),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => completeQueueItem(apiConfig, input),
+  });
+
+  registerTool(target, "report_queue_failure", {
+    title: "Report Queue failure",
+    description:
+      "Record a bounded failure. Retryable work returns to Waiting for your AI within its attempt budget; exhausted work becomes Needs You instead of looping silently.",
+    inputSchema: {
+      moveId: z.string(),
+      queueItemId: z.string(),
+      expectedVersion: z.number().int().positive(),
+      code: z.string().min(1).max(100),
+      message: z.string().min(1).max(2000),
+      retryable: z.boolean(),
+      retryAfterMs: z.number().int().min(0).max(86_400_000).optional(),
+      idempotencyKey: z.string().min(1).max(200),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (input) => reportQueueFailure(apiConfig, input),
   });
 
   registerTool(target, "get_ai_provider_status", {

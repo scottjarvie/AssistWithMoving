@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,12 +11,46 @@ import {
   accountExportFilename,
   anonymizedUserPatch,
   assertDeletionConfirmation,
+  queueRecordBelongsToAccountExport,
   redactItemForExport,
   retentionPolicy,
   summarizeExportPackage,
 } from "../../convex/lib/accountPrivacy";
 
 describe("account privacy helpers", () => {
+  it("keeps Queue exports personal across household and move-only access", () => {
+    const householdId = "household1" as never;
+    const accountUserId = "user1" as never;
+
+    expect(
+      queueRecordBelongsToAccountExport(
+        { ownerUserId: accountUserId, householdId },
+        accountUserId,
+      ),
+    ).toBe(true);
+    expect(
+      queueRecordBelongsToAccountExport(
+        { ownerUserId: "user2" as never, householdId },
+        accountUserId,
+      ),
+    ).toBe(false);
+    expect(
+      queueRecordBelongsToAccountExport(
+        { ownerUserId: accountUserId, householdId: "household2" as never },
+        accountUserId,
+      ),
+    ).toBe(true);
+
+    const exportSource = readFileSync("convex/accountPrivacy.ts", "utf8");
+    expect(exportSource).toContain('.withIndex("by_owner_updated"');
+    expect(exportSource).toContain('.withIndex("by_owner_created"');
+    expect(exportSource).toContain("queueRecordBelongsToAccountExport(item, user._id)");
+    expect(exportSource).toContain("queueRecordBelongsToAccountExport(activity, user._id)");
+    expect(exportSource.indexOf('.withIndex("by_owner_updated"')).toBeLessThan(
+      exportSource.indexOf("const householdData"),
+    );
+  });
+
   it("uses deterministic export and deletion windows", () => {
     const now = Date.UTC(2026, 5, 8, 12);
 
@@ -104,6 +140,8 @@ describe("account privacy helpers", () => {
         exportJobs: [],
         apiKeys: [1],
         shareLinks: [1, 2],
+        queueItems: [1],
+        queueActivities: [1, 2, 3],
       })
     ).toEqual({
       households: 1,
@@ -114,6 +152,8 @@ describe("account privacy helpers", () => {
       exportJobs: 0,
       apiKeys: 1,
       shareLinks: 2,
+      queueItems: 1,
+      queueActivities: 3,
     });
   });
 
@@ -121,5 +161,6 @@ describe("account privacy helpers", () => {
     expect(retentionPolicy.accountExports).toContain("14 days");
     expect(retentionPolicy.deletion).toContain("7 days");
     expect(retentionPolicy.auditLogs).toContain("retained");
+    expect(retentionPolicy.queueHistory).toContain("remain with the move");
   });
 });

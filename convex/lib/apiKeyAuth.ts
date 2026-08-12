@@ -7,7 +7,7 @@ import {
   verifyApiKeyHash,
   type ApiKeyScope,
 } from "./apiKeys";
-import { resolveMoveAccess } from "./moveAccess";
+import { agentAccessDisabled, resolveMoveAccess } from "./moveAccess";
 import { visibilityForHouseholdRole, type HouseholdRole } from "./roles";
 
 export async function authenticateApiKey(
@@ -98,6 +98,12 @@ export async function authenticateApiKey(
       q.eq("householdId", key.householdId).eq("userId", key.createdByUserId),
     )
     .unique();
+  if (creatorMembership && creatorMembership.status !== "active") {
+    throw new Error("The API key creator no longer has active household access.");
+  }
+  if (!key.moveId && !creatorMembership) {
+    throw new Error("The API key creator no longer has active household access.");
+  }
   if (creatorMembership?.apiAccessStatus === "disabled") {
     throw new Error(
       "Agent access for this connection has been turned off by an owner.",
@@ -111,19 +117,18 @@ export async function authenticateApiKey(
   // move-only participant connecting their own agent), the wall already holds.
   let effectiveRole: HouseholdRole = creatorMembership?.role ?? "guest";
   if (key.moveId) {
-    try {
-      effectiveRole = (
-        await resolveMoveAccess(
-          ctx,
-          key.createdByUserId,
-          key.householdId,
-          key.moveId,
-        )
-      ).role;
-    } catch {
-      effectiveRole =
-        key.participantMoveRole ?? creatorMembership?.role ?? "guest";
+    const moveAccess = await resolveMoveAccess(
+      ctx,
+      key.createdByUserId,
+      key.householdId,
+      key.moveId,
+    );
+    if (agentAccessDisabled(moveAccess)) {
+      throw new Error(
+        "Agent access for this connection has been turned off by an owner.",
+      );
     }
+    effectiveRole = moveAccess.role;
   }
   const visibility = visibilityForHouseholdRole(effectiveRole);
 

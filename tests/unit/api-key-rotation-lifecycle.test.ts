@@ -104,6 +104,10 @@ describe("API-key rotation lifecycle", () => {
 describe("API-key last-use receipts", () => {
   async function authenticationContext(
     overrides: Partial<ReturnType<typeof apiKeyRecord>> = {},
+    membership: { role: "owner"; status: "active" | "disabled"; apiAccessStatus?: "disabled" } | null = {
+      role: "owner",
+      status: "active",
+    },
   ) {
     const rawKey = generateApiKeySecret();
     const key = {
@@ -116,7 +120,7 @@ describe("API-key last-use receipts", () => {
     const query = vi.fn((table: string) => ({
       withIndex: vi.fn(() => ({
         unique: vi.fn().mockResolvedValue(
-          table === "apiKeys" ? key : { role: "owner" },
+          table === "apiKeys" ? key : membership,
         ),
       })),
     }));
@@ -162,5 +166,62 @@ describe("API-key last-use receipts", () => {
         lastUsedAt: expect.any(Number),
       }),
     );
+  });
+
+  it("rejects keys whose creator membership is no longer active", async () => {
+    const { ctx, rawKey, patch } = await authenticationContext(
+      {},
+      { role: "owner", status: "disabled" },
+    );
+    await expect(
+      authenticateApiKey(ctx, {
+        rawKey,
+        requiredScopes: ["moves/read"],
+        action: "moves:list",
+      }),
+    ).rejects.toThrow(/no longer has active household access/i);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("rejects household keys whose creator membership was removed", async () => {
+    const { ctx, rawKey, patch } = await authenticationContext({}, null);
+    await expect(
+      authenticateApiKey(ctx, {
+        rawKey,
+        requiredScopes: ["moves/read"],
+        action: "moves:list",
+      }),
+    ).rejects.toThrow(/no longer has active household access/i);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to a stored role when live move access is gone", async () => {
+    const rawKey = generateApiKeySecret();
+    const moveId = "move_123" as Id<"moves">;
+    const key = {
+      ...apiKeyRecord(),
+      prefix: rawKey.slice("mmk_".length, "mmk_".length + 14),
+      secretHash: await hashApiKey(rawKey),
+      moveId,
+      participantMoveRole: "owner" as const,
+    };
+    const patch = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn((table: string) => ({
+      withIndex: vi.fn(() => ({
+        unique: vi.fn().mockResolvedValue(table === "apiKeys" ? key : null),
+      })),
+    }));
+    const get = vi.fn().mockResolvedValue({ _id: moveId, householdId });
+    const ctx = { db: { query, get, patch } } as unknown as MutationCtx;
+    await expect(
+      authenticateApiKey(ctx, {
+        rawKey,
+        requiredScopes: ["moves/read"],
+        householdId,
+        moveId,
+        action: "move:get",
+      }),
+    ).rejects.toThrow(/no access to this move/i);
+    expect(patch).not.toHaveBeenCalled();
   });
 });

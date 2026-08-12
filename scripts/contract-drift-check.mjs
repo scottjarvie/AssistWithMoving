@@ -19,6 +19,13 @@ const restRouteManifest = [
   route("GET", "/moves/{moveId}/spaces"),
   route("POST", "/moves/{moveId}/spaces"),
   route("POST", "/moves/{moveId}/sale-listings"),
+  route("GET", "/moves/{moveId}/queue"),
+  route("GET", "/moves/{moveId}/queue/{queueItemId}"),
+  route("POST", "/moves/{moveId}/queue/{queueItemId}/claim"),
+  route("POST", "/moves/{moveId}/queue/{queueItemId}/release"),
+  route("POST", "/moves/{moveId}/queue/{queueItemId}/needs-you"),
+  route("POST", "/moves/{moveId}/queue/{queueItemId}/complete"),
+  route("POST", "/moves/{moveId}/queue/{queueItemId}/failure"),
   route("POST", "/images/upload"),
   route("POST", "/photos/upload"),
   route("POST", "/uploads/init"),
@@ -42,6 +49,8 @@ const mcpRequiredRouteKeys = new Set([
   "GET /moves/{moveId}/spaces",
   "POST /moves/{moveId}/spaces",
   "GET /moves/{moveId}/move-day",
+  "GET /moves/{moveId}/queue",
+  "GET /moves/{moveId}/queue/{queueItemId}",
 ]);
 
 const openApiEnumManifest = {

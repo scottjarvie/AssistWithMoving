@@ -6,6 +6,7 @@ import {
   canRunQueueForOwner,
   canViewQueueEntry,
   queueEntryOwnerUserId,
+  queueManagerRecoveryAllowed,
   queueOwnerDisplayName,
   resolveRunnableQueueOwnerIds,
 } from "../../convex/lib/queueAccess";
@@ -37,6 +38,33 @@ describe("queueOwnerDisplayName", () => {
 });
 
 describe("per-user queue ownership + delegation (requirement 5)", () => {
+  it("reserves manager recovery for a person, never an agent or API key", () => {
+    expect(
+      queueManagerRecoveryAllowed({
+        actorType: "user",
+        hasManagerRole: true,
+      }),
+    ).toBe(true);
+    expect(
+      queueManagerRecoveryAllowed({
+        actorType: "agent",
+        hasManagerRole: true,
+      }),
+    ).toBe(false);
+    expect(
+      queueManagerRecoveryAllowed({
+        actorType: "apiKey",
+        hasManagerRole: true,
+      }),
+    ).toBe(false);
+    expect(
+      queueManagerRecoveryAllowed({
+        actorType: "system",
+        hasManagerRole: true,
+      }),
+    ).toBe(false);
+  });
+
   it("coalesces ownerUserId to the creator for legacy rows", () => {
     expect(
       queueEntryOwnerUserId({ createdByUserId: scott }),
@@ -87,9 +115,9 @@ describe("per-user queue ownership + delegation (requirement 5)", () => {
     ).toBe(false);
   });
 
-  it("lets a move manager run any queue on the move without a delegation", () => {
-    // The move owner's own AI agent processing a participant's captures — the
-    // same isManager short-circuit canViewQueueEntry/canActOnQueueEntry use.
+  it("lets a human move manager run any queue on the move without a delegation", () => {
+    // Agent/API-key resolvers must pass through queueManagerRecoveryAllowed
+    // before they can set this person-only recovery flag.
     expect(
       canRunQueueForOwner({
         actorUserId: scott,

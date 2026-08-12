@@ -35,6 +35,10 @@ describe("household role helpers", () => {
     expect(canPerformHouseholdAction("guest", "inventory:read")).toBe(true);
     expect(canPerformHouseholdAction("packer", "inventory:pack")).toBe(true);
     expect(canPerformHouseholdAction("viewer", "inventory:pack")).toBe(false);
+    expect(canPerformHouseholdAction("guest", "queue:read")).toBe(true);
+    expect(canPerformHouseholdAction("guest", "queue:write")).toBe(true);
+    expect(canPerformHouseholdAction("viewer", "queue:run")).toBe(false);
+    expect(canPerformHouseholdAction("packer", "queue:run")).toBe(true);
     expect(canPerformHouseholdAction("editor", "documentation:create")).toBe(
       true
     );

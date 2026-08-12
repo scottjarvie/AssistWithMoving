@@ -160,7 +160,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "list_queue",
     description:
-      "List capture-queue entries for a move — the work waiting to become inventory. Each entry has an ownerUserId (whose personal queue it belongs to), instructions, room/disposition hints, attached photo ids, status, and any agent question/summary/result items. Also returns runnableOwners: the queues you may run — your own plus any a move owner delegated to you (each with name + queuedCount). To help run someone else's shared queue, take their ownerUserId from runnableOwners and pass it to claim_queue. Pass status to filter (queued|claimed|processed|needsInput|resolved|discarded); omit it for the newest entries.",
+      "Legacy person-authorized compatibility view of Moving's specialized capture pipeline. It projects every entry into the family Queue states while retaining legacyStatus for existing clients. This is not the canonical chosen-AI Queue authority surface. The optional status filter uses the documented legacy capture vocabulary only.",
     fn: api.mcpToolsQueue.listQueue,
     args: listQueueArgs,
     identityArg: "caller",
@@ -168,7 +168,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "claim_queue",
     description:
-      "Claim the oldest queued capture entries so two agent runs never process the same one. Defaults to YOUR own queue; to help run a queue a move owner delegated to you (share a subscription), pass ownerUserId from list_queue's runnableOwners. Returns the claimed entries — each includes mediaPhotoIds, the already-uploaded photos for that capture. A claim expires after 15 minutes. Use batchSize (default 1, max 10) and an agentLabel to mark your run. Work each entry: turn it into inventory (upsert_items / pack_boxes / convert_item_to_box), then call submit_queue_result — which files the entry's photos onto what you created. For a capture that becomes SEVERAL items, attach each photo to the right one with attach_photos first. Entries whose photo upload FAILED are still returned here and can be claimed + processed normally (a failed upload may never complete); only entries with an upload still actively in flight are held back.",
+      "Legacy person-authorized capture processing, not a canonical chosen-AI Queue claim. Claim the oldest capture entries from only your own or an explicitly delegated Queue; a human manager role does not widen agent access. Each claim expires after 15 minutes. Turn entries into inventory, then call submit_queue_result.",
     fn: api.mcpToolsQueue.claimQueue,
     args: claimQueueArgs,
     identityArg: "caller",
@@ -176,7 +176,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "submit_queue_result",
     description:
-      "Report what a claimed entry produced: link the inventory items you created (resultItemIds) AND/OR the boxes/totes you created (resultBoxIds) to mark it processed, OR ask the user a question (needsInputQuestion → sets it to needs-input). Add a short agentSummary. Pair this with upsert_items / pack_boxes / convert_item_to_box, which create the units. The capture's uploaded photos are AUTOMATICALLY attached to what you made — to the single item in resultItemIds, or (if you didn't create exactly one item) to the box/room/transport the entry targeted — so a capture's photos never get left behind. The result returns attachedPhotoCount. Exception: a capture that became MULTIPLE items can't be auto-split — attach each photo to the right item yourself with attach_photos (using the entry's mediaPhotoIds) before submitting.",
+      "Report the result of a legacy person-authorized capture claim. Link created inventory or ask the user a question; this compatibility tool does not represent canonical chosen-AI Queue authority. Uploaded capture photos are attached using the existing capture rules.",
     fn: api.mcpToolsQueue.submitQueueResult,
     args: submitQueueResultArgs,
     identityArg: "caller",

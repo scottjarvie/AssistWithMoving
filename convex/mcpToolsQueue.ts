@@ -28,6 +28,10 @@ import {
   isMediaUploadPending,
   type IngestionQueueStatus,
 } from "./lib/ingestionQueue";
+import {
+  ingestionStatusToQueueState,
+  queueStateLabels,
+} from "./lib/queue";
 import { requireMoveForSubject } from "./lib/mcpIdentity";
 import { canPerformHouseholdAction } from "./lib/roles";
 import {
@@ -35,6 +39,7 @@ import {
   canRunQueueForOwner,
   canViewQueueEntry,
   queueEntryOwnerUserId,
+  queueManagerRecoveryAllowed,
   queueOwnerDisplayName,
   resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
@@ -74,10 +79,13 @@ async function resolveQueueSubject(
       : [];
   return {
     userId,
-    isManager: canPerformHouseholdAction(
-      policy.role,
-      "household:manage_members",
-    ),
+    isManager: queueManagerRecoveryAllowed({
+      actorType: "agent",
+      hasManagerRole: canPerformHouseholdAction(
+        policy.role,
+        "household:manage_members",
+      ),
+    }),
     delegatedOwnerIds,
   };
 }
@@ -93,12 +101,20 @@ function effectiveStatus(
 // Agent-friendly projection — the fields an agent needs to act, without raw
 // internal claim bookkeeping.
 function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
+  const state = ingestionStatusToQueueState(
+    entry.status,
+    entry.claimExpiresAt,
+    now,
+  );
   return {
     entryId: entry._id,
     // Whose personal queue this belongs to — pass it as claim_queue.ownerUserId
     // to run a queue a move owner delegated to you (share a subscription).
     ownerUserId: queueEntryOwnerUserId(entry),
+    state,
+    stateLabel: queueStateLabels[state],
     status: effectiveStatus(entry, now),
+    legacyStatus: effectiveStatus(entry, now),
     instructions: entry.instructions ?? null,
     roomHint: entry.roomHint ?? null,
     dispositionHint: entry.dispositionHint ?? null,
@@ -489,6 +505,14 @@ export const submitQueueResult = mutation({
       },
     });
 
-    return { entryId: args.entryId, status: nextStatus, attachedPhotoCount };
+    const state = ingestionStatusToQueueState(nextStatus, undefined, now);
+    return {
+      entryId: args.entryId,
+      state,
+      stateLabel: queueStateLabels[state],
+      status: nextStatus,
+      legacyStatus: nextStatus,
+      attachedPhotoCount,
+    };
   },
 });

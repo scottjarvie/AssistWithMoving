@@ -32,6 +32,17 @@ import {
   structuredLocationValidator,
   transportTripStatusValidator,
 } from "./lib/moveFields";
+import {
+  queueActivityTypeValidator,
+  queueActorTypeValidator,
+  queueContextKindValidator,
+  queueDomainKindValidator,
+  queuePriorityValidator,
+  queueResultRefValidator,
+  queueStateValidator,
+  queueTerminalReasonValidator,
+  queueWaitingReasonValidator,
+} from "./lib/queue";
 
 export const appRole = v.union(v.literal("member"), v.literal("admin"));
 
@@ -120,6 +131,7 @@ export const auditCategory = v.union(
   v.literal("apiKey"),
   v.literal("export"),
   v.literal("ai"),
+  v.literal("queue"),
   v.literal("admin"),
   v.literal("system")
 );
@@ -211,6 +223,8 @@ export const apiKeyScope = v.union(
   v.literal("moves/write"),
   v.literal("inventory/read"),
   v.literal("inventory/write"),
+  v.literal("queue/read"),
+  v.literal("queue/write"),
   v.literal("plans/read"),
   v.literal("plans/write"),
   v.literal("photos/write"),
@@ -1701,6 +1715,101 @@ export default defineSchema({
     // Global sweep for captures stuck mid-upload (cron ages them out to "failed"
     // so a lost/reloaded upload doesn't strand the capture un-claimable forever).
     .index("by_media_state_created", ["mediaUploadState", "createdAt"]),
+
+  // Canonical person <-> chosen-AI handoffs. Specialized domain workflows keep
+  // their own statuses and may be projected through adapters; they are not
+  // silently relabeled or migrated into this table.
+  queueItems: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    ownerUserId: v.id("users"),
+    createdByUserId: v.id("users"),
+    directive: v.string(),
+    summary: v.optional(v.string()),
+    state: queueStateValidator,
+    priority: queuePriorityValidator,
+    contextKind: queueContextKindValidator,
+    contextRefId: v.optional(v.string()),
+    contextLabel: v.optional(v.string()),
+    domainKind: queueDomainKindValidator,
+    domainRefType: v.optional(v.string()),
+    domainRefId: v.optional(v.string()),
+    requiredAction: v.optional(v.string()),
+    nextStep: v.optional(v.string()),
+    waitingReason: v.optional(queueWaitingReasonValidator),
+    nextAttemptAt: v.optional(v.number()),
+    latestHumanResponse: v.optional(v.string()),
+    resultSummary: v.optional(v.string()),
+    resultRefs: v.optional(v.array(queueResultRefValidator)),
+    terminalReason: v.optional(queueTerminalReasonValidator),
+    failureCode: v.optional(v.string()),
+    failureMessage: v.optional(v.string()),
+    failureRetryable: v.optional(v.boolean()),
+    attemptCount: v.number(),
+    maxAttempts: v.number(),
+    claimedByUserId: v.optional(v.id("users")),
+    claimedByApiKeyId: v.optional(v.id("apiKeys")),
+    claimedByLabel: v.optional(v.string()),
+    claimedAt: v.optional(v.number()),
+    claimExpiresAt: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+    idempotencyKey: v.optional(v.string()),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_move_state_updated", ["moveId", "state", "updatedAt"])
+    .index("by_move_owner_state_updated", [
+      "moveId",
+      "ownerUserId",
+      "state",
+      "updatedAt",
+    ])
+    .index("by_move_owner_updated", ["moveId", "ownerUserId", "updatedAt"])
+    .index("by_move_updated", ["moveId", "updatedAt"])
+    .index("by_owner_updated", ["ownerUserId", "updatedAt"])
+    .index("by_household_updated", ["householdId", "updatedAt"])
+    .index("by_move_domain_ref", ["moveId", "domainRefType", "domainRefId"])
+    .index("by_move_owner_idempotency", [
+      "moveId",
+      "ownerUserId",
+      "idempotencyKey",
+    ])
+    .index("by_state_claim_expiry", ["state", "claimExpiresAt"])
+    .index("by_expiry", ["expiresAt"])
+    .searchIndex("search_directive", {
+      searchField: "directive",
+      filterFields: ["moveId", "state", "ownerUserId"],
+    }),
+
+  // Append-only, item-scoped history. This is user-inspectable Queue provenance;
+  // auditLogs remains the broader security/operations trail.
+  queueActivities: defineTable({
+    householdId: v.id("households"),
+    moveId: v.id("moves"),
+    queueItemId: v.id("queueItems"),
+    ownerUserId: v.id("users"),
+    type: queueActivityTypeValidator,
+    actorType: queueActorTypeValidator,
+    actorUserId: v.optional(v.id("users")),
+    actorApiKeyId: v.optional(v.id("apiKeys")),
+    actorLabel: v.optional(v.string()),
+    fromState: v.optional(queueStateValidator),
+    toState: queueStateValidator,
+    message: v.string(),
+    failureCode: v.optional(v.string()),
+    resultRefCount: v.optional(v.number()),
+    idempotencyKey: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_item_created", ["queueItemId", "createdAt"])
+    .index("by_move_created", ["moveId", "createdAt"])
+    .index("by_household_created", ["householdId", "createdAt"])
+    .index("by_owner_created", ["ownerUserId", "createdAt"])
+    .index("by_actor_user_created", ["actorUserId", "createdAt"])
+    .index("by_actor_apikey_created", ["actorApiKeyId", "createdAt"])
+    .index("by_item_idempotency", ["queueItemId", "idempotencyKey"]),
 
   aiJobs: defineTable({
     householdId: v.id("households"),

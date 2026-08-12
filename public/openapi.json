@@ -314,6 +314,226 @@
         }
       }
     },
+    "/moves/{moveId}/queue": {
+      "get": {
+        "summary": "List canonical Queue handoffs",
+        "operationId": "listQueueItems",
+        "description": "Returns a bounded, owner-safe page using exactly Needs You, Working, Waiting for your AI, and Done. Requires queue/read.",
+        "parameters": [
+          { "$ref": "#/components/parameters/moveId" },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": { "$ref": "#/components/schemas/QueueState" }
+          },
+          {
+            "name": "ownerUserId",
+            "in": "query",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100 }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque cursor returned by the previous page.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queue page with an opaque continuation cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/QueueItem" }
+                    },
+                    "cursor": { "type": ["string", "null"] },
+                    "isDone": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/queue/{queueItemId}": {
+      "get": {
+        "summary": "Get a Queue handoff and recent activity",
+        "operationId": "getQueueItem",
+        "parameters": [
+          { "$ref": "#/components/parameters/moveId" },
+          { "$ref": "#/components/parameters/queueItemId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queue item and attributable activity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/QueueItem" },
+                    "activity": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/QueueActivity" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/moves/{moveId}/queue/{queueItemId}/claim": {
+      "post": {
+        "summary": "Claim Queue work with an expiring lease",
+        "operationId": "claimQueueItem",
+        "parameters": [
+          { "$ref": "#/components/parameters/moveId" },
+          { "$ref": "#/components/parameters/queueItemId" },
+          { "$ref": "#/components/parameters/idempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/QueueCommand" },
+                  {
+                    "type": "object",
+                    "required": ["nextStep"],
+                    "properties": { "nextStep": { "type": "string", "maxLength": 1000 } }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "$ref": "#/components/responses/QueueItemResponse" }, "409": { "$ref": "#/components/responses/QueueConflict" } }
+      }
+    },
+    "/moves/{moveId}/queue/{queueItemId}/release": {
+      "post": {
+        "summary": "Release claimed Queue work",
+        "operationId": "releaseQueueItem",
+        "parameters": [
+          { "$ref": "#/components/parameters/moveId" },
+          { "$ref": "#/components/parameters/queueItemId" },
+          { "$ref": "#/components/parameters/idempotencyKey" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/QueueReasonCommand" },
+        "responses": { "200": { "$ref": "#/components/responses/QueueItemResponse" }, "409": { "$ref": "#/components/responses/QueueConflict" } }
+      }
+    },
+    "/moves/{moveId}/queue/{queueItemId}/needs-you": {
+      "post": {
+        "summary": "Request exact human input",
+        "operationId": "requestQueueInput",
+        "parameters": [
+          { "$ref": "#/components/parameters/moveId" },
+          { "$ref": "#/components/parameters/queueItemId" },
+          { "$ref": "#/components/parameters/idempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/QueueCommand" },
+                  {
+                    "type": "object",
+                    "required": ["requiredAction"],
+                    "properties": { "requiredAction": { "type": "string", "maxLength": 2000 } }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "$ref": "#/components/responses/QueueItemResponse" }, "409": { "$ref": "#/components/responses/QueueConflict" } }
+      }
+    },
+    "/moves/{moveId}/queue/{queueItemId}/complete": {
+      "post": {
+        "summary": "Complete claimed Queue work",
+        "operationId": "completeQueueItem",
+        "parameters": [
+          { "$ref": "#/components/parameters/moveId" },
+          { "$ref": "#/components/parameters/queueItemId" },
+          { "$ref": "#/components/parameters/idempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/QueueCommand" },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "resultSummary": { "type": "string", "maxLength": 4000 },
+                      "resultRefs": {
+                        "type": "array",
+                        "maxItems": 50,
+                        "items": { "$ref": "#/components/schemas/QueueResultRef" }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "$ref": "#/components/responses/QueueItemResponse" }, "409": { "$ref": "#/components/responses/QueueConflict" } }
+      }
+    },
+    "/moves/{moveId}/queue/{queueItemId}/failure": {
+      "post": {
+        "summary": "Report a bounded Queue failure",
+        "operationId": "reportQueueFailure",
+        "parameters": [
+          { "$ref": "#/components/parameters/moveId" },
+          { "$ref": "#/components/parameters/queueItemId" },
+          { "$ref": "#/components/parameters/idempotencyKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/QueueCommand" },
+                  {
+                    "type": "object",
+                    "required": ["code", "message", "retryable"],
+                    "properties": {
+                      "code": { "type": "string", "maxLength": 100 },
+                      "message": { "type": "string", "maxLength": 2000 },
+                      "retryable": { "type": "boolean" },
+                      "retryAfterMs": { "type": "integer", "minimum": 0, "maximum": 86400000 }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": { "200": { "$ref": "#/components/responses/QueueItemResponse" }, "409": { "$ref": "#/components/responses/QueueConflict" } }
+      }
+    },
     "/images/upload": {
       "post": {
         "summary": "Upload image evidence in one call",
@@ -617,9 +837,110 @@
         "schema": {
           "type": "string"
         }
+      },
+      "queueItemId": {
+        "name": "queueItemId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" }
+      },
+      "idempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "requestBodies": {
+      "QueueReasonCommand": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "allOf": [
+                { "$ref": "#/components/schemas/QueueCommand" },
+                {
+                  "type": "object",
+                  "required": ["reason"],
+                  "properties": { "reason": { "type": "string", "maxLength": 1000 } }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "QueueItemResponse": {
+        "description": "Updated Queue item.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": { "data": { "$ref": "#/components/schemas/QueueItem" } }
+            }
+          }
+        }
+      },
+      "QueueConflict": {
+        "description": "The Queue item changed; refresh and retry with its current version."
       }
     },
     "schemas": {
+      "QueueState": {
+        "type": "string",
+        "enum": ["needsYou", "working", "waitingForAi", "done"]
+      },
+      "QueueCommand": {
+        "type": "object",
+        "required": ["expectedVersion"],
+        "properties": {
+          "expectedVersion": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "QueueResultRef": {
+        "type": "object",
+        "required": ["type", "id"],
+        "properties": {
+          "type": { "type": "string", "maxLength": 100 },
+          "id": { "type": "string", "maxLength": 200 },
+          "label": { "type": "string", "maxLength": 200 }
+        }
+      },
+      "QueueActivity": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "actorType": { "type": "string" },
+          "actorLabel": { "type": ["string", "null"] },
+          "fromState": { "oneOf": [{ "$ref": "#/components/schemas/QueueState" }, { "type": "null" }] },
+          "toState": { "$ref": "#/components/schemas/QueueState" },
+          "message": { "type": "string" },
+          "createdAt": { "type": "number" }
+        }
+      },
+      "QueueItem": {
+        "type": "object",
+        "required": ["queueItemId", "ownerUserId", "directive", "state", "stateLabel", "version", "createdAt", "updatedAt"],
+        "properties": {
+          "queueItemId": { "type": "string" },
+          "ownerUserId": { "type": "string" },
+          "directive": { "type": "string" },
+          "summary": { "type": ["string", "null"] },
+          "state": { "$ref": "#/components/schemas/QueueState" },
+          "stateLabel": { "type": "string" },
+          "priority": { "type": "string", "enum": ["normal", "urgent"] },
+          "requiredAction": { "type": ["string", "null"] },
+          "nextStep": { "type": ["string", "null"] },
+          "latestHumanResponse": { "type": ["string", "null"] },
+          "resultSummary": { "type": ["string", "null"] },
+          "resultRefs": { "type": "array", "items": { "$ref": "#/components/schemas/QueueResultRef" } },
+          "version": { "type": "integer", "minimum": 1 },
+          "createdAt": { "type": "number" },
+          "updatedAt": { "type": "number" },
+          "completedAt": { "type": ["number", "null"] }
+        }
+      },
       "HouseholdMemberAdd": {
         "type": "object",
         "required": ["email", "role"],
