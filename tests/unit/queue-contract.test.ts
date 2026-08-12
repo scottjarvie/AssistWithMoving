@@ -159,6 +159,17 @@ describe("canonical Queue behavior contract", () => {
     expect(queueSource).toContain(
       'q.gt("expiresAt", undefined).lt("expiresAt", now)',
     );
+    expect(queueSource).toContain(
+      "await releaseExpiredQueueClaim(ctx, systemActor",
+    );
+
+    const queueServiceSource = readFileSync(
+      "convex/lib/queueService.ts",
+      "utf8",
+    );
+    expect(
+      queueServiceSource.match(/expiresAt: undefined,/g)?.length,
+    ).toBeGreaterThanOrEqual(2);
 
     const oauthFunctions = readFileSync(
       "convex/mcpToolsCanonicalQueue.ts",
@@ -175,6 +186,14 @@ describe("canonical Queue behavior contract", () => {
     expect(gatewayRegistry).toContain(
       "not a canonical chosen-AI Queue claim",
     );
+  });
+
+  it("keeps legacy capture response fields additive", () => {
+    const source = readFileSync("convex/mcpToolsQueue.ts", "utf8");
+    expect(source).toContain("status: effectiveStatus(entry, now)");
+    expect(source).toContain("legacyStatus: effectiveStatus(entry, now)");
+    expect(source).toContain("status: nextStatus");
+    expect(source).toContain("legacyStatus: nextStatus");
   });
 
   it("routes every agent Queue entry point through the human-only recovery gate", () => {

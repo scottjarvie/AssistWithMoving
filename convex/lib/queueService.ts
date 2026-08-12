@@ -42,6 +42,24 @@ export type QueueResultRef = { type: string; id: string; label?: string };
 
 type QueueCtx = QueryCtx | MutationCtx;
 
+async function getQueueReference<
+  TableName extends
+    | "items"
+    | "boxes"
+    | "moveSpaces"
+    | "floorPlans"
+    | "planProposals"
+    | "ingestionQueueEntries"
+    | "aiJobs"
+    | "aiTextSuggestions"
+    | "aiPhotoSuggestions"
+    | "aiPlanningSuggestions"
+    | "exportJobs",
+>(ctx: MutationCtx, tableName: TableName, rawId: string) {
+  const id = ctx.db.normalizeId(tableName, rawId);
+  return id ? await ctx.db.get(id) : null;
+}
+
 async function validateQueueResultRefs(
   ctx: MutationCtx,
   item: Doc<"queueItems">,
@@ -69,37 +87,37 @@ async function validateQueueResultRefs(
     let record: { householdId: Id<"households">; moveId?: Id<"moves"> } | null;
     switch (type) {
       case "item":
-        record = await ctx.db.get(id as Id<"items">);
+        record = await getQueueReference(ctx, "items", id);
         break;
       case "box":
-        record = await ctx.db.get(id as Id<"boxes">);
+        record = await getQueueReference(ctx, "boxes", id);
         break;
       case "space":
-        record = await ctx.db.get(id as Id<"moveSpaces">);
+        record = await getQueueReference(ctx, "moveSpaces", id);
         break;
       case "floorPlan":
-        record = await ctx.db.get(id as Id<"floorPlans">);
+        record = await getQueueReference(ctx, "floorPlans", id);
         break;
       case "planProposal":
-        record = await ctx.db.get(id as Id<"planProposals">);
+        record = await getQueueReference(ctx, "planProposals", id);
         break;
       case "capture":
-        record = await ctx.db.get(id as Id<"ingestionQueueEntries">);
+        record = await getQueueReference(ctx, "ingestionQueueEntries", id);
         break;
       case "aiJob":
-        record = await ctx.db.get(id as Id<"aiJobs">);
+        record = await getQueueReference(ctx, "aiJobs", id);
         break;
       case "textSuggestion":
-        record = await ctx.db.get(id as Id<"aiTextSuggestions">);
+        record = await getQueueReference(ctx, "aiTextSuggestions", id);
         break;
       case "photoSuggestion":
-        record = await ctx.db.get(id as Id<"aiPhotoSuggestions">);
+        record = await getQueueReference(ctx, "aiPhotoSuggestions", id);
         break;
       case "planningSuggestion":
-        record = await ctx.db.get(id as Id<"aiPlanningSuggestions">);
+        record = await getQueueReference(ctx, "aiPlanningSuggestions", id);
         break;
       case "export":
-        record = await ctx.db.get(id as Id<"exportJobs">);
+        record = await getQueueReference(ctx, "exportJobs", id);
         break;
       default:
         throw new ConvexError(
@@ -504,7 +522,6 @@ export async function claimQueueItem(
     claimedAt: now,
     claimExpiresAt: now + queueClaimDurationMs,
     nextAttemptAt: undefined,
-    latestHumanResponse: undefined,
     version: item.version + 1,
     updatedAt: now,
   });
@@ -539,6 +556,56 @@ export async function releaseQueueItem(
   const reason = normalizeQueueText(input.reason, "reason", 1000);
   if (!reason) throw new ConvexError("A release reason is required.");
   const now = Date.now();
+  await ctx.db.patch(item._id, {
+    state: "waitingForAi",
+    waitingReason: "ready",
+    nextStep: undefined,
+    claimedByUserId: undefined,
+    claimedByApiKeyId: undefined,
+    claimedByLabel: undefined,
+    claimedAt: undefined,
+    claimExpiresAt: undefined,
+    version: item.version + 1,
+    updatedAt: now,
+  });
+  await recordQueueActivity(ctx, item, actor, {
+    type: "released",
+    fromState: "working",
+    toState: "waitingForAi",
+    message: reason,
+    idempotencyKey: input.idempotencyKey,
+  });
+  return (await ctx.db.get(item._id))!;
+}
+
+export async function releaseExpiredQueueClaim(
+  ctx: MutationCtx,
+  actor: QueueAccessActor,
+  input: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    queueItemId: Id<"queueItems">;
+    reason: string;
+    expectedVersion?: number;
+    idempotencyKey?: string;
+  },
+) {
+  const item = await requireQueueItem(ctx, input);
+  if (actor.actorType !== "system" || actor.userId !== item.ownerUserId) {
+    throw new ConvexError("Only Queue maintenance can release an expired claim.");
+  }
+  if (await findActivityReplay(ctx, item._id, input.idempotencyKey)) return item;
+  assertExpectedQueueVersion(item.version, input.expectedVersion);
+  const now = Date.now();
+  if (
+    item.state !== "working" ||
+    item.claimExpiresAt === undefined ||
+    item.claimExpiresAt > now
+  ) {
+    throw new ConvexError("Queue maintenance can only release an expired claim.");
+  }
+  const reason = normalizeQueueText(input.reason, "reason", 1000);
+  if (!reason) throw new ConvexError("A release reason is required.");
   await ctx.db.patch(item._id, {
     state: "waitingForAi",
     waitingReason: "ready",
@@ -700,6 +767,7 @@ export async function completeQueueItem(
     failureMessage: undefined,
     failureRetryable: undefined,
     nextAttemptAt: undefined,
+    expiresAt: undefined,
     version: item.version + 1,
     updatedAt: now,
     completedAt: now,
@@ -828,6 +896,7 @@ export async function finishQueueItemWithoutWork(
     claimedAt: undefined,
     claimExpiresAt: undefined,
     nextAttemptAt: undefined,
+    expiresAt: undefined,
     version: item.version + 1,
     updatedAt: now,
     completedAt: now,

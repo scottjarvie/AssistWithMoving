@@ -27,7 +27,9 @@ Queue export and agent inheritance of human manager recovery; this first
 remediation work isolates exports, contains the bypass, requires live key
 authority, binds claims to the exact key and lease, aligns effective-state
 pagination, and holds canonical OAuth registration until distinct chosen-AI
-grants exist. Provider, marked-data, and refreshed independent-review proof
+grants exist. Two independent review passes also drove claim-maintenance,
+human-input continuity, legacy-response compatibility, terminal-expiry, and
+typed-reference repairs. Provider, marked-data, and final rereview proof
 remain under Card `MOV-0026`; final UI design is intentionally separate.
 
 ## Included scope
@@ -107,7 +109,7 @@ gate; no production data or broad access decision is requested.
   2026-08-09; authenticated/private behavior remains unverified.
 - Targeted Queue/REST/API-key/role/export/MCP tests pass locally, including
   export/authority/capability regressions and direct API-client transport proof.
-- The complete repository suite passes 1,012 tests. Lint, typecheck, production build, contract
+- The complete repository suite passes 1,014 tests. Lint, typecheck, production build, contract
   drift, philosophy synchronization, and tracker verification pass locally.
 - A full-suite run exposed missing Queue move-purge coverage; Queue activity and
   items were added to the verified purge cascade, and the full suite then passed.
@@ -121,6 +123,9 @@ gate; no production data or broad access decision is requested.
 - Independent read-only review found and locally repaired inactive key creators,
   late lease/handoff mutation, sibling-key claim takeover, effective-state
   filtering drift, timestamp-cursor ties, and move-only export omission.
+- A second independent review found and locally repaired expired-lease
+  maintenance, reclaimed human-input continuity, legacy `status` response
+  compatibility, terminal expiry-sweep starvation, and cross-table reference typing.
 - Ready protected PR #175 contains the focused package. After concurrent `main`
   movement, the branch was rebased onto `e59e31f`, the unrelated MOV-0023 trust
   card was preserved, the Queue agent card moved to MOV-0027, and all local
@@ -128,8 +133,8 @@ gate; no production data or broad access decision is requested.
 
 ## Independent audit
 
-Follow-up needed. A separate reviewer found six additional authority, lifecycle,
-pagination, and export gaps; after the repairs, an independent reviewer must re-evaluate
+Follow-up needed. Separate reviews found eleven authority, lifecycle,
+pagination, compatibility, reference, and export gaps; after the repairs, an independent reviewer must re-evaluate
 the final PR/deployment against Core §4 Queue semantics, §5 agent boundaries,
 §7 history, §8 privacy, §14 bounded queries, §16 publication controls, and
 Moving's Project Philosophy.
@@ -150,3 +155,5 @@ Moving's Project Philosophy.
   export/authority/OAuth truthfulness remediation tranche without final UI scope.
 - 2026-08-12 · Codex — completed six independently identified authority,
   lifecycle, pagination, and export repairs with local regression proof.
+- 2026-08-12 · Codex — repaired all five findings from the second independent
+  review and reran the full local release gates before final rereview.

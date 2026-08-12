@@ -113,6 +113,7 @@ function shapeQueueEntry(entry: Doc<"ingestionQueueEntries">, now: number) {
     ownerUserId: queueEntryOwnerUserId(entry),
     state,
     stateLabel: queueStateLabels[state],
+    status: effectiveStatus(entry, now),
     legacyStatus: effectiveStatus(entry, now),
     instructions: entry.instructions ?? null,
     roomHint: entry.roomHint ?? null,
@@ -509,6 +510,7 @@ export const submitQueueResult = mutation({
       entryId: args.entryId,
       state,
       stateLabel: queueStateLabels[state],
+      status: nextStatus,
       legacyStatus: nextStatus,
       attachedPhotoCount,
     };

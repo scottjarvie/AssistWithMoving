@@ -23,7 +23,7 @@ import {
   createQueueItem,
   finishQueueItemWithoutWork,
   provideQueueInput,
-  releaseQueueItem,
+  releaseExpiredQueueClaim,
   requireQueueItem,
   requireQueueItemVisible,
   shapeQueueItem,
@@ -36,6 +36,24 @@ import {
   queueEntryOwnerUserId,
   resolveRunnableQueueOwnerIds,
 } from "./lib/queueAccess";
+
+async function getQueueDirectiveReference<
+  TableName extends
+    | "moveSpaces"
+    | "items"
+    | "boxes"
+    | "ingestionQueueEntries"
+    | "aiJobs"
+    | "aiTextSuggestions"
+    | "aiPhotoSuggestions"
+    | "aiPlanningSuggestions"
+    | "exportJobs"
+    | "floorPlans"
+    | "planProposals",
+>(ctx: MutationCtx, tableName: TableName, rawId: string) {
+  const id = ctx.db.normalizeId(tableName, rawId);
+  return id ? await ctx.db.get(id) : null;
+}
 
 async function resolveWebQueueActor(
   ctx: QueryCtx | MutationCtx,
@@ -93,12 +111,16 @@ async function validateCreateDirectiveReferences(
         throw new ConvexError("Move context reference must be the selected move.");
       }
     } else if (args.contextKind === "room") {
-      const room = await ctx.db.get(args.contextRefId as Id<"moveSpaces">);
+      const room = await getQueueDirectiveReference(
+        ctx,
+        "moveSpaces",
+        args.contextRefId,
+      );
       if (!sameMove(room)) throw new ConvexError("Room context does not belong to this move.");
     } else {
       const [item, box] = await Promise.all([
-        ctx.db.get(args.contextRefId as Id<"items">),
-        ctx.db.get(args.contextRefId as Id<"boxes">),
+        getQueueDirectiveReference(ctx, "items", args.contextRefId),
+        getQueueDirectiveReference(ctx, "boxes", args.contextRefId),
       ]);
       if (!sameMove(item) && !sameMove(box)) {
         throw new ConvexError("Belongings context does not belong to this move.");
@@ -118,37 +140,57 @@ async function validateCreateDirectiveReferences(
   let record: { householdId: Id<"households">; moveId: Id<"moves"> } | null;
   switch (args.domainRefType) {
     case "ingestionQueueEntries":
-      record = await ctx.db.get(args.domainRefId as Id<"ingestionQueueEntries">);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "ingestionQueueEntries",
+        args.domainRefId,
+      );
       break;
     case "aiJobs":
-      record = await ctx.db.get(args.domainRefId as Id<"aiJobs">);
+      record = await getQueueDirectiveReference(ctx, "aiJobs", args.domainRefId);
       break;
     case "aiTextSuggestions":
-      record = await ctx.db.get(args.domainRefId as Id<"aiTextSuggestions">);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "aiTextSuggestions",
+        args.domainRefId,
+      );
       break;
     case "aiPhotoSuggestions":
-      record = await ctx.db.get(args.domainRefId as Id<"aiPhotoSuggestions">);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "aiPhotoSuggestions",
+        args.domainRefId,
+      );
       break;
     case "aiPlanningSuggestions":
-      record = await ctx.db.get(args.domainRefId as Id<"aiPlanningSuggestions">);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "aiPlanningSuggestions",
+        args.domainRefId,
+      );
       break;
     case "exportJobs":
-      record = await ctx.db.get(args.domainRefId as Id<"exportJobs">);
+      record = await getQueueDirectiveReference(ctx, "exportJobs", args.domainRefId);
       break;
     case "items":
-      record = await ctx.db.get(args.domainRefId as Id<"items">);
+      record = await getQueueDirectiveReference(ctx, "items", args.domainRefId);
       break;
     case "boxes":
-      record = await ctx.db.get(args.domainRefId as Id<"boxes">);
+      record = await getQueueDirectiveReference(ctx, "boxes", args.domainRefId);
       break;
     case "moveSpaces":
-      record = await ctx.db.get(args.domainRefId as Id<"moveSpaces">);
+      record = await getQueueDirectiveReference(ctx, "moveSpaces", args.domainRefId);
       break;
     case "floorPlans":
-      record = await ctx.db.get(args.domainRefId as Id<"floorPlans">);
+      record = await getQueueDirectiveReference(ctx, "floorPlans", args.domainRefId);
       break;
     case "planProposals":
-      record = await ctx.db.get(args.domainRefId as Id<"planProposals">);
+      record = await getQueueDirectiveReference(
+        ctx,
+        "planProposals",
+        args.domainRefId,
+      );
       break;
     default:
       throw new ConvexError("Unsupported Queue domain reference type.");
@@ -498,7 +540,7 @@ export const maintainLeasesAndExpiry = internalMutation({
         isManager: true,
         delegatedOwnerIds: [],
       };
-      await releaseQueueItem(ctx, systemActor, {
+      await releaseExpiredQueueClaim(ctx, systemActor, {
         householdId: item.householdId,
         moveId: item.moveId,
         queueItemId: item._id,

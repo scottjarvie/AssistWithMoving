@@ -8,6 +8,7 @@ import {
   createQueueItem,
   provideQueueInput,
   reportQueueFailure,
+  releaseExpiredQueueClaim,
   releaseQueueItem,
   requestQueueInput,
   shapeQueueItem,
@@ -59,6 +60,10 @@ class FakeDb {
     return null;
   }
 
+  normalizeId(table: string, id: string) {
+    return id.startsWith(`${table}_`) ? id : null;
+  }
+
   async patch(id: string, patch: Record<string, unknown>) {
     const row = await this.get(id);
     if (!row) throw new Error("row not found");
@@ -97,6 +102,7 @@ describe("Queue service integration", () => {
       contextKind: "move",
       idempotencyKey: "create-1",
       maxAttempts: 2,
+      expiresAt: Date.now() + 60_000,
     });
     const replayedCreate = await createQueueItem(ctx, human, {
       householdId,
@@ -180,6 +186,7 @@ describe("Queue service integration", () => {
       idempotencyKey: "answer-1",
     });
     expect(answered.state).toBe("waitingForAi");
+    expect(answered.expiresAt).toBeDefined();
 
     const finalClaim = await claimQueueItem(ctx, agent, {
       householdId,
@@ -189,6 +196,9 @@ describe("Queue service integration", () => {
       expectedVersion: answered.version,
       idempotencyKey: "claim-3",
     });
+    expect(finalClaim.latestHumanResponse).toBe(
+      "Page 3 is now attached to the move documents.",
+    );
     const resultItemId = (await db.insert("items", {
       householdId,
       moveId,
@@ -206,6 +216,7 @@ describe("Queue service integration", () => {
     });
     expect(done.state).toBe("done");
     expect(done.terminalReason).toBe("completed");
+    expect(done.expiresAt).toBeUndefined();
 
     const activities = db.tables.get("queueActivities") ?? [];
     expect(activities.map((activity) => activity.type)).toEqual([
@@ -433,6 +444,21 @@ describe("Queue service integration", () => {
       moveId: "move_b",
       name: "Foreign record",
     })) as Id<"items">;
+    const sameMoveBoxId = (await db.insert("boxes", {
+      householdId,
+      moveId,
+      name: "Wrong reference type",
+    })) as Id<"boxes">;
+    await expect(
+      completeQueueItem(ctx, actor, {
+        householdId,
+        moveId,
+        queueItemId: item._id,
+        resultRefs: [{ type: "item", id: sameMoveBoxId }],
+        expectedVersion: claimed.version,
+        idempotencyKey: "wrong-table",
+      }),
+    ).rejects.toThrow(/does not belong to this move/i);
     await expect(
       completeQueueItem(ctx, actor, {
         householdId,
@@ -468,5 +494,58 @@ describe("Queue service integration", () => {
         idempotencyKey: "malformed-result-ref",
       }),
     ).rejects.toThrow(/string type and id/i);
+  });
+
+  it("lets maintenance release an expired claim without opening an agent bypass", async () => {
+    const db = new FakeDb();
+    const ctx = { db } as unknown as MutationCtx;
+    const householdId = "household" as Id<"households">;
+    const moveId = "move" as Id<"moves">;
+    const userId = "user" as Id<"users">;
+    const agent: QueueAccessActor = {
+      userId,
+      actorType: "agent",
+      isManager: false,
+      delegatedOwnerIds: [],
+    };
+    const item = await createQueueItem(ctx, { ...agent, actorType: "user" }, {
+      householdId,
+      moveId,
+      directive: "Release abandoned Queue work.",
+    });
+    const claimed = await claimQueueItem(ctx, agent, {
+      householdId,
+      moveId,
+      queueItemId: item._id,
+      nextStep: "Start the bounded check.",
+      expectedVersion: item.version,
+    });
+    await db.patch(item._id, { claimExpiresAt: Date.now() - 1 });
+    const maintenance: QueueAccessActor = {
+      userId,
+      actorType: "system",
+      label: "Queue lease maintenance",
+      isManager: true,
+      delegatedOwnerIds: [],
+    };
+    const released = await releaseExpiredQueueClaim(ctx, maintenance, {
+      householdId,
+      moveId,
+      queueItemId: item._id,
+      reason: "The lease expired.",
+      expectedVersion: claimed.version,
+      idempotencyKey: "expired-lease",
+    });
+    expect(released.state).toBe("waitingForAi");
+    expect(released.claimExpiresAt).toBeUndefined();
+    await expect(
+      releaseExpiredQueueClaim(ctx, { ...maintenance, actorType: "agent" }, {
+        householdId,
+        moveId,
+        queueItemId: item._id,
+        reason: "Agent bypass attempt.",
+        expectedVersion: released.version,
+      }),
+    ).rejects.toThrow(/only Queue maintenance/i);
   });
 });
