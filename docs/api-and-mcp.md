@@ -1827,10 +1827,17 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 Hosted assistants reach MovingManifest through **three deliberately separate
 doors — do not confuse their catalogs or credentials**:
 
+Maintainers running live synthetic proof must use
+[`docs/operations/mcp-production-acceptance.md`](operations/mcp-production-acceptance.md)
+and retain only the labeled non-privileged test identity after cleanup.
+
 - **Canonical stateless OAuth (recommended):**
   `https://movingmanifest.com/mcp` — sign in with your MovingManifest account,
-  no key to copy. It verifies an issuer-signed, exact-audience Clerk access
-  token and creates a fresh MCP server for each request. **Use this URL for new
+  no key to copy. It verifies an issuer-signed Clerk OAuth access token and
+  creates a fresh MCP server for each request. Production Clerk DCR tokens
+  currently omit `aud`; Moving therefore pins issuer, signature, expiry,
+  `at+jwt` type, subject, and client id, while rejecting any supplied audience
+  that is neither this resource nor that Clerk client. **Use this URL for new
   browser-sign-in clients.** Discovery:
   `/.well-known/oauth-protected-resource/mcp`.
 - **Legacy persisted OAuth compatibility:**

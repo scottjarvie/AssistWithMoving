@@ -59,8 +59,12 @@ publishing, billing, or destructive deletion.
 
 ## Identity, tenant, and authority boundary
 
-- The resource verifies the OAuth access-token signature, issuer, expiry,
-  `at+jwt` type, and exact `/mcp` audience before starting the MCP handler.
+- The resource verifies the OAuth access-token signature, exact Clerk issuer,
+  expiry, `at+jwt` type, subject, and OAuth client identifier before starting
+  the MCP handler. Clerk's production dynamic-registration tokens currently
+  omit `aud` even when the request includes the RFC 8707 `resource` parameter;
+  when Clerk does include `aud`, Moving accepts only the exact `/mcp` resource
+  or the token's own Clerk client id and rejects any unrelated audience.
 - The server derives the Clerk subject and OAuth client id from the verified
   token. Tool arguments never choose a user or household.
 - Every move read and write resolves current household or move-only access
@@ -134,8 +138,9 @@ client to inspect what was saved.
 
 ### Partial until named-client proof exists
 
-- Clerk authorization and production audience validation are implemented and
-  covered with locally signed resource-bound tokens. A named third-party MCP
+- Clerk authorization and the observed production token shape are implemented
+  and covered with locally signed exact-issuer tokens, including absent,
+  resource, client-id, wrong, and expired audience cases. A named third-party MCP
   client's real OAuth consent, refresh, disconnect, and reconnect flow requires
   a sanctioned disposable account and is separate proof.
 - Private evidence uses the existing authenticated image action, with protocol

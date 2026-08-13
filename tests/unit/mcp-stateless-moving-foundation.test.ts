@@ -241,7 +241,7 @@ describe("stateless Moving MCP foundation", () => {
     );
   });
 
-  it("accepts only issuer-signed, resource-bound access tokens", async () => {
+  it("accepts Clerk issuer-signed access tokens with its production audience shape", async () => {
     const t = convexTest(schema, modules);
     const { privateKey, publicKey } = await generateKeyPair("RS256");
     const jwk = await exportJWK(publicKey);
@@ -259,15 +259,16 @@ describe("stateless Moving MCP foundation", () => {
       return originalFetch(input as any, init);
     }) as typeof fetch;
     try {
-      const sign = (audience: string, expiresAt: number) =>
-        new SignJWT({ scope: "openid profile", azp: PRINCIPAL.clientId })
+      const sign = (audience: string | undefined, expiresAt: number) => {
+        const token = new SignJWT({ scope: "openid profile", azp: PRINCIPAL.clientId })
           .setProtectedHeader({ alg: "RS256", kid: "moving-mcp-proof-key", typ: "at+jwt" })
           .setIssuer(ISSUER)
           .setSubject(SUBJECT)
-          .setAudience(audience)
           .setIssuedAt()
-          .setExpirationTime(expiresAt)
-          .sign(privateKey);
+          .setExpirationTime(expiresAt);
+        if (audience) token.setAudience(audience);
+        return token.sign(privateKey);
+      };
       const call = (token: string) =>
         t.fetch("/mcp", {
           method: "POST",
@@ -306,6 +307,17 @@ describe("stateless Moving MCP foundation", () => {
           );
           expect(accepted.status).toBe(200);
           expect(await accepted.text()).toContain("get_move_brief");
+
+          const productionShape = await call(
+            await sign(undefined, Math.floor(Date.now() / 1_000) + 300),
+          );
+          expect(productionShape.status).toBe(200);
+          expect(await productionShape.text()).toContain("get_move_brief");
+
+          const clerkClientAudience = await call(
+            await sign(PRINCIPAL.clientId, Math.floor(Date.now() / 1_000) + 300),
+          );
+          expect(clerkClientAudience.status).toBe(200);
 
           const wrongAudience = await call(
             await sign(

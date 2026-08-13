@@ -139,7 +139,6 @@ async function verifyOAuth(
   try {
     const result = await jwtVerify(match[1], jwksFor(issuer), {
       issuer: issuer.toString().replace(/\/$/, ""),
-      audience: resource.toString(),
     });
     if (
       result.protectedHeader.typ !== "at+jwt" &&
@@ -159,6 +158,24 @@ async function verifyOAuth(
           : null;
     if (!clientId) throw new Error("Missing OAuth client identifier.");
     if (clientId.length > 160) throw new Error("OAuth client identifier is too long.");
+    // Clerk's production dynamic-registration access tokens currently omit
+    // `aud`, even when the authorization request carries the RFC 8707
+    // `resource` parameter. Keep the exact issuer, signature, expiry, token
+    // type, subject, and client checks as the trust boundary. If Clerk does
+    // provide an audience, fail closed unless it names this MCP resource or
+    // the issuing OAuth client (Clerk's documented OAuth audience shape).
+    const audiences = Array.isArray(result.payload.aud)
+      ? result.payload.aud
+      : typeof result.payload.aud === "string"
+        ? [result.payload.aud]
+        : [];
+    if (
+      audiences.length > 0 &&
+      !audiences.includes(resource.toString()) &&
+      !audiences.includes(clientId)
+    ) {
+      throw new Error("OAuth audience does not match this resource or client.");
+    }
     const scopeValue = result.payload.scope ?? result.payload.scp;
     const scopes = Array.isArray(scopeValue)
       ? scopeValue.filter((item): item is string => typeof item === "string")
