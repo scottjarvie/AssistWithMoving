@@ -19,10 +19,12 @@ honest Queue entrance, and a recommended hosted MCP setup path.
 
 ## Current truth
 
-The public Assist domain currently reaches the application, but production
-Clerk rejects its origin because the authenticated application is still bound
-to `movingmanifest.com`. Source-level identity and first-run repairs are in
-progress; protected deployment and live verification remain pending.
+The public Assist domain now preserves the requested path and enters through
+the Clerk-bound `movingmanifest.com` compatibility host. PR `#184`, post-merge
+Actions run `31747746115`, production deployment
+`dpl_EUR93mXnmoi6PgLGsnts7fwA6uAW`, and an ordinary retained-account browser
+run verify the working sign-in, empty workspace, Queue, and hosted-OAuth-first
+AI Connections path. No provider/domain cutover or real move data was used.
 
 ## Included scope
 
@@ -80,11 +82,32 @@ cutover remains a separate provider and product decision.
 - Live Chrome reproduced `assistwithmoving.com/sign-in` with zero controls and
   Clerk's production-origin rejection for the non-bound host.
 - Source redirect, visible identity, and hosted-OAuth-first setup are implemented
-  with focused redirect tests. Protected and production proof remain active.
+  with focused redirect tests.
+- PR `#184` merged as `d1f7364ad000f4193b6a966e4c8f4c06a423e1fd`;
+  both required checks passed in post-merge run `31747746115`, including 1,046
+  unit tests.
+- Production deployment `dpl_EUR93mXnmoi6PgLGsnts7fwA6uAW` reached Ready at
+  `2026-08-13T21:56:23.554Z` from the exact merge.
+- The live Assist sign-in returned 307 with the Queue return URL intact. Its
+  destination rendered the Assist With Moving title, two inputs, Google and
+  password controls, and no Clerk origin error.
+- The retained empty identity reached the normal `/app`, `/app/queue`, and
+  `/settings/ai-connections` paths. No move or Queue fixture was created or
+  read; the UI showed Create your first move, No active move, and recommended
+  hosted MCP OAuth with API keys as fallback.
+- A one-time impersonation URL appeared in internal browser automation output.
+  It was not preserved or repeated: the ticket was consumed, the exact active
+  device/session was revoked through Clerk, the Devices table returned None,
+  the product returned to signed-out state, and the temporary tabs were closed.
 
 ## Verification
 
-Active. Local checks and browser proof are in progress.
+The product repair is complete across source, local checks, protected CI, exact
+production deployment, anonymous sign-in controls, retained empty-account first
+run, and session cleanup. The prepared v0.5.0 release record remains active
+until it passes its own protected publication and `/updates` verification. A
+true Assist-domain Clerk/OAuth cutover, live authenticated mobile proof, and
+every-browser sign-in remain unproved and are not implied.
 
 ## Independent audit
 
@@ -97,3 +120,6 @@ Not yet audited. Completion does not imply a separate independent review.
 - 2026-08-13 · Codex — reproduced the Clerk origin rejection, chose the
   reversible compatibility redirect, and began the coherent identity and
   first-run implementation.
+- 2026-08-13 · Codex — merged and deployed PR `#184`, completed the ordinary
+  retained-account first-run proof, revoked the temporary session, and prepared
+  the exact Current/Partial/Later release record for protected publication.

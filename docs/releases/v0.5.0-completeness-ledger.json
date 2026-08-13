@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "version": "0.5.0",
+    "from": "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",
+    "to": "d1f7364ad000f4193b6a966e4c8f4c06a423e1fd",
+    "cutoff": "2026-08-13T21:56:23.554Z",
+    "cutoffTimezone": "America/Phoenix",
+    "posture": "release-ready",
+    "recordType": "verified production first-run release"
+  },
+  "reconciliation": {
+    "git": {
+      "selection": "d0c0a83..d1f7364",
+      "exactAncestorRange": true,
+      "sourceCount": 2,
+      "pullRequestSources": 2,
+      "directCommitSources": 0,
+      "markerMeaning": "Merge commit of PR #182, the v0.4.1 product release cutoff; the later production-proof publication is classified separately from the Assist With Moving first-run change."
+    },
+    "github": {
+      "repository": "scottjarvie/movingmanifest",
+      "productPullRequest": 184,
+      "productionDeployment": {
+        "commit": "d1f7364ad000f4193b6a966e4c8f4c06a423e1fd",
+        "deploymentId": "dpl_EUR93mXnmoi6PgLGsnts7fwA6uAW",
+        "statusContext": "Vercel",
+        "environment": "Production",
+        "state": "success",
+        "deployedAt": "2026-08-13T21:56:23.554Z",
+        "buildCommand": "npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL"
+      },
+      "checks": [
+        {
+          "name": "Required CI",
+          "runId": 31747746115,
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit tests (informational)",
+          "runId": 31747746115,
+          "conclusion": "success",
+          "testCount": 1046
+        }
+      ]
+    },
+    "firstRunProof": {
+      "identity": "retained non-privileged Moving-only production test identity with no move records",
+      "anonymousEntry": "assistwithmoving.com/sign-in returned 307 with the full Queue return path preserved; the destination rendered Sign in to Assist With Moving with two inputs and usable Google and password controls",
+      "signedInWorkspace": "the empty production workspace rendered Assist With Moving identity, Create your first move guidance, chosen-AI setup, and the approved test identity without creating or reading any move fixture",
+      "queue": "the normal global Queue showed No active move and directed the person to create or select one; no Queue record was created",
+      "aiConnections": "the normal signed-in page led with recommended hosted MCP OAuth at movingmanifest.com/mcp and kept API keys as the separate fallback",
+      "securityCleanup": "the one-time impersonation ticket was consumed and not retained; the exact temporary test device/session was revoked through Clerk, the user Devices table returned None, the product returned to signed-out state, and the temporary browser/provider tabs were closed",
+      "notProved": [
+        "a direct Clerk or OAuth origin cutover to assistwithmoving.com; the compatibility redirect is deliberate",
+        "the authenticated first-run workspace on a live mobile device",
+        "first-run sign-in in every supported external browser"
+      ]
+    },
+    "dispositionCounts": {
+      "include": 1,
+      "group": 0,
+      "exclude": 1,
+      "unshipped": 0
+    },
+    "completenessGate": "pass"
+  },
+  "releaseItems": [
+    {
+      "id": "assist-moving-first-run",
+      "sourceCount": 1
+    }
+  ],
+  "sources": [
+    {
+      "id": "pr-183",
+      "kind": "pull_request",
+      "prNumber": 183,
+      "title": "Publish verified production MCP acceptance",
+      "commits": ["85c7bb5abdea26daaf589430740300f287fa7c81"],
+      "firstSeenAt": "2026-08-13T02:46:28.000Z",
+      "lastSeenAt": "2026-08-13T02:46:28.000Z",
+      "disposition": "exclude",
+      "reason": "Release-accounting and acceptance evidence for the already-recorded v0.4.1 OAuth repair; it did not independently change product behavior."
+    },
+    {
+      "id": "pr-184",
+      "kind": "pull_request",
+      "prNumber": 184,
+      "title": "Make Assist With Moving first run coherent",
+      "commits": ["0b77a2d55c183170147b27d171b69e15a0615ce3"],
+      "firstSeenAt": "2026-08-13T21:51:37.000Z",
+      "lastSeenAt": "2026-08-13T21:51:37.000Z",
+      "disposition": "include",
+      "releaseItemId": "assist-moving-first-run"
+    }
+  ]
+}

@@ -26,7 +26,7 @@ function readLedger() {
     readFileSync(
       resolve(
         process.cwd(),
-        "docs/releases/v0.4.1-completeness-ledger.json",
+        "docs/releases/v0.5.0-completeness-ledger.json",
       ),
       "utf8",
     ),
@@ -38,9 +38,9 @@ function readLedger() {
 
 describe("release notes", () => {
   it("keeps the visible app version aligned to the proposed latest release", () => {
-    expect(appVersion).toBe("0.4.1");
-    expect(latestRelease.version).toBe("0.4.1");
-    expect(releaseEntries[0].version).toBe("0.4.1");
+    expect(appVersion).toBe("0.5.0");
+    expect(latestRelease.version).toBe("0.5.0");
+    expect(releaseEntries[0].version).toBe("0.5.0");
   });
 
   it("uses the exact impact-sorted Created, Fixed, and Upgraded story", () => {
@@ -48,7 +48,7 @@ describe("release notes", () => {
       getReleaseItems(latestRelease, "created").map((item) => item.id),
     ).toEqual([]);
     expect(getReleaseItems(latestRelease, "fixed").map((item) => item.id)).toEqual(
-      ["production-mcp-oauth"],
+      ["assist-moving-first-run"],
     );
     expect(
       getReleaseItems(latestRelease, "upgraded").map((item) => item.id),
@@ -91,10 +91,10 @@ describe("release notes", () => {
     const ledgerIds = new Set(ledger.sources.map((source) => source.id));
 
     expect(ledger.release).toMatchObject({
-      version: "0.4.1",
-      from: "0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c",
-      to: "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",
-      cutoff: "2026-08-13T02:29:04.000Z",
+      version: "0.5.0",
+      from: "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",
+      to: "d1f7364ad000f4193b6a966e4c8f4c06a423e1fd",
+      cutoff: "2026-08-13T21:56:23.554Z",
     });
     expect(ledger.sources).toHaveLength(2);
     expect(ledgerIds.size).toBe(2);
@@ -152,6 +152,12 @@ describe("release notes", () => {
   });
 
   it("renders evidence-backed date, time, and timezone", () => {
+    expect(
+      formatReleaseTimestamp(
+        "2026-08-13T21:56:23.554Z",
+        "America/Phoenix",
+      ),
+    ).toBe("August 13, 2026, 2:56 PM MST");
     expect(
       formatReleaseTimestamp(
         "2026-08-13T02:29:04.000Z",

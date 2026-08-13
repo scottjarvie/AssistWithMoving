@@ -67,6 +67,36 @@ export const appVersion = packageJson.version;
 
 export const releaseEntries: ReleaseEntry[] = [
   {
+    version: "0.5.0",
+    releasedAt: "2026-08-13T21:56:23.554Z",
+    timezone: "America/Phoenix",
+    title: "A working Assist With Moving first run",
+    summary:
+      "Assist With Moving now opens as one coherent product: the public entry reaches a usable sign-in, the empty workspace explains the move clearly, and chosen-AI setup starts with secure hosted OAuth.",
+    backfillNote:
+      "Every first-parent source after the v0.4.1 product cutoff through the verified Assist With Moving first-run deployment was classified in the v0.5.0 completeness ledger.",
+    items: [
+      {
+        id: "assist-moving-first-run",
+        category: "fixed",
+        impactTier: "major",
+        impactRank: 1,
+        short:
+          "The Assist With Moving entry now reaches a usable sign-in and carries one current identity through the workspace, Queue, and chosen-AI setup.",
+        long: {
+          what:
+            "The public Assist domain now preserves the requested path while entering through the production Clerk-approved host. Public pages, auth framing, the signed-in shell, Queue guidance, packets, metadata, API/MCP copy, and agent guides use Assist With Moving; AI Connections recommends hosted OAuth before fallback API keys.",
+          why:
+            "An ordinary visit to the Assist-domain sign-in previously showed only a legacy title and no usable control because the production identity rejected that origin. Mixed identity and key-first setup also made the first visit harder to understand.",
+          where:
+            "Begin at assistwithmoving.com, continue into the empty workspace or Queue, and open AI Connections to copy the hosted movingmanifest.com/mcp endpoint.",
+        },
+        sourceRefs: ["pr-184"],
+        audiences: ["public", "signed-in", "agent"],
+      },
+    ],
+  },
+  {
     version: "0.4.1",
     releasedAt: "2026-08-13T02:29:04.000Z",
     timezone: "America/Phoenix",
