@@ -24,13 +24,14 @@ The complete bounded foundation is released in production through protected PR
 `#180` at merge `0a5e0eb`. Official SDK protocol discovery, OAuth-token checks,
 tenant boundaries, replay-safe writes, bounded search, optimistic correction,
 web reflection, local and protected gates, Convex/Vercel deployment, and public
-discovery/refusal/docs/privacy proof pass. A named-client authenticated receipt
-remains separate and unproved. Canonical OAuth still cannot transition Queue
-work.
+discovery/refusal/docs/privacy proof pass. Follow-up `MOV-WO-006` now owns the
+sanctioned named-client production receipt and the compatibility repair for
+Clerk's observed no-`aud` DCR access token. Canonical OAuth still cannot
+transition Queue work.
 
 ## Included scope
 
-- Canonical stateless OAuth transport with resource-bound token verification,
+- Canonical stateless OAuth transport with exact-issuer Clerk token verification,
   real protected-resource discovery, modern MCP, and stateless legacy protocol.
 - Bounded brief/search/batch/media reads and replay-safe context, inventory,
   granular planning, and complete-result writes.
@@ -76,8 +77,9 @@ coordination remain in scope.
 
 1. Official SDK protocol discovery proves the exact catalog on modern and
    stateless legacy requests.
-2. Locally signed JWT tests prove issuer, expiry, token type, and exact audience;
-   anonymous requests prove the RFC 9728 challenge and public metadata.
+2. Locally signed JWT tests prove issuer, expiry, token type, client id, and the
+   absent/resource/client-id/wrong audience shapes; anonymous requests prove
+   the RFC 9728 challenge and public metadata.
 3. `convex-test` seeds one synthetic owner, household, and move, then proves
    orientation, complete-result create, exact replay, no duplicates, search,
    optimistic correction, provenance, and audit receipts.
@@ -98,7 +100,7 @@ named-client authenticated production mutation or private-media proof.
   clean `main` at `148032a`; no unrelated work was overwritten.
 - The complete repository suite passes: 187 test files and 1,040 tests,
   including modern/legacy stateless discovery, RFC 9728 anonymous discovery,
-  resource-bound OAuth verification, private-evidence role denial, Queue-link
+  Clerk OAuth-token verification, private-evidence role denial, Queue-link
   ownership, cross-client correction denial, and a complete isolated synthetic
   move lifecycle with exact replay and correction.
 - `npm run lint`, `npm run typecheck`, and `npm run build` pass. The lint output
@@ -151,3 +153,6 @@ Not yet audited. Completion of implementation does not imply a separate review.
   post-merge CI, exact Convex/Vercel production deployment, public endpoint and
   privacy behavior, and an official SDK anonymous-client challenge; completed
   the Work Order with the named-client authenticated boundary still explicit.
+- 2026-08-12 · Codex — preserved this completed foundation Work Order and routed
+  the sanctioned retained-account compatibility repair and live acceptance to
+  `MOV-WO-006`.
