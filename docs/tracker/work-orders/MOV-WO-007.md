@@ -1,7 +1,7 @@
 ---
 id: MOV-WO-007
 title: Release the Assist With Moving rebrand and first-run repair
-execution: active
+execution: complete
 audit: not-audited
 cards: MOV-0030
 created: 2026-08-13
@@ -24,7 +24,10 @@ the Clerk-bound `movingmanifest.com` compatibility host. PR `#184`, post-merge
 Actions run `31747746115`, production deployment
 `dpl_EUR93mXnmoi6PgLGsnts7fwA6uAW`, and an ordinary retained-account browser
 run verify the working sign-in, empty workspace, Queue, and hosted-OAuth-first
-AI Connections path. No provider/domain cutover or real move data was used.
+AI Connections path. Release PR `#185`, post-merge run `31749165920`, production
+deployment `dpl_BXTFwPfurfmSkXmUzFWLHPFGDRdJ`, and live `/updates` v0.5.0 verify
+the durable release record. No provider/domain cutover or real move data was
+used.
 
 ## Included scope
 
@@ -99,14 +102,19 @@ cutover remains a separate provider and product decision.
   It was not preserved or repeated: the ticket was consumed, the exact active
   device/session was revoked through Clerk, the Devices table returned None,
   the product returned to signed-out state, and the temporary tabs were closed.
+- Release PR `#185` merged as `440f045738f916bdabbc17bbe9a4de96a351fad6`;
+  post-merge Actions run `31749165920` passed Required CI and all 1,046 tests.
+- Release production deployment `dpl_BXTFwPfurfmSkXmUzFWLHPFGDRdJ` reached
+  Ready at `2026-08-13T22:16:17.976Z`; the ordinary Assist-domain `/updates`
+  entry redirected to the authenticated host and displayed current version
+  v0.5.0, the evidence-backed title, and the exact local release time.
 
 ## Verification
 
-The product repair is complete across source, local checks, protected CI, exact
-production deployment, anonymous sign-in controls, retained empty-account first
-run, and session cleanup. The prepared v0.5.0 release record remains active
-until it passes its own protected publication and `/updates` verification. A
-true Assist-domain Clerk/OAuth cutover, live authenticated mobile proof, and
+Complete. Source, local checks, protected product and release PRs, both exact
+production deployments, anonymous sign-in controls, retained empty-account
+first run, session cleanup, and live v0.5.0 release truth have separate receipts.
+A true Assist-domain Clerk/OAuth cutover, live authenticated mobile proof, and
 every-browser sign-in remain unproved and are not implied.
 
 ## Independent audit
@@ -123,3 +131,6 @@ Not yet audited. Completion does not imply a separate independent review.
 - 2026-08-13 · Codex — merged and deployed PR `#184`, completed the ordinary
   retained-account first-run proof, revoked the temporary session, and prepared
   the exact Current/Partial/Later release record for protected publication.
+- 2026-08-13 · Codex — merged and deployed release PR `#185`, verified v0.5.0
+  through the normal Updates page, and completed the Work Order with the exact
+  remaining hostname and browser proof boundaries intact.
