@@ -1899,6 +1899,16 @@ finished work, prefer `save_complete_result`; use granular saves for later
 corrections. This OAuth catalog may read Queue summaries and link a result for
 human inspection, but it does not claim or complete canonical Queue work.
 
+Production acceptance is Current for one retained non-privileged Moving test
+identity: real Clerk consent and official-SDK token exchange, the full
+brief/search/read/save/replay/correct/hydrate loop, normal Move-overview
+reflection, refresh/client/session cleanup, and complete marked-fixture purge
+were verified on 2026-08-13 after PR `#182`. This receipt does not imply private
+image rendering, simultaneous multi-client isolation, reconnect behavior in a
+specific client product, or canonical OAuth Queue transitions. Maintainer
+details and the repeatable cleanup lane live in
+[`docs/operations/mcp-production-acceptance.md`](operations/mcp-production-acceptance.md).
+
 Codex CLI/App:
 
 ```bash

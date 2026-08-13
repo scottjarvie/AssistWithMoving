@@ -1,11 +1,11 @@
 ---
 id: MOV-WO-006
 title: Run the retained-account production MCP acceptance loop
-execution: active
+execution: complete
 audit: not-audited
 cards: MOV-0029
 created: 2026-08-12
-updated: 2026-08-12
+updated: 2026-08-13
 approved-by: Scott Jarvie
 approval-evidence: "explicit retained Moving production test identity and live MCP/UI acceptance authorization in coordinator task 019ff621-54b9-78f0-a51d-dd20fb0cb247"
 executor: Codex
@@ -19,11 +19,13 @@ the result visible in the normal Move overview, with repeatable cleanup.
 
 ## Current truth
 
-The retained Clerk identity exists and its isolated synthetic move is clearly
-marked. Real consent produced a correctly signed Clerk `at+jwt` whose production
-shape has no `aud`; the released exact-audience verifier rejected it. Refresh
-revocation succeeded and no MCP tool reached data. The repair and its focused
-regression tests are in progress through the normal protected path.
+The retained Clerk identity exists without elevated roles or real data.
+Protected PR `#182` repaired the production no-`aud` token compatibility issue,
+passed exact-head and post-merge CI, and deployed through Vercel plus Convex.
+The official SDK completed the full marked production workflow, and the normal
+Move overview showed every saved record with MCP provenance. All temporary
+clients, grants, sessions, tokens, and marked Move/MCP/Queue records were then
+removed; only the empty approved identity remains.
 
 ## Included scope
 
@@ -94,12 +96,29 @@ rule is reached.
   before any MCP data call; refresh-token revocation returned success.
 - The focused compatibility test now covers absent, resource, client-id, wrong,
   and expired audience shapes while retaining the other token checks.
-- Protected release, successful tool/UI receipt, and final cleanup are pending.
+- PR `#182` merged as `d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1`;
+  post-merge Actions run `31660891558` passed Required CI and all 1,042 unit
+  tests, and Production deployment `dpl_6ZZ6e3Ma3DDGF66x9FMZhMrpREPF` reached
+  Ready at `2026-08-13T02:29:04Z`.
+- The official SDK listed all eight tools, read the correct synthetic move,
+  saved two spaces, one inventory item, five supporting planning/source
+  records, and one complete plan, replayed the same operation with
+  `replay: true`, found three matching saved records, hydrated them, and
+  corrected the decision to `confirmed` version 2.
+- The ordinary production Move overview showed the complete result, estimate,
+  plan, two FMCSA source checks, and corrected decision with `Your AI via MCP`
+  provenance.
+- Refresh revocation returned success. Both temporary DCR applications were
+  deleted, the test session was signed out, and hard purge removed the marked
+  move and all linked Move/MCP/Queue records. The empty retained identity is the
+  only durable test state.
 
 ## Verification
 
-Active. Local focused verifier proof passes. Protected release, authenticated
-workflow, normal UI reflection, and final cleanup receipts remain next.
+Complete. Local verifier tests, protected CI/deployment, authenticated MCP
+workflow, normal UI reflection, grant/client/session cleanup, and fixture purge
+all have separate receipts. Private-image rendering, multi-client isolation,
+reconnect, and canonical OAuth Queue transitions remain unproved.
 
 ## Independent audit
 
@@ -113,3 +132,6 @@ independent review.
 - 2026-08-12 · Codex — created the isolated identity and move, reproduced the
   production no-`aud` incompatibility, revoked the refresh token, and began the
   protected compatibility repair.
+- 2026-08-13 · Codex — released the repair, completed the official-SDK and
+  normal-UI acceptance loop, and proved full temporary-state and fixture
+  cleanup while retaining only the approved test identity.
