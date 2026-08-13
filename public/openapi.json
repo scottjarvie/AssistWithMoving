@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "MovingManifest REST API",
+    "title": "Assist With Moving REST API",
     "version": "1.0.0",
     "description": "Agent-friendly REST API for move setup, inventory, spaces, photos, sale prep, planning context, and exports."
   },
@@ -538,7 +538,7 @@
       "post": {
         "summary": "Upload image evidence in one call",
         "operationId": "uploadImageEvidenceImage",
-        "description": "Plain REST alias for /photos/upload using image terminology. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
+        "description": "Plain REST alias for /photos/upload using image terminology. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. Assist With Moving stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
         "parameters": [
           {
             "name": "moveId",
@@ -632,7 +632,7 @@
       "post": {
         "summary": "Upload image evidence in one call",
         "operationId": "uploadPhotoEvidenceImage",
-        "description": "Default REST image upload path for agents. /images/upload is an equivalent alias when image terminology is clearer. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. MovingManifest stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
+        "description": "Default REST image upload path for agents. /images/upload is an equivalent alias when image terminology is clearer. Send raw JPEG/PNG/WebP bytes with metadata query params, multipart form data with a file field, or JSON with exactly one public sourceUrl, dataUrl, or fileBase64 image. Assist With Moving stores the original, reads dimensions, finalizes the evidence record, creates web-ready derivatives server-side, can optionally queue AI photo-review suggestions, and returns agentReview so assistants can summarize assumptions without asking for every field.",
         "parameters": [
           {
             "name": "moveId",
@@ -818,7 +818,7 @@
       "bearerApiKey": {
         "type": "http",
         "scheme": "bearer",
-        "description": "MovingManifest API key beginning with mmk_."
+        "description": "Assist With Moving API key beginning with mmk_."
       }
     },
     "parameters": {
@@ -1310,7 +1310,7 @@
       },
       "PhotoDerivativeVariant": {
         "type": "object",
-        "description": "Private storage keys are intentionally omitted. This describes the web-ready derivative variants MovingManifest prepares for display and AI review after an original image upload.",
+        "description": "Private storage keys are intentionally omitted. This describes the web-ready derivative variants Assist With Moving prepares for display and AI review after an original image upload.",
         "properties": {
           "variant": {
             "type": "string",

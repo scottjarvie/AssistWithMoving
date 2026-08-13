@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { product } from "@/lib/product";
 
 const starterPrompt =
-  "Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If I provide photos, upload the originals through the easiest image/photo tool and let MovingManifest create web-ready versions. If you need private access, walk me through creating an account and an AI helper key.";
+  "Open movingmanifest.com/ai and help me set up Assist With Moving. Start with my move context, places, decisions, and what needs attention. Connect to movingmanifest.com/mcp with OAuth, call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.";
 
 // Honest "learn more" links. No counts, metrics, or claims — just where to read next.
 const learnMoreLinks: {
@@ -23,7 +23,7 @@ const learnMoreLinks: {
   {
     href: "/about",
     title: "About",
-    copy: "What MovingManifest is and who it's for.",
+    copy: "Why a move needs durable memory, not another disposable checklist.",
     icon: Info,
   },
   {
@@ -49,20 +49,20 @@ export default function MarketingPage() {
         <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.8fr)] lg:px-8 lg:py-16">
           <div className="max-w-2xl">
             <Badge variant="secondary" className="mb-5">
-              MovingManifest is building at {product.domain}
+              Assist With Moving · currently hosted at {product.domain}
             </Badge>
             <h1 className="text-5xl font-semibold leading-[0.95] tracking-tight text-balance sm:text-6xl lg:text-7xl">
-              The manifest for everything that moves.
+              Keep the whole move coherent.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
-              Inventory every item, box every room, attach photo evidence, plan
-              every load, and export the right documentation packet for movers,
-              employers, insurance, storage, donations, or a military PCS.
+              One durable workspace for the changing plan, places, decisions,
+              belongings, evidence, and handoffs you share with your chosen AI.
+              Start simply, then add detail only when the move needs it.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg">
                 <Link href="/ai">
-                  Use with your AI assistant
+                  Set up your chosen AI
                   <ArrowRight aria-hidden="true" />
                 </Link>
               </Button>
@@ -73,7 +73,7 @@ export default function MarketingPage() {
             <div className="mt-6 rounded-md border border-primary/25 bg-primary/5 p-4">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Bot className="size-4 text-primary" aria-hidden="true" />
-                If you already use Claude, ChatGPT, or Codex
+                Assist your AI, so it can assist you with moving
               </div>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
                 Tell it:
@@ -101,8 +101,9 @@ export default function MarketingPage() {
             Learn about the project
           </h2>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            MovingManifest is in active development. Here is where to read more
-            before you create an account.
+            Assist With Moving is in active development. Read the current
+            product boundaries, privacy model, and available workflows before
+            you create an account.
           </p>
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             {learnMoreLinks.map((item) => (

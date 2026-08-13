@@ -1,11 +1,12 @@
 # Assist With Moving agent guide
 
 Canonical MCP endpoint: https://movingmanifest.com/mcp
-Authentication: OAuth browser sign-in with the user's MovingManifest account
+Authentication: OAuth browser sign-in with the user's Assist With Moving account
 Human setup: https://movingmanifest.com/ai/start
 Full guide: https://movingmanifest.com/llms-full.txt
+Public entry: https://assistwithmoving.com redirects to the current authenticated host
 
-MovingManifest is the durable move workspace. The AI reasons and saves
+Assist With Moving is the durable move workspace. The AI reasons and saves
 authorized work; the person remains responsible for decisions and outside-world
 actions.
 

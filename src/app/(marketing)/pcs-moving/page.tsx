@@ -10,7 +10,7 @@ import {
 export const metadata: Metadata = {
   title: "PCS Moving",
   description:
-    "MovingManifest PCS support for mixed HHG, PPM, partial PPM, personal transport, weight allowance tracking, and documentation packets.",
+    "Assist With Moving PCS support for mixed HHG, PPM, partial PPM, personal transport, weight allowance tracking, and documentation packets.",
 };
 
 const pcsCards = [
@@ -41,7 +41,7 @@ export default function PcsMovingPage() {
     <PublicPageChrome
       eyebrow="Military PCS mode"
       title="PCS move planning without pretending policy is static."
-      description="MovingManifest treats PCS as a first-class workflow: configurable official fields, personal-transport lists, HHG/PPM planning, and careful documentation language."
+      description="Assist With Moving treats PCS as a first-class workflow: configurable official fields, personal-transport lists, HHG/PPM planning, and careful documentation language."
     >
       <PublicBand>
         <FeatureGrid cards={pcsCards} />

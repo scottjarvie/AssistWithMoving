@@ -2553,7 +2553,7 @@ export function buildRoughMovableUnitAssistantPrompt({
   const trimmedList = roughList?.trim();
   return [
     "Open https://movingmanifest.com/ai and help me rough in move inventory for load planning.",
-    "Connect to MovingManifest with hosted MCP OAuth when available; use a scoped helper key only if this client cannot use OAuth.",
+    "Connect to Assist With Moving with hosted MCP OAuth when available; use a scoped helper key only if this client cannot use OAuth.",
     householdId ? `Household context: ${householdId}.` : "",
     moveId ? `Move context: ${moveId}.` : "",
     "Before changing move data, call agent_workbench, then get_api_context, then get_move_summary or get_agent_context.",
@@ -2591,7 +2591,7 @@ export function buildMovableUnitFollowUpAssistantPrompt({
   );
 
   return [
-    "Open https://movingmanifest.com/ai and help me fill rough-load follow-up gaps for existing MovingManifest movable units.",
+    "Open https://movingmanifest.com/ai and help me fill rough-load follow-up gaps for existing Assist With Moving movable units.",
     "Connect with hosted MCP OAuth when available; use a scoped helper key only if this client cannot use OAuth.",
     householdId ? `Household context: ${householdId}.` : "",
     moveId ? `Move context: ${moveId}.` : "",

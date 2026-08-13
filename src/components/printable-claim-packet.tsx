@@ -143,7 +143,7 @@ export function PrintableClaimPacket({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h1 className="text-3xl font-semibold tracking-normal">
-                  MovingManifest Insurance and Claims Packet
+                  Assist With Moving Insurance and Claims Packet
                 </h1>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {packet.disclaimer}

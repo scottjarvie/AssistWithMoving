@@ -135,7 +135,7 @@ test.describe("authenticated product flow", () => {
 
   test.skip(
     !e2eUserEmail,
-    "Set E2E_CLERK_USER_EMAIL to run signed-in MovingManifest product flows."
+    "Set E2E_CLERK_USER_EMAIL to run signed-in Assist With Moving product flows."
   );
 
   test.afterEach(async ({ page }, testInfo) => {
@@ -908,7 +908,7 @@ test.describe("authenticated product flow", () => {
     await page.goto(pcsPacketHref!);
     await expect(
       page.getByRole("heading", {
-        name: "MovingManifest PCS Support Packet",
+        name: "Assist With Moving PCS Support Packet",
         exact: true,
       })
     ).toBeVisible({ timeout: 30_000 });

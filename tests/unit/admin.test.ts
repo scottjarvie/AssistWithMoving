@@ -41,10 +41,10 @@ describe("admin helpers", () => {
       archived: 1,
     });
     expect(sumBy(rows, (row) => row.bytes)).toBe(25);
-    expect(matchesAdminSearch("manifest", ["MovingManifest", "other"])).toBe(
+    expect(matchesAdminSearch("moving", ["Assist With Moving", "other"])).toBe(
       true
     );
-    expect(matchesAdminSearch("none", ["MovingManifest", "other"])).toBe(false);
+    expect(matchesAdminSearch("none", ["Assist With Moving", "other"])).toBe(false);
   });
 
   it("redacts audit metadata for admin summaries", () => {

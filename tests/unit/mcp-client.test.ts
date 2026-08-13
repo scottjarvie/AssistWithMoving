@@ -94,7 +94,7 @@ const localMediaApiConfig = (allowedRoot: string) => ({
   },
 });
 
-describe("MovingManifest MCP API client", () => {
+describe("Assist With Moving MCP API client", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });

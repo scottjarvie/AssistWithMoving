@@ -35,7 +35,7 @@ export function AppShell({
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <Link
               href="/app"
-              aria-label="MovingManifest home"
+              aria-label="Assist With Moving home"
               className="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
             >
               <BrandMark compactOnMobile />

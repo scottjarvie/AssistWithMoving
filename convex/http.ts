@@ -1065,7 +1065,7 @@ const authorizeMcp: McpAuthorizerHandler = (_ctx, args) =>
     ? { allowed: true }
     : {
         allowed: false,
-        reason: "Sign in with your MovingManifest account to use these tools.",
+        reason: "Sign in with your Assist With Moving account to use these tools.",
       };
 
 const mcpHttpAction = httpAction((ctx, request) =>

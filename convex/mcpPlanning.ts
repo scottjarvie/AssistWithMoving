@@ -183,8 +183,8 @@ async function requireMcpUser(ctx: Ctx, principal: McpPrincipal) {
   if (!configuredIssuer || normalizedIssuer(principal.issuer) !== configuredIssuer) {
     mcpError(
       "AUTH_REQUIRED",
-      "This OAuth identity is not valid for MovingManifest.",
-      "Reconnect to the canonical MovingManifest MCP endpoint and sign in again.",
+      "This OAuth identity is not valid for Assist With Moving.",
+      "Reconnect to the canonical Assist With Moving MCP endpoint and sign in again.",
     );
   }
   try {
@@ -192,8 +192,8 @@ async function requireMcpUser(ctx: Ctx, principal: McpPrincipal) {
     if (user.status !== "active") {
       mcpError(
         "FORBIDDEN",
-        "This MovingManifest account is not active.",
-        "Open MovingManifest directly or ask the account owner to restore access.",
+        "This Assist With Moving account is not active.",
+        "Open Assist With Moving directly or ask the account owner to restore access.",
       );
     }
     return user;
@@ -201,8 +201,8 @@ async function requireMcpUser(ctx: Ctx, principal: McpPrincipal) {
     if (error instanceof ConvexError) throw error;
     mcpError(
       "MOVING_IDENTITY_NOT_FOUND",
-      "No active MovingManifest profile is linked to this sign-in.",
-      "Open MovingManifest once while signed in, then reconnect your AI.",
+      "No active Assist With Moving profile is linked to this sign-in.",
+      "Open Assist With Moving once while signed in, then reconnect your AI.",
     );
   }
 }
@@ -428,14 +428,14 @@ export const getMoveBrief = internalQuery({
     }));
     if (!args.moveId) {
       return {
-        product: "MovingManifest",
+        product: "Assist With Moving",
         roleSplit:
-          "MovingManifest keeps the durable move record; your AI reasons and saves authorized move work.",
+          "Assist With Moving keeps the durable move record; your AI reasons and saves authorized move work.",
         moves,
         truncated: access.truncated,
         next: moves.length
           ? "Call get_move_brief again with one returned moveId, then search_move_records before creating duplicates."
-          : "Open MovingManifest and create a move before asking your AI to save move work.",
+          : "Open Assist With Moving and create a move before asking your AI to save move work.",
       };
     }
 
@@ -499,7 +499,7 @@ export const getMoveBrief = internalQuery({
     const liveBoxes = boxes.filter((box) => box.archivedAt === undefined);
     const livePhotos = photos.filter((photo) => photo.archivedAt === undefined);
     return {
-      product: "MovingManifest",
+      product: "Assist With Moving",
       move: {
         moveId: move._id,
         title: move.title,
@@ -1465,7 +1465,7 @@ export const saveMoveContext = internalMutation({
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.patch.title !== undefined) patch.title = cleanText(args.patch.title, "title", 240);
     if (args.patch.status !== undefined) {
-      if (args.patch.status === "archived") mcpError("VALIDATION_ERROR", "MCP cannot archive a move.", "Use the signed-in MovingManifest archive flow.");
+      if (args.patch.status === "archived") mcpError("VALIDATION_ERROR", "MCP cannot archive a move.", "Use the signed-in Assist With Moving archive flow.");
       patch.status = args.patch.status;
     }
     for (const field of ["origin", "destination", "dateStart", "dateEnd", "notes"] as const) {

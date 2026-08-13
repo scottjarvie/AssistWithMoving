@@ -39,8 +39,8 @@ describe("AppShell responsive workspace header", () => {
   it("reserves mobile width for the current move without losing the named home link", () => {
     render(<AppShell>Workspace content</AppShell>);
 
-    const home = screen.getByRole("link", { name: "MovingManifest home" });
-    const wordmark = screen.getByText("MovingManifest");
+    const home = screen.getByRole("link", { name: "Assist With Moving home" });
+    const wordmark = screen.getByText("Assist With Moving");
     const moveTrigger = screen.getByRole("button", {
       name: "A deliberately long current move title",
     });

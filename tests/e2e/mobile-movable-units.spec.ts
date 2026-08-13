@@ -14,7 +14,7 @@ test.describe("mobile movable-unit workflow", () => {
 
   test.skip(
     !e2eUserEmail,
-    "Set E2E_CLERK_USER_EMAIL to run signed-in MovingManifest product flows.",
+    "Set E2E_CLERK_USER_EMAIL to run signed-in Assist With Moving product flows.",
   );
 
   test.afterEach(async ({ page }, testInfo) => {

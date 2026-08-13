@@ -1,7 +1,7 @@
 {
   "name": "movingmanifest-mcp",
   "version": "0.2.0",
-  "description": "MCP server for MovingManifest — lets AI agents manage moves, inventory, boxes, and photos through the MovingManifest API.",
+  "description": "MCP server for Assist With Moving — lets AI agents manage moves, inventory, boxes, and photos through the Assist With Moving API.",
   "license": "MIT",
   "type": "module",
   "bin": {

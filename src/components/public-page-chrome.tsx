@@ -20,7 +20,7 @@ import { product } from "@/lib/product";
 // Primary, informational-leaning links shown inline on desktop.
 const publicNavPrimary = [
   { href: "/features", label: "Features" },
-  { href: "/ai", label: "AI assistants" },
+  { href: "/ai", label: "Your AI" },
   { href: "/about", label: "About" },
   { href: "/faq", label: "FAQ" },
 ] as const;
@@ -74,7 +74,7 @@ export function PublicPageChrome({
   };
   const resolvedSecondaryAction = secondaryAction ?? {
     href: "/ai",
-    label: "Use with your AI assistant",
+    label: "Set up your chosen AI",
   };
 
   return (
@@ -213,28 +213,28 @@ const howItWorksSteps: {
 }[] = [
   {
     icon: Boxes,
-    label: "Inventory every room",
-    copy: "Catalog items, owners, condition, and values in one place.",
+    label: "Start with the move",
+    copy: "Capture where, when, why, and the decisions that shape everything else.",
   },
   {
     icon: PackageCheck,
-    label: "Box and label",
-    copy: "Pack boxes, list contents, and print QR labels you can scan later.",
+    label: "Build the living plan",
+    copy: "Keep questions, handoffs, timing, and next decisions together as plans change.",
   },
   {
     icon: Camera,
-    label: "Photo evidence",
-    copy: "Attach condition, serial, and receipt photos. Originals stay private.",
+    label: "Map places and belongings",
+    copy: "Connect rooms, items, boxes, destinations, transport, and private evidence.",
   },
   {
     icon: Truck,
-    label: "Plan the load",
-    copy: "Assign boxes to trucks, vehicles, storage, or movers.",
+    label: "Work with your chosen AI",
+    copy: "Let your AI research and organize while the workspace keeps durable context and provenance.",
   },
   {
     icon: FileText,
-    label: "Export packets",
-    copy: "Generate mover, employer, insurance, or PCS packets, scoped to each recipient.",
+    label: "Return to trusted results",
+    copy: "Review decisions, estimates, plans, source checks, evidence, and scoped packets later.",
   },
 ];
 

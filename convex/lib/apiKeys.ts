@@ -70,13 +70,13 @@ export function apiKeyPreview(rawKey: string) {
 export function describeInvalidApiKeyFormat(rawKey: string) {
   const base = "Invalid API key format.";
   if (rawKey.startsWith("eyJ") || rawKey.split(".").length === 3) {
-    return `${base} This looks like an OAuth/JWT token, not a MovingManifest API key. The MCP/REST endpoints need a key that starts with "mmk_" — copy it from Settings → AI Connections (Authorization: Bearer mmk_...).`;
+    return `${base} This looks like an OAuth/JWT token, not an Assist With Moving API key. The MCP/REST endpoints need a key that starts with "mmk_" — copy it from Settings → AI Connections (Authorization: Bearer mmk_...).`;
   }
   if (rawKey.includes("...") || rawKey.includes("…")) {
     return `${base} The value looks like a masked preview (it contains "..."). Copy the full one-time key shown when it was created, not the masked version.`;
   }
   if (!rawKey.startsWith(generatedKeyPrefix)) {
-    return `${base} A MovingManifest API key starts with "mmk_".`;
+    return `${base} A Assist With Moving API key starts with "mmk_".`;
   }
   return `${base} The key is the wrong shape — copy the full key from Settings → AI Connections, or rotate it.`;
 }

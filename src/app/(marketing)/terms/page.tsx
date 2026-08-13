@@ -10,7 +10,7 @@ import {
 export const metadata: Metadata = {
   title: "Terms",
   description:
-    "MovingManifest terms overview for beta use, documentation packets, AI suggestions, and user-controlled move records.",
+    "Assist With Moving terms overview for beta use, documentation packets, AI suggestions, and user-controlled move records.",
 };
 
 const termsCards = [
@@ -40,8 +40,8 @@ export default function TermsPage() {
   return (
     <PublicPageChrome
       eyebrow="Terms overview"
-      title="Use MovingManifest as an organizing system, not an official authority."
-      description="MovingManifest helps structure move data, evidence, exports, and AI-assisted planning. It does not replace official guidance, legal advice, mover requirements, employer policy, or insurance decisions."
+      title="Use Assist With Moving as an organizing system, not an official authority."
+      description="Assist With Moving helps structure move data, evidence, exports, and AI-assisted planning. It does not replace official guidance, legal advice, mover requirements, employer policy, or insurance decisions."
     >
       <PublicBand>
         <FeatureGrid cards={termsCards} />
@@ -62,7 +62,7 @@ export default function TermsPage() {
             before acting on them or sharing them externally.
           </p>
           <p>
-            MovingManifest may provide exports and share links for convenience.
+            Assist With Moving may provide exports and share links for convenience.
             The owner is responsible for choosing what to share and with whom.
           </p>
         </div>

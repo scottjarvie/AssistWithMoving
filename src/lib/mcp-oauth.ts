@@ -3,7 +3,7 @@ import { product } from "@/lib/product";
 // ============================================================================
 // THREE MCP DOORS — DO NOT CONFLATE THEM. (Read this before editing.)
 //
-// MovingManifest exposes agent access through separate doors that must stay
+// Assist With Moving exposes agent access through separate doors that must stay
 // apart. Crossing them is the recurring bug that 401s every connection:
 //
 //   1. /api/mcp        — API-KEY door. Accepts mmk_ keys ONLY. It forwards the
@@ -100,12 +100,12 @@ export function mcpBearerChallenge(
   } = {}
 ) {
   const params: [string, string][] = [
-    ["realm", "MovingManifest MCP API key"],
+    ["realm", "Assist With Moving MCP API key"],
     ["error", options.error ?? "invalid_token"],
     [
       "error_description",
       options.errorDescription ??
-        `This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at ${mcpOAuthConnectUrl(
+        `This endpoint accepts Assist With Moving API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at ${mcpOAuthConnectUrl(
           request
         )}.`,
     ],

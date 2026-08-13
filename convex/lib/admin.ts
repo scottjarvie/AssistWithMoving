@@ -38,7 +38,7 @@ export async function requireAppAdmin(ctx: QueryCtx | MutationCtx) {
   const user = await requireCurrentUser(ctx);
 
   if (user.status !== "active" || user.appRole !== "admin") {
-    throw new AuthorizationError("Requires MovingManifest admin access.");
+    throw new AuthorizationError("Requires Assist With Moving admin access.");
   }
 
   return user;

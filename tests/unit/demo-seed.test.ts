@@ -16,7 +16,7 @@ describe("demo seed scenarios", () => {
   it("covers the launch QA scenario set", () => {
     const summary = demoSeedScenarioSummary();
 
-    expect(demoHouseholdName).toBe("MovingManifest Demo Household");
+    expect(demoHouseholdName).toBe("Assist With Moving Demo Household");
     expect(summary.scenarioCount).toBe(5);
     expect(summary.moveTypes).toEqual([
       "pcs",

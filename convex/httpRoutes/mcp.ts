@@ -75,7 +75,7 @@ function resourceMetadataUrl(resource: URL) {
 function challenge(
   resource: URL,
   code = "invalid_token",
-  description = "A valid MovingManifest OAuth token is required.",
+  description = "A valid Assist With Moving OAuth token is required.",
 ) {
   const metadata = resourceMetadataUrl(resource);
   return new Response(
@@ -95,7 +95,7 @@ function protectedResourceMetadata(resource: URL, issuer: URL) {
   return new Response(
     JSON.stringify({
       resource: resource.toString(),
-      resource_name: "MovingManifest",
+      resource_name: "Assist With Moving",
       authorization_servers: [issuer.toString().replace(/\/$/, "")],
       scopes_supported: ["openid", "profile", "email"],
       bearer_methods_supported: ["header"],
@@ -196,8 +196,8 @@ async function verifyOAuth(
   } catch (error) {
     const description =
       error instanceof joseErrors.JWTExpired
-        ? "The MovingManifest OAuth token expired."
-        : "The MovingManifest OAuth token is invalid for this resource.";
+        ? "The Assist With Moving OAuth token expired."
+        : "The Assist With Moving OAuth token is invalid for this resource.";
     return challenge(resource, "invalid_token", description);
   }
 }
@@ -232,7 +232,7 @@ function toolError(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error);
   let payload: Record<string, unknown> = {
     code: "INTERNAL_ERROR",
-    message: "MovingManifest could not complete the MCP operation.",
+    message: "Assist With Moving could not complete the MCP operation.",
     recovery: "Retry once with the same operationId, then report the receipt.",
   };
   const marker = "MCP_MOVING_ERROR:";
@@ -770,7 +770,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
     return new Response(
       JSON.stringify({
         error: "request_too_large",
-        error_description: "MovingManifest MCP requests are limited to 512 KiB.",
+        error_description: "Assist With Moving MCP requests are limited to 512 KiB.",
       }),
       {
         status: 413,

@@ -10,10 +10,10 @@ describe("MCP OAuth discovery proof", () => {
   it("parses Bearer challenge params", () => {
     expect(
       bearerChallengeParams(
-        'Bearer realm="MovingManifest MCP", resource_metadata="https://movingmanifest.test/.well-known/oauth-protected-resource/mcp/connect", scope="openid profile email"'
+        'Bearer realm="Assist With Moving MCP", resource_metadata="https://movingmanifest.test/.well-known/oauth-protected-resource/mcp/connect", scope="openid profile email"'
       )
     ).toEqual({
-      realm: "MovingManifest MCP",
+      realm: "Assist With Moving MCP",
       resource_metadata:
         "https://movingmanifest.test/.well-known/oauth-protected-resource/mcp/connect",
       scope: "openid profile email",

@@ -5,9 +5,11 @@ import { BrandMark } from "@/components/brand-mark";
 import { buildPhases, product } from "@/lib/product";
 
 describe("product constants", () => {
-  it("uses MovingManifest naming and local port defaults", () => {
-    expect(product.name).toBe("MovingManifest");
+  it("uses Assist With Moving naming and local port defaults", () => {
+    expect(product.name).toBe("Assist With Moving");
+    expect(product.technicalName).toBe("MovingManifest");
     expect(product.domain).toBe("movingmanifest.com");
+    expect(product.entryDomain).toBe("assistwithmoving.com");
     expect(product.localUrl).toBe("http://localhost:3827");
   });
 
@@ -21,6 +23,6 @@ describe("product constants", () => {
 describe("BrandMark", () => {
   it("renders the product name", () => {
     render(<BrandMark />);
-    expect(screen.getByText("MovingManifest")).toBeInTheDocument();
+    expect(screen.getByText("Assist With Moving")).toBeInTheDocument();
   });
 });

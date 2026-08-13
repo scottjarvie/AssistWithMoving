@@ -528,7 +528,7 @@ async function upsertSeedUser(ctx: MutationCtx) {
     .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", identity.subject))
     .unique();
   const email = identity.email ?? "demo@movingmanifest.local";
-  const name = identity.name ?? "MovingManifest Demo Owner";
+  const name = identity.name ?? "Assist With Moving Demo Owner";
 
   if (existing) {
     await ctx.db.patch(existing._id, {

@@ -93,7 +93,7 @@ export const launchReadinessBlockers = [
     title: "Remove stale legacy Vercel alias after brand rename",
     owner: "routing",
     why:
-      "The old pre-rename preview URL should stop serving the product once MovingManifest is the public name.",
+      "The old pre-rename preview URL should stop serving the product once Assist With Moving is the public name.",
     ownerAction:
       "After explicit approval, remove the stale alias from Vercel project/domain settings.",
     verify: ["STALE_ALIAS_URL=<legacy-alias-url> npm run doctor:launch"],

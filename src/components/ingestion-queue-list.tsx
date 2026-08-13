@@ -1109,7 +1109,7 @@ export function IngestionQueueList({
           <div className="rounded-md border border-dashed border-border p-6 text-sm leading-6 text-muted-foreground">
             The queue is empty. Capture photos and notes on your phone as you
             walk through your home; then run your AI agent (Claude Code, Codex,
-            Cowork) against the MovingManifest MCP server or REST API to turn
+            Cowork) against the Assist With Moving MCP server or REST API to turn
             captures into inventory. Every agent proposal comes back here and to
             AI Review for your approval.
           </div>

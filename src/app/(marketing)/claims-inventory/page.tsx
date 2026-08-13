@@ -10,7 +10,7 @@ import {
 export const metadata: Metadata = {
   title: "Claims Inventory",
   description:
-    "MovingManifest claim-ready inventory support for photos, serial numbers, values, condition notes, and evidence packet exports.",
+    "Assist With Moving claim-ready inventory support for photos, serial numbers, values, condition notes, and evidence packet exports.",
 };
 
 const claimCards = [
@@ -41,7 +41,7 @@ export default function ClaimsInventoryPage() {
     <PublicPageChrome
       eyebrow="Claims and evidence"
       title="A claim-ready record built as a side effect of being organized."
-      description="MovingManifest helps you preserve item details, photos, condition notes, values, serial numbers, and packet exports without turning the move into a separate paperwork project."
+      description="Assist With Moving helps you preserve item details, photos, condition notes, values, serial numbers, and packet exports without turning the move into a separate paperwork project."
     >
       <PublicBand>
         <FeatureGrid cards={claimCards} />
@@ -53,7 +53,7 @@ export default function ClaimsInventoryPage() {
               Evidence organization, not claim approval.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              MovingManifest can organize records and exports. It does not
+              Assist With Moving can organize records and exports. It does not
               decide whether an insurer, mover, transportation office, or claims
               process will accept or approve anything.
             </p>

@@ -17,7 +17,7 @@ import {
 export const metadata: Metadata = {
   title: "Features",
   description:
-    "MovingManifest features for inventory, boxes, photo evidence, load planning, documentation packets, AI review, and API access.",
+    "Assist With Moving features for inventory, boxes, photo evidence, load planning, documentation packets, AI review, and API access.",
 };
 
 const featureCards = [
@@ -63,7 +63,7 @@ export default function FeaturesPage() {
     <PublicPageChrome
       eyebrow="Product features"
       title="Everything needed to turn a move into a usable record."
-      description="MovingManifest combines inventory, boxes, photos, load planning, privacy, packet exports, and AI-assisted review in one workspace."
+      description="Assist With Moving combines inventory, boxes, photos, load planning, privacy, packet exports, and AI-assisted review in one workspace."
     >
       <PublicBand>
         <FeatureGrid cards={featureCards} />

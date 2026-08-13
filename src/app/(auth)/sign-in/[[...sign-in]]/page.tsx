@@ -10,7 +10,7 @@ const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 export const metadata: Metadata = {
   title: "Sign in",
-  description: "Sign in to your MovingManifest workspace.",
+  description: "Sign in to your Assist With Moving workspace.",
 };
 
 export default function SignInPage() {
@@ -20,6 +20,10 @@ export default function SignInPage() {
         <BrandMark />
         {clerkEnabled ? (
           <div className="mt-8">
+            <h1 className="text-2xl font-semibold">Sign in to Assist With Moving</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Open your private move workspace and continue where you left off.
+            </p>
             <SignIn
               routing="path"
               path="/sign-in"
@@ -30,6 +34,8 @@ export default function SignInPage() {
                   rootBox: { width: "100%", maxWidth: "100%" },
                   cardBox: { width: "100%", maxWidth: "100%" },
                   card: { width: "100%", maxWidth: "100%" },
+                  headerTitle: { display: "none" },
+                  headerSubtitle: { display: "none" },
                 },
               }}
             />

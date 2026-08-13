@@ -89,7 +89,7 @@ describe("HouseholdMemberManager task tabs", () => {
       screen.queryByLabelText("Add collaborator email for Jarvie household"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/MovingManifest keeps a pending invitation/),
+      screen.queryByText(/Assist With Moving keeps a pending invitation/),
     ).not.toBeInTheDocument();
 
     const manageButtons = screen.getAllByRole("button", {
@@ -124,7 +124,7 @@ describe("HouseholdMemberManager task tabs", () => {
       screen.getByLabelText("New collaborator role for Jarvie household"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/MovingManifest keeps a pending invitation/),
+      screen.getByText(/Assist With Moving keeps a pending invitation/),
     ).toBeInTheDocument();
     expect(screen.queryByText("Scott Jarvie")).not.toBeInTheDocument();
     expect(screen.queryByText("Packing helper")).not.toBeInTheDocument();

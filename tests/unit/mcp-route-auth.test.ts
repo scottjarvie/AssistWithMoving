@@ -26,12 +26,12 @@ describe("remote MCP OAuth discovery route behavior", () => {
       error: {
         code: "unauthorized",
         message:
-          "This endpoint accepts a MovingManifest API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp.",
+          "This endpoint accepts an Assist With Moving API key via 'Authorization: Bearer mmk_...'. To connect with OAuth sign-in instead (no key needed), point your agent at https://movingmanifest.com/mcp.",
       },
     });
     const challenge = response.headers.get("WWW-Authenticate");
     expect(challenge).toBe(
-      'Bearer realm="MovingManifest MCP API key", error="invalid_token", error_description="This endpoint accepts MovingManifest API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp."'
+      'Bearer realm="Assist With Moving MCP API key", error="invalid_token", error_description="This endpoint accepts Assist With Moving API keys (mmk_...). To connect with OAuth sign-in instead, point your agent at https://movingmanifest.test/mcp."'
     );
     // /api/mcp must not advertise OAuth — that is what dead-ends OAuth clients.
     expect(challenge).not.toContain("resource_metadata");
@@ -69,7 +69,7 @@ describe("remote MCP OAuth discovery route behavior", () => {
       resource: "https://movingmanifest.test/api/mcp",
       authorization_servers: [],
       bearer_methods_supported: ["header"],
-      resource_name: "MovingManifest",
+      resource_name: "Assist With Moving",
       resource_documentation: "https://movingmanifest.test/mcp/guide",
     });
     expect(response.headers.get("Cache-Control")).toBe("no-store");

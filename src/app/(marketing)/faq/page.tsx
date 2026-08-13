@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 export const metadata: Metadata = {
   title: "FAQ",
   description:
-    "Honest answers about MovingManifest: what it is, accounts, privacy, the bring-your-own AI assistant model, military PCS use, exports, pricing, and affiliation.",
+    "Honest answers about Assist With Moving: what it is, accounts, privacy, the bring-your-own AI assistant model, military PCS use, exports, pricing, and affiliation.",
 };
 
 // Each FAQ is a question + the honest answer body. Answers may include
@@ -20,10 +20,10 @@ type Faq = {
 
 const faqs: Faq[] = [
   {
-    question: "What is MovingManifest?",
+    question: "What is Assist With Moving?",
     answer: (
       <>
-        MovingManifest is a structured system of record for a move. You catalog
+        Assist With Moving is a structured system of record for a move. You catalog
         your inventory, pack and label boxes with their contents, attach photo
         evidence, plan how everything loads onto trucks, vehicles, storage, or
         movers, and export scoped documentation packets when someone needs a
@@ -61,7 +61,7 @@ const faqs: Faq[] = [
     answer: (
       <>
         You bring your own assistant — Claude, ChatGPT, Codex, or another tool
-        you already use. MovingManifest does not bundle its own AI. You connect
+        you already use. Assist With Moving does not bundle its own AI. You connect
         your assistant either through hosted MCP OAuth or with a scoped API key
         you create yourself and can revoke at any time. The product is the
         structured place your assistant reads from and writes to. See the{" "}
@@ -91,7 +91,7 @@ const faqs: Faq[] = [
     question: "Can I use it for a military PCS?",
     answer: (
       <>
-        Yes. MovingManifest supports a mixed move with household goods (HHG),
+        Yes. Assist With Moving supports a mixed move with household goods (HHG),
         personally procured (PPM) portions, and personal-transport planning, and
         it can produce PCS-focused packets. Official fields are configurable
         rather than hardcoded to one policy. It is an organizing tool, not an
@@ -115,7 +115,7 @@ const faqs: Faq[] = [
     question: "How much does it cost?",
     answer: (
       <>
-        MovingManifest is in active development / early access, and pricing is
+        Assist With Moving is in active development / early access, and pricing is
         not yet announced. We are not stating a price here because there is not a
         confirmed one to share yet.
       </>
@@ -123,10 +123,10 @@ const faqs: Faq[] = [
   },
   {
     question:
-      "Is MovingManifest affiliated with the military, insurers, or moving companies?",
+      "Is Assist With Moving affiliated with the military, insurers, or moving companies?",
     answer: (
       <>
-        No. MovingManifest is an independent organizing tool. It is not an
+        No. Assist With Moving is an independent organizing tool. It is not an
         official authority and has no affiliation with the military, the
         Department of Defense, insurers, moving companies, or any government
         office. It does not decide whether a claim is paid, whether an insurer or
@@ -141,8 +141,8 @@ export default function FaqPage() {
   return (
     <PublicPageChrome
       eyebrow="Questions and answers"
-      title="Honest answers about MovingManifest."
-      description="If you are still deciding whether MovingManifest fits your move, start here. These are plain answers about what it does, how your data stays private, and where it is in development."
+      title="Honest answers about Assist With Moving."
+      description="If you are still deciding whether Assist With Moving fits your move, start here. These are plain answers about what it does, how your data stays private, and where it is in development."
       primaryAction={{ href: "/features", label: "See the features" }}
       secondaryAction={{ href: "/ai", label: "How AI assistants help" }}
     >
@@ -154,7 +154,7 @@ export default function FaqPage() {
               The short version.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              MovingManifest is the structured record for your move, your data
+              Assist With Moving is the structured record for your move, your data
               stays private by default, and you bring your own AI assistant if
               you want one. It is early — built openly at{" "}
               <span className="text-foreground">movingmanifest.com</span> — so a

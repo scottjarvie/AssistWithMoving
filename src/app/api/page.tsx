@@ -19,9 +19,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
-  title: "MovingManifest API",
+  title: "Assist With Moving API",
   description:
-    "Public REST API overview for MovingManifest agents and integrations.",
+    "Public REST API overview for Assist With Moving agents and integrations.",
 };
 
 const apiCards = [
@@ -77,7 +77,7 @@ export default function ApiPage() {
     <PublicPageChrome
       eyebrow="REST API"
       title="A structured API for move helpers and AI agents."
-      description="The MovingManifest API lets trusted tools create moves, add inventory, upload evidence, prepare sale listings, plan loads, and export documentation. Public docs are readable before login; private data requires a user-created API key."
+      description="The Assist With Moving API lets trusted tools create moves, add inventory, upload evidence, prepare sale listings, plan loads, and export documentation. Public docs are readable before login; private data requires a user-created API key."
       visual={<ApiVisual />}
     >
       <PublicBand>
