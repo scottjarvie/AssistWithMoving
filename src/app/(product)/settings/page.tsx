@@ -12,7 +12,7 @@ export default function SettingsPage() {
       <div className="mb-6 max-w-3xl">
         <h2 className="text-3xl font-semibold tracking-tight">Settings</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Manage security and integration settings for MovingManifest.
+          Manage security and integration settings for Assist With Moving.
         </p>
       </div>
       <SettingsFeatureSections />

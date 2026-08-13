@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PublicShareViewer } from "@/components/public-share-viewer";
 
 export const metadata: Metadata = {
-  title: "Shared MovingManifest packet",
+  title: "Shared Assist With Moving packet",
   robots: {
     index: false,
     follow: false,

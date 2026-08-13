@@ -19,20 +19,20 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://movingmanifest.com"
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://movingmanifest.com",
   ),
   title: {
-    default: "MovingManifest",
-    template: "%s | MovingManifest",
+    default: "Assist With Moving",
+    template: "%s | Assist With Moving",
   },
   description:
-    "A move inventory, box manifest, photo evidence vault, load plan, and documentation packet system.",
-  applicationName: "MovingManifest",
+    "A durable move-planning workspace shared by you and your chosen AI.",
+  applicationName: "Assist With Moving",
   openGraph: {
-    title: "MovingManifest",
+    title: "Assist With Moving",
     description:
-      "Inventory every item, box every room, plan every load, and export the right documentation packet.",
-    siteName: "MovingManifest",
+      "Organize the changing plan, places, belongings, evidence, decisions, and handoffs for your move.",
+    siteName: "Assist With Moving",
     type: "website",
   },
   robots: {
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "MovingManifest",
+    title: "Assist With Moving",
   },
   icons: {
     icon: "/icon.svg",

@@ -1,16 +1,16 @@
 import { expect, test } from "@playwright/test";
 
-test("home page presents the MovingManifest product", async ({ page }) => {
+test("home page presents the Assist With Moving product", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page).toHaveTitle("MovingManifest");
+  await expect(page).toHaveTitle("Assist With Moving");
   await expect(
     page.getByRole("heading", {
-      name: "The manifest for everything that moves.",
+      name: "Keep the whole move coherent.",
     })
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Use with your AI assistant" }),
+    page.getByRole("link", { name: "Set up your chosen AI" }),
   ).toHaveAttribute("href", "/ai");
 });
 
@@ -20,7 +20,7 @@ test("public product and legal pages are available", async ({ page }) => {
     ["/pcs-moving", "PCS move planning without pretending policy is static."],
     ["/claims-inventory", "A claim-ready record built as a side effect of being organized."],
     ["/privacy", "Moving records can be sensitive. The product treats them that way."],
-    ["/terms", "Use MovingManifest as an organizing system, not an official authority."],
+    ["/terms", "Use Assist With Moving as an organizing system, not an official authority."],
   ] as const;
 
   for (const [route, heading] of routes) {
@@ -34,7 +34,7 @@ test("workspace preview is protected for signed-out users", async ({ page }) => 
 
   await expect(page).toHaveURL(/\/sign-in/);
   await expect(
-    page.getByRole("heading", { name: "Sign in to MovingManifest" })
+    page.getByRole("heading", { name: "Sign in to Assist With Moving" })
   ).toBeVisible();
 });
 

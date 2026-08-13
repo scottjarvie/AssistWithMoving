@@ -422,7 +422,7 @@ const evidenceImageInputSchema = z.object({
   generateAiSuggestions: z
     .boolean()
     .optional()
-    .describe("When true, ask MovingManifest to queue AI photo-intake suggestions after upload. Requires inventory/write in addition to photos/write."),
+    .describe("When true, ask Assist With Moving to queue AI photo-intake suggestions after upload. Requires inventory/write in addition to photos/write."),
   idempotencyKey: z.string().optional(),
 });
 
@@ -960,7 +960,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "get_api_capabilities", {
     title: "Get API capabilities",
     description:
-      "Inspect MovingManifest REST/MCP capabilities, required scopes, core workflows, and known launch blockers. This is local metadata and does not call the API.",
+      "Inspect Assist With Moving REST/MCP capabilities, required scopes, core workflows, and known launch blockers. This is local metadata and does not call the API.",
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: () => getApiCapabilities(),
@@ -969,7 +969,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "get_api_context", {
     title: "Get API context",
     description:
-      "Inspect the current MovingManifest API key context, including scopes and any move restriction.",
+      "Inspect the current Assist With Moving API key context, including scopes and any move restriction.",
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: () => getApiContext(apiConfig),
@@ -980,7 +980,7 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "List real household login access for the current API key household. This is different from move people/contact records. Requires members/manage.",
     inputSchema: {
-      householdId: z.string().describe("MovingManifest household id from get_api_context."),
+      householdId: z.string().describe("Assist With Moving household id from get_api_context."),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => listHouseholdMembers(apiConfig, input),
@@ -991,7 +991,7 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "Grant real household login access by email, or create a pending invitation if the email has not signed in yet. Requires members/manage.",
     inputSchema: {
-      householdId: z.string().describe("MovingManifest household id from get_api_context."),
+      householdId: z.string().describe("Assist With Moving household id from get_api_context."),
       email: z.string().email(),
       role: householdMemberRoleSchema.default("editor"),
       idempotencyKey: z.string().optional(),
@@ -1004,7 +1004,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "list_moves", {
     title: "List moves",
     description:
-      "List accessible MovingManifest moves. Requires an API key with moves/read scope.",
+      "List accessible Assist With Moving moves. Requires an API key with moves/read scope.",
     inputSchema: {
       limit: z.number().int().min(1).max(100).optional(),
     },
@@ -1090,7 +1090,7 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "Update an existing move's basics — name, status, origin/destination, dates, driving distance (miles), travel time (minutes), notes, documentation profiles, and official weight allowance. Distance, travel time, notes, and allowance can be null to clear. Requires a household-scoped key with moves/write.",
     inputSchema: {
-      moveId: z.string().describe("MovingManifest move id to update."),
+      moveId: z.string().describe("Assist With Moving move id to update."),
       title: z.string().optional(),
       status: z.enum(["planning", "active", "completed"]).optional(),
       origin: z.string().optional(),
@@ -1124,7 +1124,7 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "Fetch a compact move summary with resources, zones, inventory, boxes, assignments, and photo metadata.",
     inputSchema: {
-      moveId: z.string().describe("MovingManifest move id."),
+      moveId: z.string().describe("Assist With Moving move id."),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => getMoveSummary(apiConfig, input),
@@ -1135,7 +1135,7 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "Fetch one compact structured context payload for AI agents: move, spaces, transport resources/zones, items, photos, sale pipeline, counts, and write-contract guidance.",
     inputSchema: {
-      moveId: z.string().describe("MovingManifest move id."),
+      moveId: z.string().describe("Assist With Moving move id."),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => getAgentContext(apiConfig, input),
@@ -1146,7 +1146,7 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "Fetch structured unanswered-question prompts for setup, PCS, resources, inventory, evidence, load planning, and documentation packets.",
     inputSchema: {
-      moveId: z.string().describe("MovingManifest move id."),
+      moveId: z.string().describe("Assist With Moving move id."),
     },
     annotations: { readOnlyHint: true, openWorldHint: false },
     handler: (input) => getMoveQuestions(apiConfig, input),
@@ -1157,7 +1157,7 @@ export function registerTools(target, apiConfig, options = {}) {
     description:
       "Fetch a crew-safe Move Day checklist with box status, item counts, load assignment names, warnings, exception notes, and progress counts.",
     inputSchema: {
-      moveId: z.string().describe("MovingManifest move id."),
+      moveId: z.string().describe("Assist With Moving move id."),
       filter: moveDayFilterSchema.optional(),
       query: z.string().optional(),
       limit: z.number().int().min(1).max(100).optional(),
@@ -1284,7 +1284,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "create_item_with_images", {
     title: "Create item with images",
     description:
-      "Fast household-item intake for agents: create one inventory item, set quantity only when the user says it or the photo clearly shows a count, default omitted quantity to 1, upload one or more original images attached to that item, and let MovingManifest create web-ready derivatives server-side. Use this when the user provides a picture plus a few short words.",
+      "Fast household-item intake for agents: create one inventory item, set quantity only when the user says it or the photo clearly shows a count, default omitted quantity to 1, upload one or more original images attached to that item, and let Assist With Moving create web-ready derivatives server-side. Use this when the user provides a picture plus a few short words.",
     inputSchema: {
       moveId: z.string(),
       name: z.string().min(1),
@@ -1311,7 +1311,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "add_item_from_photo", {
     title: "Add item from photo",
     description:
-      "Plain-language fastest path for one household item from one user photo plus a few words. Provide dataUrl/fileBase64, a public HTTPS sourceUrl, or a maintainer-approved local filePath with the item name and any obvious fields. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Set quantity only when the user says it or the photo clearly shows a count; omitted quantity defaults to 1. Missing weight, dimensions, disposition, and condition do not block creation; MovingManifest stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
+      "Plain-language fastest path for one household item from one user photo plus a few words. Provide dataUrl/fileBase64, a public HTTPS sourceUrl, or a maintainer-approved local filePath with the item name and any obvious fields. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Set quantity only when the user says it or the photo clearly shows a count; omitted quantity defaults to 1. Missing weight, dimensions, disposition, and condition do not block creation; Assist With Moving stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
     inputSchema: {
       moveId: z.string(),
       name: z.string().min(1),
@@ -1373,7 +1373,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "archive_item", {
     title: "Archive item",
     description:
-      "Soft-archive one inventory item. Alias for delete_item using MovingManifest's archive language. Set dryRun true to preview the request without writing.",
+      "Soft-archive one inventory item. Alias for delete_item using Assist With Moving's archive language. Set dryRun true to preview the request without writing.",
     inputSchema: {
       moveId: z.string(),
       itemId: z.string(),
@@ -1386,7 +1386,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "convert_item_to_box", {
     title: "Convert item to box",
     description:
-      "Convert an inventory item that was mistakenly captured as a container into a real MovingManifest box. Use this for totes, crates, bins, cartons, wardrobe boxes, and dish packs that should hold other items.",
+      "Convert an inventory item that was mistakenly captured as a container into a real Assist With Moving box. Use this for totes, crates, bins, cartons, wardrobe boxes, and dish packs that should hold other items.",
     inputSchema: {
       moveId: z.string(),
       itemId: z.string(),
@@ -1671,7 +1671,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "suggest_assignments", {
     title: "Suggest assignments",
     description:
-      "Generate deterministic box-to-resource/zone assignment suggestions using MovingManifest load planner validation. This does not write changes.",
+      "Generate deterministic box-to-resource/zone assignment suggestions using Assist With Moving load planner validation. This does not write changes.",
     inputSchema: {
       moveId: z.string(),
       limit: z.number().int().min(1).max(100).optional(),
@@ -2038,7 +2038,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "start_photo_upload", {
     title: "Start media evidence upload",
     description:
-      "Create a presigned evidence upload session for an image, audio file, or video. The client must PUT the file to the returned URL and then call finalize_photo_upload. Image derivatives are optional; MovingManifest creates them server-side when API/MCP clients upload only the original.",
+      "Create a presigned evidence upload session for an image, audio file, or video. The client must PUT the file to the returned URL and then call finalize_photo_upload. Image derivatives are optional; Assist With Moving creates them server-side when API/MCP clients upload only the original.",
     inputSchema: {
       moveId: z.string(),
       itemId: z.string().optional(),
@@ -2069,7 +2069,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_file", {
     title: "Upload evidence file",
     description:
-      "Easy MCP upload path: provide a public HTTPS source URL, or a maintainer-approved local filePath when running stdio with MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Hosted MCP refuses filePath. The tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. For images, MovingManifest creates web-ready derivatives server-side so agents do not need to resize or re-encode files.",
+      "Easy MCP upload path: provide a public HTTPS source URL, or a maintainer-approved local filePath when running stdio with MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Hosted MCP refuses filePath. The tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. For images, Assist With Moving creates web-ready derivatives server-side so agents do not need to resize or re-encode files.",
     inputSchema: {
       moveId: z.string(),
       filePath: z.string().optional().describe(localFilePathDescription),
@@ -2104,7 +2104,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_image", {
     title: "Upload evidence image in one call",
     description:
-      "Default image upload path for agents: provide exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. The tool sends the original image to MovingManifest, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId plus agentReview so the assistant can tell the user what caption, target, privacy/type, and assumptions were used. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Default image upload path for agents: provide exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. The tool sends the original image to Assist With Moving, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId plus agentReview so the assistant can tell the user what caption, target, privacy/type, and assumptions were used. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       filePath: z
@@ -2160,7 +2160,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_images", {
     title: "Upload multiple evidence images",
     description:
-      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Shared metadata at the top level applies to every image unless an image entry overrides it. MovingManifest stores originals and creates web-ready derivatives server-side, then returns per-image status plus agentReview summaries; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Shared metadata at the top level applies to every image unless an image entry overrides it. Assist With Moving stores originals and creates web-ready derivatives server-side, then returns per-image status plus agentReview summaries; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       images: z
@@ -2247,7 +2247,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_photo", {
     title: "Upload photo",
     description:
-      "Plain-language alias for upload_evidence_image. Use this for a normal single household photo: pass a public HTTPS sourceUrl, dataUrl/fileBase64, or a maintainer-approved local filePath, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
+      "Plain-language alias for upload_evidence_image. Use this for a normal single household photo: pass a public HTTPS sourceUrl, dataUrl/fileBase64, or a maintainer-approved local filePath, and Assist With Moving stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       ...evidenceImageInputSchema.shape,
@@ -2260,7 +2260,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_image", {
     title: "Upload image",
     description:
-      "Plain-language alias for upload_evidence_image using image terminology. Use this when the user or agent says image instead of photo: pass a public HTTPS sourceUrl, dataUrl/fileBase64, or a maintainer-approved local filePath, and MovingManifest stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
+      "Plain-language alias for upload_evidence_image using image terminology. Use this when the user or agent says image instead of photo: pass a public HTTPS sourceUrl, dataUrl/fileBase64, or a maintainer-approved local filePath, and Assist With Moving stores the original, creates web-ready derivatives server-side, and returns photoId plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       ...evidenceImageInputSchema.shape,
@@ -2273,7 +2273,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_photos", {
     title: "Upload photos",
     description:
-      "Plain-language alias for upload_evidence_images. Use this when the user provides several ordinary photos from the same room/context or wants new photos attached to an existing itemId. One image entry equals one user photo; shared itemId, room, privacy/type, and review defaults can live at the top level; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
+      "Plain-language alias for upload_evidence_images. Use this when the user provides several ordinary photos from the same room/context or wants new photos attached to an existing itemId. One image entry equals one user photo; shared itemId, room, privacy/type, and review defaults can live at the top level; Assist With Moving stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       images: z
@@ -2296,7 +2296,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_images", {
     title: "Upload images",
     description:
-      "Plain-language alias for upload_evidence_images using image terminology. Use this when the user provides several ordinary images from the same room/context or wants new images attached to an existing itemId. One image entry equals one user image; shared itemId, room, privacy/type, and review defaults can live at the top level; MovingManifest stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
+      "Plain-language alias for upload_evidence_images using image terminology. Use this when the user provides several ordinary images from the same room/context or wants new images attached to an existing itemId. One image entry equals one user image; shared itemId, room, privacy/type, and review defaults can live at the top level; Assist With Moving stores originals, creates web-ready derivatives server-side, and returns per-image status plus agentReview.",
     inputSchema: {
       moveId: z.string(),
       images: z

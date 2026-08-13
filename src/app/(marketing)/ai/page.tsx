@@ -21,9 +21,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Use MovingManifest with an AI assistant",
+  title: "Use Assist With Moving with an AI assistant",
   description:
-    "A simple starting point for using MovingManifest with Claude, ChatGPT, Codex, or another AI assistant.",
+    "A simple starting point for using Assist With Moving with Claude, ChatGPT, Codex, or another AI assistant.",
 };
 
 const starterPrompt =
@@ -54,7 +54,7 @@ const quickCapabilities = [
 
 const setupSteps = [
   "Tell your assistant to open this page.",
-  "Create or sign into your MovingManifest account.",
+  "Create or sign into your Assist With Moving account.",
   "Use hosted MCP OAuth when your assistant supports it.",
   "Create a fallback AI helper key only when OAuth is not available.",
 ];
@@ -79,7 +79,7 @@ export default function AiAssistantPage() {
     <PublicPageChrome
       eyebrow="AI assistant ready"
       title="Let your AI help with the move."
-      description="MovingManifest gives your assistant a structured place to save rooms, photos, inventory, boxes, vehicles, sale prep, layouts, and packets. You stay in control of the account and the key."
+      description="Assist With Moving gives your assistant a structured place to save rooms, photos, inventory, boxes, vehicles, sale prep, layouts, and packets. You stay in control of the account and the key."
       primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
       secondaryAction={{
         href: "/llms.txt",

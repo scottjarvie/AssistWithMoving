@@ -997,7 +997,7 @@ test.describe("Layout Studio authenticated smoke", () => {
       await publicPage.goto(
         `http://localhost:3827/share/${encodeURIComponent(share.token)}`,
       );
-      await expect(publicPage.getByText("MovingManifest plan")).toBeVisible({
+      await expect(publicPage.getByText("Assist With Moving plan")).toBeVisible({
         timeout: 30_000,
       });
       await expect(

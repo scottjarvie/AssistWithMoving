@@ -182,7 +182,7 @@ export function InstallPrompt() {
     >
       <div
         role="region"
-        aria-label="Install MovingManifest"
+        aria-label="Install Assist With Moving"
         className={cn(
           "pointer-events-auto flex w-full max-w-md gap-3 rounded-lg border bg-card p-4 text-foreground shadow-lg"
         )}
@@ -197,7 +197,7 @@ export function InstallPrompt() {
         />
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-semibold">Install MovingManifest</p>
+            <p className="text-sm font-semibold">Install Assist With Moving</p>
             {mode === "android" ? (
               <p className="text-sm text-muted-foreground">
                 Add it to your home screen for quick, full-screen access.

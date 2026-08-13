@@ -11,7 +11,7 @@ import { appVersion, publicReleaseEntries } from "@/lib/release-notes";
 export const metadata: Metadata = {
   title: "What's New",
   description:
-    "Release notes for MovingManifest product updates, fixes, and upgrades.",
+    "Release notes for Assist With Moving product updates, fixes, and upgrades.",
 };
 
 export default function UpdatesPage() {
@@ -27,7 +27,7 @@ export default function UpdatesPage() {
             What&apos;s New
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-            See what MovingManifest can do now, what was fixed, and what became
+            See what Assist With Moving can do now, what was fixed, and what became
             easier or safer. Choose a quick scan or learn why each change matters.
           </p>
           <p className="mt-4 text-sm text-muted-foreground">
@@ -37,7 +37,7 @@ export default function UpdatesPage() {
         </div>
       </section>
 
-      <section aria-label="MovingManifest release history">
+      <section aria-label="Assist With Moving release history">
         <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           <UpdatesReleaseList entries={publicReleaseEntries} />
         </div>

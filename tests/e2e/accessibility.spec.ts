@@ -10,7 +10,7 @@ test("home page has no automated accessibility violations", async ({ page }) => 
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "The manifest for everything that moves.",
+      name: "Keep the whole move coherent.",
     })
   ).toBeVisible();
   await expectNoAxeViolations(page);
@@ -22,7 +22,7 @@ test("signed-out workspace protection has no automated accessibility violations"
   await page.goto("/app/dashboard");
   await expect(page).toHaveURL(/\/sign-in/);
   await expect(
-    page.getByRole("heading", { name: "Sign in to MovingManifest" })
+    page.getByRole("heading", { name: "Sign in to Assist With Moving" })
   ).toBeVisible();
   await expectNoAxeViolations(page);
 });

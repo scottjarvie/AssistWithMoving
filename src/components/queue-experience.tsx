@@ -185,15 +185,15 @@ function QueueConnectionNote({
             {loading
               ? "Checking AI access"
               : hasKey
-                ? "API-key access is available"
-                : "No API-key access is set up"}
+                ? "Queue-capable API-key access is available"
+                : "No Queue-capable key is set up"}
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground sm:text-sm">
             {loading
               ? "Connection status will appear here when it is known."
               : hasKey
-                ? `${activeApiKeyCount} active key${activeApiKeyCount === 1 ? "" : "s"} can reach scoped Queue tools. MovingManifest cannot tell whether an AI client is currently online.`
-                : "You can still leave handoff notes. They will wait until you give a chosen AI scoped access."}
+                ? `${activeApiKeyCount} active key${activeApiKeyCount === 1 ? "" : "s"} can reach scoped Queue tools. Assist With Moving cannot tell whether an AI client is currently online.`
+                : "You can still leave handoff notes. Hosted OAuth can save move work, but Queue claims wait for a separately scoped Queue-capable key."}
           </p>
         </div>
       </div>

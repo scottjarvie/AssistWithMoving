@@ -362,7 +362,7 @@ export function AdminDashboard() {
               Admin access required
             </CardTitle>
             <CardDescription>
-              This dashboard is available only to MovingManifest admins.
+              This dashboard is available only to Assist With Moving admins.
             </CardDescription>
           </CardHeader>
         </Card>

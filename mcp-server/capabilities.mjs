@@ -38,7 +38,7 @@ export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
     title: "Remove stale legacy Vercel alias after brand rename",
     area: "routing",
     impact:
-      "Old pre-rename aliases can confuse QA and support notes after the MovingManifest rename.",
+      "Old pre-rename aliases can confuse QA and support notes after the Assist With Moving rename.",
     owner: "external-account",
   },
 ];
@@ -440,7 +440,7 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
       "To LOOK AT existing photos (read a model/serial number, write a description, judge condition), call get_images with a filter (itemId/boxId/spaceId/room or photoIds) — it returns the pictures as inline viewable images, not just links, and the server fetches the bytes so it works even when your own sandbox cannot reach the image host. Use variant 'detail' for fine print; keep limit small.",
       "When the user provides one picture plus a few short words for one household item, use add_item_from_photo. Set quantity only when the user says it or the photo clearly shows a count; otherwise omit quantity so it defaults to 1. Unknown weight/size/disposition/condition can stay blank. The tool uploads the original image, creates web-ready derivatives, attaches the photo, and returns item/photo IDs plus agentReview.",
       "Use create_item_with_images when the same new item has several photos or when the agent already has an images array.",
-      "For ordinary images, use upload_image, upload_photo, or upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; MovingManifest stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
+      "For ordinary images, use upload_image, upload_photo, or upload_evidence_image first: pass exactly one local file path, public image URL, data URL, or base64 image; Assist With Moving stores the original, reads dimensions, finalizes the evidence record, and creates web-ready derivatives.",
       "Use derivativeVariants in upload responses to confirm the storage-prepped 200x200 thumb, 600x600 card, 1200x1200 detail, and 2400x2400 full WebP display variants without exposing private storage keys.",
       "When a user gives several ordinary images from the same room/context or for an existing item, use upload_images, upload_photos, or upload_evidence_images with shared defaults and one image entry per user image. For existing items, resolve itemId first with get_agent_context or get_move_summary and pass itemId at the top level.",
       "Set generateAiSuggestions true when the uploaded image should also enter AI photo review; upload still succeeds if review queueing fails or the key only has photos/write.",
@@ -547,7 +547,7 @@ export function getApiCapabilities() {
   }, {});
 
   return {
-    product: "MovingManifest",
+    product: "Assist With Moving",
     apiVersion: "v1",
     capabilityVersion: MOVINGMANIFEST_CAPABILITY_VERSION,
     defaultBaseUrl: "https://movingmanifest.com/api/v1",

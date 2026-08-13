@@ -10,7 +10,7 @@ import {
 export const metadata: Metadata = {
   title: "Privacy",
   description:
-    "MovingManifest privacy overview for household inventory, photo evidence, scoped sharing, API keys, and private originals.",
+    "Assist With Moving privacy overview for household inventory, photo evidence, scoped sharing, API keys, and private originals.",
 };
 
 const privacyCards = [
@@ -41,7 +41,7 @@ export default function PrivacyPage() {
     <PublicPageChrome
       eyebrow="Privacy overview"
       title="Moving records can be sensitive. The product treats them that way."
-      description="A move inventory can contain addresses, dates, room layouts, valuables, documents, serial numbers, and family photos. MovingManifest is designed around scoped access and private originals."
+      description="A move inventory can contain addresses, dates, room layouts, valuables, documents, serial numbers, and family photos. Assist With Moving is designed around scoped access and private originals."
     >
       <PublicBand>
         <FeatureGrid cards={privacyCards} />
@@ -52,7 +52,7 @@ export default function PrivacyPage() {
             Privacy posture
           </h2>
           <p>
-            MovingManifest stores move records in an authenticated workspace and
+            Assist With Moving stores move records in an authenticated workspace and
             uses object-level authorization in backend functions. Human sessions,
             API keys, and share links are separate access paths with separate
             permissions.

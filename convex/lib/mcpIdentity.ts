@@ -50,7 +50,7 @@ export async function requireUserBySubject(ctx: Ctx, subject: string | null) {
   const user = await getUserBySubject(ctx, subject);
   if (!user) {
     throw new AuthorizationError(
-      "No MovingManifest account is linked to this sign-in yet. Open the app once while signed in, then retry.",
+      "No Assist With Moving account is linked to this sign-in yet. Open the app once while signed in, then retry.",
     );
   }
   return user;

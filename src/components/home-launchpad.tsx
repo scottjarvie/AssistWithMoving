@@ -52,14 +52,14 @@ export function HomeLaunchpad() {
     <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
       <header>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          MovingManifest
+          Assist With Moving
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
           Your workspace
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Jump into the part of the move you need, or let an AI assistant help
-          fill it in.
+          Keep the changing plan clear, or bring your chosen AI into the next
+          bounded piece of work.
         </p>
       </header>
 
@@ -102,7 +102,8 @@ export function HomeLaunchpad() {
             <div>
               <p className="text-base font-semibold">Create your first move</p>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Start a move, then add rooms, items, boxes, and photos.
+                Begin with the route and timing. Add rooms, belongings,
+                evidence, and planning detail when you need them.
               </p>
             </div>
           </div>
@@ -152,20 +153,20 @@ export function HomeLaunchpad() {
             </span>
             <div>
               <h2 className="text-lg font-semibold tracking-tight">
-                Connect your AI assistant
+                Set up your chosen AI
               </h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                First time, or need the steps again? Connect Claude, ChatGPT,
-                Codex, or another assistant so it can help catalog items, boxes,
-                photos, and packets. You stay in control and can revoke access
-                anytime.
+                Connect Claude, ChatGPT, Codex, or another capable AI through
+                hosted OAuth so it can read the right move context and save
+                decisions, estimates, plans, inventory, and source checks. You
+                stay in control and can revoke access.
               </p>
             </div>
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end">
             <Button asChild>
               <Link href="/settings/ai-connections">
-                Connect an assistant
+                Connect your AI
                 <Sparkles aria-hidden="true" />
               </Link>
             </Button>

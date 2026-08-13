@@ -22,7 +22,7 @@ type PcsShipmentType = (typeof pcsShipmentTypes)[number];
 type PlanningDefaultKey = (typeof planningDefaultKeys)[number];
 type TransportResourcePresetKey = (typeof transportResourcePresetKeys)[number];
 
-export const demoHouseholdName = "MovingManifest Demo Household";
+export const demoHouseholdName = "Assist With Moving Demo Household";
 
 export type DemoSeedItem = {
   name: string;

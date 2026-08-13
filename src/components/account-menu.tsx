@@ -131,7 +131,7 @@ function EnabledAccountMenu() {
         >
           <Link href="/settings/ai-connections">
             <KeyRound aria-hidden="true" />
-            Connect your AI agent
+            Connect your chosen AI
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

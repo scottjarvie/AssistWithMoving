@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "MovingManifest",
-    short_name: "MovingManifest",
+    name: "Assist With Moving",
+    short_name: "Moving",
     description:
-      "A move inventory, box manifest, photo evidence vault, load plan, and documentation packet system.",
+      "A durable move-planning workspace shared by you and your chosen AI.",
     start_url: "/app",
     scope: "/",
     display: "standalone",

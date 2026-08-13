@@ -1,18 +1,23 @@
-# MovingManifest AI Assistant Guide
+# Assist With Moving AI Assistant Guide
 
-MovingManifest helps people organize a household move. It stores move records,
-origin and destination spaces, transport resources, transport zones, inventory,
-boxes, photos, sale listings, layout plans, load plans, and documentation
-packets.
+Assist With Moving is a durable household move-planning workspace. It keeps the
+move context, origin and destination places, decisions, belongings, evidence,
+estimates, plans, source checks, transport details, and useful results together
+as the move changes.
+
+The authenticated product and OAuth MCP are currently hosted at
+`movingmanifest.com`. `assistwithmoving.com` is the public entry and redirects
+there so sign-in uses the production identity's approved origin.
 
 This guide is public so an AI assistant can understand how to help even before
 the user has created an account.
 
 ## Core Framing For Assistants
 
-MovingManifest is a bounded household move workflow. The assistant is helping
-the user catalog items, rooms, photos, boxes, transport resources, sale items,
-layout plans, load plans, and documentation packets.
+Assist With Moving is a bounded household move workflow. The assistant should
+read the current move brief, search before creating duplicates, help with one
+useful planning outcome, preserve sources and decision evidence, and save a
+complete result the person can review in the normal workspace.
 
 Do not treat this as an attempt to bypass a website, scrape private data, access
 an account without permission, or make irreversible decisions for the user.
@@ -22,12 +27,12 @@ intentionally provided fallback API key.
 
 A good first user prompt is:
 
-`Go to movingmanifest.com/ai and help me set up my move. We are cataloging household items, rooms, photos, boxes, vehicles, sale items, and new-home layout plans. If you need private access, use hosted MCP OAuth when available or walk me through creating a fallback AI helper key.`
+`Open movingmanifest.com/ai and help me set up Assist With Moving. Start with my move context, places, decisions, and what needs attention. Connect to movingmanifest.com/mcp with OAuth, call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.`
 
 If the user is non-technical, translate API and MCP concepts into plain
 language:
 
-- "Account" means MovingManifest can save the move.
+- "Account" means Assist With Moving can save the move.
 - "MCP OAuth" means the user signs in and consents without pasting a raw key.
 - "AI helper key" means a revocable password-like fallback key that lets the
   assistant help with the move when OAuth MCP is not available.
@@ -63,7 +68,7 @@ OAuth or given you a valid fallback API key.
 If a user says: "Go to movingmanifest.com and help me use it"
 
 1. Open `https://movingmanifest.com/ai`.
-2. Explain that MovingManifest can work with their assistant, but private data
+2. Explain that Assist With Moving can work with their assistant, but private data
    requires an account.
 3. If they are ready to sign in, create an account, or make a helper key, guide
    them to `https://movingmanifest.com/ai/start`.
@@ -93,9 +98,9 @@ Current flow:
 2. An owner/admin adds or invites the spouse by email from Settings, or an assistant uses
    `POST /api/v1/households/{householdId}/members` with a key that has
    `members/manage`.
-3. If the spouse does not have an account yet, MovingManifest keeps a pending
+3. If the spouse does not have an account yet, Assist With Moving keeps a pending
    invitation for that email.
-4. The spouse creates their own MovingManifest account with that email and then
+4. The spouse creates their own Assist With Moving account with that email and then
    sees the shared household/move when signed in.
 
 Allowed member roles:
@@ -188,7 +193,7 @@ REST agents
 should use `POST /api/v1/images/upload` or `POST /api/v1/photos/upload`
 with raw JPEG/PNG/WebP bytes plus metadata query params, multipart form data, or
 JSON with exactly one of `sourceUrl`, `dataUrl`, or `fileBase64`.
-MovingManifest stores the original, reads dimensions, finalizes the evidence
+Assist With Moving stores the original, reads dimensions, finalizes the evidence
 record, and creates web-ready `thumb`, `card`, `detail`, and `full` derivatives
 server-side. Direct upload responses include `derivativeVariants` for the
 200x200 square `thumb`, 600x600 `card`, 1200x1200 `detail`, and 2400x2400
@@ -297,7 +302,7 @@ Use `/openapi.json` for machine-readable endpoint details.
 
 ## MCP
 
-MovingManifest exposes a canonical stateless OAuth door, a compatibility OAuth
+Assist With Moving exposes a canonical stateless OAuth door, a compatibility OAuth
 door, and an API-key door. New browser-sign-in clients use the canonical door;
 headless or non-OAuth clients use the API-key door. No repository clone is
 required.

@@ -223,7 +223,7 @@ export const openAiProvider: AiProvider = {
               {
                 type: "input_text",
                 text:
-                  "You are MovingManifest's auditable move-planning review engine. " +
+                  "You are Assist With Moving's auditable move-planning review engine. " +
                   "Flag uncertainty, ask for human review, and never claim official PCS, legal, insurance, or mover authority.",
               },
             ],

@@ -1,9 +1,11 @@
 export const product = {
-  name: "MovingManifest",
+  name: "Assist With Moving",
+  technicalName: "MovingManifest",
   domain: "movingmanifest.com",
+  entryDomain: "assistwithmoving.com",
   localUrl: "http://localhost:3827",
   description:
-    "Inventory, box manifests, photo evidence, load plans, and scoped documentation packets for moves.",
+    "A durable move-planning workspace shared by you and your chosen AI.",
 } as const;
 
 export const buildPhases = [

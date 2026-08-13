@@ -452,7 +452,7 @@ export function PublicShareViewer({ token }: { token: string }) {
           </CardHeader>
           <CardContent>
             <Button asChild variant="outline">
-              <Link href="/">Open MovingManifest</Link>
+              <Link href="/">Open Assist With Moving</Link>
             </Button>
           </CardContent>
         </Card>
@@ -624,7 +624,7 @@ function PublicPlanView({
         <CardHeader className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-sm text-muted-foreground">MovingManifest plan</p>
+              <p className="text-sm text-muted-foreground">Assist With Moving plan</p>
               <CardTitle>{plan.plan.name}</CardTitle>
               <CardDescription>{plan.plan.moveTitle}</CardDescription>
             </div>
@@ -830,7 +830,7 @@ function PublicSubManifest({
 
       <div className="print-hidden flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">MovingManifest shared packet</p>
+          <p className="text-sm text-muted-foreground">Assist With Moving shared packet</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-normal">
             {profile.name}
           </h1>
@@ -1120,7 +1120,7 @@ function PublicDocumentationPacketView({
 
       <div className="print-hidden flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">MovingManifest shared packet</p>
+          <p className="text-sm text-muted-foreground">Assist With Moving shared packet</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-normal">
             {profile.name}
           </h1>

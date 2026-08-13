@@ -106,7 +106,7 @@ describe("ApiKeyManager task tabs", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /MovingManifest stores the original and creates web-ready versions server-side/,
+        /Assist With Moving stores the original and creates web-ready versions server-side/,
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create key" })).toBeInTheDocument();

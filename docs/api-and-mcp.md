@@ -1,10 +1,16 @@
-# MovingManifest API and MCP Guide
+# Assist With Moving API and MCP Guide
 
 This guide covers the shipped `v1` REST API, the canonical stateless OAuth MCP,
 the compatibility OAuth and API-key doors, and the
 maintainer-only stdio server.
 The API is designed for controlled automation: API keys carry explicit scopes,
 may be restricted to one move, and all write paths are auditable.
+
+`assistwithmoving.com` is the public product entry. It currently redirects to
+the authenticated compatibility host, `movingmanifest.com`, because production
+Clerk and OAuth are bound there. The brand is Assist With Moving; technical
+URLs, `mmk_` keys, code identifiers, and existing OAuth resources retain their
+compatibility names until a separately approved provider/domain migration.
 
 ## Base URL
 
@@ -288,7 +294,7 @@ curl -X POST https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
 
 Member management requires `members/manage` and a household-scoped key. The
 target email can be added before the person has an account. If the email is not
-registered yet, MovingManifest stores a pending invitation and activates
+registered yet, Assist With Moving stores a pending invitation and activates
 household access when that person signs in with the same email. Owner access
 cannot be granted through the API.
 
@@ -296,7 +302,7 @@ Expected write responses:
 
 | Status | Meaning |
 | --- | --- |
-| `201` | Existing MovingManifest user was added as an active household member. |
+| `201` | Existing Assist With Moving user was added as an active household member. |
 | `202` | Pending invitation was created for an email without an account yet. |
 | `200` | Existing member/invitation was updated or refreshed. |
 
@@ -405,7 +411,7 @@ verification. API writes default missing `recordedAt` to the request time. This
 lets future agents distinguish photo estimates from manual measurements,
 manufacturer specs, mover confirmations, or product research.
 
-When an API key writes measurement provenance, MovingManifest also stores the
+When an API key writes measurement provenance, Assist With Moving also stores the
 specific `recordedByApiKeyId` and defaults `recordedByLabel` to the API key name
 plus safe token preview. General API writes are also audited with
 `actorApiKeyId`, so non-measurement item changes can be traced to the API key
@@ -614,7 +620,7 @@ validation, the response uses HTTP `207` and includes the failed row details.
 External source keys are optional but useful for importer and agent
 reconciliation. `externalSource` should name the upstream system or import
 stream, while `externalId` should identify the upstream row or object. The pair
-is scoped to one MovingManifest move. Direct item create/update requests may also
+is scoped to one Assist With Moving move. Direct item create/update requests may also
 set or clear the pair; providing only one side is rejected.
 
 Item payloads may include `dimensionsIn` and `dimensionsConfidence`. Confidence
@@ -1340,7 +1346,7 @@ For API-key MCP agents, prefer the plain `upload_image` or `upload_photo` alias,
 `upload_evidence_image` when the client already knows that name, for normal
 single-image work. The assistant can pass a public HTTPS `sourceUrl`, `dataUrl`,
 or `fileBase64`; the maintainer-only local stdio server can additionally use an
-approved `filePath`. MovingManifest stores the original, finalizes evidence
+approved `filePath`. Assist With Moving stores the original, finalizes evidence
 metadata, creates web-ready derivatives server-side, and returns the `photoId`.
 Remote API-key MCP rejects `filePath`. Local stdio enables it only for paths
 whose resolved real path is inside a directory named in
@@ -1403,7 +1409,7 @@ workflow instead of creating another item:
 
 This is the fastest Codex and Claude Code path for requests like "attach these
 three photos to the wheelbarrow we already added." Codex agents may need to
-start a fresh session after configuring MCP before the MovingManifest tools are
+start a fresh session after configuring MCP before the Assist With Moving tools are
 visible. Claude Desktop and Claude Code use the same MCP tool sequence once the
 server appears in their MCP tool list.
 
@@ -1457,7 +1463,7 @@ multipart form data, or JSON with exactly one of `sourceUrl`, `dataUrl`, or
 `detail`, and `full` WebP derivatives after storing the original. Direct upload
 responses include a `derivativeVariants` array describing those prepared web
 sizes without storage URLs or object keys. Remote URLs must use public HTTPS
-without embedded credentials. MovingManifest validates every DNS result and
+without embedded credentials. Assist With Moving validates every DNS result and
 redirect hop, pins the accepted address for the connection, applies a timeout,
 and enforces a 25 MB limit from both headers and streamed bytes. Claimed image
 types must also match JPEG, PNG, or WebP file signatures. API-key REST/MCP
@@ -1474,7 +1480,7 @@ derivatives.
 
 The lower-level REST flow is still useful for custom clients, browser clients,
 and clients that already create web-ready image derivatives. API/MCP clients can
-omit image derivatives; MovingManifest creates the web-ready variants during
+omit image derivatives; Assist With Moving creates the web-ready variants during
 finalization after the original is in storage. REST clients do this:
 
 1. Start an upload session and receive a presigned Backblaze URL.
@@ -1655,7 +1661,7 @@ derivatives. Use `attach_photo` afterward only when evidence metadata needs to
 be changed or linked differently.
 
 Current derivative behavior: `upload_evidence_file` uploads and finalizes the
-original evidence file. For images, MovingManifest creates `thumb`, `card`,
+original evidence file. For images, Assist With Moving creates `thumb`, `card`,
 `detail`, and `full` WebP derivatives server-side and returns derivative status
 plus `derivativeVariants` so the agent can tell the user whether display/AI-ready
 versions are ready or need review.
@@ -1824,7 +1830,7 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 
 ## MCP Server
 
-Hosted assistants reach MovingManifest through **three deliberately separate
+Hosted assistants reach Assist With Moving through **three deliberately separate
 doors — do not confuse their catalogs or credentials**:
 
 Maintainers running live synthetic proof must use
@@ -1832,7 +1838,7 @@ Maintainers running live synthetic proof must use
 and retain only the labeled non-privileged test identity after cleanup.
 
 - **Canonical stateless OAuth (recommended):**
-  `https://movingmanifest.com/mcp` — sign in with your MovingManifest account,
+  `https://movingmanifest.com/mcp` — sign in with your Assist With Moving account,
   no key to copy. It verifies an issuer-signed Clerk OAuth access token and
   creates a fresh MCP server for each request. Production Clerk DCR tokens
   currently omit `aud`; Moving therefore pins issuer, signature, expiry,
@@ -1877,7 +1883,7 @@ Auth:     OAuth 2.1 sign-in (Clerk) — no key to paste
 ```
 
 In claude.ai or Claude Cowork: Settings → Connectors → Add custom connector →
-paste `https://movingmanifest.com/mcp`. The client opens MovingManifest sign-in
+paste `https://movingmanifest.com/mcp`. The client opens Assist With Moving sign-in
 and consent; on approval it can call the eight workflow tools below. No `mmk_`
 key needed.
 
@@ -2111,7 +2117,7 @@ names, and known launch blockers.
 | `upload_photos` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload for several ordinary household photos or several new photos attached to one existing item. |
 | `upload_image` | Plain-language alias for `upload_evidence_image`; easiest MCP single-image upload when the user or agent says image instead of photo. |
 | `upload_images` | Plain-language alias for `upload_evidence_images`; easiest MCP batch upload when the user or agent says images instead of photos, including several new images for one existing item. |
-| `upload_evidence_image` | Easiest API-key MCP single-image upload: pass public HTTPS `sourceUrl`, `dataUrl`, or `fileBase64`; maintainer-only local stdio can also read a `filePath` inside an explicitly configured real-path root. MovingManifest stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
+| `upload_evidence_image` | Easiest API-key MCP single-image upload: pass public HTTPS `sourceUrl`, `dataUrl`, or `fileBase64`; maintainer-only local stdio can also read a `filePath` inside an explicitly configured real-path root. Assist With Moving stores the original, finalizes metadata, creates derivatives server-side, and returns the `photoId` plus `agentReview`. |
 | `upload_evidence_images` | Batch MCP image helper: pass shared defaults plus one image entry per user photo; each image still uses the one-call upload path and returns per-image status plus `agentReview`. |
 | `upload_evidence_file` | Maintainer-only local stdio media upload: pass a `filePath` inside an explicitly configured real-path root or a bounded public HTTPS `sourceUrl`; hosted transports reject filesystem paths. The tool starts the upload session, PUTs the original, finalizes metadata, triggers server-side image derivatives, and returns the `photoId`. |
 | `start_photo_upload` | Start an evidence media upload session and return presigned original/optional derivative upload information. |
@@ -2151,7 +2157,7 @@ export, or member permissions.
 OAuth capture-queue compatibility tools (`list_queue`, `claim_queue`, and
 `submit_queue_result`) are served only by the legacy `/mcp/connect` Convex MCP
 gateway for signed-in
-MovingManifest users. They are legacy person-authorized capture processing,
+Assist With Moving users. They are legacy person-authorized capture processing,
 not the canonical chosen-AI Queue authority surface, and a manager role does
 not widen their Queue ownership. Queue entries expose structured capture hints such as
 `itemKind`, `estimatedWeightLb`, `dimensionsIn`, `disposition`,
@@ -2161,7 +2167,7 @@ When submitting results, agents may pass `resultItemIds` and `resultBoxIds`.
 Omitting either field preserves any previously stored links; passing an empty
 array clears that field. Result boxes must belong to the same move and cannot be
 archived. If a processed queue entry has uploaded photos and exactly one result
-item or box, MovingManifest automatically attaches those photos to that record.
+item or box, Assist With Moving automatically attaches those photos to that record.
 
 Recommended MCP key scopes depend on the intended agent:
 

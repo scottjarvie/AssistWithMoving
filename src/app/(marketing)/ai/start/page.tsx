@@ -13,9 +13,9 @@ import { PublicFooter, PublicHeader } from "@/components/public-page-chrome";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
-  title: "Start with an AI assistant",
+  title: "Set up your chosen AI",
   description:
-    "A short setup path for people using MovingManifest with Claude, ChatGPT, Codex, or another AI assistant.",
+    "A short setup path for using Assist With Moving with Claude, ChatGPT, Codex, or another chosen AI.",
 };
 
 const keyOptions = [
@@ -38,12 +38,12 @@ export default function AiStartPage() {
           <div>
             <Badge variant="secondary">AI-assisted setup</Badge>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-normal sm:text-5xl">
-              Your assistant can help after you create one connection.
+              Your chosen AI can help after one secure connection.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              MovingManifest saves the move. Your AI assistant can help fill it
-              in. You only need to sign in and connect the assistant. Use hosted
-              MCP OAuth when your assistant supports it; create a fallback key
+              Assist With Moving keeps the durable record. Your AI can research,
+              organize, and save bounded work into it. Use hosted MCP OAuth when
+              your AI supports it; create a fallback key
               only for local or non-OAuth tools.
             </p>
             <div className="mt-7">

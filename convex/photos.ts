@@ -920,7 +920,7 @@ function derivativeNoteForStatus(
 ) {
   switch (status) {
     case "ready":
-      return "Original evidence was uploaded and MovingManifest created web-ready image derivatives for display and AI review.";
+      return "Original evidence was uploaded and Assist With Moving created web-ready image derivatives for display and AI review.";
     case "pending":
       return "Original evidence was uploaded and web-ready image derivatives are pending.";
     case "failed":

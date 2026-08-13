@@ -301,14 +301,14 @@ export function ApiKeyManager({
   const canCreateInventory = scopes.includes("inventory/write");
   const agentPhotoReady = canUploadPhotos && canCreateInventory;
   const agentHandoffText = [
-    `Use this MovingManifest key for ${selectedHousehold?.name ?? "the selected household"} with ${summarizeScopes(scopes).toLowerCase()}.`,
+    `Use this Assist With Moving key for ${selectedHousehold?.name ?? "the selected household"} with ${summarizeScopes(scopes).toLowerCase()}.`,
     agentPhotoReady
       ? "For one household item from one photo plus a few words, prefer MCP add_item_from_photo."
       : canUploadPhotos
         ? "For ordinary image uploads, use MCP upload_image or upload_images, or POST /api/v1/images/upload."
         : "This key cannot upload photos; ask the user for an Add items and photos or Full trusted helper key before uploading images.",
     canUploadPhotos
-      ? "Send original JPEG, PNG, or WebP files only; MovingManifest stores the original and creates web-ready versions server-side."
+      ? "Send original JPEG, PNG, or WebP files only; Assist With Moving stores the original and creates web-ready versions server-side."
       : "",
     agentPhotoReady
       ? "If quantity is omitted, default to 1; leave unknown weight, size, disposition, and condition blank; return the agentReview assumptions for the user to correct."
@@ -699,7 +699,7 @@ export function ApiKeyManager({
               </h3>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
                 Give this to the assistant after the key. It tells the agent to
-                send originals and let MovingManifest create web-ready image
+                send originals and let Assist With Moving create web-ready image
                 versions in the background.
               </p>
             </div>
@@ -984,7 +984,7 @@ export function ApiKeyManager({
                   <div>
                     <h3 className="text-sm font-medium">One-time secret</h3>
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      Copy this now with the green button. MovingManifest stores
+                      Copy this now with the green button. Assist With Moving stores
                       only a secure hash, so this exact secret will not be shown
                       again.
                     </p>
@@ -1024,7 +1024,7 @@ export function ApiKeyManager({
               Create a household before adding AI connections.
             </h3>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              AI keys belong to a household so MovingManifest knows which move,
+              AI keys belong to a household so Assist With Moving knows which move,
               rooms, photos, and collaborators the assistant can work with.
             </p>
             <Button asChild className="mt-3" variant="outline">

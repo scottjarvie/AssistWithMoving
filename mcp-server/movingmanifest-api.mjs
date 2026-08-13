@@ -92,7 +92,7 @@ export async function movingManifestRequest(
     const message =
       typeof payload === "object" && payload?.error?.message
         ? payload.error.message
-        : `MovingManifest API request failed with ${response.status}.`;
+        : `Assist With Moving API request failed with ${response.status}.`;
     const error = new Error(message);
     error.status = response.status;
     error.payload = payload;
@@ -139,7 +139,7 @@ export async function movingManifestBinaryRequest(
     const message =
       typeof payload === "object" && payload?.error?.message
         ? payload.error.message
-        : `MovingManifest API request failed with ${response.status}.`;
+        : `Assist With Moving API request failed with ${response.status}.`;
     const error = new Error(message);
     error.status = response.status;
     error.payload = payload;
@@ -312,7 +312,7 @@ export async function addHouseholdMember(config, input) {
         path: `/households/${input.householdId}/members`,
         body,
       },
-      note: "If the target email does not have an account yet, MovingManifest creates a pending invitation that activates when they sign in with that email.",
+      note: "If the target email does not have an account yet, Assist With Moving creates a pending invitation that activates when they sign in with that email.",
     };
   }
   return await movingManifestRequest(config, {
@@ -597,7 +597,7 @@ export async function createItemWithImages(config, input) {
       item: itemDryRun,
       images: imageDryRun,
       note:
-        "Dry run only. On a live run, MovingManifest creates the item first, then uploads each original image attached to that item and creates web-ready derivatives server-side.",
+        "Dry run only. On a live run, Assist With Moving creates the item first, then uploads each original image attached to that item and creates web-ready derivatives server-side.",
     };
   }
 
@@ -625,7 +625,7 @@ export async function createItemWithImages(config, input) {
       .map((result) => result.photoId),
     images: imageResult,
     note:
-      "Created the item, uploaded original image evidence attached to it, and let MovingManifest create web-ready derivatives server-side.",
+      "Created the item, uploaded original image evidence attached to it, and let Assist With Moving create web-ready derivatives server-side.",
     agentReview: createItemWithImagesAgentReview({
       input,
       itemId,
@@ -1453,7 +1453,7 @@ export async function uploadEvidenceFile(config, input) {
         finalize: { method: "POST", path: "/photos/finalize", body: finalizeBody },
       },
       derivativeNote:
-        "This helper uploads the original evidence file only. MovingManifest creates web-ready image derivatives during finalization when the client does not supply them.",
+        "This helper uploads the original evidence file only. Assist With Moving creates web-ready image derivatives during finalization when the client does not supply them.",
       derivativeVariants: derivativeVariantsForStatus("pending", mimeType),
     };
   }
@@ -1574,14 +1574,14 @@ export async function uploadEvidenceImage(config, input) {
           }
         : { method: "POST", path: "/photos/upload", body },
       derivativeNote:
-        "MovingManifest stores the original image and creates web-ready derivatives server-side.",
+        "Assist With Moving stores the original image and creates web-ready derivatives server-side.",
       derivativeVariants,
       agentReview: imageUploadAgentReview({
         input,
         data: { derivativeVariants },
         media: directImage,
         derivativeNote:
-          "MovingManifest stores the original image and creates web-ready derivatives server-side.",
+          "Assist With Moving stores the original image and creates web-ready derivatives server-side.",
         dryRun: true,
       }),
     };
@@ -1687,7 +1687,7 @@ export async function uploadEvidenceImages(config, input) {
     failedCount: results.filter((result) => !result.ok).length,
     results,
     derivativeNote:
-      "Each image was sent as one original upload. MovingManifest creates web-ready derivatives server-side for uploaded images.",
+      "Each image was sent as one original upload. Assist With Moving creates web-ready derivatives server-side for uploaded images.",
     derivativeVariants: derivativeVariantsForStatus("pending"),
     agentReview: imageBatchAgentReview({ input, results }),
   };
@@ -1800,7 +1800,7 @@ export async function attachPhoto(config, input) {
 function derivativeNoteForStatus(status) {
   switch (status) {
     case "ready":
-      return "Original evidence was uploaded and MovingManifest created web-ready image derivatives for display and AI review.";
+      return "Original evidence was uploaded and Assist With Moving created web-ready image derivatives for display and AI review.";
     case "failed":
       return "Original evidence was uploaded, but server-side derivative processing failed. The photo record remains available for review and retry.";
     case "pending":

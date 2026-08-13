@@ -17,13 +17,13 @@ import { buildPhases, product } from "@/lib/product";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "What MovingManifest is, the principles behind it, and where the project stands. An independently built system of record for moves, designed around your own AI and private originals.",
+    "What Assist With Moving is, the principles behind it, and where the project stands. An independently built system of record for moves, designed around your own AI and private originals.",
 };
 
 const principleCards = [
   {
     title: "Your AI, not ours",
-    copy: "Bring your own assistant — Claude, ChatGPT, or Codex — over scoped MCP and API keys. MovingManifest is the structured record, not another locked-in chatbot. We don't bundle an AI model.",
+    copy: "Bring your own assistant — Claude, ChatGPT, or Codex — over scoped MCP and API keys. Assist With Moving is the structured record, not another locked-in chatbot. We don't bundle an AI model.",
     icon: Bot,
   },
   {
@@ -47,8 +47,8 @@ export default function AboutPage() {
   return (
     <PublicPageChrome
       eyebrow="About the project"
-      title="A move generates chaos. MovingManifest turns it into one record you can trust."
-      description="MovingManifest is a system of record for moves: inventory, box manifests, photo evidence, load plans, and scoped documentation packets. It exists so the details of a move are captured once and stay usable for everyone who needs them."
+      title="A move generates chaos. Assist With Moving turns it into one record you can trust."
+      description="Assist With Moving is a system of record for moves: inventory, box manifests, photo evidence, load plans, and scoped documentation packets. It exists so the details of a move are captured once and stay usable for everyone who needs them."
     >
       <PublicBand>
         <div className="mb-6 max-w-3xl">

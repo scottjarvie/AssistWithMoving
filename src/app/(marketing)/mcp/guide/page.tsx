@@ -20,9 +20,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "MovingManifest MCP",
+  title: "Assist With Moving MCP",
   description:
-    "MCP setup overview for AI assistants that can connect to MovingManifest tools.",
+    "MCP setup overview for AI assistants that can connect to Assist With Moving tools.",
 };
 
 const mcpCards = [
@@ -33,7 +33,7 @@ const mcpCards = [
   },
   {
     title: "MCP first, API only if you must",
-    copy: "Recommended: connect to https://movingmanifest.com/mcp and sign in with your MovingManifest account — no key to copy, works with your subscription. Advanced only: headless or non-OAuth agents connect directly to https://movingmanifest.com/api/mcp with a scoped API key.",
+    copy: "Recommended: connect to https://movingmanifest.com/mcp and sign in with your Assist With Moving account — no key to copy, works with your subscription. Advanced only: headless or non-OAuth agents connect directly to https://movingmanifest.com/api/mcp with a scoped API key.",
     icon: Laptop,
   },
   {
@@ -85,7 +85,7 @@ const remoteEndpointUrl = "https://movingmanifest.com/mcp";
 const remoteOAuthExample = `Paste this MCP URL into an OAuth-capable hosted client (recommended):
 https://movingmanifest.com/mcp
 
-Then sign in with your MovingManifest account — no key needed.
+Then sign in with your Assist With Moving account — no key needed.
 The client discovers Clerk auth from:
 /.well-known/oauth-protected-resource/mcp`;
 
@@ -110,8 +110,8 @@ export default function McpPage() {
   return (
     <PublicPageChrome
       eyebrow="Model Context Protocol"
-      title="Connect capable assistants to MovingManifest tools."
-      description="For AI apps that support MCP, MovingManifest provides a hosted OAuth endpoint plus an advanced remote API-key endpoint. The user still controls sign-in, connection access, fallback keys, and revocation."
+      title="Connect capable assistants to Assist With Moving tools."
+      description="For AI apps that support MCP, Assist With Moving provides a hosted OAuth endpoint plus an advanced remote API-key endpoint. The user still controls sign-in, connection access, fallback keys, and revocation."
       primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
       secondaryAction={{
         href: "/settings/ai-connections",
@@ -159,8 +159,8 @@ export default function McpPage() {
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               claude.ai, Claude Cowork, and other hosted MCP clients cannot run
-              a local process. Add MovingManifest as a custom connector using
-              the remote endpoint. OAuth-capable clients open MovingManifest
+              a local process. Add Assist With Moving as a custom connector using
+              the remote endpoint. OAuth-capable clients open Assist With Moving
               sign-in and consent instead of asking the user to paste a key.
             </p>
           </div>
@@ -370,7 +370,7 @@ function McpVisual() {
       </div>
       <div className="mt-4 space-y-3">
         {[
-          ["1", "User signs in to MovingManifest."],
+          ["1", "User signs in to Assist With Moving."],
           [
             "2",
             "Assistant connects via hosted OAuth or the remote API-key door.",

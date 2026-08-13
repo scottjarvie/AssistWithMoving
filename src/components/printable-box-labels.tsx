@@ -203,7 +203,7 @@ export function PrintableBoxLabels({
                       {box.code}
                     </p>
                     <p className="mt-1 truncate text-base font-medium">
-                      {box.label ?? "MovingManifest box"}
+                      {box.label ?? "Assist With Moving box"}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {box.room ?? "Room"} to{" "}

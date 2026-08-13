@@ -483,7 +483,7 @@ function HouseholdMemberPanel({
                   </Button>
                 </form>
                 <p className="text-xs leading-5 text-muted-foreground">
-                  If that email does not have an account yet, MovingManifest
+                  If that email does not have an account yet, Assist With Moving
                   keeps a pending invitation and activates it when they sign in
                   with the same email.
                 </p>

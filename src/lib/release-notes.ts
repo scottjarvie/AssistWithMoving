@@ -150,7 +150,7 @@ export const releaseEntries: ReleaseEntry[] = [
     timezone: "America/Phoenix",
     title: "A complete moving workspace for people and their agents",
     summary:
-      "MovingManifest grew from a basic inventory into a coordinated moving workspace: people and their AI assistants can capture evidence, organize belongings, plan spaces and transport, collaborate safely, and keep large moves understandable on any screen.",
+      "Assist With Moving grew from a basic inventory into a coordinated moving workspace: people and their AI assistants can capture evidence, organize belongings, plan spaces and transport, collaborate safely, and keep large moves understandable on any screen.",
     backfillNote:
       "Every shipped source since the previous release marker was classified against the verified July 27 production deployment.",
     items: [
@@ -207,7 +207,7 @@ export const releaseEntries: ReleaseEntry[] = [
           "Move owners can invite participants and deliberately share queue work with the right people and assistants.",
         long: {
           what:
-            "MovingManifest now understands move participants, durable invitation claims, per-person queues, agent provenance, and explicit delegation consent.",
+            "Assist With Moving now understands move participants, durable invitation claims, per-person queues, agent provenance, and explicit delegation consent.",
           why:
             "A household move is rarely a one-person job. These boundaries let several people contribute without making every capture or assistant connection visible to everyone by default.",
           where:
@@ -287,10 +287,10 @@ export const releaseEntries: ReleaseEntry[] = [
         impactTier: "supporting",
         impactRank: 7,
         short:
-          "MovingManifest can be installed on a phone for faster access during packing and move-day work.",
+          "Assist With Moving can be installed on a phone for faster access during packing and move-day work.",
         long: {
           what:
-            "The public app metadata and install experience now support adding MovingManifest to a mobile home screen.",
+            "The public app metadata and install experience now support adding Assist With Moving to a mobile home screen.",
           why:
             "Packing work happens away from a desk, so quick app-like access reduces friction when capturing or checking belongings in place.",
           where:
@@ -625,7 +625,7 @@ export const releaseEntries: ReleaseEntry[] = [
           "Public OAuth discovery metadata tells compatible AI assistants how to begin a protected connection.",
         long: {
           what:
-            "MovingManifest publishes the standards-based protected-resource document needed to identify its authorization boundary.",
+            "Assist With Moving publishes the standards-based protected-resource document needed to identify its authorization boundary.",
           why:
             "Discovery lets an assistant find the correct sign-in flow without making private move data public.",
           where: "This powers compatible remote MCP connection setup.",
@@ -675,7 +675,7 @@ export const releaseEntries: ReleaseEntry[] = [
     timezone: "America/Phoenix",
     title: "Initial release-log baseline",
     summary:
-      "MovingManifest established a public, privacy-safe record of product-visible changes.",
+      "Assist With Moving established a public, privacy-safe record of product-visible changes.",
     items: [
       {
         id: "updates-baseline",

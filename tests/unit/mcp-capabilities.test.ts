@@ -111,7 +111,7 @@ function collectToolRegistrations(options?: { allowedToolNames?: readonly string
   return registrations;
 }
 
-describe("MovingManifest MCP capability discovery", () => {
+describe("Assist With Moving MCP capability discovery", () => {
   it("returns a code-backed capability matrix without calling the API", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -671,7 +671,7 @@ describe("MovingManifest MCP capability discovery", () => {
 
   it("exports stable summary metadata for non-MCP callers", () => {
     expect(getApiCapabilities()).toMatchObject({
-      product: "MovingManifest",
+      product: "Assist With Moving",
       apiVersion: "v1",
       defaultBaseUrl: "https://movingmanifest.com/api/v1",
       summary: {
