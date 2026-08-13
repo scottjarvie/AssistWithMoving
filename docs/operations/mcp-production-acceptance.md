@@ -76,3 +76,30 @@ OAuth consent/token exchange, authenticated MCP reads and writes, normal UI
 reflection, token/client/session revocation, and fixture purge. Private-media,
 multi-client isolation, Queue transitions, or another client product remain
 unproved unless that exact scenario was exercised.
+
+## Latest retained-account receipt
+
+The 2026-08-13 run completed after protected PR `#182` deployed the production
+token-shape repair:
+
+- release: merge `d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1`, Actions
+  run `31660891558`, Production deployment
+  `dpl_6ZZ6e3Ma3DDGF66x9FMZhMrpREPF` Ready at `2026-08-13T02:29:04Z`;
+- authenticated workflow: official TypeScript SDK, all eight canonical tools,
+  correct marked move, one complete result with two spaces, one inventory item,
+  one decision, one estimate, one plan section, two checked FMCSA sources, and
+  one readable top-level result;
+- write safety: the complete-result retry returned `replay: true`; the granular
+  decision correction produced `confirmed` version 2; search and hydration
+  returned the saved records;
+- normal UI: **Saved work** showed the result, estimate, plan, both source
+  checks, and corrected decision with `Your AI via MCP` provenance;
+- cleanup: refresh revocation succeeded, both temporary DCR clients were
+  deleted, the browser session was signed out, the exact marked move was hard
+  purged with every linked Move/MCP/Queue record, and the marker was absent from
+  both **Your moves** and Queue afterward.
+
+Only the labeled test identity and its empty minimal Moving identity scaffold
+remain. Private-image rendering, simultaneous multi-client isolation,
+disconnect/reconnect inside a named client product, and canonical OAuth Queue
+transitions were not exercised.

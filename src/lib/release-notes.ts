@@ -67,6 +67,36 @@ export const appVersion = packageJson.version;
 
 export const releaseEntries: ReleaseEntry[] = [
   {
+    version: "0.4.1",
+    releasedAt: "2026-08-13T02:29:04.000Z",
+    timezone: "America/Phoenix",
+    title: "Reliable sign-in for chosen AI connections",
+    summary:
+      "Chosen AI connections can now complete real Moving sign-in and keep useful, source-backed work in the move workspace through the recommended OAuth MCP connection.",
+    backfillNote:
+      "Every first-parent source after the v0.4.0 product release marker through the verified OAuth repair deployment was classified in the v0.4.1 completeness ledger.",
+    items: [
+      {
+        id: "production-mcp-oauth",
+        category: "fixed",
+        impactTier: "major",
+        impactRank: 1,
+        short:
+          "Chosen AI connections can now finish browser sign-in and save durable move work through the recommended MCP endpoint.",
+        long: {
+          what:
+            "Moving now accepts the signed production OAuth access-token shape issued during browser consent while retaining issuer, signature, expiry, token-type, subject, client, and supplied-audience checks.",
+          why:
+            "The first live connection exposed a mismatch between the released verifier and the token actually issued after consent, so a valid chosen AI could sign in but could not reach any move tool.",
+          where:
+            "Connect a chosen AI with movingmanifest.com/mcp, then review its returned decisions, estimates, plans, and source checks in the move Overview under Saved work.",
+        },
+        sourceRefs: ["pr-182"],
+        audiences: ["signed-in", "agent"],
+      },
+    ],
+  },
+  {
     version: "0.4.0",
     releasedAt: "2026-08-12T23:46:53.000Z",
     timezone: "America/Phoenix",

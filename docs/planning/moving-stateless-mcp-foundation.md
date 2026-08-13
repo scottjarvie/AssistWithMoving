@@ -1,6 +1,6 @@
 # Moving stateless MCP foundation
 
-Status: released in production; named-client authenticated proof remains partial
+Status: released in production with one complete named-client authenticated loop
 Product owner: Scott Jarvie
 Executor: Codex
 Tracker: `MOV-0028`, `MOV-WO-005`
@@ -136,16 +136,23 @@ client to inspect what was saved.
 - Saved MCP planning records appear in the signed-in move workspace.
 - Older `/mcp/connect`, `/api/mcp`, and stdio clients keep their existing doors.
 
-### Partial until named-client proof exists
+### Current after named-client production acceptance
 
-- Clerk authorization and the observed production token shape are implemented
-  and covered with locally signed exact-issuer tokens, including absent,
-  resource, client-id, wrong, and expired audience cases. A named third-party MCP
-  client's real OAuth consent, refresh, disconnect, and reconnect flow requires
-  a sanctioned disposable account and is separate proof.
+- A retained non-privileged Moving-only test identity completed real Clerk
+  sign-in and consent, official-SDK token exchange, all eight tool discovery,
+  brief/search/read, one-call result save, idempotent replay, granular
+  correction, hydration, updated brief, normal Move-overview reflection,
+  refresh revocation, temporary client deletion, sign-out, and hard purge.
+- The production Clerk token shape and verifier are covered with absent,
+  resource, client-id, wrong, and expired audience regression cases.
+
+### Partial / Unknown after that proof
+
 - Private evidence uses the existing authenticated image action, with protocol
   coverage and existing image-action tests. A named client rendering a real
   private image remains separate proof.
+- A second simultaneous client, disconnect/reconnect in a named client product,
+  and cross-client stable-key isolation remain separate proof.
 - Shared development Convex cannot be used as disposable proof when another
   lane has schema/data not represented by this branch; isolated `convex-test`
   is authoritative for this foundation's synthetic lifecycle.
@@ -153,7 +160,6 @@ client to inspect what was saved.
 ### Later
 
 - A distinct chosen-AI grant for canonical OAuth Queue transitions.
-- Named-client compatibility receipts and client-specific setup screenshots.
 - Additional complete-result templates only when real move workflows show a
   repeated need; the first catalog should not become raw CRUD by accumulation.
 
@@ -164,8 +170,9 @@ client to inspect what was saved.
 3. Protected PR review and exact-head CI/preview.
 4. Merge to `main`, production deployment receipt, public discovery/challenge,
    public docs, signed-out privacy, and `/updates` verification.
-5. Named-client authenticated proof only through a sanctioned disposable
-   identity and cleanup path; absence of that path is reported, not inferred.
+5. Named-client authenticated proof only through the retained Moving test
+   identity and mandatory cleanup path in
+   `docs/operations/mcp-production-acceptance.md`.
 
 ## Released evidence
 
@@ -182,6 +189,20 @@ client to inspect what was saved.
 - `npm run mcp:doctor` passed ten discovery checks without registration, token
   exchange, tool calls, or move access. An official TypeScript SDK client
   reached production and stopped at the expected `invalid_token` challenge.
-- No named third-party client completed OAuth consent, refresh,
-  disconnect/reconnect, an authenticated tool call, or private-image rendering.
-  Those paths remain Partial until a sanctioned disposable account exists.
+- PR `#182` repaired the provider-observed no-`aud` DCR token shape, merged as
+  `d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1`, passed post-merge Actions run
+  `31660891558`, and deployed Ready as
+  `dpl_6ZZ6e3Ma3DDGF66x9FMZhMrpREPF` at `2026-08-13T02:29:04Z`.
+- At `2026-08-13T02:35:41Z`–`02:36:21Z`, the official TypeScript SDK completed
+  the retained-account production workflow: eight tools, the correct move,
+  two spaces, one inventory item, five supporting records plus one complete
+  result, idempotent replay, three-record search/hydration, and a confirmed
+  version-two correction.
+- The normal Move overview showed the result, decision, estimate, plan and two
+  FMCSA source checks with `Your AI via MCP` provenance. Refresh revocation
+  succeeded; both temporary OAuth applications were deleted; the session was
+  signed out; and the marked move plus every linked Move/MCP/Queue record was
+  hard-purged. Only the approved empty test identity remains.
+- Private-image rendering, a second simultaneous named client,
+  disconnect/reconnect in a client product, and canonical OAuth Queue
+  transitions remain Partial / Unknown rather than inferred.

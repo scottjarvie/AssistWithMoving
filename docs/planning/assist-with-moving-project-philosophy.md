@@ -2,16 +2,15 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.6.2
+> **Document version:** 1.6.3
 >
-> **Document date:** 2026-08-12
+> **Document date:** 2026-08-13
 >
-> **Capability evidence last verified:** 2026-08-12 against protected PR `#180`,
-> production merge `0a5e0eb`, Actions run `31652048912`, Production deployment
-> `dpl_AxReSqDrxvy6vMoL13Q5PYumxmPz`, public MCP/docs/privacy proof, the isolated
-> stateless protocol/auth/data proof in `MOV-WO-005`, and the earlier provider
-> receipts described in the evidence record below, plus the sanctioned
-> retained-account consent/token-shape finding recorded in `MOV-WO-006`
+> **Capability evidence last verified:** 2026-08-13 against protected PR `#180`
+> and its production foundation, protected repair PR `#182`, production merge
+> `d0c0a83`, Actions run `31660891558`, Production deployment
+> `dpl_6ZZ6e3Ma3DDGF66x9FMZhMrpREPF`, and the complete retained-account
+> OAuth/MCP/normal-UI/cleanup acceptance receipt in `MOV-WO-006`
 >
 > **Authority-policy consistency audited:** 2026-08-09 against the complete
 > family Core v1.6.3 and Scott's clarified person / product / chosen-AI boundary
@@ -139,7 +138,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
 | Queue states | Canonical Queue records and the global/move Queue workspace use exactly **Needs you / Working / Waiting for your AI / Done**. Older capture records retain their source states and project into those four person-facing lanes for compatibility. | **Current/verified repository and released-source foundation.** The Queue remains a handoff desk; lease/retry/expiry are operational details, not extra person-facing states. |
 | Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. A Queue item records intent but does not itself create a missing tool, data, operation or external-action grant. | **Owner clarification adopted now in product truth:** Moving checks authority separately from the instruction. Missing authority returns the smallest exact **Needs you** question. When a separately visible grant already names the AI, scope, permitted data, operation or external-action category, approval and duration, Moving may hand the approved context and intent to that AI and record the result. Complete implementation remains **Later**. |
-| MCP and `/ai` | Source routes provide a canonical stateless OAuth `/mcp` with eight move-workflow tools, a persisted compatibility catalog at `/mcp/connect`, and separate API-key `/api/mcp` plus stdio. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified in production** for anonymous OAuth/resource discovery, the exact door boundaries, public docs and signed-out privacy at merge `0a5e0eb`; isolated synthetic proof covers the authenticated protocol/data lifecycle. Sanctioned production consent and token exchange are now verified, and revealed that Clerk DCR access tokens omit `aud`; the compatible exact-issuer verifier and complete named-client tool/UI/cleanup rerun remain **active / Partial** in `MOV-0029`. Private-media proof remains **Unknown**. Canonical `/settings/ai` is a **Later alignment gap**. Public pages must list only the catalog attached to their named door. |
+| MCP and `/ai` | Source routes provide a canonical stateless OAuth `/mcp` with eight move-workflow tools, a persisted compatibility catalog at `/mcp/connect`, and separate API-key `/api/mcp` plus stdio. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified in production** for anonymous OAuth/resource discovery, exact door boundaries, public docs, signed-out privacy, and one complete retained-account named-client loop: consent/token exchange, brief/search/read, one-call source-backed save, idempotent replay, granular correction, normal Move-overview reflection, refresh/client/session cleanup, and hard purge. PR `#182`, merge `d0c0a83`, run `31660891558`, deployment `dpl_6ZZ6e3Ma3DDGF66x9FMZhMrpREPF`, and `MOV-WO-006` preserve the proof. Private-media rendering, simultaneous multi-client isolation, reconnect in a client product, and canonical OAuth Queue transitions remain **Partial / Unknown**. Canonical `/settings/ai` is a **Later alignment gap**. Public pages must list only the catalog attached to their named door. |
 | Activity and provenance | `auditLogs`, move/object queries, item activity UI, plan journals, API-key/agent write events, and MCP planning records preserve actor and time. Stateless MCP saves add client id, operation id, version, reason, source status, and replay receipts, and the web workspace shows “Your AI via MCP.” Coverage and human-readable before/after/evidence detail are not universal, and no complete external-action handoff/result receipt is verified. | **Current/verified partial repository foundation.** Complete “if an AI did it, the record says so,” including grant, handoff, result, failure or return, is **Later**. |
 | Access and sharing | Clerk-backed household and move participants, roles, move restrictions, scoped/revocable API keys, documentation profiles and revocable `/share/<token>` links exist in source. They are foundations for collaboration-first owner, partner, move-only helper, chosen-AI and recipient-link roles, but the complete per-operation scenarios are not proven. New records do not share a single family visibility field, and current links may expire or permit selected recipient actions. | Private-by-default and collaboration foundations are **Current/verified partial**. The complete role contract, family **Private / Unlisted / Trusted / Public** vocabulary and shared-data screen are **Later**. Action-capable recipient links are an **intentional product-specific difference**, not “Unlisted.” |
 | External conversations and action handoffs | A person may ask their own AI anything outside Moving. Moving neither controls those conversations nor polices the AI's overall behavior. Moving may control only whether its tools or data participate. No complete source-and-user-path proof establishes a grant that names actor, scope, permitted data, external-action category, approval, expiry/revocation and attributable handoff result. | The freedom/boundary distinction is **adopted product truth**. A granular external-action handoff is **Later / unverified**, not a current integration claim. Moving itself remains prohibited from independently taking the outside action. |
@@ -1561,6 +1560,13 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.6.3 · 2026-08-13** — promoted the canonical OAuth move workflow to exact
+  named-client production proof after PR `#182` repaired Clerk's observed
+  no-`aud` DCR token compatibility. The retained-account official-SDK loop
+  completed all eight tools, durable source-backed save, replay, correction,
+  normal Move-overview reflection, grant/client/session cleanup, and hard purge.
+  Private media, simultaneous multi-client isolation, client-product reconnect,
+  and canonical OAuth Queue transitions remain Partial / Unknown.
 - **1.6.2 · 2026-08-12** — recorded the first sanctioned Moving-only production
   test identity and real named-client consent/token exchange. The run exposed
   Clerk's no-`aud` DCR access-token shape before any MCP data write; `MOV-0029`

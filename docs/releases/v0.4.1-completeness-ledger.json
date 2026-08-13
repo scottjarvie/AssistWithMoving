@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "version": "0.4.1",
+    "from": "0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c",
+    "to": "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",
+    "cutoff": "2026-08-13T02:29:04.000Z",
+    "cutoffTimezone": "America/Phoenix",
+    "posture": "release-ready",
+    "recordType": "verified production repair record"
+  },
+  "reconciliation": {
+    "git": {
+      "selection": "0a5e0eb..d0c0a83",
+      "exactAncestorRange": true,
+      "sourceCount": 2,
+      "pullRequestSources": 2,
+      "directCommitSources": 0,
+      "markerMeaning": "Merge commit of PR #180, the v0.4.0 product release cutoff; later release-accounting evidence is classified separately from the OAuth repair."
+    },
+    "github": {
+      "repository": "scottjarvie/movingmanifest",
+      "productPullRequest": 182,
+      "productionDeployment": {
+        "commit": "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",
+        "deploymentId": "dpl_6ZZ6e3Ma3DDGF66x9FMZhMrpREPF",
+        "statusContext": "Vercel",
+        "environment": "Production",
+        "state": "success",
+        "deployedAt": "2026-08-13T02:29:04.000Z",
+        "buildCommand": "npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL"
+      },
+      "checks": [
+        {
+          "name": "Required CI",
+          "runId": 31660891558,
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit tests (informational)",
+          "runId": 31660891558,
+          "conclusion": "success",
+          "testCount": 1042
+        }
+      ]
+    },
+    "authenticatedProof": {
+      "identity": "retained non-privileged Moving-only production test identity",
+      "officialSdkWindow": {
+        "startedAt": "2026-08-13T02:35:41.544Z",
+        "completedAt": "2026-08-13T02:36:21.005Z"
+      },
+      "workflow": "eight tools; correct move brief; bounded search/read; two spaces; one item; five supporting records plus one complete result; replay true; three-record search/hydration; confirmed version-two correction",
+      "normalUi": "Saved work displayed the result, estimate, plan, two source checks, and corrected decision with Your AI via MCP provenance",
+      "cleanup": "refresh revoked; both temporary DCR clients deleted; session signed out; marked move and all linked Move/MCP/Queue records hard-purged; only the empty approved identity remains",
+      "notProved": [
+        "private-image rendering in a named client",
+        "simultaneous multi-client isolation",
+        "disconnect and reconnect in a named client product",
+        "canonical OAuth Queue transitions"
+      ]
+    },
+    "dispositionCounts": {
+      "include": 1,
+      "group": 0,
+      "exclude": 1,
+      "unshipped": 0
+    },
+    "completenessGate": "pass"
+  },
+  "releaseItems": [
+    {
+      "id": "production-mcp-oauth",
+      "sourceCount": 1
+    }
+  ],
+  "sources": [
+    {
+      "id": "pr-181",
+      "kind": "pull_request",
+      "prNumber": 181,
+      "title": "Record the released AI move loop",
+      "commits": ["ebf755ef83251ef544fa54fe4ee38f616e102d87"],
+      "firstSeenAt": "2026-08-13T00:00:28.000Z",
+      "lastSeenAt": "2026-08-13T00:00:28.000Z",
+      "disposition": "exclude",
+      "reason": "Release-accounting and evidence publication for the already-recorded v0.4.0 outcome; it did not independently change product behavior."
+    },
+    {
+      "id": "pr-182",
+      "kind": "pull_request",
+      "prNumber": 182,
+      "title": "Restore real production OAuth access to Moving MCP",
+      "commits": ["362af53fe41238556dddb4747f65766ccc673d25"],
+      "firstSeenAt": "2026-08-13T02:27:41.000Z",
+      "lastSeenAt": "2026-08-13T02:27:41.000Z",
+      "disposition": "include",
+      "releaseItemId": "production-mcp-oauth"
+    }
+  ]
+}

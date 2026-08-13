@@ -26,7 +26,7 @@ function readLedger() {
     readFileSync(
       resolve(
         process.cwd(),
-        "docs/releases/v0.4.0-completeness-ledger.json",
+        "docs/releases/v0.4.1-completeness-ledger.json",
       ),
       "utf8",
     ),
@@ -38,17 +38,17 @@ function readLedger() {
 
 describe("release notes", () => {
   it("keeps the visible app version aligned to the proposed latest release", () => {
-    expect(appVersion).toBe("0.4.0");
-    expect(latestRelease.version).toBe("0.4.0");
-    expect(releaseEntries[0].version).toBe("0.4.0");
+    expect(appVersion).toBe("0.4.1");
+    expect(latestRelease.version).toBe("0.4.1");
+    expect(releaseEntries[0].version).toBe("0.4.1");
   });
 
   it("uses the exact impact-sorted Created, Fixed, and Upgraded story", () => {
     expect(
       getReleaseItems(latestRelease, "created").map((item) => item.id),
-    ).toEqual(["durable-ai-move-work", "four-state-ai-queue"]);
+    ).toEqual([]);
     expect(getReleaseItems(latestRelease, "fixed").map((item) => item.id)).toEqual(
-      [],
+      ["production-mcp-oauth"],
     );
     expect(
       getReleaseItems(latestRelease, "upgraded").map((item) => item.id),
@@ -91,13 +91,13 @@ describe("release notes", () => {
     const ledgerIds = new Set(ledger.sources.map((source) => source.id));
 
     expect(ledger.release).toMatchObject({
-      version: "0.4.0",
-      from: "3c2864968a34d661aa928f1343a92bd48e252f48",
-      to: "0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c",
-      cutoff: "2026-08-12T23:46:53.000Z",
+      version: "0.4.1",
+      from: "0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c",
+      to: "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",
+      cutoff: "2026-08-13T02:29:04.000Z",
     });
-    expect(ledger.sources).toHaveLength(19);
-    expect(ledgerIds.size).toBe(19);
+    expect(ledger.sources).toHaveLength(2);
+    expect(ledgerIds.size).toBe(2);
     expect(ledger.sources.some((source) => source.disposition === "unshipped")).toBe(
       false,
     );
@@ -152,6 +152,12 @@ describe("release notes", () => {
   });
 
   it("renders evidence-backed date, time, and timezone", () => {
+    expect(
+      formatReleaseTimestamp(
+        "2026-08-13T02:29:04.000Z",
+        "America/Phoenix",
+      ),
+    ).toBe("August 12, 2026, 7:29 PM MST");
     expect(
       formatReleaseTimestamp(
         "2026-08-12T23:46:53.000Z",
