@@ -13,7 +13,7 @@
     >
     <meta
       name="source-sha256"
-      content="d5b853fc07c698e14936dc38de7d3c11990bbeabda93288a780c0cdfe47fd74d"
+      content="b25a99ed3cc7c5530d6f3a4830144f7869db4c34c1b777dbf949e1f315a67076"
     >
     <link
       rel="icon"
@@ -1358,7 +1358,7 @@
           </div>
           <div>
             <dt>Source digest</dt>
-            <dd data-source-digest-short>d5b853fc…47fd74d</dd>
+            <dd data-source-digest-short>b25a99ed…5a67076</dd>
           </div>
         </dl>
 
@@ -1405,7 +1405,7 @@
         </p>
         <p class="source-hash">
           Source SHA-256:
-          <span data-source-digest-full>d5b853fc07c698e14936dc38de7d3c11990bbeabda93288a780c0cdfe47fd74d</span>
+          <span data-source-digest-full>b25a99ed3cc7c5530d6f3a4830144f7869db4c34c1b777dbf949e1f315a67076</span>
         </p>
       </div>
     </footer>
@@ -1415,13 +1415,15 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.6.0
+> **Document version:** 1.6.1
 >
 > **Document date:** 2026-08-12
 >
-> **Capability evidence last verified:** 2026-08-12 against the protected-release
-> candidate in `MOV-WO-005`, its isolated stateless MCP protocol/auth/data proof,
-> and the earlier provider receipts described in the evidence record below
+> **Capability evidence last verified:** 2026-08-12 against protected PR `#180`,
+> production merge `0a5e0eb`, Actions run `31652048912`, Production deployment
+> `dpl_AxReSqDrxvy6vMoL13Q5PYumxmPz`, public MCP/docs/privacy proof, the isolated
+> stateless protocol/auth/data proof in `MOV-WO-005`, and the earlier provider
+> receipts described in the evidence record below
 >
 > **Authority-policy consistency audited:** 2026-08-09 against the complete
 > family Core v1.6.3 and Scott's clarified person / product / chosen-AI boundary
@@ -1549,13 +1551,13 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
 | Queue states | Canonical Queue records and the global/move Queue workspace use exactly **Needs you / Working / Waiting for your AI / Done**. Older capture records retain their source states and project into those four person-facing lanes for compatibility. | **Current/verified repository and released-source foundation.** The Queue remains a handoff desk; lease/retry/expiry are operational details, not extra person-facing states. |
 | Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. A Queue item records intent but does not itself create a missing tool, data, operation or external-action grant. | **Owner clarification adopted now in product truth:** Moving checks authority separately from the instruction. Missing authority returns the smallest exact **Needs you** question. When a separately visible grant already names the AI, scope, permitted data, operation or external-action category, approval and duration, Moving may hand the approved context and intent to that AI and record the result. Complete implementation remains **Later**. |
-| MCP and `/ai` | Source routes provide a canonical stateless OAuth `/mcp` with eight move-workflow tools, a persisted compatibility catalog at `/mcp/connect`, and separate API-key `/api/mcp` plus stdio. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified repository source with isolated synthetic protocol/auth/data proof; production and named-client proof remain Unknown until exact release receipts exist.** Canonical `/settings/ai` is a **Later alignment gap**. Public pages must list only the catalog attached to their named door. |
+| MCP and `/ai` | Source routes provide a canonical stateless OAuth `/mcp` with eight move-workflow tools, a persisted compatibility catalog at `/mcp/connect`, and separate API-key `/api/mcp` plus stdio. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified in production** for anonymous OAuth/resource discovery, the exact door boundaries, public docs and signed-out privacy at merge `0a5e0eb`; isolated synthetic proof covers the authenticated protocol/data lifecycle. Named-client consent/refresh/private-media proof remains **Partial / Unknown**. Canonical `/settings/ai` is a **Later alignment gap**. Public pages must list only the catalog attached to their named door. |
 | Activity and provenance | `auditLogs`, move/object queries, item activity UI, plan journals, API-key/agent write events, and MCP planning records preserve actor and time. Stateless MCP saves add client id, operation id, version, reason, source status, and replay receipts, and the web workspace shows “Your AI via MCP.” Coverage and human-readable before/after/evidence detail are not universal, and no complete external-action handoff/result receipt is verified. | **Current/verified partial repository foundation.** Complete “if an AI did it, the record says so,” including grant, handoff, result, failure or return, is **Later**. |
 | Access and sharing | Clerk-backed household and move participants, roles, move restrictions, scoped/revocable API keys, documentation profiles and revocable `/share/<token>` links exist in source. They are foundations for collaboration-first owner, partner, move-only helper, chosen-AI and recipient-link roles, but the complete per-operation scenarios are not proven. New records do not share a single family visibility field, and current links may expire or permit selected recipient actions. | Private-by-default and collaboration foundations are **Current/verified partial**. The complete role contract, family **Private / Unlisted / Trusted / Public** vocabulary and shared-data screen are **Later**. Action-capable recipient links are an **intentional product-specific difference**, not “Unlisted.” |
 | External conversations and action handoffs | A person may ask their own AI anything outside Moving. Moving neither controls those conversations nor polices the AI's overall behavior. Moving may control only whether its tools or data participate. No complete source-and-user-path proof establishes a grant that names actor, scope, permitted data, external-action category, approval, expiry/revocation and attributable handoff result. | The freedom/boundary distinction is **adopted product truth**. A granular external-action handoff is **Later / unverified**, not a current integration claim. Moving itself remains prohibited from independently taking the outside action. |
 | Move Brief and document memory | A bounded MCP workflow brief now lists accessible moves or returns one move's route, spaces, counts, review attention, saved planning records and personal Queue summaries. Documentation profiles, evidence/photos, exports, recipient-safe fields and packet-oriented source also exist. No complete cross-domain Move Brief, original-artifact/version model, extracted-versus-confirmed facts, completed-form snapshot, requirements tracker or year-later packet-retrieval path is verified. | The bounded MCP brief and existing pieces are **Current/verified partial repository foundations**. The complete connected Move Brief and Document Memory / Move Evidence Packet are **Later / unverified** and must not be claimed as an official PCS, claims or provider integration. |
 | Identity and deletion | Identity is site-specific Clerk. Settings can export JSON, stage deletion, anonymize the Convex profile, revoke keys/share links and disable memberships/grants. It does not prove Clerk identity deletion, attachment/Backblaze purge, or removal of all personal/content-bearing history; `/delete-account` is absent. | Per-site identity and export are **Current/verified**. Family-complete deletion and `/delete-account` are **Later gaps**. Never describe current anonymization as full account-data deletion. |
-| Public truth and Coming soon | Source includes home, separate FAQ, `/ai`, `/ai.txt`, `llms.txt`, `llms-full.txt`, and `/updates`. The home page does not contain the FAQ, and source presence does not prove live claims. | **Current/verified source foundation; Unknown deployment until exact release proof.** Public claims require an environment/user-path proof. **Coming soon** is reserved for approved, scheduled soft-launch work; none is assigned here. |
+| Public truth and Coming soon | Source includes home, separate FAQ, `/ai`, `/ai.txt`, `llms.txt`, `llms-full.txt`, and `/updates`. The home page does not contain the FAQ. | `/ai`, `/mcp/guide`, `/ai.txt` and the MCP discovery/refusal boundaries are **Current/verified in production** at merge `0a5e0eb`; other public claims still require their own environment/user-path proof. **Coming soon** is reserved for approved, scheduled soft-launch work; none is assigned here. |
 | `/me`, `/admin`, and stats | A REST `/api/v1/me` context endpoint and an owner-gated app `/admin` surface exist. There is no family `/me` page; current admin source focuses operations and does not prove the family split between meaningful personal stats at `/me` and owner usage/operations stats at `/admin`, or every public-content maintenance job. | `/admin` is a **Current/verified source foundation** with **Unknown production proof**. Family `/me`, the personal/owner stats split and full admin destination are **Later**. |
 | Support Desk | No Assist With Life Support Desk link, Moving source key or page-key allowlist is present in the inspected public shell. The family desk itself is specified but not proven deployed. | **Later alignment gap.** Do not publish a pretend or dead support control. |
 | Product identity and primary experience | This document defines a household-first, evidence-rich moving workspace organized around a changing move rather than a generic family-site layout or feature checklist. | **Intentional product-specific difference and controlling domain direction.** The shared chassis does not standardize Moving's objects, workflows, information architecture, content, density, voice or experience shape. |
@@ -2586,7 +2588,7 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 | Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields and packet-oriented source | **Current/verified repository foundation.** Full Document Memory / Move Evidence Packets, extraction-confirmation states, completed-form snapshots, requirements progress and post-move retrieval are **Later / unverified**. Private evidence does not become shareable merely because a summary or packet exists |
 | Questions, Move Brief and queue | Derived readiness questions; a bounded MCP move brief; compact move/context summaries; and a per-user four-state Queue with directives, evidence, claim expiry, delegation, AI question, summary, activity and result references | **Current/verified partial repository foundation.** The complete cross-domain Move Brief and attachable question system are **Later**; canonical OAuth Queue transitions remain held until a distinct chosen-AI grant is proven |
 | History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research/source checks, MCP client/operation/version receipts, web-visible saved planning results, and plan operation inverses | **Current/verified partial repository foundation.** Complete dependency, revision and AI-activity coverage is **Later** |
-| API and MCP source surfaces | Documented REST API; a canonical stateless OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts`; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified repository source with isolated synthetic protocol, OAuth-audience and complete-result proof; deployment and named-client paths remain Unknown until exact receipts exist.** Reverify auth consent/refresh, private media, disconnect/reconnect and production behavior before a named-client availability claim |
+| API and MCP source surfaces | Documented REST API; a canonical stateless OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts`; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified production foundation** at merge `0a5e0eb` for deployment, anonymous discovery/challenge, door separation, docs and signed-out privacy; isolated synthetic protocol, OAuth-audience and complete-result proof covers the authenticated data path without production data. Named-client consent/refresh, private media and disconnect/reconnect remain **Partial / Unknown** |
 | Granular chosen-AI grants and external-action handoffs | Scoped API keys, OAuth/client foundations, Queue claims and selected audit fields exist, but no complete verified contract names actor, scope, permitted data, product operation or external-action category, approval, expiry/revocation and attributable result together | **Current/verified partial foundations; Later complete contract.** Do not claim that Moving can currently pass an approved external-action handoff or that every AI can receive one |
 | Costs | Item and replacement values, sale prices and research, planned-item estimate, internal AI-job cost | **Current/verified partial foundation.** General move budgets, vendor quotes, payments and reimbursements are **Later** |
 | Bounded link sharing | Documentation profiles plus move- or profile-scoped links with selected fields/actions, expiry, revocation, access metadata, and recipient comments | **Current/verified recipient-workflow foundation** and **intentional product-specific difference** from family Unlisted. General selected-plan, checklist, item-group and arbitrary-view links are **Later** |
@@ -2971,6 +2973,12 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.6.1 · 2026-08-12** — replaced the stateless MCP candidate labels with
+  exact protected-release evidence: PR `#180`, merge `0a5e0eb`, post-merge
+  Actions run `31652048912`, Convex-backed Production deployment
+  `dpl_AxReSqDrxvy6vMoL13Q5PYumxmPz`, public OAuth/resource and door-boundary
+  proof, signed-out privacy, and an official SDK anonymous-client challenge.
+  Named-client consent/refresh/private-media proof remains Partial / Unknown.
 - **1.6.0 · 2026-08-12** — reconciled the released four-state Queue and the
   protected-release candidate for Moving's first stateless OAuth MCP: eight
   bounded workflow tools, server-derived identity, replay-safe complete-result

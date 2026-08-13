@@ -1,7 +1,7 @@
 ---
 id: MOV-WO-005
 title: Deliver the first durable chosen-AI move loop
-execution: active
+execution: complete
 audit: not-audited
 cards: MOV-0028
 created: 2026-08-12
@@ -20,12 +20,12 @@ Current/Partial/Later truth.
 
 ## Current truth
 
-The repository candidate implements the complete bounded foundation. Official
-SDK protocol discovery, OAuth-token checks, tenant boundaries, replay-safe
-writes, bounded search, optimistic correction, web reflection, all local gates,
-and desktop/mobile public-guide rendering pass. Protected integration,
-deployment, public endpoint discovery, and any sanctioned named-client receipt
-remain separate pending evidence. Canonical OAuth still cannot transition Queue
+The complete bounded foundation is released in production through protected PR
+`#180` at merge `0a5e0eb`. Official SDK protocol discovery, OAuth-token checks,
+tenant boundaries, replay-safe writes, bounded search, optimistic correction,
+web reflection, local and protected gates, Convex/Vercel deployment, and public
+discovery/refusal/docs/privacy proof pass. A named-client authenticated receipt
+remains separate and unproved. Canonical OAuth still cannot transition Queue
 work.
 
 ## Included scope
@@ -88,9 +88,9 @@ coordination remain in scope.
 
 ## Human gates
 
-No Scott action is currently required. A sanctioned disposable production-
-matched identity and cleanup path are required before named-client authenticated
-production mutation or private-media proof.
+No Scott action is required for the released foundation. A sanctioned
+disposable production-matched identity and cleanup path are required before
+named-client authenticated production mutation or private-media proof.
 
 ## Execution evidence
 
@@ -109,15 +109,31 @@ production mutation or private-media proof.
   phone widths with the exact eight-tool catalog and Current/Partial/Later
   boundaries. The page returned 200; local hot-reload cross-origin socket noise
   was development-only and did not affect the page.
-- Protected CI, deployment, public endpoint behavior, and named-client evidence
-  remain pending and will be appended rather than inferred.
+- Protected PR `#180` passed Required CI and the informational full 1,040-test
+  job on exact head `74cd6e9`, then merged at
+  `0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c`.
+- Post-merge Actions run `31652048912` passed Required CI and the full suite on
+  the exact production merge.
+- Vercel Production deployment `dpl_AxReSqDrxvy6vMoL13Q5PYumxmPz` reached
+  Ready for the exact merge. Its configured build ran `convex deploy` before
+  the Next build, so the Convex schema/functions and web release share the
+  same release receipt.
+- Public proof returned 401 plus the exact RFC 9728 resource metadata from
+  `/mcp`; 200 from the protected-resource document, `/mcp/guide`, and `/ai.txt`;
+  the expected separate 401 refusals from `/mcp/connect` and `/api/mcp`; and a
+  307 sign-in redirect with no private body from `/app/moves`.
+- `npm run mcp:doctor` passed all ten discovery checks without registration,
+  token exchange, tool calls, or move access. An official TypeScript SDK client
+  reached production and stopped at the expected `invalid_token` challenge.
+- No production move data, real-user mutation, real-account consent, secret,
+  billing, DNS, provider-policy, or access-expanding action was used.
 
 ## Verification
 
-Focused official-SDK, OAuth/JWT, isolated Convex lifecycle, UI component, and
-route-separation tests first; then the repository lint, typecheck, unit, build,
-tracker, philosophy, and contract gates; then protected CI/deployment/public
-proof. Named-client authenticated proof remains a separate optional layer.
+Completed across focused official-SDK, OAuth/JWT, isolated Convex lifecycle, UI
+component and route-separation tests; full repository gates; protected CI and
+deployment; and public anonymous/signed-out proof. Named-client authenticated
+proof remains a separate optional layer.
 
 ## Independent audit
 
@@ -131,3 +147,7 @@ Not yet audited. Completion of implementation does not imply a separate review.
   with focused protocol/auth/data proof passing.
 - 2026-08-12 · Codex — completed all local code, test, build, contract, and
   desktop/mobile guide proof; protected release proof is next.
+- 2026-08-12 · Codex — merged protected PR `#180`, verified exact-head and
+  post-merge CI, exact Convex/Vercel production deployment, public endpoint and
+  privacy behavior, and an official SDK anonymous-client challenge; completed
+  the Work Order with the named-client authenticated boundary still explicit.

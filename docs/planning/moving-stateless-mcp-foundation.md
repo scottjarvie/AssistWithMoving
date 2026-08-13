@@ -1,6 +1,6 @@
 # Moving stateless MCP foundation
 
-Status: implementation and protected-release proof in progress
+Status: released in production; named-client authenticated proof remains partial
 Product owner: Scott Jarvie
 Executor: Codex
 Tracker: `MOV-0028`, `MOV-WO-005`
@@ -161,3 +161,22 @@ client to inspect what was saved.
    public docs, signed-out privacy, and `/updates` verification.
 5. Named-client authenticated proof only through a sanctioned disposable
    identity and cleanup path; absence of that path is reported, not inferred.
+
+## Released evidence
+
+- Protected PR `#180` passed Required CI, the informational full 1,040-test job,
+  and Vercel preview on exact head `74cd6e9`, then merged at
+  `0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c`.
+- Post-merge Actions run `31652048912` passed both jobs on that exact merge.
+- Production deployment `dpl_AxReSqDrxvy6vMoL13Q5PYumxmPz` reached Ready. The
+  configured Vercel build ran `convex deploy` before the Next build.
+- Public `/mcp` returns the exact RFC 9728 challenge and resource metadata;
+  `/mcp/connect` and `/api/mcp` retain separate 401 boundaries; `/mcp/guide`
+  and `/ai.txt` return 200; signed-out `/app/moves` redirects to sign-in without
+  private data.
+- `npm run mcp:doctor` passed ten discovery checks without registration, token
+  exchange, tool calls, or move access. An official TypeScript SDK client
+  reached production and stopped at the expected `invalid_token` challenge.
+- No named third-party client completed OAuth consent, refresh,
+  disconnect/reconnect, an authenticated tool call, or private-image rendering.
+  Those paths remain Partial until a sanctioned disposable account exists.

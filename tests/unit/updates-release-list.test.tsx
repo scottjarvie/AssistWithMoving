@@ -10,7 +10,7 @@ describe("UpdatesReleaseList", () => {
     const { container } = render(
       <UpdatesReleaseList entries={publicReleaseEntries} />,
     );
-    const latestArticle = container.querySelector("#release-0-3-0-2026-07-27");
+    const latestArticle = container.querySelector("#release-0-4-0-2026-08-12");
 
     expect(latestArticle).not.toBeNull();
     expect(screen.getByRole("button", { name: "Quick read" })).toHaveAttribute(
@@ -22,26 +22,19 @@ describe("UpdatesReleaseList", () => {
     ).toHaveAttribute("aria-pressed", "false");
 
     const latest = within(latestArticle as HTMLElement);
-    expect(latest.getByRole("heading", { name: /Created 8/ })).toBeVisible();
-    expect(latest.getByRole("heading", { name: /Fixed 5/ })).toBeVisible();
-    expect(latest.getByRole("heading", { name: /Upgraded 4/ })).toBeVisible();
-    expect(
-      latest.getByRole("button", {
-        name: "Show all 8 Created changes in v0.3.0",
-      }),
-    ).toHaveAttribute("aria-expanded", "false");
+    expect(latest.getByRole("heading", { name: /Created 2/ })).toBeVisible();
+    expect(latest.getByRole("heading", { name: /Fixed 0/ })).toBeVisible();
+    expect(latest.getByRole("heading", { name: /Upgraded 0/ })).toBeVisible();
     expect(
       latest.getByText(
-        "AI assistants can connect directly and complete real capture, inventory, box, image, transport, and queue workflows.",
+        "A chosen AI can now do bounded move-planning work and save a complete, readable result back into the move workspace.",
       ),
     ).toBeVisible();
     expect(
-      latest
-        .getByText(
-          "Public guidance now explains the real product and the direct remote-assistant connection path without fabricated examples.",
-        )
-        .closest("li"),
-    ).toHaveAttribute("hidden");
+      latest.getByText(
+        "The Queue now shows Needs you, Working, Waiting for your AI, and Done as one clear, attributable handoff flow.",
+      ),
+    ).toBeVisible();
   });
 
   it("expands categories independently and preserves the reading mode", async () => {
