@@ -1,5 +1,12 @@
 # MovingManifest - AI-Agent-Ready Product Blueprint and Build Spec
 
+> **Historical implementation blueprint.** The current product identity is
+> **Assist With Moving**. The canonical Project Philosophy controls current
+> language and capability truth; MovingManifest remains a technical and
+> compatibility name for existing code, Clerk, domains, keys, and OAuth
+> resources. Do not treat older brand or roadmap statements below as shipped
+> current claims.
+
 Prepared: June 8, 2026
 Status: Draft 2 - full product build plan and technical spec
 Target builder: an autonomous AI coding agent working in a fresh repository

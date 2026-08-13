@@ -13,7 +13,7 @@
     >
     <meta
       name="source-sha256"
-      content="4b511cbc9638bd622654cb3106f7094a8c2924217756c4096fef01966f677dee"
+      content="facdc6e0dfa13d8dea39bd2581e15ddc9c23caf93e279229c94a4c48da35287e"
     >
     <link
       rel="icon"
@@ -1358,7 +1358,7 @@
           </div>
           <div>
             <dt>Source digest</dt>
-            <dd data-source-digest-short>4b511cbc…f677dee</dd>
+            <dd data-source-digest-short>facdc6e0…a35287e</dd>
           </div>
         </dl>
 
@@ -1405,7 +1405,7 @@
         </p>
         <p class="source-hash">
           Source SHA-256:
-          <span data-source-digest-full>4b511cbc9638bd622654cb3106f7094a8c2924217756c4096fef01966f677dee</span>
+          <span data-source-digest-full>facdc6e0dfa13d8dea39bd2581e15ddc9c23caf93e279229c94a4c48da35287e</span>
         </p>
       </div>
     </footer>
@@ -1415,7 +1415,7 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.6.3
+> **Document version:** 1.7.0
 >
 > **Document date:** 2026-08-13
 >
@@ -1423,7 +1423,10 @@
 > and its production foundation, protected repair PR `#182`, production merge
 > `d0c0a83`, Actions run `31660891558`, Production deployment
 > `dpl_6ZZ6e3Ma3DDGF66x9FMZhMrpREPF`, and the complete retained-account
-> OAuth/MCP/normal-UI/cleanup acceptance receipt in `MOV-WO-006`
+> OAuth/MCP/normal-UI/cleanup acceptance receipt in `MOV-WO-006`; plus Assist
+> With Moving first-run PR `#184`, merge `d1f7364`, Actions run `31747746115`,
+> production deployment `dpl_EUR93mXnmoi6PgLGsnts7fwA6uAW`, and retained empty
+> account sign-in/session-cleanup receipt in `MOV-WO-007`
 >
 > **Authority-policy consistency audited:** 2026-08-09 against the complete
 > family Core v1.6.3 and Scott's clarified person / product / chosen-AI boundary
@@ -1495,11 +1498,13 @@ motifs and primary experience.
 This Project Philosophy defines what Assist With Moving is, how it fits the
 Assist family, and which claims its public and signed-in experiences may make. It
 supersedes checklist-first or inventory-only positioning when that positioning
-conflicts with this identity. The current repository and public pages still use
-the MovingManifest name in many places; this philosophy does not claim that an
-Assist With Moving rename, domain change, provider change, or production
-cutover has shipped. Execution plans, roadmaps, release notes, and provider
-runbooks remain authoritative for delivery status.
+conflicts with this identity. The released public and signed-in experience now
+uses **Assist With Moving**. `MovingManifest` remains an implementation and
+compatibility name in technical URLs, code identifiers, existing keys, Clerk,
+and OAuth resources. `assistwithmoving.com` is a public entry that temporarily
+redirects to the authenticated `movingmanifest.com` host; no Clerk, OAuth, DNS,
+or provider-domain cutover is implied. Release notes and provider runbooks
+remain authoritative for delivery details.
 
 The family Core is normative for shared trust, route, truth and operational
 conventions. Where an older statement in this document conflicts in that shared
@@ -1546,7 +1551,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 
 | Family concern | Evidence-backed Moving truth | Alignment label and decision |
 |---|---|---|
-| Person / Assist workspace / your AI | The product philosophy, `/ai` copy, scoped keys, canonical stateless OAuth MCP and compatibility/API-key surfaces separate the person's authority, Moving's durable record and the person's chosen AI. Older public copy still often says “AI assistant” and leads with inventory rather than the full three-way promise. | **Current/verified repository foundation; Later alignment gap.** Adopt “Assist your AI, so it can assist you with moving” and the house sentence “Assist you and your AI with every part of your move.” |
+| Person / Assist workspace / your AI | The released home, signed-in launchpad, `/ai` copy, scoped keys, canonical stateless OAuth MCP and compatibility/API-key surfaces separate the person's authority, Moving's durable record and the person's chosen AI. The first-run promise now leads with the changing move and durable context rather than inventory alone. | **Current/verified production foundation** at PR `#184` and `MOV-WO-007`. “Assist your AI, so it can assist you with moving” is current visible copy. The broader family sentence remains product guidance rather than an unverified capability claim. |
 | Domain promise and objects | Moves, households, people, spaces, items, planned items, boxes, photos/evidence, transport resources/zones/trips, layouts, documentation profiles, exports, share links, and MCP-saved decisions, estimates, plan results and source checks are modeled in `convex/schema.ts`. These support a simple-to-complex direction, but general tasks, budgets and provider/vendor records are not complete first-class models. | **Current/verified repository foundation** for the named records; progressive composition and unscheduled extensions are **Later**. Moving's vocabulary is retained. |
 | Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
 | Queue states | Canonical Queue records and the global/move Queue workspace use exactly **Needs you / Working / Waiting for your AI / Done**. Older capture records retain their source states and project into those four person-facing lanes for compatibility. | **Current/verified repository and released-source foundation.** The Queue remains a handoff desk; lease/retry/expiry are operational details, not extra person-facing states. |
@@ -1557,15 +1562,15 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | External conversations and action handoffs | A person may ask their own AI anything outside Moving. Moving neither controls those conversations nor polices the AI's overall behavior. Moving may control only whether its tools or data participate. No complete source-and-user-path proof establishes a grant that names actor, scope, permitted data, external-action category, approval, expiry/revocation and attributable handoff result. | The freedom/boundary distinction is **adopted product truth**. A granular external-action handoff is **Later / unverified**, not a current integration claim. Moving itself remains prohibited from independently taking the outside action. |
 | Move Brief and document memory | A bounded MCP workflow brief now lists accessible moves or returns one move's route, spaces, counts, review attention, saved planning records and personal Queue summaries. Documentation profiles, evidence/photos, exports, recipient-safe fields and packet-oriented source also exist. No complete cross-domain Move Brief, original-artifact/version model, extracted-versus-confirmed facts, completed-form snapshot, requirements tracker or year-later packet-retrieval path is verified. | The bounded MCP brief and existing pieces are **Current/verified partial repository foundations**. The complete connected Move Brief and Document Memory / Move Evidence Packet are **Later / unverified** and must not be claimed as an official PCS, claims or provider integration. |
 | Identity and deletion | Identity is site-specific Clerk. Settings can export JSON, stage deletion, anonymize the Convex profile, revoke keys/share links and disable memberships/grants. It does not prove Clerk identity deletion, attachment/Backblaze purge, or removal of all personal/content-bearing history; `/delete-account` is absent. | Per-site identity and export are **Current/verified**. Family-complete deletion and `/delete-account` are **Later gaps**. Never describe current anonymization as full account-data deletion. |
-| Public truth and Coming soon | Source includes home, separate FAQ, `/ai`, `/ai.txt`, `llms.txt`, `llms-full.txt`, and `/updates`. The home page does not contain the FAQ. | `/ai`, `/mcp/guide`, `/ai.txt` and the MCP discovery/refusal boundaries are **Current/verified in production** at merge `0a5e0eb`; other public claims still require their own environment/user-path proof. **Coming soon** is reserved for approved, scheduled soft-launch work; none is assigned here. |
+| Public truth and Coming soon | Source includes home, separate FAQ, `/ai`, `/ai.txt`, `llms.txt`, `llms-full.txt`, and `/updates`. PR `#184` aligned visible metadata, public copy, auth framing, app shell, packets and agent guides with Assist With Moving. The home page still does not contain the FAQ. | The named public identity and first-run routes are **Current/verified in production** at merge `d1f7364` and `MOV-WO-007`; other public claims still require their own environment/user-path proof. **Coming soon** is reserved for approved, scheduled soft-launch work; none is assigned here. |
 | `/me`, `/admin`, and stats | A REST `/api/v1/me` context endpoint and an owner-gated app `/admin` surface exist. There is no family `/me` page; current admin source focuses operations and does not prove the family split between meaningful personal stats at `/me` and owner usage/operations stats at `/admin`, or every public-content maintenance job. | `/admin` is a **Current/verified source foundation** with **Unknown production proof**. Family `/me`, the personal/owner stats split and full admin destination are **Later**. |
 | Support Desk | No Assist With Life Support Desk link, Moving source key or page-key allowlist is present in the inspected public shell. The family desk itself is specified but not proven deployed. | **Later alignment gap.** Do not publish a pretend or dead support control. |
-| Product identity and primary experience | This document defines a household-first, evidence-rich moving workspace organized around a changing move rather than a generic family-site layout or feature checklist. | **Intentional product-specific difference and controlling domain direction.** The shared chassis does not standardize Moving's objects, workflows, information architecture, content, density, voice or experience shape. |
-| Distinct design and light/dark access | The product has a distinct MovingManifest earth/route aesthetic, accessible focus patterns, a responsive signed-in shell and light/dark token sets, but `src/app/layout.tsx` hard-locks the app to dark mode. The family contract names an Assist With Moving palette, but the shared chassis does not require visual homogenization. | Distinct design, phone shell and dark theme are **Current/verified foundations**. First-class accessible light mode is **Later**. Palette and typography remain product-design decisions; the philosophy reader's editorial route-note art direction is an **intentional product-specific difference**, not proof of app branding. |
+| Product identity and primary experience | The released Assist With Moving experience presents a household-first, evidence-rich moving workspace organized around a changing move rather than a generic family-site layout or feature checklist. | **Current/verified production identity and intentional product-specific difference** at PR `#184`; the shared chassis does not standardize Moving's objects, workflows, information architecture, content, density, voice or experience shape. Technical MovingManifest compatibility names remain deliberate. |
+| Distinct design and light/dark access | The product has a distinct Moving earth/route aesthetic, accessible focus patterns, a responsive signed-in shell and light/dark token sets, but `src/app/layout.tsx` hard-locks the app to dark mode. The family contract names an Assist With Moving palette, but the shared chassis does not require visual homogenization. | Distinct design, phone shell and dark theme are **Current/verified foundations**. First-class accessible light mode is **Later**. Palette and typography remain product-design decisions; the philosophy reader's editorial route-note art direction is an **intentional product-specific difference**. |
 | Dense information | REST lists are bounded and paginated; several signed-in views provide tables/cards, filters and responsive detail. The repository does not prove every dense collection uses indexed bounded access, table-default behavior or remembered views. | **Current/verified partial foundation; Later** safety and performance conformance. Moving's useful information density and view design remain product-specific. |
 | Family navigation | No shared Assist With Life catalog row or fallback roster was found in the public shell. | **Later alignment gap.** |
 | Cards / Work Orders / Guide | `docs/tracker/` contains Moving-specific Cards, canonical Work Orders, Guide, metadata, generated Kanban/Work Orders readers, exact state helper, GitHub classifier and Vercel classifier. README and AI instructions link the package. | **Current/verified repository source and provider proof.** These repository-owned records are the durable current-work truth; Linear is optional historical or portfolio context only and never a gate. Card `MOV-0001` preserves the exact proof that established the fast lane; configuration alone would not have done so. |
-| Launch stages and later native guardrail | README names a production domain and public copy says active development, but this local review does not prove that the real site is currently reachable, listed by Assist With Life, Tier A-complete or deliberately marketed. | **Unknown current stage.** Prioritize **soft website launch → big/public website launch**. Native/app-store work is only a concise **Later** guardrail after substantial recurring website use, not a current product requirement or design driver. |
+| Launch stages and later native guardrail | Both public entry and authenticated host are reachable, the ordinary sign-in and empty first run were verified with the retained test identity, and public copy says active development. Assist With Life listing, Tier A completion and deliberate public marketing were not proved. | **Current soft-launch foundation; Partial portfolio/public-launch proof.** The next stage is **big/public website launch** only after its separate gates. Native/app-store work remains a concise **Later** guardrail after substantial recurring website use. |
 
 ### What this matrix changes—and what it does not
 
@@ -2588,7 +2593,7 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 | Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields and packet-oriented source | **Current/verified repository foundation.** Full Document Memory / Move Evidence Packets, extraction-confirmation states, completed-form snapshots, requirements progress and post-move retrieval are **Later / unverified**. Private evidence does not become shareable merely because a summary or packet exists |
 | Questions, Move Brief and queue | Derived readiness questions; a bounded MCP move brief; compact move/context summaries; and a per-user four-state Queue with directives, evidence, claim expiry, delegation, AI question, summary, activity and result references | **Current/verified partial repository foundation.** The complete cross-domain Move Brief and attachable question system are **Later**; canonical OAuth Queue transitions remain held until a distinct chosen-AI grant is proven |
 | History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research/source checks, MCP client/operation/version receipts, web-visible saved planning results, and plan operation inverses | **Current/verified partial repository foundation.** Complete dependency, revision and AI-activity coverage is **Later** |
-| API and MCP source surfaces | Documented REST API; a canonical stateless OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts`; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified production foundation** at merge `0a5e0eb` for deployment, anonymous discovery/challenge, door separation, docs and signed-out privacy; isolated synthetic protocol and complete-result proof covers the authenticated data path without production data. A sanctioned production client proved consent/token exchange and the Clerk no-`aud` shape; the compatible verifier and complete named-client tool/UI/revocation/cleanup receipt remain **active / Partial** in `MOV-0029`. Private media and disconnect/reconnect beyond the run cleanup remain **Unknown** |
+| API and MCP source surfaces | Documented REST API; a canonical stateless OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts`; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified production foundation** through merge `d0c0a83` for deployment, anonymous discovery/challenge, door separation, docs, consent/token exchange, exact move isolation, complete source-backed save, replay, correction, normal UI reflection, revocation and fixture cleanup. `MOV-WO-006` preserves the complete receipt. Private media, simultaneous multi-client isolation, reconnect in a named client, and canonical OAuth Queue transitions remain **Partial / Unknown** |
 | Granular chosen-AI grants and external-action handoffs | Scoped API keys, OAuth/client foundations, Queue claims and selected audit fields exist, but no complete verified contract names actor, scope, permitted data, product operation or external-action category, approval, expiry/revocation and attributable result together | **Current/verified partial foundations; Later complete contract.** Do not claim that Moving can currently pass an approved external-action handoff or that every AI can receive one |
 | Costs | Item and replacement values, sale prices and research, planned-item estimate, internal AI-job cost | **Current/verified partial foundation.** General move budgets, vendor quotes, payments and reimbursements are **Later** |
 | Bounded link sharing | Documentation profiles plus move- or profile-scoped links with selected fields/actions, expiry, revocation, access metadata, and recipient comments | **Current/verified recipient-workflow foundation** and **intentional product-specific difference** from family Unlisted. General selected-plan, checklist, item-group and arbitrary-view links are **Later** |
@@ -2731,11 +2736,10 @@ name a specific client as currently supported without exact current proof.
 Repository source, a route, a tool manifest, a mockup, or a plan is not enough
 for a public availability claim.
 
-The current implementation name **MovingManifest** may remain in technical,
-compatibility, historical, and delivery contexts until an approved product
-cutover says otherwise. Do not describe **Assist With Moving** branding,
-domains, redirects, OAuth identity, or provider configuration as shipped based
-on this philosophy.
+The current implementation name **MovingManifest** remains in technical,
+compatibility, historical, Clerk, OAuth, and delivery contexts. The visible
+**Assist With Moving** identity and reversible entry-domain redirect are
+shipped at PR `#184`; a Clerk/OAuth/DNS/provider-domain cutover is not.
 
 ## Public homepage and future shell implications
 
@@ -2788,8 +2792,9 @@ change the application.
   non-sensitive view without granting membership.
 - Use the visible alignment labels from [Capability truth and ledger](#capability-truth-and-ledger)
   when future work appears.
-- Keep current MovingManifest implementation naming distinct from an unshipped
-  Assist With Moving product or domain cutover.
+- Keep technical MovingManifest compatibility naming distinct from the shipped
+  Assist With Moving product identity and from an unshipped provider/domain
+  cutover.
 - Use synthetic, clearly labeled illustrations. Do not show fake live maps,
   connected calendars, vendor conversations, bookings, cross-product data, or
   autonomous purchases.
@@ -2903,9 +2908,10 @@ or a visual clone of another product's board.
 2. **Big/public website launch.** Tier A and the sentence-by-sentence honesty
    pass are verified. This is when deliberate public marketing begins.
 
-This checkout does not prove Moving's current stage. A configured domain,
-source route, merged commit or PWA manifest is not operational or public-launch
-proof.
+Moving's public entry, authenticated host, ordinary sign-in and empty first run
+are verified as a **soft-launch foundation** in `MOV-WO-007`. Assist With Life
+listing, Tier A completion and deliberate public marketing remain unproved, so
+the big/public launch stage is not claimed.
 
 Native/app-store work remains **Later** and must not shape the website around a
 hypothetical wrapper. Revisit privacy, deletion, review and distinct native
@@ -2973,6 +2979,14 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.7.0 · 2026-08-13** — recorded the shipped Assist With Moving identity and
+  working first run after PR `#184`: the public entry preserves the requested
+  route through the existing Clerk-bound host, visible public/signed-in/agent
+  surfaces use the current product name, and AI Connections leads with hosted
+  OAuth. The retained empty identity verified sign-in, workspace, Queue and AI
+  setup; the temporary session was revoked. A Clerk/OAuth/DNS/provider-domain
+  cutover, live authenticated mobile proof and every-browser proof remain
+  Partial / Later rather than implied.
 - **1.6.3 · 2026-08-13** — promoted the canonical OAuth move workflow to exact
   named-client production proof after PR `#182` repaired Clerk's observed
   no-`aud` DCR token compatibility. The retained-account official-SDK loop

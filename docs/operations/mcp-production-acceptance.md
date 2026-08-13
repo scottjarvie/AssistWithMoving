@@ -32,6 +32,13 @@ This dashboard path is the only retained sign-in recipe. A one-time ticket,
 browser session, password, OAuth access/refresh token, dynamic OAuth client,
 consent grant, API key, or Queue claim is never durable test setup.
 
+When automating the dashboard path, never print or persist the new tab's full
+URL. Bind it by tab id/title, consume it immediately, and sanitize query strings
+from all inspection output. If a ticket URL appears in any automation output,
+treat it as an incident: do not repeat it, consume it, revoke the exact resulting
+device/session through Clerk, confirm the user's Devices table returns none,
+and close the temporary tabs before continuing.
+
 ## Marked acceptance loop
 
 1. Create one move whose title begins `E2E PROD MCP acceptance` and use only

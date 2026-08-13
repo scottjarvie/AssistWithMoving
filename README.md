@@ -1,8 +1,19 @@
-# MovingManifest
+# Assist With Moving
 
-MovingManifest helps people plan and execute a move: capture belongings by photo, organize them into boxes and movable units, plan spaces and transport, and generate documentation packets (claims, employer, mover, military PCS). Its differentiator is **bring-your-own AI agent**: instead of a built-in AI, users connect their own assistant (Claude, ChatGPT, etc.) over MCP, and the agent does the heavy lifting — identifying items from photos, packing boxes, planning loads — through the same permissioned APIs a human would use.
+Assist With Moving is a durable move-planning workspace shared by a person and
+their chosen AI. It keeps move context, places, decisions, belongings,
+evidence, estimates, plans, source checks, transport details, and useful
+results together as the move changes. A chosen AI can connect through bounded
+MCP or API tools while the person remains the authority.
 
-**Production:** https://movingmanifest.com
+**Public entry:** https://assistwithmoving.com
+
+**Authenticated compatibility host and MCP:** https://movingmanifest.com
+
+`MovingManifest` remains the technical repository, package, Clerk, key-prefix,
+and OAuth compatibility name. The public and signed-in product identity is
+Assist With Moving; the public entry redirects to the existing authenticated
+host until a separately approved provider/domain cutover.
 
 The canonical product identity, responsibility boundaries, domain model, design direction, capability truth and family alignment live in [Assist With Moving — Project Philosophy](docs/planning/assist-with-moving-project-philosophy.md).
 
