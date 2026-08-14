@@ -1,11 +1,11 @@
 ---
 id: MOV-WO-002
 title: Make Moving's first-use promise honest and proven
-execution: proposed
+execution: superseded
 audit: not-audited
 cards: MOV-0003 MOV-0004 MOV-0005 MOV-0006 MOV-0007
 created: 2026-08-08
-updated: 2026-08-08
+updated: 2026-08-14
 proposed-by: Codex
 ---
 
@@ -17,13 +17,11 @@ setup, touch-safe controls, and one repeatable first-move journey.
 
 ## Current truth
 
-Moving has a distinctive public site, protected product shell, rich move-domain
-source, 87-tool local MCP surface, live OAuth discovery, repo-owned tracker, and
-proven publishing safeguards. The audit also found a product-facing Linear
-instruction, a human link to the protocol-only `/mcp`, missing `/ai.txt`, broad
-AI claims without authenticated tool proof, repeated sub-44px controls, and no
-authenticated first-move scenario. This order is **Proposed**, not approved for
-execution. All included Cards remain Backlog until Scott makes it Ready.
+Later protected releases completed the public identity and AI truth outcomes in
+`MOV-0004` and `MOV-0005`, including authenticated production MCP/UI proof.
+Bundling those completed outcomes with the remaining error-copy, hit-area, and
+person-first private-move work would now obscure priority and encourage repeated
+acceptance. This proposal is superseded by the smaller Ready `MOV-WO-009`.
 
 ## Sequence
 
@@ -100,3 +98,6 @@ local tests; prior normal main Actions run `31272562770` green at software SHA
 - 2026-08-08 · Codex — proposed from the read-only Core v1.6.3 compliance and
   product-gap audit. No app, schema, provider, production-data, or auth change
   was made.
+- 2026-08-14 · Scott via coordinator reset — superseded the mixed launch-audit
+  package after later releases completed its identity/MCP work; moved only the
+  remaining first private-move friction into `MOV-WO-009`.

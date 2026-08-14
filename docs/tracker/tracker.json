@@ -7,13 +7,13 @@
   "idPrefix": "MOV",
   "projectPhilosophy": "../planning/assist-with-moving-project-philosophy.md",
   "familyCore": {
-    "label": "Assist With Sites Core Philosophy v1.6.2",
+    "label": "Assist With Sites Core Philosophy v1.6.3",
     "date": "2026-08-08",
-    "commit": "561481843793a1d0fb97eee3984bccfd004c21a2",
+    "commit": "db658ab091bcfbb71f62db55d5b8b6d51b64e52f",
     "url": "https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md"
   },
   "guide": "GUIDE.md",
-  "lastUpdated": "2026-08-11",
+  "lastUpdated": "2026-08-14",
   "palette": {
     "paper": "#eee9dc",
     "sheet": "#fbf8ef",

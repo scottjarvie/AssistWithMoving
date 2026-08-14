@@ -1,11 +1,11 @@
 ---
 id: MOV-WO-003
 title: Build and prove Moving's complete Queue foundation
-execution: active
+execution: complete
 audit: follow-up-needed
 cards: MOV-0008 MOV-0027 MOV-0024 MOV-0026
 created: 2026-08-09
-updated: 2026-08-12
+updated: 2026-08-14
 approved-by: Scott Jarvie
 approval-evidence: "explicit complete Queue foundation authorization in coordinator task 019fe207-1ff7-7a62-a4ab-a2775634d0a1"
 executor: Codex
@@ -21,17 +21,14 @@ real contract to Claude Design without inventing the final UI.
 
 ## Current truth
 
-The design-independent implementation shipped through protected PR #175 at
-merge `3566dc8`. A read-only contract audit found household-wide
-Queue export and agent inheritance of human manager recovery; this first
-remediation work isolates exports, contains the bypass, requires live key
-authority, binds claims to the exact key and lease, aligns effective-state
-pagination, and holds canonical OAuth registration until distinct chosen-AI
-grants exist. Three completed independent review passes drove fourteen repairs.
-Exact-SHA main CI, Vercel, production Convex, public REST/OpenAPI, signed-out,
-and MCP discovery proof pass. Authenticated marked-data/revocation/cleanup proof
-and a concluded independent post-deploy audit remain under Card `MOV-0026`;
-final UI design is intentionally separate.
+The design-independent implementation shipped through protected PR `#175` at
+merge `3566dc8`; protected PRs `#177` and `#179` shipped the designed Queue and
+cleanup/status repairs. Three independent review passes drove fourteen fixes.
+The later production loop in `MOV-WO-008` proved the ordinary owner-scoped Queue
+and Move UI against a canonical MCP result, preserved the Queue state, and
+removed every marked client/session/data fixture. The bounded foundation is
+complete. Audit remains honestly Follow-up needed, and canonical OAuth Queue
+transitions remain excluded pending the distinct authority in `MOV-0023`.
 
 ## Included scope
 
@@ -47,11 +44,11 @@ this Work Order.
 
 ## Execution state
 
-Active. Audit/reconciliation, authority/lifecycle repairs, protected merge,
-main CI, production Convex/Vercel deployment, and public discovery/refusal proof
-are complete for this tranche. Marked authenticated/API-key lifecycle proof and
-a concluded post-deploy independent audit remain. Card `MOV-0026` records the
-test-identity and cleanup limitation without turning it into a software rollback.
+Complete. Backend, API-key authority, lifecycle, designed UI, protected release,
+production provider, public contract, and marked Queue/MCP/UI cleanup evidence
+are preserved across the included Cards and later Work Orders. Production
+API-key depth, cron/export scale, multi-owner isolation, and a concluded
+post-deploy audit remain Partial/Unknown without keeping execution Active.
 
 ## Sequence
 
@@ -191,3 +188,6 @@ audit against Core §4, §5, §7, §8, §14, §16, and Moving's Project Philosop
 - 2026-08-12 · Codex — completed the disposable authenticated preview acceptance
   proof, removed every generated record/key, and opened protected cleanup/status
   repair PR `#179` while preserving the production-auth boundary.
+- 2026-08-14 · Codex — reconciled the later designed Queue and production
+  OAuth-MCP-to-Queue/UI proof, closed all included Cards, and preserved the
+  Follow-up-needed audit and distinct-grant limits.

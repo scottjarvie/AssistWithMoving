@@ -140,6 +140,8 @@ const styles = `
   h1,h2,h3 { font-family:Georgia,"Times New Roman",serif; color:var(--deep); }
   h1 { margin:0; font-size:clamp(25px,4vw,42px); line-height:1.08; }
   .sub { margin:7px 0 0; color:var(--muted); max-width:78ch; }
+  .truth-key { margin:9px 0 0; color:var(--ink); font-size:12px; max-width:86ch; }
+  .truth-key strong { color:var(--signal); }
   nav { display:flex; justify-content:flex-end; gap:6px; flex-wrap:wrap; }
   .button,.mode {
     display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:8px 12px;
@@ -264,7 +266,7 @@ function shell({ title, main, script, guide = false }) {
   return `<!doctype html>
 <html lang="en" data-mode="day"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:," /><title>${title}</title><style>${styles}</style></head>
 <body><a class="skip" href="#${guide ? "guide" : "workspace"}">Skip to ${guide ? "guide" : "tracker"}</a>
-<header><div class="mast"><div><p class="eyebrow">Moving field desk · route notes</p><h1>${title}</h1><p class="sub">A durable local view of what is moving now, what is staged for later, and what needs a decision. Markdown remains the source.</p></div><nav aria-label="Tracker links"><a class="button" href="${metadata.projectUrl}">Project</a><a class="button" href="${metadata.projectPhilosophy}">Project Philosophy</a><a class="button" href="${metadata.familyCore.url}">Family Core</a><a class="button" href="${guide ? "board.html" : "guide.html"}">${guide ? "Board" : "Guide"}</a><button class="mode" id="mode" type="button">Night mode</button></nav></div></header>
+<header><div class="mast"><div><p class="eyebrow">Moving field desk · route notes</p><h1>${title}</h1><p class="sub">A durable local view of what is moving now, what is staged for later, and what needs a decision. Markdown remains the source.</p><p class="truth-key"><strong>Truth key:</strong> Current means verified evidence; Partial means useful foundations with a named gap; Later means not selected or not yet verified. Workflow lanes never upgrade capability truth.</p></div><nav aria-label="Tracker links"><a class="button" href="${metadata.projectUrl}">Project</a><a class="button" href="${metadata.projectPhilosophy}">Project Philosophy</a><a class="button" href="${metadata.familyCore.url}">Family Core</a><a class="button" href="${guide ? "board.html" : "guide.html"}">${guide ? "Board" : "Guide"}</a><button class="mode" id="mode" type="button">Night mode</button></nav></div></header>
 <main id="${guide ? "guide" : "workspace"}" tabindex="-1">${main}</main><script>${script}</script></body></html>`;
 }
 

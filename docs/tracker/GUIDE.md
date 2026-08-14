@@ -19,6 +19,12 @@ Open `board.html`. Start with **Needs You**, then scan **Doing** and **Next**.
 Kanban shows motion; Work Orders show approved scope, derived Card progress,
 execution evidence, and independent audit as separate facts.
 
+Capability truth and workflow state are deliberately separate. **Current**
+means verified evidence, **Partial** means useful foundations with a named gap,
+and **Later** means not selected or not yet verified. Those labels live in the
+Card or Work Order truth; moving something to Next or Doing never upgrades a
+capability claim.
+
 Cards use exactly `backlog`, `next`, `doing`, `needs-you`, or `done`. Work Order
 execution uses `proposed`, `ready`, `active`, `complete`, or `superseded`.
 Audit uses `not-audited`, `passed`, or `follow-up-needed`. Complete does not
@@ -42,6 +48,9 @@ Work Orders, and Guide; GitHub records code review and integration evidence.
 - Cards live in `docs/tracker/cards/` with stable `MOV-####` ids.
 - Work Orders live in `docs/tracker/work-orders/` with `MOV-WO-###` ids.
 - Append dated attributed history; do not erase evidence or invent provenance.
+- Specifications and requirements remain supporting documents linked by a Card
+  or Work Order. They do not become a fourth tracker or replace the canonical
+  outcome, scope, and evidence record.
 - Run `npm run tracker:build && npm run tracker:verify` after state edits.
 - Use **Copy as prompt** or **Copy whole work order** for cold-start handoff.
 
