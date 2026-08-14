@@ -1,11 +1,11 @@
 ---
 id: MOV-WO-008
 title: Release and prove the Queue-linked canonical MCP path
-execution: active
+execution: complete
 audit: not-audited
 cards: MOV-0031
 created: 2026-08-13
-updated: 2026-08-13
+updated: 2026-08-14
 approved-by: Scott Jarvie
 approval-evidence: "coordinator task 019ff621-54b9-78f0-a51d-dd20fb0cb247 requested a production Queue and canonical MCP integration goal with retained-account proof and exact cleanup"
 executor: Codex
@@ -20,10 +20,12 @@ Move overview render the durable result without inventing Queue authority.
 
 ## Current truth
 
-The first production loop reached the chosen AI save and normal Saved work UI,
-then exposed the unusable single-owner default and missing Queue-side result.
-The bounded source repair and focused tests are complete. Protected release,
-repaired live Queue rendering, final cleanup, and release publication remain.
+The first production loop exposed the unusable single-owner default and missing
+Queue-side result. PR `#186` repaired both and deployed from merge `147cff4`.
+The retained-account rerun then proved the production OAuth MCP read/save path,
+the linked Queue and Saved work rendering, idempotent replay, unchanged Queue
+state, and complete removal of the marked client, session, move, Queue, MCP, and
+planning fixtures.
 
 ## Included scope
 
@@ -84,14 +86,32 @@ policy change or use of real move data would require a separate decision.
   item, saved six planning/source records through one complete-result call,
   replayed idempotently, and returned `queue.transition: none` with MCP
   provenance. Refresh revocation succeeded and the exact DCR client was deleted.
-- The normal Saved work overview rendered the result and both checked FMCSA
-  sources, but the released Queue detail rendered no linked result. This is the
-  source defect now under protected repair.
+- The initial normal Saved work overview rendered the result and both checked
+  FMCSA sources, while Queue detail rendered no linked result. That exact live
+  finding defined the bounded source repair in PR `#186`.
+- PR `#186` merged as `147cff46eaf971b3629d5b9e625e668c3a2d2b0b`.
+  Post-merge Actions run `31768988479` passed Required CI and all 1,050 tests;
+  GitHub deployment `5900338675` reported the exact production commit Ready.
+- The post-fix production OAuth client discovered all eight canonical tools,
+  read the exact owner-scoped move and Queue directive, saved the marked
+  source-backed result, replayed the operation idempotently, and returned
+  `queue.transition: none` with `Your AI via MCP` provenance.
+- Normal Queue detail rendered **Linked move work**, the exact result title,
+  **Open saved work**, and attributable Waiting-for-your-AI-to-same-state
+  activity. The Move overview rendered the same decision, estimate, plan, two
+  FMCSA source checks, and MCP provenance.
+- Refresh revocation succeeded, the exact temporary OAuth client was deleted,
+  the product session was signed out, Clerk showed no device, the short-lived
+  password was removed, and the marked move was hard-purged. Both Your moves
+  and Queue were rechecked with the move, directive, and result markers absent.
 
 ## Verification
 
-Active. Initial production diagnosis and focused local repair tests are proven;
-protected release, repaired production rendering, and final cleanup remain.
+Complete. Source tests, protected PR checks, exact-merge production deployment,
+authenticated OAuth MCP use, normal Queue and Move UI reflection, session/client
+cleanup, and permanent fixture purge have separate receipts. Canonical OAuth
+still does not claim or complete Queue work, and private media, another client
+product, mobile, and multi-owner acceptance were not exercised.
 
 ## Independent audit
 
@@ -101,3 +121,6 @@ Not yet audited.
 
 - 2026-08-13 · Codex — completed the first production loop, isolated the two
   integration defects, and began the bounded repair without changing providers.
+- 2026-08-14 · Codex — released PR `#186`, completed the post-fix production
+  OAuth MCP-to-Queue/UI loop, removed every marked synthetic record and
+  temporary connection, and closed execution without broadening Queue authority.

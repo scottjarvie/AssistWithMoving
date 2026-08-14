@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "version": "0.5.1",
+    "from": "42c51f2f60c17d7490d71d8c1ce333359e342286",
+    "to": "147cff46eaf971b3629d5b9e625e668c3a2d2b0b",
+    "cutoff": "2026-08-14T04:10:43.000Z",
+    "cutoffTimezone": "America/Phoenix",
+    "posture": "release-ready",
+    "recordType": "verified production Queue-linked MCP release"
+  },
+  "reconciliation": {
+    "git": {
+      "selection": "42c51f2..147cff4",
+      "exactAncestorRange": true,
+      "sourceCount": 1,
+      "pullRequestSources": 1,
+      "directCommitSources": 0,
+      "markerMeaning": "Direct state commit that completed the v0.5.0 release record; the next first-parent source is the Queue-linked MCP product release."
+    },
+    "github": {
+      "repository": "scottjarvie/movingmanifest",
+      "productPullRequest": 186,
+      "productionDeployment": {
+        "commit": "147cff46eaf971b3629d5b9e625e668c3a2d2b0b",
+        "deploymentId": 5900338675,
+        "state": "success",
+        "deployedAt": "2026-08-14T04:10:43.000Z"
+      },
+      "checks": [
+        {
+          "name": "Required CI",
+          "runId": 31768988479,
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit tests (informational)",
+          "runId": 31768988479,
+          "conclusion": "success",
+          "testCount": 1050
+        }
+      ]
+    },
+    "productionAcceptance": {
+      "identity": "retained non-privileged Moving-only production test identity",
+      "oauthMcp": "fresh public PKCE client using the official MCP TypeScript SDK discovered all eight canonical tools, read the exact owner-scoped move and Queue directive, saved and hydrated one complete source-backed result, and replayed the operation idempotently",
+      "queue": "normal Queue detail rendered the exact linked result, direct Saved work path, MCP attribution, and an unchanged Waiting for your AI state",
+      "moveOverview": "normal Move overview rendered the same decision, estimate, plan, two FMCSA source checks, and Your AI via MCP provenance",
+      "cleanup": "refresh revocation succeeded; exact OAuth client deleted; product signed out; Clerk showed no device and no password; exact marked move hard-purged; Your moves and Queue rechecked with move, directive, and result markers absent",
+      "credentialBoundary": "only the non-privileged identity and verified test-only alias remain; no reusable password was retained because the sanctioned browser automation surface could not save it to the unlocked Bitwarden vault and email-code sign-in was unavailable",
+      "notProved": [
+        "canonical OAuth Queue claiming or completion",
+        "private-media rendering through this client",
+        "reconnect inside a named client product",
+        "mobile or multi-owner acceptance"
+      ]
+    },
+    "dispositionCounts": {
+      "include": 1,
+      "group": 0,
+      "exclude": 0,
+      "unshipped": 0
+    },
+    "completenessGate": "pass"
+  },
+  "releaseItems": [
+    {
+      "id": "queue-linked-mcp-results",
+      "sourceCount": 1
+    }
+  ],
+  "sources": [
+    {
+      "id": "pr-186",
+      "kind": "pull_request",
+      "prNumber": 186,
+      "title": "Show chosen-AI results in Queue handoffs",
+      "commits": ["147cff46eaf971b3629d5b9e625e668c3a2d2b0b"],
+      "firstSeenAt": "2026-08-13T22:09:23-06:00",
+      "lastSeenAt": "2026-08-13T22:09:23-06:00",
+      "disposition": "include",
+      "releaseItemId": "queue-linked-mcp-results"
+    }
+  ]
+}
