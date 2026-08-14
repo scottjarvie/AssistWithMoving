@@ -155,6 +155,7 @@ function waitingReasonLabel(reason: string | null) {
 function activityTypeLabel(type: string) {
   return type
     .replaceAll("_", " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
@@ -296,6 +297,7 @@ function QueueDetailSheet({
   onCancel,
   busy,
   captureWorkspacePath,
+  savedWorkPath,
   onClose,
 }: {
   item: QueueDeskItem | null;
@@ -309,6 +311,7 @@ function QueueDetailSheet({
   onCancel: () => void;
   busy: boolean;
   captureWorkspacePath: string | null;
+  savedWorkPath: string | null;
   onClose: () => void;
 }) {
   if (!item) return null;
@@ -419,6 +422,39 @@ function QueueDetailSheet({
             </section>
           ) : null}
 
+          {item.state !== "done" &&
+          (item.resultSummary || item.resultRefs.length) ? (
+            <section className="rounded-xl border border-primary/25 bg-primary/[0.045] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                Linked move work
+              </p>
+              <p className="mt-2 leading-6">
+                {item.resultSummary ?? "Your AI saved move work for this handoff."}
+              </p>
+              {item.resultRefs.length ? (
+                <ul className="mt-3 space-y-2">
+                  {item.resultRefs.map((ref, index) => (
+                    <li
+                      key={`${ref.type ?? "result"}:${ref.id ?? index}`}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <PackageOpen className="size-4 text-primary" aria-hidden="true" />
+                      {ref.label ?? ref.type ?? "Move record"}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {savedWorkPath ? (
+                <Button asChild variant="outline" size="sm" className="mt-4">
+                  <Link href={savedWorkPath}>Open saved work</Link>
+                </Button>
+              ) : null}
+              <p className="mt-3 text-xs text-muted-foreground">
+                This link records useful work without claiming or completing the handoff.
+              </p>
+            </section>
+          ) : null}
+
           {item.failure ? (
             <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
               <p className="font-medium text-destructive">Work did not finish cleanly</p>
@@ -523,6 +559,7 @@ export function QueueDesk({
   onProvideInput,
   onCancel,
   captureWorkspacePath,
+  savedWorkPath,
 }: {
   items: QueueDeskItem[];
   selectedState?: QueueState;
@@ -547,6 +584,7 @@ export function QueueDesk({
   onProvideInput: (item: QueueDeskItem, response: string) => Promise<boolean>;
   onCancel: (item: QueueDeskItem) => Promise<boolean>;
   captureWorkspacePath: string | null;
+  savedWorkPath: string | null;
 }) {
   const [internalActiveState, setInternalActiveState] =
     useState<QueueState>("needsYou");
@@ -773,6 +811,7 @@ export function QueueDesk({
         onCancel={cancel}
         busy={busy}
         captureWorkspacePath={captureWorkspacePath}
+        savedWorkPath={savedWorkPath}
         onClose={() => {
           setResponse("");
           setSelectedItemKey(null);

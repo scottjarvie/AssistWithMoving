@@ -47,6 +47,7 @@ async function getQueueReference<
     | "items"
     | "boxes"
     | "moveSpaces"
+    | "movePlanningRecords"
     | "floorPlans"
     | "planProposals"
     | "ingestionQueueEntries"
@@ -94,6 +95,9 @@ async function validateQueueResultRefs(
         break;
       case "space":
         record = await getQueueReference(ctx, "moveSpaces", id);
+        break;
+      case "planningRecord":
+        record = await getQueueReference(ctx, "movePlanningRecords", id);
         break;
       case "floorPlan":
         record = await getQueueReference(ctx, "floorPlans", id);
@@ -778,6 +782,60 @@ export async function completeQueueItem(
     toState: "done",
     message: resultSummary ?? "Completed with attached result references.",
     resultRefCount: resultRefs?.length ?? 0,
+    idempotencyKey: input.idempotencyKey,
+  });
+  return (await ctx.db.get(item._id))!;
+}
+
+/**
+ * Attach durable move work to a handoff without claiming or completing it.
+ * Canonical OAuth MCP uses this narrow path because its grant can save move
+ * work but deliberately cannot perform Queue state transitions.
+ */
+export async function linkQueueResultWithoutTransition(
+  ctx: MutationCtx,
+  actor: QueueAccessActor,
+  input: {
+    householdId: Id<"households">;
+    moveId: Id<"moves">;
+    queueItemId: Id<"queueItems">;
+    resultSummary: string;
+    resultRef: QueueResultRef;
+    idempotencyKey: string;
+  },
+) {
+  const item = await requireQueueItem(ctx, input);
+  requireQueueItemAction(actor, item);
+  if (await findActivityReplay(ctx, item._id, input.idempotencyKey)) return item;
+  const resultSummary = normalizeQueueText(
+    input.resultSummary,
+    "resultSummary",
+    4000,
+  );
+  if (!resultSummary) throw new ConvexError("A linked result summary is required.");
+  const [resultRef] =
+    (await validateQueueResultRefs(ctx, item, [input.resultRef])) ?? [];
+  if (!resultRef) throw new ConvexError("A linked result reference is required.");
+  const resultRefs = [
+    ...(item.resultRefs ?? []).filter(
+      (existing) =>
+        existing.type !== resultRef.type || existing.id !== resultRef.id,
+    ),
+    resultRef,
+  ].slice(-50);
+  const now = Date.now();
+  await ctx.db.patch(item._id, {
+    resultSummary,
+    resultRefs,
+    version: item.version + 1,
+    updatedAt: now,
+  });
+  await recordQueueActivity(ctx, item, actor, {
+    type: "resultLinked",
+    fromState: item.state,
+    toState: item.state,
+    message: resultSummary,
+    resultRefCount: 1,
     idempotencyKey: input.idempotencyKey,
   });
   return (await ctx.db.get(item._id))!;

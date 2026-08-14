@@ -194,12 +194,30 @@ async function seedMove() {
       createdAt: now,
       updatedAt: now,
     });
+    const queueItemId = await ctx.db.insert("queueItems", {
+      householdId,
+      moveId,
+      ownerUserId: userId,
+      createdByUserId: userId,
+      directive: "Save a source-backed packing result for review",
+      state: "waitingForAi",
+      priority: "normal",
+      contextKind: "move",
+      domainKind: "general",
+      waitingReason: "ready",
+      attemptCount: 0,
+      maxAttempts: 3,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
     return {
       userId,
       householdId,
       moveId,
       guestUserId,
       privatePhotoId,
+      queueItemId,
       foreignQueueItemId,
     };
   });
@@ -469,6 +487,7 @@ describe("stateless Moving MCP foundation", () => {
             checkedAt: Date.now(),
           },
         ],
+        relatedQueueItemId: String(fixture.queueItemId),
         reason: "Save the user's completed synthetic planning result.",
       };
       const callComplete = () =>
@@ -484,7 +503,11 @@ describe("stateless Moving MCP foundation", () => {
       expect(created.items).toHaveLength(1);
       expect(created.spaces).toHaveLength(2);
       expect(created.records).toHaveLength(2);
-      expect(created.queue).toBeNull();
+      expect(created.queue).toEqual({
+        queueItemId: fixture.queueItemId,
+        transition: "none",
+        note: expect.stringMatching(/did not claim or complete/i),
+      });
       expect(created.receipt.actor).toBe("Your AI via MCP");
 
       const replayEnvelope = (await (await callComplete()).json()) as any;
@@ -500,6 +523,38 @@ describe("stateless Moving MCP foundation", () => {
         operations: (await ctx.db.query("mcpOperations").collect()).length,
       }));
       expect(counts).toEqual({ items: 1, spaces: 2, planning: 3, operations: 1 });
+
+      const linkedQueue = await fixture.t.run(async (ctx) => ({
+        item: await ctx.db.get(fixture.queueItemId),
+        activities: await ctx.db
+          .query("queueActivities")
+          .withIndex("by_item_created", (q) =>
+            q.eq("queueItemId", fixture.queueItemId),
+          )
+          .collect(),
+      }));
+      expect(linkedQueue.item).toMatchObject({
+        state: "waitingForAi",
+        resultSummary: completeInput.summary,
+        resultRefs: [
+          {
+            type: "planningRecord",
+            id: created.result.planningRecordId,
+            label: completeInput.title,
+          },
+        ],
+        version: 2,
+      });
+      expect(linkedQueue.activities).toEqual([
+        expect.objectContaining({
+          type: "resultLinked",
+          actorType: "agent",
+          actorLabel: "Your AI via MCP",
+          fromState: "waitingForAi",
+          toState: "waitingForAi",
+          resultRefCount: 1,
+        }),
+      ]);
 
       const hiddenPhotos = await fixture.t.query(api.mcpToolsImages.mcpResolvePhotos, {
         caller: { subject: "user_moving_mcp_guest" },

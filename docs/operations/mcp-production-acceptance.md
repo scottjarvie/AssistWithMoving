@@ -47,12 +47,16 @@ and close the temporary tabs before continuing.
 2. Register a temporary OAuth client with a name beginning `E2E PROD Moving MCP
    acceptance`; use PKCE and the canonical resource
    `https://movingmanifest.com/mcp`.
-3. Prove the real workflow, not raw CRUD: list and read the move brief, search,
-   save a source-backed complete result, replay the same operation id, make one
-   optimistic granular correction, hydrate the saved records, and read the
-   updated brief.
-4. Open the normal move overview and verify **Saved work** shows the MCP result,
-   source checks, status, and `Your AI via MCP` provenance.
+3. Create one personal Queue handoff through the normal move UI. The MCP brief
+   must return that exact owner-scoped Queue ID and directive.
+4. Prove the real workflow, not raw CRUD: list and read the move brief, search,
+   save a source-backed complete result linked with `relatedQueueItemId`, replay
+   the same operation id, hydrate the saved records, and read the updated brief.
+5. Open the normal move overview and verify **Saved work** shows the MCP result,
+   source checks, status, and `Your AI via MCP` provenance. Open the Queue
+   handoff and verify **Linked move work** shows the same result plus attributable
+   activity while the state remains **Waiting for your AI**. Canonical OAuth did
+   not claim or complete Queue work.
 
 FMCSA sources are suitable for this removable scenario because they exercise
 real source URLs without introducing private data. Source checks must record
@@ -68,7 +72,8 @@ succeeded.
 3. Archive and then hard-purge the exact marked move through the normal Moving
    UI. Hard purge removes that move's inventory, spaces, planning records,
    source checks, MCP operation receipts, Queue rows/activities, and other
-   move-scoped fixtures.
+   move-scoped fixtures, including the personal handoff and linked-result
+   activity.
 4. Return to **Your moves** and verify the marker is absent. The retained test
    account must contain no Move, MCP, or Queue fixture after the run.
 

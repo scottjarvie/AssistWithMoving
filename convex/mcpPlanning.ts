@@ -14,6 +14,7 @@ import { requireMoveForSubject, requireUserBySubject } from "./lib/mcpIdentity";
 import { normalizedSearchName } from "./lib/moveFields";
 import { canViewPhotoAssets } from "./lib/photoVisibility";
 import { requireMovePermission } from "./lib/permissions";
+import { linkQueueResultWithoutTransition } from "./lib/queueService";
 import {
   estimateConfidence,
   itemCondition,
@@ -1605,6 +1606,30 @@ export const saveCompleteResult = internalMutation({
       confidence: args.confidence,
       relatedQueueItemId: args.relatedQueueItemId,
     });
+    if (args.relatedQueueItemId) {
+      await linkQueueResultWithoutTransition(
+        ctx,
+        {
+          userId: policy.user._id,
+          actorType: "agent",
+          label: "Your AI via MCP",
+          isManager: false,
+          delegatedOwnerIds: [],
+        },
+        {
+          householdId: move.householdId,
+          moveId: move._id,
+          queueItemId: args.relatedQueueItemId,
+          resultSummary: args.summary,
+          resultRef: {
+            type: "planningRecord",
+            id: umbrella.record.planningRecordId,
+            label: args.title,
+          },
+          idempotencyKey: `mcp:${args.principal.clientId}:${args.operationId}:result-linked`,
+        },
+      );
+    }
     const records = [];
     for (const input of args.decisions ?? []) {
       if (input.kind !== "decision") mcpError("VALIDATION_ERROR", "Every decisions entry must use kind decision.", "Correct the discriminated result array.");
