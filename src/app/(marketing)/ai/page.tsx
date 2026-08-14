@@ -21,23 +21,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
-  title: "Use Assist With Moving with an AI assistant",
+  title: "Use Assist With Moving with your chosen AI",
   description:
-    "A simple starting point for using Assist With Moving with Claude, ChatGPT, Codex, or another AI assistant.",
+    "Current setup, capability, Queue, and access boundaries for using Assist With Moving with a compatible AI.",
 };
 
 const starterPrompt =
-  "Go to movingmanifest.com/ai and help me plan my move. Connect to https://movingmanifest.com/mcp with OAuth when available, call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result. Use a fallback helper key only when OAuth is unavailable or I ask for an API-key-only workflow.";
+  "Open https://movingmanifest.com/ai and help me use Assist With Moving. If you support remote MCP with OAuth, connect to https://movingmanifest.com/mcp, call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result. Do not claim or complete Queue items through this OAuth connection; those actions use a separately scoped API-key tool today.";
 
 const quickCapabilities = [
   {
     title: "Use evidence with inventory",
-    copy: "Your connected assistant can inspect existing private move photos, create inventory records, preserve source notes, and mark uncertain dimensions or weights for review.",
+    copy: "The canonical OAuth tools can read bounded private evidence, create or correct inventory records, preserve source notes, and mark uncertainty for review.",
     icon: Camera,
   },
   {
-    title: "Set up the move",
-    copy: "It can create rooms, destination spaces, trucks, trailers, storage, and moving-company shipment areas.",
+    title: "Keep move context current",
+    copy: "Your AI can read a compact move brief, search before creating duplicates, and add or correct core move, place, inventory, and transport context.",
     icon: Truck,
   },
   {
@@ -46,17 +46,17 @@ const quickCapabilities = [
     icon: ClipboardList,
   },
   {
-    title: "Use structured tools",
-    copy: "With hosted MCP OAuth or a key you create, it can use structured tools instead of asking you to click every field.",
+    title: "Choose the right connection",
+    copy: "Hosted MCP OAuth covers the normal move-planning loop. A separately scoped helper key provides the granular REST/stdio catalog and today’s Queue claim and completion tools.",
     icon: Bot,
   },
 ];
 
 const setupSteps = [
-  "Tell your assistant to open this page.",
-  "Create or sign into your Assist With Moving account.",
-  "Use hosted MCP OAuth when your assistant supports it.",
-  "Create a fallback AI helper key only when OAuth is not available.",
+  "Create your private move and keep only the context that is useful now.",
+  "Leave a Queue handoff in your own words when work should survive the chat.",
+  "Connect hosted MCP OAuth from an AI that supports remote MCP and OAuth.",
+  "Ask it to save finished work, then review the result inside the move.",
 ];
 
 const examplePrompts = [
@@ -69,17 +69,36 @@ const examplePrompts = [
 
 const safetyRules = [
   "Public pages are safe for your assistant to read.",
-  "Private move data requires your account or a key you create.",
+  "Private move data requires your signed-in OAuth connection or a scoped key you create.",
   "A key is like a temporary password. Only paste it into an assistant you trust.",
   "You can revoke or rotate keys later in Settings.",
+  "A Queue note records intent. It does not start an AI or expand that AI’s access.",
+];
+
+const connectionTruth = [
+  {
+    status: "Current",
+    title: "Hosted MCP OAuth",
+    copy: "Eight workflow tools can brief, search, read bounded records and evidence, create or correct core move records, and save a complete source-backed result in one call.",
+  },
+  {
+    status: "Current",
+    title: "Scoped helper key",
+    copy: "The separate API-key HTTP/stdio catalog provides granular automation and the Queue claim and completion tools. Create a key only for an AI you trust, then revoke it when it is no longer needed.",
+  },
+  {
+    status: "Partial",
+    title: "Queue through hosted OAuth",
+    copy: "OAuth can read bounded Queue summaries and link saved work to a handoff. It cannot claim or complete Queue work yet, and saving a handoff never means an AI is already running.",
+  },
 ];
 
 export default function AiAssistantPage() {
   return (
     <PublicPageChrome
       eyebrow="AI assistant ready"
-      title="Let your AI help with the move."
-      description="Assist With Moving gives your assistant a structured place to save rooms, photos, inventory, boxes, vehicles, sale prep, layouts, and packets. You stay in control of the account and the key."
+      title="Give your chosen AI the right move context."
+      description="Assist With Moving keeps the durable move record. A compatible AI can reason in its own environment, use bounded tools, and save useful work back to the move. You remain the authority."
       primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
       secondaryAction={{
         href: "/llms.txt",
@@ -93,22 +112,22 @@ export default function AiAssistantPage() {
           <div>
             <Badge variant="secondary">First step</Badge>
             <h2 className="mt-4 text-2xl font-semibold tracking-normal">
-              If an AI sent you here, start with the setup page.
+              Start with the move, not the connection.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The setup page keeps the human part short: sign in, connect with
-              hosted MCP OAuth when available, or create a fallback key for
-              local/headless tools. The assistant can read the deeper docs when
-              it needs them.
+              Create a private move and leave a Queue handoff first. Then use
+              hosted MCP OAuth from a compatible AI, or create a scoped helper
+              key only for clients and Queue workflows that need the separate
+              API-key catalog.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button asChild>
+              <Button asChild size="touch">
                 <Link href="/ai/start">
                   Start AI setup
                   <ArrowRight aria-hidden="true" />
                 </Link>
               </Button>
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" size="touch">
                 <a href="/llms.txt">AI-readable guide</a>
               </Button>
             </div>
@@ -116,7 +135,7 @@ export default function AiAssistantPage() {
           <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <MessageSquareText className="size-4 text-primary" aria-hidden="true" />
-              Paste this into Claude, ChatGPT, Codex, or another assistant
+              Paste this into a compatible AI
             </div>
             <blockquote className="mt-3 border-l-2 border-primary pl-3 text-sm leading-6">
               {starterPrompt}
@@ -142,11 +161,42 @@ export default function AiAssistantPage() {
       </PublicBand>
 
       <PublicBand>
+        <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
+          <div>
+            <Badge variant="secondary">Connection truth</Badge>
+            <h2 className="mt-4 text-2xl font-semibold tracking-normal">
+              Current and Partial are different.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Assist With Moving has distinct connection doors. Use the one
+              that matches the work instead of assuming every tool appears in
+              every AI client.
+            </p>
+          </div>
+          <div className="grid gap-3">
+            {connectionTruth.map((item) => (
+              <article key={item.title} className="rounded-md border border-border p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={item.status === "Current" ? "default" : "outline"}>
+                    {item.status}
+                  </Badge>
+                  <h3 className="font-semibold">{item.title}</h3>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {item.copy}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </PublicBand>
+
+      <PublicBand>
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <Badge variant="secondary">What happens next</Badge>
             <h2 className="mt-4 text-2xl font-semibold tracking-normal">
-              Four short steps.
+              One durable loop.
             </h2>
           </div>
           <ol className="grid gap-3 sm:grid-cols-2">
@@ -211,7 +261,7 @@ function ExpandableSection({
 }) {
   return (
     <details className="rounded-md border border-border p-4 text-sm leading-6 text-muted-foreground open:bg-muted/25">
-      <summary className="cursor-pointer text-base font-medium text-foreground">
+      <summary className="flex min-h-11 cursor-pointer items-center text-base font-medium text-foreground">
         {title}
       </summary>
       <div className="mt-3">{children}</div>
@@ -229,7 +279,7 @@ function DocLink({
   navigation?: PublicNavigationMode;
 }) {
   const className =
-    "inline-flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted/40";
+    "inline-flex min-h-11 items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted/40";
   const content = (
     <>
       {title}
@@ -260,7 +310,7 @@ function AssistantVisual() {
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
             Human part
           </p>
-          <p className="mt-1 text-lg font-semibold">Connect the assistant</p>
+          <p className="mt-1 text-lg font-semibold">Connect a compatible AI</p>
         </div>
         <Badge>
           <KeyRound aria-hidden="true" />
@@ -269,10 +319,10 @@ function AssistantVisual() {
       </div>
       <div className="mt-4 space-y-3">
         {[
-          ["1", "Sign in or create an account."],
-          ["2", "Connect hosted MCP with OAuth when available."],
-          ["3", "Create a fallback key only when needed."],
-          ["4", "Return to the AI chat."],
+          ["1", "Create a private move."],
+          ["2", "Leave a durable Queue handoff."],
+          ["3", "Connect hosted MCP OAuth when supported."],
+          ["4", "Review saved work inside the move."],
         ].map(([step, copy]) => (
           <div
             key={step}
@@ -291,11 +341,11 @@ function AssistantVisual() {
           You stay in control
         </span>
         <p className="mt-2 text-muted-foreground">
-          Your assistant only gets the access you choose, and you can revoke the
-          connection or key later.
+          Authentication ties calls to your account, tools enforce bounded
+          reads and writes, and you can revoke the connection or key later.
         </p>
       </div>
-      <Button asChild className="mt-4 w-full">
+      <Button asChild size="touch" className="mt-4 w-full">
         <Link href="/ai/start">
           Start AI setup
           <Sparkles aria-hidden="true" />

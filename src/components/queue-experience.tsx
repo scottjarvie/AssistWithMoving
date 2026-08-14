@@ -198,7 +198,7 @@ function QueueConnectionNote({
           </p>
         </div>
       </div>
-      <Button asChild variant="outline" size="sm" className="self-start sm:self-center">
+      <Button asChild variant="outline" size="touch" className="self-start sm:self-center">
         <Link href="/settings/ai-connections">Manage AI access</Link>
       </Button>
     </div>
@@ -678,6 +678,7 @@ export function QueueDesk({
             <Button
               onClick={createDirective}
               disabled={!canCreateDirective || busy || !directive.trim()}
+              size="touch"
               className="w-full"
             >
               {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ClipboardList aria-hidden="true" />}

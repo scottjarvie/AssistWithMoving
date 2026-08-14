@@ -30,7 +30,7 @@ export function PublicMobileNav({
       <SheetTrigger asChild>
         <Button
           variant="outline"
-          size="icon-sm"
+          size="icon-touch"
           aria-label="Open navigation menu"
           aria-expanded={open}
         >
@@ -47,7 +47,7 @@ export function PublicMobileNav({
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
-              className="rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              className="flex min-h-11 items-center rounded-md px-2 py-2 text-sm font-medium text-foreground hover:bg-muted"
             >
               {item.label}
             </Link>
@@ -58,20 +58,20 @@ export function PublicMobileNav({
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
-              className="rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex min-h-11 items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               {item.label}
             </Link>
           ))}
         </nav>
         <div className="mt-auto flex flex-col gap-2 px-4 pb-4">
-          <Button asChild>
+          <Button asChild size="touch">
             <Link href="/sign-in" onClick={() => setOpen(false)}>
               Sign in
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" size="touch">
             <Link href="/sign-up" onClick={() => setOpen(false)}>
               Create account
             </Link>

@@ -36,6 +36,10 @@ export default function SignInPage() {
                   card: { width: "100%", maxWidth: "100%" },
                   headerTitle: { display: "none" },
                   headerSubtitle: { display: "none" },
+                  formButtonPrimary: "min-h-11",
+                  socialButtonsBlockButton: "min-h-11",
+                  formFieldInput: "min-h-11",
+                  footerActionLink: "inline-flex min-h-11 items-center",
                 },
               }}
             />
@@ -53,7 +57,7 @@ export default function SignInPage() {
                 enable authentication.
               </p>
             </div>
-            <Button asChild className="mt-6 w-full">
+            <Button asChild size="touch" className="mt-6 w-full">
               <Link href="/">Return home</Link>
             </Button>
           </>

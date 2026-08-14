@@ -8,7 +8,6 @@ import {
 } from "@/components/public-page-chrome";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { product } from "@/lib/product";
 
 const starterPrompt =
   "Open movingmanifest.com/ai and help me set up Assist With Moving. Start with my move context, places, decisions, and what needs attention. Connect to movingmanifest.com/mcp with OAuth, call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.";
@@ -48,8 +47,8 @@ export default function MarketingPage() {
       <section className="border-b border-border">
         <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.8fr)] lg:px-8 lg:py-16">
           <div className="max-w-2xl">
-            <Badge variant="secondary" className="mb-5">
-              Assist With Moving · currently hosted at {product.domain}
+            <Badge variant="secondary" className="mb-5 max-w-full whitespace-normal leading-5">
+              Assist With Moving · active development
             </Badge>
             <h1 className="text-5xl font-semibold leading-[0.95] tracking-tight text-balance sm:text-6xl lg:text-7xl">
               Keep the whole move coherent.
@@ -60,13 +59,13 @@ export default function MarketingPage() {
               Start simply, then add detail only when the move needs it.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg">
+              <Button asChild size="touch">
                 <Link href="/ai">
                   Set up your chosen AI
                   <ArrowRight aria-hidden="true" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg">
+              <Button asChild variant="outline" size="touch">
                 <Link href="/sign-up">Create account</Link>
               </Button>
             </div>
@@ -83,7 +82,7 @@ export default function MarketingPage() {
               </blockquote>
               <Link
                 href="/ai"
-                className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary"
+                className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
               >
                 Open the assistant guide
                 <ArrowRight className="size-4" aria-hidden="true" />

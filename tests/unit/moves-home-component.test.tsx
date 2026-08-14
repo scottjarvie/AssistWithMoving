@@ -17,6 +17,7 @@ const apiMock = vi.hoisted(() => ({
 const movesHomeData = vi.hoisted(() => ({
   createHousehold: vi.fn(),
   createMove: vi.fn(),
+  push: vi.fn(),
   selectHousehold: vi.fn(),
   selectMove: vi.fn(),
   workspace: {
@@ -44,7 +45,7 @@ vi.mock("convex/react", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: movesHomeData.push }),
 }));
 
 vi.mock("@/components/move-workspace-context", () => ({
@@ -73,6 +74,8 @@ describe("MovesHome", () => {
       "household_new" as Id<"households">,
     );
     movesHomeData.createMove.mockReset();
+    movesHomeData.createMove.mockResolvedValue("move_new" as Id<"moves">);
+    movesHomeData.push.mockReset();
     movesHomeData.selectHousehold.mockReset();
     movesHomeData.selectMove.mockReset();
     movesHomeData.workspace.householdId = null;
@@ -85,24 +88,35 @@ describe("MovesHome", () => {
     movesHomeData.workspace.loadingParticipantMoves = false;
   });
 
-  it("submits the one-field household form with Enter", async () => {
+  it("creates the private workspace and first move from one short form", async () => {
     const user = userEvent.setup();
 
     render(<MovesHome />);
 
-    const input = screen.getByLabelText("Household name");
-    await user.clear(input);
-    await user.type(input, "Jarvie home{Enter}");
+    const title = screen.getByLabelText("Move name");
+    await user.clear(title);
+    await user.type(title, "Codex first move");
+    await user.type(screen.getByLabelText("Moving from (optional)"), "Phoenix");
+    await user.type(screen.getByLabelText("Moving to (optional)"), "Tucson");
+    await user.click(screen.getByRole("button", { name: "Create private move" }));
 
     await waitFor(() => {
       expect(movesHomeData.createHousehold).toHaveBeenCalledWith({
-        name: "Jarvie home",
+        name: "My moving workspace",
       });
     });
+    expect(movesHomeData.createMove).toHaveBeenCalledWith({
+      householdId: "household_new",
+      title: "Codex first move",
+      type: "local",
+      origin: "Phoenix",
+      destination: "Tucson",
+      unitSystem: "imperial",
+    });
     expect(movesHomeData.selectHousehold).toHaveBeenCalledWith("household_new");
-    expect(
-      screen.getByRole("button", { name: /Create household/ }),
-    ).toHaveAttribute("type", "submit");
+    expect(movesHomeData.selectMove).toHaveBeenCalledWith("move_new");
+    expect(movesHomeData.push).toHaveBeenCalledWith("/app/moves/move_new");
+    expect(screen.getByText(/Nothing is shared when you create it/)).toBeVisible();
   });
 
   it("keeps move-card controls above the link overlay without nesting buttons in the link", () => {
