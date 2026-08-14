@@ -167,7 +167,7 @@ export default function FaqPage() {
                 key={faq.question}
                 className="group rounded-md border border-border p-4 open:bg-muted/25"
               >
-                <summary className="flex cursor-pointer items-start gap-3 text-base font-medium text-foreground">
+                <summary className="flex min-h-11 cursor-pointer items-start gap-3 py-2 text-base font-medium text-foreground">
                   <HelpCircle
                     className="mt-0.5 size-5 shrink-0 text-primary"
                     aria-hidden="true"
@@ -197,21 +197,21 @@ export default function FaqPage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               href="/features"
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
             >
               Features
               <ArrowRight className="size-4 text-primary" aria-hidden="true" />
             </Link>
             <Link
               href="/privacy"
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
             >
               Privacy
               <ArrowRight className="size-4 text-primary" aria-hidden="true" />
             </Link>
             <Link
               href="/ai"
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
             >
               AI assistants
               <ArrowRight className="size-4 text-primary" aria-hidden="true" />

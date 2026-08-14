@@ -93,7 +93,7 @@ export function PublicPageChrome({
               {description}
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg">
+              <Button asChild size="touch">
                 {resolvedPrimaryAction.navigation === "document" ? (
                   <a href={resolvedPrimaryAction.href}>
                     {resolvedPrimaryAction.label}
@@ -106,7 +106,7 @@ export function PublicPageChrome({
                   </Link>
                 )}
               </Button>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="touch" variant="outline">
                 {resolvedSecondaryAction.navigation === "document" ? (
                   <a href={resolvedSecondaryAction.href}>
                     {resolvedSecondaryAction.label}
@@ -136,7 +136,7 @@ export function PublicHeader() {
         {publicNavPrimary.map((item) => (
           <Link
             key={item.href}
-            className="text-sm text-muted-foreground hover:text-foreground"
+            className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:text-foreground"
             href={item.href}
           >
             {item.label}
@@ -144,7 +144,7 @@ export function PublicHeader() {
         ))}
       </nav>
       <div className="flex items-center gap-2">
-        <Button asChild size="sm" className="hidden lg:inline-flex">
+        <Button asChild size="touch" className="hidden lg:inline-flex">
           <Link href="/sign-in">
             Sign in
             <ArrowRight aria-hidden="true" />

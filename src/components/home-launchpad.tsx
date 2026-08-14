@@ -39,7 +39,10 @@ const destinationMeta: Record<
     icon: Warehouse,
     description: "Organize what's in each space and transport.",
   },
-  queue: { icon: Inbox, description: "Review intake waiting for you." },
+  queue: {
+    icon: Inbox,
+    description: "Leave and resume durable handoffs with your chosen AI.",
+  },
 };
 
 export function HomeLaunchpad() {
@@ -102,8 +105,8 @@ export function HomeLaunchpad() {
             <div>
               <p className="text-base font-semibold">Create your first move</p>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Begin with the route and timing. Add rooms, belongings,
-                evidence, and planning detail when you need them.
+                Begin privately with a name and whatever you know about the
+                route. Add detail only when it helps.
               </p>
             </div>
           </div>
@@ -156,21 +159,21 @@ export function HomeLaunchpad() {
                 Set up your chosen AI
               </h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Connect Claude, ChatGPT, Codex, or another capable AI through
-                hosted OAuth so it can read the right move context and save
-                decisions, estimates, plans, inventory, and source checks. You
-                stay in control and can revoke access.
+                Connect a compatible AI through hosted MCP OAuth so it can read
+                bounded move context and save decisions, estimates, plans,
+                inventory, and source checks. Queue claiming uses the separate
+                scoped API-key tools today. You can revoke either connection.
               </p>
             </div>
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-            <Button asChild>
+            <Button asChild size="touch">
               <Link href="/settings/ai-connections">
                 Connect your AI
                 <Sparkles aria-hidden="true" />
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" size="touch">
               <Link href="/ai">See what it can do</Link>
             </Button>
           </div>

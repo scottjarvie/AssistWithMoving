@@ -137,13 +137,13 @@ export default function McpPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild>
+            <Button asChild size="touch">
               <Link href="/settings/ai-connections">
                 Open AI connections
                 <ArrowRight aria-hidden="true" />
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" size="touch">
               <Link href="/ai/start">Start setup</Link>
             </Button>
           </div>
@@ -344,6 +344,7 @@ function SnippetBlock({
           text={text}
           label={buttonLabel}
           ariaLabel={`Copy ${title}`}
+          className="min-h-11"
         />
       </div>
       <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted/35 p-3 font-mono text-xs leading-5 text-muted-foreground">
@@ -394,7 +395,7 @@ function McpVisual() {
       </div>
       <Link
         href="/api"
-        className="mt-4 inline-flex items-center gap-2 text-sm text-primary"
+        className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm text-primary"
       >
         REST API fallback
         <ArrowRight className="size-4" aria-hidden="true" />

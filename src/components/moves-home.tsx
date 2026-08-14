@@ -62,7 +62,6 @@ import { cn } from "@/lib/utils";
 
 const DEFAULT_MOVE_TYPE: MoveType = "local";
 type HomeMove = MoveWorkspaceValue["activeMoves"][number];
-type CreateMoveTask = "basics" | "pcs" | "packets";
 type MoveStatusFilter = "all" | "planning" | "active" | "completed";
 type MoveSort = "updated" | "name";
 
@@ -70,12 +69,6 @@ const moveTitleCollator = new Intl.Collator("en", {
   numeric: true,
   sensitivity: "base",
 });
-
-const createMoveTasks: Array<{ value: CreateMoveTask; label: string }> = [
-  { value: "basics", label: "Basics" },
-  { value: "pcs", label: "PCS details" },
-  { value: "packets", label: "Packets" },
-];
 
 // Plain-language status copy. The lifecycle enum stays planning -> active ->
 // completed (see MOVE-306); this only controls how each status reads on a card.
@@ -302,7 +295,7 @@ export function MovesHome() {
       ) : null}
 
       {needsHousehold ? (
-        <HouseholdSetupCard />
+        <FirstMoveSetupCard />
       ) : loadingMoves ? (
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           <Skeleton className="h-44 rounded-md" />
@@ -345,18 +338,19 @@ export function MovesHome() {
         )
       ) : (
         <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
-          <p>
-            Create your first move to unlock resources, zones, inventory, AI
-            planning, and documentation packets.
+          <p className="font-medium text-foreground">Start with one private move.</p>
+          <p className="mt-1 max-w-2xl leading-6">
+            A name and whatever you know about the route are enough. Rooms,
+            belongings, people, evidence, and advanced planning can wait.
           </p>
           <Button
             type="button"
-            size="sm"
+            size="touch"
             className="mt-3"
             onClick={() => setCreateOpen(true)}
           >
             <Plus aria-hidden="true" />
-            New move
+            Create your first move
           </Button>
         </div>
       )}
@@ -493,33 +487,57 @@ function MoveIdTooltip({ moveId }: { moveId: Id<"moves"> }) {
   );
 }
 
-// The very first setup step that must survive outside a move: creating the
-// household permission boundary that moves, inventory, and packets belong to.
-function HouseholdSetupCard() {
-  const { selectHousehold } = useMoveWorkspace();
+// A first-time person should not need to understand the internal household
+// boundary before the move exists. This creates that private boundary and the
+// first move in one short product flow, then lands in the durable move.
+function FirstMoveSetupCard() {
+  const router = useRouter();
+  const { selectHousehold, selectMove } = useMoveWorkspace();
   const createHousehold = useMutation(api.households.create);
-  const [householdName, setHouseholdName] = useState("My household");
+  const createMove = useMutation(api.moves.create);
+  const [moveTitle, setMoveTitle] = useState("My move");
+  const [origin, setOrigin] = useState("");
+  const [destination, setDestination] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function handleCreateHousehold(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateFirstMove(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextHouseholdName = householdName.trim();
-    if (!nextHouseholdName) {
+    const nextMoveTitle = moveTitle.trim();
+    if (!nextMoveTitle) {
       return;
     }
 
     setSaving(true);
     setMessage(null);
     try {
-      const id = await createHousehold({ name: nextHouseholdName });
-      selectHousehold(id);
-      setMessage("Household created. You can now create your first move.");
+      const householdId = await createHousehold({ name: "My moving workspace" });
+      try {
+        const moveId = await createMove({
+          householdId,
+          title: nextMoveTitle,
+          type: DEFAULT_MOVE_TYPE,
+          origin: origin.trim() || undefined,
+          destination: destination.trim() || undefined,
+          unitSystem: "imperial",
+        });
+        selectHousehold(householdId);
+        selectMove(moveId);
+        router.push(moveWorkspacePath(moveId));
+      } catch (error) {
+        setMessage(
+          describeMutationError(
+            error,
+            "Your private workspace was created, but the move was not. Try again from New move.",
+          ),
+        );
+        selectHousehold(householdId);
+      }
     } catch (error) {
       setMessage(
         describeMutationError(
           error,
-          "Couldn't create the household. Check the name and try again.",
+          "Couldn't start the private workspace. Check the move name and try again.",
         ),
       );
     } finally {
@@ -528,28 +546,65 @@ function HouseholdSetupCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Home className="size-4 text-primary" aria-hidden="true" />
-          Create your household
-        </CardTitle>
-        <CardDescription>
-          Start here. The household is the permission boundary that moves,
-          inventory, and packets belong to.
-        </CardDescription>
+    <Card className="overflow-hidden border-primary/30 bg-[linear-gradient(135deg,color-mix(in_oklch,var(--primary),transparent_94%),transparent_62%)]">
+      <CardHeader className="border-b border-border/70">
+        <div className="flex items-start gap-3">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10 text-primary">
+            <Home className="size-5" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+              Private first step
+            </p>
+            <CardTitle className="mt-1 text-xl">Start your move</CardTitle>
+            <CardDescription className="mt-2 max-w-2xl leading-6">
+              Give the move a name and add any route details you already know.
+              Nothing is shared when you create it; you can invite people or
+              connect your chosen AI later.
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
-        <form className="space-y-3" onSubmit={handleCreateHousehold}>
-          <Input
-            value={householdName}
-            onChange={(event) => setHouseholdName(event.target.value)}
-            placeholder="Household name"
-            aria-label="Household name"
-          />
-          <Button type="submit" size="sm" disabled={saving || !householdName.trim()}>
+      <CardContent className="pt-5">
+        <form className="space-y-4" onSubmit={handleCreateFirstMove}>
+          <label className="grid gap-1.5 text-sm font-medium">
+            Move name
+            <Input
+              value={moveTitle}
+              onChange={(event) => setMoveTitle(event.target.value)}
+              className="h-11"
+              placeholder="My move"
+              autoFocus
+              required
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-sm font-medium">
+              Moving from <span className="sr-only">(optional)</span>
+              <Input
+                value={origin}
+                onChange={(event) => setOrigin(event.target.value)}
+                className="h-11"
+                placeholder="City, neighborhood, or home"
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              Moving to <span className="sr-only">(optional)</span>
+              <Input
+                value={destination}
+                onChange={(event) => setDestination(event.target.value)}
+                className="h-11"
+                placeholder="Known destination or area"
+              />
+            </label>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            Route fields are optional. Start now and fill in dates, rooms,
+            belongings, transport, or evidence only when they help.
+          </p>
+          <Button type="submit" size="touch" disabled={saving || !moveTitle.trim()}>
             <Plus aria-hidden="true" />
-            Create household
+            {saving ? "Starting your move…" : "Create private move"}
           </Button>
           {message ? (
             <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
@@ -575,7 +630,6 @@ function CreateMoveSheet({
   const { householdId, moveLinkMessage, selectMove } = useMoveWorkspace();
   const createMove = useMutation(api.moves.create);
 
-  const [activeTask, setActiveTask] = useState<CreateMoveTask>("basics");
   const [moveTitle, setMoveTitle] = useState("");
   const [moveType, setMoveType] = useState<MoveType>(DEFAULT_MOVE_TYPE);
   const [documentationProfileTypes, setDocumentationProfileTypes] = useState<
@@ -670,22 +724,20 @@ function CreateMoveSheet({
         <SheetHeader>
           <SheetTitle>New move</SheetTitle>
           <SheetDescription>
-            Choose the workflow and recipient packet defaults up front.
+            A name and route are enough. Templates and packet defaults are
+            optional and can change later.
           </SheetDescription>
         </SheetHeader>
         <form className="space-y-3 px-4 pb-4" onSubmit={handleCreateMove}>
           <Tabs
-            value={activeTask}
-            onValueChange={(value) => setActiveTask(value as CreateMoveTask)}
+            defaultValue="basics"
             className="gap-4"
           >
             <div className="overflow-x-auto pb-1">
               <TabsList className="min-w-max" aria-label="Create move sections">
-                {createMoveTasks.map((task) => (
-                  <TabsTrigger key={task.value} value={task.value}>
-                    {task.label}
-                  </TabsTrigger>
-                ))}
+                <TabsTrigger value="basics" className="min-h-11">Start</TabsTrigger>
+                <TabsTrigger value="pcs" className="min-h-11">Optional PCS</TabsTrigger>
+                <TabsTrigger value="packets" className="min-h-11">Optional packets</TabsTrigger>
               </TabsList>
             </div>
 
@@ -696,9 +748,10 @@ function CreateMoveSheet({
                 placeholder="Move title"
                 aria-label="Move title"
                 disabled={!householdId}
+                className="h-11"
               />
               <select
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                 value={moveType}
                 aria-label="Move template"
                 onChange={(event) => {
@@ -727,6 +780,7 @@ function CreateMoveSheet({
                   placeholder="Origin"
                   aria-label="Move origin"
                   disabled={!householdId}
+                  className="h-11"
                 />
                 <Input
                   value={destination}
@@ -734,6 +788,7 @@ function CreateMoveSheet({
                   placeholder="Destination"
                   aria-label="Move destination"
                   disabled={!householdId}
+                  className="h-11"
                 />
               </div>
             </TabsContent>
@@ -913,7 +968,7 @@ function CreateMoveSheet({
           </Tabs>
           <Button
             type="submit"
-            size="sm"
+            size="touch"
             disabled={
               !householdId ||
               !moveTitle.trim() ||
@@ -922,7 +977,7 @@ function CreateMoveSheet({
             }
           >
             <Plus aria-hidden="true" />
-            Create move
+            Create private move
           </Button>
           {statusMessage ? (
             <p

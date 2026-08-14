@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 
 export default function Error({
@@ -19,12 +21,18 @@ export default function Error({
           Something went wrong
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          The app hit an unexpected state. Retry once; if it repeats, the error
-          belongs in Linear with the route and browser details.
+          Your move records are unchanged. Retry once; if it repeats, share the
+          short code above when you ask for help.
         </p>
-        <Button className="mt-6" onClick={reset}>
-          Retry
-        </Button>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <Button size="touch" onClick={reset}>Retry</Button>
+          <Button asChild size="touch" variant="outline">
+            <Link href="/app/moves">Back to moves</Link>
+          </Button>
+          <Button asChild size="touch" variant="ghost">
+            <Link href="/faq">Get help</Link>
+          </Button>
+        </div>
       </div>
     </main>
   );

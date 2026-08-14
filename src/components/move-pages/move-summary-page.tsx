@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
+import { FirstMoveJourney } from "@/components/first-move-journey";
 import { MoveOperationsNav } from "@/components/move-operations-nav";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
@@ -206,6 +207,10 @@ export function MoveSummaryPage() {
       />
 
       <MoveOperationsNav />
+
+      {moveId && selectedMove ? (
+        <FirstMoveJourney moveId={moveId} hasRoute={Boolean(routeValue)} />
+      ) : null}
 
       {moveId ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/40 p-3">
