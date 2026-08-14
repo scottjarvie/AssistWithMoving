@@ -87,6 +87,7 @@ function renderDesk(
     onProvideInput: vi.fn().mockResolvedValue(true),
     onCancel: vi.fn().mockResolvedValue(true),
     captureWorkspacePath: "/app/moves/move_1/capture",
+    savedWorkPath: "/app/moves/move_1/overview#planning-results",
     ...overrides,
   };
   return { ...render(<QueueDesk {...props} />), props };
@@ -147,6 +148,52 @@ describe("QueueDesk", () => {
       "Check the packing list for missing room labels.",
     );
     expect(screen.getByRole("heading", { name: "Waiting for your AI" })).toBeInTheDocument();
+  });
+
+  it("keeps a linked MCP result readable without inventing a Queue transition", async () => {
+    const user = userEvent.setup();
+    renderDesk({
+      items: [
+        queueItem("waitingForAi", {
+          resultSummary: "Three written estimates are ready for human review.",
+          resultRefs: [
+            {
+              type: "planningRecord",
+              id: "plan_result_1",
+              label: "Mover estimate readiness",
+            },
+          ],
+        }),
+      ],
+      selectedState: "waitingForAi",
+      activities: [
+        {
+          id: "activity_linked",
+          type: "resultLinked",
+          actorLabel: "Your AI via MCP",
+          fromState: "waitingForAi",
+          toState: "waitingForAi",
+          message: "Three written estimates are ready for human review.",
+          createdAt: 1_750_000_001_000,
+        },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: /waitingForAi route note/i }));
+
+    expect(screen.getByText("Linked move work")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Three written estimates are ready for human review."),
+    ).toHaveLength(2);
+    expect(screen.getByText("Mover estimate readiness")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open saved work" })).toHaveAttribute(
+      "href",
+      "/app/moves/move_1/overview#planning-results",
+    );
+    expect(screen.getAllByText("Waiting for your AI").length).toBeGreaterThan(0);
+    expect(screen.getByText("Result Linked")).toBeInTheDocument();
+    expect(screen.getByText(/Your AI via MCP · Waiting for your AI → Waiting for your AI/)).toBeInTheDocument();
+    expect(screen.queryByText("Recorded result")).not.toBeInTheDocument();
   });
 
   it("lets a person answer the exact question and inspect attributable activity", async () => {

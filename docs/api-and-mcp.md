@@ -1903,7 +1903,12 @@ Canonical OAuth tool catalog:
 Start with `get_move_brief`. Search before creating duplicates. For normal
 finished work, prefer `save_complete_result`; use granular saves for later
 corrections. This OAuth catalog may read Queue summaries and link a result for
-human inspection, but it does not claim or complete canonical Queue work.
+human inspection. When `relatedQueueItemId` names the signed-in person's
+returned handoff, Moving attaches the complete planning result and an
+attributable Queue activity entry; the normal Queue detail renders **Linked move
+work** and a path to Overview → Saved work. The Queue state does not change and
+the receipt says `transition: none`: this OAuth surface still cannot claim or
+complete canonical Queue work.
 
 Production acceptance is Current for one retained non-privileged Moving test
 identity: real Clerk consent and official-SDK token exchange, the full

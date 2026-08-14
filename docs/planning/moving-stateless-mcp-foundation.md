@@ -100,7 +100,9 @@ The canonical stateless surface may read the signed-in person's Queue summaries
 and may link a completed result to a Queue item for human inspection. It does
 not claim, release, answer, fail, or complete Queue work. Those transitions
 remain on the scoped API-key surface until Moving has a separately proven
-chosen-AI grant. Linking a result records `transition: none` explicitly.
+chosen-AI grant. Linking a result stores the complete planning-record reference
+and attributable Queue activity, makes the result readable as **Linked move
+work** in the normal handoff detail, and records `transition: none` explicitly.
 
 ## Human visibility
 
@@ -108,7 +110,9 @@ The move overview includes **Saved work**. It reactively shows current
 decisions, estimates, plan results, and source checks written through MCP,
 including status, source link where applicable, provenance label, and version.
 This is the normal web reflection of an AI write; a person does not need an MCP
-client to inspect what was saved.
+client to inspect what was saved. A linked Queue handoff also shows the result
+summary and planning-record label without converting Waiting for your AI into a
+false Working or Done state.
 
 ## Boundedness
 

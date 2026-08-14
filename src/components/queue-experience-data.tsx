@@ -13,6 +13,7 @@ import {
   type QueueState,
 } from "@/components/queue-experience";
 import { describeMutationError } from "@/lib/mutation-error";
+import { defaultQueueOwnerScope } from "@/lib/queue-owner-scope";
 import { toastError, toastSaved } from "@/lib/toast";
 
 type QueueListResult = FunctionReturnType<typeof api.queue.listForMove>;
@@ -109,9 +110,11 @@ export function QueueExperience({
   });
   const effectiveOwnerScope =
     ownerScope === "default"
-      ? scopes?.canManage
-        ? "all"
-        : currentUser?._id ?? "loading"
+      ? defaultQueueOwnerScope({
+          currentUserId: currentUser?._id,
+          canManage: scopes?.canManage,
+          delegatedOwnerCount: scopes?.delegatedOwners.length,
+        })
       : ownerScope;
   const ownerLabels = new Map<string, string>([
     ...(currentUser ? [[currentUser._id, "My Queue"] as const] : []),
@@ -334,6 +337,7 @@ export function QueueExperience({
       onProvideInput={handleProvideInput}
       onCancel={handleCancel}
       captureWorkspacePath={`/app/moves/${encodeURIComponent(moveId)}/capture`}
+      savedWorkPath={`/app/moves/${encodeURIComponent(moveId)}/overview#planning-results`}
     />
   );
 }
