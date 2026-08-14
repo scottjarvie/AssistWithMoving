@@ -37,8 +37,8 @@ assert.equal(metadata.schemaVersion, 1);
 assert.equal(metadata.generatorVersion, 1);
 assert.equal(metadata.project, "Assist With Moving");
 assert.equal(metadata.idPrefix, "MOV");
-assert.equal(metadata.familyCore.label, "Assist With Sites Core Philosophy v1.6.2");
-assert.equal(metadata.familyCore.commit, "561481843793a1d0fb97eee3984bccfd004c21a2");
+assert.equal(metadata.familyCore.label, "Assist With Sites Core Philosophy v1.6.3");
+assert.equal(metadata.familyCore.commit, "db658ab091bcfbb71f62db55d5b8b6d51b64e52f");
 assert.equal(metadata.projectPhilosophy, "../planning/assist-with-moving-project-philosophy.md");
 
 const cards = list(join(DIR, "cards"));
@@ -170,6 +170,8 @@ assert.match(board, /\.card \{[\s\S]*?width:100%; min-height:118px/);
 assert.match(board, /dialog \{ width:min\(780px,calc\(100vw - 28px\)\)/);
 assert.match(board, /min-height:44px/);
 assert.match(board, /prefers-reduced-motion:reduce/);
+assert.match(board, /Truth key:/);
+assert.match(board, /Workflow lanes never upgrade capability truth/);
 
 const guide = readFileSync(join(DIR, "guide.html"), "utf8");
 for (const label of ["whole card tile", "search and filters", "stable markdown source", "copy-ready handoff", "personal card order", "normal click still opens detail", "long-press", "shift + an arrow key", "reset to canonical order", "never changes canonical card status"]) assert(guide.toLowerCase().includes(label), `guide missing ${label}`);

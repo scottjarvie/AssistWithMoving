@@ -39,6 +39,8 @@
   h1,h2,h3 { font-family:Georgia,"Times New Roman",serif; color:var(--deep); }
   h1 { margin:0; font-size:clamp(25px,4vw,42px); line-height:1.08; }
   .sub { margin:7px 0 0; color:var(--muted); max-width:78ch; }
+  .truth-key { margin:9px 0 0; color:var(--ink); font-size:12px; max-width:86ch; }
+  .truth-key strong { color:var(--signal); }
   nav { display:flex; justify-content:flex-end; gap:6px; flex-wrap:wrap; }
   .button,.mode {
     display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:8px 12px;
@@ -159,7 +161,7 @@
   @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; transition:none !important; } }
 </style></head>
 <body><a class="skip" href="#guide">Skip to guide</a>
-<header><div class="mast"><div><p class="eyebrow">Moving field desk · route notes</p><h1>Assist With Moving — tracker guide</h1><p class="sub">A durable local view of what is moving now, what is staged for later, and what needs a decision. Markdown remains the source.</p></div><nav aria-label="Tracker links"><a class="button" href="https://movingmanifest.com">Project</a><a class="button" href="../planning/assist-with-moving-project-philosophy.md">Project Philosophy</a><a class="button" href="https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md">Family Core</a><a class="button" href="board.html">Board</a><button class="mode" id="mode" type="button">Night mode</button></nav></div></header>
+<header><div class="mast"><div><p class="eyebrow">Moving field desk · route notes</p><h1>Assist With Moving — tracker guide</h1><p class="sub">A durable local view of what is moving now, what is staged for later, and what needs a decision. Markdown remains the source.</p><p class="truth-key"><strong>Truth key:</strong> Current means verified evidence; Partial means useful foundations with a named gap; Later means not selected or not yet verified. Workflow lanes never upgrade capability truth.</p></div><nav aria-label="Tracker links"><a class="button" href="https://movingmanifest.com">Project</a><a class="button" href="../planning/assist-with-moving-project-philosophy.md">Project Philosophy</a><a class="button" href="https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md">Family Core</a><a class="button" href="board.html">Board</a><button class="mode" id="mode" type="button">Night mode</button></nav></div></header>
 <main id="guide" tabindex="-1"><article class="guide"><p class="eyebrow">One-minute orientation</p><h2>How to use this reader</h2><p>The whole Card tile opens its durable detail experience. Search and filters cover every Card; the Backlog is grouped by priority and progressively revealed. A Card's detail owns its copy-ready handoff and links to the stable Markdown source beside this generated reader.</p><h2>Personal Card order</h2><p>Drag the Card surface after moving the pointer; a normal click still opens detail. On touch, long-press a Card before dragging. With a focused Card, press <strong>Shift + an arrow key</strong> to move it earlier or later. Personal order stays within the same visible lane and is saved only in this browser when local storage is available. It never changes canonical Card status, priority, Work Orders, or Markdown. Use <strong>Reset to canonical order</strong> at any time.</p><h2>Assist With Moving tracker guide</h2>
 <p>This repo-owned tracker is the durable owner-and-AI view of work for Assist With Moving. It travels with every authorized clone. Markdown is canonical; <code>board.html</code> and <code>guide.html</code> are generated zero-setup readers.</p>
 <h2>The three concepts</h2>
@@ -177,6 +179,7 @@
 <p>support these concepts without creating a fourth tracker.</p>
 <h2>One-minute orientation</h2>
 <p>Open <code>board.html</code>. Start with <strong>Needs You</strong>, then scan <strong>Doing</strong> and <strong>Next</strong>. Kanban shows motion; Work Orders show approved scope, derived Card progress, execution evidence, and independent audit as separate facts.</p>
+<p>Capability truth and workflow state are deliberately separate. <strong>Current</strong> means verified evidence, <strong>Partial</strong> means useful foundations with a named gap, and <strong>Later</strong> means not selected or not yet verified. Those labels live in the Card or Work Order truth; moving something to Next or Doing never upgrades a capability claim.</p>
 <p>Cards use exactly <code>backlog</code>, <code>next</code>, <code>doing</code>, <code>needs-you</code>, or <code>done</code>. Work Order execution uses <code>proposed</code>, <code>ready</code>, <code>active</code>, <code>complete</code>, or <code>superseded</code>. Audit uses <code>not-audited</code>, <code>passed</code>, or <code>follow-up-needed</code>. Complete does not mean independently audited. There is no automatic dispatch.</p>
 <h2>Authority and handoff</h2>
 <p>The loop is <strong>AI proposes; Scott approves scope; AI executes; a separate AI audits</strong>. Ordinary safe technical judgment belongs to the executor inside an approved Work Order. <code>needs-you</code> is only for a consequential product, access, money, security, production-data, identity, or irreversible choice, and its Card must teach before asking.</p>
@@ -186,6 +189,10 @@
 <li>Cards live in <code>docs/tracker/cards/</code> with stable <code>MOV-####</code> ids.</li>
 <li>Work Orders live in <code>docs/tracker/work-orders/</code> with <code>MOV-WO-###</code> ids.</li>
 <li>Append dated attributed history; do not erase evidence or invent provenance.</li>
+<li>Specifications and requirements remain supporting documents linked by a Card</li>
+</ul>
+<p>or Work Order. They do not become a fourth tracker or replace the canonical outcome, scope, and evidence record.</p>
+<ul>
 <li>Run <code>npm run tracker:build &amp;&amp; npm run tracker:verify</code> after state edits.</li>
 <li>Use <strong>Copy as prompt</strong> or <strong>Copy whole work order</strong> for cold-start handoff.</li>
 </ul>
