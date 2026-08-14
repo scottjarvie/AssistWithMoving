@@ -1,7 +1,7 @@
 ---
 id: MOV-WO-009
 title: Make the first private move useful without setup ceremony
-execution: ready
+execution: complete
 audit: not-audited
 cards: MOV-0007 MOV-0003 MOV-0006
 created: 2026-08-14
@@ -83,11 +83,28 @@ minimum useful move should contain.
 
 ## Execution evidence
 
-Not started. The completed evidence baseline is preserved in `MOV-WO-007` and
-`MOV-WO-008`; this Work Order begins only at the remaining person-first gap.
+PR `#190` shipped the private-first flow at merge
+`d8ed8fe0717cd76444158ca63915ea473289792b`. The empty account now creates its
+private workspace and first move in one short form, the Move overview carries a
+clear route → Queue → saved-work loop, root errors recover inside the product,
+and `/ai` distinguishes hosted OAuth, helper-key tools, and the Partial Queue
+boundary. Local lint, typecheck, 1,054 tests, production build, and phone plus
+desktop public browser checks passed. Post-merge run `31816220259` and
+production deployment `5909128548` succeeded.
+
+The canonical sign-in return path rendered the branded Google/email/password
+form with zero phone overflow. A fresh authenticated production fixture was not
+created: the retained empty test identity has no retained password or active
+session, and this run did not generate another one-time impersonation ticket.
+The completed `MOV-WO-008` MCP → Queue → Move-overview proof remains preserved;
+no production fixture, Queue row, MCP record, OAuth client, grant, token,
+password, session, or device was created or left behind.
 
 ## History
 
 - 2026-08-14 · Scott via coordinator reset — approved core first-use/private
   workspace and Queue as the first tranche; Codex removed completed MCP/brand
   work and broad audit ceremony from the scope.
+- 2026-08-14 · Codex — shipped PR `#190`, verified exact production deployment
+  and public/sign-in return surfaces, and recorded the retained-credential limit
+  without rerunning completed MCP acceptance.
