@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "version": "0.6.0",
+    "from": "147cff46eaf971b3629d5b9e625e668c3a2d2b0b",
+    "to": "d8ed8fe0717cd76444158ca63915ea473289792b",
+    "cutoff": "2026-08-14T15:48:49.000Z",
+    "cutoffTimezone": "America/Phoenix",
+    "posture": "release-ready",
+    "recordType": "verified production private-first onboarding release"
+  },
+  "reconciliation": {
+    "git": {
+      "selection": "147cff4..d8ed8fe",
+      "exactAncestorRange": true,
+      "sourceCount": 4,
+      "pullRequestSources": 4,
+      "directCommitSources": 0,
+      "markerMeaning": "The v0.5.1 product merge is the prior release marker; later tracker-only sources are classified separately from the private-first product release."
+    },
+    "github": {
+      "repository": "scottjarvie/movingmanifest",
+      "productPullRequest": 190,
+      "productionDeployment": {
+        "commit": "d8ed8fe0717cd76444158ca63915ea473289792b",
+        "deploymentId": 5909128548,
+        "state": "success",
+        "deployedAt": "2026-08-14T15:48:49.000Z"
+      },
+      "checks": [
+        {
+          "name": "Required CI",
+          "runId": 31816220259,
+          "conclusion": "success"
+        },
+        {
+          "name": "Unit tests (informational)",
+          "runId": 31816220259,
+          "conclusion": "success",
+          "testCount": 1054
+        }
+      ]
+    },
+    "productionAcceptance": {
+      "public": "assistwithmoving.com redirected to the intended Clerk-compatible movingmanifest.com host; /ai rendered the Current and Partial connection truth with zero phone overflow",
+      "signIn": "the canonical sign-in return path reached the branded Clerk form with Google, email, password, and Continue controls and zero phone overflow",
+      "authenticatedBoundary": "the retained non-privileged Moving test identity is empty but has no retained password or active session; no new impersonation ticket was generated, so the changed signed-in creation journey remains source-, test-, build-, and deployment-proven rather than newly live-authenticated",
+      "cleanup": "no production fixture, Queue row, MCP record, OAuth client, grant, token, password, session, or device was created in this release proof",
+      "preservedEvidence": "the completed v0.5.1 OAuth MCP to Queue and Move-overview proof remains authoritative and was not rerun",
+      "notProved": [
+        "a fresh authenticated production first-move creation through the changed form",
+        "a fresh production Queue handoff through the changed first-use journey",
+        "canonical OAuth Queue claiming or completion"
+      ]
+    },
+    "dispositionCounts": {
+      "include": 1,
+      "group": 0,
+      "exclude": 3,
+      "unshipped": 0
+    },
+    "completenessGate": "pass"
+  },
+  "releaseItems": [
+    {
+      "id": "private-first-move-journey",
+      "sourceCount": 1
+    }
+  ],
+  "sources": [
+    {
+      "id": "pr-187",
+      "kind": "pull_request",
+      "prNumber": 187,
+      "title": "Record the completed Moving Queue release proof",
+      "commits": ["b4b71f2444b0b44187f3191dd734d3364c281f0a"],
+      "firstSeenAt": "2026-08-14T06:23:03.000Z",
+      "lastSeenAt": "2026-08-14T06:23:03.000Z",
+      "disposition": "exclude",
+      "reason": "Tracker evidence publication for the already classified v0.5.1 product source."
+    },
+    {
+      "id": "pr-188",
+      "kind": "pull_request",
+      "prNumber": 188,
+      "title": "Freshen Moving tracker truth",
+      "commits": ["c41a05cfddbe56d13cb23bd22db9e74ef3dd4079"],
+      "firstSeenAt": "2026-08-14T06:30:54.000Z",
+      "lastSeenAt": "2026-08-14T06:30:54.000Z",
+      "disposition": "exclude",
+      "reason": "Tracker-only publication without a separate user-facing product change."
+    },
+    {
+      "id": "pr-189",
+      "kind": "pull_request",
+      "prNumber": 189,
+      "title": "Reset Moving's soft-launch backlog",
+      "commits": ["484d7f84b474a6010237d119a8cb958fba61b82a"],
+      "firstSeenAt": "2026-08-14T07:42:29.000Z",
+      "lastSeenAt": "2026-08-14T07:42:29.000Z",
+      "disposition": "exclude",
+      "reason": "Tracker-only backlog orientation without a separate user-facing product change."
+    },
+    {
+      "id": "pr-190",
+      "kind": "pull_request",
+      "prNumber": 190,
+      "title": "Make the first private move useful",
+      "commits": ["d8ed8fe0717cd76444158ca63915ea473289792b"],
+      "firstSeenAt": "2026-08-14T15:47:28.000Z",
+      "lastSeenAt": "2026-08-14T15:47:28.000Z",
+      "disposition": "include",
+      "releaseItemId": "private-first-move-journey"
+    }
+  ]
+}

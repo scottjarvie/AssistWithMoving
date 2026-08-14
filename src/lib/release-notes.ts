@@ -67,31 +67,31 @@ export const appVersion = packageJson.version;
 
 export const releaseEntries: ReleaseEntry[] = [
   {
-    version: "0.5.1",
-    releasedAt: "2026-08-14T04:10:43.000Z",
+    version: "0.6.0",
+    releasedAt: "2026-08-14T15:48:49.000Z",
     timezone: "America/Phoenix",
-    title: "Chosen-AI work returns to its Queue handoff",
+    title: "A private move that starts with the person",
     summary:
-      "A Queue handoff can now point directly to the source-backed result a chosen AI saved in the move, while keeping the Queue state and the person's authority unchanged.",
+      "A first visit now starts one private move directly, then keeps the path to Queue and AI-saved move work clear without requiring setup ceremony.",
     backfillNote:
-      "The product source after the completed v0.5.0 record through the verified Queue-linked MCP deployment is classified in the v0.5.1 completeness ledger.",
+      "The product source after the completed v0.5.1 record through the verified private-first onboarding deployment is classified in the v0.6.0 completeness ledger.",
     items: [
       {
-        id: "queue-linked-mcp-results",
-        category: "fixed",
+        id: "private-first-move-journey",
+        category: "upgraded",
         impactTier: "major",
         impactRank: 1,
         short:
-          "Queue handoffs now show the chosen AI's linked move work and open the same saved result in the Move overview.",
+          "New people can create a private move in one short form and follow its Queue-to-saved-work loop.",
         long: {
           what:
-            "A complete MCP planning result can be linked to the exact personal Queue handoff. Queue detail shows the linked work, attribution, and a direct Saved work path; a move with one Queue owner starts in My Queue.",
+            "The empty workspace now creates its private boundary and first move together, optional route context stays optional, the Move overview explains the durable Queue and saved-work path, failure recovery stays inside the product, and AI guidance distinguishes hosted OAuth, helper-key tools, and the Partial Queue boundary.",
           why:
-            "Previously, useful source-backed work reached Saved work but disappeared from the handoff that requested it, and a first move could open on an unusable Everyone's Queue scope.",
+            "The previous first visit exposed an internal household step and advanced setup language before a person had a useful move to return to, while AI setup could imply every connection door had the same tools.",
           where:
-            "Create or open a Waiting for your AI handoff in Queue, then review its Linked move work or open the same result from the move Overview.",
+            "Sign in, create the first private move from Your moves, then use the First useful loop on the Move overview.",
         },
-        sourceRefs: ["pr-186"],
+        sourceRefs: ["pr-190"],
         audiences: ["signed-in", "agent"],
       },
     ],
