@@ -113,6 +113,20 @@ cleanup, and permanent fixture purge have separate receipts. Canonical OAuth
 still does not claim or complete Queue work, and private media, another client
 product, mobile, and multi-owner acceptance were not exercised.
 
+## Retained state and next safe action
+
+Fixture residue is empty: no synthetic move, Queue, MCP, planning, source-check,
+OAuth client, grant, token, product session, Clerk device, or password remains.
+The only retained provider state is the ordinary Moving test identity and its
+verified test-only alias. Future unattended sign-in is still **Partial** because
+production offers no email-code factor for the alias and the sanctioned browser
+automation surface could not write a password to the unlocked vault.
+
+When another live acceptance is needed, use supported Clerk impersonation after
+its allowance resets or an owner-approved password-manager write path. Do not
+weaken Clerk policy. Create a newly marked move, rerun the bounded OAuth
+MCP-to-Queue/UI path, and repeat the exact purge and absence checks.
+
 ## Independent audit
 
 Not yet audited.
