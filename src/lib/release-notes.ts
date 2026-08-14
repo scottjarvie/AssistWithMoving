@@ -67,6 +67,36 @@ export const appVersion = packageJson.version;
 
 export const releaseEntries: ReleaseEntry[] = [
   {
+    version: "0.5.1",
+    releasedAt: "2026-08-14T04:10:43.000Z",
+    timezone: "America/Phoenix",
+    title: "Chosen-AI work returns to its Queue handoff",
+    summary:
+      "A Queue handoff can now point directly to the source-backed result a chosen AI saved in the move, while keeping the Queue state and the person's authority unchanged.",
+    backfillNote:
+      "The product source after the completed v0.5.0 record through the verified Queue-linked MCP deployment is classified in the v0.5.1 completeness ledger.",
+    items: [
+      {
+        id: "queue-linked-mcp-results",
+        category: "fixed",
+        impactTier: "major",
+        impactRank: 1,
+        short:
+          "Queue handoffs now show the chosen AI's linked move work and open the same saved result in the Move overview.",
+        long: {
+          what:
+            "A complete MCP planning result can be linked to the exact personal Queue handoff. Queue detail shows the linked work, attribution, and a direct Saved work path; a move with one Queue owner starts in My Queue.",
+          why:
+            "Previously, useful source-backed work reached Saved work but disappeared from the handoff that requested it, and a first move could open on an unusable Everyone's Queue scope.",
+          where:
+            "Create or open a Waiting for your AI handoff in Queue, then review its Linked move work or open the same result from the move Overview.",
+        },
+        sourceRefs: ["pr-186"],
+        audiences: ["signed-in", "agent"],
+      },
+    ],
+  },
+  {
     version: "0.5.0",
     releasedAt: "2026-08-13T21:56:23.554Z",
     timezone: "America/Phoenix",

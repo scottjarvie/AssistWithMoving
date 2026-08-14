@@ -9,17 +9,21 @@ account, another user's account, or another Assist product's Clerk instance.
 - Clerk application: **MovingManifest**
 - Clerk environment: **production**
 - Display name: **Moving MCP Test**
-- Email: `moving-mcp-e2e+production@example.com`
+- Primary email: `moving-mcp-e2e+production@example.com`
+- Verified test-only alias: `jarvie+assistwithmoving-mcp-test@gmail.com`
 - Role: ordinary signed-in person; no organization, admin, staff, or other
   elevated role
 
-The randomized bootstrap password was discarded and must not be stored in the
-repository, a password manager, test output, or a handoff. The retained Clerk
-identity and its minimal empty Moving user/household membership scaffold are
-the only durable test state. The account must never receive real household or
-move information.
+No password is retained. The verified alias is a reusable identifier, not a
+credential, and production currently does not offer an email-code factor for
+that address. A future unattended run therefore still needs either a password
+stored through an owner-approved secret manager path or a newly available
+Clerk impersonation allowance. Never store a password, ticket, or token in the
+repository, tracker, test output, or handoff. The retained Clerk identity and
+its verified test-only alias are the only durable provider state; the account
+must never receive real household or move information.
 
-## Generate a future one-time sign-in
+## Generate a future one-time sign-in when Clerk permits it
 
 1. Open Clerk Dashboard → **MovingManifest** → **production** → **Users**.
 2. Search for `moving-mcp-e2e+production@example.com` and open **Moving MCP
@@ -31,6 +35,11 @@ move information.
 This dashboard path is the only retained sign-in recipe. A one-time ticket,
 browser session, password, OAuth access/refresh token, dynamic OAuth client,
 consent grant, API key, or Queue claim is never durable test setup.
+
+If Clerk reports that the environment's impersonation allowance is exhausted,
+stop before creating a password unless a supported secret-manager write path
+is available and authorized. Do not change production sign-in factors or other
+Clerk policy merely to automate acceptance.
 
 When automating the dashboard path, never print or persist the new tab's full
 URL. Bind it by tab id/title, consume it immediately, and sanitize query strings
@@ -90,6 +99,30 @@ multi-client isolation, Queue transitions, or another client product remain
 unproved unless that exact scenario was exercised.
 
 ## Latest retained-account receipt
+
+The 2026-08-14 post-fix run completed after protected PR `#186`:
+
+- release: merge `147cff46eaf971b3629d5b9e625e668c3a2d2b0b`, post-merge
+  Actions run `31768988479` with Required CI and 1,050 tests passing, and exact
+  production deployment `5900338675` successful at `2026-08-14T04:10:43Z`;
+- authenticated workflow: a fresh public PKCE client using the official MCP
+  TypeScript SDK discovered all eight canonical tools, read the exact move and
+  personal Queue directive, saved and hydrated one source-backed complete
+  result, and replayed the same operation idempotently;
+- normal UI: Queue detail rendered the exact linked result, direct Saved work
+  path, MCP attribution, and an unchanged Waiting for your AI state; the Move
+  overview rendered the same decision, estimate, plan, and two FMCSA checks;
+- cleanup: refresh revocation succeeded, the exact client was deleted, the
+  product session was signed out, Clerk showed no device, the short-lived
+  password was removed, and the exact marked move was hard-purged. Your moves
+  and Queue were rechecked with all move, directive, and result markers absent.
+
+Only the non-privileged identity and verified test-only alias remain. A durable
+reusable password could not be placed in the unlocked Bitwarden browser vault
+through the sanctioned automation surface, so future unattended sign-in is
+still **Partial**. No Clerk policy was weakened to bypass that boundary.
+
+### Prior 2026-08-13 receipt
 
 The 2026-08-13 run completed after protected PR `#182` deployed the production
 token-shape repair:

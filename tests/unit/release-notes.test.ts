@@ -26,7 +26,7 @@ function readLedger() {
     readFileSync(
       resolve(
         process.cwd(),
-        "docs/releases/v0.5.0-completeness-ledger.json",
+        "docs/releases/v0.5.1-completeness-ledger.json",
       ),
       "utf8",
     ),
@@ -38,9 +38,9 @@ function readLedger() {
 
 describe("release notes", () => {
   it("keeps the visible app version aligned to the proposed latest release", () => {
-    expect(appVersion).toBe("0.5.0");
-    expect(latestRelease.version).toBe("0.5.0");
-    expect(releaseEntries[0].version).toBe("0.5.0");
+    expect(appVersion).toBe("0.5.1");
+    expect(latestRelease.version).toBe("0.5.1");
+    expect(releaseEntries[0].version).toBe("0.5.1");
   });
 
   it("uses the exact impact-sorted Created, Fixed, and Upgraded story", () => {
@@ -48,7 +48,7 @@ describe("release notes", () => {
       getReleaseItems(latestRelease, "created").map((item) => item.id),
     ).toEqual([]);
     expect(getReleaseItems(latestRelease, "fixed").map((item) => item.id)).toEqual(
-      ["assist-moving-first-run"],
+      ["queue-linked-mcp-results"],
     );
     expect(
       getReleaseItems(latestRelease, "upgraded").map((item) => item.id),
@@ -91,13 +91,13 @@ describe("release notes", () => {
     const ledgerIds = new Set(ledger.sources.map((source) => source.id));
 
     expect(ledger.release).toMatchObject({
-      version: "0.5.0",
-      from: "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",
-      to: "d1f7364ad000f4193b6a966e4c8f4c06a423e1fd",
-      cutoff: "2026-08-13T21:56:23.554Z",
+      version: "0.5.1",
+      from: "42c51f2f60c17d7490d71d8c1ce333359e342286",
+      to: "147cff46eaf971b3629d5b9e625e668c3a2d2b0b",
+      cutoff: "2026-08-14T04:10:43.000Z",
     });
-    expect(ledger.sources).toHaveLength(2);
-    expect(ledgerIds.size).toBe(2);
+    expect(ledger.sources).toHaveLength(1);
+    expect(ledgerIds.size).toBe(1);
     expect(ledger.sources.some((source) => source.disposition === "unshipped")).toBe(
       false,
     );
