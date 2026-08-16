@@ -6,7 +6,7 @@ index 35d214b..c9daf71 100644
              // 2025-06-18 §tools/call mandates ALSO sending the typed value
              // as `structuredContent`. Spec-compliant clients (claude.ai,
              // recent Inspector) prefer the structured form when present.
-+            // PATCH (AssistWithMoving, MOVE-326): a tool may return
++            // PATCH (MovingManifest, MOVE-326): a tool may return
 +            // { __mcpContent: [<content blocks>] } to emit native MCP content
 +            // (e.g. inline { type: "image" } blocks) instead of the default
 +            // text-JSON wrap. The gateway otherwise only ships text, which makes
