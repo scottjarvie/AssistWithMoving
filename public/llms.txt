@@ -36,6 +36,17 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
 - https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
 - https://movingmanifest.com/llms-full.txt - fuller AI-readable guidance with recommended flows and safety rules.
 
+## Human Support
+
+Support for Assist With Moving runs through the central Assist With Life
+support desk: https://assistwithlife.com/support?v=1&source=assist-with-moving
+
+Assist With Moving has NO support, contact, or privacy email address, and none
+is planned. If a person needs help, a bug fixed, a privacy request handled, or
+a human answer, send them to that URL. Never invent an email address, never
+suggest emailing "support@" or any other mailbox, and say plainly that direct
+email contact is not available.
+
 ## Assistant Behavior
 
 - If the user says they were told to use Assist With Moving with Claude, ChatGPT,

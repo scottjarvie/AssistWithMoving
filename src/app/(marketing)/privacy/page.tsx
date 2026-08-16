@@ -6,6 +6,7 @@ import {
   PublicBand,
   PublicPageChrome,
 } from "@/components/public-page-chrome";
+import { supportDesk, supportDeskUrl } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -65,6 +66,24 @@ export default function PrivacyPage() {
           <p>
             This page is a product privacy overview for launch readiness. Formal
             legal policy text should be reviewed before broad commercial launch.
+          </p>
+          <h2 className="text-2xl font-semibold tracking-normal text-foreground">
+            Privacy questions and requests
+          </h2>
+          <p>
+            Send a privacy question, data request, or concern about your move
+            records to the{" "}
+            <a
+              href={supportDeskUrl("home")}
+              className="text-foreground underline underline-offset-4 hover:text-primary"
+            >
+              {supportDesk.name}
+            </a>
+            , the single desk shared by every Assist With product. Direct email
+            contact is not available: Assist With Moving publishes no privacy,
+            support, or contact address, because it does not operate a mailbox.
+            Account-level export and deletion controls also live in your
+            settings once you are signed in.
           </p>
         </div>
       </PublicBand>
