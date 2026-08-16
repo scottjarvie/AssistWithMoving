@@ -29,7 +29,7 @@ export const STATELESS_MOVING_TOOL_NAMES = [
   "save_complete_result",
 ] as const;
 
-const SERVER_NAME = "movingmanifest";
+const SERVER_NAME = "assistwithmoving";
 const SERVER_VERSION = "0.4.0";
 const MAX_MCP_REQUEST_BYTES = 512 * 1024;
 const mcpQueries = (internal as any).mcpPlanning;
@@ -85,7 +85,7 @@ function challenge(
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
-        "WWW-Authenticate": `Bearer realm="movingmanifest", error="${code}", error_description="${description}", resource_metadata="${metadata}"`,
+        "WWW-Authenticate": `Bearer realm="assistwithmoving", error="${code}", error_description="${description}", resource_metadata="${metadata}"`,
       },
     },
   );

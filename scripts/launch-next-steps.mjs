@@ -93,7 +93,7 @@ export const launchBlockerRemediations = [
     issue: "MOVE-67",
     title: "Remove stale legacy Vercel alias after brand rename",
     why:
-      "The old pre-rename preview URL should stop serving the product once MovingManifest is the public name.",
+      "The old pre-rename preview URL should stop serving the product once AssistWithMoving is the public name.",
     ownerAction:
       "After explicit approval, remove the stale alias from the Vercel project/domain settings.",
     actions: ["No automatic command is provided because this is a routing change."],
@@ -117,7 +117,7 @@ export function renderLaunchRemediationPlan(remediations = launchBlockerRemediat
   );
 
   return [
-    "Moving Manifest Launch Next Steps",
+    "Assist With Moving Launch Next Steps",
     "",
     "This checklist is intentionally read-only. It prints the safe order for resolving launch blockers, but it does not change Vercel, Convex, Clerk, Backblaze, DNS, aliases, or secrets.",
     "",

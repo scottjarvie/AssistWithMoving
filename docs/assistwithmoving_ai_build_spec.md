@@ -1,11 +1,12 @@
-# MovingManifest - AI-Agent-Ready Product Blueprint and Build Spec
+# AssistWithMoving - AI-Agent-Ready Product Blueprint and Build Spec
 
 > **Historical implementation blueprint.** The current product identity is
-> **Assist With Moving**. The canonical Project Philosophy controls current
-> language and capability truth; MovingManifest remains a technical and
-> compatibility name for existing code, Clerk, domains, keys, and OAuth
-> resources. Do not treat older brand or roadmap statements below as shipped
-> current claims.
+> **Assist With Moving**, and code identifiers were renamed to match. The
+> canonical Project Philosophy controls current language and capability truth;
+> `movingmanifest` remains a compatibility name for domains, Clerk, `mmk_` keys,
+> and OAuth resources. This document was written under the original
+> `MovingManifest` name — do not treat older brand or roadmap statements below
+> as shipped current claims.
 
 Prepared: June 8, 2026
 Status: Draft 2 - full product build plan and technical spec
@@ -17,7 +18,7 @@ Build the complete application described in this document, not a thin demo and n
 
 Default stack: Next.js App Router, React, TypeScript, Tailwind CSS, shadcn/ui, Convex, Clerk, Vercel, Backblaze B2, Cloudflare image delivery/transformations, and a small Node-based MCP server plus REST API for agent integrations.
 
-Important domain note: MovingManifest is the product brand, and `movingmanifest.com` has been purchased and connected through Vercel. Use it as the production domain once the app is ready, but do not hardcode any production domain; the app name, marketing domain, and email-from domain must remain configurable.
+Important domain note: Assist With Moving is the product brand, and `movingmanifest.com` has been purchased and connected through Vercel. Use it as the production domain once the app is ready, but do not hardcode any production domain; the app name, marketing domain, and email-from domain must remain configurable.
 
 ---
 
@@ -42,13 +43,13 @@ The AI's job is not to silently make irreversible decisions. The AI acts like a 
 
 ## 1.1 Full Product Mandate
 
-MovingManifest should be planned as a full product, not as a throwaway MVP. Sequencing still matters: foundation, permissions, inventory, photos, load planning, AI, exports, API, and admin must land in dependency order. However, the intended destination includes the full documentation, AI, claims, helper access, API/MCP, and operational/admin surfaces.
+AssistWithMoving should be planned as a full product, not as a throwaway MVP. Sequencing still matters: foundation, permissions, inventory, photos, load planning, AI, exports, API, and admin must land in dependency order. However, the intended destination includes the full documentation, AI, claims, helper access, API/MCP, and operational/admin surfaces.
 
 The first useful workflows should become usable early, but they should be implemented on the same architecture that supports the full product. Avoid temporary shortcuts that would make later privacy, exports, AI review, or collaboration difficult.
 
 ## 1.2 Product Outcome
 
-MovingManifest should become the trusted record of a move:
+AssistWithMoving should become the trusted record of a move:
 
 - a household inventory,
 - a packing and box manifest,
@@ -116,7 +117,7 @@ A user wants pre-move and post-move evidence. The app keeps photos, condition no
 
 ## 4.5 Documentation Packet Support
 
-Many moves require documentation for a third party. MovingManifest should support documentation profiles and export packets for common recipients:
+Many moves require documentation for a third party. AssistWithMoving should support documentation profiles and export packets for common recipients:
 
 - Military PCS / HHG / PPM / partial PPM documentation
 - Moving company inventory and high-value item lists
@@ -1675,7 +1676,7 @@ The app should state that exports are evidence organization tools and not offici
 
 # 17. Documentation Modes and PCS-Specific Considerations
 
-MovingManifest should include a documentation packet system. A documentation packet is a filtered/exportable view of a move for a specific purpose. It can produce CSV, printable HTML/PDF, and shareable scoped views depending on sensitivity and recipient.
+AssistWithMoving should include a documentation packet system. A documentation packet is a filtered/exportable view of a move for a specific purpose. It can produce CSV, printable HTML/PDF, and shareable scoped views depending on sensitivity and recipient.
 
 ## 17.1 Documentation Profile Types
 
@@ -2032,7 +2033,7 @@ To reduce ambiguity for the coding agent, use these defaults:
 Suggested `.env.example`:
 
 ```text
-NEXT_PUBLIC_APP_NAME="MovingManifest"
+NEXT_PUBLIC_APP_NAME="AssistWithMoving"
 NEXT_PUBLIC_APP_URL="http://localhost:3827"
 
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=""
@@ -2145,4 +2146,4 @@ These are not implementation docs embedded forever. The coding agent should chec
 
 # 27. One-Sentence Product North Star
 
-MovingManifest should make it possible to walk through a house with a phone, capture what exists, let AI organize the mess, decide what goes where, and arrive with a searchable, claim-ready record instead of a foggy memory and a pile of mystery boxes.
+AssistWithMoving should make it possible to walk through a house with a phone, capture what exists, let AI organize the mess, decide what goes where, and arrive with a searchable, claim-ready record instead of a foggy memory and a pile of mystery boxes.

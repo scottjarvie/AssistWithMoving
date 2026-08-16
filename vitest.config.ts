@@ -2,7 +2,7 @@ import path from "node:path";
 import { defineConfig, type Plugin } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
-// The MCP server entry (mcp-server/movingmanifest-mcp.mjs) is a CLI bin, so it
+// The MCP server entry (mcp-server/assistwithmoving-mcp.mjs) is a CLI bin, so it
 // starts with a `#!/usr/bin/env node` shebang. Vite's SSR transform mangles that
 // leading shebang (it ends up concatenated mid-line), which makes Rolldown fail
 // to parse the module — taking down every test that imports the MCP route/tools

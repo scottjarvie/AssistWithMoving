@@ -118,6 +118,9 @@ async function parseRawPhotoUpload(
     fileBase64: base64FromArrayBuffer(bytes),
     fileName:
       metadata.fileName ??
+      request.headers.get("x-assistwithmoving-file-name") ??
+      // Legacy name for the same header: an older local MCP server still sends
+      // it, and those installs upgrade independently of this deployment.
       request.headers.get("x-movingmanifest-file-name") ??
       request.headers.get("x-file-name") ??
       fileNameFromContentDisposition(request.headers.get("content-disposition")),

@@ -19,7 +19,7 @@
       "markerMeaning": "Merge commit of PR #171, which published the complete v0.3.0 release record and is excluded from the next release range."
     },
     "github": {
-      "repository": "scottjarvie/movingmanifest",
+      "repository": "scottjarvie/assistwithmoving",
       "productPullRequest": 180,
       "productionDeployment": {
         "commit": "0a5e0eb9a771b2c13f16bcef5adc6c4e13c8507c",

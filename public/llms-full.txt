@@ -330,29 +330,29 @@ client there, it rejects OAuth and fails to register. Send the key in the
 Codex OAuth setup (recommended):
 
 ```bash
-codex mcp add movingmanifest --url https://movingmanifest.com/mcp
-codex mcp login movingmanifest
+codex mcp add assistwithmoving --url https://movingmanifest.com/mcp
+codex mcp login assistwithmoving
 ```
 
 Codex API-key setup (advanced, non-OAuth only):
 
 ```bash
-export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key
-codex mcp add movingmanifest \
+export ASSISTWITHMOVING_API_KEY=mmk_replace_with_a_scoped_api_key
+codex mcp add assistwithmoving \
   --url https://movingmanifest.com/api/mcp \
-  --bearer-token-env-var MOVINGMANIFEST_API_KEY
+  --bearer-token-env-var ASSISTWITHMOVING_API_KEY
 ```
 
 Equivalent advanced Codex `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.movingmanifest]
+[mcp_servers.assistwithmoving]
 url = "https://movingmanifest.com/api/mcp"
-bearer_token_env_var = "MOVINGMANIFEST_API_KEY"
+bearer_token_env_var = "ASSISTWITHMOVING_API_KEY"
 ```
 
 After configuring MCP for Codex, restart Codex or start a fresh session. The
-agent should confirm `movingmanifest` appears in `/mcp` or `codex mcp list`,
+agent should confirm `assistwithmoving` appears in `/mcp` or `codex mcp list`,
 then call `get_move_brief` before accessing private data. API-key connections
 call `get_api_capabilities` and `get_api_context` instead. If the current
 Codex session cannot see newly added MCP tools, tell the user a fresh Codex

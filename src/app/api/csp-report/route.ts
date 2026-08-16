@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const reports = parseCspReports(payload);
   if (reports.length > 0 && process.env.CSP_REPORT_LOGGING !== "disabled") {
     console.warn(
-      "movingmanifest_csp_violation",
+      "assistwithmoving_csp_violation",
       JSON.stringify({ reports: reports.slice(0, 5) })
     );
   }

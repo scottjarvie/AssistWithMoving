@@ -658,7 +658,7 @@ test.describe("Layout Studio authenticated smoke", () => {
       ) => Promise<string>;
     };
     const mcpApi = (await import(
-      "../../mcp-server/movingmanifest-api.mjs"
+      "../../mcp-server/assistwithmoving-api.mjs"
     )) as McpApiModule;
     test.skip(
       browserName !== "chromium",

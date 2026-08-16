@@ -40,7 +40,7 @@ type SeedCounts = {
 export const seedDemoData = mutation({
   args: {
     reset: v.optional(v.boolean()),
-    confirm: v.literal("movingmanifest-dev-seed"),
+    confirm: v.literal("assistwithmoving-dev-seed"),
   },
   handler: async (ctx, args) => {
     const user = await upsertSeedUser(ctx);
@@ -53,7 +53,7 @@ export const seedDemoData = mutation({
     const now = Date.now();
     const householdId = await ctx.db.insert("households", {
       name: demoHouseholdName,
-      slug: "movingmanifest-demo",
+      slug: "assistwithmoving-demo",
       createdByUserId: user._id,
       ownerUserId: user._id,
       createdAt: now,
@@ -516,7 +516,7 @@ async function upsertSeedUser(ctx: MutationCtx) {
     throw new Error("Seed requires a Convex identity. Use scripts/seed.mjs.");
   }
   if (
-    identity.issuer !== "movingmanifest-seed" ||
+    identity.issuer !== "assistwithmoving-seed" ||
     !identity.subject.startsWith("seed:")
   ) {
     throw new Error("Demo seed requires the local seed identity.");

@@ -1,21 +1,21 @@
 {
-  "name": "movingmanifest-mcp",
+  "name": "assistwithmoving-mcp",
   "version": "0.2.0",
   "description": "MCP server for Assist With Moving — lets AI agents manage moves, inventory, boxes, and photos through the Assist With Moving API.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "movingmanifest-mcp": "./movingmanifest-mcp.mjs"
+    "assistwithmoving-mcp": "./assistwithmoving-mcp.mjs"
   },
-  "main": "./movingmanifest-mcp.mjs",
+  "main": "./assistwithmoving-mcp.mjs",
   "exports": {
-    ".": "./movingmanifest-mcp.mjs",
-    "./api": "./movingmanifest-api.mjs",
+    ".": "./assistwithmoving-mcp.mjs",
+    "./api": "./assistwithmoving-api.mjs",
     "./capabilities": "./capabilities.mjs"
   },
   "files": [
-    "movingmanifest-mcp.mjs",
-    "movingmanifest-api.mjs",
+    "assistwithmoving-mcp.mjs",
+    "assistwithmoving-api.mjs",
     "capabilities.mjs",
     "example-desktop-config.json"
   ],
@@ -27,7 +27,7 @@
     "model-context-protocol",
     "moving",
     "inventory",
-    "movingmanifest"
+    "assistwithmoving"
   ],
   "homepage": "https://movingmanifest.com/mcp",
   "dependencies": {

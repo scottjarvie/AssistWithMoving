@@ -1189,7 +1189,7 @@ export const getOriginalDownloadUrl = action({
     }
 
     const config = requireB2Config();
-    const filename = `movingmanifest-original-${args.photoId}.${fileExtensionForMediaMimeType(
+    const filename = `assistwithmoving-original-${args.photoId}.${fileExtensionForMediaMimeType(
       photo.mimeType,
     )}`;
     const url = await getSignedUrl(

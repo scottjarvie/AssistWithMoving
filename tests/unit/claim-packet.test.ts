@@ -110,7 +110,7 @@ describe("claim packet paths", () => {
     ).toBe(
       "/app/claim-packet?householdId=household-id&moveId=move-id&mode=owner"
     );
-    expect(claimPacketFilename("owner")).toBe("movingmanifest-claim-owner.csv");
+    expect(claimPacketFilename("owner")).toBe("assistwithmoving-claim-owner.csv");
     expect(formatClaimCurrency(12500)).toBe("$125.00");
     expect(formatClaimCurrency(undefined)).toBe("Not documented");
   });

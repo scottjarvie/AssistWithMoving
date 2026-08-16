@@ -50,7 +50,7 @@ removed; only the empty approved identity remains.
 
 ## Dependencies
 
-MovingManifest production Clerk and Convex/Vercel deployment, the canonical
+AssistWithMoving production Clerk and Convex/Vercel deployment, the canonical
 stateless MCP, the official TypeScript MCP SDK, the normal Move overview and
 hard-purge workflow, and the repo-owned protected release path.
 
@@ -88,7 +88,7 @@ rule is reached.
 
 ## Execution evidence
 
-- Moving MCP Test was created only in MovingManifest production Clerk with no
+- Moving MCP Test was created only in AssistWithMoving production Clerk with no
   elevated role; its randomized bootstrap password was discarded.
 - Official-SDK consent and token exchange succeeded against the real production
   authorization server and canonical resource.

@@ -14,7 +14,7 @@ export function buildMoverPacketPath({
 }
 
 export function moverPacketFilename(mode: MoverPacketMode) {
-  return `movingmanifest-mover-${mode}.csv`;
+  return `assistwithmoving-mover-${mode}.csv`;
 }
 
 export function moverModeLabel(mode: MoverPacketMode) {

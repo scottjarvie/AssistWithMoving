@@ -14,7 +14,7 @@ export function buildEmployerPacketPath({
 }
 
 export function employerPacketFilename(mode: EmployerPacketMode) {
-  return `movingmanifest-employer-${mode}.csv`;
+  return `assistwithmoving-employer-${mode}.csv`;
 }
 
 export function formatEmployerCurrency(cents: number | undefined) {

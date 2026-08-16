@@ -10,10 +10,25 @@ MCP or API tools while the person remains the authority.
 
 **Authenticated compatibility host and MCP:** https://movingmanifest.com
 
-`MovingManifest` remains the technical repository, package, Clerk, key-prefix,
-and OAuth compatibility name. The public and signed-in product identity is
-Assist With Moving; the public entry redirects to the existing authenticated
-host until a separately approved provider/domain cutover.
+The repository, package, and code identifiers are now `AssistWithMoving`. Several
+technical names deliberately still read `movingmanifest`, because renaming them
+is a live-infrastructure change rather than a code change:
+
+| Still `movingmanifest` | Why |
+|---|---|
+| `movingmanifest.com` (+ `clerk.` / `images.` / `www.`) | The authenticated and MCP/OAuth host; a domain cutover is separately approved |
+| `mmk_` API key prefix | Every issued agent key starts with it; changing it invalidates live keys |
+| Clerk instance and OAuth resource ids | Registered agent clients are bound to them |
+| `movingmanifest-pics` B2 bucket | Holds every uploaded photo |
+| Vercel project (and its `*.vercel.app` preview hosts) | Renaming changes preview URLs and deploy config |
+
+The public and signed-in product identity is Assist With Moving; the public entry
+redirects to the existing authenticated host until a separately approved
+provider/domain cutover.
+
+`MOVINGMANIFEST_*` environment variables are now `ASSISTWITHMOVING_*`. The old
+names are still read as a fallback, so existing agent configs and deployment
+environments keep working until they are updated.
 
 The canonical product identity, responsibility boundaries, domain model, design direction, capability truth and family alignment live in [Assist With Moving — Project Philosophy](docs/planning/assist-with-moving-project-philosophy.md).
 

@@ -1,6 +1,6 @@
 export const product = {
   name: "Assist With Moving",
-  technicalName: "MovingManifest",
+  technicalName: "AssistWithMoving",
   domain: "movingmanifest.com",
   entryDomain: "assistwithmoving.com",
   localUrl: "http://localhost:3827",

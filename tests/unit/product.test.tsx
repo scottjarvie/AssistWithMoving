@@ -7,7 +7,7 @@ import { buildPhases, product } from "@/lib/product";
 describe("product constants", () => {
   it("uses Assist With Moving naming and local port defaults", () => {
     expect(product.name).toBe("Assist With Moving");
-    expect(product.technicalName).toBe("MovingManifest");
+    expect(product.technicalName).toBe("AssistWithMoving");
     expect(product.domain).toBe("movingmanifest.com");
     expect(product.entryDomain).toBe("assistwithmoving.com");
     expect(product.localUrl).toBe("http://localhost:3827");

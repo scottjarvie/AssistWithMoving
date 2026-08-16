@@ -110,7 +110,7 @@ function smokeApi() {
         counts: { items: 15, boxes: 1, photos: 1 },
         photos: [{ photoId: "photo1", derivativeStatus: "ready" }],
       }),
-    movingManifestRequest: vi.fn(async () => ({ data: { moveId: "move1" } })),
+    assistWithMovingRequest: vi.fn(async () => ({ data: { moveId: "move1" } })),
   };
 }
 
@@ -123,7 +123,7 @@ describe("agent journey smoke script", () => {
     ).resolves.toEqual({ status: "skipped", reason: "missing_api_key" });
 
     expect(log).toHaveBeenCalledWith(
-      "SKIP agent journey smoke: set SMOKE_TEST_API_KEY or MOVINGMANIFEST_API_KEY to run."
+      "SKIP agent journey smoke: set SMOKE_TEST_API_KEY or ASSISTWITHMOVING_API_KEY to run."
     );
   });
 
@@ -131,8 +131,8 @@ describe("agent journey smoke script", () => {
     expect(
       createSmokeApiConfig({
         SMOKE_TEST_API_KEY: "mmk_smoke",
-        MOVINGMANIFEST_API_KEY: "mmk_general",
-        MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1/",
+        ASSISTWITHMOVING_API_KEY: "mmk_general",
+        ASSISTWITHMOVING_API_BASE_URL: "https://example.com/api/v1/",
       } as unknown as NodeJS.ProcessEnv)
     ).toEqual({
       baseUrl: "https://example.com/api/v1",
@@ -185,7 +185,7 @@ describe("agent journey smoke script", () => {
       })
     ).rejects.toThrow("batch failed");
 
-    expect(api.movingManifestRequest).toHaveBeenCalledWith(
+    expect(api.assistWithMovingRequest).toHaveBeenCalledWith(
       { baseUrl: "https://movingmanifest.com/api/v1", apiKey: "mmk_smoke" },
       {
         method: "PATCH",
@@ -212,7 +212,7 @@ describe("agent journey smoke script", () => {
     );
 
     expect(api.setupMove).not.toHaveBeenCalled();
-    expect(api.movingManifestRequest).not.toHaveBeenCalled();
+    expect(api.assistWithMovingRequest).not.toHaveBeenCalled();
   });
 
   it("rejects a key missing exports/read before setup writes", async () => {
@@ -246,7 +246,7 @@ describe("agent journey smoke script", () => {
     );
 
     expect(api.setupMove).not.toHaveBeenCalled();
-    expect(api.movingManifestRequest).not.toHaveBeenCalled();
+    expect(api.assistWithMovingRequest).not.toHaveBeenCalled();
   });
 
   it("runs the canonical agent journey with synthetic fixtures", async () => {
@@ -332,7 +332,7 @@ describe("agent journey smoke script", () => {
         ],
       })
     );
-    expect(api.movingManifestRequest).toHaveBeenCalledWith(
+    expect(api.assistWithMovingRequest).toHaveBeenCalledWith(
       { baseUrl: "https://movingmanifest.com/api/v1", apiKey: "mmk_smoke" },
       {
         method: "PATCH",

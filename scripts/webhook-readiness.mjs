@@ -62,7 +62,7 @@ async function checkEndpoint(url) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       type: "user.created",
-      data: { id: "movingmanifest-webhook-readiness" },
+      data: { id: "assistwithmoving-webhook-readiness" },
     }),
   });
   const body = (await response.text()).toLowerCase();

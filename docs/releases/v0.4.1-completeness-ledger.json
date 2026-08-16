@@ -19,7 +19,7 @@
       "markerMeaning": "Merge commit of PR #180, the v0.4.0 product release cutoff; later release-accounting evidence is classified separately from the OAuth repair."
     },
     "github": {
-      "repository": "scottjarvie/movingmanifest",
+      "repository": "scottjarvie/assistwithmoving",
       "productPullRequest": 182,
       "productionDeployment": {
         "commit": "d0c0a83b3a6bf01289b1fb0dd472203fc6d20ac1",

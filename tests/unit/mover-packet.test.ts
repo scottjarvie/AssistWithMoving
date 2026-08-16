@@ -159,7 +159,7 @@ describe("mover packet paths", () => {
     ).toBe(
       "/app/mover-packet?householdId=household-id&moveId=move-id&mode=loadCrew"
     );
-    expect(moverPacketFilename("owner")).toBe("movingmanifest-mover-owner.csv");
+    expect(moverPacketFilename("owner")).toBe("assistwithmoving-mover-owner.csv");
     expect(moverModeLabel("movingCompany")).toBe("Moving company");
   });
 });
