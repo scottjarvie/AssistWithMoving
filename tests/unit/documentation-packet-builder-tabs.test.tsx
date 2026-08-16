@@ -67,7 +67,7 @@ const exportJob = {
   type: "inventory" as const,
   format: "csv" as const,
   status: "completed" as const,
-  filename: "movingmanifest-inventory.csv",
+  filename: "assistwithmoving-inventory.csv",
   rowCount: 12,
   createdAt: Date.UTC(2026, 0, 2),
 };
@@ -158,7 +158,7 @@ describe("DocumentationPacketBuilder task tabs", () => {
       screen.getByRole("button", { name: "Inventory CSV" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/movingmanifest-inventory\.csv/),
+      screen.getByText(/assistwithmoving-inventory\.csv/),
     ).toBeInTheDocument();
     expect(
       screen.queryByLabelText("Packet profile name"),

@@ -66,7 +66,7 @@ describe("storage readiness CORS helpers", () => {
   it("keeps bucket-scoped runtime keys separate from CORS administration", () => {
     expect(
       corsAdministrationGuidance({
-        bucketName: "movingmanifest",
+        bucketName: "assistwithmoving",
         capabilities: ["listFiles", "readFiles", "writeFiles", "deleteFiles"],
       }).detail
     ).toContain("runtime key is bucket-scoped");

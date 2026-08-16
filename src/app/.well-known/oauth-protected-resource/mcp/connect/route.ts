@@ -20,7 +20,7 @@ export function GET(request: Request): Response {
       authorization_servers: issuer ? [issuer] : [],
       scopes_supported: [...mcpOauthScopes],
       bearer_methods_supported: ["header"],
-      resource_name: "MovingManifest",
+      resource_name: "AssistWithMoving",
       resource_documentation: `${origin}/mcp/guide`,
     },
     {

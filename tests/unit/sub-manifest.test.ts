@@ -97,7 +97,7 @@ describe("sub-manifest paths", () => {
       "/app/sub-manifest?householdId=household-id&moveId=move-id&kind=storage&mode=owner"
     );
     expect(subManifestFilename("sellFree", "owner")).toBe(
-      "movingmanifest-sellfree-owner.csv"
+      "assistwithmoving-sellfree-owner.csv"
     );
   });
 });

@@ -19,7 +19,7 @@
       "markerMeaning": "Direct state commit that completed the v0.5.0 release record; the next first-parent source is the Queue-linked MCP product release."
     },
     "github": {
-      "repository": "scottjarvie/movingmanifest",
+      "repository": "scottjarvie/assistwithmoving",
       "productPullRequest": 186,
       "productionDeployment": {
         "commit": "147cff46eaf971b3629d5b9e625e668c3a2d2b0b",

@@ -75,11 +75,11 @@ client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
   local/headless or non-OAuth automation, with a scoped mmk_ key.
 - Codex users should connect remotely; no repository clone or local server is
   required. Recommended OAuth setup:
-  `codex mcp add movingmanifest --url https://movingmanifest.com/mcp`, then
-  `codex mcp login movingmanifest`. Advanced non-OAuth setup:
-  `export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key`, then
-  `codex mcp add movingmanifest --url https://movingmanifest.com/api/mcp --bearer-token-env-var MOVINGMANIFEST_API_KEY`.
-  Restart Codex or start a fresh session, verify `movingmanifest` appears in
+  `codex mcp add assistwithmoving --url https://movingmanifest.com/mcp`, then
+  `codex mcp login assistwithmoving`. Advanced non-OAuth setup:
+  `export ASSISTWITHMOVING_API_KEY=mmk_replace_with_a_scoped_api_key`, then
+  `codex mcp add assistwithmoving --url https://movingmanifest.com/api/mcp --bearer-token-env-var ASSISTWITHMOVING_API_KEY`.
+  Restart Codex or start a fresh session, verify `assistwithmoving` appears in
   `/mcp` or `codex mcp list`, then call `get_move_brief` for OAuth or
   `get_api_context` for an API-key connection. Keep the key in an
   environment variable or secret manager, never in source or the command URL.

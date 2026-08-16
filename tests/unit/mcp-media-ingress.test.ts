@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { uploadEvidenceFile, uploadEvidenceImage } from "../../mcp-server/movingmanifest-api.mjs";
+import { uploadEvidenceFile, uploadEvidenceImage } from "../../mcp-server/assistwithmoving-api.mjs";
 import { downloadPublicHttpsMedia, parsePublicHttpsUrl, readAllowedLocalMedia, resolvePublicAddresses } from "../../mcp-server/media-ingress.mjs";
 
 const pngBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==", "base64");
@@ -13,7 +13,7 @@ describe("MCP media ingress policy", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("rejects hosted filePath input before reading or calling the API", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-hosted-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-hosted-"));
     const filePath = path.join(tempDir, "private.png");
     await writeFile(filePath, pngBytes);
     const fetchMock = vi.fn();
@@ -25,19 +25,19 @@ describe("MCP media ingress policy", () => {
   });
 
   it("requires an explicit allowed root for local filePath input", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-local-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-local-"));
     const filePath = path.join(tempDir, "private.png");
     await writeFile(filePath, pngBytes);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     try {
-      await expect(uploadEvidenceFile(apiConfig({ transport: "stdio", allowedFileRoots: [] }), { moveId: "move1", filePath })).rejects.toThrow(/configure MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS/i);
+      await expect(uploadEvidenceFile(apiConfig({ transport: "stdio", allowedFileRoots: [] }), { moveId: "move1", filePath })).rejects.toThrow(/configure ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS/i);
       expect(fetchMock).not.toHaveBeenCalled();
     } finally { await rm(tempDir, { recursive: true, force: true }); }
   });
 
   it("rejects a claimed MIME type that disagrees with local magic bytes", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mime-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-mime-"));
     const filePath = path.join(tempDir, "mismatch.jpg");
     await writeFile(filePath, pngBytes);
     const fetchMock = vi.fn();
@@ -130,7 +130,7 @@ describe("MCP media ingress policy", () => {
   });
 
   it("allows only regular files whose real path stays inside an allowed root", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-roots-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-roots-"));
     const allowedRoot = path.join(tempDir, "allowed");
     const outsideFile = path.join(tempDir, "outside.png");
     const insideFile = path.join(allowedRoot, "inside.png");
@@ -141,7 +141,7 @@ describe("MCP media ingress policy", () => {
     await symlink(outsideFile, symlinkPath);
     try {
       await expect(readAllowedLocalMedia({ filePath: insideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).resolves.toMatchObject({ bytes: pngBytes });
-      await expect(readAllowedLocalMedia({ filePath: outsideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/outside MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS/i);
+      await expect(readAllowedLocalMedia({ filePath: outsideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/outside ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS/i);
       await expect(readAllowedLocalMedia({ filePath: symlinkPath, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/symlinks, devices, directories, and pipes/i);
       await expect(readAllowedLocalMedia({ filePath: "/dev/zero", transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/regular file/i);
     } finally { await rm(tempDir, { recursive: true, force: true }); }
@@ -152,7 +152,7 @@ describe("MCP media ingress policy", () => {
     { name: "voice-note.weba", mimeType: "audio/webm", bytes: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00]) },
     { name: "voice-note.mp3", mimeType: "audio/mpeg", bytes: Buffer.from([0xff, 0xfb, 0x90, 0x64]) },
   ])("keeps advertised $mimeType local media compatible with signature checks", async ({ name, mimeType, bytes }) => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-media-compat-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-media-compat-"));
     const filePath = path.join(tempDir, name);
     await writeFile(filePath, bytes);
     try {

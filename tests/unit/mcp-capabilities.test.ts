@@ -5,14 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getApiCapabilities,
   getCapabilityToolNames,
-  MOVINGMANIFEST_API_CAPABILITIES,
+  ASSISTWITHMOVING_API_CAPABILITIES,
 } from "../../mcp-server/capabilities.mjs";
 import {
-  MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
+  ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS,
   createAllowedToolFilter,
   planOpSchema,
   registerTools,
-} from "../../mcp-server/movingmanifest-mcp.mjs";
+} from "../../mcp-server/assistwithmoving-mcp.mjs";
 
 type ToolResult = {
   content: Array<{
@@ -37,10 +37,10 @@ type CapabilityPayload = {
 };
 
 function capabilitySourceObjects(source: string) {
-  const start = source.indexOf("export const MOVINGMANIFEST_API_CAPABILITIES = [");
+  const start = source.indexOf("export const ASSISTWITHMOVING_API_CAPABILITIES = [");
   const end = source.indexOf("];", start);
   if (start === -1 || end === -1) {
-    throw new Error("Could not locate MOVINGMANIFEST_API_CAPABILITIES source.");
+    throw new Error("Could not locate ASSISTWITHMOVING_API_CAPABILITIES source.");
   }
 
   const lines = source.slice(start, end).split("\n");
@@ -126,7 +126,7 @@ describe("Assist With Moving MCP capability discovery", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(payload.summary.capabilityCount).toBe(
-      MOVINGMANIFEST_API_CAPABILITIES.length
+      ASSISTWITHMOVING_API_CAPABILITIES.length
     );
     expect(payload.capabilities.map((entry) => entry.id)).toEqual(
       expect.arrayContaining([
@@ -189,7 +189,7 @@ describe("Assist With Moving MCP capability discovery", () => {
   });
 
   it("advertises the Layout Studio floor-plan tools and scopes", () => {
-    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+    expect(ASSISTWITHMOVING_API_CAPABILITIES).toContainEqual(
       expect.objectContaining({
         id: "floorPlans",
         requiredScopes: ["plans/read", "plans/write"],
@@ -206,7 +206,7 @@ describe("Assist With Moving MCP capability discovery", () => {
   });
 
   it("advertises the one-call move setup tool and scopes", () => {
-    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+    expect(ASSISTWITHMOVING_API_CAPABILITIES).toContainEqual(
       expect.objectContaining({
         id: "moveSetup",
         requiredScopes: ["moves/read", "moves/write", "inventory/write"],
@@ -229,7 +229,7 @@ describe("Assist With Moving MCP capability discovery", () => {
     );
     expect(uploadPhotosOptions?.description).toContain("existing itemId");
 
-    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+    expect(ASSISTWITHMOVING_API_CAPABILITIES).toContainEqual(
       expect.objectContaining({
         id: "photoEvidence",
         restEndpoints: expect.arrayContaining([
@@ -273,7 +273,7 @@ describe("Assist With Moving MCP capability discovery", () => {
     expect(saveBoxOptions?.inputSchema).toHaveProperty("contents");
     expect(saveBoxOptions?.inputSchema).toHaveProperty("linkedItems");
 
-    expect(MOVINGMANIFEST_API_CAPABILITIES).toContainEqual(
+    expect(ASSISTWITHMOVING_API_CAPABILITIES).toContainEqual(
       expect.objectContaining({
         id: "boxes",
         requiredScopes: ["inventory/read", "inventory/write", "photos/write"],
@@ -318,13 +318,13 @@ describe("Assist With Moving MCP capability discovery", () => {
   });
 
   it("offers a smaller trusted-helper MCP tool set for hosted assistants", () => {
-    const filter = createAllowedToolFilter(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS);
+    const filter = createAllowedToolFilter(ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS);
     const registrations = collectToolRegistrations({
-      allowedToolNames: MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
+      allowedToolNames: ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS,
     });
     const toolNames = [...registrations.keys()].sort();
 
-    expect(MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(33);
+    expect(ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(33);
     expect(filter("save_box_intake")).toBe(true);
     expect(filter("create_box")).toBe(false);
     expect(toolNames).toContain("save_box_intake");
@@ -616,7 +616,7 @@ describe("Assist With Moving MCP capability discovery", () => {
   });
 
   it("keeps capability ids unique for agent discovery", () => {
-    const ids = MOVINGMANIFEST_API_CAPABILITIES.map((entry) => entry.id);
+    const ids = ASSISTWITHMOVING_API_CAPABILITIES.map((entry) => entry.id);
 
     expect(ids).toHaveLength(new Set(ids).size);
   });

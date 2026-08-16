@@ -496,6 +496,9 @@ async function parseDirectImageUploadRequest(
     const bytes = new Uint8Array(await request.arrayBuffer());
     const fileName =
       stringValue(body.fileName) ??
+      request.headers.get("x-assistwithmoving-file-name") ??
+      // Legacy name for the same header: an older local MCP server still sends
+      // it, and those installs upgrade independently of this deployment.
       request.headers.get("x-movingmanifest-file-name") ??
       request.headers.get("x-file-name") ??
       fileNameFromContentDisposition(request.headers.get("content-disposition"));
@@ -1075,7 +1078,7 @@ const mcpHttpAction = httpAction((ctx, request) =>
     tools: mcpTools,
     requireAuth: true,
     cors: true,
-    serverInfo: { name: "movingmanifest", version: "0.2.0" },
+    serverInfo: { name: "assistwithmoving", version: "0.2.0" },
   }),
 );
 

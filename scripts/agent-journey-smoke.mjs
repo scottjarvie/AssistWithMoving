@@ -9,10 +9,10 @@ import {
   createBox,
   getApiContext,
   getMoveSummary,
-  movingManifestRequest,
+  assistWithMovingRequest,
   setupMove,
   uploadEvidenceImage,
-} from "../mcp-server/movingmanifest-api.mjs";
+} from "../mcp-server/assistwithmoving-api.mjs";
 
 const defaultBaseUrl = "https://movingmanifest.com/api/v1";
 const fixturePath = path.resolve(
@@ -30,11 +30,20 @@ const requiredScopes = [
 ];
 
 export function createSmokeApiConfig(env = process.env) {
-  const apiKey = env.SMOKE_TEST_API_KEY ?? env.MOVINGMANIFEST_API_KEY;
+  // `MOVINGMANIFEST_*` was renamed to `ASSISTWITHMOVING_*`; keep reading the old
+  // names so an unchanged CI secret or shell profile still runs the smoke.
+  const apiKey =
+    env.SMOKE_TEST_API_KEY ??
+    env.ASSISTWITHMOVING_API_KEY ??
+    env.MOVINGMANIFEST_API_KEY;
   if (!apiKey) return null;
 
   return {
-    baseUrl: (env.MOVINGMANIFEST_API_BASE_URL ?? defaultBaseUrl).replace(/\/+$/g, ""),
+    baseUrl: (
+      env.ASSISTWITHMOVING_API_BASE_URL ??
+      env.MOVINGMANIFEST_API_BASE_URL ??
+      defaultBaseUrl
+    ).replace(/\/+$/g, ""),
     apiKey,
   };
 }
@@ -142,7 +151,7 @@ function createdItemIds(batchResult) {
 }
 
 async function archiveSmokeMove(api, config, moveId, log) {
-  await api.movingManifestRequest(config, {
+  await api.assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${moveId}`,
     body: { status: "archived" },
@@ -177,14 +186,14 @@ export async function runAgentJourneySmoke({
     createBox,
     getApiContext,
     getMoveSummary,
-    movingManifestRequest,
+    assistWithMovingRequest,
     setupMove,
     uploadEvidenceImage,
   },
 } = {}) {
   const config = createSmokeApiConfig(env);
   if (!config) {
-    log("SKIP agent journey smoke: set SMOKE_TEST_API_KEY or MOVINGMANIFEST_API_KEY to run.");
+    log("SKIP agent journey smoke: set SMOKE_TEST_API_KEY or ASSISTWITHMOVING_API_KEY to run.");
     return { status: "skipped", reason: "missing_api_key" };
   }
 

@@ -57,8 +57,8 @@ import {
   planSnapshot,
   planSummary,
   plansList,
-  movingManifestImageDerivativeVariants,
-  movingManifestRequest,
+  assistWithMovingImageDerivativeVariants,
+  assistWithMovingRequest,
   convertItemToBox,
   convertPlannedItem,
   removeItemFromBox,
@@ -80,10 +80,10 @@ import {
   updatePlannedItem,
   updateTransportResource,
   updateTransportZone,
-} from "../../mcp-server/movingmanifest-api.mjs";
+} from "../../mcp-server/assistwithmoving-api.mjs";
 
 const derivativeVariantsWithStatus = (status: "pending" | "ready" | "failed") =>
-  movingManifestImageDerivativeVariants.map((variant) => ({ ...variant, status }));
+  assistWithMovingImageDerivativeVariants.map((variant) => ({ ...variant, status }));
 
 const localMediaApiConfig = (allowedRoot: string) => ({
   baseUrl: "https://example.com/api/v1",
@@ -102,8 +102,8 @@ describe("Assist With Moving MCP API client", () => {
   it("reads API config from environment", () => {
     expect(
       createApiConfig({
-        MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1/",
-        MOVINGMANIFEST_API_KEY: "mmk_test_secret",
+        ASSISTWITHMOVING_API_BASE_URL: "https://example.com/api/v1/",
+        ASSISTWITHMOVING_API_KEY: "mmk_test_secret",
       } as unknown as NodeJS.ProcessEnv)
     ).toEqual({
       baseUrl: "https://example.com/api/v1",
@@ -117,7 +117,7 @@ describe("Assist With Moving MCP API client", () => {
 
   it("requires an API key", () => {
     expect(() => createApiConfig({} as NodeJS.ProcessEnv)).toThrow(
-      "MOVINGMANIFEST_API_KEY is required."
+      "ASSISTWITHMOVING_API_KEY is required."
     );
   });
 
@@ -199,7 +199,7 @@ describe("Assist With Moving MCP API client", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await movingManifestRequest(
+    await assistWithMovingRequest(
       { baseUrl: "https://example.com/api/v1", apiKey: "mmk_test_secret" },
       {
         method: "POST",
@@ -766,7 +766,7 @@ describe("Assist With Moving MCP API client", () => {
   });
 
   it("creates an item and uploads attached images through one MCP helper", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-mcp-"));
     const filePath = path.join(tempDir, "red-toolbox.png");
     const pngBytes = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
@@ -919,7 +919,7 @@ describe("Assist With Moving MCP API client", () => {
         authorization: "Bearer mmk_test_secret",
         "content-type": "image/png",
         "content-length": String(pngBytes.length),
-        "x-movingmanifest-file-name": "red-toolbox.png",
+        "x-assistwithmoving-file-name": "red-toolbox.png",
         "idempotency-key": "toolbox-intake-image-1",
       },
       body: pngBytes,
@@ -927,7 +927,7 @@ describe("Assist With Moving MCP API client", () => {
   });
 
   it("adds a household item from one photo through the plain MCP helper", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-mcp-"));
     const filePath = path.join(tempDir, "desk-lamp.png");
     const pngBytes = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
@@ -1073,7 +1073,7 @@ describe("Assist With Moving MCP API client", () => {
         authorization: "Bearer mmk_test_secret",
         "content-type": "image/png",
         "content-length": String(pngBytes.length),
-        "x-movingmanifest-file-name": "desk-lamp.png",
+        "x-assistwithmoving-file-name": "desk-lamp.png",
         "idempotency-key": "desk-lamp-photo-image-1",
       },
       body: pngBytes,
@@ -2184,7 +2184,7 @@ describe("Assist With Moving MCP API client", () => {
   });
 
   it("uploads a local evidence file through the convenience MCP helper", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-mcp-"));
     const filePath = path.join(tempDir, "garage-shelf.png");
     const pngBytes = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
@@ -2422,7 +2422,7 @@ describe("Assist With Moving MCP API client", () => {
   });
 
   it("uploads a local image through the one-call MCP image helper", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-mcp-"));
     const filePath = path.join(tempDir, "closet-bin.png");
     const pngBytes = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
@@ -2518,7 +2518,7 @@ describe("Assist With Moving MCP API client", () => {
         authorization: "Bearer mmk_test_secret",
         "content-type": "image/png",
         "content-length": String(pngBytes.length),
-        "x-movingmanifest-file-name": "closet-bin.png",
+        "x-assistwithmoving-file-name": "closet-bin.png",
         "idempotency-key": "local-image-1",
       },
       body: pngBytes,
@@ -2526,7 +2526,7 @@ describe("Assist With Moving MCP API client", () => {
   });
 
   it("uploads multiple local images through the batch MCP image helper", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-mcp-"));
     const firstPath = path.join(tempDir, "garage-shelf.png");
     const secondPath = path.join(tempDir, "garage-workbench.png");
     const pngBytes = Buffer.from(
@@ -2683,7 +2683,7 @@ describe("Assist With Moving MCP API client", () => {
   });
 
   it("keeps one-call image upload dry runs free of image bytes", async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "movingmanifest-mcp-"));
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-mcp-"));
     const filePath = path.join(tempDir, "entry-table.png");
     const pngBytes = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAADZrBkAAAAADUlEQVR42mP8z8BQDwAFgwJ/lpQqNwAAAABJRU5ErkJggg==",
@@ -2725,7 +2725,7 @@ describe("Assist With Moving MCP API client", () => {
           },
           headers: {
             "Content-Type": "image/png",
-            "X-MovingManifest-File-Name": "entry-table.png",
+            "X-AssistWithMoving-File-Name": "entry-table.png",
           },
           note: expect.stringContaining("does not upload image bytes"),
         },
@@ -3184,8 +3184,8 @@ describe("Assist With Moving MCP API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const config = createApiConfig({
-      MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1",
-      MOVINGMANIFEST_API_KEY: "mmk_test_secret",
+      ASSISTWITHMOVING_API_BASE_URL: "https://example.com/api/v1",
+      ASSISTWITHMOVING_API_KEY: "mmk_test_secret",
     } as unknown as NodeJS.ProcessEnv);
 
     const result = await getInlineImages(config, {
@@ -3206,8 +3206,8 @@ describe("Assist With Moving MCP API client", () => {
 
   it("get_images requires a moveId", async () => {
     const config = createApiConfig({
-      MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1",
-      MOVINGMANIFEST_API_KEY: "mmk_test_secret",
+      ASSISTWITHMOVING_API_BASE_URL: "https://example.com/api/v1",
+      ASSISTWITHMOVING_API_KEY: "mmk_test_secret",
     } as unknown as NodeJS.ProcessEnv);
     await expect(
       getInlineImages(config, {} as Record<string, unknown>)
@@ -3237,8 +3237,8 @@ describe("Assist With Moving MCP API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const config = createApiConfig({
-      MOVINGMANIFEST_API_BASE_URL: "https://example.com/api/v1",
-      MOVINGMANIFEST_API_KEY: "mmk_test_secret",
+      ASSISTWITHMOVING_API_BASE_URL: "https://example.com/api/v1",
+      ASSISTWITHMOVING_API_KEY: "mmk_test_secret",
     } as unknown as NodeJS.ProcessEnv);
 
     const result = await getInlineImages(config, {

@@ -9,7 +9,7 @@ import {
 
 export { getApiCapabilities } from "./capabilities.mjs";
 
-export const movingManifestImageDerivativeVariants = [
+export const assistWithMovingImageDerivativeVariants = [
   {
     variant: "thumb",
     mimeType: "image/webp",
@@ -40,12 +40,19 @@ export const movingManifestImageDerivativeVariants = [
   },
 ];
 
+// The `MOVINGMANIFEST_*` env vars were renamed to `ASSISTWITHMOVING_*`. Existing
+// agent configs (Claude Desktop, Codex, shell profiles) still export the old
+// names, so read the new name first and fall back to the old one.
+function envSetting(env, suffix) {
+  return env[`ASSISTWITHMOVING_${suffix}`] ?? env[`MOVINGMANIFEST_${suffix}`];
+}
+
 export function createApiConfig(env = process.env) {
   const baseUrl =
-    env.MOVINGMANIFEST_API_BASE_URL ?? "https://movingmanifest.com/api/v1";
-  const apiKey = env.MOVINGMANIFEST_API_KEY;
+    envSetting(env, "API_BASE_URL") ?? "https://movingmanifest.com/api/v1";
+  const apiKey = envSetting(env, "API_KEY");
   if (!apiKey) {
-    throw new Error("MOVINGMANIFEST_API_KEY is required.");
+    throw new Error("ASSISTWITHMOVING_API_KEY is required.");
   }
   return {
     baseUrl: baseUrl.replace(/\/+$/g, ""),
@@ -53,13 +60,13 @@ export function createApiConfig(env = process.env) {
     mediaIngress: {
       transport: "stdio",
       allowedFileRoots: parseAllowedFileRoots(
-        env.MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS,
+        envSetting(env, "MCP_ALLOWED_FILE_ROOTS"),
       ),
     },
   };
 }
 
-export async function movingManifestRequest(
+export async function assistWithMovingRequest(
   config,
   { method = "GET", path, query, body, idempotencyKey }
 ) {
@@ -102,7 +109,7 @@ export async function movingManifestRequest(
   return payload;
 }
 
-export async function movingManifestBinaryRequest(
+export async function assistWithMovingBinaryRequest(
   config,
   { method = "POST", path, query, bytes, mimeType, fileName, idempotencyKey }
 ) {
@@ -119,7 +126,7 @@ export async function movingManifestBinaryRequest(
     "content-length": String(bytes.byteLength),
   };
   if (fileName) {
-    headers["x-movingmanifest-file-name"] = fileName;
+    headers["x-assistwithmoving-file-name"] = fileName;
   }
   if (method !== "GET") {
     headers["idempotency-key"] = idempotencyKey ?? randomUUID();
@@ -152,7 +159,7 @@ export async function movingManifestBinaryRequest(
 // ---- inline image reading --------------------------------------------------
 // Sign a short-lived display URL for one photo (MOVE-317 REST endpoint).
 export async function getPhotoDisplayUrl(config, { moveId, photoId, variant }) {
-  return movingManifestRequest(config, {
+  return assistWithMovingRequest(config, {
     method: "GET",
     path: `moves/${moveId}/photos/${photoId}/display-url`,
     query: { variant },
@@ -203,7 +210,7 @@ export async function getInlineImages(config, input) {
   if (Array.isArray(input?.photoIds) && input.photoIds.length > 0) {
     selected = input.photoIds.slice(0, limit).map((photoId) => ({ photoId }));
   } else {
-    const listing = await movingManifestRequest(config, {
+    const listing = await assistWithMovingRequest(config, {
       method: "GET",
       path: `moves/${moveId}/photos`,
       query: { limit: "250" },
@@ -287,13 +294,13 @@ export function toolErrorResult(error) {
 }
 
 export async function getApiContext(config) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: "/me",
   });
 }
 
 export async function listHouseholdMembers(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/households/${input.householdId}/members`,
   });
   return response.data;
@@ -315,7 +322,7 @@ export async function addHouseholdMember(config, input) {
       note: "If the target email does not have an account yet, Assist With Moving creates a pending invitation that activates when they sign in with that email.",
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/households/${input.householdId}/members`,
     body,
@@ -324,7 +331,7 @@ export async function addHouseholdMember(config, input) {
 }
 
 export async function listMoves(config, input = {}) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: "/moves",
     query: { limit: input.limit },
   });
@@ -334,7 +341,7 @@ export async function createMove(config, input) {
   if (input.dryRun) {
     return { dryRun: true, request: { method: "POST", path: "/moves", body: input } };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: "/moves",
     body: input,
@@ -349,7 +356,7 @@ export async function setupMove(config, input) {
       request: { method: "POST", path: "/moves/setup", body },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: "/moves/setup",
     body,
@@ -371,7 +378,7 @@ export async function updateMove(config, input) {
       request: { method: "PATCH", path: `/moves/${moveId}`, body },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${moveId}`,
     body,
@@ -380,28 +387,28 @@ export async function updateMove(config, input) {
 }
 
 export async function getMoveSummary(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/summary`,
   });
   return response.data;
 }
 
 export async function getAgentContext(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/agent-context`,
   });
   return response.data;
 }
 
 export async function getMoveQuestions(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/questions`,
   });
   return response.data;
 }
 
 export async function getMoveDayChecklist(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/move-day`,
     query: {
       filter: input.filter,
@@ -414,7 +421,7 @@ export async function getMoveDayChecklist(config, input) {
 }
 
 export async function plansList(config, input = {}) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: "/plans",
     query: {
       moveId: input.moveId,
@@ -425,7 +432,7 @@ export async function plansList(config, input = {}) {
 }
 
 export async function planGet(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/plans/${input.planId}`,
     query: { moveId: input.moveId },
   });
@@ -433,7 +440,7 @@ export async function planGet(config, input) {
 }
 
 export async function planSummary(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/plans/${input.planId}/summary`,
     query: { moveId: input.moveId },
   });
@@ -457,7 +464,7 @@ export async function planApplyOps(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/plans/${input.planId}/ops`,
     query: { moveId: input.moveId },
@@ -484,7 +491,7 @@ export async function planProposeOps(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/plans/${input.planId}/proposals`,
     query: { moveId: input.moveId },
@@ -494,7 +501,7 @@ export async function planProposeOps(config, input) {
 }
 
 export async function planSnapshot(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/plans/${input.planId}/snapshot.svg`,
     query: {
       moveId: input.moveId,
@@ -504,7 +511,7 @@ export async function planSnapshot(config, input) {
 }
 
 export async function searchInventory(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/items`,
     query: {
       limit: input.limit ?? 50,
@@ -538,7 +545,7 @@ export async function createItem(config, input) {
       request: { method: "POST", path: `/moves/${input.moveId}/items`, body },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/items`,
     body,
@@ -692,7 +699,7 @@ export async function addItemFromPhoto(config, input) {
 }
 
 export async function batchUpsertItems(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/items/batch-upsert`,
     body: {
@@ -714,7 +721,7 @@ export async function updateItem(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${input.moveId}/items/${input.itemId}`,
     body: input,
@@ -732,7 +739,7 @@ export async function deleteItem(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "DELETE",
     path: `/items/${input.itemId}`,
     query: { moveId: input.moveId },
@@ -756,7 +763,7 @@ export async function convertItemToBox(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/items/${input.itemId}/convert-to-box`,
     query: { moveId: input.moveId },
@@ -765,7 +772,7 @@ export async function convertItemToBox(config, input) {
 }
 
 export async function listMoveSpaces(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/spaces`,
     query: {
       limit: input.limit ?? 100,
@@ -785,7 +792,7 @@ export async function createMoveSpace(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/spaces`,
     body: input,
@@ -801,7 +808,7 @@ export async function upsertSaleListing(config, input) {
   if (dryRun) {
     return { dryRun: true, request: { method, path, body } };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method,
     path,
     body,
@@ -810,7 +817,7 @@ export async function upsertSaleListing(config, input) {
 }
 
 export async function listPlannedItems(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/planned-items`,
     query: {
       limit: input.limit ?? 50,
@@ -841,7 +848,7 @@ export async function createPlannedItem(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/planned-items`,
     body: input,
@@ -859,7 +866,7 @@ export async function updatePlannedItem(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}`,
     body: input,
@@ -876,7 +883,7 @@ export async function convertPlannedItem(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}/convert`,
   });
@@ -892,7 +899,7 @@ export async function archivePlannedItem(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "DELETE",
     path: `/moves/${input.moveId}/planned-items/${input.plannedItemId}`,
   });
@@ -908,7 +915,7 @@ export async function createBox(config, input) {
       request: { method: "POST", path: `/moves/${input.moveId}/boxes`, body },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/boxes`,
     body,
@@ -932,7 +939,7 @@ export async function updateBox(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${input.moveId}/boxes/${boxId}`,
     body,
@@ -959,7 +966,7 @@ export async function addItemsToBox(config, input) {
   const results = [];
   for (const item of input.items) {
     results.push(
-      await movingManifestRequest(config, {
+      await assistWithMovingRequest(config, {
         method: "POST",
         path: `/boxes/${input.boxId}/items`,
         body: {
@@ -1113,7 +1120,7 @@ export async function removeItemFromBox(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "DELETE",
     path: `/boxes/${input.boxId}/items/${input.itemId}`,
     query: { moveId: input.moveId },
@@ -1121,7 +1128,7 @@ export async function removeItemFromBox(config, input) {
 }
 
 export async function suggestAssignments(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/assignments/suggest`,
     body: { limit: input.limit },
@@ -1129,7 +1136,7 @@ export async function suggestAssignments(config, input) {
 }
 
 export async function applyAssignments(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/assignments/apply`,
     body: {
@@ -1140,7 +1147,7 @@ export async function applyAssignments(config, input) {
 }
 
 export async function listPlanningSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/planning-suggestions`,
     query: {
       limit: input.limit,
@@ -1150,7 +1157,7 @@ export async function listPlanningSuggestions(config, input) {
 }
 
 export async function listAiJobs(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/ai-jobs`,
     query: {
       limit: input.limit,
@@ -1160,7 +1167,7 @@ export async function listAiJobs(config, input) {
 }
 
 export async function listQueueItems(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/queue`,
     query: {
       state: input.state,
@@ -1172,13 +1179,13 @@ export async function listQueueItems(config, input) {
 }
 
 export async function getQueueItem(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/queue/${input.queueItemId}`,
   });
 }
 
 async function queueCommand(config, input, action, body) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/queue/${input.queueItemId}/${action}`,
     idempotencyKey: input.idempotencyKey,
@@ -1217,14 +1224,14 @@ export async function reportQueueFailure(config, input) {
 }
 
 export async function getAiProviderStatus(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/ai-jobs/provider-status`,
   });
   return response.data;
 }
 
 export async function listAiTextSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/ai-text-suggestions`,
     query: {
       limit: input.limit,
@@ -1234,7 +1241,7 @@ export async function listAiTextSuggestions(config, input) {
 }
 
 export async function listAiPhotoSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/ai-photo-suggestions`,
     query: {
       limit: input.limit,
@@ -1244,7 +1251,7 @@ export async function listAiPhotoSuggestions(config, input) {
 }
 
 export async function generateAiTextSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/ai-text-suggestions/generate`,
     body: {
@@ -1254,7 +1261,7 @@ export async function generateAiTextSuggestions(config, input) {
 }
 
 export async function generateAiPhotoSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/ai-photo-suggestions/generate`,
     body: input.photoId
@@ -1266,7 +1273,7 @@ export async function generateAiPhotoSuggestions(config, input) {
 }
 
 export async function approveAiTextSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/ai-text-suggestions/approve`,
     body: {
@@ -1277,7 +1284,7 @@ export async function approveAiTextSuggestions(config, input) {
 }
 
 export async function rejectAiTextSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/ai-text-suggestions/reject`,
     body: {
@@ -1287,7 +1294,7 @@ export async function rejectAiTextSuggestions(config, input) {
 }
 
 export async function approveAiPhotoSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/ai-photo-suggestions/approve`,
     body: {
@@ -1298,7 +1305,7 @@ export async function approveAiPhotoSuggestions(config, input) {
 }
 
 export async function rejectAiPhotoSuggestions(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/ai-photo-suggestions/reject`,
     body: {
@@ -1318,7 +1325,7 @@ export async function generatePlanningSuggestions(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/planning-suggestions/generate`,
     body: {},
@@ -1338,7 +1345,7 @@ export async function approvePlanningSuggestions(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/planning-suggestions/approve`,
     body: {
@@ -1360,7 +1367,7 @@ export async function rejectPlanningSuggestions(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/planning-suggestions/reject`,
     body: {
@@ -1370,7 +1377,7 @@ export async function rejectPlanningSuggestions(config, input) {
 }
 
 export async function startPhotoUpload(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: "/uploads/init",
     body: input,
@@ -1568,7 +1575,7 @@ export async function uploadEvidenceImage(config, input) {
             query: removeUndefined(metadata),
             headers: removeUndefined({
               "Content-Type": directImage.mimeType,
-              "X-MovingManifest-File-Name": directImage.fileName,
+              "X-AssistWithMoving-File-Name": directImage.fileName,
             }),
             note: "Dry run does not upload image bytes or include them in the transcript.",
           }
@@ -1588,7 +1595,7 @@ export async function uploadEvidenceImage(config, input) {
   }
 
   const response = directImage
-    ? await movingManifestBinaryRequest(config, {
+    ? await assistWithMovingBinaryRequest(config, {
         method: "POST",
         path: "/photos/upload",
         query: removeUndefined(metadata),
@@ -1597,7 +1604,7 @@ export async function uploadEvidenceImage(config, input) {
         fileName: directImage.fileName,
         idempotencyKey: input.idempotencyKey,
       })
-    : await movingManifestRequest(config, {
+    : await assistWithMovingRequest(config, {
         method: "POST",
         path: "/photos/upload",
         body,
@@ -1776,7 +1783,7 @@ export async function finalizePhotoUpload(config, input) {
       request: { method: "POST", path: "/photos/finalize", body: input },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: "/photos/finalize",
     body: input,
@@ -1790,7 +1797,7 @@ export async function attachPhoto(config, input) {
       request: { method: "POST", path: `/photos/${input.photoId}/attach`, body: input },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/photos/${input.photoId}/attach`,
     body: input,
@@ -1812,7 +1819,7 @@ function derivativeNoteForStatus(status) {
 
 function derivativeVariantsForStatus(status, mimeType = "image/jpeg") {
   if (!status || !String(mimeType).startsWith("image/")) return undefined;
-  return movingManifestImageDerivativeVariants.map((variant) => ({
+  return assistWithMovingImageDerivativeVariants.map((variant) => ({
     ...variant,
     status,
   }));
@@ -2236,14 +2243,14 @@ function webpDimensions(bytes) {
 
 export async function listTransportResources(config, input) {
   const [resources, zones] = await Promise.all([
-    movingManifestRequest(config, { path: `/moves/${input.moveId}/resources` }),
-    movingManifestRequest(config, { path: `/moves/${input.moveId}/zones` }),
+    assistWithMovingRequest(config, { path: `/moves/${input.moveId}/resources` }),
+    assistWithMovingRequest(config, { path: `/moves/${input.moveId}/zones` }),
   ]);
   return { resources, zones };
 }
 
 export async function listMovePeople(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/people`,
     query: {
       limit: input.limit,
@@ -2263,7 +2270,7 @@ export async function createMovePerson(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/people`,
     body: {
@@ -2288,7 +2295,7 @@ export async function updateMovePerson(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${input.moveId}/people/${input.personId}`,
     body: {
@@ -2313,7 +2320,7 @@ export async function archiveMovePerson(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "DELETE",
     path: `/moves/${input.moveId}/people/${input.personId}`,
   });
@@ -2330,7 +2337,7 @@ export async function createTransportResource(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/resources`,
     body: input,
@@ -2348,7 +2355,7 @@ export async function updateTransportResource(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${input.moveId}/resources/${input.resourceId}`,
     body: input,
@@ -2362,7 +2369,7 @@ export async function createTransportZone(config, input) {
       request: { method: "POST", path: `/moves/${input.moveId}/zones`, body: input },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/zones`,
     body: input,
@@ -2380,7 +2387,7 @@ export async function updateTransportZone(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${input.moveId}/zones/${input.zoneId}`,
     body: input,
@@ -2388,14 +2395,14 @@ export async function updateTransportZone(config, input) {
 }
 
 export async function getCapacityReport(config, input) {
-  const response = await movingManifestRequest(config, {
+  const response = await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/capacity-report`,
   });
   return response.data;
 }
 
 export async function listDocumentationProfiles(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/documentation-profiles`,
     query: { limit: input.limit, status: input.status },
   });
@@ -2412,7 +2419,7 @@ export async function createDocumentationProfile(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/documentation-profiles`,
     body: {
@@ -2440,7 +2447,7 @@ export async function updateDocumentationProfile(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "PATCH",
     path: `/moves/${input.moveId}/documentation-profiles/${input.documentationProfileId}`,
     body: {
@@ -2467,14 +2474,14 @@ export async function archiveDocumentationProfile(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "DELETE",
     path: `/moves/${input.moveId}/documentation-profiles/${input.documentationProfileId}`,
   });
 }
 
 export async function createExport(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/exports`,
     body: {
@@ -2485,27 +2492,27 @@ export async function createExport(config, input) {
 }
 
 export async function listExports(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/exports`,
     query: { limit: input.limit },
   });
 }
 
 export async function downloadExport(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/exports/${input.exportJobId}/download`,
   });
 }
 
 export async function listShareLinks(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: `/moves/${input.moveId}/share-links`,
     query: { limit: input.limit, status: input.status },
   });
 }
 
 export async function listShareLinkComments(config, input) {
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     path: input.shareLinkId
       ? `/moves/${input.moveId}/share-links/${input.shareLinkId}/comments`
       : `/moves/${input.moveId}/share-links/comments`,
@@ -2527,7 +2534,7 @@ export async function createShareLink(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "POST",
     path: `/moves/${input.moveId}/share-links`,
     body: {
@@ -2551,7 +2558,7 @@ export async function revokeShareLink(config, input) {
       },
     };
   }
-  return await movingManifestRequest(config, {
+  return await assistWithMovingRequest(config, {
     method: "DELETE",
     path: `/moves/${input.moveId}/share-links/${input.shareLinkId}`,
   });

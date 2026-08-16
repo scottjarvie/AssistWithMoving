@@ -59,7 +59,7 @@ describe("account privacy helpers", () => {
       now + ACCOUNT_DELETION_GRACE_MS
     );
     expect(accountExportFilename(now)).toBe(
-      "movingmanifest-account-export-2026-06-08.json"
+      "assistwithmoving-account-export-2026-06-08.json"
     );
   });
 

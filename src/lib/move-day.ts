@@ -31,7 +31,7 @@ export type MoveDayConnectivityStatus = {
 };
 
 export function moveDayCacheKey(moveId: string) {
-  return `movingmanifest:move-day:${moveId}:v${MOVE_DAY_CACHE_VERSION}`;
+  return `assistwithmoving:move-day:${moveId}:v${MOVE_DAY_CACHE_VERSION}`;
 }
 
 export function createMoveDayCachePayload({

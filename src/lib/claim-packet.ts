@@ -14,7 +14,7 @@ export function buildClaimPacketPath({
 }
 
 export function claimPacketFilename(mode: ClaimPacketMode) {
-  return `movingmanifest-claim-${mode}.csv`;
+  return `assistwithmoving-claim-${mode}.csv`;
 }
 
 export function formatClaimCurrency(cents: number | undefined) {

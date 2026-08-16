@@ -1,9 +1,9 @@
 {
-  "name": "movingmanifest",
+  "name": "assistwithmoving",
   "version": "0.6.0",
   "private": true,
   "bin": {
-    "movingmanifest-mcp": "./mcp-server/movingmanifest-mcp.mjs"
+    "assistwithmoving-mcp": "./mcp-server/assistwithmoving-mcp.mjs"
   },
   "scripts": {
     "dev": "next dev -p 3827",
@@ -39,7 +39,7 @@
     "mcp:doctor:legacy": "node scripts/mcp-oauth-discovery-proof.mjs --endpoint https://movingmanifest.com/mcp/connect",
     "smoke:agent-journey": "node scripts/agent-journey-smoke.mjs",
     "smoke:mcp-stdio": "node scripts/mcp-stdio-smoke.mjs",
-    "mcp": "node ./mcp-server/movingmanifest-mcp.mjs",
+    "mcp": "node ./mcp-server/assistwithmoving-mcp.mjs",
     "seed": "node scripts/seed.mjs",
     "postinstall": "patch-package"
   },

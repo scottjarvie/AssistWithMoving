@@ -633,7 +633,7 @@ test.describe("authenticated product flow", () => {
       .click();
     await expect(
       documentationPackets.getByText(
-        /movingmanifest-inventory\.csv - completed - \d+ rows/
+        /assistwithmoving-inventory\.csv - completed - \d+ rows/
       )
     ).toBeVisible({ timeout: 30_000 });
 

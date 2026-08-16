@@ -1,13 +1,13 @@
 // Type surface for the shared MCP tool registry (plain ESM, lives outside src/).
-declare module "*/mcp-server/movingmanifest-mcp.mjs" {
+declare module "*/mcp-server/assistwithmoving-mcp.mjs" {
   import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-  export interface MovingManifestApiConfig {
+  export interface AssistWithMovingApiConfig {
     baseUrl: string;
     apiKey: string;
   }
 
-  export const MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS: string[];
+  export const ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS: string[];
 
   export function createAllowedToolFilter(
     allowedToolNames?: readonly string[]
@@ -15,12 +15,12 @@ declare module "*/mcp-server/movingmanifest-mcp.mjs" {
 
   export function registerTools(
     target: McpServer,
-    apiConfig: MovingManifestApiConfig,
+    apiConfig: AssistWithMovingApiConfig,
     options?: { allowedToolNames?: readonly string[] }
   ): void;
 
-  export function createMovingManifestMcpServer(
-    apiConfig: MovingManifestApiConfig,
+  export function createAssistWithMovingMcpServer(
+    apiConfig: AssistWithMovingApiConfig,
     options?: { allowedToolNames?: readonly string[] }
   ): McpServer;
 }

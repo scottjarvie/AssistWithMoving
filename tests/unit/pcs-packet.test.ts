@@ -173,6 +173,6 @@ describe("PCS packet paths", () => {
         mode: "owner",
       })
     ).toBe("/app/pcs-packet?householdId=household-id&moveId=move-id&mode=owner");
-    expect(pcsPacketFilename("owner")).toBe("movingmanifest-pcs-owner.csv");
+    expect(pcsPacketFilename("owner")).toBe("assistwithmoving-pcs-owner.csv");
   });
 });

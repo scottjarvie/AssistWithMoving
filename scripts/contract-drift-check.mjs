@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const openApiPath = "public/openapi.json";
-const mcpApiPath = "mcp-server/movingmanifest-api.mjs";
-const mcpServerPath = "mcp-server/movingmanifest-mcp.mjs";
+const mcpApiPath = "mcp-server/assistwithmoving-api.mjs";
+const mcpServerPath = "mcp-server/assistwithmoving-mcp.mjs";
 
 const restRouteManifest = [
   route("GET", "/me"),
@@ -185,7 +185,7 @@ function openApiRouteKeys(openapi) {
 function mcpRouteKeys(source) {
   const keys = new Set();
   const requestRegex =
-    /movingManifest(?:Binary)?Request\(\s*config,\s*\{([\s\S]*?)\n\s*\}\s*\)/g;
+    /assistWithMoving(?:Binary)?Request\(\s*config,\s*\{([\s\S]*?)\n\s*\}\s*\)/g;
   let match;
 
   while ((match = requestRegex.exec(source))) {

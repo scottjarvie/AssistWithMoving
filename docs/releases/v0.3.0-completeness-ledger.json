@@ -18,7 +18,7 @@
       "directCommitSources": 12
     },
     "github": {
-      "repository": "scottjarvie/movingmanifest",
+      "repository": "scottjarvie/assistwithmoving",
       "tagsOrReleasesAtCutoff": 0,
       "productionDeployment": {
         "commit": "15cf0063218a6208326abf6b10142d8d1a500ef6",
@@ -42,7 +42,7 @@
       ]
     },
     "linear": {
-      "team": "MovingManifest",
+      "team": "AssistWithMoving",
       "query": "completed issues created on or after 2026-06-20",
       "completedIssueCount": 111,
       "hasNextPage": false,

@@ -127,7 +127,7 @@ describe("normalizeClerkUser", () => {
 
   it("verifies signed Clerk webhook requests and rejects tampered signatures", async () => {
     const signingSecret = `whsec_${Buffer.from(
-      "movingmanifest-test-secret"
+      "assistwithmoving-test-secret"
     ).toString("base64")}`;
     const payload = JSON.stringify({
       type: "user.created",

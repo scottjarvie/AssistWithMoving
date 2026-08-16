@@ -248,13 +248,13 @@ export const openAiProvider: AiProvider = {
         text: {
           format: {
             type: "json_schema",
-            name: "movingmanifest_ai_job_result",
+            name: "assistwithmoving_ai_job_result",
             strict: true,
             schema: openAiStructuredResultSchema,
           },
         },
         metadata: {
-          product: "movingmanifest",
+          product: "assistwithmoving",
           ai_job_id: request.jobId,
           job_type: request.type,
         },

@@ -8,9 +8,10 @@ may be restricted to one move, and all write paths are auditable.
 
 `assistwithmoving.com` is the public product entry. It currently redirects to
 the authenticated compatibility host, `movingmanifest.com`, because production
-Clerk and OAuth are bound there. The brand is Assist With Moving; technical
-URLs, `mmk_` keys, code identifiers, and existing OAuth resources retain their
-compatibility names until a separately approved provider/domain migration.
+Clerk and OAuth are bound there. The brand is Assist With Moving and code
+identifiers now read `AssistWithMoving`; technical URLs, `mmk_` keys, and
+existing OAuth resources retain their `movingmanifest` compatibility names until
+a separately approved provider/domain migration.
 
 ## Base URL
 
@@ -101,11 +102,11 @@ The command is intentionally env-gated:
 
 ```bash
 SMOKE_TEST_API_KEY=mmk_dedicated_smoke_key \
-MOVINGMANIFEST_API_BASE_URL=https://preview-or-local.example/api/v1 \
+ASSISTWITHMOVING_API_BASE_URL=https://preview-or-local.example/api/v1 \
 npm run smoke:agent-journey
 ```
 
-If neither `SMOKE_TEST_API_KEY` nor `MOVINGMANIFEST_API_KEY` is set, the command
+If neither `SMOKE_TEST_API_KEY` nor `ASSISTWITHMOVING_API_KEY` is set, the command
 skips without writing. When pointed at `https://movingmanifest.com/api/v1`, it
 also requires `SMOKE_TEST_ALLOW_PRODUCTION_WRITES=true`; use that only with a
 dedicated household-scoped smoke key and clearly synthetic test data. Never run
@@ -1350,7 +1351,7 @@ approved `filePath`. Assist With Moving stores the original, finalizes evidence
 metadata, creates web-ready derivatives server-side, and returns the `photoId`.
 Remote API-key MCP rejects `filePath`. Local stdio enables it only for paths
 whose resolved real path is inside a directory named in
-`MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS`; symlinks, non-regular files, and paths
+`ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS`; symlinks, non-regular files, and paths
 outside those roots are rejected. The local helper sends approved original
 image bytes directly to `POST /photos/upload`; it does not require the agent to
 base64-wrap the photo, calculate dimensions, or create display files. Use
@@ -1871,7 +1872,7 @@ API-key HTTP and stdio transports share the larger REST-backed registry:
 - **API-key Streamable HTTP** at `https://movingmanifest.com/api/mcp`, served
   by `src/app/api/mcp/route.ts` and backed by REST.
 - **Maintainer-only API-key stdio** via
-  `mcp-server/movingmanifest-mcp.mjs`, run with Node from a clone of this repo
+  `mcp-server/assistwithmoving-mcp.mjs`, run with Node from a clone of this repo
   for development and transport debugging. It is not the public installation
   path and the package is not published to npm.
 
@@ -1923,8 +1924,8 @@ details and the repeatable cleanup lane live in
 Codex CLI/App:
 
 ```bash
-codex mcp add movingmanifest --url https://movingmanifest.com/mcp
-codex mcp login movingmanifest
+codex mcp add assistwithmoving --url https://movingmanifest.com/mcp
+codex mcp login assistwithmoving
 ```
 
 ### Remote MCP — API-key door
@@ -1947,18 +1948,18 @@ Codex CLI/App reads the bearer token from an environment variable rather than
 putting the secret in checked-in configuration:
 
 ```bash
-export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key
-codex mcp add movingmanifest \
+export ASSISTWITHMOVING_API_KEY=mmk_replace_with_a_scoped_api_key
+codex mcp add assistwithmoving \
   --url https://movingmanifest.com/api/mcp \
-  --bearer-token-env-var MOVINGMANIFEST_API_KEY
+  --bearer-token-env-var ASSISTWITHMOVING_API_KEY
 ```
 
 Equivalent Codex `config.toml`:
 
 ```toml
-[mcp_servers.movingmanifest]
+[mcp_servers.assistwithmoving]
 url = "https://movingmanifest.com/api/mcp"
-bearer_token_env_var = "MOVINGMANIFEST_API_KEY"
+bearer_token_env_var = "ASSISTWITHMOVING_API_KEY"
 ```
 
 ### Maintainer-only local stdio server
@@ -1968,20 +1969,20 @@ and parity checks. It is not the user-facing fallback for npm publication. Run
 it only from a trusted clone:
 
 ```bash
-git clone https://github.com/scottjarvie/movingmanifest
-cd movingmanifest/mcp-server
+git clone https://github.com/scottjarvie/assistwithmoving
+cd assistwithmoving/mcp-server
 npm install
 ```
 
 Run the server with a scoped key:
 
 ```bash
-MOVINGMANIFEST_API_KEY="mmk_replace_with_a_scoped_api_key" \
-MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS="/absolute/path/to/approved/media" \
-  node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
+ASSISTWITHMOVING_API_KEY="mmk_replace_with_a_scoped_api_key" \
+ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS="/absolute/path/to/approved/media" \
+  node /absolute/path/to/assistwithmoving/mcp-server/assistwithmoving-mcp.mjs
 ```
 
-`MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS` is path-delimited (`:` on macOS/Linux,
+`ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS` is path-delimited (`:` on macOS/Linux,
 `;` on Windows). Leave it empty to disable local-file ingestion. Only explicitly
 trusted media directories belong here; the server verifies the resolved real
 path and rejects symlinks, devices, pipes, directories, and traversal outside
@@ -1991,32 +1992,32 @@ From this repo during development: `npm run mcp` with the same env. Optional
 env override (defaults to production):
 
 ```bash
-MOVINGMANIFEST_API_BASE_URL="https://movingmanifest.com/api/v1"
+ASSISTWITHMOVING_API_BASE_URL="https://movingmanifest.com/api/v1"
 ```
 
 Maintainer Codex setup (use the absolute path of your clone):
 
 ```bash
-codex mcp add movingmanifest-maintainer-stdio \
-  --env MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key \
-  --env MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS=/absolute/path/to/approved/media \
-  -- node /absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs
+codex mcp add assistwithmoving-maintainer-stdio \
+  --env ASSISTWITHMOVING_API_KEY=mmk_replace_with_a_scoped_api_key \
+  --env ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS=/absolute/path/to/approved/media \
+  -- node /absolute/path/to/assistwithmoving/mcp-server/assistwithmoving-mcp.mjs
 ```
 
 Equivalent Codex `config.toml`:
 
 ```toml
-[mcp_servers.movingmanifest-maintainer-stdio]
+[mcp_servers.assistwithmoving-maintainer-stdio]
 command = "node"
-args = ["/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"]
+args = ["/absolute/path/to/assistwithmoving/mcp-server/assistwithmoving-mcp.mjs"]
 
-[mcp_servers.movingmanifest-maintainer-stdio.env]
-MOVINGMANIFEST_API_KEY = "mmk_replace_with_a_scoped_api_key"
-MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS = "/absolute/path/to/approved/media"
+[mcp_servers.assistwithmoving-maintainer-stdio.env]
+ASSISTWITHMOVING_API_KEY = "mmk_replace_with_a_scoped_api_key"
+ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS = "/absolute/path/to/approved/media"
 ```
 
 After adding the server, restart Codex or start a fresh Codex session, use
-`/mcp` or `codex mcp list` to confirm `movingmanifest-maintainer-stdio` is
+`/mcp` or `codex mcp list` to confirm `assistwithmoving-maintainer-stdio` is
 enabled, then call `get_api_context` before reading or writing private move
 data.
 
@@ -2026,13 +2027,13 @@ Maintainer desktop-agent config example (see
 ```json
 {
   "mcpServers": {
-    "movingmanifest-maintainer-stdio": {
+    "assistwithmoving-maintainer-stdio": {
       "command": "node",
       "args": [
-        "/absolute/path/to/movingmanifest/mcp-server/movingmanifest-mcp.mjs"
+        "/absolute/path/to/assistwithmoving/mcp-server/assistwithmoving-mcp.mjs"
       ],
       "env": {
-        "MOVINGMANIFEST_API_KEY": "mmk_replace_with_a_scoped_api_key"
+        "ASSISTWITHMOVING_API_KEY": "mmk_replace_with_a_scoped_api_key"
       }
     }
   }
@@ -2044,7 +2045,7 @@ remote MCP endpoints above are the public connection solution. Do not advertise
 npm or `npx` setup unless the owner explicitly reopens publication.
 If that decision changes, maintainers must bump the version in
 `mcp-server/package.json` and the `McpServer` constructor in
-`mcp-server/movingmanifest-mcp.mjs`, publish from `mcp-server`, verify a clean
+`mcp-server/assistwithmoving-mcp.mjs`, publish from `mcp-server`, verify a clean
 install, and update every public setup surface in the same release.
 
 Available API-key HTTP/stdio MCP tools:
