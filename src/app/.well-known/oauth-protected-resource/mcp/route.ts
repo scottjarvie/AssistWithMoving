@@ -9,6 +9,7 @@ import {
   mcpOauthScopes,
   siteOriginFromRequest,
 } from "@/lib/mcp-oauth";
+import { product } from "@/lib/product";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export function GET(request: Request): Response {
       authorization_servers: issuer ? [issuer] : [],
       scopes_supported: [...mcpOauthScopes],
       bearer_methods_supported: ["header"],
-      resource_name: "AssistWithMoving",
+      resource_name: product.name,
       resource_documentation: `${origin}/ai`,
     },
     {
