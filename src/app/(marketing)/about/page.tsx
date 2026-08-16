@@ -13,6 +13,7 @@ import {
   PublicPageChrome,
 } from "@/components/public-page-chrome";
 import { buildPhases, product } from "@/lib/product";
+import { supportDesk, supportDeskUrl } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "About",
@@ -119,8 +120,16 @@ export default function AboutPage() {
               It helps you prepare and document a move on your terms.
             </p>
             <p>
-              As the product matures, more about the project and how to reach us
-              will live here.
+              To reach us, use the{" "}
+              <a
+                href={supportDeskUrl("home")}
+                className="text-foreground underline underline-offset-4 hover:text-primary"
+              >
+                {supportDesk.name}
+              </a>
+              . It is the single desk for every Assist With product, so it is
+              also the way to reach Assist With Moving. Direct email contact is
+              not available — there is no support mailbox, and none is planned.
             </p>
           </div>
         </div>

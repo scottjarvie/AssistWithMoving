@@ -4,6 +4,7 @@ import { ArrowRight, HelpCircle, ShieldCheck } from "lucide-react";
 
 import { PublicBand, PublicPageChrome } from "@/components/public-page-chrome";
 import { Badge } from "@/components/ui/badge";
+import { supportDesk, supportDeskUrl } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "FAQ",
@@ -122,6 +123,26 @@ const faqs: Faq[] = [
     ),
   },
   {
+    question: "How do I get help or report a problem?",
+    answer: (
+      <>
+        Through the{" "}
+        <a
+          href={supportDeskUrl("home")}
+          className="text-foreground underline underline-offset-4 hover:text-primary"
+        >
+          {supportDesk.name}
+        </a>
+        . Every Assist With product shares that one desk, so a question, bug
+        report, or privacy request about your move goes to the same place and
+        arrives tagged as coming from Assist With Moving. There is no support
+        email address, and none is planned — Assist With Moving does not run a
+        mailbox, so the desk is the whole support path. If you see an email
+        address claiming to be Assist With Moving support, it is not us.
+      </>
+    ),
+  },
+  {
     question:
       "Is Assist With Moving affiliated with the military, insurers, or moving companies?",
     answer: (
@@ -192,9 +213,18 @@ export default function FaqPage() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             The feature, AI, and privacy pages go deeper than this list. If you
             want to see how your assistant connects or how packets stay scoped to
-            each recipient, those are the best next reads.
+            each recipient, those are the best next reads. If the answer is not
+            written down anywhere, ask at the {supportDesk.name} — there is no
+            support email address to write to instead.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href={supportDeskUrl("home")}
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
+            >
+              Support desk
+              <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+            </a>
             <Link
               href="/features"
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"

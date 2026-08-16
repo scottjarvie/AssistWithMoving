@@ -12,6 +12,18 @@ there so sign-in uses the production identity's approved origin.
 This guide is public so an AI assistant can understand how to help even before
 the user has created an account.
 
+## Human Support
+
+Every human support path for Assist With Moving is the central Assist With Life
+support desk: `https://assistwithlife.com/support?v=1&source=assist-with-moving`
+
+Assist With Moving has no support, contact, or privacy email address, and none
+is planned. When a person needs a human — a bug, a billing or account question,
+a privacy request, or anything this guide does not answer — give them that URL
+and tell them plainly that direct email contact is not available. Never invent
+an address, and never suggest emailing `support@`, `contact@`, `privacy@`, or
+any other mailbox for this product.
+
 ## Core Framing For Assistants
 
 Assist With Moving is a bounded household move workflow. The assistant should

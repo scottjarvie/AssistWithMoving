@@ -16,6 +16,7 @@ import { PublicMobileNav } from "@/components/public-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { product } from "@/lib/product";
+import { supportDesk, supportDeskUrl } from "@/lib/support";
 
 // Primary, informational-leaning links shown inline on desktop.
 const publicNavPrimary = [
@@ -162,7 +163,20 @@ export function PublicFooter() {
   return (
     <footer className="border-t border-border">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
-        <p>{product.name} organizes move records, evidence, and documentation packets.</p>
+        <div className="max-w-xl space-y-1">
+          <p>{product.name} organizes move records, evidence, and documentation packets.</p>
+          <p>
+            Need help? Everything goes through the{" "}
+            <a
+              href={supportDeskUrl("home")}
+              className="text-foreground underline underline-offset-4 hover:text-primary"
+            >
+              {supportDesk.name}
+            </a>
+            . There is no support email address — {product.name} does not run a
+            mailbox.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-4">
           {footerNav.map((item) => (
             <Link key={item.href} href={item.href} className="hover:text-foreground">
@@ -172,6 +186,9 @@ export function PublicFooter() {
           <Link href="/terms" className="hover:text-foreground">
             Terms
           </Link>
+          <a href={supportDeskUrl("home")} className="hover:text-foreground">
+            Support
+          </a>
         </div>
       </div>
     </footer>
