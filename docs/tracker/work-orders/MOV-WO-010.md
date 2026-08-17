@@ -200,13 +200,15 @@ and `package-lock.json`, no `.env.local`, and no deployment contacted.
   since `convex/_generated` is committed and `tsc` covers all 212 files under
   `convex/`; `npm run test` 198 files / 1125 tests pass; `npm run build`
   succeeds and emits `/settings/ai`.
-- The schema delta production will receive is **purely additive**: four new
-  tables (`aiGrants`, `aiGrantActivities`, `movePlanningRecords`,
-  `mcpOperations`) and sixteen indexes. Diffing `convex/schema.ts` across every
-  commit since the live deploy removes zero lines and adds no required field to
-  any existing table, so no backfill is needed and existing rows are untouched.
-  Note this is four tables, not the two an earlier draft recorded — production
-  predates the durable planning loop as well as the grant system.
+- The schema delta production will receive is **purely additive**: two new
+  tables (`aiGrants`, `aiGrantActivities`) and eight indexes. Live production is
+  commit `d8ed8fe` per the v0.6.0 completeness ledger; diffing
+  `convex/schema.ts` from there to `origin/main` is 117 lines added and 0
+  removed. No existing table gains a field at all, so there is no required-field
+  trap, no backfill, and existing rows are untouched. (An earlier draft of this
+  entry counted `movePlanningRecords` and `mcpOperations` as new. They are not —
+  `694d7d8` is an ancestor of the live commit and both tables are already in
+  production.)
 - `npm run mcp:doctor` and `npm run mcp:doctor:legacy` both return 10 pass / 0
   warn / 0 blocked / 0 fail against production today. They are read-only
   discovery probes and were run as a pre-deploy baseline, so after the deploy
@@ -246,6 +248,9 @@ rollback note, is section 2 of
 - 2026-08-16 · Claude Fable 5 — verified repo-side deploy readiness from a clean
   `origin/main` worktree. Found and fixed the branded protected-resource
   metadata serving three scopes and no grant contract, which would have made the
-  documented post-deploy check fail; enumerated the additive four-table schema
-  delta; and rewrote the deploy section into a copy-paste runbook. **Ready for
-  production deploy — awaiting Codex.**
+  documented post-deploy check fail; enumerated the additive two-table schema
+  delta against the live commit; corrected the runbook's deploy ordering, which
+  told Codex to run `npx convex deploy` by hand when `vercel.json` already
+  deploys Convex inside the Vercel build; and captured the live 401 challenge
+  verbatim so the post-deploy check compares against a real response rather than
+  a described one. **Ready for production deploy — awaiting Codex.**

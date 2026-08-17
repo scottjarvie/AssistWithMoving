@@ -77,24 +77,47 @@ npm ci
 A fresh worktree has **no `.env.local`**, and that is deliberate. Keep it that
 way until the deploy step itself.
 
-> **The trap that silently deploys to production.** The Convex CLI reads
-> `CONVEX_DEPLOY_KEY` out of `.env.local` on its own, and that value **overrides
-> your shell environment**. A `prod:`-prefixed key sitting in `.env.local` makes
-> every Convex command target production — including ones you thought were
-> local, like `convex codegen` or `convex dev`. A clean shell does not protect
-> you.
+> ### The trap: `convex deploy` from a dev checkout IS a production deploy
+>
+> This is the most dangerous thing in this document. Verified against the
+> installed CLI (`convex 1.43.0`) — quoting `npx convex deploy --help`:
+>
+> > The target deployment is chosen like this:
+> > • If the `CONVEX_DEPLOYMENT` environment variable is set (typical during
+> > local development), the target is **the project's default production
+> > deployment**.
+>
+> Read that twice. `CONVEX_DEPLOYMENT=dev:gregarious-goldfinch-763` in
+> `.env.local` does **not** mean `convex deploy` goes to dev. It means the CLI
+> knows which *project* you are in and then deploys to that project's
+> **production**. There is no confirmation prompt.
+>
+> **`convex deploy` has no `--prod` flag.** Do not go looking for one and do not
+> add one — its absence is not a safety feature, it is because production is
+> already the default. The `--prod` flag exists on *other* subcommands, which is
+> exactly what makes this easy to get backwards.
+>
+> The Convex CLI also reads `CONVEX_DEPLOY_KEY` out of `.env.local` itself, and
+> that value **overrides your shell environment** — so exporting a dev key does
+> not save you either.
 >
 > Checked on 2026-08-16: `AssistWithMoving/.env.local` contains **no
 > `CONVEX_DEPLOY_KEY`** and sets `CONVEX_DEPLOYMENT=dev:gregarious-goldfinch-763`.
-> So the trap is not currently armed in this repository — but re-check before
-> deploying, because the file is not in version control and can change.
+> The file is not in version control and can change — re-check before deploying.
 >
-> Before any Convex command that could write, confirm the target:
+> **Pre-flight, both commands, before any Convex write:**
+>
 > ```bash
-> npx convex dashboard --no-open     # prints the deployment it would act on
+> # Which deployment is this project's PRODUCTION? --prod is required.
+> # Without it this reports your DEV deployment and tells you nothing useful.
+> npx convex dashboard --no-open --prod
+>
+> # What exactly would be pushed? Prints the configuration, deploys nothing.
+> npx convex deploy --dry-run -v
 > ```
-> If that does not name the production deployment when you intend production —
-> or does name it when you do not — stop and fix the environment first.
+>
+> If the dry run shows anything you did not expect — a table you did not intend
+> to add, a function you did not intend to change — stop.
 
 **Nothing in the verify chain below touches any deployment.** `convex/_generated`
 is committed, so no codegen network call is needed, and `tsc --noEmit` typechecks
@@ -130,37 +153,67 @@ values are already present before deploying:
 `npm run doctor:vercel-env` and `npm run doctor:convex-env` check these without
 deploying.
 
-### 2c. Deploy — Convex first, then Vercel
+### 2c. Deploy — Convex first, then Vercel (one command does both, in order)
+
+**Read this before typing anything.** Convex must land before Vercel, because
+the app reads tables the schema has to already contain. This repository already
+guarantees that ordering — you do not arrange it by hand. `vercel.json` sets:
+
+```json
+"buildCommand": "npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL"
+```
+
+So a production Vercel build **deploys Convex first**, waits for it to succeed,
+then runs `npm run build` with `NEXT_PUBLIC_CONVEX_URL` injected from the
+deployment it just made. If the Convex deploy fails, the build fails and no new
+frontend is promoted. That is the correct ordering, enforced by the build itself.
 
 ```bash
-# 1. Convex. Confirm the target first.
-npx convex dashboard --no-open
-npx convex deploy
-
-# 2. Only after Convex reports success, Vercel.
+# One command. Convex deploys inside this build, before Next.js builds.
 npx vercel deploy --prod
 ```
 
-**Schema delta this applies (purely additive — verified by diffing
-`convex/schema.ts` across every commit since the live deploy; zero lines were
-removed and no existing table gained a required field):**
+Do **not** run a separate `npx convex deploy` first. It is redundant, and — per
+the trap box above — it would deploy straight to production from your local
+machine with no prompt, which is exactly the accident this path avoids. Vercel
+holds the production `CONVEX_DEPLOY_KEY` in its own environment.
+
+If you want to inspect the target and the pending change first, both of these
+are read-only:
+
+```bash
+npx convex dashboard --no-open --prod   # names the PRODUCTION deployment
+npx convex deploy --dry-run -v          # prints what would be pushed
+```
+
+**Schema delta this applies — purely additive.** Live production is commit
+`d8ed8fe` (recorded in `docs/releases/v0.6.0-completeness-ledger.json` as
+production deployment `5909128548`, state `success`, 2026-08-14). Diffing
+`convex/schema.ts` from `d8ed8fe` to `origin/main` gives **117 lines added and
+0 removed**:
 
 | Table | Indexes | From |
 | --- | --- | --- |
 | `aiGrants` | `by_owner_status_updated`, `by_owner_updated`, `by_owner_client_status`, `by_household_updated` | #196 |
 | `aiGrantActivities` | `by_grant_created`, `by_owner_created`, `by_move_created`, `by_expires` | #196 |
-| `movePlanningRecords` | `by_move_updated`, `by_move_kind_updated`, `by_move_stable_key`, `by_household_updated`, plus search index `search_move_records` | `694d7d8` |
-| `mcpOperations` | `by_actor_client_tool_operation`, `by_move`, `by_expires` | `694d7d8` |
 
-That is **four new tables and sixteen indexes**, not two tables and three
-indexes as an earlier draft of this document said. Production predates the
-grant system *and* the durable planning loop, so both land together. New union
-validators (`movingGrantScope`, `mcpClientRegistrationMethod`,
-`aiGrantActivityType`, `movePlanningRecordKind`, `movePlanningRecordStatus`,
-`moveSourceCheckStatus`) are additive type definitions and touch no stored row.
+That is **two new tables and eight indexes**.
 
-Every table is new, so there is no backfill and no existing document needs to
-change. Existing rows are untouched by this deploy.
+> **Correction to an earlier draft of this document.** A previous revision listed
+> `movePlanningRecords` and `mcpOperations` as new, for "four tables and sixteen
+> indexes". They are not new. Commit `694d7d8` is an ancestor of the live commit
+> (`git merge-base --is-ancestor 694d7d8 d8ed8fe` succeeds), and
+> `git show d8ed8fe:convex/schema.ts` already defines both tables. They are
+> already in production. Only the two grant tables are new.
+
+Three new union validators land with them — `movingGrantScope`,
+`mcpClientRegistrationMethod`, `aiGrantActivityType`. Validators are type
+definitions; they touch no stored row.
+
+**Verdict: safe to deploy over live data with no migration.** Nothing is
+removed, renamed, or retyped. No pre-existing table gains a field at all, let
+alone a required one — the classic trap that breaks existing rows is not
+present here. Both new tables start empty, so there is nothing to backfill.
 
 ### 2d. Post-deploy verification
 
@@ -174,21 +227,55 @@ npm run mcp:doctor:legacy
 # Expect: 10 pass, 0 warn, 0 blocked, 0 fail.
 ```
 
-Both doctors were green against production **before** this deploy, so they are a
-regression check, not a proof of the new work. What proves the new work is the
-metadata body:
+Both scripts are the same probe (`scripts/mcp-oauth-discovery-proof.mjs`) aimed
+at different doors — `mcp:doctor` at the canonical `/mcp`, `mcp:doctor:legacy`
+at the compatibility `/mcp/connect`. Neither needs an environment variable, a
+secret, or a live local deployment: they read public endpoints over the network
+and nothing else. The script states its own no-mutation guarantee, and it holds
+— it sends one unauthenticated `initialize` that is rejected at the auth gate,
+then plain GETs for discovery documents. No registration, no token exchange, no
+tool call, no move data.
+
+**Ten checks, and what green proves:** the door returns 401 unauthenticated;
+the challenge carries a `resource_metadata` URL; that document's `resource`
+matches the door you probed; an authorization server is named; and Clerk
+advertises `registration_endpoint`, `authorization_endpoint`, `token_endpoint`,
+PKCE `S256`, and `none` for token-endpoint auth. The tenth check is scopes —
+and note its limit: **the doctor only requires `openid profile email`.** It
+does not assert the five `moving.*` scopes, so a green doctor does **not** prove
+the headline outcome of this deploy. Use the curl below for that.
+
+Both doctors were green against production **before** this deploy (10 pass / 0
+warn / 0 blocked / 0 fail, run 2026-08-16), so they are a regression check —
+they prove the OAuth handshake did not break — not a proof of the new work.
+What proves the new work is the metadata body:
 
 ```bash
-curl -s https://movingmanifest.com/.well-known/oauth-protected-resource/mcp | jq
+curl -s https://movingmanifest.com/.well-known/oauth-protected-resource/mcp \
+  | jq '.scopes_supported'
 ```
 
-Expect `scopes_supported` to contain the three identity scopes **and all five
-product scopes**:
+Expect exactly the three identity scopes **and all five product scopes**, in
+this order:
 
+```json
+[
+  "openid",
+  "profile",
+  "email",
+  "moving.context.read",
+  "moving.evidence.read",
+  "moving.work.write",
+  "moving.queue.work",
+  "moving.archive"
+]
 ```
-"openid", "profile", "email",
-"moving.context.read", "moving.evidence.read",
-"moving.work.write", "moving.queue.work", "moving.archive"
+
+For reference, this is what production returned **before** the deploy
+(captured 2026-08-16) — if you still see this, the deploy did not take:
+
+```json
+["openid","profile","email"]
 ```
 
 and an `x-assistwithmoving` block with `productGrantRequired: true`,
@@ -205,15 +292,37 @@ block, alongside `client_id_metadata_document_supported: true`.
 > list from `convex/lib/aiGrants.ts`) and are guarded by
 > `tests/unit/mcp-endpoint-separation.test.ts`.
 
-Confirm the 401 challenge itself is intact:
+Confirm the 401 challenge itself is intact. An MCP client's very first move is
+an unauthenticated `initialize`; if this stops returning a well-formed
+challenge, no client can discover how to sign in, and the failure is silent
+from the app's side.
 
 ```bash
-curl -s -i -X POST https://movingmanifest.com/mcp \
+curl -s -D - -o /dev/null -X POST https://movingmanifest.com/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}' | head -20
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
+  | grep -iE '^(HTTP/|www-authenticate)'
 ```
 
-Expect `HTTP/2 401` and a `WWW-Authenticate: Bearer ... resource_metadata="https://movingmanifest.com/.well-known/oauth-protected-resource/mcp"` header.
+Expect exactly this shape (verified against live production 2026-08-16, and it
+must be unchanged after the deploy):
+
+```
+HTTP/2 401
+www-authenticate: Bearer realm="assistwithmoving", error="invalid_token", error_description="A valid Assist With Moving OAuth token is required.", resource_metadata="https://movingmanifest.com/.well-known/oauth-protected-resource/mcp"
+```
+
+The response body is:
+
+```json
+{"error":"invalid_token","error_description":"A valid Assist With Moving OAuth token is required."}
+```
+
+Two things must hold: the status is `401` (not 200, 405, or 500), and
+`resource_metadata` points at **`movingmanifest.com`**, not at a `.convex.site`
+host. If it points at the Convex host, the `/mcp` proxy rewrite has broken and
+clients will read the gateway's copy of the metadata instead of the branded one.
 
 Finally, confirm `/api/mcp` still advertises **no** authorization server:
 
@@ -232,9 +341,11 @@ Convex one:
 1. Roll back the Vercel deployment to the previous production build (Vercel
    dashboard → Deployments → previous → Promote to Production). The site returns
    to its prior behaviour immediately.
-2. **Leave the Convex schema in place.** The four new tables are unread by the
+2. **Leave the Convex schema in place.** The two new tables are unread by the
    previous frontend and hold no data yet; removing them is riskier than keeping
-   them and gains nothing.
+   them and gains nothing. There is no "roll back Convex" step, and you should
+   not invent one — a schema rollback is the only genuinely destructive action
+   available here.
 3. Report which check failed and its exact response body.
 
 **Report back:** the doctor summaries, the full protected-resource document, the
