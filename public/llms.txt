@@ -214,7 +214,9 @@ only when the person's grant includes its scope:
 
 Rules for this door: call `get_move_brief` first; search before creating
 duplicates; get private photos with `get_evidence_media` rather than fetching a
-private page or a storage URL; prefer `save_complete_result` (with
+private page or a storage URL, remembering that photo delivery is budgeted, that
+an oversized photo arrives smaller rather than missing, and that anything left
+out is listed under `skipped` with a reason; prefer `save_complete_result` (with
 `completeQueueItem: true` and `relatedQueueItemId` to close a Queue handoff in
 the same approval) and use the granular saves for corrections; reuse the same
 `operationId` on a retry so it corrects instead of duplicating; and if a tool

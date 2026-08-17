@@ -75,7 +75,11 @@ Canonical workflow:
 3. Hydrate only the needed records with get_move_records. Use
    get_evidence_media for private move photos. Never fetch a private page or a
    storage URL; evidence comes back through Moving as protected content or not
-   at all.
+   at all. Photo delivery is budgeted — up to 8 photos per call, and a photo
+   too large at the size you asked for is sent smaller rather than dropped.
+   Anything left out is listed under skipped with a reason: still processing
+   (ask again shortly), too large, or batch limit reached (narrow the filter,
+   or ask for thumb/card).
 4. Prefer save_complete_result for finished work spanning locations, inventory,
    decisions, estimates, plan sections, and source checks. Set
    completeQueueItem: true with relatedQueueItemId to save the result and close

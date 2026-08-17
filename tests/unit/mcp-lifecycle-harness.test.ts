@@ -15,8 +15,10 @@
  *
  * What is deliberately *not* proved here, and needs the live run:
  *  - a real authorization server issuing a real token (this signs its own);
- *  - real object-storage bytes (the delivery fetch is stubbed, so what is
- *    proved is the attachment-scoped delivery shape, not the bucket);
+ *  - the storage host itself (the HTTP GET is stubbed; the URL under it is the
+ *    product's real derivative/signed URL, and the budget, step-down, and
+ *    skipped-with-reason contract is proved in
+ *    `mcp-evidence-media-delivery.test.ts`);
  *  - any client's own OAuth, consent, or tool-refresh behaviour.
  */
 import { createMcpHandler } from "@modelcontextprotocol/server";
@@ -378,12 +380,15 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
     const fixture = await seedLifecycle();
     await approveGrant(fixture, CLIENT_A);
     const originalFetch = globalThis.fetch;
-    // The bucket is out of scope for a local harness. Stubbing the delivery
-    // fetch proves the attachment-scoped path and the inline-bytes shape; real
-    // storage delivery stays an external step.
+    // Only the storage host is stubbed; the URL it answers is the one the
+    // product built. A realistic payload rather than four bytes, so the budget
+    // accounting in the result is meaningful.
     globalThis.fetch = (async () =>
-      new Response(new Uint8Array([1, 2, 3, 4]), {
-        headers: { "content-type": "image/webp" },
+      new Response(new Uint8Array(48_000), {
+        headers: {
+          "content-type": "image/webp",
+          "content-length": "48000",
+        },
       })) as typeof fetch;
     try {
       const result = await fixture.t.action(api.mcpToolsImages.getImages, {
@@ -401,13 +406,21 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
       expect((images[0] as any).mimeType).toBe("image/webp");
       // No storage URL ever crosses the boundary, under any scope.
       expect(JSON.stringify(blocks)).not.toContain("synthetic-lifecycle-bucket");
+      // Delivery is budgeted and accounts for itself, so a batch that cannot
+      // fit reports what it left out instead of failing the call.
+      const summary = JSON.parse(
+        String((blocks.find((b: any) => b.type === "text") as any).text),
+      );
+      expect(summary.images[0].bytes).toBe(48_000);
+      expect(summary.budget.batchLimitBytes).toBeGreaterThan(0);
+      expect(summary.skipped).toEqual([]);
     } finally {
       globalThis.fetch = originalFetch;
     }
     record(
       "4. Protected evidence",
       "Bytes returned",
-      "Private media arrives inline, scoped to the item it is attached to, with no storage link",
+      "Private media arrives inline, scoped to the item it is attached to, within a budget that accounts for itself, with no storage link",
     );
   });
 

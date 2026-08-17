@@ -669,7 +669,7 @@ export function createMovingServer(
     {
       title: "Get evidence media",
       description:
-        "Return private move photos as native inline image blocks. Filter by explicit photo IDs or one item, box, space, transport, zone, room, or the move. Use detail/full only when fine print matters.",
+        "Return private move photos as native inline image blocks — never a storage link. Filter by explicit photo IDs or one item, box, space, transport, zone, room, or the move. Use detail/full only when fine print matters. Delivery is budgeted: a photo too large at the size you asked for is sent smaller rather than dropped, and any photo left out is listed under `skipped` with a reason and what to do about it.",
       inputSchema: z
         .object({
           moveId: id,

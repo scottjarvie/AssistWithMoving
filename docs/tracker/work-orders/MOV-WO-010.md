@@ -3,9 +3,9 @@ id: MOV-WO-010
 title: Bring a chosen AI into a private move with scoped, revocable OAuth
 execution: active
 audit: not-audited
-cards: MOV-0032 MOV-0023 MOV-0033 MOV-0034 MOV-0035
+cards: MOV-0032 MOV-0023 MOV-0033 MOV-0034 MOV-0035 MOV-0038
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-08-17
 proposed-by: Codex
 approved-by: Scott Jarvie
 approval-evidence: "Bring Your AI implementation program charter, assist-with-life/planning/mcp-program-2026-08.md, which places Moving in Wave 1 as a gateway retrofit with the full tool inventory and names the staged implementation sequence this Work Order already carried"
@@ -45,10 +45,15 @@ canonical OAuth can list, claim, question, and complete Queue work; archive is
 reversible and separate; `/settings/ai` is a real grant manager; and a scripted
 nine-step harness runs the whole lifecycle with marked synthetic records.
 
+**Provider truth, CONFIRMED 2026-08-17:** Clerk production Dynamic Client
+Registration is live fleet-wide; DCR is the approved soft-launch client-identity
+path for Moving; Client ID Metadata Documents are **deferred by decision**, not
+blocked or awaiting a provider ticket. Provider action 1 in
+`docs/planning/moving-bring-your-ai-provider-actions.md` is closed as deferred.
+Client identity is no longer a reason a real-client lifecycle cannot run.
+
 The connection is still **Partial**, and deliberately so. Nothing here is
-deployed, the Clerk metadata-document path is not yet enabled, private media
-bytes are proved only against a stubbed delivery fetch rather than the real
-bucket, and **no named AI product has completed the lifecycle**. Every client
+deployed and **no named AI product has completed the lifecycle**. Every client
 stays Unknown. The remaining outside-the-repository steps are written up in
 `docs/planning/moving-bring-your-ai-provider-actions.md`; the evidence and
 target contract remain in
@@ -72,7 +77,9 @@ data; those steps are written up for Scott to run separately.
    saved result → precise follow-up under the product grant, without raw CRUD.
 4. `MOV-0034` — ship canonical `/settings/ai`, connection/activity/revoke UI,
    manual Queue fallback, and synchronized human/AI setup documentation.
-5. `MOV-0035` — prove the SDK and at least one real compatible AI product through
+5. `MOV-0038` — deliver private move photos as real bytes within a server
+   ceiling, stepping down before dropping, and name every omission.
+6. `MOV-0035` — prove the SDK and at least one real compatible AI product through
    the full lifecycle, then update client-specific truth and clean every fixture.
 
 The sequence is deliberate: client identity and transport establish who is
@@ -254,3 +261,21 @@ rollback note, is section 2 of
   deploys Convex inside the Vercel build; and captured the live 401 challenge
   verbatim so the post-deploy check compares against a real response rather than
   a described one. **Ready for production deploy — awaiting Codex.**
+- 2026-08-17 · Claude Fable 5 — recorded the confirmed provider truth (Clerk
+  production DCR live fleet-wide, DCR the approved soft-launch path, Client ID
+  Metadata Documents deferred by decision) across `MOV-0032`, `MOV-0035`, this
+  Work Order's Current truth, and the provider-actions runbook, where step 1 is
+  now closed as deferred rather than outstanding. Then inspected the shipped
+  implementation against the family standard and found the recorded media gap
+  was mis-stated: private-media byte delivery is **real in source** and reuses
+  the web app's own server-side object read (`photos.getDisplayUrlForSubject`
+  → Cloudflare Images or a Backblaze B2 signed URL, fetched server-side, no
+  storage link ever returned). Only the test harness stubbed the network. The
+  genuine gap was that delivery was unbudgeted and failure-opaque, so a real
+  batch of photos could fail the whole call and a missing photo told an AI
+  nothing. That is closed by `MOV-0038`: server-enforced per-image and batch
+  ceilings, an automatic step down to a smaller variant before a photo is
+  dropped, and a ranked, plain-language reason for every omission. No new
+  credential or environment variable is introduced, so the deploy contract in
+  the runbook is unchanged. No provider, secret, deployment, or production data
+  was touched.
