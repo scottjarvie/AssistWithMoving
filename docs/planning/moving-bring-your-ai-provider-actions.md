@@ -200,8 +200,9 @@ npx convex deploy --dry-run -v          # prints what would be pushed
 **Schema delta this applies — purely additive.** Live production is commit
 `d8ed8fe` (recorded in `docs/releases/v0.6.0-completeness-ledger.json` as
 production deployment `5909128548`, state `success`, 2026-08-14). Diffing
-`convex/schema.ts` from `d8ed8fe` to `origin/main` gives **117 lines added and
-0 removed**:
+`convex/schema.ts` from `d8ed8fe` to `origin/main` gives **127 lines added and
+0 removed** (117 for the two grant tables, 10 for the `moves` compatibility
+fields and their comment described below):
 
 | Table | Indexes | From |
 | --- | --- | --- |
@@ -221,10 +222,35 @@ Three new union validators land with them — `movingGrantScope`,
 `mcpClientRegistrationMethod`, `aiGrantActivityType`. Validators are type
 definitions; they touch no stored row.
 
+The pre-existing `moves` table also gains two **optional** fields,
+`nextItemCodeSeq` and `nextBoxCodeSeq`. They are compatibility surface, not new
+product state — nothing reads or writes them. See the note below.
+
 **Verdict: safe to deploy over live data with no migration.** Nothing is
-removed, renamed, or retyped. No pre-existing table gains a field at all, let
-alone a required one — the classic trap that breaks existing rows is not
-present here. Both new tables start empty, so there is nothing to backfill.
+removed, renamed, or retyped. The only pre-existing table that changes is
+`moves`, and it gains two optional fields — never a required one, which is the
+classic trap that breaks existing rows. Both new tables start empty, so there is
+nothing to backfill.
+
+**Deploy blocker cleared — schema validation on `moves`.** Before this change, a
+`convex` push failed schema validation on the development deployment:
+`Object contains extra field 'nextItemCodeSeq' that is not in the validator`.
+The cause was an abandoned performance branch (`8ebdc13`, never merged to
+`main`) that had been pushed to the shared development deployment and wrote
+code-reservation counters onto move documents; dropping the branch orphaned the
+fields. Because Convex validates every document in a table on every push, one
+orphaned field fails the whole deploy.
+
+Re-declaring both counters as optional clears it without touching a single
+document. **Production was never at risk** — the counters were never on `main`,
+so the production validator never declared them, and Convex refuses writes
+carrying fields the deployed validator does not declare. Production rows
+therefore cannot hold them. A read-only confirmation is in the runbook.
+
+Only three development documents carry the fields, all E2E or debug fixtures.
+Removing the fields later requires clearing those documents first:
+`docs/operations/convex-legacy-code-seq-cleanup.md`.
+`tests/unit/moves-legacy-code-seq.test.ts` fails if they are removed early.
 
 ### 2d. Post-deploy verification
 

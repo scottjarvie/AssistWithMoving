@@ -1240,6 +1240,16 @@ export default defineSchema({
     pcsRestrictedItemsNotes: v.optional(v.string()),
     proGearNotes: v.optional(v.string()),
     notes: v.optional(v.string()),
+    // Legacy code-reservation counters. An abandoned performance branch
+    // (8ebdc13, never merged to main) deployed a schema carrying these and
+    // wrote them onto rows in the shared development deployment. No current
+    // code reads or writes them, but Convex validates the whole table on every
+    // push, so leaving them out makes any push fail on those pre-existing rows.
+    // They are retained for backward compatibility with rows written before the
+    // branch was dropped. Removing them requires deleting or patching those rows
+    // first — see docs/operations/convex-legacy-code-seq-cleanup.md.
+    nextItemCodeSeq: v.optional(v.number()),
+    nextBoxCodeSeq: v.optional(v.number()),
     createdByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
