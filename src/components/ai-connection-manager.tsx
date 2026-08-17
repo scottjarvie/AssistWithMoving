@@ -809,6 +809,17 @@ export function AiConnectionManager() {
                         refused immediately. Everything it already saved, and
                         the record of what it did, stays readable.
                       </p>
+                      {/* An honest limit. This revokes the grant, which is what
+                          governs the main connection. It is not a master switch
+                          over the older compatibility connection or over API
+                          keys, and saying so here is better than a person
+                          discovering it later. */}
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        This stops the main connection. It does not revoke a
+                        scoped API key, or an older connection made before
+                        grants existed — those are listed and revoked
+                        separately.
+                      </p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button
                           type="button"
