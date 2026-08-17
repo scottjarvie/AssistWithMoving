@@ -15,4 +15,20 @@ describe("package scripts", () => {
     expect(packageJson.scripts["mcp:doctor"]).not.toContain("register");
     expect(packageJson.scripts["mcp:doctor"]).not.toContain("token");
   });
+
+  it("proves the Convex bindings are fresh before verify:launch typechecks", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+
+    expect(packageJson.scripts["check:convex-bindings-fresh"]).toBe(
+      "node scripts/check-convex-bindings-fresh.mjs"
+    );
+
+    // Ordering is the whole point: a typecheck run against stale bindings
+    // typechecks `any`, and the errors it misses fail inside `convex deploy`.
+    const launch: string = packageJson.scripts["verify:launch"];
+    expect(launch.indexOf("check:convex-bindings-fresh")).toBeGreaterThan(-1);
+    expect(launch.indexOf("check:convex-bindings-fresh")).toBeLessThan(
+      launch.indexOf("run typecheck")
+    );
+  });
 });

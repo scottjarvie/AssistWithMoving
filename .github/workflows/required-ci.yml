@@ -57,6 +57,16 @@ jobs:
         if: steps.scope.outputs.run_full == 'true'
         run: npm run lint
 
+      # Must stay immediately before Typecheck. The checked-in Convex bindings
+      # are what give `api.*`/`internal.*` their types; if they are stale the
+      # typecheck passes against `any` and the errors only surface later, in
+      # the Vercel build's own deploy step. Proving them fresh first is what
+      # makes the next step a real fresh-bindings typecheck. This step is
+      # offline: it regenerates from the modules on disk, with no credentials.
+      - name: Verify the checked-in Convex bindings are fresh
+        if: steps.scope.outputs.run_full == 'true'
+        run: npm run check:convex-bindings-fresh
+
       - name: Typecheck
         if: steps.scope.outputs.run_full == 'true'
         run: npm run typecheck
