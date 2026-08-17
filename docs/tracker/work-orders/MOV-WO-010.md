@@ -3,7 +3,7 @@ id: MOV-WO-010
 title: Bring a chosen AI into a private move with scoped, revocable OAuth
 execution: active
 audit: not-audited
-cards: MOV-0032 MOV-0023 MOV-0033 MOV-0034 MOV-0035 MOV-0038
+cards: MOV-0032 MOV-0023 MOV-0033 MOV-0034 MOV-0035 MOV-0038 MOV-0039
 created: 2026-08-16
 updated: 2026-08-17
 proposed-by: Codex
@@ -116,6 +116,12 @@ data; those steps are written up for Scott to run separately.
    ceiling, stepping down before dropping, and name every omission.
 6. `MOV-0035` — prove the SDK and at least one real compatible AI product through
    the full lifecycle, then update client-specific truth and clean every fixture.
+
+`MOV-0039` is not a seventh step. It is a defect closed inside step 3's already
+delivered and deployed capability: `save_inventory` and `upsert_items` could not
+write an item's own `planningDefaultKeys`, so the `firstNight` tag every packet,
+filter and the load planner already read was unreachable from the connection. It
+adds no scope, no tool, and no product promise.
 
 The sequence is deliberate: client identity and transport establish who is
 connecting; product grants establish what is allowed; domain tools use that
@@ -343,6 +349,28 @@ rollback note, is section 2 of
   label on the connection is unchanged and correct: no named AI product has
   completed the lifecycle.** No product code, authority model, tool catalog,
   scope, provider setting, secret, deployment, or production data was touched.
+- 2026-08-17 · Claude Opus 5 (first-night lane) — closed a defect in the write
+  capability step 3 already delivered. `MOV-0039`: both canonical OAuth write
+  paths hardcoded `planningDefaultKeys: []` on create and carried no field on
+  update, so a connected AI could capture a whole house and still not tag one
+  belonging `firstNight` — even though the load planner, the mover/PCS/employer
+  packets, the inventory filters and `moveQuestions` all read that key today,
+  and the web app has always been able to set it. The field is writable through
+  both paths now, behind a closed vocabulary derived from `planningDefaultKeys`
+  (so the published tool schema cannot drift from what the database accepts) and
+  a compare-and-set requirement, because the field replaces rather than merges.
+  `get_item` and `get_move_records` now return the current tags beside
+  `updatedAt` so a replace is never blind. 18 new tests in
+  `tests/unit/mcp-first-night-planning-keys.test.ts`; the whole suite is 204
+  files / 1188 tests passing, with lint, typecheck, contract drift, tracker
+  verification, Project Philosophy synchronization and the state-publication
+  contract all green. Deliberately out of scope and untouched: any post-arrival,
+  utilities, address-change or first-week system — the Project Philosophy claims
+  no post-arrival phase and that scope is Scott's decision — and the parked July
+  performance branches `codex/move-400-perf-wp1` … `codex/move-409-ci-hygiene`.
+  No scope was added or advertised; `scopes_supported` and the 401 challenge are
+  untouched, storage is untouched, and the connection remains **Partial**. Built
+  on branch `claude/moving-first-night`; not pushed, merged or deployed.
 - 2026-08-17 · Claude Opus 5 (release-candidate lane) — verified production
   against `origin/main` and pinned the deployed SHA. Established that the live
   site serves `7a1081d` exactly (Vercel `dpl_4d8r5pY95xVLXkXeGgUDJtKQEBwc`), that

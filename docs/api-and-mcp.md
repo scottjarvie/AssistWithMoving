@@ -1918,7 +1918,7 @@ connection never sees a capability nobody approved.
 | `get_move_records` | `moving.context.read` | Hydrate up to 25 selected records with role-filtered detail. |
 | `get_evidence_media` | `moving.evidence.read` | Return selected private move photos as native MCP image content. |
 | `save_move_context` | `moving.work.write` | Replay-safe move route/timing/note correction plus room/location upserts. |
-| `save_inventory` | `moving.work.write` | Replay-safe inventory creation and optimistic corrections with estimates, review flags, and source provenance. |
+| `save_inventory` | `moving.work.write` | Replay-safe inventory creation and optimistic corrections with estimates, review flags, source provenance, and the item's `planningDefaultKeys` (`firstNight` and the rest of the move's own tag vocabulary). |
 | `save_planning_record` | `moving.work.write` | Create or optimistically correct a decision, estimate, plan result, or source check. |
 | `save_complete_result` | `moving.work.write` | Preferred happy path: atomically save a readable result and its related locations, inventory, decisions, estimates, plan sections, and source checks. With `completeQueueItem`, finishes the handoff in the same approval when the grant also carries `moving.queue.work`. |
 | `list_queue_work` | `moving.queue.work` | Return only the handoffs the person left **Waiting for your AI** on one move, each with the version to claim it with. Needs you items wait on the person and are not listed. |
@@ -1927,6 +1927,31 @@ connection never sees a capability nobody approved.
 | `ask_queue_question` | `moving.queue.work` | Move a claimed handoff to **Needs you** with one specific smallest question, instead of guessing. |
 | `complete_queue_work` | `moving.queue.work` | Mark a claimed handoff **Done** with its result summary and references. |
 | `archive_move_records` | `moving.archive` | Reversibly archive or restore belongings, boxes, rooms, or planning records, with a per-record result. Never permanently deletes. |
+
+### Planning default keys on an inventory write
+
+`planningDefaultKeys` is the closed tag vocabulary in `planningDefaultKeys`
+(`convex/lib/moveFields.ts`) — `firstNight`, `doNotLetMoversTouch`, `highValue`,
+`documents`, `medication`, `electronics`, `sensitive`, `fragile`,
+`irreplaceable`, `restrictedReview`. The load planner, the mover/PCS/employer
+packets, the inventory filters and `convex/lib/moveQuestions.ts` all read it, so
+an unknown key is refused rather than stored: `save_inventory` publishes the
+vocabulary as an enum derived from that array, and `normalizePlanningDefaultKeys`
+gates every write behind it.
+
+The field **replaces** the stored set, so an AI can remove a tag it got wrong.
+Two rules keep that safe:
+
+- **Omitted means untouched.** A partial correction — a room rename, a quantity
+  fix — never erases tags it did not mention. An explicit `[]` is a deliberate
+  clear.
+- **A replace must be informed.** `save_inventory` already requires
+  `expectedUpdatedAt` on any correction. `upsert_items` (the gateway tool in
+  `convex/mcpToolsWrite.ts`) accepts an optional `expectedUpdatedAt` and
+  *requires* it whenever the draft carries `planningDefaultKeys`, so a
+  concurrent edit by the person cannot be silently dropped. `get_item` and
+  `get_move_records` return the current tags beside `updatedAt`, so one read
+  supplies both.
 
 The five scopes keep read, private-evidence read, write, Queue work, and
 reversible archive separate; a read scope never implies its write sibling. The
