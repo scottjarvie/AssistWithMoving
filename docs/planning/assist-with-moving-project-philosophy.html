@@ -13,7 +13,7 @@
     >
     <meta
       name="source-sha256"
-      content="5c8526b39679d1261fb8f148263c8922b4a6c3411f30a9e1725ea4813c570f51"
+      content="4d54cca420e8a4c242dd86f1111120ac972a8d8eaa918cc36288a95d2ec6f833"
     >
     <link
       rel="icon"
@@ -1358,7 +1358,7 @@
           </div>
           <div>
             <dt>Source digest</dt>
-            <dd data-source-digest-short>5c8526b3…c570f51</dd>
+            <dd data-source-digest-short>4d54cca4…ec6f833</dd>
           </div>
         </dl>
 
@@ -1405,7 +1405,7 @@
         </p>
         <p class="source-hash">
           Source SHA-256:
-          <span data-source-digest-full>5c8526b39679d1261fb8f148263c8922b4a6c3411f30a9e1725ea4813c570f51</span>
+          <span data-source-digest-full>4d54cca420e8a4c242dd86f1111120ac972a8d8eaa918cc36288a95d2ec6f833</span>
         </p>
       </div>
     </footer>
@@ -1415,9 +1415,9 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.7.1
+> **Document version:** 1.8.0
 >
-> **Document date:** 2026-08-14
+> **Document date:** 2026-08-16
 >
 > **Capability evidence last verified:** 2026-08-14 against protected PR `#180`
 > and its production foundation, protected repair PR `#182`, production merge
@@ -1429,7 +1429,9 @@
 > account sign-in/session-cleanup receipt in `MOV-WO-007`; plus Queue-linked MCP
 > PR `#186`, merge `147cff4`, post-merge run `31768988479`, production
 > deployment `5900338675`, and the authenticated Queue/UI/cleanup receipt in
-> `MOV-WO-008`
+> `MOV-WO-008`; re-audited 2026-08-16 against `origin/main` `8a064303`, all
+> four current agent doors, the adopted Bring Your AI standard, and read-only
+> live `/mcp` challenge, protected-resource, and authorization-server metadata
 >
 > **Authority-policy consistency audited:** 2026-08-09 against the complete
 > family Core v1.6.3 and Scott's clarified person / product / chosen-AI boundary
@@ -1458,10 +1460,15 @@
 > direct their own AI; granular, revocable authority and attributable handoff;
 > activity, provenance, identity, privacy and access rules; the accessible
 > light/dark floor; website launch sequencing; Cards / Work Orders / Guide;
-> and the exact fail-closed state-versus-software publication boundary
+> the exact fail-closed state-versus-software publication boundary; and the
+> Bring Your AI delivery sequence for stateless transport, product grants,
+> consent, revocation, workflow tools, human setup, and real-client proof
 >
-> **Deferred/gaps:** a verified granular chosen-AI grant and external-action
-> handoff contract; canonical OAuth Queue transitions;
+> **Deferred/gaps:** Moving-specific OAuth read/evidence/write/Queue/archive
+> scopes; a visible product grant, consent, activity, expiry and immediate
+> revocation path; Client ID Metadata Document-first registration with DCR only
+> as fallback; canonical OAuth Queue transitions; real named-client lifecycle
+> and private-media proof; a separately verified external-action handoff contract;
 > `/me`; `/settings/ai`; `/settings/data`; `/delete-account`; full personal-data
 > deletion; family navigation; Support Desk link; and first-class light mode.
 > These are requirements or later work, not
@@ -1544,6 +1551,9 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 
 - **Current/verified** means supported by this checkout. It does not, by itself,
   prove production deployment or an authenticated real-user path.
+- **Partial** means a useful implemented or deployed foundation has a named
+  permission, lifecycle, environment, or proof gap and cannot support the
+  complete claim.
 - **In design / committed — Coming soon** requires approved, actively scheduled
   soft-launch work. None is assigned by this documentation-only revision.
 - **Later** means required or desired direction without a verified delivery
@@ -1559,7 +1569,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
 | Queue states | Canonical Queue records and the global/move Queue workspace use exactly **Needs you / Working / Waiting for your AI / Done**. Older capture records retain their source states and project into those four person-facing lanes for compatibility. | **Current/verified repository and released-source foundation.** The Queue remains a handoff desk; lease/retry/expiry are operational details, not extra person-facing states. |
 | Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. A Queue item records intent but does not itself create a missing tool, data, operation or external-action grant. | **Owner clarification adopted now in product truth:** Moving checks authority separately from the instruction. Missing authority returns the smallest exact **Needs you** question. When a separately visible grant already names the AI, scope, permitted data, operation or external-action category, approval and duration, Moving may hand the approved context and intent to that AI and record the result. Complete implementation remains **Later**. |
-| MCP and `/ai` | Source routes provide a canonical stateless OAuth `/mcp` with eight move-workflow tools, a persisted compatibility catalog at `/mcp/connect`, and separate API-key `/api/mcp` plus stdio. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified in production** for anonymous OAuth/resource discovery, exact door boundaries, public docs, signed-out privacy, and retained-account OAuth loops covering brief/search/read, one-call source-backed save, idempotent replay, granular correction, normal Move-overview reflection, exact Queue-result linkage without a Queue transition, refresh/client/session cleanup, and hard purge. PRs `#182` and `#186`, `MOV-WO-006`, and `MOV-WO-008` preserve the receipts. Private-media rendering, simultaneous multi-client isolation, reconnect in a named client product, and canonical OAuth Queue claiming/completion remain **Partial / Unknown**. Canonical `/settings/ai` is a **Later alignment gap**. Public pages must list only the catalog attached to their named door. |
+| MCP and `/ai` | Source routes provide a canonical stateless Streamable HTTP OAuth `/mcp` with eight move-workflow tools, a persisted compatibility catalog at `/mcp/connect`, and separate API-key `/api/mcp` plus stdio. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified in production** for anonymous OAuth/resource discovery, exact door boundaries, official-SDK consent/token exchange, brief/search/read, one-call source-backed save, idempotent replay, granular correction, normal Move/Queue reflection without a Queue transition, refresh/client/session cleanup, and hard purge. The complete Bring Your AI lifecycle is **Partial**: OAuth advertises identity-only scopes, DCR is the observed default, no person-visible product grant or immediate OAuth revoke control exists, private-media rendering and reconnect are unproved in a named AI product, and canonical OAuth cannot claim/complete Queue work. Canonical `/settings/ai` is **Later** until delivered. `MOV-WO-010` is the Proposed alignment program; it is not implementation proof. Public pages must list only the exact catalog and client lifecycle attached to their evidence. |
 | Activity and provenance | `auditLogs`, move/object queries, item activity UI, plan journals, API-key/agent write events, and MCP planning records preserve actor and time. Stateless MCP saves add client id, operation id, version, reason, source status, and replay receipts, and the web workspace shows “Your AI via MCP.” Coverage and human-readable before/after/evidence detail are not universal, and no complete external-action handoff/result receipt is verified. | **Current/verified partial repository foundation.** Complete “if an AI did it, the record says so,” including grant, handoff, result, failure or return, is **Later**. |
 | Access and sharing | Clerk-backed household and move participants, roles, move restrictions, scoped/revocable API keys, documentation profiles and revocable `/share/<token>` links exist in source. They are foundations for collaboration-first owner, partner, move-only helper, chosen-AI and recipient-link roles, but the complete per-operation scenarios are not proven. New records do not share a single family visibility field, and current links may expire or permit selected recipient actions. | Private-by-default and collaboration foundations are **Current/verified partial**. The complete role contract, family **Private / Unlisted / Trusted / Public** vocabulary and shared-data screen are **Later**. Action-capable recipient links are an **intentional product-specific difference**, not “Unlisted.” |
 | External conversations and action handoffs | A person may ask their own AI anything outside Moving. Moving neither controls those conversations nor polices the AI's overall behavior. Moving may control only whether its tools or data participate. No complete source-and-user-path proof establishes a grant that names actor, scope, permitted data, external-action category, approval, expiry/revocation and attributable handoff result. | The freedom/boundary distinction is **adopted product truth**. A granular external-action handoff is **Later / unverified**, not a current integration claim. Moving itself remains prohibited from independently taking the outside action. |
@@ -2571,6 +2581,7 @@ one alignment status:
 | Status | Meaning | Claim rule |
 |---|---|---|
 | **Current/verified** | Verified in the exact environment and user path being described; repository-only evidence is labeled as such | Present tense and active controls require current deployed proof |
+| **Partial** | A useful foundation is implemented or deployed, but a named permission, lifecycle, environment or proof element is missing | State the working part and the exact gap; never present the complete capability as Current |
 | **In design / committed — Coming soon** | Approved and actively scheduled soft-launch work with a defined user outcome and owned delivery path | Must say **Coming soon** beside the unfinished capability; no fake or working-looking control |
 | **Later** | A requirement, desired direction, partial foundation or unscheduled capability | Future direction only, never a near-term promise |
 | **Intentional product-specific difference** | A justified Moving behavior that does not redefine a family term or weaken a family safety boundary | Name the difference and reason explicitly |
@@ -2582,8 +2593,9 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 
 ### Dated repository evidence ledger
 
-> **Time-sensitive evidence — verified 2026-08-07:** This table describes the
-> checked-out repository at commit `0d30a9c`. It is not proof that the same
+> **Time-sensitive evidence — reverified 2026-08-16:** This table describes
+> `origin/main` at `8a064303` plus the explicitly named live anonymous checks.
+> It is not proof that the same
 > capability is deployed, configured, reachable through a supported client, or
 > usable by a real account in production.
 
@@ -2596,8 +2608,8 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 | Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields and packet-oriented source | **Current/verified repository foundation.** Full Document Memory / Move Evidence Packets, extraction-confirmation states, completed-form snapshots, requirements progress and post-move retrieval are **Later / unverified**. Private evidence does not become shareable merely because a summary or packet exists |
 | Questions, Move Brief and queue | Derived readiness questions; a bounded MCP move brief; compact move/context summaries; and a per-user four-state Queue with directives, evidence, claim expiry, delegation, AI question, summary, activity and result references | **Current/verified partial repository foundation.** The complete cross-domain Move Brief and attachable question system are **Later**; canonical OAuth Queue transitions remain held until a distinct chosen-AI grant is proven |
 | History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research/source checks, MCP client/operation/version receipts, web-visible saved planning results, and plan operation inverses | **Current/verified partial repository foundation.** Complete dependency, revision and AI-activity coverage is **Later** |
-| API and MCP source surfaces | Documented REST API; a canonical stateless OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts`; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified production foundation** through merge `d0c0a83` for deployment, anonymous discovery/challenge, door separation, docs, consent/token exchange, exact move isolation, complete source-backed save, replay, correction, normal UI reflection, revocation and fixture cleanup. `MOV-WO-006` preserves the complete receipt. Private media, simultaneous multi-client isolation, reconnect in a named client, and canonical OAuth Queue transitions remain **Partial / Unknown** |
-| Granular chosen-AI grants and external-action handoffs | Scoped API keys, OAuth/client foundations, Queue claims and selected audit fields exist, but no complete verified contract names actor, scope, permitted data, product operation or external-action category, approval, expiry/revocation and attributable result together | **Current/verified partial foundations; Later complete contract.** Do not claim that Moving can currently pass an approved external-action handoff or that every AI can receive one |
+| API and MCP source surfaces | Documented REST API; a canonical stateless Streamable HTTP OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts`; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified production foundation** for anonymous discovery/challenge, door separation, official-SDK consent/token exchange, exact move isolation, complete source-backed save, replay, correction, normal UI reflection, refresh/client/session cleanup and fixture purge. The complete connection is **Partial** because product scopes/grants, immediate OAuth revocation, metadata-document-first client identity, named-product media/reconnect, and canonical Queue transitions are not proved. `MOV-WO-010` owns the Proposed alignment program |
+| Granular chosen-AI grants and external-action handoffs | Scoped API keys, OAuth/client identity, Queue claims and selected audit fields exist. No complete product grant binds one OAuth client to selected moves/data, separate operations, approval, expiry, last use and immediate revocation. No external-action contract binds selected data/intent to an attributable result/failure/return | **Partial product-grant foundations; Later complete contracts.** `MOV-0023` owns product grants inside Moving; `MOV-0036` preserves external-action handoffs outside `MOV-WO-010`. Do not claim every AI can connect or receive an outside-action handoff |
 | Costs | Item and replacement values, sale prices and research, planned-item estimate, internal AI-job cost | **Current/verified partial foundation.** General move budgets, vendor quotes, payments and reimbursements are **Later** |
 | Bounded link sharing | Documentation profiles plus move- or profile-scoped links with selected fields/actions, expiry, revocation, access metadata, and recipient comments | **Current/verified recipient-workflow foundation** and **intentional product-specific difference** from family Unlisted. General selected-plan, checklist, item-group and arbitrary-view links are **Later** |
 | General tasks, dependencies, decisions, risks, vendors, and appointments | No complete first-class cross-move model verified | **Later** |
@@ -2932,6 +2944,7 @@ capability.
 | Project orientation and delivery | [README](../../README.md) | Current stack, repository map, local checks and the merge-to-production convention |
 | AI working instructions | [AGENTS.md](../../AGENTS.md) | Stable repository orientation, safety rules and canonical Project Philosophy discovery |
 | API, MCP and authorization architecture | [API and MCP guide](../api-and-mcp.md) and [stateless foundation contract](moving-stateless-mcp-foundation.md) | Authoritative guide to the canonical stateless OAuth, persisted compatibility OAuth and API-key HTTP/stdio surfaces; claims still require exact running-path proof |
+| Bring Your AI alignment | [Moving MCP/OAuth alignment plan](moving-bring-your-ai-mcp-oauth-alignment.md), [Work Order `MOV-WO-010`](../tracker/work-orders/MOV-WO-010.md), and [family-standard draft receipt](https://github.com/scottjarvie/assistwithlife/pull/16) | Moving-specific Current/Partial/Later audit, product grants, Queue/evidence/save workflow, metadata-first client identity, human connection experience, and proof plan; Proposed work is not Current capability |
 | Product and implementation intent | [MovingManifest AI build specification](../movingmanifest_ai_build_spec.md) | Historical design and implementation direction; useful context, not proof that a capability is current |
 | Audit and remediation evidence | [2026-07-26 performance fix specification](../audits/AUDIT-2026-07-26-PERF-FIX-SPEC.md) and the other files in `docs/audits/` | Dated findings and proposed or verified remediation; recheck the exact code and environment before relying on them |
 | Release accounting | [v0.3.0 completeness ledger](../releases/v0.3.0-completeness-ledger.json) | Version-scoped release evidence, not a substitute for deployed or authenticated proof |
@@ -2946,7 +2959,7 @@ dated evidence map and can drift.
 Before changing a public page, onboarding flow, signed-in shell, product
 description, AI setup guide, or integration guide:
 
-1. classify every material claim with one of this document's five alignment
+1. classify every material claim with one of this document's six alignment
    statuses;
 2. verify deployed **Current/verified** claims against the exact environment and relevant user
    path—not only source code, a merged pull request, provider configuration, or
@@ -2967,8 +2980,12 @@ Before naming MCP or a specific AI client as deployed **Current/verified**, prov
 authentication flow, caller and move isolation, exact documented tool list,
 supported-client setup, and an end-to-end
 context → work → save → human-inspection result. Before naming a provider-style
-connection, prove consent, scope, credential handling, revocation, failure
-behavior, freshness, and the exact user path. Before naming an external action,
+connection, prove Client ID Metadata Documents first or record why DCR fallback
+was required; product read/evidence/write/Queue/archive scopes and consent;
+credential handling; person-visible activity and immediate revocation; failure,
+reconnect and stale-tool behavior; cleanup; and the exact user path. An official
+SDK harness or token exchange does not prove Claude, ChatGPT, Codex, Grok,
+Hermes, or another named AI product. Before naming an external action,
 prove the chosen AI, scope, permitted data, operation/action category, owner
 approval, expiry/revocation, handoff receipt, attributable result or failure,
 error handling, and recovery boundaries. Keep the proof explicit that Moving
@@ -2982,6 +2999,13 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.8.0 · 2026-08-16** — adopted the Bring Your AI implementation standard
+  as a separate delivery reference; re-audited fresh `origin/main`, all four
+  agent doors and live anonymous OAuth discovery; added Partial as a first-class
+  truth state; preserved the Current stateless eight-tool and SDK foundations;
+  and recorded product scopes/grants, immediate revocation, Client ID Metadata
+  Documents, canonical Queue work, `/settings/ai`, and real named-client proof
+  as the missing system proposed in `MOV-WO-010`.
 - **1.7.1 · 2026-08-14** — recorded the verified production path from an exact
   personal Queue directive through canonical OAuth MCP to linked Queue and Move
   overview results, while preserving the unchanged Queue state, chosen-AI

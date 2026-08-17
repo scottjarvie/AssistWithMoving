@@ -66,6 +66,8 @@ before assuming a capability is missing):
    only MCP surface with canonical scoped Queue transitions today.
 
 See [docs/api-and-mcp.md](docs/api-and-mcp.md) for details.
+The evidence-backed path from today's foundation to the adopted family standard
+is in the [Moving Bring Your AI MCP/OAuth alignment plan](docs/planning/moving-bring-your-ai-mcp-oauth-alignment.md).
 
 ## Project tracker
 
