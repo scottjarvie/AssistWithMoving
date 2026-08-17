@@ -190,6 +190,46 @@ production data was changed. The Clerk metadata-document enablement, the
 ordered Convex-before-Vercel deployment, and the named-client lifecycle are
 prepared and unrun.
 
+## Deploy readiness — ready for production deploy, awaiting Codex
+
+Verified 2026-08-16 from a clean worktree at `origin/main` `118f91c`, with npm
+and `package-lock.json`, no `.env.local`, and no deployment contacted.
+
+- `npm run lint` 0 errors (1 pre-existing unused-var warning);
+  `npm run typecheck` clean — which is also the Convex-functions compile proof,
+  since `convex/_generated` is committed and `tsc` covers all 212 files under
+  `convex/`; `npm run test` 198 files / 1125 tests pass; `npm run build`
+  succeeds and emits `/settings/ai`.
+- The schema delta production will receive is **purely additive**: two new
+  tables (`aiGrants`, `aiGrantActivities`) and eight indexes. Live production is
+  commit `d8ed8fe` per the v0.6.0 completeness ledger; diffing
+  `convex/schema.ts` from there to `origin/main` is 117 lines added and 0
+  removed. No existing table gains a field at all, so there is no required-field
+  trap, no backfill, and existing rows are untouched. (An earlier draft of this
+  entry counted `movePlanningRecords` and `mcpOperations` as new. They are not —
+  `694d7d8` is an ancestor of the live commit and both tables are already in
+  production.)
+- `npm run mcp:doctor` and `npm run mcp:doctor:legacy` both return 10 pass / 0
+  warn / 0 blocked / 0 fail against production today. They are read-only
+  discovery probes and were run as a pre-deploy baseline, so after the deploy
+  they are a regression check rather than proof of the new work.
+- **One defect found and fixed before it could break the deploy.** The branded
+  `/.well-known/oauth-protected-resource/mcp` route served only
+  `["openid","profile","email"]` and no grant block, while the document carrying
+  the five `moving.*` scopes, `productGrantRequired`, and the four-door block
+  existed only on the Convex gateway — which no client ever fetches, because the
+  `/mcp` proxy rewrites the 401 `resource_metadata` to point at the branded
+  route. Deploying as-is would have shipped the grant system with its scopes
+  invisible to every client, and the documented post-deploy check would have
+  failed. Both documents now build from one shared source
+  (`protectedResourceMetadataBody`), and
+  `tests/unit/mcp-endpoint-separation.test.ts` locks the contract.
+
+The copy-paste deploy procedure, including the `CONVEX_DEPLOY_KEY`-in-
+`.env.local` trap, the environment table, post-deploy verification, and the
+rollback note, is section 2 of
+`docs/planning/moving-bring-your-ai-provider-actions.md`.
+
 ## History
 
 - 2026-08-16 · Scott via coordinator task — requested a visible substantial
@@ -205,3 +245,12 @@ prepared and unrun.
   `MOV-0032`, `MOV-0023`, `MOV-0033`, `MOV-0034`, `MOV-0035` moved to Doing.
   Provider-dashboard and real-client steps stay outside the repository and are
   written up for Scott to run.
+- 2026-08-16 · Claude Fable 5 — verified repo-side deploy readiness from a clean
+  `origin/main` worktree. Found and fixed the branded protected-resource
+  metadata serving three scopes and no grant contract, which would have made the
+  documented post-deploy check fail; enumerated the additive two-table schema
+  delta against the live commit; corrected the runbook's deploy ordering, which
+  told Codex to run `npx convex deploy` by hand when `vercel.json` already
+  deploys Convex inside the Vercel build; and captured the live 401 challenge
+  verbatim so the post-deploy check compares against a real response rather than
+  a described one. **Ready for production deploy — awaiting Codex.**

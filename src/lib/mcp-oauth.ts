@@ -1,3 +1,4 @@
+import { GRANT_BOUNDARY_VERSION, movingScopes } from "../../convex/lib/aiGrants";
 import { product } from "@/lib/product";
 
 // ============================================================================
@@ -33,6 +34,75 @@ import { product } from "@/lib/product";
 // ============================================================================
 
 export const mcpOauthScopes = ["openid", "profile", "email"] as const;
+
+/**
+ * What the OAuth doors advertise in RFC 9728 `scopes_supported`.
+ *
+ * Two different things live in one list, and the distinction matters:
+ *   - `mcpOauthScopes` are the identity scopes Clerk actually issues today.
+ *   - `movingScopes` are the product ceiling this resource enforces from its
+ *     own grant records. A token carrying one never widens a grant, and a token
+ *     lacking one never narrows one — but a client still needs to see them to
+ *     understand what approving at /settings/ai can cover.
+ *
+ * Sourced from convex/lib/aiGrants.ts rather than re-listed here. These Next
+ * routes are what an MCP client actually reads: the /mcp proxy rewrites the
+ * gateway's 401 to point at this domain's metadata, so the Convex gateway's own
+ * copy is never fetched by a real client. When the two lists drifted, the five
+ * moving.* scopes existed in the backend and were invisible to every client.
+ */
+export const mcpResourceScopes = [
+  ...mcpOauthScopes,
+  ...movingScopes,
+] as const;
+
+/**
+ * The RFC 9728 body for an OAuth door, mirroring `protectedResourceMetadata`
+ * in convex/httpRoutes/mcp.ts.
+ *
+ * Both copies have to exist — the gateway answers on `.convex.site`, and these
+ * routes answer on the branded domain — but only this one is ever read by a
+ * client, because the /mcp proxy rewrites the gateway's 401 `resource_metadata`
+ * to point here. Keep the two in sync; the drift is silent and total.
+ */
+export function protectedResourceMetadataBody({
+  origin,
+  resourcePath,
+  documentationPath,
+}: {
+  origin: string;
+  resourcePath: string;
+  documentationPath: string;
+}) {
+  const issuer = clerkOauthIssuer();
+  return {
+    resource: `${origin}${resourcePath}`,
+    authorization_servers: issuer ? [issuer] : [],
+    scopes_supported: [...mcpResourceScopes],
+    bearer_methods_supported: ["header"],
+    resource_name: product.name,
+    resource_documentation: `${origin}${documentationPath}`,
+    // A Client ID Metadata Document is preferred; dynamic registration stays as
+    // a labelled compatibility fallback so a client can choose the better path.
+    client_id_metadata_document_supported: true,
+    dynamic_client_registration_fallback_supported: true,
+    "x-assistwithmoving": {
+      grantBoundaryVersion: GRANT_BOUNDARY_VERSION,
+      // Signing in is not authorization. Without an approved grant every tool
+      // call is refused, so a client should send people to the grant manager
+      // rather than reporting a broken connection.
+      productGrantRequired: true,
+      grantManager: `${origin}/settings/ai`,
+      // Four doors, honestly named. Only /mcp is the canonical OAuth resource.
+      doors: {
+        canonical: `${origin}/mcp`,
+        legacyCompatibility: `${origin}/mcp/connect`,
+        apiKeyOnly: `${origin}/api/mcp`,
+        localStdio: "assistwithmoving-mcp (npm, mmk_ key)",
+      },
+    },
+  };
+}
 
 export function siteOriginFromRequest(request: Request) {
   const requestOrigin = originFromRequest(request);

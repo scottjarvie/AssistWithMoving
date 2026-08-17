@@ -21,6 +21,7 @@ import {
 import { GET as getMcpEndpoint } from "../../src/app/api/mcp/route";
 import { GET as getApiMcpMetadata } from "../../src/app/.well-known/oauth-protected-resource/[[...resource]]/route";
 import { GET as getConnectMetadata } from "../../src/app/.well-known/oauth-protected-resource/mcp/connect/route";
+import { GET as getCanonicalMetadata } from "../../src/app/.well-known/oauth-protected-resource/mcp/route";
 
 const originalEnv = { ...process.env };
 
@@ -93,6 +94,64 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
     });
   });
 
+  // The /mcp proxy rewrites the Convex gateway's 401 `resource_metadata` to
+  // point at THIS document, so the gateway's own copy is never fetched by a
+  // real client. Anything the product needs a client to know has to be here.
+  // These assertions exist because the two copies silently drifted once: the
+  // five moving.* scopes and the grant contract shipped to Convex and stayed
+  // invisible in production, where the branded route still said "openid
+  // profile email" and nothing about grants.
+  describe("/mcp protected-resource metadata carries the grant contract", () => {
+    it("lists the identity scopes and all five product scopes", async () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
+      process.env.CLERK_JWT_ISSUER_DOMAIN = "https://clerk.example.test/";
+      const res = await getCanonicalMetadata(
+        new Request(
+          "https://x.example/.well-known/oauth-protected-resource/mcp",
+        ),
+      );
+      const body = (await res.json()) as {
+        resource: string;
+        scopes_supported: string[];
+      };
+      expect(body.resource).toBe("https://movingmanifest.test/mcp");
+      expect(body.scopes_supported).toEqual([
+        "openid",
+        "profile",
+        "email",
+        "moving.context.read",
+        "moving.evidence.read",
+        "moving.work.write",
+        "moving.queue.work",
+        "moving.archive",
+      ]);
+    });
+
+    it("tells a client that signing in is not authorization", async () => {
+      process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
+      process.env.CLERK_JWT_ISSUER_DOMAIN = "https://clerk.example.test/";
+      const res = await getCanonicalMetadata(
+        new Request(
+          "https://x.example/.well-known/oauth-protected-resource/mcp",
+        ),
+      );
+      const body = (await res.json()) as {
+        client_id_metadata_document_supported: boolean;
+        "x-assistwithmoving": {
+          productGrantRequired: boolean;
+          grantManager: string;
+          doors: Record<string, string>;
+        };
+      };
+      expect(body.client_id_metadata_document_supported).toBe(true);
+      const moving = body["x-assistwithmoving"];
+      expect(moving.productGrantRequired).toBe(true);
+      expect(moving.grantManager).toBe("https://movingmanifest.test/settings/ai");
+      expect(moving.doors.canonical).toBe("https://movingmanifest.test/mcp");
+      expect(moving.doors.apiKeyOnly).toBe("https://movingmanifest.test/api/mcp");
+    });
+  });
+
   describe("/mcp/connect (OAuth door) MUST advertise OAuth", () => {
     it("advertises Clerk + scopes and points at /mcp/connect", async () => {
       process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
@@ -109,7 +168,21 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
       };
       expect(body.resource).toBe("https://movingmanifest.test/mcp/connect");
       expect(body.authorization_servers).toEqual(["https://clerk.example.test"]);
-      expect(body.scopes_supported).toEqual(["openid", "profile", "email"]);
+      // Identity scopes (what Clerk issues) followed by the five product
+      // scopes (the ceiling this resource enforces from its grant records).
+      // A real client only ever reads this document — the /mcp proxy rewrites
+      // the gateway's 401 to point here — so the moving.* scopes must be
+      // listed here or they are invisible in production.
+      expect(body.scopes_supported).toEqual([
+        "openid",
+        "profile",
+        "email",
+        "moving.context.read",
+        "moving.evidence.read",
+        "moving.work.write",
+        "moving.queue.work",
+        "moving.archive",
+      ]);
     });
 
     it("mcpOAuthConnectUrl resolves to the /mcp front door", () => {
