@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "version": "0.7.0",
+    "from": "d8ed8fe0717cd76444158ca63915ea473289792b",
+    "to": "7a1081dd937f43d9ef8b97586e89633b8334611c",
+    "cutoff": "2026-08-17T15:31:49.223Z",
+    "cutoffTimezone": "America/Phoenix",
+    "posture": "release-ready",
+    "recordType": "verified production Bring Your AI connection release"
+  },
+  "reconciliation": {
+    "git": {
+      "selection": "d8ed8fe..7a1081d",
+      "exactAncestorRange": true,
+      "sourceCount": 12,
+      "pullRequestSources": 12,
+      "directCommitSources": 0,
+      "markerMeaning": "The v0.6.0 private-first product merge is the prior release marker. Every first-parent merge after it through the currently deployed production commit is classified here."
+    },
+    "github": {
+      "repository": "scottjarvie/assistwithmoving",
+      "productPullRequest": 196,
+      "productionDeployment": {
+        "commit": "7a1081dd937f43d9ef8b97586e89633b8334611c",
+        "deploymentId": "dpl_4d8r5pY95xVLXkXeGgUDJtKQEBwc",
+        "state": "READY",
+        "target": "production",
+        "deployedAt": "2026-08-17T15:31:49.223Z",
+        "evidence": "Vercel deployment API reports meta.githubCommitSha 7a1081dd937f43d9ef8b97586e89633b8334611c on ref main, aliased to movingmanifest.com and assistwithmoving.com. The deployed SHA equals origin/main HEAD exactly, so production serves this ledger's `to` commit with nothing merged behind it."
+      }
+    },
+    "productionAcceptance": {
+      "discovery": "npm run mcp:doctor and npm run mcp:doctor:legacy each returned 10 pass / 0 warn / 0 blocked / 0 fail against production on 2026-08-17, covering the anonymous 401 challenge, the resource_metadata pointer, the Clerk authorization server, registration/authorize/token endpoints, PKCE S256, and the advertised identity scopes.",
+      "grantContract": "GET https://movingmanifest.com/.well-known/oauth-protected-resource/mcp served scopes_supported [openid, profile, email], client_id_metadata_document_supported true, dynamic_client_registration_fallback_supported true, and the x-assistwithmoving block carrying grantBoundaryVersion 2026-08-16, productGrantRequired true, the five moving.* product scopes, the grant-manager URL, and the four-door map.",
+      "doorSeparation": "POST https://movingmanifest.com/api/mcp without credentials returned 401 with a WWW-Authenticate challenge naming the API-key door and redirecting OAuth clients to https://movingmanifest.com/mcp. Its protected-resource document correctly advertises no authorization server, so the API-key door cannot be mistaken for the OAuth door.",
+      "cleanup": "No production fixture, move, Queue row, MCP record, OAuth client, grant, token, password, session, or device was created in this release proof. Every probe was an unauthenticated read.",
+      "notProved": [
+        "a named AI product completing the full connect-to-revoke lifecycle against production",
+        "a production consent screen, five-scope grant approval, or token exchange",
+        "production Queue claim/ask/complete under a canonical OAuth grant",
+        "production private-photo byte delivery under the new media budgets",
+        "production revoke-immediate refusal and reconnect"
+      ],
+      "whyNotProved": "The real-client lifecycle needs a production Clerk identity and a production Clerk secret. The repository checkout holds only development Clerk credentials (a pk_test_/sk_test_ pair for glorious-swine-50.clerk.accounts.dev) and a development Convex deployment, so no production person-step can be driven programmatically from it. Creating a production account, or obtaining a production Clerk secret, is an outside-the-repository decision reserved to Scott under MOV-WO-010's stop rules."
+    },
+    "dispositionCounts": {
+      "include": 5,
+      "group": 1,
+      "exclude": 6,
+      "unshipped": 0
+    }
+  },
+  "releaseItems": [
+    "chosen-ai-scoped-connection",
+    "connected-ai-move-photos",
+    "oauth-scope-advertisement",
+    "oauth-consent-product-name",
+    "support-path",
+    "stdio-package-identity"
+  ],
+  "sources": [
+    {
+      "id": "pr-191",
+      "kind": "pull_request",
+      "prNumber": 191,
+      "title": "Record the private-first Moving release",
+      "commits": ["8a06430340e82000d6c9edc97882a233b12043f2"],
+      "firstSeenAt": "2026-08-14T15:59:21.000Z",
+      "lastSeenAt": "2026-08-14T15:59:21.000Z",
+      "disposition": "exclude",
+      "reason": "Publishes the v0.6.0 release record itself. The product source it describes is already classified in the v0.6.0 completeness ledger."
+    },
+    {
+      "id": "pr-192",
+      "kind": "pull_request",
+      "prNumber": 192,
+      "title": "Rename the project's technical identity to AssistWithMoving",
+      "commits": ["3fa11f5a4a606ec8554cf5cdb7b483bb76a94256"],
+      "firstSeenAt": "2026-08-16T22:39:34.000Z",
+      "lastSeenAt": "2026-08-16T22:39:34.000Z",
+      "disposition": "include",
+      "releaseItemId": "stdio-package-identity"
+    },
+    {
+      "id": "pr-193",
+      "kind": "pull_request",
+      "prNumber": 193,
+      "title": "Show the product name in the OAuth consent screen",
+      "commits": ["11bed8040650ebe6ce483987f6e53cfc8889fad7"],
+      "firstSeenAt": "2026-08-16T22:48:39.000Z",
+      "lastSeenAt": "2026-08-16T22:48:39.000Z",
+      "disposition": "include",
+      "releaseItemId": "oauth-consent-product-name"
+    },
+    {
+      "id": "pr-194",
+      "kind": "pull_request",
+      "prNumber": 194,
+      "title": "Give people one clear support path instead of a missing address",
+      "commits": ["1d0b76ddfda8894b837e1dab2254a364d6aaa361"],
+      "firstSeenAt": "2026-08-16T23:39:00.000Z",
+      "lastSeenAt": "2026-08-16T23:39:00.000Z",
+      "disposition": "include",
+      "releaseItemId": "support-path"
+    },
+    {
+      "id": "pr-195",
+      "kind": "pull_request",
+      "prNumber": 195,
+      "title": "Plan the Bring Your AI MCP/OAuth alignment for Moving",
+      "commits": ["ee16bd49e1c08afd9652f04c95e59b99125f0fa0"],
+      "firstSeenAt": "2026-08-17T00:49:48.000Z",
+      "lastSeenAt": "2026-08-17T00:49:48.000Z",
+      "disposition": "exclude",
+      "reason": "Planning records and the MOV-WO-010 Work Order only. No product source, and the capability it plans is classified under pr-196."
+    },
+    {
+      "id": "pr-196",
+      "kind": "pull_request",
+      "prNumber": 196,
+      "title": "Let a person hand their AI exactly what they choose, and take it back",
+      "commits": ["118f91c6527d8f2c778c464380974bc7fddef6bd"],
+      "firstSeenAt": "2026-08-17T01:43:44.000Z",
+      "lastSeenAt": "2026-08-17T01:43:44.000Z",
+      "disposition": "include",
+      "releaseItemId": "chosen-ai-scoped-connection"
+    },
+    {
+      "id": "pr-197",
+      "kind": "pull_request",
+      "prNumber": 197,
+      "title": "Make Moving's production deploy safe to hand to someone with no context",
+      "commits": ["64a6402861bfc928a60d8a22ff806a4f14800b62"],
+      "firstSeenAt": "2026-08-17T04:02:57.000Z",
+      "lastSeenAt": "2026-08-17T04:02:57.000Z",
+      "disposition": "group",
+      "releaseItemId": "chosen-ai-scoped-connection",
+      "reason": "Mostly a deploy runbook, but it also fixed the branded protected-resource document, which was serving three identity scopes and no grant block. Without that fix the grant contract in pr-196 would have shipped invisible to every connecting client, so it belongs to the same person-visible outcome."
+    },
+    {
+      "id": "pr-198",
+      "kind": "pull_request",
+      "prNumber": 198,
+      "title": "Let a connected AI actually see the move photos, or know why it cannot",
+      "commits": ["fca8cf54c2bef4dc9e6277bfc071058fcd5951e6"],
+      "firstSeenAt": "2026-08-17T05:14:28.000Z",
+      "lastSeenAt": "2026-08-17T05:14:28.000Z",
+      "disposition": "include",
+      "releaseItemId": "connected-ai-move-photos"
+    },
+    {
+      "id": "pr-199",
+      "kind": "pull_request",
+      "prNumber": 199,
+      "title": "Advertise only the OAuth scopes Clerk can actually issue",
+      "commits": ["18934f3722124de79205e432d1733cca3d861232"],
+      "firstSeenAt": "2026-08-17T07:16:12.000Z",
+      "lastSeenAt": "2026-08-17T07:16:12.000Z",
+      "disposition": "include",
+      "releaseItemId": "oauth-scope-advertisement"
+    },
+    {
+      "id": "pr-200",
+      "kind": "pull_request",
+      "prNumber": 200,
+      "title": "Unblock Convex deploys that failed on abandoned perf-branch fields",
+      "commits": ["42a35018121c985f598cefdaa9798f60a8233a61"],
+      "firstSeenAt": "2026-08-17T07:31:04.000Z",
+      "lastSeenAt": "2026-08-17T07:31:04.000Z",
+      "disposition": "exclude",
+      "reason": "Adds two optional compatibility fields to the moves table so documents left by an abandoned branch still validate. Schema-level deploy unblock with no behaviour a person or an AI can observe."
+    },
+    {
+      "id": "pr-201",
+      "kind": "pull_request",
+      "prNumber": 201,
+      "title": "Catch stale Convex bindings on the PR instead of in the deploy",
+      "commits": ["ab6652b09e6b3d92030f03265aa9d43aca9a552c"],
+      "firstSeenAt": "2026-08-17T07:54:11.000Z",
+      "lastSeenAt": "2026-08-17T07:54:11.000Z",
+      "disposition": "exclude",
+      "reason": "Continuous-integration gate only. It protects future deploys and changes nothing in the running product."
+    },
+    {
+      "id": "pr-202",
+      "kind": "pull_request",
+      "prNumber": 202,
+      "title": "Make every Moving document say what the code and the live site already say",
+      "commits": ["7a1081dd937f43d9ef8b97586e89633b8334611c"],
+      "firstSeenAt": "2026-08-17T15:31:43.000Z",
+      "lastSeenAt": "2026-08-17T15:31:43.000Z",
+      "disposition": "exclude",
+      "reason": "Reconciles internal documentation and the tracker with shipped source, adds a required CI catalog gate, and closes three test holes. The public agent surfaces were already correct, so no person-visible or agent-visible behaviour changed."
+    }
+  ]
+}

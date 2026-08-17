@@ -67,6 +67,120 @@ export const appVersion = packageJson.version;
 
 export const releaseEntries: ReleaseEntry[] = [
   {
+    version: "0.7.0",
+    releasedAt: "2026-08-17T15:31:49.223Z",
+    timezone: "America/Phoenix",
+    title: "Hand your chosen AI exactly what you choose, and take it back",
+    summary:
+      "You can now connect one AI to one private move with narrow authority you approve yourself, watch what it does, and end the connection so the very next thing it tries is refused.",
+    items: [
+      {
+        id: "chosen-ai-scoped-connection",
+        category: "created",
+        impactTier: "major",
+        impactRank: 1,
+        short:
+          "Approve exactly which moves an AI may reach and what it may do, see every use, and revoke it instantly.",
+        long: {
+          what:
+            "Settings → AI connections is a real grant manager. You choose the moves, then approve up to five separate permissions — read move context, read private evidence, save move work, work the Queue, and archive records — each with a published boundary saying what it does not imply. The connection shows its client, registration method, approval, expiry, last use and use count, plus an append-only trail of both uses and refusals. Revoking takes effect on the very next call, because the grant is re-read from the database on every discovery and every tool call rather than trusted from the access token. A connected AI can also work the Queue under that grant: list only actionable work, claim it, ask the smallest clarifying question, and finish it in one saved result. Signing in proves who you are; it never decides what the AI may do.",
+          why:
+            "Signing in with OAuth proved identity and nothing else. Without a product-level grant, connecting an AI meant handing it whatever the sign-in could reach, with no screen that showed the connection, no narrow choice, and no way to end it yourself.",
+          where:
+            "Settings → AI connections, after connecting an AI to https://movingmanifest.com/mcp.",
+        },
+        sourceRefs: ["pr-196", "pr-197"],
+        audiences: ["signed-in", "agent"],
+      },
+      {
+        id: "connected-ai-move-photos",
+        category: "created",
+        impactTier: "meaningful",
+        impactRank: 1,
+        short:
+          "A connected AI can see your move photos, and says plainly when a picture cannot be delivered.",
+        long: {
+          what:
+            "Private photos reach a connected AI as real image bytes, fetched server-side so no storage link ever leaves Assist With Moving. Each image and each batch has a size ceiling, and an oversized photo automatically steps down to a smaller version before it is ever dropped. Anything still left out comes back with a ranked, plain-language reason.",
+          why:
+            "Moving's inventory is made of photographs, and asking for a batch of full-size ones could exceed the response limit and fail the whole call — so an AI asking for eight pictures got none instead of six. A photo that could not be delivered also vanished silently, so 'this belonging has no photo', 'the photo is still processing', and 'you asked for too much' were indistinguishable.",
+          where:
+            "Ask a connected AI about belongings that have photos, with read-private-evidence approved.",
+        },
+        sourceRefs: ["pr-198"],
+        audiences: ["signed-in", "agent"],
+      },
+      {
+        id: "oauth-scope-advertisement",
+        category: "fixed",
+        impactTier: "meaningful",
+        impactRank: 1,
+        short:
+          "Connecting an AI no longer fails because Assist With Moving asked for permissions the sign-in provider cannot issue.",
+        long: {
+          what:
+            "Discovery now advertises only the identity scopes the authorization server can actually grant, and carries the five Moving product permissions in a separate vendor block alongside the grant-manager address. Authority still comes from your approved grant, never from a token scope.",
+          why:
+            "Advertising product permissions as OAuth scopes made well-behaved clients request something the provider could not issue, which failed the connection outright before a person ever reached the approval screen.",
+          where:
+            "Point any compatible AI client at https://movingmanifest.com/mcp.",
+        },
+        sourceRefs: ["pr-199"],
+        audiences: ["agent"],
+      },
+      {
+        id: "oauth-consent-product-name",
+        category: "fixed",
+        impactTier: "meaningful",
+        impactRank: 2,
+        short:
+          "The approval screen now names Assist With Moving instead of a bare address.",
+        long: {
+          what:
+            "The protected-resource document publishes the product's real display name, so the consent screen a person sees while connecting their AI says Assist With Moving.",
+          why:
+            "Being asked to approve access for an unnamed host is exactly the moment a person should be able to tell what they are approving.",
+        },
+        sourceRefs: ["pr-193"],
+        audiences: ["signed-in", "agent"],
+      },
+      {
+        id: "support-path",
+        category: "fixed",
+        impactTier: "meaningful",
+        impactRank: 3,
+        short: "Every page that offers help now points somewhere that works.",
+        long: {
+          what:
+            "One shared support path replaces the missing contact address referenced across the marketing, about, FAQ, privacy, and agent-facing pages.",
+          why:
+            "Pages invited people to get in touch and then gave them nowhere to go.",
+          where: "The footer, About, FAQ, and Privacy pages.",
+        },
+        sourceRefs: ["pr-194"],
+        audiences: ["public", "signed-in"],
+      },
+      {
+        id: "stdio-package-identity",
+        category: "upgraded",
+        impactTier: "supporting",
+        impactRank: 1,
+        short:
+          "The local helper package is now named assistwithmoving-mcp, matching the product.",
+        long: {
+          what:
+            "The bundled local MCP command and its package were renamed from movingmanifest-mcp to assistwithmoving-mcp, along with the project's internal technical identity.",
+          why:
+            "The old technical name predated the product name, so desktop AI configuration files referred to something a person could not recognize.",
+          where:
+            "Local stdio setup, for people who run the helper package with an mmk_ key.",
+        },
+        sourceRefs: ["pr-192"],
+        audiences: ["agent"],
+      },
+    ],
+  },
+  {
     version: "0.6.0",
     releasedAt: "2026-08-14T15:48:49.000Z",
     timezone: "America/Phoenix",

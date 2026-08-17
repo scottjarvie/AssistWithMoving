@@ -58,6 +58,27 @@ Client identity is no longer a reason a real-client lifecycle cannot run.
 The connection is still **Partial**, and deliberately so, for exactly one reason:
 **no named AI product has completed the lifecycle.** Every client stays Unknown.
 
+**Deployment receipt, 2026-08-17.** Production serves `origin/main` HEAD exactly:
+Vercel deployment `dpl_4d8r5pY95xVLXkXeGgUDJtKQEBwc`, `githubCommitSha`
+`7a1081dd937f43d9ef8b97586e89633b8334611c`, target production, aliased to
+`movingmanifest.com` and `assistwithmoving.com`. Both discovery doctors return
+10 pass / 0 warn / 0 blocked / 0 fail against it. The whole Work Order is
+therefore **built and deployed**; only the real-client run remains.
+
+**Correction, 2026-08-17 (second).** The Current truth above, and `MOV-0035`,
+both said client identity was settled so a real-client lifecycle "can be
+attempted today" — implying an AI could simply run it. It cannot, and the reason
+is credentials, not the door. `AssistWithMoving/.env.local` holds a
+`pk_test_`/`sk_test_` Clerk pair for the **development** instance
+`glorious-swine-50.clerk.accounts.dev` alongside
+`CONVEX_DEPLOYMENT=dev:gregarious-goldfinch-763`. Production is a different
+Clerk instance (`pk_live_` at `clerk.movingmanifest.com`) and no production
+secret exists on this machine. Every person-step — sign-in, consent, approving
+the five-scope grant — is therefore unreachable programmatically, and creating a
+production identity to reach them is precisely what the Human gates below
+reserve to Scott. `MOV-0035` now carries that decision as a `needs-you` Card
+with a recorded safe default of *do nothing*.
+
 **Correction, 2026-08-17.** This paragraph previously also said "Nothing here is
 deployed." That is false. PRs `#196`–`#201` merged and production carries this
 work: the live branded `/.well-known/oauth-protected-resource/mcp` document
@@ -322,3 +343,26 @@ rollback note, is section 2 of
   label on the connection is unchanged and correct: no named AI product has
   completed the lifecycle.** No product code, authority model, tool catalog,
   scope, provider setting, secret, deployment, or production data was touched.
+- 2026-08-17 · Claude Opus 5 (release-candidate lane) — verified production
+  against `origin/main` and pinned the deployed SHA. Established that the live
+  site serves `7a1081d` exactly (Vercel `dpl_4d8r5pY95xVLXkXeGgUDJtKQEBwc`), that
+  both discovery doctors pass 10/10 against it, and that the branded
+  protected-resource document carries the full grant contract while `/api/mcp`
+  correctly advertises no authorization server. Ran the full gate at that commit
+  from a clean worktree: lint 0 errors, `check:convex-bindings-fresh` OK,
+  typecheck clean, 203 test files / 1170 tests pass, build succeeds, tracker
+  verified, Project Philosophy synchronized. Then attempted the `MOV-0035`
+  real-client lifecycle and found it credential-blocked rather than merely unrun;
+  the Current truth correction above records why, and `MOV-0035` became a
+  `needs-you` decision Card. Closed the release-record gap this Work Order had
+  left open: every merge from the v0.6.0 marker through the deployed commit
+  (`d8ed8fe..7a1081d`, PRs #191–#202) is now classified in
+  `docs/releases/v0.7.0-completeness-ledger.json`, and `/updates` carries a
+  truthful v0.7.0 entry describing the scoped connection, the Queue loop, the
+  photo budgets, and the three fixes — with **no named client**, because no
+  client has earned one. `MOV-0032`, `MOV-0033` and `MOV-0038` each received a
+  deployment receipt and were deliberately left at `doing`, since each still has
+  a completion-evidence bullet that only a real client can satisfy. `MOV-0037`
+  remains a filed decision, untouched. No provider, account, secret, client
+  registration, token, grant, deployment, or production data was created or
+  changed; every live probe was an unauthenticated read.

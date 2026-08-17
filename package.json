@@ -1,6 +1,6 @@
 {
   "name": "assistwithmoving",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "bin": {
     "assistwithmoving-mcp": "./mcp-server/assistwithmoving-mcp.mjs"
