@@ -1,7 +1,7 @@
 ---
 id: MOV-WO-010
 title: Bring a chosen AI into a private move with scoped, revocable OAuth
-execution: proposed
+execution: active
 audit: not-audited
 cards: MOV-0032 MOV-0023 MOV-0033 MOV-0034 MOV-0035
 created: 2026-08-16
@@ -42,9 +42,12 @@ product has proved connect through revoke/reconnect/cleanup. The evidence and
 Moving-specific target contract are recorded in
 `docs/planning/moving-bring-your-ai-mcp-oauth-alignment.md`.
 
-This Work Order is **Proposed**, not permission to change Clerk, provider
-settings, accounts, production data, or deploy software. The Cards remain
-Backlog until Scott approves execution as Ready.
+This Work Order is **Active**. Scott approved execution under the family
+program charter
+(`assist-with-life/planning/mcp-program-2026-08.md`, Wave 1 gateway retrofit).
+Approval covers software inside this repository. It is still not permission to
+change Clerk, provider settings, accounts, secrets, billing, DNS, or production
+data; those steps are written up for Scott to run separately.
 
 ## Sequence
 
@@ -163,3 +166,9 @@ changed.
 - 2026-08-16 · Codex — audited fresh main without touching the dirty active
   checkout, wrote the Moving-specific alignment plan, and proposed this grouped
   Work Order. Execution remains unapproved.
+- 2026-08-16 · Scott via the Bring Your AI program charter
+  (`assist-with-life/planning/mcp-program-2026-08.md`) — approved execution.
+  Moving is a Wave 1 gateway retrofit. Execution moved Proposed → Active and
+  `MOV-0032`, `MOV-0023`, `MOV-0033`, `MOV-0034`, `MOV-0035` moved to Doing.
+  Provider-dashboard and real-client steps stay outside the repository and are
+  written up for Scott to run.

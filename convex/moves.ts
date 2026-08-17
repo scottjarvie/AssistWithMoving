@@ -476,6 +476,7 @@ const MOVE_INDEXED_PURGE_TABLES: Array<{ table: string; index: string }> = [
   { table: "movePlanningDefaults", index: "by_move_sort" },
   { table: "movePlanningRecords", index: "by_move_updated" },
   { table: "mcpOperations", index: "by_move" },
+  { table: "aiGrantActivities", index: "by_move_created" },
   { table: "floorPlans", index: "by_move_status" },
   { table: "planLevels", index: "by_move" },
   { table: "planProposals", index: "by_move_status" },

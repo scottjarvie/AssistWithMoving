@@ -132,6 +132,30 @@ async function seedMove() {
       createdAt: now,
       updatedAt: now,
     });
+    // The connection's product grant. An OAuth token alone proves identity and
+    // nothing more, so every tool call in these tests is authorized by this row
+    // — and revoking it is what the revocation tests exercise.
+    const grantId = await ctx.db.insert("aiGrants", {
+      ownerUserId: userId,
+      householdId,
+      label: "Synthetic chosen AI",
+      scopes: [
+        "moving.context.read",
+        "moving.evidence.read",
+        "moving.work.write",
+        "moving.queue.work",
+        "moving.archive",
+      ],
+      moveScope: "allMoves",
+      status: "active",
+      consentBoundaryVersion: "2026-08-16",
+      consentSnapshot: [],
+      approvedAt: now,
+      useCount: 0,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
     const guestUserId = await ctx.db.insert("users", {
       clerkUserId: "user_moving_mcp_guest",
       email: "moving-mcp-guest@example.test",
@@ -215,6 +239,7 @@ async function seedMove() {
       userId,
       householdId,
       moveId,
+      grantId,
       guestUserId,
       privatePhotoId,
       queueItemId,
@@ -324,13 +349,18 @@ describe("stateless Moving MCP foundation", () => {
             ),
           );
           expect(accepted.status).toBe(200);
-          expect(await accepted.text()).toContain("get_move_brief");
+          const acceptedBody = await accepted.text();
+          // A verified token gets a working catalog. This identity holds no
+          // product grant, so the catalog is only the always-available
+          // connection description — identity is not authority.
+          expect(acceptedBody).toContain("describe_connection");
+          expect(acceptedBody).not.toContain("get_move_brief");
 
           const productionShape = await call(
             await sign(undefined, Math.floor(Date.now() / 1_000) + 300),
           );
           expect(productionShape.status).toBe(200);
-          expect(await productionShape.text()).toContain("get_move_brief");
+          expect(await productionShape.text()).toContain("describe_connection");
 
           const clerkClientAudience = await call(
             await sign(PRINCIPAL.clientId, Math.floor(Date.now() / 1_000) + 300),
@@ -506,7 +536,10 @@ describe("stateless Moving MCP foundation", () => {
       expect(created.queue).toEqual({
         queueItemId: fixture.queueItemId,
         transition: "none",
-        note: expect.stringMatching(/did not claim or complete/i),
+        // Saving work and closing a handoff are separate asks. Without
+        // completeQueueItem the result is linked and the Queue state is left
+        // to the person.
+        note: expect.stringMatching(/linked for human inspection/i),
       });
       expect(created.receipt.actor).toBe("Your AI via MCP");
 
@@ -675,7 +708,11 @@ describe("stateless Moving MCP foundation", () => {
       );
       const crossClientDenied = ((await crossClientCorrection.json()) as any).result;
       expect(crossClientDenied.isError).toBe(true);
-      expect(crossClientDenied.structuredContent.error.code).toBe("FORBIDDEN");
+      // The refusal now lands one step earlier than it used to. A grant binds
+      // to the first client that uses it, so a second AI arriving with the same
+      // person's token holds no authority at all — it never reaches the
+      // record-level separation check underneath.
+      expect(crossClientDenied.structuredContent.error.code).toBe("GRANT_REQUIRED");
       await otherClient.close();
       await handler.close();
     } finally {

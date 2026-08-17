@@ -10,11 +10,21 @@ import {
 } from "./_generated/server";
 import { generateItemCode } from "./items";
 import { recordAuditEvent } from "./lib/audit";
-import { requireMoveForSubject, requireUserBySubject } from "./lib/mcpIdentity";
+import { activeGrantsForUser } from "./aiGrants";
+import { grantError } from "./lib/aiGrants";
+import {
+  hasQueueWorkGrant,
+  mcpError,
+  mcpPrincipalValidator,
+  requireMcpMove,
+  requireMcpUser,
+  type McpPrincipal,
+} from "./lib/mcpGrantAccess";
 import { normalizedSearchName } from "./lib/moveFields";
 import { canViewPhotoAssets } from "./lib/photoVisibility";
 import { requireMovePermission } from "./lib/permissions";
 import { linkQueueResultWithoutTransition } from "./lib/queueService";
+import { completeQueueForResult } from "./mcpQueueWork";
 import {
   estimateConfidence,
   itemCondition,
@@ -29,7 +39,6 @@ import {
   moveStatus,
 } from "./schema";
 
-const MCP_ERROR_MARKER = "MCP_MOVING_ERROR:";
 const OPERATION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MAX_ACCESSIBLE_MOVES = 50;
 const MAX_BRIEF_ROWS = 200;
@@ -37,12 +46,7 @@ const MAX_SEARCH_CANDIDATES_PER_KIND = 120;
 const MAX_RECORD_BATCH = 25;
 const MAX_WRITE_ROWS = 100;
 
-export const mcpPrincipalValidator = v.object({
-  issuer: v.string(),
-  subject: v.string(),
-  clientId: v.string(),
-  clientName: v.optional(v.string()),
-});
+export { mcpPrincipalValidator } from "./lib/mcpGrantAccess";
 
 const optionalNullableString = v.optional(v.union(v.string(), v.null()));
 const optionalNullableNumber = v.optional(v.union(v.number(), v.null()));
@@ -153,93 +157,6 @@ const recordReference = v.object({
   kind: recordReferenceKind,
   id: v.string(),
 });
-
-export type McpPrincipal = {
-  issuer: string;
-  subject: string;
-  clientId: string;
-  clientName?: string;
-};
-
-type Ctx = QueryCtx | MutationCtx;
-
-function mcpError(
-  code: string,
-  message: string,
-  recovery: string,
-): never {
-  throw new ConvexError(
-    `${MCP_ERROR_MARKER}${JSON.stringify({ code, message, recovery })}`,
-  );
-}
-
-function normalizedIssuer(value: string | undefined) {
-  return value?.trim().replace(/\/+$/, "") ?? "";
-}
-
-async function requireMcpUser(ctx: Ctx, principal: McpPrincipal) {
-  const configuredIssuer = normalizedIssuer(
-    process.env.CLERK_JWT_ISSUER_DOMAIN ?? process.env.CLERK_FRONTEND_API_URL,
-  );
-  if (!configuredIssuer || normalizedIssuer(principal.issuer) !== configuredIssuer) {
-    mcpError(
-      "AUTH_REQUIRED",
-      "This OAuth identity is not valid for Assist With Moving.",
-      "Reconnect to the canonical Assist With Moving MCP endpoint and sign in again.",
-    );
-  }
-  try {
-    const user = await requireUserBySubject(ctx, principal.subject);
-    if (user.status !== "active") {
-      mcpError(
-        "FORBIDDEN",
-        "This Assist With Moving account is not active.",
-        "Open Assist With Moving directly or ask the account owner to restore access.",
-      );
-    }
-    return user;
-  } catch (error) {
-    if (error instanceof ConvexError) throw error;
-    mcpError(
-      "MOVING_IDENTITY_NOT_FOUND",
-      "No active Assist With Moving profile is linked to this sign-in.",
-      "Open Assist With Moving once while signed in, then reconnect your AI.",
-    );
-  }
-}
-
-async function requireMcpMove(
-  ctx: Ctx,
-  principal: McpPrincipal,
-  moveId: Id<"moves">,
-  action: "inventory:read" | "inventory:edit" | "plan:read" | "plan:edit",
-) {
-  await requireMcpUser(ctx, principal);
-  const move = await ctx.db.get(moveId);
-  if (!move || move.archivedAt !== undefined) {
-    mcpError(
-      "NOT_FOUND",
-      "That active move is not available.",
-      "Call get_move_brief without a moveId and choose one of the returned moves.",
-    );
-  }
-  try {
-    const policy = await requireMoveForSubject(
-      ctx,
-      principal.subject,
-      move.householdId,
-      moveId,
-      action,
-    );
-    return { move, policy };
-  } catch {
-    mcpError(
-      "FORBIDDEN",
-      "This connection cannot use that move for the requested operation.",
-      "Choose a move returned by get_move_brief or ask the owner to adjust access.",
-    );
-  }
-}
 
 function boundedCount(rows: unknown[]) {
   return {
@@ -369,6 +286,25 @@ function shapePlanningRecord(row: Doc<"movePlanningRecords">) {
 
 async function listAccessibleMoves(ctx: QueryCtx, principal: McpPrincipal) {
   const user = await requireMcpUser(ctx, principal);
+  // The move list is the first call a connected AI makes, so it must already
+  // obey the grant: an AI approved for two moves should not learn that a third
+  // exists. Any context-read grant opens the list; the grants themselves then
+  // decide which rows survive.
+  const now = Date.now();
+  const grants = (
+    await activeGrantsForUser(ctx, user._id, principal.clientId, now)
+  ).filter((grant) => grant.scopes.includes("moving.context.read"));
+  if (grants.length === 0) {
+    grantError(
+      (await activeGrantsForUser(ctx, user._id, principal.clientId, now)).length
+        ? "outOfScope"
+        : "noGrant",
+    );
+  }
+  const grantsAllMoves = grants.some((grant) => grant.moveScope === "allMoves");
+  const grantedMoveIds = new Set(
+    grants.flatMap((grant) => (grant.moveIds ?? []).map(String)),
+  );
   const memberships = await ctx.db
     .query("householdMemberships")
     .withIndex("by_user_status", (q) =>
@@ -400,6 +336,7 @@ async function listAccessibleMoves(ctx: QueryCtx, principal: McpPrincipal) {
     if (row && row.status !== "archived") moveMap.set(String(row._id), row);
   }
   const rows = [...moveMap.values()]
+    .filter((row) => grantsAllMoves || grantedMoveIds.has(String(row._id)))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, MAX_ACCESSIBLE_MOVES);
   return {
@@ -445,6 +382,7 @@ export const getMoveBrief = internalQuery({
       args.principal,
       args.moveId,
       "inventory:read",
+      "moving.context.read",
     );
     const [items, boxes, spaces, photos, planningRecords, queueNeedsYou, queueWorking, queueWaiting] =
       await Promise.all([
@@ -570,6 +508,9 @@ export const resolveMoveScope = internalQuery({
       args.principal,
       args.moveId,
       "inventory:read",
+      // resolveMoveScope only backs get_evidence_media, so it must prove the
+      // evidence scope rather than the ordinary context scope.
+      "moving.evidence.read",
     );
     return { householdId: move.householdId, moveId: move._id };
   },
@@ -616,6 +557,7 @@ export const searchMoveRecords = internalQuery({
       args.principal,
       args.moveId,
       "inventory:read",
+      "moving.context.read",
     );
     const limit = Math.min(Math.max(Math.trunc(args.limit ?? 25), 1), 50);
     const offset = parseOffset(args.cursor);
@@ -791,6 +733,7 @@ export const getMoveRecords = internalQuery({
       args.principal,
       args.moveId,
       "inventory:read",
+      "moving.context.read",
     );
     if (args.records.length < 1 || args.records.length > MAX_RECORD_BATCH) {
       mcpError(
@@ -1456,7 +1399,7 @@ export const saveMoveContext = internalMutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const { move, policy } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit");
+    const { move, policy } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit", "moving.work.write");
     const replay = await replayResult(ctx, policy.user._id, args.principal, "save_move_context", args.operationId, args.requestHash);
     if (replay) return replay;
     if (args.expectedUpdatedAt !== undefined && args.expectedUpdatedAt !== move.updatedAt) {
@@ -1504,7 +1447,7 @@ export const saveInventory = internalMutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const { move, policy } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit");
+    const { move, policy } = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit", "moving.work.write");
     const replay = await replayResult(ctx, policy.user._id, args.principal, "save_inventory", args.operationId, args.requestHash);
     if (replay) return replay;
     const reason = cleanText(args.reason, "reason", 500);
@@ -1535,7 +1478,7 @@ export const savePlanningRecord = internalMutation({
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const { move, policy } = await requireMcpMove(ctx, args.principal, args.moveId, "plan:edit");
+    const { move, policy } = await requireMcpMove(ctx, args.principal, args.moveId, "plan:edit", "moving.work.write");
     const replay = await replayResult(ctx, policy.user._id, args.principal, "save_planning_record", args.operationId, args.requestHash);
     if (replay) return replay;
     const reason = cleanText(args.reason, "reason", 500);
@@ -1576,11 +1519,12 @@ export const saveCompleteResult = internalMutation({
     planSections: v.optional(v.array(planningRecordInput)),
     sourceChecks: v.optional(v.array(sourceCheckInput)),
     relatedQueueItemId: v.optional(v.id("queueItems")),
+    completeQueueItem: v.optional(v.boolean()),
     reason: v.string(),
   },
   handler: async (ctx, args) => {
-    const inventoryAccess = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit");
-    await requireMcpMove(ctx, args.principal, args.moveId, "plan:edit");
+    const inventoryAccess = await requireMcpMove(ctx, args.principal, args.moveId, "inventory:edit", "moving.work.write");
+    await requireMcpMove(ctx, args.principal, args.moveId, "plan:edit", "moving.work.write");
     const { move, policy } = inventoryAccess;
     const replay = await replayResult(ctx, policy.user._id, args.principal, "save_complete_result", args.operationId, args.requestHash);
     if (replay) return replay;
@@ -1606,6 +1550,14 @@ export const saveCompleteResult = internalMutation({
       confidence: args.confidence,
       relatedQueueItemId: args.relatedQueueItemId,
     });
+    let queueOutcome: {
+      transition: "none" | "done";
+      note: string;
+      failure?: string;
+    } = {
+      transition: "none",
+      note: "The result is linked for human inspection. Ask for moving.queue.work if you also need to close the handoff.",
+    };
     if (args.relatedQueueItemId) {
       await linkQueueResultWithoutTransition(
         ctx,
@@ -1629,6 +1581,49 @@ export const saveCompleteResult = internalMutation({
           idempotencyKey: `mcp:${args.principal.clientId}:${args.operationId}:result-linked`,
         },
       );
+      // The one-call finish. Closing the handoff needs its own authority, so a
+      // work-write grant alone links the result and leaves the Queue state to
+      // the person — it does not quietly decide the job is done.
+      if (args.completeQueueItem) {
+        const queueGrant = await hasQueueWorkGrant(ctx, args.principal, move._id);
+        if (!queueGrant) {
+          queueOutcome = {
+            transition: "none",
+            note: "The result is linked, but this connection does not hold moving.queue.work, so the handoff is still yours to close.",
+          };
+        } else {
+          try {
+            await completeQueueForResult(ctx, args.principal, {
+              householdId: move.householdId,
+              moveId: move._id,
+              queueItemId: args.relatedQueueItemId,
+              resultSummary: args.summary,
+              resultRef: {
+                type: "planningRecord",
+                id: umbrella.record.planningRecordId,
+                label: args.title,
+              },
+              operationId: args.operationId,
+              userId: policy.user._id,
+              isManager: false,
+              delegatedOwnerIds: [],
+            });
+            queueOutcome = {
+              transition: "done",
+              note: "The handoff is Done with this result attached.",
+            };
+          } catch (error) {
+            // The work is already durably saved. Reporting a partial truth is
+            // better than discarding a good result over a state transition.
+            queueOutcome = {
+              transition: "none",
+              note:
+                "The result saved and is linked, but the handoff could not be closed. Re-read it with list_queue_work and complete it, or close it yourself.",
+              failure: error instanceof ConvexError ? String(error.data ?? error.message) : "unknown",
+            };
+          }
+        }
+      }
     }
     const records = [];
     for (const input of args.decisions ?? []) {
@@ -1677,7 +1672,7 @@ export const saveCompleteResult = internalMutation({
         spaceCount: spaces.length,
         planningRecordCount: records.length + 1,
         relatedQueueItemId: args.relatedQueueItemId,
-        queueTransition: "none",
+        queueTransition: queueOutcome.transition,
       },
     });
     const result = {
@@ -1687,11 +1682,7 @@ export const saveCompleteResult = internalMutation({
       spaces,
       records: records.map((entry) => entry.record),
       queue: args.relatedQueueItemId
-        ? {
-            queueItemId: args.relatedQueueItemId,
-            transition: "none",
-            note: "The result is linked for human inspection, but this OAuth surface did not claim or complete canonical Queue work.",
-          }
+        ? { queueItemId: args.relatedQueueItemId, ...queueOutcome }
         : null,
       receipt: { actor: "Your AI via MCP", operationId: args.operationId, reason },
     };
