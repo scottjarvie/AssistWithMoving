@@ -4,27 +4,23 @@
 // connects to (.../mcp); `authorization_servers` is Clerk. Mirrors the
 // /mcp/connect metadata. A specific segment route, so it takes precedence over
 // the [[...resource]] catch-all (which serves the key-only /api/mcp metadata).
+//
+// The body is built by protectedResourceMetadataBody so this document and the
+// Convex gateway's own copy cannot drift. A client only ever reads this one.
 import {
-  clerkOauthIssuer,
-  mcpOauthScopes,
+  protectedResourceMetadataBody,
   siteOriginFromRequest,
 } from "@/lib/mcp-oauth";
-import { product } from "@/lib/product";
 
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request): Response {
-  const origin = siteOriginFromRequest(request);
-  const issuer = clerkOauthIssuer();
   return Response.json(
-    {
-      resource: `${origin}/mcp`,
-      authorization_servers: issuer ? [issuer] : [],
-      scopes_supported: [...mcpOauthScopes],
-      bearer_methods_supported: ["header"],
-      resource_name: product.name,
-      resource_documentation: `${origin}/ai`,
-    },
+    protectedResourceMetadataBody({
+      origin: siteOriginFromRequest(request),
+      resourcePath: "/mcp",
+      documentationPath: "/ai",
+    }),
     {
       headers: {
         "Access-Control-Allow-Origin": "*",

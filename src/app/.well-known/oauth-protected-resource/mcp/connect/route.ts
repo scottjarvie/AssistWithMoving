@@ -3,27 +3,24 @@
 // WWW-Authenticate to point here, so OAuth discovery stays on our domain instead
 // of exposing the .convex.site host. `resource` matches the URL the user
 // actually connects to; `authorization_servers` is Clerk.
+//
+// Shares protectedResourceMetadataBody with the /mcp door: the grant boundary
+// is the same product ceiling whichever door a client came through, and the
+// legacy door must not quietly describe a smaller product than the canonical one.
 import {
-  clerkOauthIssuer,
-  mcpOauthScopes,
+  protectedResourceMetadataBody,
   siteOriginFromRequest,
 } from "@/lib/mcp-oauth";
-import { product } from "@/lib/product";
 
 export const dynamic = "force-dynamic";
 
 export function GET(request: Request): Response {
-  const origin = siteOriginFromRequest(request);
-  const issuer = clerkOauthIssuer();
   return Response.json(
-    {
-      resource: `${origin}/mcp/connect`,
-      authorization_servers: issuer ? [issuer] : [],
-      scopes_supported: [...mcpOauthScopes],
-      bearer_methods_supported: ["header"],
-      resource_name: product.name,
-      resource_documentation: `${origin}/mcp/guide`,
-    },
+    protectedResourceMetadataBody({
+      origin: siteOriginFromRequest(request),
+      resourcePath: "/mcp/connect",
+      documentationPath: "/mcp/guide",
+    }),
     {
       headers: {
         "Access-Control-Allow-Origin": "*",
