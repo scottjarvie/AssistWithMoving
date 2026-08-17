@@ -16,15 +16,22 @@ honest state, and no surface in this repository claims otherwise.
 
 ---
 
-## SEND TO CODEX — 1. Enable the Client ID Metadata Document path in Clerk
+## CLOSED — DEFERRED — 1. Enable the Client ID Metadata Document path in Clerk
 
-**Why:** Moving now prefers a Client ID Metadata Document and treats Dynamic
-Client Registration as a labelled fallback. The resource advertises
-`client_id_metadata_document_supported: true` at
-`/.well-known/oauth-protected-resource/mcp`. The authorization server has to
-actually support it, or the preference is advertised and unreachable.
+**Do not run this step.** Provider truth confirmed 2026-08-17: Clerk production
+**Dynamic Client Registration is live fleet-wide**, DCR is the **approved
+soft-launch client-identity path** for Moving, and Client ID Metadata Documents
+are **deferred by decision** — not blocked, not awaiting Clerk support, not
+pending a ticket. Nothing about a real-client lifecycle waits on this.
 
-**Steps:**
+What that means for the shipped code, which is unchanged and correct: the
+metadata-document path in `convex/lib/mcpClientIdentity.ts` stays implemented
+and fail-closed, `client_id_metadata_document_supported` stays advertised as an
+honest *preference*, and a client that uses DCR is accepted and labelled
+`dynamicClientRegistration` on its grant. When the deferral is lifted, the
+steps below are the ones to run.
+
+**Deferred steps, kept for when the decision changes:**
 1. Sign in to the Clerk dashboard for the **production** Assist With Moving
    instance (the one behind `movingmanifest.com`).
 2. Find the OAuth / MCP application settings and check whether Client ID
@@ -47,6 +54,9 @@ configuration to make a client connect.
 
 **Report back:** whether the path is available, whether it needed Clerk
 support, and the exact metadata document before and after.
+
+**Status:** deferred 2026-08-17. Step 3 below does not depend on it; a real
+client self-registering through DCR is the approved path and is enough.
 
 ---
 
@@ -149,6 +159,7 @@ values are already present before deploying:
 | `NEXT_PUBLIC_APP_URL` | Vercel (Production) | existing — must be `https://movingmanifest.com`, or the metadata advertises the wrong origin |
 | `CLERK_JWT_ISSUER_DOMAIN` | Vercel (Production) + Convex | existing |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Vercel (Production) | existing |
+| `CLOUDFLARE_IMAGE_DELIVERY_URL` / `CLOUDFLARE_IMAGES_ACCOUNT_HASH`, or `B2_ENDPOINT` + `B2_BUCKET_NAME` + `B2_APPLICATION_KEY_ID` + `B2_APPLICATION_KEY` | Convex (Production) | existing — `get_evidence_media` fetches photo bytes server-side through the **same** display path the web app uses. If the site shows photos today, this is already correct; nothing new is required. `npm run doctor:storage` checks it. |
 
 `npm run doctor:vercel-env` and `npm run doctor:convex-env` check these without
 deploying.
@@ -375,7 +386,10 @@ naming a product as supported.
    `moving.context.read` and `moving.queue.work` at first. Screenshot the
    consent summary.
 3. In the real AI product, add `https://movingmanifest.com/mcp` as a remote MCP
-   server. Record which registration path it used and whether it self-registered.
+   server. It will self-register through Dynamic Client Registration — that is
+   the approved path (confirmed 2026-08-17), so a `dynamicClientRegistration`
+   label on the resulting grant is a pass, not a fallback to explain away.
+   Record the registration path anyway; it belongs in the matrix.
 4. List tools. Confirm only the granted tools plus `describe_connection` appear —
    `save_inventory`, `get_evidence_media`, and `archive_move_records` must be
    absent.

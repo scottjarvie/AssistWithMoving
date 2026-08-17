@@ -429,7 +429,14 @@ How to work this door:
    session does not duplicate work.
 3. Hydrate only what is needed with `get_move_records`.
 4. Get private photos with `get_evidence_media`. Never fetch a private page or a
-   storage URL; evidence is returned through Moving or not at all.
+   storage URL; evidence is returned through Moving or not at all. Delivery is
+   budgeted: at most 8 photos per call, a per-photo and a whole-batch byte
+   ceiling, and an automatic step down to a smaller variant before a photo is
+   dropped. Every omission is listed under `skipped` with a machine-readable
+   reason — `derivative_not_ready` (ask again shortly), `too_large`,
+   `budget_exhausted` (narrow the filter or ask for `thumb`/`card`),
+   `delivery_unavailable`, `not_an_image`, `fetch_failed`. A missing photo is
+   never silent, so an empty-looking result is a fact you can act on.
 5. Save a finished workflow with `save_complete_result`. Pass
    `relatedQueueItemId` and `completeQueueItem: true` to save the result and
    close the Queue handoff in one approval. Use the granular saves for later

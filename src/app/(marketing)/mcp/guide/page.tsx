@@ -159,6 +159,7 @@ const workflowRules = `1. describe_connection when no tools are listed — it sa
 2. get_move_brief first; use only the move and record IDs it returns.
 3. search_move_records before creating anything.
 4. get_evidence_media for private photos — never a private page or storage URL.
+   Delivery is budgeted; anything left out is listed under skipped with a reason.
 5. save_complete_result to finish, with completeQueueItem to close the handoff.
 6. Reuse operationId on a retry so it corrects instead of duplicating.
 7. Stale tools after a deployment: disconnect, then reconnect.`;
