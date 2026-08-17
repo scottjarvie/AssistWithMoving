@@ -47,6 +47,43 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
     expect(compatibilityProxy).toContain('/mcp/legacy');
   });
 
+  // The check above is a source grep: it passes on wording and would miss a
+  // runtime regression. This one observes the canonical door actually behaving,
+  // so the two together cover both the wiring and the behaviour. The rest of the
+  // canonical door's request guards — body cap, malformed envelopes, method and
+  // path gates — are exercised in tests/unit/mcp-request-guards.test.ts.
+  it("actually behaves as a distinct door at runtime, not just in source text", async () => {
+    process.env.MCP_RESOURCE_URL = OAUTH_DOOR;
+    process.env.CLERK_JWT_ISSUER_DOMAIN = "https://clerk.example.test";
+    const { handleMcpRequestForTests } = await import(
+      "../../convex/httpRoutes/mcp"
+    );
+
+    // Anonymous POST to the canonical door: an OAuth challenge that names the
+    // branded discovery document.
+    const canonicalChallenge = await handleMcpRequestForTests(
+      {} as never,
+      new Request(OAUTH_DOOR, { method: "POST", body: "{}" }),
+    );
+    expect(canonicalChallenge.status).toBe(401);
+    expect(canonicalChallenge.headers.get("WWW-Authenticate")).toContain(
+      "resource_metadata",
+    );
+
+    // The same anonymous POST to the API-key door: also 401, but deliberately
+    // WITHOUT resource_metadata. Advertising it here is what dead-ends an OAuth
+    // client on the wrong door, which is the outage this file exists to prevent.
+    process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
+    const { POST: postApiMcp } = await import("../../src/app/api/mcp/route");
+    const keyDoorChallenge = await postApiMcp(
+      new Request(API_KEY_DOOR, { method: "POST", body: "{}" }),
+    );
+    expect(keyDoorChallenge.status).toBe(401);
+    expect(keyDoorChallenge.headers.get("WWW-Authenticate")).not.toContain(
+      "resource_metadata",
+    );
+  });
+
   describe("/api/mcp (API-key door) must NOT advertise OAuth", () => {
     it("emits a key-only protected-resource doc with no authorization server", () => {
       process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";

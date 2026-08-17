@@ -2,9 +2,9 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.9.0
+> **Document version:** 1.9.1
 >
-> **Document date:** 2026-08-16
+> **Document date:** 2026-08-17
 >
 > **Capability evidence last verified:** 2026-08-14 against protected PR `#180`
 > and its production foundation, protected repair PR `#182`, production merge
@@ -19,7 +19,12 @@
 > `MOV-WO-008`; re-audited 2026-08-16 against `origin/main` `8a064303` and
 > reverified the same day against `1d0b76d` after PRs `#192`–`#194`, all
 > four current agent doors, the adopted Bring Your AI standard, and read-only
-> live `/mcp` challenge, protected-resource, and authorization-server metadata
+> live `/mcp` challenge, protected-resource, and authorization-server metadata;
+> re-verified 2026-08-17 against `origin/main` `ab6652b` and read-only live
+> probes confirming the deployed grant block on
+> `/.well-known/oauth-protected-resource/mcp`, the `/mcp` 401 with branded
+> `resource_metadata`, `/api/mcp?key=` rejection with
+> `query_credentials_rejected`, and Clerk's advertised `registration_endpoint`
 >
 > **Authority-policy consistency audited:** 2026-08-09 against the complete
 > family Core v1.6.3 and Scott's clarified person / product / chosen-AI boundary
@@ -52,13 +57,29 @@
 > Bring Your AI delivery sequence for stateless transport, product grants,
 > consent, revocation, workflow tools, human setup, and real-client proof
 >
-> **Deferred/gaps:** Moving-specific OAuth read/evidence/write/Queue/archive
-> scopes; a visible product grant, consent, activity, expiry and immediate
-> revocation path; Client ID Metadata Document-first registration with DCR only
-> as fallback; canonical OAuth Queue transitions; real named-client lifecycle
-> and private-media proof; a separately verified external-action handoff contract;
-> `/me`; `/settings/ai`; `/settings/data`; `/delete-account`; full personal-data
-> deletion; family navigation; Support Desk link; and first-class light mode.
+> **Closed since this matrix was first written** (corrected 2026-08-17 against
+> `origin/main` and live production; these were listed as gaps and are now
+> shipped): the five Moving-specific OAuth
+> read/evidence/write/Queue/archive scopes in `convex/lib/aiGrants.ts`; the
+> visible product grant with consent snapshot, activity trail, expiry and
+> immediate revocation (`aiGrants`, `aiGrantActivities`, re-read on every
+> discovery and every call in `convex/lib/mcpGrantAccess.ts`); Client ID
+> Metadata Document-first registration with DCR as a labelled fallback
+> (`convex/lib/mcpClientIdentity.ts` — and DCR is the approved soft-launch path
+> by owner decision, confirmed 2026-08-17, so the preference stays implemented
+> and honestly labelled rather than enforced); canonical OAuth Queue transitions
+> (`convex/mcpQueueWork.ts`); `/settings/ai` as the canonical grant manager, with
+> `/settings/ai-connections` redirecting so old links keep working; and the
+> Support Desk link (`src/lib/support.ts`, published on the footer, `ai.txt`,
+> `llms.txt` and `llms-full.txt`). The grant block is live: the branded
+> `/.well-known/oauth-protected-resource/mcp` document serves
+> `productGrantRequired`, the five `moving.*` scopes, `grantBoundaryVersion`, and
+> the four-door block.
+>
+> **Deferred/gaps:** real named-client lifecycle and private-media proof; a
+> separately verified external-action handoff contract; `/me`;
+> `/settings/data`; `/delete-account`; full personal-data
+> deletion; family navigation; and first-class light mode.
 > These are requirements or later work, not
 > claims of current capability. No gap in this list is designated **Coming
 > soon** without a separate approved delivery commitment.
@@ -157,7 +178,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Product Queue versus internal Tracker | `/app/queue` and move Queue routes expose the capture/ingestion Queue. `docs/tracker/` now holds the separate repo-owned Cards / Work Orders / Guide package and generated owner readers. | The separation is **Current/verified in repository source**. The Queue is user product work; the Tracker is internal build coordination. Card `MOV-0001` records the completed same-SHA GitHub, Vercel and retained-production proof for the state fast lane. |
 | Queue states | Canonical Queue records and the global/move Queue workspace use exactly **Needs you / Working / Waiting for your AI / Done**. Older capture records retain their source states and project into those four person-facing lanes for compatibility. | **Current/verified repository and released-source foundation.** The Queue remains a handoff desk; lease/retry/expiry are operational details, not extra person-facing states. |
 | Directive authority | Capture instructions can be claimed by an authorized AI; tools enforce move/owner access and claims. A Queue item records intent but does not itself create a missing tool, data, operation or external-action grant. | **Owner clarification adopted now in product truth:** Moving checks authority separately from the instruction. Missing authority returns the smallest exact **Needs you** question. When a separately visible grant already names the AI, scope, permitted data, operation or external-action category, approval and duration, Moving may hand the approved context and intent to that AI and record the result. Complete implementation remains **Later**. |
-| MCP and `/ai` | Source routes provide a canonical stateless Streamable HTTP OAuth `/mcp` with eight move-workflow tools, a persisted compatibility catalog at `/mcp/connect`, and separate API-key `/api/mcp` plus stdio. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries; AI settings live at `/settings/ai-connections` and within `/settings`. | **Current/verified in production** for anonymous OAuth/resource discovery, exact door boundaries, official-SDK consent/token exchange, brief/search/read, one-call source-backed save, idempotent replay, granular correction, normal Move/Queue reflection without a Queue transition, refresh/client/session cleanup, and hard purge. The complete Bring Your AI lifecycle is **Partial**: OAuth advertises identity-only scopes, DCR is the observed default, no person-visible product grant or immediate OAuth revoke control exists, private-media rendering and reconnect are unproved in a named AI product, and canonical OAuth cannot claim/complete Queue work. Canonical `/settings/ai` is **Later** until delivered. `MOV-WO-010` is the Proposed alignment program; it is not implementation proof. Public pages must list only the exact catalog and client lifecycle attached to their evidence. |
+| MCP and `/ai` | Source routes provide a canonical stateless Streamable HTTP OAuth `/mcp` whose catalog is the exact `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — fifteen grant-gated move-workflow tools including the full Queue loop and reversible archive — plus a persisted compatibility catalog at `/mcp/connect` and separate API-key `/api/mcp` and stdio doors: four doors in total. Public `/ai`, `/ai/start`, `/ai.txt`, `llms.txt` and `llms-full.txt` state the door and Queue boundaries and derive their tool list from that array. `/settings/ai` is the canonical grant manager; `/settings/ai-connections` redirects to it. | **Current/verified in production** for anonymous OAuth/resource discovery, exact door boundaries, the served grant block (`productGrantRequired`, five `moving.*` scopes, `grantBoundaryVersion`, four doors), official-SDK consent/token exchange, brief/search/read, one-call source-backed save, idempotent replay, granular correction, normal Move/Queue reflection, refresh/client/session cleanup, and hard purge. **Current/verified in source** for the product grant, its five separate scopes, immediate revocation, metadata-document-first client identity with DCR fallback, canonical OAuth Queue transitions, reversible archive, and `/settings/ai`. The complete Bring Your AI lifecycle is still **Partial**, for one honest reason: **no named AI client has completed the lifecycle**, so private-media rendering and reconnect in a real AI product remain unproved and every client stays **Unknown**. Clerk still issues identity-only token scopes, which is by design — authority comes from the grant, never from a token scope. `MOV-WO-010` shipped; `MOV-0035` holds the outstanding real-client run. Public pages must list only the exact catalog and client lifecycle attached to their evidence. |
 | Activity and provenance | `auditLogs`, move/object queries, item activity UI, plan journals, API-key/agent write events, and MCP planning records preserve actor and time. Stateless MCP saves add client id, operation id, version, reason, source status, and replay receipts, and the web workspace shows “Your AI via MCP.” Coverage and human-readable before/after/evidence detail are not universal, and no complete external-action handoff/result receipt is verified. | **Current/verified partial repository foundation.** Complete “if an AI did it, the record says so,” including grant, handoff, result, failure or return, is **Later**. |
 | Access and sharing | Clerk-backed household and move participants, roles, move restrictions, scoped/revocable API keys, documentation profiles and revocable `/share/<token>` links exist in source. They are foundations for collaboration-first owner, partner, move-only helper, chosen-AI and recipient-link roles, but the complete per-operation scenarios are not proven. New records do not share a single family visibility field, and current links may expire or permit selected recipient actions. | Private-by-default and collaboration foundations are **Current/verified partial**. The complete role contract, family **Private / Unlisted / Trusted / Public** vocabulary and shared-data screen are **Later**. Action-capable recipient links are an **intentional product-specific difference**, not “Unlisted.” |
 | External conversations and action handoffs | A person may ask their own AI anything outside Moving. Moving neither controls those conversations nor polices the AI's overall behavior. Moving may control only whether its tools or data participate. No complete source-and-user-path proof establishes a grant that names actor, scope, permitted data, external-action category, approval, expiry/revocation and attributable handoff result. | The freedom/boundary distinction is **adopted product truth**. A granular external-action handoff is **Later / unverified**, not a current integration claim. Moving itself remains prohibited from independently taking the outside action. |
@@ -1588,6 +1609,28 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.9.1 · 2026-08-17** — reconciled this document, the API/MCP guide, the
+  README and the tracker with `origin/main` and live production. Three families
+  of stale claim were corrected. (1) The canonical catalog is **fifteen**
+  grant-gated tools, not eight; this document already said fifteen in its
+  Capability truth ledger while its Core-adoption matrix said eight, and the two
+  now agree. A CI gate (`tests/unit/mcp-doc-tool-catalog.test.ts`) derives the
+  count and the names from `STATELESS_MOVING_TOOL_NAMES` and fails if any
+  document disagrees, so this particular drift cannot recur. (2) Canonical OAuth
+  **can** work the Queue, under the distinct `moving.queue.work` grant scope
+  (`convex/mcpQueueWork.ts`); several documents still said it could not. (3) The
+  product grant, `/settings/ai`, and immediate revocation are shipped, and the
+  grant block is **deployed** — verified 2026-08-17 against the live branded
+  `/.well-known/oauth-protected-resource/mcp` document, which serves
+  `productGrantRequired`, the five `moving.*` scopes, `grantBoundaryVersion`
+  `2026-08-16`, and the four-door block. Also corrected: the 2026-08-13
+  production acceptance was driven by the official MCP TypeScript SDK, a harness,
+  not by a named AI client; earlier revisions of this document and of
+  `docs/planning/moving-stateless-mcp-foundation.md` called it "named-client
+  proof", which it was not. **Nothing about the honest remaining limit changed:
+  no named AI client has completed the lifecycle, every client stays Unknown,
+  every Partial label survives, and private-media rendering and reconnect in a
+  real AI product are still unproved (`MOV-0035`, `MOV-0038`).**
 - **1.9.0 · 2026-08-16** — recorded the implemented `MOV-WO-010` system: five
   product scopes with published does-not-imply boundaries, an owner-visible
   grant binding one OAuth client to selected moves with a frozen consent

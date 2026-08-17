@@ -1232,6 +1232,18 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
   return await handler.fetch(request, { authInfo: auth });
 }
 
+/**
+ * The request-level guards, exported so they can be tested as behaviour.
+ *
+ * `createMovingServer` gives tests the tool layer, but the checks that run
+ * *before* it — the 512 KiB body cap, the method and path gates, the OAuth
+ * challenge, and client-identity resolution — lived only inside `handleMcp` and
+ * were therefore unreachable. The body cap in particular was completely
+ * untested. Exporting the handler keeps the route wiring below unchanged while
+ * letting a test drive the real ordering rather than re-implementing it.
+ */
+export { handleMcp as handleMcpRequestForTests, MAX_MCP_REQUEST_BYTES };
+
 export function registerMcpRoutes(http: HttpRouter) {
   http.route({ path: "/mcp", method: "POST", handler: httpAction(handleMcp) });
   http.route({ path: "/mcp", method: "OPTIONS", handler: httpAction(handleMcp) });

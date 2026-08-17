@@ -1,6 +1,9 @@
 # Moving stateless MCP foundation
 
-Status: released in production with one complete named-client authenticated loop
+Status: released in production with one complete authenticated loop driven by the
+official MCP TypeScript SDK. That harness is not an AI product; no named AI
+client has completed the lifecycle. Corrected 2026-08-17 — an earlier revision of
+this line called the SDK harness a "named client".
 Product owner: Scott Jarvie
 Executor: Codex
 Tracker: `MOV-0028`, `MOV-WO-005`
@@ -22,7 +25,7 @@ handoff desk and keeps its four states and its existing grant boundary.
 
 | Door | Authentication | Transport | Purpose |
 | --- | --- | --- | --- |
-| `https://movingmanifest.com/mcp` | Clerk OAuth bearer | Stateless MCP 2026 with stateless 2025 compatibility | Canonical eight-tool move workflow |
+| `https://movingmanifest.com/mcp` | Clerk OAuth bearer + product grant | Stateless MCP 2026 with stateless 2025 compatibility | Canonical grant-gated move workflow, including canonical Queue transitions |
 | `https://movingmanifest.com/mcp/connect` | Clerk OAuth bearer | Persisted legacy gateway | Compatibility for clients using the older 29-tool OAuth catalog |
 | `https://movingmanifest.com/api/mcp` | `mmk_` API key | Stateless HTTP | Existing granular API-key automation, including scoped Queue tools |
 | `npx assistwithmoving-mcp` | `mmk_` API key | stdio | Existing local/API-key automation |
@@ -33,7 +36,16 @@ do not silently receive a different tool set. New clients should use `/mcp`.
 
 ## Workflow tool contract
 
-The canonical OAuth resource exposes exactly eight tools:
+The canonical OAuth resource exposes exactly the tools in
+`STATELESS_MOVING_TOOL_NAMES` (`convex/httpRoutes/mcp.ts`). Each is gated by one
+of the five product grant scopes in `convex/lib/aiGrants.ts`, so `tools/list`
+advertises only what the person approved. The authoritative per-tool scope map is
+`MOVING_TOOL_SCOPES`; the full published catalog with purposes is in
+[`docs/api-and-mcp.md`](../api-and-mcp.md) and on `llms-full.txt`.
+
+`describe_connection` needs no scope and is always available, so a connection
+with no grant can still learn what it may do and where the person changes that.
+Under `moving.context.read`, `moving.evidence.read`, and `moving.work.write`:
 
 1. `get_move_brief` — first call; lists bounded accessible moves or returns one
    move's route, locations, counts, review attention, saved planning records,
@@ -51,7 +63,25 @@ The canonical OAuth resource exposes exactly eight tools:
    estimate, readable plan result, or source check.
 8. `save_complete_result` — preferred happy path; atomically saves a readable
    result and its related rooms, inventory, decisions, estimates, plan
-   sections, and source checks in one operation.
+   sections, and source checks in one operation. With `completeQueueItem` it
+   also closes the handoff, when the grant carries `moving.queue.work`.
+
+Under `moving.queue.work` (implemented in `convex/mcpQueueWork.ts`):
+
+9. `list_queue_work` — only the handoffs the person left **Waiting for your AI**
+   on one move, each with the version to claim it with. Needs you items wait on
+   the person and are deliberately omitted.
+10. `claim_queue_work` — takes one waiting handoff under a 15-minute lease.
+11. `release_queue_work` — returns a claim to Waiting for your AI with a reason.
+12. `ask_queue_question` — moves a claimed handoff to **Needs you** with the
+    smallest exact question, rather than guessing.
+13. `complete_queue_work` — marks a claimed handoff **Done** with its result.
+
+Under `moving.archive`:
+
+14. `archive_move_records` — reversible archive and restore for belongings,
+    boxes, rooms, and planning records, with a per-record result. The only
+    destructive-sounding verb an AI is given, and it deletes nothing.
 
 The catalog is deliberately workflow-shaped. It does not expose raw tables,
 arbitrary Convex calls, account administration, membership changes, exports,
@@ -96,13 +126,27 @@ publishing, billing, or destructive deletion.
 
 ## Queue boundary
 
-The canonical stateless surface may read the signed-in person's Queue summaries
-and may link a completed result to a Queue item for human inspection. It does
-not claim, release, answer, fail, or complete Queue work. Those transitions
-remain on the scoped API-key surface until Moving has a separately proven
-chosen-AI grant. Linking a result stores the complete planning-record reference
-and attributable Queue activity, makes the result readable as **Linked move
-work** in the normal handoff detail, and records `transition: none` explicitly.
+Queue authority is a separate approval, not a separate door. Two cases:
+
+- **With `moving.queue.work`,** the canonical stateless surface runs the full
+  loop: list only actionable granted work, claim it under a lease, release it,
+  ask the smallest **Needs you** question, and complete it — plus the one-call
+  `save_complete_result` + `completeQueueItem` finish. Implementation is
+  `convex/mcpQueueWork.ts`, reusing the existing `queueService` primitives
+  rather than a second lifecycle. A failed transition never discards a saved
+  result; it reports the partial truth.
+- **Without it,** at `moving.context.read` / `moving.work.write` only, the
+  surface may still read the person's Queue summaries and link a completed
+  result to a Queue item for human inspection. Linking stores the complete
+  planning-record reference and attributable Queue activity, makes the result
+  readable as **Linked move work** in the normal handoff detail, and records
+  `transition: none` explicitly. The state is left to the person because they
+  did not approve Queue work.
+
+Corrected 2026-08-17: an earlier revision of this section said canonical OAuth
+"does not claim, release, answer, fail, or complete Queue work" and that those
+transitions "remain on the scoped API-key surface". That was true before
+`MOV-WO-010`; `convex/mcpQueueWork.ts` closed it.
 
 ## Human visibility
 
@@ -132,18 +176,25 @@ false Working or Done state.
 
 - Anonymous `/mcp` requests receive OAuth discovery rather than an API-key
   error.
-- Modern and legacy stateless clients discover the exact eight-tool catalog
-  without a server session id.
+- Modern and legacy stateless clients discover the exact catalog in
+  `STATELESS_MOVING_TOOL_NAMES`, filtered to the current grant, without a server
+  session id.
 - Isolated synthetic owner flows can orient, create a multi-record complete
   result, replay without duplicates, search it, and make an optimistic granular
   correction.
 - Saved MCP planning records appear in the signed-in move workspace.
 - Older `/mcp/connect`, `/api/mcp`, and stdio clients keep their existing doors.
 
-### Current after named-client production acceptance
+### Current after official-SDK production acceptance
+
+The client in this acceptance was the official MCP TypeScript SDK — a harness,
+not an AI product. An earlier revision of this heading called it a "named
+client"; corrected 2026-08-17. Named-client proof is still outstanding
+(`MOV-0035`).
 
 - A retained non-privileged Moving-only test identity completed real Clerk
-  sign-in and consent, official-SDK token exchange, all eight tool discovery,
+  sign-in and consent, official-SDK token exchange, discovery of all eight tools
+  in the catalog as it stood on that date,
   brief/search/read, one-call result save, idempotent replay, granular
   correction, hydration, updated brief, normal Move-overview reflection,
   refresh revocation, temporary client deletion, sign-out, and hard purge.
@@ -161,9 +212,18 @@ false Working or Done state.
   lane has schema/data not represented by this branch; isolated `convex-test`
   is authoritative for this foundation's synthetic lifecycle.
 
+### Closed since this document was written
+
+- **A distinct chosen-AI grant for canonical OAuth Queue transitions** was listed
+  here as **Later**. It shipped under `MOV-WO-010`: five product scopes in
+  `convex/lib/aiGrants.ts`, the `aiGrants` / `aiGrantActivities` records, and the
+  Queue tools in `convex/mcpQueueWork.ts`. It is deployed — the live branded
+  `/.well-known/oauth-protected-resource/mcp` document carries
+  `productGrantRequired`, the five `moving.*` scopes, and the four-door block.
+  Moved out of **Later** on 2026-08-17.
+
 ### Later
 
-- A distinct chosen-AI grant for canonical OAuth Queue transitions.
 - Additional complete-result templates only when real move workflows show a
   repeated need; the first catalog should not become raw CRUD by accumulation.
 

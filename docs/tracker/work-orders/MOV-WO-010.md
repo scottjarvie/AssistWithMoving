@@ -32,7 +32,10 @@ trustworthy end-to-end connection.
 ## Current truth
 
 `/mcp` is a live stateless Streamable HTTP resource with protected-resource
-discovery, eight workflow-native tools, server-derived person/move identity,
+discovery, the exact `STATELESS_MOVING_TOOL_NAMES` catalog — fifteen grant-gated
+workflow-native tools (corrected 2026-08-17; "eight" was the count before this
+Work Order added the five Queue tools, `describe_connection`, and
+`archive_move_records`) — server-derived person/move identity,
 bounded evidence reads, replay-safe complete-result saves, provenance, and
 normal Queue/Move reflection. Official SDK production acceptance and cleanup
 are preserved in `MOV-WO-006` and `MOV-WO-008`.
@@ -52,9 +55,20 @@ blocked or awaiting a provider ticket. Provider action 1 in
 `docs/planning/moving-bring-your-ai-provider-actions.md` is closed as deferred.
 Client identity is no longer a reason a real-client lifecycle cannot run.
 
-The connection is still **Partial**, and deliberately so. Nothing here is
-deployed and **no named AI product has completed the lifecycle**. Every client
-stays Unknown. The remaining outside-the-repository steps are written up in
+The connection is still **Partial**, and deliberately so, for exactly one reason:
+**no named AI product has completed the lifecycle.** Every client stays Unknown.
+
+**Correction, 2026-08-17.** This paragraph previously also said "Nothing here is
+deployed." That is false. PRs `#196`–`#201` merged and production carries this
+work: the live branded `/.well-known/oauth-protected-resource/mcp` document
+serves `productGrantRequired`, the five `moving.*` scopes, `grantBoundaryVersion`
+`2026-08-16`, the grant-manager URL and the four-door block; `POST /mcp` returns
+a 401 whose `resource_metadata` points at that branded route; and
+`POST /api/mcp?key=mmk_...` returns 401 `query_credentials_rejected` with rotate
+guidance. Verified by read-only probe on 2026-08-17. Deployment is no longer a
+gap; the real-client run is.
+
+The remaining outside-the-repository steps are written up in
 `docs/planning/moving-bring-your-ai-provider-actions.md`; the evidence and
 target contract remain in
 `docs/planning/moving-bring-your-ai-mcp-oauth-alignment.md`.
@@ -210,12 +224,23 @@ and `package-lock.json`, no `.env.local`, and no deployment contacted.
 - The schema delta production will receive is **purely additive**: two new
   tables (`aiGrants`, `aiGrantActivities`) and eight indexes. Live production is
   commit `d8ed8fe` per the v0.6.0 completeness ledger; diffing
-  `convex/schema.ts` from there to `origin/main` is 117 lines added and 0
-  removed. No existing table gains a field at all, so there is no required-field
-  trap, no backfill, and existing rows are untouched. (An earlier draft of this
-  entry counted `movePlanningRecords` and `mcpOperations` as new. They are not —
-  `694d7d8` is an ancestor of the live commit and both tables are already in
-  production.)
+  `convex/schema.ts` from there to `origin/main` is **127 lines added and 0
+  removed** (`git diff --numstat d8ed8fe origin/main -- convex/schema.ts`,
+  re-run 2026-08-17): 117 for the two grant tables, plus 10 for two
+  compatibility fields on `moves` and their comment. **Correction,
+  2026-08-17:** this entry said "117 lines" and "No existing table gains a field
+  at all." Both were wrong. The pre-existing `moves` table gains
+  `nextItemCodeSeq` and `nextBoxCodeSeq`, both `v.optional(v.number())`
+  (`convex/schema.ts`). Because they are optional, the conclusion still holds —
+  no required-field trap, no backfill, existing rows untouched — but the fields
+  are real and they matter: they exist so documents left behind by an unmerged
+  perf branch still validate. See
+  [`docs/operations/convex-legacy-code-seq-cleanup.md`](../../operations/convex-legacy-code-seq-cleanup.md),
+  which had this right all along, and
+  `docs/planning/moving-bring-your-ai-provider-actions.md`, which correctly says
+  127. (A separate earlier draft counted `movePlanningRecords` and
+  `mcpOperations` as new. They are not — `694d7d8` is an ancestor of the live
+  commit and both tables are already in production.)
 - `npm run mcp:doctor` and `npm run mcp:doctor:legacy` both return 10 pass / 0
   warn / 0 blocked / 0 fail against production today. They are read-only
   discovery probes and were run as a pre-deploy baseline, so after the deploy
@@ -279,3 +304,21 @@ rollback note, is section 2 of
   credential or environment variable is introduced, so the deploy contract in
   the runbook is unchanged. No provider, secret, deployment, or production data
   was touched.
+- 2026-08-17 · Claude Opus 5 — documentation reconciliation against `origin/main`
+  `ab6652b` and read-only live probes. This Work Order's own Current truth said
+  "Nothing here is deployed"; that was false — PRs `#196`–`#201` merged and
+  production serves the grant block, verified on
+  `/.well-known/oauth-protected-resource/mcp`. The Deploy readiness section said
+  the schema delta was 117 lines and that "No existing table gains a field at
+  all"; the real numbers are 127 lines and two optional fields on `moves`, which
+  is what `docs/operations/convex-legacy-code-seq-cleanup.md` and
+  `docs/planning/moving-bring-your-ai-provider-actions.md` said all along. Both
+  corrected in place with the diff command that produces the number. The stale
+  eight-tool count was corrected to the fifteen names in
+  `STATELESS_MOVING_TOOL_NAMES`, and a required-CI gate
+  (`tests/unit/mcp-doc-tool-catalog.test.ts`) now derives the catalog from source
+  so no document can disagree with it again. `MOV-0023` and `MOV-0034` closed;
+  `MOV-0033`, `MOV-0035` and `MOV-0038` deliberately left open. **The Partial
+  label on the connection is unchanged and correct: no named AI product has
+  completed the lifecycle.** No product code, authority model, tool catalog,
+  scope, provider setting, secret, deployment, or production data was touched.
