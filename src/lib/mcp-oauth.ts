@@ -38,23 +38,33 @@ export const mcpOauthScopes = ["openid", "profile", "email"] as const;
 /**
  * What the OAuth doors advertise in RFC 9728 `scopes_supported`.
  *
- * Two different things live in one list, and the distinction matters:
- *   - `mcpOauthScopes` are the identity scopes Clerk actually issues today.
- *   - `movingScopes` are the product ceiling this resource enforces from its
- *     own grant records. A token carrying one never widens a grant, and a token
- *     lacking one never narrows one — but a client still needs to see them to
- *     understand what approving at /settings/ai can cover.
+ * Identity scopes ONLY, because `scopes_supported` means "what a client may
+ * ask the authorization server for". Clerk is that authorization server, and
+ * Clerk can only issue `openid profile email`.
  *
- * Sourced from convex/lib/aiGrants.ts rather than re-listed here. These Next
- * routes are what an MCP client actually reads: the /mcp proxy rewrites the
- * gateway's 401 to point at this domain's metadata, so the Convex gateway's own
- * copy is never fetched by a real client. When the two lists drifted, the five
- * moving.* scopes existed in the backend and were invisible to every client.
+ * RULE: never add `movingScopes` here. It was tried once, and it is wrong in
+ * both directions:
+ *   - Advertising a scope Clerk cannot mint invites a client to request it and
+ *     be rejected at the authorization endpoint — a self-inflicted interop bug.
+ *   - It misdescribes our authority model. Product permission lives in the
+ *     person's grant record, never in the token. A token carrying a moving.*
+ *     scope would not widen a grant, and a token lacking one does not narrow
+ *     one, so the token is simply not where that answer lives.
+ *
+ * The five moving.* scopes are still discoverable — they are the consent
+ * screen at /settings/ai, the guide at /ai, and the grant-filtered tool
+ * catalogue — plus the non-normative `x-assistwithmoving.productScopes` hint
+ * below, which is namespaced precisely so no client mistakes it for something
+ * to request from Clerk.
  */
-export const mcpResourceScopes = [
-  ...mcpOauthScopes,
-  ...movingScopes,
-] as const;
+export const mcpResourceScopes = [...mcpOauthScopes] as const;
+
+/**
+ * The product ceiling this resource enforces from its own grant records.
+ * Published as a vendor hint, never as `scopes_supported`. Sourced from
+ * convex/lib/aiGrants.ts rather than re-listed here.
+ */
+export const mcpProductScopes = [...movingScopes] as const;
 
 /**
  * The RFC 9728 body for an OAuth door, mirroring `protectedResourceMetadata`
@@ -93,6 +103,10 @@ export function protectedResourceMetadataBody({
       // rather than reporting a broken connection.
       productGrantRequired: true,
       grantManager: `${origin}/settings/ai`,
+      // The product ceiling, surfaced as a vendor hint rather than in
+      // `scopes_supported`: these are approved at the grant manager, not
+      // requested from Clerk.
+      productScopes: [...mcpProductScopes],
       // Four doors, honestly named. Only /mcp is the canonical OAuth resource.
       doors: {
         canonical: `${origin}/mcp`,
