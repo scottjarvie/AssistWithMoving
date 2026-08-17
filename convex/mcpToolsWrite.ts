@@ -28,7 +28,9 @@ import {
   normalizeDocumentationProfileTypes,
   normalizeItemName,
   normalizeOptionalText,
+  normalizePlanningDefaultKeys,
   normalizedSearchName,
+  planningDefaultKeyValidator,
   pcsBranchValidator,
   pcsDependentStatusValidator,
   pcsShipmentTypeValidator,
@@ -196,6 +198,11 @@ export const getItem = query({
       fragility: item.fragility,
       highValue: item.highValue,
       needsReview: item.needsReview,
+      // Planning tags (firstNight and the rest) plus the version token, both
+      // returned here because upsert_items REPLACES the tag set and refuses a
+      // tag change without expectedUpdatedAt. One read supplies both.
+      planningDefaultKeys: item.planningDefaultKeys,
+      updatedAt: item.updatedAt,
       // AI/research prose can restate value/serial — gate it like values so a
       // walled-off moveOnly guest (mover/helper) can't read it.
       aiSummary: policy.visibility.research ? (item.aiSummary ?? null) : undefined,
@@ -225,6 +232,11 @@ export const getItem = query({
 // ---- upsert_items ----------------------------------------------------------
 const itemDraftValidator = v.object({
   itemId: v.optional(v.id("items")),
+  // Compare-and-set token for a correction, matching the `expectedUpdatedAt`
+  // contract save_inventory already enforces. Optional so every client that
+  // predates it keeps working, but REQUIRED whenever a correction carries
+  // planningDefaultKeys — see the guard in the handler for why.
+  expectedUpdatedAt: v.optional(v.number()),
   name: v.string(),
   room: v.optional(v.string()),
   destinationRoom: v.optional(v.string()),
@@ -237,6 +249,9 @@ const itemDraftValidator = v.object({
   highValue: v.optional(v.boolean()),
   fragility: v.optional(itemFragilityValidator),
   needsReview: v.optional(v.boolean()),
+  // Planning tags — firstNight and the rest of the move's own vocabulary.
+  // Omit to leave stored tags alone; send an array to replace the whole set.
+  planningDefaultKeys: v.optional(v.array(planningDefaultKeyValidator)),
 });
 export const upsertItemsArgs = {
   caller: mcpCallerValidator,
@@ -262,6 +277,15 @@ export const upsertItems = mutation({
       [];
 
     for (const draft of args.items) {
+      // Validated before the dryRun branch so a preview genuinely previews:
+      // an unknown tag refuses the call whether or not anything is saved.
+      const planningKeys = normalizePlanningDefaultKeys(
+        draft.planningDefaultKeys,
+        {
+          label: "planningDefaultKeys",
+          error: (message) => new ConvexError(message),
+        },
+      );
       if (draft.itemId) {
         const existing = await ctx.db.get(draft.itemId);
         if (
@@ -271,6 +295,24 @@ export const upsertItems = mutation({
           existing.deletedAt !== undefined
         ) {
           throw new ConvexError(`Item ${draft.itemId} not found in this move.`);
+        }
+        // Compare-and-set. Every other field on this path merges (`?? existing`)
+        // so a blind write can only ever add; planningDefaultKeys REPLACES, so a
+        // blind write could silently drop a tag a person or another AI set
+        // between the read and the write. Require the version token for that
+        // field, and honour it for any caller that volunteers it.
+        if (planningKeys !== undefined && draft.expectedUpdatedAt === undefined) {
+          throw new ConvexError(
+            `Item ${draft.itemId}: changing planningDefaultKeys replaces the whole tag set, so it needs expectedUpdatedAt. Read the item with get_item, send back its updatedAt, and include every tag you are keeping.`,
+          );
+        }
+        if (
+          draft.expectedUpdatedAt !== undefined &&
+          draft.expectedUpdatedAt !== existing.updatedAt
+        ) {
+          throw new ConvexError(
+            `Item ${existing.name} changed after it was read. Read it again with get_item and retry with the new updatedAt.`,
+          );
         }
         if (!dryRun) {
           const name = normalizeItemName(draft.name);
@@ -291,6 +333,8 @@ export const upsertItems = mutation({
             highValue: draft.highValue ?? existing.highValue,
             fragility: draft.fragility ?? existing.fragility,
             needsReview: draft.needsReview ?? existing.needsReview,
+            planningDefaultKeys:
+              planningKeys ?? existing.planningDefaultKeys,
             updatedByUserId: userId,
             updatedAt: now,
           });
@@ -324,7 +368,7 @@ export const upsertItems = mutation({
               hazardousFlag: false,
               highValue: draft.highValue ?? false,
               requiresPersonalTransport: false,
-              planningDefaultKeys: [],
+              planningDefaultKeys: planningKeys ?? [],
               needsReview: draft.needsReview ?? false,
               reviewFlags: [],
               aiTags: [],

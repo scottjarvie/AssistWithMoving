@@ -128,7 +128,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpQuery({
     name: "get_item",
     description:
-      "Full detail for one item, including its photo ids. Value/serial/private notes appear only if your role may view them.",
+      "Full detail for one item, including its photo ids, its planningDefaultKeys, and its updatedAt version token. Value/serial/private notes appear only if your role may view them. Call this before changing planningDefaultKeys with upsert_items — that write replaces the whole tag set and requires the updatedAt returned here.",
     fn: api.mcpToolsWrite.getItem,
     args: getItemArgs,
     identityArg: "caller",
@@ -136,7 +136,7 @@ export const tools: McpToolRegistration[] = [
   defineMcpMutation({
     name: "upsert_items",
     description:
-      "Add OR update many inventory items in one call (pass itemId to update, omit to create). Supports dryRun to preview. The workhorse for capturing inventory. For an item's weight, dimensions, volume, present location, or transport/zone assignment, use update_item. If you create an item from a photo (or a queue capture) its photos belong ON that item — attach them with attach_photos (attachTo.itemId); when you finish a queue entry via submit_queue_result that happens automatically.",
+      "Add OR update many inventory items in one call (pass itemId to update, omit to create). Supports dryRun to preview. The workhorse for capturing inventory. Use planningDefaultKeys to tag what the plan has to act on — firstNight (needed the night the household arrives), doNotLetMoversTouch, documents, medication, electronics, highValue, sensitive, fragile, irreplaceable, restrictedReview. Omitting planningDefaultKeys leaves stored tags untouched; sending it REPLACES the whole set for that item ([] clears it), so on an update call get_item first, send back its updatedAt as expectedUpdatedAt, and include every tag you are keeping — a tag change without expectedUpdatedAt is refused so a concurrent edit cannot be silently dropped. For an item's weight, dimensions, volume, present location, or transport/zone assignment, use update_item. If you create an item from a photo (or a queue capture) its photos belong ON that item — attach them with attach_photos (attachTo.itemId); when you finish a queue entry via submit_queue_result that happens automatically.",
     fn: api.mcpToolsWrite.upsertItems,
     args: upsertItemsArgs,
     identityArg: "caller",

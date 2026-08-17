@@ -368,6 +368,51 @@ export function normalizeDocumentationProfileTypes(
   );
 }
 
+/**
+ * Validate and normalize a planning-default tag list written by an agent.
+ *
+ * These tags are the vocabulary a connected AI uses to say "this belonging is
+ * first-night essential", "do not let movers touch this", "this needs evidence
+ * before loading". Every downstream consumer — packets, inventory filters, the
+ * load planner, `moveQuestions` — reads them as a closed set, so an unknown key
+ * must be **refused**, never silently stored: a stored typo would look like a
+ * successful tag to the AI and to the person, and would then be invisible to
+ * every filter that was supposed to act on it.
+ *
+ * `undefined` in, `undefined` out. The caller uses that to mean "the field was
+ * absent from this write, leave whatever is stored alone" — which is what keeps
+ * a partial correction (say, of a room name) from erasing tags it never
+ * mentioned. An explicit empty array is a deliberate clear.
+ */
+export function normalizePlanningDefaultKeys(
+  value: readonly string[] | undefined,
+  options: {
+    label?: string;
+    error?: (message: string) => Error;
+  } = {}
+): PlanningDefaultKeyValue[] | undefined {
+  if (value === undefined) return undefined;
+  const label = options.label ?? "planningDefaultKeys";
+  const fail = options.error ?? ((message: string) => new Error(message));
+  if (!Array.isArray(value)) {
+    throw fail(`${label} must be an array of planning default keys.`);
+  }
+  const allowed = new Set<string>(planningDefaultKeys);
+  const normalized: PlanningDefaultKeyValue[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || !allowed.has(entry)) {
+      throw fail(
+        `Unsupported ${label} value ${JSON.stringify(entry)}. Use one of: ${planningDefaultKeys.join(", ")}.`
+      );
+    }
+    const key = entry as PlanningDefaultKeyValue;
+    if (!normalized.includes(key)) normalized.push(key);
+  }
+  return normalized;
+}
+
+export type PlanningDefaultKeyValue = (typeof planningDefaultKeys)[number];
+
 type MovePatchInput = {
   title?: unknown;
   status?: unknown;

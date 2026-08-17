@@ -29,6 +29,7 @@ import {
   resolveClientIdentity,
   type ResolvedClientIdentity,
 } from "../lib/mcpClientIdentity";
+import { planningDefaultKeys } from "../lib/moveFields";
 
 /**
  * The canonical catalog. A tool appears to a connected AI only when the
@@ -411,6 +412,13 @@ const itemSchema = z
     status: z.enum(["draft", "active", "packed", "staged", "loaded", "delivered", "missing", "damaged"]).optional(),
     fragility: z.enum(["low", "medium", "high"]).optional(),
     highValue: z.boolean().optional(),
+    // Planning tags, derived from the product's own vocabulary so the tool
+    // schema an AI reads can never drift from what the database accepts.
+    // Omit to leave existing tags alone; send an array to replace them.
+    planningDefaultKeys: z
+      .array(z.enum(planningDefaultKeys))
+      .max(planningDefaultKeys.length)
+      .optional(),
     needsReview: z.boolean().optional(),
     reviewFlags: z.array(z.string().trim().min(1).max(240)).max(30).optional(),
     estimatedWeightLb: nullableNonnegative,
@@ -771,7 +779,7 @@ export function createMovingServer(
     {
       title: "Save inventory",
       description:
-        "Create replay-safe inventory rows or optimistically correct existing items in a bounded batch. Preserve estimates, confidence, review flags, and item-level source provenance.",
+        "Create replay-safe inventory rows or optimistically correct existing items in a bounded batch. Preserve estimates, confidence, review flags, and item-level source provenance. Use planningDefaultKeys to tag what the move plan has to act on — firstNight marks a belonging the household needs unpacked the night they arrive, alongside doNotLetMoversTouch, documents, medication, electronics, highValue, sensitive, fragile, irreplaceable, restrictedReview. Omitting planningDefaultKeys leaves existing tags untouched; sending it replaces the whole set for that item (send [] to clear), so read the item's current tags first and include the ones you are keeping.",
       inputSchema: z
         .object({
           moveId: id,

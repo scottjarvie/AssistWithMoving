@@ -20,7 +20,11 @@ import {
   requireMcpUser,
   type McpPrincipal,
 } from "./lib/mcpGrantAccess";
-import { normalizedSearchName } from "./lib/moveFields";
+import {
+  normalizePlanningDefaultKeys,
+  normalizedSearchName,
+  planningDefaultKeyValidator,
+} from "./lib/moveFields";
 import { canViewPhotoAssets } from "./lib/photoVisibility";
 import { requireMovePermission } from "./lib/permissions";
 import { linkQueueResultWithoutTransition } from "./lib/queueService";
@@ -123,6 +127,11 @@ const itemInput = v.object({
   status: v.optional(itemStatus),
   fragility: v.optional(itemFragility),
   highValue: v.optional(v.boolean()),
+  // The planning tags a connected AI may set while it works through the
+  // possessions — `firstNight` above all, which every packet, inventory filter
+  // and the load planner already read. Absent means "leave the stored tags
+  // alone"; an explicit array replaces them wholesale (see saveItems).
+  planningDefaultKeys: v.optional(v.array(planningDefaultKeyValidator)),
   needsReview: v.optional(v.boolean()),
   reviewFlags: v.optional(v.array(v.string())),
   estimatedWeightLb: optionalNullableNumber,
@@ -799,6 +808,10 @@ export const getMoveRecords = internalQuery({
               }
             : null,
           review: { needsReview: item.needsReview, flags: item.reviewFlags },
+          // Read alongside updatedAt on purpose: save_inventory replaces the
+          // whole tag set, so this one read gives an AI both the tags it is
+          // about to rewrite and the version token that write must carry.
+          planningDefaultKeys: item.planningDefaultKeys,
           updatedAt: item.updatedAt,
         });
       } else if (table === "boxes") {
@@ -1280,6 +1293,22 @@ async function saveItems(
     if (!!input.itemId === !!input.createKey) {
       mcpError("VALIDATION_ERROR", "Each inventory row needs exactly one of itemId or createKey.", "Use itemId for a correction or a stable createKey for a new item.");
     }
+    // Validated before anything is read or written, so an unknown tag refuses
+    // the whole bounded batch instead of half-applying it.
+    const planningKeys = normalizePlanningDefaultKeys(
+      input.planningDefaultKeys as string[] | undefined,
+      {
+        label: "planningDefaultKeys",
+        // mcpError throws, so this never returns — it surfaces the refusal in
+        // the same shaped envelope every other MCP validation failure uses.
+        error: (message) =>
+          mcpError(
+            "VALIDATION_ERROR",
+            message,
+            "Use a planning default key from the move's own vocabulary; firstNight is the first-night essentials tag.",
+          ),
+      },
+    );
     const sourcesProvided = input.researchSources !== undefined;
     const researchSources = input.researchSources?.slice(0, 30).map((source) => ({
       title: source.title ? cleanText(source.title, "source title", 500) : undefined,
@@ -1309,6 +1338,11 @@ async function saveItems(
       const patch = itemPatch({ ...input, researchSources });
       await ctx.db.patch(existing._id, {
         ...patch,
+        // Absent from the write → untouched. Present → replaces the stored set,
+        // which is safe here because this path already refuses a correction
+        // without a matching expectedUpdatedAt, so the AI has demonstrably read
+        // the tags it is replacing.
+        ...(planningKeys === undefined ? {} : { planningDefaultKeys: planningKeys }),
         name,
         normalizedName: normalizedSearchName(name),
         researchedAt: sourcesProvided
@@ -1354,7 +1388,7 @@ async function saveItems(
         hazardousFlag: false,
         highValue: (patch.highValue as boolean | undefined) ?? false,
         requiresPersonalTransport: false,
-        planningDefaultKeys: [],
+        planningDefaultKeys: planningKeys ?? [],
         needsReview: (patch.needsReview as boolean | undefined) ?? false,
         reviewFlags: (patch.reviewFlags as string[] | undefined) ?? [],
         aiTags: [],
