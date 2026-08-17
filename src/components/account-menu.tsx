@@ -129,7 +129,7 @@ function EnabledAccountMenu() {
           asChild
           className="bg-primary/10 text-primary focus:bg-primary/15 focus:text-primary"
         >
-          <Link href="/settings/ai-connections">
+          <Link href="/settings/ai">
             <KeyRound aria-hidden="true" />
             Connect your chosen AI
           </Link>

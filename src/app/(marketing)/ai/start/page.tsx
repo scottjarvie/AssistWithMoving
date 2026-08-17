@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  ClipboardList,
   KeyRound,
   ShieldAlert,
 } from "lucide-react";
@@ -15,14 +16,15 @@ import { Badge } from "@/components/ui/badge";
 export const metadata: Metadata = {
   title: "Set up your chosen AI",
   description:
-    "A short setup path for using Assist With Moving with Claude, ChatGPT, Codex, or another chosen AI.",
+    "A short setup path for using Assist With Moving with an AI you choose: sign in, approve a grant, and know exactly what it covers.",
 };
 
-const keyOptions = [
-  "Hosted MCP OAuth",
-  "Fallback helper key",
-  "Move-restricted access",
-  "Read-only fallback",
+const grantChoices = [
+  "Read the move context you choose",
+  "Open the private photos and files for that work",
+  "Save the work you asked for",
+  "Work the Queue handoffs you hand over",
+  "Retire records that turned out to be wrong",
 ];
 
 // OAuth (sign-in) connector URL — the bare /mcp front door. NOT /api/mcp, which
@@ -38,13 +40,14 @@ export default function AiStartPage() {
           <div>
             <Badge variant="secondary">AI-assisted setup</Badge>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-normal sm:text-5xl">
-              Your chosen AI can help after one secure connection.
+              Your chosen AI can help after you sign in and approve a grant.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               Assist With Moving keeps the durable record. Your AI can research,
-              organize, and save bounded work into it. Use hosted MCP OAuth when
-              your AI supports it; create a fallback key
-              only for local or non-OAuth tools.
+              organize, and save bounded work into it. Signing in proves who you
+              are; the grant you approve afterwards decides what your AI may
+              actually do. Create a fallback key only for local or non-OAuth
+              tools.
             </p>
             <div className="mt-7">
               <AiStartActions />
@@ -63,15 +66,16 @@ export default function AiStartPage() {
               </div>
               <Badge>
                 <Bot aria-hidden="true" />
-                AI ready
+                your AI
               </Badge>
             </div>
             <ol className="mt-4 space-y-3">
               {[
                 "Create or sign into your account.",
-                "Paste the MCP endpoint into an OAuth-capable assistant.",
-                "Sign in and approve the connection.",
-                "Use a fallback helper key only if OAuth is unavailable.",
+                "Paste the endpoint into an AI that speaks remote MCP with OAuth.",
+                "Sign in through your browser.",
+                "Approve a grant: the moves it covers and what it may do.",
+                "Use a fallback helper key only if that path is unavailable.",
               ].map((step, index) => (
                 <li
                   key={step}
@@ -95,36 +99,52 @@ export default function AiStartPage() {
           <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <KeyRound className="size-4 text-primary" aria-hidden="true" />
-              Connection choices you will see
+              What the grant asks you to choose
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {keyOptions.map((option) => (
+            <div className="mt-4 grid gap-2">
+              {grantChoices.map((option) => (
                 <div
                   key={option}
                   className="flex items-center gap-2 rounded-md border border-border bg-background/65 p-3 text-sm"
                 >
                   <CheckCircle2
-                    className="size-4 text-primary"
+                    className="size-4 shrink-0 text-primary"
                     aria-hidden="true"
                   />
                   {option}
                 </div>
               ))}
             </div>
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">
+              Approve only what the work needs. Your AI is shown just the tools
+              your grant covers, and revoking it refuses the very next call.
+            </p>
           </div>
           <div className="rounded-md border border-border p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Bot className="size-4 text-primary" aria-hidden="true" />
-              Hosted MCP endpoint
+              Canonical MCP endpoint
             </div>
             <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted/35 p-3 font-mono text-xs leading-5 text-muted-foreground">
               {remoteMcpEndpoint}
             </pre>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Paste this URL into hosted MCP clients that support browser
-              sign-in. Ask the assistant to call get_move_brief first, search
-              before creating duplicates, and use save_complete_result to keep
-              finished decisions, estimates, plans, and source checks together.
+              Paste this URL into any AI that speaks remote Streamable HTTP MCP
+              with compatible OAuth. This is a capability requirement, not a
+              claim that a particular AI product works — none has completed a
+              full run yet, so the connection is Partial. Ask your AI to call
+              describe_connection if no tools appear, get_move_brief first,
+              search before creating duplicates, and use save_complete_result to
+              keep finished decisions, estimates, plans, and source checks
+              together.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              The other doors are not the same:
+              https://movingmanifest.com/mcp/connect keeps older connections
+              working with a different, larger catalog;
+              https://movingmanifest.com/api/mcp and the local
+              assistwithmoving-mcp package take a scoped mmk_ key and never
+              offer sign-in.
             </p>
           </div>
           <div className="rounded-md border border-border p-4">
@@ -134,16 +154,37 @@ export default function AiStartPage() {
             </div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               A fallback key can read and change your move data according to
-              its scopes. Only paste it into an assistant you trust when hosted
-              OAuth is not available. Do not put keys in public chats,
-              screenshots, issues, or documents. You can revoke connections and
-              keys later in Settings.
+              its scopes, and it is not governed by the grant. Only paste it
+              into an AI you trust when the canonical connection is not
+              available. Do not put keys in public chats, screenshots, issues,
+              or documents. You can revoke connections and keys later in
+              Settings.
             </p>
             <Link
               href="/ai"
-              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary"
+              className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
             >
-              Learn what the assistant can help with
+              Learn what your AI can help with
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
+          <div className="rounded-md border border-border p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <ClipboardList className="size-4 text-primary" aria-hidden="true" />
+              No connection needed to hand work over
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              You do not need a connection at all to hand work over. Open a
+              Queue item, copy its bounded brief into any AI, and paste the
+              result back into the same item. The handoff completes without MCP,
+              OAuth, or a key — and Settings → AI connections keeps a copyable
+              brief ready for exactly this.
+            </p>
+            <Link
+              href="/mcp/guide"
+              className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
+            >
+              Read the MCP overview
               <ArrowRight className="size-4" aria-hidden="true" />
             </Link>
           </div>

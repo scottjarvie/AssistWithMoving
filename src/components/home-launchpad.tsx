@@ -168,7 +168,7 @@ export function HomeLaunchpad() {
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end">
             <Button asChild size="touch">
-              <Link href="/settings/ai-connections">
+              <Link href="/settings/ai">
                 Connect your AI
                 <Sparkles aria-hidden="true" />
               </Link>

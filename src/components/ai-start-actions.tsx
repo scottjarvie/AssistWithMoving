@@ -24,7 +24,7 @@ function ClerkAwareAiStartActions() {
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      router.replace("/settings/ai-connections");
+      router.replace("/settings/ai");
     }
   }, [isLoaded, isSignedIn, router]);
 
@@ -40,7 +40,7 @@ function ClerkAwareAiStartActions() {
   if (isSignedIn) {
     return (
       <Button asChild size="lg">
-        <Link href="/settings/ai-connections">
+        <Link href="/settings/ai">
           <RefreshCw className="animate-spin" aria-hidden="true" />
           Opening connection setup
         </Link>
@@ -57,13 +57,13 @@ function AiStartLinks() {
   return (
     <div className="flex flex-col gap-3 sm:flex-row">
       <Button asChild size="lg">
-        <Link href="/sign-up?redirect_url=/settings/ai-connections">
+        <Link href="/sign-up?redirect_url=/settings/ai">
           <UserPlus aria-hidden="true" />
           Create account and connection
         </Link>
       </Button>
       <Button asChild size="lg" variant="outline">
-        <Link href="/sign-in?redirect_url=/settings/ai-connections">
+        <Link href="/sign-in?redirect_url=/settings/ai">
           <LockKeyhole aria-hidden="true" />
           Sign in and connect AI
         </Link>

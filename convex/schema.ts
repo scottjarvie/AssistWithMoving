@@ -233,6 +233,40 @@ export const apiKeyScope = v.union(
   v.literal("members/manage")
 );
 
+/**
+ * Product scopes for a chosen AI connected over OAuth.
+ *
+ * Deliberately separate from `apiKeyScope`: an `mmk_` key is a headless
+ * automation credential the person mints, and an OAuth grant is authority a
+ * person approves for someone else's AI. Sharing one vocabulary would make the
+ * two look interchangeable on screen, and they are not.
+ *
+ * The meanings, and each scope's does-not-imply boundary, live in
+ * `convex/lib/aiGrants.ts` so the product UI, the consent snapshot, and the
+ * agent-facing guides all render from one source.
+ */
+export const movingGrantScope = v.union(
+  v.literal("moving.context.read"),
+  v.literal("moving.evidence.read"),
+  v.literal("moving.work.write"),
+  v.literal("moving.queue.work"),
+  v.literal("moving.archive")
+);
+
+export const mcpClientRegistrationMethod = v.union(
+  v.literal("clientIdMetadataDocument"),
+  v.literal("dynamicClientRegistration")
+);
+
+export const aiGrantActivityType = v.union(
+  v.literal("approved"),
+  v.literal("scopeUsed"),
+  v.literal("refused"),
+  v.literal("clientBound"),
+  v.literal("revoked"),
+  v.literal("expired")
+);
+
 export const planProposalStatus = v.union(
   v.literal("pending"),
   v.literal("applied"),
@@ -1439,6 +1473,89 @@ export default defineSchema({
       "operationId",
     ])
     .index("by_move", ["moveId"])
+    .index("by_expires", ["expiresAt"]),
+
+  /**
+   * What one person has approved one chosen AI to do inside Moving.
+   *
+   * This is the authority record, and it is read fresh on every discovery and
+   * every tool call. An OAuth token proves who signed in; this row decides what
+   * they may reach. That is what makes revocation immediate: the token is still
+   * cryptographically valid, and the very next call is still refused.
+   *
+   * A grant is per OAuth client, so revoking one connected AI does not disturb
+   * another. It is never a credential — there is nothing here to connect with.
+   */
+  aiGrants: defineTable({
+    ownerUserId: v.id("users"),
+    householdId: v.id("households"),
+    // What the person called this connection, for their own screen.
+    label: v.string(),
+    // The OAuth client this grant is bound to. Absent means the person approved
+    // the grant before any client connected; the first matching client claims it.
+    clientId: v.optional(v.string()),
+    registrationMethod: v.optional(mcpClientRegistrationMethod),
+    // SHA-256 of the Client ID Metadata Document, so a swapped document shows up.
+    clientMetadataDigest: v.optional(v.string()),
+    // What the client called itself. A label for the person, never authority.
+    observedClientName: v.optional(v.string()),
+    scopes: v.array(movingGrantScope),
+    moveScope: v.union(v.literal("allMoves"), v.literal("selectedMoves")),
+    moveIds: v.optional(v.array(v.id("moves"))),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    // The text the person actually approved, frozen at approval time. Rendering
+    // today's wording for an old grant would quietly rewrite what they agreed to.
+    consentBoundaryVersion: v.string(),
+    consentSnapshot: v.array(
+      v.object({
+        scope: v.string(),
+        label: v.string(),
+        grants: v.string(),
+        doesNotImply: v.string(),
+      }),
+    ),
+    // A grant that never ends is one nobody remembers agreeing to.
+    expiresAt: v.optional(v.number()),
+    approvedAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    lastToolName: v.optional(v.string()),
+    useCount: v.number(),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+    revokedReason: v.optional(v.string()),
+    note: v.optional(v.string()),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
+    .index("by_owner_updated", ["ownerUserId", "updatedAt"])
+    .index("by_owner_client_status", ["ownerUserId", "clientId", "status"])
+    .index("by_household_updated", ["householdId", "updatedAt"]),
+
+  // Append-only, owner-readable history for one grant: approvals, uses,
+  // refusals, and revocation. Revoking future access must never erase the
+  // attribution of work already done, so nothing here is deleted on revoke.
+  aiGrantActivities: defineTable({
+    grantId: v.id("aiGrants"),
+    ownerUserId: v.id("users"),
+    householdId: v.id("households"),
+    moveId: v.optional(v.id("moves")),
+    type: aiGrantActivityType,
+    scope: v.optional(movingGrantScope),
+    toolName: v.optional(v.string()),
+    clientId: v.optional(v.string()),
+    clientLabel: v.optional(v.string()),
+    // Plain language, written for the person rather than for an operator.
+    message: v.string(),
+    outcome: v.union(v.literal("allowed"), v.literal("refused"), v.literal("recorded")),
+    refusalCode: v.optional(v.string()),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+  })
+    .index("by_grant_created", ["grantId", "createdAt"])
+    .index("by_owner_created", ["ownerUserId", "createdAt"])
+    .index("by_move_created", ["moveId", "createdAt"])
     .index("by_expires", ["expiresAt"]),
 
   floorPlans: defineTable({

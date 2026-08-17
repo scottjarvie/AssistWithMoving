@@ -1,12 +1,15 @@
 ---
 id: MOV-WO-010
 title: Bring a chosen AI into a private move with scoped, revocable OAuth
-execution: proposed
+execution: active
 audit: not-audited
 cards: MOV-0032 MOV-0023 MOV-0033 MOV-0034 MOV-0035
 created: 2026-08-16
 updated: 2026-08-16
 proposed-by: Codex
+approved-by: Scott Jarvie
+approval-evidence: "Bring Your AI implementation program charter, assist-with-life/planning/mcp-program-2026-08.md, which places Moving in Wave 1 as a gateway retrofit with the full tool inventory and names the staged implementation sequence this Work Order already carried"
+executor: Claude Fable 5
 ---
 
 ## Goal
@@ -34,17 +37,29 @@ bounded evidence reads, replay-safe complete-result saves, provenance, and
 normal Queue/Move reflection. Official SDK production acceptance and cleanup
 are preserved in `MOV-WO-006` and `MOV-WO-008`.
 
-The whole Bring Your AI lifecycle is **Partial**. OAuth uses identity-only
-scopes; DCR is the observed registration path; no product grant or immediate
-revocation check exists; `/settings/ai-connections` manages fallback keys but
-not OAuth clients; canonical OAuth cannot transition Queue work; and no named AI
-product has proved connect through revoke/reconnect/cleanup. The evidence and
-Moving-specific target contract are recorded in
+The seven gaps this Work Order was written to close are closed **in source**.
+A product grant now decides authority and is re-read on every discovery and
+every call; five scopes carry published does-not-imply boundaries; Client ID
+Metadata Documents lead with dynamic registration as a labelled fallback;
+canonical OAuth can list, claim, question, and complete Queue work; archive is
+reversible and separate; `/settings/ai` is a real grant manager; and a scripted
+nine-step harness runs the whole lifecycle with marked synthetic records.
+
+The connection is still **Partial**, and deliberately so. Nothing here is
+deployed, the Clerk metadata-document path is not yet enabled, private media
+bytes are proved only against a stubbed delivery fetch rather than the real
+bucket, and **no named AI product has completed the lifecycle**. Every client
+stays Unknown. The remaining outside-the-repository steps are written up in
+`docs/planning/moving-bring-your-ai-provider-actions.md`; the evidence and
+target contract remain in
 `docs/planning/moving-bring-your-ai-mcp-oauth-alignment.md`.
 
-This Work Order is **Proposed**, not permission to change Clerk, provider
-settings, accounts, production data, or deploy software. The Cards remain
-Backlog until Scott approves execution as Ready.
+This Work Order is **Active**. Scott approved execution under the family
+program charter
+(`assist-with-life/planning/mcp-program-2026-08.md`, Wave 1 gateway retrofit).
+Approval covers software inside this repository. It is still not permission to
+change Clerk, provider settings, accounts, secrets, billing, DNS, or production
+data; those steps are written up for Scott to run separately.
 
 ## Sequence
 
@@ -103,8 +118,8 @@ called Current.
 
 ## Human gates
 
-Scott must move this Work Order from Proposed to Ready before implementation.
-Inside an approved Ready order, routine architecture, schema, UI, test, docs,
+Scott approved execution through the family program charter. Inside an approved
+order, routine architecture, schema, UI, test, docs,
 PR, preview, synthetic-fixture, and release decisions belong to the executor.
 A separate decision remains required for provider configuration, account/access
 expansion, secrets, billing, DNS/domain, real production data, permanent delete,
@@ -147,12 +162,33 @@ cleanup, and claim truth before this Work Order can record Passed.
 
 ## Execution evidence
 
-No implementation has started. The 2026-08-16 audit used fresh `origin/main`
-`8a064303`, current source, the adopted family standard, Project Philosophy,
-tracker, Queue/auth/identity models, all four agent doors, existing release
-receipts, and read-only production anonymous discovery. No provider, account,
-secret, deployment, grant, client registration, token, or production data was
-changed.
+The 2026-08-16 audit used fresh `origin/main` `8a064303`, current source, the
+adopted family standard, Project Philosophy, tracker, Queue/auth/identity
+models, all four agent doors, existing release receipts, and read-only
+production anonymous discovery.
+
+Implementation followed on branch `claude/mov-wo010-bring-your-ai` from
+`origin/main` `ee16bd4`. Repository evidence:
+
+- new `convex/lib/aiGrants.ts`, `convex/lib/mcpClientIdentity.ts`,
+  `convex/lib/mcpGrantAccess.ts`, `convex/aiGrants.ts`, `convex/mcpQueueWork.ts`,
+  `convex/mcpArchive.ts`; `aiGrants` and `aiGrantActivities` tables, with move
+  purge coverage extended so a purged move leaves no grant activity behind;
+- fifteen canonical tools, filtered at discovery by the person's current grant,
+  plus an always-available `describe_connection` so a person with no grant gets
+  a sentence rather than a protocol failure;
+- `/settings/ai` grant manager with `/settings/ai-connections` redirecting;
+  `/ai`, `/ai/start`, `/mcp/guide`, `ai.txt`, `llms.txt`, and `llms-full.txt`
+  regenerated from the shipped contract with every named-client claim removed;
+- `tests/unit/mcp-product-grants.test.ts` (34 tests) and
+  `tests/unit/mcp-lifecycle-harness.test.ts` (`npm run proof:mcp-lifecycle`);
+- full lint, typecheck, unit suite, build, tracker verification, and Project
+  Philosophy synchronization green.
+
+No provider, account, secret, deployment, client registration, token, or
+production data was changed. The Clerk metadata-document enablement, the
+ordered Convex-before-Vercel deployment, and the named-client lifecycle are
+prepared and unrun.
 
 ## History
 
@@ -163,3 +199,9 @@ changed.
 - 2026-08-16 · Codex — audited fresh main without touching the dirty active
   checkout, wrote the Moving-specific alignment plan, and proposed this grouped
   Work Order. Execution remains unapproved.
+- 2026-08-16 · Scott via the Bring Your AI program charter
+  (`assist-with-life/planning/mcp-program-2026-08.md`) — approved execution.
+  Moving is a Wave 1 gateway retrofit. Execution moved Proposed → Active and
+  `MOV-0032`, `MOV-0023`, `MOV-0033`, `MOV-0034`, `MOV-0035` moved to Doing.
+  Provider-dashboard and real-client steps stay outside the repository and are
+  written up for Scott to run.

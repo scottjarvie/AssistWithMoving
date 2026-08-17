@@ -82,6 +82,31 @@ function duplicateTopLevelKeys(objectLines: string[]) {
   return [...duplicates];
 }
 
+/**
+ * The canonical catalog, read from the shipped transport rather than retyped.
+ *
+ * Parsed from source instead of imported because `convex/httpRoutes/mcp.ts`
+ * pulls in Convex codegen and the MCP SDK; the point here is only that the
+ * documentation cannot drift from the array a deployment actually serves.
+ */
+function canonicalToolNames(): string[] {
+  const source = readFileSync(
+    resolve(process.cwd(), "convex/httpRoutes/mcp.ts"),
+    "utf8",
+  );
+  const block = source.match(
+    /export const STATELESS_MOVING_TOOL_NAMES = \[([\s\S]*?)\] as const;/,
+  );
+  if (!block) {
+    throw new Error("Could not locate STATELESS_MOVING_TOOL_NAMES.");
+  }
+  const names = [...block[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
+  if (names.length === 0) {
+    throw new Error("STATELESS_MOVING_TOOL_NAMES parsed as empty.");
+  }
+  return names;
+}
+
 function collectToolRegistrations(options?: { allowedToolNames?: readonly string[] }) {
   const registrations = new Map<
     string,
@@ -669,6 +694,25 @@ describe("Assist With Moving MCP capability discovery", () => {
     }
   });
 
+  it("keeps the documented legacy compatibility catalog distinct from the canonical one", () => {
+    const legacySource = readFileSync(
+      resolve(process.cwd(), "convex/mcp.ts"),
+      "utf8",
+    );
+    const legacyToolNames = [
+      ...legacySource.matchAll(/^ {4}name: "([a-z_]+)",$/gm),
+    ].map((match) => match[1]);
+
+    // The two OAuth doors must not be describable as one catalog. If this ever
+    // becomes true, the docs claiming they differ need rewriting, not muting.
+    expect(legacyToolNames.length).toBeGreaterThan(
+      canonicalToolNames().length,
+    );
+    expect(
+      legacyToolNames.filter((name) => canonicalToolNames().includes(name)),
+    ).toEqual([]);
+  });
+
   it("exports stable summary metadata for non-MCP callers", () => {
     expect(getApiCapabilities()).toMatchObject({
       product: "Assist With Moving",
@@ -683,5 +727,192 @@ describe("Assist With Moving MCP capability discovery", () => {
     expect(getApiCapabilities().summary.statuses).not.toHaveProperty(
       "availableWithOperationalBlocker"
     );
+  });
+});
+
+/**
+ * Every human- and AI-facing Bring Your AI surface, guarded against the three
+ * ways this documentation has historically gone wrong: a tool list that drifts
+ * from the code, a named AI product described as working, and four doors
+ * blurred into one.
+ */
+const BRING_YOUR_AI_SURFACES = [
+  "public/ai.txt",
+  "public/llms.txt",
+  "public/llms-full.txt",
+  "src/app/(marketing)/ai/page.tsx",
+  "src/app/(marketing)/ai/start/page.tsx",
+  "src/app/(marketing)/mcp/guide/page.tsx",
+] as const;
+
+/** Surfaces that publish the catalog itself, and how to read it back out. */
+const CATALOG_SURFACES = [
+  { path: "public/ai.txt", after: "Exact canonical tools" },
+  { path: "public/llms.txt", after: "exposes exactly these tools" },
+  { path: "public/llms-full.txt", after: "Canonical tools and the scope" },
+  { path: "src/app/(marketing)/ai/page.tsx", marker: true },
+  { path: "src/app/(marketing)/mcp/guide/page.tsx", marker: true },
+] as const;
+
+function surfaceText(path: string) {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
+
+/** Tool names from a plain-text bullet list that follows a named heading. */
+function documentedListCatalog(text: string, after: string) {
+  const start = text.indexOf(after);
+  if (start === -1) throw new Error(`Missing catalog heading: ${after}`);
+  const names: string[] = [];
+  for (const line of text.slice(start).split("\n").slice(1)) {
+    const match = line.match(/^- `?([a-z_]+)`?\b/);
+    if (match) {
+      names.push(match[1]);
+      continue;
+    }
+    if (names.length > 0 && line.trim() !== "") break;
+  }
+  return names;
+}
+
+/** Tool names from the marked catalog literal inside a page component. */
+function documentedMarkerCatalog(text: string) {
+  const start = text.indexOf("canonical-tool-catalog:start");
+  const end = text.indexOf("canonical-tool-catalog:end");
+  if (start === -1 || end === -1) {
+    throw new Error("Missing canonical-tool-catalog markers.");
+  }
+  return [...text.slice(start, end).matchAll(/"([a-z_]+)"/g)].map(
+    (match) => match[1],
+  );
+}
+
+describe("Bring Your AI documentation truth", () => {
+  it("publishes exactly the shipped canonical tool catalog on every surface that lists it", () => {
+    const expected = canonicalToolNames();
+
+    expect(expected).toContain("describe_connection");
+    for (const surface of CATALOG_SURFACES) {
+      const text = surfaceText(surface.path);
+      const documented =
+        "marker" in surface
+          ? documentedMarkerCatalog(text)
+          : documentedListCatalog(text, surface.after);
+
+      // Exact, ordered, no extras: a tool added to or removed from the
+      // transport must be reflected here before the docs can pass again.
+      expect(documented, `catalog drift in ${surface.path}`).toEqual(expected);
+    }
+  });
+
+  it("names no AI product as working, and gives no client-specific setup steps", () => {
+    // Naming a product as an example of the category would still invite the
+    // reading this program must prevent, so these surfaces name none at all.
+    const forbidden =
+      /\b(claude|chatgpt|openai|codex|cowork|anthropic|gemini|grok|hermes|copilot|llama|mistral)\b/i;
+
+    for (const path of BRING_YOUR_AI_SURFACES) {
+      const offending = surfaceText(path)
+        .split("\n")
+        .filter((line) => forbidden.test(line));
+
+      expect(offending, `named client claim in ${path}`).toEqual([]);
+    }
+  });
+
+  it("names the same canonical endpoint everywhere", () => {
+    for (const path of BRING_YOUR_AI_SURFACES) {
+      expect(surfaceText(path), path).toContain("https://movingmanifest.com/mcp");
+    }
+  });
+
+  it("describes all four doors distinctly on every surface", () => {
+    for (const path of BRING_YOUR_AI_SURFACES) {
+      const text = surfaceText(path);
+
+      expect(text, `${path} must name the legacy door`).toContain(
+        "https://movingmanifest.com/mcp/connect",
+      );
+      expect(text, `${path} must name the API-key door`).toContain(
+        "https://movingmanifest.com/api/mcp",
+      );
+      expect(text, `${path} must name the local stdio package`).toContain(
+        "assistwithmoving-mcp",
+      );
+      expect(text, `${path} must name the key format`).toContain("mmk_");
+      // The catalogs differ; saying so is the whole point of naming them.
+      expect(text, `${path} must not imply one shared catalog`).toMatch(
+        /a\s+different[\s,]*(and\s+)?(larger[\s,]*)?catalog/i,
+      );
+    }
+  });
+
+  it("states the honest capability position instead of the retired eight-tool claim", () => {
+    for (const path of BRING_YOUR_AI_SURFACES) {
+      const text = surfaceText(path);
+
+      expect(text, `${path} must state Partial`).toMatch(/\bPartial\b/);
+      expect(text, `${path} must explain the grant`).toMatch(/\bgrant\b/i);
+      expect(text, `${path} must separate sign-in from permission`).toMatch(
+        /signing in is not permission|signing in proves who|proves who is calling|sign-in ties calls/i,
+      );
+      expect(text, `${path} must not claim eight tools`).not.toMatch(
+        /eight (workflow |structured |canonical )?tools/i,
+      );
+    }
+  });
+
+  it("documents the guidance an AI needs to work the connection safely", () => {
+    const agentSurfaces = [
+      "public/ai.txt",
+      "public/llms.txt",
+      "public/llms-full.txt",
+    ];
+
+    for (const path of agentSurfaces) {
+      const text = surfaceText(path);
+
+      expect(text, `${path} first call`).toMatch(/`?get_move_brief`? first/i);
+      expect(text, `${path} search first`).toMatch(
+        /search[\s\S]{0,60}before creating/i,
+      );
+      expect(text, `${path} evidence rule`).toMatch(
+        /get_evidence_media[\s\S]{0,200}storage URL|storage URL[\s\S]{0,200}get_evidence_media/i,
+      );
+      expect(text, `${path} one-call save`).toContain("completeQueueItem");
+      expect(text, `${path} queue loop`).toContain("list_queue_work");
+      expect(text, `${path} idempotency`).toMatch(/operationId/);
+      expect(text, `${path} stale tools`).toMatch(
+        /stale|disconnect and reconnect|disconnect,? then reconnect/i,
+      );
+      expect(text, `${path} client identity`).toMatch(
+        /Client ID Metadata Document/i,
+      );
+      expect(text, `${path} immediate revocation`).toMatch(
+        /re-read|every (discovery and every )?call|very next call/i,
+      );
+      expect(text, `${path} grant screen`).toContain(
+        "https://movingmanifest.com/settings/ai",
+      );
+      expect(text, `${path} manual fallback`).toMatch(
+        /copy (its|a) bounded brief|copy its bounded brief/i,
+      );
+    }
+  });
+
+  it("keeps the never-permitted ceiling readable on the human and agent guides", () => {
+    for (const path of ["public/ai.txt", "public/llms.txt", "public/llms-full.txt", "src/app/(marketing)/ai/page.tsx"]) {
+      const text = surfaceText(path);
+
+      expect(text, `${path} permanent delete`).toMatch(/permanently delete/i);
+      expect(text, `${path} whole-move archive`).toMatch(/archive a whole move/i);
+      expect(text, `${path} sharing`).toMatch(/publish|share link/i);
+      expect(text, `${path} household access`).toMatch(/household/i);
+      expect(text, `${path} outside action`).toMatch(
+        /book,?\s*(or\s+)?buy,?\s*(or\s+)?sign,?\s*(or\s+)?pay/i,
+      );
+      expect(text, `${path} queue is not permission`).toMatch(
+        /never permission|not permission|never widens/i,
+      );
+    }
   });
 });

@@ -17,8 +17,26 @@ import { z } from "zod";
 
 import { api, internal } from "../_generated/api";
 import { httpAction, type ActionCtx } from "../_generated/server";
+import {
+  GRANT_BOUNDARY_VERSION,
+  NEVER_PERMITTED,
+  movingScopes,
+  scopeForTool,
+  type MovingScope,
+} from "../lib/aiGrants";
+import {
+  ClientIdentityError,
+  resolveClientIdentity,
+  type ResolvedClientIdentity,
+} from "../lib/mcpClientIdentity";
 
+/**
+ * The canonical catalog. A tool appears to a connected AI only when the
+ * person's current grant includes its scope, so `tools/list` never advertises
+ * a capability nobody approved.
+ */
 export const STATELESS_MOVING_TOOL_NAMES = [
+  "describe_connection",
   "get_move_brief",
   "search_move_records",
   "get_move_records",
@@ -27,6 +45,12 @@ export const STATELESS_MOVING_TOOL_NAMES = [
   "save_inventory",
   "save_planning_record",
   "save_complete_result",
+  "list_queue_work",
+  "claim_queue_work",
+  "release_queue_work",
+  "ask_queue_question",
+  "complete_queue_work",
+  "archive_move_records",
 ] as const;
 
 const SERVER_NAME = "assistwithmoving";
@@ -40,7 +64,24 @@ type VerifiedPrincipal = {
   subject: string;
   clientId: string;
   clientName?: string;
+  /** How this client proved its identity. A fact we record, never a claim. */
+  registrationMethod?: ResolvedClientIdentity["registrationMethod"];
+  metadataDigest?: string;
 };
+
+/**
+ * The subset of the principal the Convex layer validates. Registration facts
+ * stay at the transport, because authority never depends on them — a metadata
+ * document does not buy a client more access than a dynamically registered one.
+ */
+function convexPrincipal(principal: VerifiedPrincipal) {
+  return {
+    issuer: principal.issuer,
+    subject: principal.subject,
+    clientId: principal.clientId,
+    clientName: principal.clientName,
+  };
+}
 
 function requiredUrl(name: string) {
   const raw =
@@ -97,9 +138,31 @@ function protectedResourceMetadata(resource: URL, issuer: URL) {
       resource: resource.toString(),
       resource_name: "Assist With Moving",
       authorization_servers: [issuer.toString().replace(/\/$/, "")],
-      scopes_supported: ["openid", "profile", "email"],
+      // Identity scopes are what the authorization server issues today. The
+      // Moving scopes below are the product ceiling this resource enforces from
+      // its own grant records — a token carrying them would still not widen a
+      // grant, and a token lacking them does not narrow one.
+      scopes_supported: ["openid", "profile", "email", ...movingScopes],
       bearer_methods_supported: ["header"],
       resource_documentation: new URL("/ai", resource.origin).toString(),
+      // Client ID Metadata Documents are preferred here; dynamic registration
+      // is accepted as a labelled compatibility fallback. Advertised so a
+      // client can choose the better path rather than defaulting to DCR.
+      client_id_metadata_document_supported: true,
+      dynamic_client_registration_fallback_supported: true,
+      "x-assistwithmoving": {
+        grantBoundaryVersion: GRANT_BOUNDARY_VERSION,
+        productGrantRequired: true,
+        grantManager: new URL("/settings/ai", resource.origin).toString(),
+        // Four doors, honestly named. Only this one is the canonical OAuth
+        // resource; the others exist and are not equivalent to it.
+        doors: {
+          canonical: new URL("/mcp", resource.origin).toString(),
+          legacyCompatibility: new URL("/mcp/connect", resource.origin).toString(),
+          apiKeyOnly: new URL("/api/mcp", resource.origin).toString(),
+          localStdio: "assistwithmoving-mcp (npm, mmk_ key)",
+        },
+      },
     }),
     {
       status: 200,
@@ -400,22 +463,110 @@ const spaceSchema = z
 export function createMovingServer(
   actionCtx: ActionCtx,
   principal: VerifiedPrincipal,
+  grantedScopes: readonly MovingScope[] = movingScopes,
 ) {
+  const granted = new Set<MovingScope>(grantedScopes);
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       instructions: [
+        granted.size === 0
+          ? "This sign-in has no active Assist With Moving grant, so no tools are available. The person opens Settings → AI connections in Assist With Moving and approves what this AI may do, then you reconnect."
+          : `This connection holds ${[...granted].join(", ")}. Only tools inside those are listed.`,
         "Call get_move_brief first and use only returned move and record IDs.",
         "Search before creating duplicates; hydrate only the records needed for the work.",
         "Use get_evidence_media for private photos rather than normal web fetch.",
         "Use save_complete_result for a normal finished workflow and granular save tools for corrections.",
         "Record blocked, gated, failed, and not-relevant sources honestly.",
-        "This OAuth surface does not claim or complete canonical Queue work until Moving has a distinct chosen-AI grant.",
+        "A Queue directive says what the person wants; it never widens this grant. If authority is missing, ask the smallest question with ask_queue_question instead of assuming.",
+        `Never attempted here: ${NEVER_PERMITTED[0]}`,
       ].join(" "),
     },
   );
 
+  /**
+   * Register a tool only when the person's grant covers it, and record the use
+   * against that grant afterwards.
+   *
+   * Filtering at registration is what keeps `tools/list` honest: an AI is never
+   * shown a capability it would only be refused for. The refusal still exists
+   * underneath — `convex/lib/mcpGrantAccess.ts` re-reads the grant on every
+   * call — because a stale catalog must never become authority.
+   */
+  function registerGranted(
+    name: (typeof STATELESS_MOVING_TOOL_NAMES)[number],
+    config: any,
+    handler: (input: any) => Promise<any>,
+  ) {
+    const scope = scopeForTool(name);
+    if (!scope || !granted.has(scope)) return;
+    (server.registerTool as any)(name, config, async (input: any) => {
+      let outcome: { isError?: boolean };
+      try {
+        outcome = (await handler(input)) as { isError?: boolean };
+      } catch (error) {
+        return toolError(error);
+      }
+      if (!outcome?.isError) {
+        try {
+          await actionCtx.runMutation((internal as any).aiGrants.noteGrantUse, {
+            subject: principal.subject,
+            toolName: name,
+            scope,
+            moveId: input?.moveId,
+            clientId: principal.clientId,
+            clientName: principal.clientName,
+            registrationMethod: principal.registrationMethod,
+            clientMetadataDigest: principal.metadataDigest,
+          });
+        } catch (error) {
+          // A receipt that fails to write must not undo work that succeeded.
+          console.error("[MCP] Could not record grant use", error);
+        }
+      }
+      return outcome;
+    });
+  }
+
+  /**
+   * Always available, and deliberately outside the scope catalog.
+   *
+   * An AI must be able to ask "what am I actually allowed to do here?" without
+   * already holding a grant — otherwise a person with no grant sees an opaque
+   * protocol failure instead of the one sentence that tells them what to do.
+   * It reveals nothing but the person's own connection state.
+   */
   server.registerTool(
+    "describe_connection",
+    {
+      title: "Describe this Assist With Moving connection",
+      description:
+        "Report what this connection is currently allowed to do, what it can never do, and how the person changes that. Safe to call first when no other tools are listed.",
+      inputSchema: z.object({}).strict(),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    },
+    async () =>
+      toolResult({
+        endpoint: "https://movingmanifest.com/mcp",
+        grantBoundaryVersion: GRANT_BOUNDARY_VERSION,
+        grantedScopes: [...granted],
+        connected: granted.size > 0,
+        client: {
+          clientId: principal.clientId,
+          registrationMethod: principal.registrationMethod ?? "unknown",
+          name: principal.clientName ?? null,
+          note: "Registration method is recorded, never trusted as a claim about which product this is.",
+        },
+        neverPermitted: [...NEVER_PERMITTED],
+        next:
+          granted.size > 0
+            ? "Call get_move_brief, then list_queue_work if you hold moving.queue.work."
+            : "Ask the person to open Assist With Moving → Settings → AI connections and approve what this AI may do, then reconnect. Signing in proved who they are; it did not decide what you may do.",
+        grantManager: "https://movingmanifest.com/settings/ai",
+      }),
+  );
+
+  registerGranted(
     "get_move_brief",
     {
       title: "Get Move Brief",
@@ -428,7 +579,7 @@ export function createMovingServer(
       try {
         return toolResult(
           await actionCtx.runQuery(mcpQueries.getMoveBrief, {
-            principal,
+            principal: convexPrincipal(principal),
             moveId: moveId as any,
           }),
         );
@@ -438,7 +589,7 @@ export function createMovingServer(
     },
   );
 
-  server.registerTool(
+  registerGranted(
     "search_move_records",
     {
       title: "Search Move records",
@@ -464,7 +615,7 @@ export function createMovingServer(
         return toolResult(
           await actionCtx.runQuery(mcpQueries.searchMoveRecords, {
             ...input,
-            principal,
+            principal: convexPrincipal(principal),
             moveId: input.moveId as any,
           }),
         );
@@ -474,7 +625,7 @@ export function createMovingServer(
     },
   );
 
-  server.registerTool(
+  registerGranted(
     "get_move_records",
     {
       title: "Get Move records",
@@ -502,7 +653,7 @@ export function createMovingServer(
       try {
         return toolResult(
           await actionCtx.runQuery(mcpQueries.getMoveRecords, {
-            principal,
+            principal: convexPrincipal(principal),
             moveId: input.moveId as any,
             records: input.records,
           }),
@@ -513,7 +664,7 @@ export function createMovingServer(
     },
   );
 
-  server.registerTool(
+  registerGranted(
     "get_evidence_media",
     {
       title: "Get evidence media",
@@ -543,7 +694,7 @@ export function createMovingServer(
     async (input) => {
       try {
         const scope = await actionCtx.runQuery(mcpQueries.resolveMoveScope, {
-          principal,
+          principal: convexPrincipal(principal),
           moveId: input.moveId as any,
         });
         const result = await actionCtx.runAction((api as any).mcpToolsImages.getImages, {
@@ -561,7 +712,7 @@ export function createMovingServer(
     },
   );
 
-  server.registerTool(
+  registerGranted(
     "save_move_context",
     {
       title: "Save Move context",
@@ -597,7 +748,7 @@ export function createMovingServer(
         return toolResult(
           await actionCtx.runMutation(mcpMutations.saveMoveContext, {
             ...input,
-            principal,
+            principal: convexPrincipal(principal),
             requestHash,
             moveId: input.moveId as any,
             spaces: input.spaces as any,
@@ -609,7 +760,7 @@ export function createMovingServer(
     },
   );
 
-  server.registerTool(
+  registerGranted(
     "save_inventory",
     {
       title: "Save inventory",
@@ -631,7 +782,7 @@ export function createMovingServer(
         return toolResult(
           await actionCtx.runMutation(mcpMutations.saveInventory, {
             ...input,
-            principal,
+            principal: convexPrincipal(principal),
             requestHash,
             moveId: input.moveId as any,
             items: input.items as any,
@@ -643,7 +794,7 @@ export function createMovingServer(
     },
   );
 
-  server.registerTool(
+  registerGranted(
     "save_planning_record",
     {
       title: "Save planning record",
@@ -665,7 +816,7 @@ export function createMovingServer(
         return toolResult(
           await actionCtx.runMutation(mcpMutations.savePlanningRecord, {
             ...input,
-            principal,
+            principal: convexPrincipal(principal),
             requestHash,
             moveId: input.moveId as any,
             record: input.record as any,
@@ -677,7 +828,7 @@ export function createMovingServer(
     },
   );
 
-  server.registerTool(
+  registerGranted(
     "save_complete_result",
     {
       title: "Save complete Move result",
@@ -700,6 +851,9 @@ export function createMovingServer(
           planSections: z.array(planningRecordSchema).max(30).optional(),
           sourceChecks: z.array(sourceCheckSchema).max(30).optional(),
           relatedQueueItemId: id.optional(),
+          // The one-call finish: save the work and close the handoff in the
+          // same approval, so a completed job is not two separate asks.
+          completeQueueItem: z.boolean().optional(),
           reason,
         })
         .strict(),
@@ -711,7 +865,7 @@ export function createMovingServer(
         return toolResult(
           await actionCtx.runMutation(mcpMutations.saveCompleteResult, {
             ...input,
-            principal,
+            principal: convexPrincipal(principal),
             requestHash,
             moveId: input.moveId as any,
             items: input.items as any,
@@ -721,6 +875,232 @@ export function createMovingServer(
             planSections: input.planSections as any,
             sourceChecks: input.sourceChecks as any,
             relatedQueueItemId: input.relatedQueueItemId as any,
+          }),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  // --- Queue workflow -----------------------------------------------------
+  // The loop that makes a connection useful: see what is waiting, take it,
+  // ask if something is genuinely unclear, and hand back a finished result.
+
+  registerGranted(
+    "list_queue_work",
+    {
+      title: "List Queue work waiting for your AI",
+      description:
+        "Return only the handoffs this person has actually accepted and left Waiting for your AI on one move, each with the version to claim it with. Needs you items are waiting on the person and are not listed.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          includeMine: z.boolean().optional(),
+          limit: z.number().int().min(1).max(25).default(10),
+        })
+        .strict(),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runQuery((internal as any).mcpQueueWork.listQueueWork, {
+            ...input,
+            principal: convexPrincipal(principal),
+            moveId: input.moveId as any,
+          }),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  registerGranted(
+    "claim_queue_work",
+    {
+      title: "Claim Queue work",
+      description:
+        "Take one waiting handoff so the person can see it is being worked and no other AI picks it up. Claims lease for 15 minutes and renew by working; echo the expectedVersion from list_queue_work.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          queueItemId: id,
+          expectedVersion: z.number().int().min(1),
+          operationId,
+          nextStep: z.string().trim().min(3).max(500),
+        })
+        .strict(),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runMutation((internal as any).mcpQueueWork.claimQueueWork, {
+            ...input,
+            principal: convexPrincipal(principal),
+            moveId: input.moveId as any,
+            queueItemId: input.queueItemId as any,
+          }),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  registerGranted(
+    "release_queue_work",
+    {
+      title: "Release Queue work",
+      description:
+        "Hand a claimed handoff back to Waiting for your AI without pretending it is finished. Use this when you cannot complete it and the person does not need to do anything.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          queueItemId: id,
+          expectedVersion: z.number().int().min(1),
+          operationId,
+          reason,
+        })
+        .strict(),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runMutation((internal as any).mcpQueueWork.releaseQueueWork, {
+            ...input,
+            principal: convexPrincipal(principal),
+            moveId: input.moveId as any,
+            queueItemId: input.queueItemId as any,
+          }),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  registerGranted(
+    "ask_queue_question",
+    {
+      title: "Ask the smallest Needs you question",
+      description:
+        "Move a claimed handoff to Needs you with one specific question. Prefer this over guessing or saving a result built on an assumption. Ask for the smallest thing that unblocks the work.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          queueItemId: id,
+          expectedVersion: z.number().int().min(1),
+          operationId,
+          question: z.string().trim().min(5).max(2_000),
+        })
+        .strict(),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runMutation((internal as any).mcpQueueWork.askQueueQuestion, {
+            ...input,
+            principal: convexPrincipal(principal),
+            moveId: input.moveId as any,
+            queueItemId: input.queueItemId as any,
+          }),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  registerGranted(
+    "complete_queue_work",
+    {
+      title: "Complete Queue work",
+      description:
+        "Mark a claimed handoff Done with its result summary and references. Use this when the result was already saved; save_complete_result with completeQueueItem does both in one approval.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          queueItemId: id,
+          expectedVersion: z.number().int().min(1),
+          operationId,
+          resultSummary: z.string().trim().min(1).max(4_000),
+          resultRefs: z
+            .array(
+              z
+                .object({
+                  type: z.string().trim().min(1).max(80),
+                  id,
+                  label: z.string().trim().max(200).optional(),
+                })
+                .strict(),
+            )
+            .max(20)
+            .optional(),
+        })
+        .strict(),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runMutation((internal as any).mcpQueueWork.completeQueueWork, {
+            ...input,
+            principal: convexPrincipal(principal),
+            moveId: input.moveId as any,
+            queueItemId: input.queueItemId as any,
+            resultRefs: input.resultRefs as any,
+          }),
+        );
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  registerGranted(
+    "archive_move_records",
+    {
+      title: "Archive or restore Move records",
+      description:
+        "Reversibly retire belongings, boxes, rooms, or planning records that turned out to be wrong, or restore ones already archived. Returns a per-record result. This never permanently deletes anything.",
+      inputSchema: z
+        .object({
+          moveId: id,
+          operationId,
+          action: z.enum(["archive", "restore"]),
+          records: z
+            .array(
+              z
+                .object({
+                  kind: z.enum(["item", "box", "space", "planningRecord"]),
+                  id,
+                })
+                .strict(),
+            )
+            .min(1)
+            .max(50),
+          reason,
+        })
+        .strict(),
+      annotations: {
+        readOnlyHint: false,
+        // Reversible, but a person should still be told it changes what they see.
+        destructiveHint: true,
+        idempotentHint: true,
+      },
+    },
+    async (input) => {
+      try {
+        return toolResult(
+          await actionCtx.runMutation((internal as any).mcpArchive.archiveMoveRecords, {
+            ...input,
+            principal: convexPrincipal(principal),
+            moveId: input.moveId as any,
           }),
         );
       } catch (error) {
@@ -778,15 +1158,65 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       },
     );
   }
-  const clientName = request.headers.get("mcp-client-name")?.slice(0, 160) || undefined;
+  const declaredClientName =
+    request.headers.get("mcp-client-name")?.slice(0, 160) || undefined;
+
+  // Metadata-document first, dynamic registration as the labelled fallback.
+  // A client id that claims to be a metadata document and fails to validate is
+  // refused outright — degrading it to the fallback would let a bad document
+  // buy the easier path.
+  let identity: ResolvedClientIdentity;
+  try {
+    identity = await resolveClientIdentity(auth.clientId, {
+      declaredClientName,
+    });
+  } catch (error) {
+    if (error instanceof ClientIdentityError) {
+      return new Response(
+        JSON.stringify({
+          error: "invalid_client",
+          error_description: error.message,
+          reason: error.reason,
+        }),
+        {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+            "WWW-Authenticate": `Bearer realm="assistwithmoving", error="invalid_client", error_description="${error.message}", resource_metadata="${resourceMetadataUrl(resource)}"`,
+          },
+        },
+      );
+    }
+    throw error;
+  }
+
+  // The grant, read fresh on this request. It decides which tools even appear.
+  let grantedScopes: MovingScope[] = [];
+  try {
+    const access = (await actionCtx.runQuery(
+      (internal as any).aiGrants.grantsForPrincipal,
+      { subject, clientId: identity.clientId },
+    )) as { scopes: MovingScope[] };
+    grantedScopes = access.scopes ?? [];
+  } catch (error) {
+    console.error("[MCP] Could not read product grants", error);
+  }
+
   const handler = createMcpHandler(
     () =>
-      createMovingServer(actionCtx, {
-        issuer: principalIssuer,
-        subject,
-        clientId: auth.clientId,
-        clientName,
-      }).server,
+      createMovingServer(
+        actionCtx,
+        {
+          issuer: principalIssuer,
+          subject,
+          clientId: identity.clientId,
+          clientName: identity.clientName ?? declaredClientName,
+          registrationMethod: identity.registrationMethod,
+          metadataDigest: identity.metadataDigest,
+        },
+        grantedScopes,
+      ).server,
     {
       legacy: "stateless",
       responseMode: "json",
