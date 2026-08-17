@@ -50,6 +50,21 @@ describe("required CI workflow contract", () => {
     expect(source).not.toMatch(/convex deploy|vercel deploy|npm publish/);
   });
 
+  it("proves the Convex bindings are fresh before it typechecks", () => {
+    const requiredJob = requiredJobSource(workflowSource());
+
+    // The checked-in convex/_generated/api.d.ts is what gives api.*/internal.*
+    // their types. Stale bindings make those `any`, so the typecheck passes on
+    // nothing and the real errors surface only inside `convex deploy`. Proving
+    // the bindings fresh FIRST is what makes the typecheck step meaningful.
+    const bindingsAt = requiredJob.indexOf("run: npm run check:convex-bindings-fresh");
+    const typecheckAt = requiredJob.indexOf("run: npm run typecheck");
+
+    expect(bindingsAt).toBeGreaterThan(-1);
+    expect(typecheckAt).toBeGreaterThan(-1);
+    expect(bindingsAt).toBeLessThan(typecheckAt);
+  });
+
   it("keeps the existing anonymous-caller OAuth lock in the required job", () => {
     const source = workflowSource();
     const requiredJob = requiredJobSource(source);
