@@ -91,7 +91,7 @@ describe("CSP report handling", () => {
 
     expect(response.status).toBe(204);
     expect(warn).toHaveBeenCalledWith(
-      "movingmanifest_csp_violation",
+      "assistwithmoving_csp_violation",
       JSON.stringify({
         reports: [
           {

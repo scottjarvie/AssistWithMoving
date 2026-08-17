@@ -13,7 +13,7 @@
     >
     <meta
       name="source-sha256"
-      content="4d54cca420e8a4c242dd86f1111120ac972a8d8eaa918cc36288a95d2ec6f833"
+      content="5399673533511982727596ac226181eee8261c27886711a3fa28515683c6424b"
     >
     <link
       rel="icon"
@@ -1358,7 +1358,7 @@
           </div>
           <div>
             <dt>Source digest</dt>
-            <dd data-source-digest-short>4d54cca4…ec6f833</dd>
+            <dd data-source-digest-short>53996735…3c6424b</dd>
           </div>
         </dl>
 
@@ -1405,7 +1405,7 @@
         </p>
         <p class="source-hash">
           Source SHA-256:
-          <span data-source-digest-full>4d54cca420e8a4c242dd86f1111120ac972a8d8eaa918cc36288a95d2ec6f833</span>
+          <span data-source-digest-full>5399673533511982727596ac226181eee8261c27886711a3fa28515683c6424b</span>
         </p>
       </div>
     </footer>
@@ -1429,7 +1429,8 @@
 > account sign-in/session-cleanup receipt in `MOV-WO-007`; plus Queue-linked MCP
 > PR `#186`, merge `147cff4`, post-merge run `31768988479`, production
 > deployment `5900338675`, and the authenticated Queue/UI/cleanup receipt in
-> `MOV-WO-008`; re-audited 2026-08-16 against `origin/main` `8a064303`, all
+> `MOV-WO-008`; re-audited 2026-08-16 against `origin/main` `8a064303` and
+> reverified the same day against `1d0b76d` after PRs `#192`–`#194`, all
 > four current agent doors, the adopted Bring Your AI standard, and read-only
 > live `/mcp` challenge, protected-resource, and authorization-server metadata
 >
@@ -1577,7 +1578,7 @@ The labels in this matrix are deliberately stricter than a feature inventory:
 | Identity and deletion | Identity is site-specific Clerk. Settings can export JSON, stage deletion, anonymize the Convex profile, revoke keys/share links and disable memberships/grants. It does not prove Clerk identity deletion, attachment/Backblaze purge, or removal of all personal/content-bearing history; `/delete-account` is absent. | Per-site identity and export are **Current/verified**. Family-complete deletion and `/delete-account` are **Later gaps**. Never describe current anonymization as full account-data deletion. |
 | Public truth and Coming soon | Source includes home, separate FAQ, `/ai`, `/ai.txt`, `llms.txt`, `llms-full.txt`, and `/updates`. PR `#184` aligned visible metadata, public copy, auth framing, app shell, packets and agent guides with Assist With Moving. The home page still does not contain the FAQ. | The named public identity and first-run routes are **Current/verified in production** at merge `d1f7364` and `MOV-WO-007`; other public claims still require their own environment/user-path proof. **Coming soon** is reserved for approved, scheduled soft-launch work; none is assigned here. |
 | `/me`, `/admin`, and stats | A REST `/api/v1/me` context endpoint and an owner-gated app `/admin` surface exist. There is no family `/me` page; current admin source focuses operations and does not prove the family split between meaningful personal stats at `/me` and owner usage/operations stats at `/admin`, or every public-content maintenance job. | `/admin` is a **Current/verified source foundation** with **Unknown production proof**. Family `/me`, the personal/owner stats split and full admin destination are **Later**. |
-| Support Desk | No Assist With Life Support Desk link, Moving source key or page-key allowlist is present in the inspected public shell. The family desk itself is specified but not proven deployed. | **Later alignment gap.** Do not publish a pretend or dead support control. |
+| Support Desk | The family desk is deployed and answers at `https://assistwithlife.com/support`, and it recognizes Moving's registered source key `assist-with-moving` with its page-key allowlist. `src/lib/support.ts` owns that contract in this repository, and the public footer, FAQ, About, Privacy, `ai.txt`, `llms.txt` and `llms-full.txt` now send people and assistants there. | **Current/verified public support path.** The desk is the only support path: Moving publishes no support, contact or privacy email address and none is planned, so public copy and agent guides must state that direct email contact is not available. Desk-side triage, reply and status workflow remain the family product's truth, not Moving's claim. |
 | Product identity and primary experience | The released Assist With Moving experience presents a household-first, evidence-rich moving workspace organized around a changing move rather than a generic family-site layout or feature checklist. | **Current/verified production identity and intentional product-specific difference** at PR `#184`; the shared chassis does not standardize Moving's objects, workflows, information architecture, content, density, voice or experience shape. Technical MovingManifest compatibility names remain deliberate. |
 | Distinct design and light/dark access | The product has a distinct Moving earth/route aesthetic, accessible focus patterns, a responsive signed-in shell and light/dark token sets, but `src/app/layout.tsx` hard-locks the app to dark mode. The family contract names an Assist With Moving palette, but the shared chassis does not require visual homogenization. | Distinct design, phone shell and dark theme are **Current/verified foundations**. First-class accessible light mode is **Later**. Palette and typography remain product-design decisions; the philosophy reader's editorial route-note art direction is an **intentional product-specific difference**. |
 | Dense information | REST lists are bounded and paginated; several signed-in views provide tables/cards, filters and responsive detail. The repository does not prove every dense collection uses indexed bounded access, table-default behavior or remembered views. | **Current/verified partial foundation; Later** safety and performance conformance. Moving's useful information density and view design remain product-specific. |
@@ -2594,7 +2595,8 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 ### Dated repository evidence ledger
 
 > **Time-sensitive evidence — reverified 2026-08-16:** This table describes
-> `origin/main` at `8a064303` plus the explicitly named live anonymous checks.
+> `origin/main` at `8a064303`, reverified against `1d0b76d` on the same date,
+> plus the explicitly named live anonymous checks.
 > It is not proof that the same
 > capability is deployed, configured, reachable through a supported client, or
 > usable by a real account in production.
@@ -2945,7 +2947,7 @@ capability.
 | AI working instructions | [AGENTS.md](../../AGENTS.md) | Stable repository orientation, safety rules and canonical Project Philosophy discovery |
 | API, MCP and authorization architecture | [API and MCP guide](../api-and-mcp.md) and [stateless foundation contract](moving-stateless-mcp-foundation.md) | Authoritative guide to the canonical stateless OAuth, persisted compatibility OAuth and API-key HTTP/stdio surfaces; claims still require exact running-path proof |
 | Bring Your AI alignment | [Moving MCP/OAuth alignment plan](moving-bring-your-ai-mcp-oauth-alignment.md), [Work Order `MOV-WO-010`](../tracker/work-orders/MOV-WO-010.md), and [family-standard draft receipt](https://github.com/scottjarvie/assistwithlife/pull/16) | Moving-specific Current/Partial/Later audit, product grants, Queue/evidence/save workflow, metadata-first client identity, human connection experience, and proof plan; Proposed work is not Current capability |
-| Product and implementation intent | [MovingManifest AI build specification](../movingmanifest_ai_build_spec.md) | Historical design and implementation direction; useful context, not proof that a capability is current |
+| Product and implementation intent | [MovingManifest AI build specification](../assistwithmoving_ai_build_spec.md) | Historical design and implementation direction; useful context, not proof that a capability is current |
 | Audit and remediation evidence | [2026-07-26 performance fix specification](../audits/AUDIT-2026-07-26-PERF-FIX-SPEC.md) and the other files in `docs/audits/` | Dated findings and proposed or verified remediation; recheck the exact code and environment before relying on them |
 | Release accounting | [v0.3.0 completeness ledger](../releases/v0.3.0-completeness-ledger.json) | Version-scoped release evidence, not a substitute for deployed or authenticated proof |
 | Security, identity and deletion implementation | [permissions](../../convex/lib/permissions.ts), [API-key authorization](../../convex/lib/apiKeyAuth.ts), [account privacy](../../convex/accountPrivacy.ts), [Clerk request boundary](../../src/proxy.ts), and [account privacy UI](../../src/components/account-privacy-controls.tsx) | Current implementation evidence; the capability ledger records what remains partial or unknown |

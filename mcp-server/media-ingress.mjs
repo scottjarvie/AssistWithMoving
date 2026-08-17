@@ -17,7 +17,7 @@ export function parseAllowedFileRoots(rawValue, cwd = process.cwd()) {
 /** @param {{filePath:string, transport?:"stdio"|"hosted", allowedFileRoots?:string[], maxBytes?:number}} options */
 export async function readAllowedLocalMedia({ filePath, transport, allowedFileRoots = [], maxBytes = DEFAULT_REMOTE_MEDIA_BYTES }) {
   if (transport === "hosted") throw new Error("filePath is disabled for hosted MCP. Use sourceUrl, dataUrl, or fileBase64 instead.");
-  if (allowedFileRoots.length === 0) throw new Error("Local filePath access is disabled. Configure MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS with one or more trusted directories before using filePath.");
+  if (allowedFileRoots.length === 0) throw new Error("Local filePath access is disabled. Configure ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS with one or more trusted directories before using filePath.");
   const candidatePath = path.resolve(filePath);
   const candidateLstat = await lstat(candidatePath).catch(() => null);
   if (!candidateLstat?.isFile()) throw new Error("filePath must identify a regular file inside an allowed root; symlinks, devices, directories, and pipes are refused.");
@@ -29,7 +29,7 @@ export async function readAllowedLocalMedia({ filePath, transport, allowedFileRo
     const relative = path.relative(root, canonicalPath);
     return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
   });
-  if (!insideAllowedRoot) throw new Error("filePath resolves outside MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS.");
+  if (!insideAllowedRoot) throw new Error("filePath resolves outside ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS.");
   const bytes = await readFile(canonicalPath);
   if (bytes.byteLength > maxBytes) throw new Error(`filePath exceeds the ${maxBytes}-byte media limit.`);
   return { bytes, canonicalPath };

@@ -2,7 +2,10 @@
 
 **Status:** evidence-backed product and delivery plan  
 **Prepared:** 2026-08-16  
-**Repository baseline:** `origin/main` at `8a06430340e82000d6c9edc97882a233b12043f2`  
+**Repository baseline:** `origin/main` at `1d0b76d` (originally audited at
+`8a06430340e82000d6c9edc97882a233b12043f2`; reverified 2026-08-16 after the
+`AssistWithMoving` rename PR `#192`, the OAuth consent-name fix PR `#193`, and
+the support-path PR `#194`)  
 **Tracker owner:** `MOV-WO-010`
 
 This plan adapts the adopted **Bring Your AI: MCP and OAuth Standard** to
@@ -39,6 +42,12 @@ this Work Order.
   9728 `WWW-Authenticate` challenge pointing to
   `/.well-known/oauth-protected-resource/mcp`. The live resource document named
   the exact `/mcp` resource and Clerk authorization server.
+- The consent screen's human-readable `resource_name` now comes from
+  `product.name` at all three emitters (PR `#193`), so the branded name a person
+  approves matches the product. The `resource` identifier is unchanged, so
+  already-registered OAuth clients are unaffected. The `/mcp` proxy is stateless
+  and no longer forwards `mcp-session-id`; only the persisted `/mcp/connect`
+  door still does.
 - Eight canonical tools implement a coherent move workflow: brief, bounded
   search, batch record hydration, protected evidence retrieval, move-context
   save, inventory save, planning-record save, and one-call complete-result save.

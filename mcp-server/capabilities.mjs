@@ -1,6 +1,6 @@
-export const MOVINGMANIFEST_CAPABILITY_VERSION = "2026-06-12";
+export const ASSISTWITHMOVING_CAPABILITY_VERSION = "2026-06-12";
 
-export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
+export const ASSISTWITHMOVING_KNOWN_LAUNCH_BLOCKERS = [
   {
     issue: "MOVE-63",
     title: "Switch Clerk to a production instance before public launch",
@@ -43,7 +43,7 @@ export const MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS = [
   },
 ];
 
-export const MOVINGMANIFEST_API_CAPABILITIES = [
+export const ASSISTWITHMOVING_API_CAPABILITIES = [
   {
     id: "apiContext",
     title: "API key context",
@@ -536,12 +536,12 @@ export const MOVINGMANIFEST_API_CAPABILITIES = [
 export function getCapabilityToolNames() {
   return [
     "get_api_capabilities",
-    ...new Set(MOVINGMANIFEST_API_CAPABILITIES.flatMap((entry) => entry.mcpTools)),
+    ...new Set(ASSISTWITHMOVING_API_CAPABILITIES.flatMap((entry) => entry.mcpTools)),
   ];
 }
 
 export function getApiCapabilities() {
-  const statuses = MOVINGMANIFEST_API_CAPABILITIES.reduce((counts, entry) => {
+  const statuses = ASSISTWITHMOVING_API_CAPABILITIES.reduce((counts, entry) => {
     counts[entry.status] = (counts[entry.status] ?? 0) + 1;
     return counts;
   }, {});
@@ -549,15 +549,15 @@ export function getApiCapabilities() {
   return {
     product: "Assist With Moving",
     apiVersion: "v1",
-    capabilityVersion: MOVINGMANIFEST_CAPABILITY_VERSION,
+    capabilityVersion: ASSISTWITHMOVING_CAPABILITY_VERSION,
     defaultBaseUrl: "https://movingmanifest.com/api/v1",
     summary: {
-      capabilityCount: MOVINGMANIFEST_API_CAPABILITIES.length,
+      capabilityCount: ASSISTWITHMOVING_API_CAPABILITIES.length,
       toolCount: getCapabilityToolNames().length,
       statuses,
     },
-    capabilities: MOVINGMANIFEST_API_CAPABILITIES,
-    knownLaunchBlockers: MOVINGMANIFEST_KNOWN_LAUNCH_BLOCKERS,
+    capabilities: ASSISTWITHMOVING_API_CAPABILITIES,
+    knownLaunchBlockers: ASSISTWITHMOVING_KNOWN_LAUNCH_BLOCKERS,
     guidance: [
       "Call get_api_context first to inspect scopes and move restrictions.",
       "Prefer dryRun on write tools before bulk imports, load assignment changes, and scoped sharing.",

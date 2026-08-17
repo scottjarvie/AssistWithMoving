@@ -35,7 +35,7 @@ describe("parseRestApiBody", () => {
         method: "POST",
         headers: {
           "content-type": "image/png",
-          "x-movingmanifest-file-name": "garage-shelf.png",
+          "x-assistwithmoving-file-name": "garage-shelf.png",
         },
         body: pngBytes,
       },
@@ -73,7 +73,7 @@ describe("parseRestApiBody", () => {
         method: "POST",
         headers: {
           "content-type": "image/png",
-          "x-movingmanifest-file-name": "garage-image.png",
+          "x-assistwithmoving-file-name": "garage-image.png",
         },
         body: pngBytes,
       },
@@ -99,7 +99,7 @@ describe("parseRestApiBody", () => {
   });
 
   it("turns multipart form uploads into the same photo upload body", async () => {
-    const boundary = "----movingmanifest-test-boundary";
+    const boundary = "----assistwithmoving-test-boundary";
     const multipartFileBytes = new TextEncoder().encode("image-bytes");
     const multipartBody = [
       `--${boundary}`,

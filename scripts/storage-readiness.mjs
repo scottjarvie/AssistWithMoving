@@ -36,7 +36,7 @@ export const recommendedS3CorsConfiguration = {
 };
 export const recommendedBackblazeNativeCorsRules = [
   {
-    corsRuleName: "movingmanifest-upload",
+    corsRuleName: "assistwithmoving-upload",
     allowedOrigins: requiredCorsOrigins,
     allowedHeaders: ["*"],
     allowedOperations: ["s3_put", "s3_get", "s3_head"],
@@ -219,19 +219,19 @@ async function checkS3(client) {
       kind: "image",
       key: `diagnostics/codex-${timestamp}.jpg`,
       contentType: "image/jpeg",
-      body: "MovingManifest image storage diagnostic.",
+      body: "AssistWithMoving image storage diagnostic.",
     },
     {
       kind: "audio",
       key: `diagnostics/codex-${timestamp}.mp3`,
       contentType: "audio/mpeg",
-      body: "MovingManifest audio storage diagnostic.",
+      body: "AssistWithMoving audio storage diagnostic.",
     },
     {
       kind: "video",
       key: `diagnostics/codex-${timestamp}.mp4`,
       contentType: "video/mp4",
-      body: "MovingManifest video storage diagnostic.",
+      body: "AssistWithMoving video storage diagnostic.",
     },
   ];
   const uploadedKeys = [];
@@ -364,7 +364,7 @@ if (isMain) {
     );
     console.log(JSON.stringify(recommendedBackblazeNativeCorsRules, null, 2));
     console.log(
-      "Dashboard note: if Backblaze asks which API the rule applies to, choose S3-compatible API or Both for MovingManifest uploads."
+      "Dashboard note: if Backblaze asks which API the rule applies to, choose S3-compatible API or Both for AssistWithMoving uploads."
     );
     for (const warning of backblazeDashboardPresetWarnings) {
       console.log(warning);

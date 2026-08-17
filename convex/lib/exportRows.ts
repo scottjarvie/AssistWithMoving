@@ -164,7 +164,7 @@ export function exportFilename({
   slug?: string;
 }) {
   const safeSlug = (slug ?? type).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return `movingmanifest-${safeSlug}.${format === "csv" ? "csv" : "html"}`;
+  return `assistwithmoving-${safeSlug}.${format === "csv" ? "csv" : "html"}`;
 }
 
 export function exportMimeType(format: ExportFormat) {

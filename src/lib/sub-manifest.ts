@@ -21,7 +21,7 @@ export function buildSubManifestPath({
 }
 
 export function subManifestFilename(kind: SubManifestKind, mode: SubManifestMode) {
-  return `movingmanifest-${kind.toLowerCase()}-${mode}.csv`;
+  return `assistwithmoving-${kind.toLowerCase()}-${mode}.csv`;
 }
 
 export function subManifestKindForProfileType(

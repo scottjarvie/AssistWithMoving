@@ -25,7 +25,7 @@ handoff desk and keeps its four states and its existing grant boundary.
 | `https://movingmanifest.com/mcp` | Clerk OAuth bearer | Stateless MCP 2026 with stateless 2025 compatibility | Canonical eight-tool move workflow |
 | `https://movingmanifest.com/mcp/connect` | Clerk OAuth bearer | Persisted legacy gateway | Compatibility for clients using the older 29-tool OAuth catalog |
 | `https://movingmanifest.com/api/mcp` | `mmk_` API key | Stateless HTTP | Existing granular API-key automation, including scoped Queue tools |
-| `npx movingmanifest-mcp` | `mmk_` API key | stdio | Existing local/API-key automation |
+| `npx assistwithmoving-mcp` | `mmk_` API key | stdio | Existing local/API-key automation |
 
 `/mcp/connect` is not a second name for the new catalog. It intentionally
 proxies the older Convex gateway at `/mcp/legacy` so already-connected clients

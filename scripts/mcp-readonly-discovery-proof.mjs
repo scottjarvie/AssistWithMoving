@@ -158,7 +158,7 @@ function parseCapabilityToolResult(result) {
 
 export async function runReadonlyMcpDiscoveryProbe({
   cwd = process.cwd(),
-  serverPath = path.join(cwd, "mcp-server", "movingmanifest-mcp.mjs"),
+  serverPath = path.join(cwd, "mcp-server", "assistwithmoving-mcp.mjs"),
 } = {}) {
   if (!existsSync(serverPath)) {
     throw new Error(`MCP server not found at ${serverPath}`);
@@ -169,12 +169,12 @@ export async function runReadonlyMcpDiscoveryProbe({
     args: [serverPath],
     env: {
       ...process.env,
-      MOVINGMANIFEST_API_KEY: "mmk_readonly_discovery_proof_not_a_real_key",
-      MOVINGMANIFEST_API_BASE_URL: "https://example.invalid/api/v1",
+      ASSISTWITHMOVING_API_KEY: "mmk_readonly_discovery_proof_not_a_real_key",
+      ASSISTWITHMOVING_API_BASE_URL: "https://example.invalid/api/v1",
     },
   });
   const client = new Client({
-    name: "movingmanifest-readonly-discovery-proof",
+    name: "assistwithmoving-readonly-discovery-proof",
     version: "0.1.0",
   });
 

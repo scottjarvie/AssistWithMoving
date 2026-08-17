@@ -24,5 +24,5 @@ export function formatPcsCurrency(cents: number | undefined) {
 }
 
 export function pcsPacketFilename(mode: PcsPacketMode) {
-  return `movingmanifest-pcs-${mode}.csv`;
+  return `assistwithmoving-pcs-${mode}.csv`;
 }

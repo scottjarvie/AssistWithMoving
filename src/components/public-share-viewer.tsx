@@ -1985,7 +1985,7 @@ function subManifestToCsv(packet: PublicSubManifestPacket) {
 }
 
 function documentationPacketFilename(packet: PublicDocumentationPacket) {
-  return `movingmanifest-${packet.packetKind}-${packet.recipientMode}.csv`;
+  return `assistwithmoving-${packet.packetKind}-${packet.recipientMode}.csv`;
 }
 
 function documentationPacketToCsv(packet: PublicDocumentationPacket) {

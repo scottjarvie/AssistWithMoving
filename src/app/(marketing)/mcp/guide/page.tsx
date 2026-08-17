@@ -94,17 +94,17 @@ This door is key-only and rejects OAuth sign-in; do not use it for hosted client
 POST https://movingmanifest.com/api/mcp
 Authorization: Bearer mmk_replace_with_a_scoped_api_key`;
 
-const codexOAuthCommand = `codex mcp add movingmanifest --url https://movingmanifest.com/mcp
-codex mcp login movingmanifest`;
+const codexOAuthCommand = `codex mcp add assistwithmoving --url https://movingmanifest.com/mcp
+codex mcp login assistwithmoving`;
 
-const codexApiKeyCommand = `export MOVINGMANIFEST_API_KEY=mmk_replace_with_a_scoped_api_key
-codex mcp add movingmanifest \\
+const codexApiKeyCommand = `export ASSISTWITHMOVING_API_KEY=mmk_replace_with_a_scoped_api_key
+codex mcp add assistwithmoving \\
   --url https://movingmanifest.com/api/mcp \\
-  --bearer-token-env-var MOVINGMANIFEST_API_KEY`;
+  --bearer-token-env-var ASSISTWITHMOVING_API_KEY`;
 
-const codexTomlConfig = `[mcp_servers.movingmanifest]
+const codexTomlConfig = `[mcp_servers.assistwithmoving]
 url = "https://movingmanifest.com/api/mcp"
-bearer_token_env_var = "MOVINGMANIFEST_API_KEY"`;
+bearer_token_env_var = "ASSISTWITHMOVING_API_KEY"`;
 
 export default function McpPage() {
   return (
@@ -230,7 +230,7 @@ export default function McpPage() {
             <p className="mt-4 text-xs leading-5 text-muted-foreground">
               Keep the key in your shell or secret manager, not in the
               checked-in config. Restart Codex after adding the server. In a new
-              Codex thread, check MCP tools for movingmanifest, then call
+              Codex thread, check MCP tools for assistwithmoving, then call
               get_move_brief. API-key connections start with
               get_api_capabilities instead.
             </p>

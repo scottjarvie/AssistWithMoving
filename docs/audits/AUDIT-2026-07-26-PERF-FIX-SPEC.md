@@ -512,7 +512,7 @@ OAuth identity, Clerk, docs, printed labels), not a config change.
    that `/mcp` + `/.well-known/oauth-protected-resource/mcp` redirect intact.
 3. No code change needed for B. (For A, the inventory above becomes the work
    list: `NEXT_PUBLIC_APP_URL`, `metadataBase`, sitemap/robots, Clerk allowed
-   origins, `MOVINGMANIFEST_MCP_RESOURCE_ID`, the MOVE-393 lock test, llms
+   origins, `ASSISTWITHMOVING_MCP_RESOURCE_ID`, the MOVE-393 lock test, llms
    files, docs, mcp-server default endpoint, doctor/smoke scripts.)
 
 **Tests/acceptance (B):** exactly one domain answers 200; the other 301s on

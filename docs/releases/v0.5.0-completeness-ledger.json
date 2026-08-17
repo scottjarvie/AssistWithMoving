@@ -19,7 +19,7 @@
       "markerMeaning": "Merge commit of PR #182, the v0.4.1 product release cutoff; the later production-proof publication is classified separately from the Assist With Moving first-run change."
     },
     "github": {
-      "repository": "scottjarvie/movingmanifest",
+      "repository": "scottjarvie/assistwithmoving",
       "productPullRequest": 184,
       "productionDeployment": {
         "commit": "d1f7364ad000f4193b6a966e4c8f4c06a423e1fd",

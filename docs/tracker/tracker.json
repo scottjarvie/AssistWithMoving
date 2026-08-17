@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "project": "Assist With Moving",
-  "repository": "github.com/scottjarvie/movingmanifest",
+  "repository": "github.com/scottjarvie/assistwithmoving",
   "projectUrl": "https://movingmanifest.com",
   "idPrefix": "MOV",
   "projectPhilosophy": "../planning/assist-with-moving-project-philosophy.md",

@@ -5,6 +5,7 @@ const requiredScopes = ["openid", "profile", "email"];
 // The canonical stateless OAuth door — /mcp, NOT /api/mcp. /mcp/connect can be
 // passed explicitly to probe the persisted compatibility catalog.
 const defaultEndpoint =
+  process.env.ASSISTWITHMOVING_MCP_ENDPOINT ??
   process.env.MOVINGMANIFEST_MCP_ENDPOINT ??
   "https://movingmanifest.com/mcp";
 

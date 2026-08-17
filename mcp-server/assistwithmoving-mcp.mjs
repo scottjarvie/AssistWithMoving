@@ -98,7 +98,7 @@ import {
   updateItem,
   updatePlannedItem,
   createShareLink,
-} from "./movingmanifest-api.mjs";
+} from "./assistwithmoving-api.mjs";
 
 const allowedOriginalMediaMimeTypes = [
   "image/jpeg",
@@ -120,7 +120,7 @@ const allowedOriginalImageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 const allowedDerivativeImageMimeTypes = ["image/jpeg", "image/png", "image/webp"];
 
 const localFilePathDescription =
-  "Maintainer-only local stdio input. filePath is refused by hosted MCP and local stdio refuses it unless MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS contains the file's trusted directory; symlinks and non-regular files are refused.";
+  "Maintainer-only local stdio input. filePath is refused by hosted MCP and local stdio refuses it unless ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS contains the file's trusted directory; symlinks and non-regular files are refused.";
 const publicSourceUrlDescription =
   "Public HTTPS media URL without embedded credentials. Private, loopback, link-local, mixed public/private DNS, unsafe redirect, oversized, timed-out, or MIME-mismatched responses are refused.";
 
@@ -889,7 +889,7 @@ const boxIntakeLinkedItemSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS = [
+export const ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS = [
   "get_api_capabilities",
   "get_api_context",
   "list_moves",
@@ -933,9 +933,9 @@ export function createAllowedToolFilter(allowedToolNames) {
   return (toolName) => allowed.has(toolName);
 }
 
-export function createMovingManifestMcpServer(apiConfig, options = {}) {
+export function createAssistWithMovingMcpServer(apiConfig, options = {}) {
   const target = new McpServer({
-    name: "movingmanifest",
+    name: "assistwithmoving",
     version: "0.2.0",
     websiteUrl: "https://movingmanifest.com",
   });
@@ -945,7 +945,7 @@ export function createMovingManifestMcpServer(apiConfig, options = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const config = createApiConfig();
-  const server = createMovingManifestMcpServer(config);
+  const server = createAssistWithMovingMcpServer(config);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
@@ -1311,7 +1311,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "add_item_from_photo", {
     title: "Add item from photo",
     description:
-      "Plain-language fastest path for one household item from one user photo plus a few words. Provide dataUrl/fileBase64, a public HTTPS sourceUrl, or a maintainer-approved local filePath with the item name and any obvious fields. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Set quantity only when the user says it or the photo clearly shows a count; omitted quantity defaults to 1. Missing weight, dimensions, disposition, and condition do not block creation; Assist With Moving stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
+      "Plain-language fastest path for one household item from one user photo plus a few words. Provide dataUrl/fileBase64, a public HTTPS sourceUrl, or a maintainer-approved local filePath with the item name and any obvious fields. Hosted MCP refuses filePath; local stdio requires ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS. Set quantity only when the user says it or the photo clearly shows a count; omitted quantity defaults to 1. Missing weight, dimensions, disposition, and condition do not block creation; Assist With Moving stores the original image, creates web-ready derivatives server-side, attaches the photo to the created item, and returns agentReview for a lightweight user correction summary.",
     inputSchema: {
       moveId: z.string(),
       name: z.string().min(1),
@@ -2069,7 +2069,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_file", {
     title: "Upload evidence file",
     description:
-      "Easy MCP upload path: provide a public HTTPS source URL, or a maintainer-approved local filePath when running stdio with MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Hosted MCP refuses filePath. The tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. For images, Assist With Moving creates web-ready derivatives server-side so agents do not need to resize or re-encode files.",
+      "Easy MCP upload path: provide a public HTTPS source URL, or a maintainer-approved local filePath when running stdio with ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS. Hosted MCP refuses filePath. The tool starts the upload session, PUTs the original file, finalizes the evidence record, and returns the photoId. For images, Assist With Moving creates web-ready derivatives server-side so agents do not need to resize or re-encode files.",
     inputSchema: {
       moveId: z.string(),
       filePath: z.string().optional().describe(localFilePathDescription),
@@ -2104,7 +2104,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_image", {
     title: "Upload evidence image in one call",
     description:
-      "Default image upload path for agents: provide exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. The tool sends the original image to Assist With Moving, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId plus agentReview so the assistant can tell the user what caption, target, privacy/type, and assumptions were used. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Default image upload path for agents: provide exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS. The tool sends the original image to Assist With Moving, finalizes evidence metadata, creates web-ready display/AI derivatives server-side, and returns the photoId plus agentReview so the assistant can tell the user what caption, target, privacy/type, and assumptions were used. Agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       filePath: z
@@ -2160,7 +2160,7 @@ export function registerTools(target, apiConfig, options = {}) {
   registerTool(target, "upload_evidence_images", {
     title: "Upload multiple evidence images",
     description:
-      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires MOVINGMANIFEST_MCP_ALLOWED_FILE_ROOTS. Shared metadata at the top level applies to every image unless an image entry overrides it. Assist With Moving stores originals and creates web-ready derivatives server-side, then returns per-image status plus agentReview summaries; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
+      "Batch convenience path for agents when the user provides several household photos. Each image entry supplies exactly one public HTTPS source URL, data URL, base64 image, or maintainer-approved local filePath. Hosted MCP refuses filePath; local stdio requires ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS. Shared metadata at the top level applies to every image unless an image entry overrides it. Assist With Moving stores originals and creates web-ready derivatives server-side, then returns per-image status plus agentReview summaries; agents do not need to resize, re-encode, calculate dimensions, or create derivative files.",
     inputSchema: {
       moveId: z.string(),
       images: z

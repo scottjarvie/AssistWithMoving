@@ -19,7 +19,7 @@
       "markerMeaning": "The v0.5.1 product merge is the prior release marker; later tracker-only sources are classified separately from the private-first product release."
     },
     "github": {
-      "repository": "scottjarvie/movingmanifest",
+      "repository": "scottjarvie/assistwithmoving",
       "productPullRequest": 190,
       "productionDeployment": {
         "commit": "d8ed8fe0717cd76444158ca63915ea473289792b",

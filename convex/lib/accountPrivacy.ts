@@ -34,7 +34,7 @@ export function accountDeletionScheduledAt(now: number) {
 
 export function accountExportFilename(now: number) {
   const date = new Date(now).toISOString().slice(0, 10);
-  return `movingmanifest-account-export-${date}.json`;
+  return `assistwithmoving-account-export-${date}.json`;
 }
 
 /**

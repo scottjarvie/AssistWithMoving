@@ -20,12 +20,12 @@ describe("Convex env readiness", () => {
 
   it("parses Convex env assignment output in memory", () => {
     const assignments = parseEnvAssignments(`
-B2_BUCKET_NAME=movingmanifest
+B2_BUCKET_NAME=assistwithmoving
 B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com
 B2_APPLICATION_KEY=super-secret-value
 `);
 
-    expect(assignments.get("B2_BUCKET_NAME")).toBe("movingmanifest");
+    expect(assignments.get("B2_BUCKET_NAME")).toBe("assistwithmoving");
     expect(assignments.get("B2_ENDPOINT")).toBe(
       "https://s3.us-west-004.backblazeb2.com"
     );
@@ -41,7 +41,7 @@ B2_APPLICATION_KEY=convex-secret
 `);
 
     const results = localStorageAlignmentResults(assignments, {
-      B2_BUCKET_NAME: "movingmanifest",
+      B2_BUCKET_NAME: "assistwithmoving",
       B2_ENDPOINT: "https://s3.us-west-004.backblazeb2.com",
       B2_REGION: "us-west-004",
       B2_APPLICATION_KEY: "local-secret",
@@ -54,21 +54,21 @@ B2_APPLICATION_KEY=convex-secret
     });
     const rendered = JSON.stringify(results);
     expect(rendered).not.toContain("movingmanifest-pics");
-    expect(rendered).not.toContain("movingmanifest");
+    expect(rendered).not.toContain("assistwithmoving");
     expect(rendered).not.toContain("convex-secret");
     expect(rendered).not.toContain("local-secret");
   });
 
   it("passes when comparable public B2 values match", () => {
     const assignments = parseEnvAssignments(`
-B2_BUCKET_NAME=movingmanifest
+B2_BUCKET_NAME=assistwithmoving
 B2_ENDPOINT=https://s3.us-west-004.backblazeb2.com/
 B2_REGION=us-west-004
 `);
 
     expect(
       localStorageAlignmentResults(assignments, {
-        B2_BUCKET_NAME: "movingmanifest",
+        B2_BUCKET_NAME: "assistwithmoving",
         B2_ENDPOINT: "https://s3.us-west-004.backblazeb2.com",
         B2_REGION: "us-west-004",
       } as unknown as NodeJS.ProcessEnv)
@@ -81,7 +81,7 @@ B2_REGION=us-west-004
   });
 
   it("warns when optional Cloudflare image delivery is inactive in Convex", () => {
-    expect(optionalGroupResults("B2_BUCKET_NAME=movingmanifest")).toEqual([
+    expect(optionalGroupResults("B2_BUCKET_NAME=assistwithmoving")).toEqual([
       {
         status: "warn",
         label: "Cloudflare image delivery Convex env names",

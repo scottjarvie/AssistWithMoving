@@ -112,15 +112,15 @@ async function main() {
   const mockApi = await startMockApi();
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [path.join(cwd, "mcp-server", "movingmanifest-mcp.mjs")],
+    args: [path.join(cwd, "mcp-server", "assistwithmoving-mcp.mjs")],
     env: {
       ...process.env,
-      MOVINGMANIFEST_API_KEY: "mmk_codex_test_mock_key",
-      MOVINGMANIFEST_API_BASE_URL: mockApi.baseUrl,
+      ASSISTWITHMOVING_API_KEY: "mmk_codex_test_mock_key",
+      ASSISTWITHMOVING_API_BASE_URL: mockApi.baseUrl,
     },
   });
   const client = new Client({
-    name: "movingmanifest-stdio-smoke",
+    name: "assistwithmoving-stdio-smoke",
     version: "0.1.0",
   });
 

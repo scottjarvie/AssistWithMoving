@@ -164,7 +164,7 @@ describe("employer packet paths", () => {
       "/app/employer-packet?householdId=household-id&moveId=move-id&mode=owner"
     );
     expect(employerPacketFilename("owner")).toBe(
-      "movingmanifest-employer-owner.csv"
+      "assistwithmoving-employer-owner.csv"
     );
   });
 });

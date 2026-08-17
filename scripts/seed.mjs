@@ -4,7 +4,7 @@ const args = process.argv.slice(2);
 const ownerEmail =
   valueAfter("--email") ?? process.env.SEED_USER_EMAIL ?? "demo@movingmanifest.local";
 const ownerName =
-  valueAfter("--name") ?? process.env.SEED_USER_NAME ?? "MovingManifest Demo Owner";
+  valueAfter("--name") ?? process.env.SEED_USER_NAME ?? "AssistWithMoving Demo Owner";
 const reset = !args.includes("--append");
 const deployment = deploymentArgs();
 
@@ -15,7 +15,7 @@ if (args.includes("--prod") || deployment.includes("--prod")) {
 
 const identity = {
   subject: `seed:${ownerEmail.toLowerCase()}`,
-  issuer: "movingmanifest-seed",
+  issuer: "assistwithmoving-seed",
   email: ownerEmail,
   name: ownerName,
 };
@@ -24,14 +24,14 @@ const convexArgs = [
   "convex",
   "run",
   "seed:seedDemoData",
-  JSON.stringify({ reset, confirm: "movingmanifest-dev-seed" }),
+  JSON.stringify({ reset, confirm: "assistwithmoving-dev-seed" }),
   "--identity",
   JSON.stringify(identity),
   "--push",
   ...deployment,
 ];
 
-console.log("Seeding MovingManifest demo data into Convex dev deployment.");
+console.log("Seeding AssistWithMoving demo data into Convex dev deployment.");
 console.log(`Owner email: ${ownerEmail}`);
 console.log(`Reset existing demo data: ${reset ? "yes" : "no"}`);
 

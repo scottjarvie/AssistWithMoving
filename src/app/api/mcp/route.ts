@@ -11,7 +11,7 @@
 // — URL-borne keys leak into request logs, browser history, and referrers.
 //
 // Tool definitions are shared with the local stdio server in
-// mcp-server/movingmanifest-mcp.mjs so the two transports cannot drift.
+// mcp-server/assistwithmoving-mcp.mjs so the two transports cannot drift.
 import { createMcpHandler } from "mcp-handler";
 
 import {
@@ -20,9 +20,9 @@ import {
 } from "@/lib/mcp-request-auth";
 import { mcpBearerChallenge } from "@/lib/mcp-oauth";
 import {
-  MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS,
+  ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS,
   registerTools,
-} from "../../../../mcp-server/movingmanifest-mcp.mjs";
+} from "../../../../mcp-server/assistwithmoving-mcp.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,16 +43,27 @@ function restApiBaseUrl(): string {
   return "https://movingmanifest.com/api/v1";
 }
 
+// The `MOVINGMANIFEST_*` env vars were renamed to `ASSISTWITHMOVING_*`. Read the
+// new name first and fall back to the old one so a deployment whose environment
+// has not been updated yet keeps its configured toolset instead of silently
+// dropping back to the default one.
+function mcpEnvSetting(suffix: string): string | undefined {
+  return (
+    process.env[`ASSISTWITHMOVING_${suffix}`] ??
+    process.env[`MOVINGMANIFEST_${suffix}`]
+  );
+}
+
 function hostedAllowedToolNames(apiKey: string): string[] | undefined {
-  if (process.env.MOVINGMANIFEST_MCP_TOOLSET === "trusted-helper") {
-    return [...MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS];
+  if (mcpEnvSetting("MCP_TOOLSET") === "trusted-helper") {
+    return [...ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS];
   }
   const looksLikeApiKey = apiKey.startsWith("mmk_");
   if (
-    process.env.MOVINGMANIFEST_MCP_OAUTH_TOOLSET === "trusted-helper" &&
+    mcpEnvSetting("MCP_OAUTH_TOOLSET") === "trusted-helper" &&
     !looksLikeApiKey
   ) {
-    return [...MOVINGMANIFEST_TRUSTED_HELPER_MCP_TOOLS];
+    return [...ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS];
   }
   return undefined;
 }
@@ -107,7 +118,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
       });
     },
     {
-      serverInfo: { name: "movingmanifest", version: "0.2.0" },
+      serverInfo: { name: "assistwithmoving", version: "0.2.0" },
       instructions: SERVER_INSTRUCTIONS,
     },
     {

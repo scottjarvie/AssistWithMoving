@@ -15,7 +15,7 @@ const basePhoto = {
   moveId: "move" as Doc<"itemPhotos">["moveId"],
   documentationProfileTypes: [],
   originalStorageKey: "private/original.jpg",
-  originalBucket: "movingmanifest",
+  originalBucket: "assistwithmoving",
   originalHash: "hash",
   derivativeRefs: {
     thumb: "thumb/path.jpg",
@@ -111,7 +111,7 @@ describe("photo visibility", () => {
     );
 
     expect(redacted.originalStorageKey).toBe("private/original.jpg");
-    expect(redacted.originalBucket).toBe("movingmanifest");
+    expect(redacted.originalBucket).toBe("assistwithmoving");
     expect(redacted.derivativeRefs).toEqual(basePhoto.derivativeRefs);
     expect(redacted.notes).toBe("private notes");
   });

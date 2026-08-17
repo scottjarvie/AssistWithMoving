@@ -187,7 +187,7 @@ export function PrintableLoadPlanPacket({
             onClick={() =>
               packet
                 ? downloadCsv({
-                    filename: `movingmanifest-load-plan-${mode}.csv`,
+                    filename: `assistwithmoving-load-plan-${mode}.csv`,
                     csv: packetToCsv(packet, safeMode, zoneNameById),
                   })
                 : undefined

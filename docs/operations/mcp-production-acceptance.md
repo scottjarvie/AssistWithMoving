@@ -6,7 +6,7 @@ account, another user's account, or another Assist product's Clerk instance.
 
 ## Retained identity
 
-- Clerk application: **MovingManifest**
+- Clerk application: **AssistWithMoving**
 - Clerk environment: **production**
 - Display name: **Moving MCP Test**
 - Primary email: `moving-mcp-e2e+production@example.com`
@@ -25,7 +25,7 @@ must never receive real household or move information.
 
 ## Generate a future one-time sign-in when Clerk permits it
 
-1. Open Clerk Dashboard → **MovingManifest** → **production** → **Users**.
+1. Open Clerk Dashboard → **AssistWithMoving** → **production** → **Users**.
 2. Search for `moving-mcp-e2e+production@example.com` and open **Moving MCP
    Test**.
 3. Choose **Actions → Impersonate user**.

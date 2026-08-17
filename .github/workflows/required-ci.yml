@@ -1,4 +1,4 @@
-name: MovingManifest CI
+name: AssistWithMoving CI
 
 on:
   pull_request:
