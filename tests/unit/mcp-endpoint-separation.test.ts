@@ -98,11 +98,16 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
   // point at THIS document, so the gateway's own copy is never fetched by a
   // real client. Anything the product needs a client to know has to be here.
   // These assertions exist because the two copies silently drifted once: the
-  // five moving.* scopes and the grant contract shipped to Convex and stayed
-  // invisible in production, where the branded route still said "openid
-  // profile email" and nothing about grants.
+  // grant contract shipped to Convex and stayed invisible in production, where
+  // the branded route said nothing about grants.
+  //
+  // The fix for that drift briefly over-corrected by putting the five moving.*
+  // scopes into `scopes_supported`. That is wrong: RFC 9728 `scopes_supported`
+  // is what a client may request of the authorization server, and Clerk cannot
+  // mint product scopes. The grant contract is carried by the vendor block
+  // instead — see the `productScopes` assertion below.
   describe("/mcp protected-resource metadata carries the grant contract", () => {
-    it("lists the identity scopes and all five product scopes", async () => {
+    it("advertises only the identity scopes Clerk can actually issue", async () => {
       process.env.NEXT_PUBLIC_APP_URL = "https://movingmanifest.test";
       process.env.CLERK_JWT_ISSUER_DOMAIN = "https://clerk.example.test/";
       const res = await getCanonicalMetadata(
@@ -115,16 +120,12 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
         scopes_supported: string[];
       };
       expect(body.resource).toBe("https://movingmanifest.test/mcp");
-      expect(body.scopes_supported).toEqual([
-        "openid",
-        "profile",
-        "email",
-        "moving.context.read",
-        "moving.evidence.read",
-        "moving.work.write",
-        "moving.queue.work",
-        "moving.archive",
-      ]);
+      expect(body.scopes_supported).toEqual(["openid", "profile", "email"]);
+      // Guard the regression directly: no product scope may leak into the
+      // list a client hands to Clerk.
+      for (const scope of body.scopes_supported) {
+        expect(scope.startsWith("moving.")).toBe(false);
+      }
     });
 
     it("tells a client that signing in is not authorization", async () => {
@@ -140,12 +141,22 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
         "x-assistwithmoving": {
           productGrantRequired: boolean;
           grantManager: string;
+          productScopes: string[];
           doors: Record<string, string>;
         };
       };
       expect(body.client_id_metadata_document_supported).toBe(true);
       const moving = body["x-assistwithmoving"];
       expect(moving.productGrantRequired).toBe(true);
+      // The five product scopes stay discoverable — as a vendor hint about
+      // what /settings/ai can approve, not as something to request from Clerk.
+      expect(moving.productScopes).toEqual([
+        "moving.context.read",
+        "moving.evidence.read",
+        "moving.work.write",
+        "moving.queue.work",
+        "moving.archive",
+      ]);
       expect(moving.grantManager).toBe("https://movingmanifest.test/settings/ai");
       expect(moving.doors.canonical).toBe("https://movingmanifest.test/mcp");
       expect(moving.doors.apiKeyOnly).toBe("https://movingmanifest.test/api/mcp");
@@ -168,21 +179,10 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
       };
       expect(body.resource).toBe("https://movingmanifest.test/mcp/connect");
       expect(body.authorization_servers).toEqual(["https://clerk.example.test"]);
-      // Identity scopes (what Clerk issues) followed by the five product
-      // scopes (the ceiling this resource enforces from its grant records).
-      // A real client only ever reads this document — the /mcp proxy rewrites
-      // the gateway's 401 to point here — so the moving.* scopes must be
-      // listed here or they are invisible in production.
-      expect(body.scopes_supported).toEqual([
-        "openid",
-        "profile",
-        "email",
-        "moving.context.read",
-        "moving.evidence.read",
-        "moving.work.write",
-        "moving.queue.work",
-        "moving.archive",
-      ]);
+      // Identity scopes only — what Clerk can actually issue. The product
+      // ceiling is enforced from grant records and advertised in the
+      // x-assistwithmoving vendor block, not here.
+      expect(body.scopes_supported).toEqual(["openid", "profile", "email"]);
     });
 
     it("mcpOAuthConnectUrl resolves to the /mcp front door", () => {

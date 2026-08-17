@@ -138,11 +138,13 @@ function protectedResourceMetadata(resource: URL, issuer: URL) {
       resource: resource.toString(),
       resource_name: "Assist With Moving",
       authorization_servers: [issuer.toString().replace(/\/$/, "")],
-      // Identity scopes are what the authorization server issues today. The
-      // Moving scopes below are the product ceiling this resource enforces from
-      // its own grant records — a token carrying them would still not widen a
-      // grant, and a token lacking them does not narrow one.
-      scopes_supported: ["openid", "profile", "email", ...movingScopes],
+      // Identity scopes ONLY. `scopes_supported` is what a client may request
+      // of the authorization server, and Clerk can only issue these three.
+      // The moving.* scopes are product permission, which lives in the
+      // person's grant record and never in the token, so listing them here
+      // would both misdescribe the authority model and invite a client to
+      // request a scope Clerk will reject. They appear as a vendor hint below.
+      scopes_supported: ["openid", "profile", "email"],
       bearer_methods_supported: ["header"],
       resource_documentation: new URL("/ai", resource.origin).toString(),
       // Client ID Metadata Documents are preferred here; dynamic registration
@@ -154,6 +156,10 @@ function protectedResourceMetadata(resource: URL, issuer: URL) {
         grantBoundaryVersion: GRANT_BOUNDARY_VERSION,
         productGrantRequired: true,
         grantManager: new URL("/settings/ai", resource.origin).toString(),
+        // The product ceiling, surfaced as a vendor hint rather than in
+        // `scopes_supported`: these are approved at the grant manager, not
+        // requested from Clerk.
+        productScopes: [...movingScopes],
         // Four doors, honestly named. Only this one is the canonical OAuth
         // resource; the others exist and are not equivalent to it.
         doors: {

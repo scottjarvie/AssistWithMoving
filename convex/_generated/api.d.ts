@@ -75,6 +75,7 @@ import type * as lib_imageDerivatives from "../lib/imageDerivatives.js";
 import type * as lib_ingestionQueue from "../lib/ingestionQueue.js";
 import type * as lib_inventoryDuplicates from "../lib/inventoryDuplicates.js";
 import type * as lib_mcpClientIdentity from "../lib/mcpClientIdentity.js";
+import type * as lib_mcpEvidenceMedia from "../lib/mcpEvidenceMedia.js";
 import type * as lib_mcpGrantAccess from "../lib/mcpGrantAccess.js";
 import type * as lib_mcpIdentity from "../lib/mcpIdentity.js";
 import type * as lib_mcpMediaIngress from "../lib/mcpMediaIngress.js";
@@ -229,6 +230,7 @@ declare const fullApi: ApiFromModules<{
   "lib/ingestionQueue": typeof lib_ingestionQueue;
   "lib/inventoryDuplicates": typeof lib_inventoryDuplicates;
   "lib/mcpClientIdentity": typeof lib_mcpClientIdentity;
+  "lib/mcpEvidenceMedia": typeof lib_mcpEvidenceMedia;
   "lib/mcpGrantAccess": typeof lib_mcpGrantAccess;
   "lib/mcpIdentity": typeof lib_mcpIdentity;
   "lib/mcpMediaIngress": typeof lib_mcpMediaIngress;

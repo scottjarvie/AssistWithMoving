@@ -251,57 +251,77 @@ tool call, no move data.
 the challenge carries a `resource_metadata` URL; that document's `resource`
 matches the door you probed; an authorization server is named; and Clerk
 advertises `registration_endpoint`, `authorization_endpoint`, `token_endpoint`,
-PKCE `S256`, and `none` for token-endpoint auth. The tenth check is scopes —
-and note its limit: **the doctor only requires `openid profile email`.** It
-does not assert the five `moving.*` scopes, so a green doctor does **not** prove
-the headline outcome of this deploy. Use the curl below for that.
+PKCE `S256`, and `none` for token-endpoint auth. The tenth check is scopes, and
+it requires exactly `openid profile email` — which is the whole correct answer,
+not a limitation to work around.
 
 Both doctors were green against production **before** this deploy (10 pass / 0
 warn / 0 blocked / 0 fail, run 2026-08-16), so they are a regression check —
-they prove the OAuth handshake did not break — not a proof of the new work.
-What proves the new work is the metadata body:
+they prove the OAuth handshake did not break.
+
+> **Do not check `scopes_supported` for the five `moving.*` scopes.** An
+> earlier version of this runbook did, and it was wrong: it would report a
+> correct deploy as a failure. RFC 9728 `scopes_supported` lists what a client
+> may *request of the authorization server*. Clerk is that authorization
+> server and can only issue `openid profile email`; it cannot mint product
+> scopes. Our authority model is deliberate — product permission lives in the
+> person's grant record, never in the token — so a `moving.*` scope in that
+> list would be both unrequestable and a misdescription of how Moving decides
+> what an AI may do. Seeing exactly `["openid","profile","email"]` is the
+> correct result.
+
+The metadata body still carries the grant contract, just not in
+`scopes_supported`:
 
 ```bash
 curl -s https://movingmanifest.com/.well-known/oauth-protected-resource/mcp \
-  | jq '.scopes_supported'
+  | jq '{scopes_supported, x: ."x-assistwithmoving"}'
 ```
 
-Expect exactly the three identity scopes **and all five product scopes**, in
-this order:
+Expect the three identity scopes, and the five product scopes present as a
+namespaced vendor hint — `productScopes` — alongside
+`productGrantRequired: true`, `grantManager:
+"https://movingmanifest.com/settings/ai"`, and the four-door block:
 
 ```json
-[
-  "openid",
-  "profile",
-  "email",
-  "moving.context.read",
-  "moving.evidence.read",
-  "moving.work.write",
-  "moving.queue.work",
-  "moving.archive"
-]
+{
+  "scopes_supported": ["openid", "profile", "email"],
+  "x": {
+    "productGrantRequired": true,
+    "grantManager": "https://movingmanifest.com/settings/ai",
+    "productScopes": [
+      "moving.context.read",
+      "moving.evidence.read",
+      "moving.work.write",
+      "moving.queue.work",
+      "moving.archive"
+    ]
+  }
+}
 ```
 
-For reference, this is what production returned **before** the deploy
-(captured 2026-08-16) — if you still see this, the deploy did not take:
-
-```json
-["openid","profile","email"]
-```
-
-and an `x-assistwithmoving` block with `productGrantRequired: true`,
-`grantManager: "https://movingmanifest.com/settings/ai"`, and the four-door
-block, alongside `client_id_metadata_document_supported: true`.
-
-> **This is the check that would have failed.** Before 2026-08-16 the branded
-> Next.js route served only `["openid","profile","email"]` and no grant block,
-> while the richer document lived only on the Convex gateway — which a client
-> never fetches, because the `/mcp` proxy rewrites the 401 to point at the
-> branded route. The five scopes existed in the backend and were invisible in
-> production. Both documents are now built from one shared source
-> (`protectedResourceMetadataBody` in `src/lib/mcp-oauth.ts`, sourcing the scope
-> list from `convex/lib/aiGrants.ts`) and are guarded by
+> **What this deploy actually has to prove.** Before 2026-08-16 the branded
+> Next.js route served no grant block at all, while the richer document lived
+> only on the Convex gateway — which a client never fetches, because the
+> `/mcp` proxy rewrites the 401 to point at the branded route. The grant
+> contract existed in the backend and was invisible in production. Both
+> documents are now built from one shared source
+> (`protectedResourceMetadataBody` in `src/lib/mcp-oauth.ts`, sourcing the
+> product scope list from `convex/lib/aiGrants.ts`) and are guarded by
 > `tests/unit/mcp-endpoint-separation.test.ts`.
+
+**The three checks that prove this deploy, in order of what they establish:**
+
+1. **The 401 challenge with branded `resource_metadata`** — the curl below.
+   This proves a client can discover how to sign in, and that it will read
+   *our* metadata rather than the gateway's.
+2. **The grant-filtered tool list** — after approving a grant at
+   `/settings/ai`, a connected AI's `tools/list` must show only the tools
+   whose scope that grant includes, and must shrink when the grant is
+   narrowed. This is the real proof of the authority model, because it is
+   enforced from grant records rather than from anything in the token.
+3. **`npm run mcp:doctor` green** — 10 pass / 0 warn / 0 blocked / 0 fail, as
+   a regression check on the handshake.
 
 Confirm the 401 challenge itself is intact. An MCP client's very first move is
 an unauthenticated `initialize`; if this stops returning a well-formed
