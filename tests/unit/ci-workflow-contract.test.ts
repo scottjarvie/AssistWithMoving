@@ -73,6 +73,16 @@ describe("required CI workflow contract", () => {
     expect(requiredJob).toContain("tests/unit/mcp-route-auth.test.ts");
   });
 
+  it("keeps the documentation-truth gate in the required job, not the informational one", () => {
+    // The full suite is informational, so putting the catalog gate only there
+    // would let a stale capability claim merge. It has to block.
+    const source = workflowSource();
+    const requiredJob = requiredJobSource(source);
+
+    expect(requiredJob).toContain("tests/unit/mcp-doc-tool-catalog.test.ts");
+    expect(requiredJob).toContain("tests/unit/mcp-capabilities.test.ts");
+  });
+
   it("runs the known-flaky full suite as informational until MOVE-395 lands", () => {
     const source = workflowSource();
 

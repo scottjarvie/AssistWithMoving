@@ -122,7 +122,7 @@ this Work Order.
 
 | Door | Current role | Alignment decision |
 |---|---|---|
-| `/mcp` | Canonical stateless OAuth, eight move-workflow tools | Keep as the branded Bring Your AI door and align its grants, client identity, Queue workflow, setup, and proof |
+| `/mcp` | Canonical stateless OAuth; the exact `STATELESS_MOVING_TOOL_NAMES` catalog of grant-gated move-workflow tools (this row said "eight" when the plan was written; the alignment work below added the Queue tools, `describe_connection`, and `archive_move_records` — corrected 2026-08-17) | Keep as the branded Bring Your AI door and align its grants, client identity, Queue workflow, setup, and proof |
 | `/mcp/connect` | Persisted legacy OAuth catalog for existing connections | Compatibility only; do not call it an alias or use it as proof for `/mcp` |
 | `/api/mcp` | Remote `mmk_` API-key automation surface | Keep key-only and separately scoped; never advertise OAuth discovery here |
 | `mcp-server/` | Local stdio/HTTP client over the REST API and `mmk_` key | Keep as a headless/local fallback with its own catalog and proof |
@@ -154,9 +154,11 @@ this Work Order.
 
 ## Target tool families
 
-The implementation should reuse the strong canonical eight-tool foundation,
-not replace it with database CRUD. `MOV-0033` owns the exact catalog and a
-compatibility plan before any rename or removal.
+The implementation should reuse the strong canonical workflow foundation, not
+replace it with database CRUD. It did: the tools this section asked for were
+added to `STATELESS_MOVING_TOOL_NAMES` alongside the original eight rather than
+displacing them. `MOV-0033` owns the exact catalog and a compatibility plan
+before any rename or removal.
 
 | Family | Required outcome | Existing foundation |
 |---|---|---|

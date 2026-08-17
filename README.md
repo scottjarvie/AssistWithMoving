@@ -66,19 +66,29 @@ infra/              Cloudflare image worker
 patches/            patch-package patches applied on install
 ```
 
-**The MCP compatibility doors** (easy to confuse — check the right catalog
-before assuming a capability is missing):
+**The MCP surfaces** (easy to confuse — check the right catalog before assuming
+a capability is missing). Three code surfaces serve four public doors: `/mcp`,
+`/mcp/connect`, `/api/mcp`, and the local stdio server.
 
 1. **Canonical stateless OAuth** — `convex/httpRoutes/mcp.ts` +
-   `convex/mcpPlanning.ts`, served at `movingmanifest.com/mcp`. It exposes eight
-   workflow-level tools for a durable move brief, bounded search/read/media,
-   move context, inventory, planning records, and complete-result saves.
+   `convex/mcpPlanning.ts` + `convex/mcpQueueWork.ts`, served at
+   `movingmanifest.com/mcp`. Its catalog is the exact
+   `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — fifteen
+   workflow-level tools covering a durable move brief, bounded
+   search/read/media, move context, inventory, planning records,
+   complete-result saves, the full Queue loop (list, claim, release, ask the
+   smallest Needs you question, complete), and reversible archive. Each tool is
+   gated by one of the five product grant scopes in `convex/lib/aiGrants.ts`, so
+   a connection is only shown what the person approved. Never retype this count;
+   `tests/unit/mcp-doc-tool-catalog.test.ts` derives it from source.
 2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served
    at `movingmanifest.com/mcp/connect`. It preserves the older 29-tool catalog
    for already-connected clients.
 3. **API-key HTTP/stdio** — `src/app/api/mcp/route.ts` and `mcp-server/`, using
-   an `mmk_` key against REST. This is the granular automation surface and the
-   only MCP surface with canonical scoped Queue transitions today.
+   an `mmk_` key against REST. This is the granular automation surface. It has
+   its own Queue tools under `queue/read` / `queue/write`; the canonical OAuth
+   door has equivalents under the `moving.queue.work` grant scope. Both drive
+   the same `queueService` primitives.
 
 See [docs/api-and-mcp.md](docs/api-and-mcp.md) for details.
 The evidence-backed path from today's foundation to the adopted family standard

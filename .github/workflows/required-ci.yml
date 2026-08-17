@@ -82,6 +82,21 @@ jobs:
           tests/unit/mcp-oauth-config-lock.test.ts
           tests/unit/mcp-route-auth.test.ts
 
+      # Documentation truth, derived from source rather than retyped. On
+      # 2026-08-17 a reconciliation found twenty-two places still claiming the
+      # canonical OAuth door exposed eight tools when the shipped array had
+      # fifteen; nothing caught it because nothing compared the docs to the
+      # code. These two files parse STATELESS_MOVING_TOOL_NAMES and
+      # MOVING_TOOL_SCOPES out of the transport and fail the PR if any document
+      # disagrees. Required, not informational: a stale capability claim is a
+      # user-facing defect.
+      - name: Verify documentation matches the shipped MCP tool catalog
+        if: steps.scope.outputs.run_full == 'true'
+        run: >-
+          npx vitest run
+          tests/unit/mcp-doc-tool-catalog.test.ts
+          tests/unit/mcp-capabilities.test.ts
+
       - name: Build without credentials or deployment keys
         if: steps.scope.outputs.run_full == 'true'
         run: npm run build

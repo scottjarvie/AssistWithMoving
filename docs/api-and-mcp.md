@@ -1831,8 +1831,10 @@ curl -X DELETE https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links/SHARE
 
 ## MCP Server
 
-Hosted assistants reach Assist With Moving through **three deliberately separate
-doors — do not confuse their catalogs or credentials**:
+Hosted assistants reach Assist With Moving through **four deliberately separate
+doors — do not confuse their catalogs or credentials**: the canonical OAuth
+`/mcp`, the legacy persisted `/mcp/connect`, the API-key-only `/api/mcp`, and the
+maintainer-only local stdio server. All four are described below.
 
 Maintainers running live synthetic proof must use
 [`docs/operations/mcp-production-acceptance.md`](operations/mcp-production-acceptance.md)
@@ -1850,8 +1852,8 @@ and retain only the labeled non-privileged test identity after cleanup.
 - **Legacy persisted OAuth compatibility:**
   `https://movingmanifest.com/mcp/connect` — preserves the older 29-tool
   Convex-gateway catalog for already-connected clients. It is not an alias for
-  the new eight-tool catalog; do not use it for new setup unless compatibility
-  is specifically required.
+  the canonical grant-gated catalog; do not use it for new setup unless
+  compatibility is specifically required.
 - **API-key door:** `https://movingmanifest.com/api/mcp` — accepts `mmk_` API
   keys ONLY (forwarded to REST as a key). It **cannot** consume an OAuth/JWT
   token, so do not point an OAuth sign-in at it. For local/headless tools, CI,
@@ -1883,50 +1885,87 @@ Endpoint: https://movingmanifest.com/mcp
 Auth:     OAuth 2.1 sign-in (Clerk) — no key to paste
 ```
 
-In claude.ai or Claude Cowork: Settings → Connectors → Add custom connector →
-paste `https://movingmanifest.com/mcp`. The client opens Assist With Moving sign-in
-and consent; on approval it can call the eight workflow tools below. No `mmk_`
-key needed.
+Setup is whatever the client calls adding a remote MCP server or custom
+connector: paste `https://movingmanifest.com/mcp`. The client opens Assist With
+Moving sign-in and consent; no `mmk_` key is involved. No AI product is named
+here on purpose — **no named AI client has completed the lifecycle against this
+door**, so every client is Unknown until `MOV-0035` records a dated real-client
+run. Do not add product-specific setup steps for this door before then. (The
+API-key and maintainer stdio sections below still show one CLI's configuration
+syntax; those are key-based transports where the config format is the fact being
+documented, not a claim that an AI product completed an OAuth lifecycle.)
 
-Canonical OAuth tool catalog:
+**Signing in is not permission.** OAuth proves who is calling; a product grant,
+re-read from the database on every discovery and every tool call, decides what
+that caller may do. Clerk issues identity-only scopes (`openid profile email`)
+and a broader token never widens a grant. People approve, inspect, and revoke
+grants at `https://movingmanifest.com/settings/ai`; revoking refuses the very
+next call even while the access token is still cryptographically valid. The
+current boundary version is `GRANT_BOUNDARY_VERSION` in
+`convex/lib/aiGrants.ts`.
 
-| Tool | Purpose |
-| --- | --- |
-| `get_move_brief` | First call. List bounded accessible moves or return one move's route, spaces, counts, review attention, saved planning records, and Queue summaries. |
-| `search_move_records` | Search bounded items, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue summaries. |
-| `get_move_records` | Hydrate up to 25 selected records with role-filtered detail. |
-| `get_evidence_media` | Return selected private move photos as native MCP image content. |
-| `save_move_context` | Replay-safe move route/timing/note correction plus room/location upserts. |
-| `save_inventory` | Replay-safe inventory creation and optimistic corrections with estimates, review flags, and source provenance. |
-| `save_planning_record` | Create or optimistically correct a decision, estimate, plan result, or source check. |
-| `save_complete_result` | Preferred happy path: atomically save a readable result and its related locations, inventory, decisions, estimates, plan sections, and source checks. |
+Canonical OAuth tool catalog. This is the exact list in
+`STATELESS_MOVING_TOOL_NAMES` (`convex/httpRoutes/mcp.ts`), with the scope each
+tool requires from `MOVING_TOOL_SCOPES` (`convex/lib/aiGrants.ts`). A tool is
+advertised in `tools/list` only when the current grant carries its scope, so a
+connection never sees a capability nobody approved.
+
+| Tool | Required scope | Purpose |
+| --- | --- | --- |
+| `describe_connection` | none — always available | Report what this connection may currently do, what it can never do, and how the person changes that. Safe to call first when no other tools are listed. |
+| `get_move_brief` | `moving.context.read` | First call. List bounded accessible moves or return one move's route, spaces, counts, review attention, saved planning records, and Queue summaries. |
+| `search_move_records` | `moving.context.read` | Search bounded items, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue summaries. |
+| `get_move_records` | `moving.context.read` | Hydrate up to 25 selected records with role-filtered detail. |
+| `get_evidence_media` | `moving.evidence.read` | Return selected private move photos as native MCP image content. |
+| `save_move_context` | `moving.work.write` | Replay-safe move route/timing/note correction plus room/location upserts. |
+| `save_inventory` | `moving.work.write` | Replay-safe inventory creation and optimistic corrections with estimates, review flags, and source provenance. |
+| `save_planning_record` | `moving.work.write` | Create or optimistically correct a decision, estimate, plan result, or source check. |
+| `save_complete_result` | `moving.work.write` | Preferred happy path: atomically save a readable result and its related locations, inventory, decisions, estimates, plan sections, and source checks. With `completeQueueItem`, finishes the handoff in the same approval when the grant also carries `moving.queue.work`. |
+| `list_queue_work` | `moving.queue.work` | Return only the handoffs the person left **Waiting for your AI** on one move, each with the version to claim it with. Needs you items wait on the person and are not listed. |
+| `claim_queue_work` | `moving.queue.work` | Take one waiting handoff under a 15-minute lease so no other AI picks it up. Echo the `expectedVersion` from `list_queue_work`. |
+| `release_queue_work` | `moving.queue.work` | Hand a claimed handoff back to Waiting for your AI with a durable reason, without pretending it is finished. |
+| `ask_queue_question` | `moving.queue.work` | Move a claimed handoff to **Needs you** with one specific smallest question, instead of guessing. |
+| `complete_queue_work` | `moving.queue.work` | Mark a claimed handoff **Done** with its result summary and references. |
+| `archive_move_records` | `moving.archive` | Reversibly archive or restore belongings, boxes, rooms, or planning records, with a per-record result. Never permanently deletes. |
+
+The five scopes keep read, private-evidence read, write, Queue work, and
+reversible archive separate; a read scope never implies its write sibling. The
+authoritative wording of each boundary lives in `movingScopes` /
+`MOVING_SCOPE_INFO` in `convex/lib/aiGrants.ts` and is published verbatim on
+`llms-full.txt`.
 
 Start with `get_move_brief`. Search before creating duplicates. For normal
 finished work, prefer `save_complete_result`; use granular saves for later
-corrections. This OAuth catalog may read Queue summaries and link a result for
-human inspection. When `relatedQueueItemId` names the signed-in person's
-returned handoff, Moving attaches the complete planning result and an
-attributable Queue activity entry; the normal Queue detail renders **Linked move
-work** and a path to Overview → Saved work. The Queue state does not change and
-the receipt says `transition: none`: this OAuth surface still cannot claim or
-complete canonical Queue work.
+corrections.
+
+**Canonical OAuth can work the Queue.** With `moving.queue.work` the loop is
+list → claim → (ask the smallest Needs you question, or release) → complete, and
+`save_complete_result` with `completeQueueItem` does the save and the completion
+under one approval (`convex/mcpQueueWork.ts`). The four person-facing states are
+unchanged: **Needs you / Working / Waiting for your AI / Done**.
+
+When a grant stops at `moving.work.write`, a save that names
+`relatedQueueItemId` or asks to complete a handoff still links the result and an
+attributable Queue activity entry — the normal Queue detail renders **Linked
+move work** and a path to Overview → Saved work — but the Queue state does not
+change and the receipt says `transition: none`. That is the boundary doing its
+job, not a missing capability: the state is left to the person because they did
+not approve Queue work.
 
 Production acceptance is Current for one retained non-privileged Moving test
 identity: real Clerk consent and official-SDK token exchange, the full
 brief/search/read/save/replay/correct/hydrate loop, normal Move-overview
 reflection, refresh/client/session cleanup, and complete marked-fixture purge
-were verified on 2026-08-13 after PR `#182`. This receipt does not imply private
-image rendering, simultaneous multi-client isolation, reconnect behavior in a
-specific client product, or canonical OAuth Queue transitions. Maintainer
-details and the repeatable cleanup lane live in
+were verified on 2026-08-13 after PR `#182`. That acceptance used the official
+MCP TypeScript SDK as the client — an SDK harness, not an AI product. The
+receipt does not imply private image rendering, simultaneous multi-client
+isolation, or reconnect behavior in any client product. Maintainer details and
+the repeatable cleanup lane live in
 [`docs/operations/mcp-production-acceptance.md`](operations/mcp-production-acceptance.md).
-
-Codex CLI/App:
-
-```bash
-codex mcp add assistwithmoving --url https://movingmanifest.com/mcp
-codex mcp login assistwithmoving
-```
+The canonical Queue transitions and the grant system shipped later, are live in
+production (the branded `/.well-known/oauth-protected-resource/mcp` document
+carries `productGrantRequired`, the five `moving.*` scopes, and the four-door
+block), and have not yet been exercised by a real AI client.
 
 ### Remote MCP — API-key door
 
@@ -2153,12 +2192,21 @@ names, and known launch blockers.
 
 Canonical Queue tools (`list_queue_items`, `get_queue_item`,
 `claim_queue_item`, `release_queue_item`, `request_queue_input`,
-`complete_queue_item`, and `report_queue_failure`) are available through the
-API-key REST/MCP/stdio surface with `queue/read` or `queue/write`. They are
-deliberately not registered on the OAuth gateway yet: a person's OAuth identity
-does not prove a distinct chosen-AI grant. Queue access cannot create a new
-objective, inherit the person's manager recovery, or inherit inventory, plan,
-export, or member permissions.
+`complete_queue_item`, and `report_queue_failure`) are the API-key REST/MCP/stdio
+names for the Queue, gated by `queue/read` or `queue/write`.
+
+The canonical OAuth door has its own Queue tools — `list_queue_work`,
+`claim_queue_work`, `release_queue_work`, `ask_queue_question`, and
+`complete_queue_work` — gated by the `moving.queue.work` product grant scope
+rather than an API-key scope. Both surfaces drive the same `queueService`
+primitives and the same four person-facing states; they are separate names for
+separate credentials, not one door with the capability and one without. What the
+OAuth door required was never a missing implementation: it was a distinct
+chosen-AI grant, and that grant now exists.
+
+On either surface, Queue access cannot create a new objective, inherit the
+person's manager recovery, or inherit inventory, plan, export, or member
+permissions.
 
 OAuth capture-queue compatibility tools (`list_queue`, `claim_queue`, and
 `submit_queue_result`) are served only by the legacy `/mcp/connect` Convex MCP

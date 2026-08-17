@@ -2,9 +2,11 @@
 //
 // Auth: mmk_ API keys ONLY (same keys as the REST API). This endpoint forwards
 // the Bearer token to REST as an mmk_ key, so it CANNOT accept an OAuth/JWT
-// token. OAuth-capable clients (claude.ai) must use the OAuth door instead:
-// https://<site>/mcp/connect. See src/lib/mcp-oauth.ts for the full two-door
-// explanation — do not make this endpoint advertise OAuth.
+// token. OAuth-capable clients must use the canonical OAuth door instead:
+// https://<site>/mcp. (This comment used to send them to /mcp/connect, which is
+// the legacy persisted-catalog compatibility door, and to name one AI product;
+// both were wrong — corrected 2026-08-17.) See src/lib/mcp-oauth.ts for the full
+// door explanation — do not make this endpoint advertise OAuth.
 //
 // Transport is the Authorization header (`Bearer mmk_...`) or the `x-api-key`
 // header. The legacy `?key=` query parameter is rejected with a migration error

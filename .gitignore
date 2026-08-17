@@ -15,6 +15,10 @@
 /test-results
 /playwright-report
 /.playwright-mcp
+# Playwright and script scratch output. Listed alongside the two above because it
+# is the same kind of generated residue; it was simply missed. Anything in here
+# worth keeping belongs in docs/ or the tracker, not in a generated directory.
+/output
 
 # next.js
 /.next/
