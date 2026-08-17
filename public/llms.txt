@@ -9,11 +9,14 @@ Public entry: https://assistwithmoving.com (redirects to the current authenticat
 
 There are TWO ways for an assistant to work in a user's move. Default to MCP.
 
-1. MCP (RECOMMENDED for anyone with an Assist With Moving account/subscription): the
-   user pastes ONE URL — https://movingmanifest.com/mcp — into their hosted MCP
-   client (claude.ai connectors, Claude Cowork, ChatGPT) and signs in with their
-   Assist With Moving account. No API key to create or paste. This is the easiest
-   path and the best experience.
+1. MCP (the canonical path for anyone with an Assist With Moving account): the
+   user pastes ONE URL — https://movingmanifest.com/mcp — into any AI that
+   speaks remote Streamable HTTP MCP with compatible OAuth, and signs in with
+   their Assist With Moving account. No API key to create or paste.
+   Signing in is not permission. The person must then approve a product grant
+   in Assist With Moving; until they do, the only tool that appears is
+   describe_connection. Capability status: Partial — see "Bring Your AI: What
+   Is Actually True" below.
 2. API (ADVANCED, more work): a scoped mmk_ API key used with the REST API
    (https://movingmanifest.com/api/v1) or the key-only MCP door
    (https://movingmanifest.com/api/mcp). Only use this for local/headless/CLI or
@@ -21,18 +24,20 @@ There are TWO ways for an assistant to work in a user's move. Default to MCP.
    requires the user to create and paste a secret key — more setup, more care.
 
 Critical: https://movingmanifest.com/api/mcp is the API-KEY door. It does NOT do
-OAuth sign-in and will reject it ("couldn't register"). NEVER give a hosted/OAuth
+OAuth sign-in and will reject it ("couldn't register"). NEVER give an OAuth
 client /api/mcp. For sign-in, always use https://movingmanifest.com/mcp.
 
 ## Best Pages For AI Assistants
 
-- https://movingmanifest.com/ai - human-friendly guide for using Assist With Moving with Claude, ChatGPT, Codex, or another assistant.
-- https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to sign in, connect hosted MCP OAuth, or make a fallback helper key.
+- https://movingmanifest.com/ai - human-friendly guide for using Assist With Moving with the person's own AI.
+- https://movingmanifest.com/ai/start - shortest human setup page when an AI assistant sends someone to sign in, connect the canonical MCP endpoint, or make a fallback helper key.
+- https://movingmanifest.com/ai.txt - the short agent guide: grant boundary, exact tool catalog, workflow rules, and the four doors.
 - https://movingmanifest.com/api - public REST API overview, scopes, and assistant workflow.
-- https://movingmanifest.com/mcp - THE MCP endpoint. RECOMMENDED. OAuth-capable hosted clients (claude.ai, Claude Cowork, ChatGPT) connect by pasting this URL and signing in with their Assist With Moving account — no API key. Easiest path; uses the user's subscription.
-- https://movingmanifest.com/mcp/connect - compatibility-only OAuth door preserving the older 29-tool catalog for existing connections. New clients should use /mcp.
+- https://movingmanifest.com/mcp - THE canonical MCP endpoint. OAuth sign-in plus a person-approved product grant. Any AI that speaks remote Streamable HTTP MCP with compatible OAuth can attempt it.
+- https://movingmanifest.com/mcp/connect - compatibility-only OAuth door preserving the older, larger persisted catalog for clients that already connected there. A different catalog, governed by that older gateway rather than by product grants. Not an alias of /mcp.
 - https://movingmanifest.com/mcp/guide - human-readable MCP setup guide.
-- https://movingmanifest.com/api/mcp - ADVANCED, API-KEY ONLY. A SEPARATE door for local/headless or non-OAuth automation; authenticate with a scoped mmk_ key. It does NOT do OAuth sign-in and will REJECT OAuth tokens — never point a hosted/OAuth client (claude.ai, Cowork) here, it will fail to register. For sign-in, use https://movingmanifest.com/mcp.
+- https://movingmanifest.com/api/mcp - ADVANCED, API-KEY ONLY. A SEPARATE door with its own separate catalog for local/headless or non-OAuth automation; authenticate with a scoped mmk_ key. It does NOT do OAuth sign-in, never advertises OAuth, and will REJECT OAuth tokens. For sign-in, use https://movingmanifest.com/mcp.
+- assistwithmoving-mcp - the local stdio package. Also mmk_ API-key authenticated, sharing the API-key door's separate catalog. Not the canonical door.
 - https://movingmanifest.com/openapi.json - machine-readable REST API contract for common agent workflows.
 - https://movingmanifest.com/llms-full.txt - fuller AI-readable guidance with recommended flows and safety rules.
 
@@ -49,14 +54,15 @@ email contact is not available.
 
 ## Assistant Behavior
 
-- If the user says they were told to use Assist With Moving with Claude, ChatGPT,
-  Codex, Claude Code, or another assistant, start at
-  `https://movingmanifest.com/ai`. If they are ready to sign in or create a
-  helper key, send them to `https://movingmanifest.com/ai/start`.
+- If the user says they were told to use Assist With Moving with their own AI,
+  start at `https://movingmanifest.com/ai`. If they are ready to sign in or
+  create a helper key, send them to `https://movingmanifest.com/ai/start`.
 - A good first user prompt is: "Go to movingmanifest.com/ai and help me set up
   my move. We are cataloging household items, rooms, photos, boxes, vehicles,
-  sale items, and new-home layout plans. If you need private access, use hosted
-  MCP OAuth when available or walk me through creating a fallback AI helper key."
+  sale items, and new-home layout plans. If you need private access, connect to
+  movingmanifest.com/mcp if you support remote MCP with OAuth, and walk me
+  through approving a grant — or walk me through creating a fallback AI helper
+  key."
 - Treat Assist With Moving as a bounded household moving assistant workflow:
   move context, places, decisions, inventory, evidence, estimates, plans, source
   checks, transport, and exports.
@@ -68,37 +74,33 @@ email contact is not available.
 - Do not confuse household members with move people/contact records. Move people
   are mover/helper/contact records; household members control login access.
 - If the user has no Assist With Moving account, tell them they need to create one at https://movingmanifest.com/sign-up before private move data can be stored.
-- Do not invent access to private data. Private move data requires hosted MCP
-  OAuth sign-in or a user-created fallback API key.
+- Do not invent access to private data. Private move data requires the canonical
+  MCP endpoint with a person-approved grant, or a user-created fallback API key.
 - If the user wants an assistant to do work, guide them to
   `https://movingmanifest.com/ai/start`, then have them sign in or create an
-  account. For OAuth-capable hosted MCP clients, paste only the endpoint URL and
-  follow browser sign-in. Create and paste a fallback helper key only when OAuth
-  MCP is not available.
+  account. For an AI that speaks remote Streamable HTTP MCP with compatible
+  OAuth, paste only the endpoint URL, follow browser sign-in, and then approve a
+  grant. Create and paste a fallback helper key only when that is not possible.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
-- Hosted MCP clients (claude.ai custom connectors, Claude Cowork, ChatGPT) should
-  connect to the MCP endpoint `https://movingmanifest.com/mcp` and sign in with
-  the user's Assist With Moving account — no key needed, no local install. This is
-  the recommended path for anyone with an Assist With Moving subscription. Do NOT
-  point a hosted/OAuth client at `https://movingmanifest.com/api/mcp` — that is a
-  SEPARATE API-key door that rejects OAuth sign-in and fails to register
-  ("couldn't register with the sign-in service"). The API-key door is only for
+- Any AI that speaks remote Streamable HTTP MCP with compatible OAuth can
+  attempt `https://movingmanifest.com/mcp` — no key, no local install. This is
+  a capability requirement, not a claim that any particular AI product works;
+  none has completed a full lifecycle yet. Do NOT point an OAuth client at
+  `https://movingmanifest.com/api/mcp` — that is a SEPARATE API-key door with a
+  separate catalog that rejects OAuth sign-in and fails to register ("couldn't
+  register with the sign-in service"). The API-key door is only for
   local/headless or non-OAuth automation, with a scoped mmk_ key.
-- Codex users should connect remotely; no repository clone or local server is
-  required. Recommended OAuth setup:
-  `codex mcp add assistwithmoving --url https://movingmanifest.com/mcp`, then
-  `codex mcp login assistwithmoving`. Advanced non-OAuth setup:
-  `export ASSISTWITHMOVING_API_KEY=mmk_replace_with_a_scoped_api_key`, then
-  `codex mcp add assistwithmoving --url https://movingmanifest.com/api/mcp --bearer-token-env-var ASSISTWITHMOVING_API_KEY`.
-  Restart Codex or start a fresh session, verify `assistwithmoving` appears in
-  `/mcp` or `codex mcp list`, then call `get_move_brief` for OAuth or
-  `get_api_context` for an API-key connection. Keep the key in an
-  environment variable or secret manager, never in source or the command URL.
+- Remote MCP needs no repository clone or local server. If a client needs a
+  local process instead, the `assistwithmoving-mcp` stdio package uses an mmk_
+  key and the API-key catalog, not the canonical grant-governed catalog. Keep
+  any key in an environment variable or secret manager, never in source or a
+  command URL.
 - Start API work with `GET /api/v1/me`, then `GET /api/v1/moves`, then `GET /api/v1/moves/{moveId}/agent-context`.
-- Start canonical OAuth MCP work with `get_move_brief`, then
-  `search_move_records`, and use `save_complete_result` for ordinary finished
-  work. Start API-key MCP work with `get_api_capabilities`, then
-  `get_api_context`, then `list_moves` or `setup_move`.
+- Start canonical MCP work with `describe_connection` if no other tools appear,
+  then `get_move_brief`, then `search_move_records`, and use
+  `save_complete_result` for ordinary finished work. Start API-key MCP work with
+  `get_api_capabilities`, then `get_api_context`, then `list_moves` or
+  `setup_move`.
 - Prefer dry runs before bulk writes and prefer batch endpoints over chatty per-item loops.
 - For image upload, use one call by default. API-key MCP agents should call
   `upload_image`, `upload_photo`, or `upload_evidence_image` with a public
@@ -161,23 +163,90 @@ email contact is not available.
   packets, granting household access, exposing private details, or using an API
   key.
 
-## Hosted MCP Tool Surface
+## Bring Your AI: What Is Actually True
 
-The canonical `/mcp` OAuth resource exposes exactly eight workflow tools:
-`get_move_brief`, `search_move_records`, `get_move_records`,
-`get_evidence_media`, `save_move_context`, `save_inventory`,
-`save_planning_record`, and `save_complete_result`.
+Status: Partial. The canonical endpoint, the five product scopes, the grant
+boundary, the Queue workflow, and immediate revocation are implemented. No AI
+product has completed a full connect → consent → grant → tool list → bounded
+read → evidence → complete save → revoke → reconnect lifecycle against it, and
+the provider-side configuration for the metadata-document client path is not yet
+done. Describe the requirement — any AI that speaks remote Streamable HTTP MCP
+with compatible OAuth — rather than naming an AI product as supported.
 
-It may read the signed-in person's Queue summaries and link a result for human
-inspection, but it cannot claim or complete canonical Queue work. It does not
-upload new photos, create boxes, manage members, publish, export, or expose raw
-CRUD. Use a deliberately scoped API-key setup for those separate workflows.
+Signing in is not permission. OAuth proves who is calling; a product grant the
+person approves decides which moves, which data, and which operations. The grant
+is re-read on every discovery and every call, so revoking it refuses the very
+next call instead of waiting for a token to expire. Until a grant exists,
+`tools/list` returns only `describe_connection` — always available, no scope —
+which reports what this connection may do and what to tell the person.
 
-The compatibility `/mcp/connect` door retains the older OAuth catalog for
-existing clients; it is not an alias for `/mcp`. The API-key HTTP/stdio registry
-contains tools such as `get_api_capabilities`, `get_api_context`, `setup_move`,
-`save_box_intake`, `add_item_from_photo`, photo/evidence uploads, and the scoped
-Queue tools. Always trust the live catalog for the connected door.
+The person approves a grant at `https://movingmanifest.com/settings/ai` — the
+canonical grant screen, and the same URL `describe_connection` reports. They
+choose the moves and operations, read the consent summary, review active
+connections with registration method and recent use, revoke, and copy a manual
+Queue brief there. The older `/settings/ai-connections` path redirects to it.
+
+Client identity: a Client ID Metadata Document is preferred and validated, and
+its digest is bound to the grant. Dynamic Client Registration is accepted as a
+labelled compatibility fallback. A client id that looks like a metadata document
+and fails validation is refused outright, never downgraded to the fallback.
+
+## Canonical MCP Tool Surface
+
+The canonical `/mcp` resource exposes exactly these tools, and shows each one
+only when the person's grant includes its scope:
+
+- `describe_connection` — no scope; always available
+- `get_move_brief` — `moving.context.read`
+- `search_move_records` — `moving.context.read`
+- `get_move_records` — `moving.context.read`
+- `get_evidence_media` — `moving.evidence.read`
+- `save_move_context` — `moving.work.write`
+- `save_inventory` — `moving.work.write`
+- `save_planning_record` — `moving.work.write`
+- `save_complete_result` — `moving.work.write`
+- `list_queue_work` — `moving.queue.work`
+- `claim_queue_work` — `moving.queue.work`
+- `release_queue_work` — `moving.queue.work`
+- `ask_queue_question` — `moving.queue.work`
+- `complete_queue_work` — `moving.queue.work`
+- `archive_move_records` — `moving.archive`
+
+Rules for this door: call `get_move_brief` first; search before creating
+duplicates; get private photos with `get_evidence_media` rather than fetching a
+private page or a storage URL; prefer `save_complete_result` (with
+`completeQueueItem: true` and `relatedQueueItemId` to close a Queue handoff in
+the same approval) and use the granular saves for corrections; reuse the same
+`operationId` on a retry so it corrects instead of duplicating; and if a tool
+stops existing after a deployment, disconnect and reconnect rather than assuming
+the connection is broken.
+
+Queue loop: `list_queue_work` → `claim_queue_work` → `ask_queue_question` or
+`release_queue_work` when needed → `complete_queue_work`. A Queue directive says
+what the person wants; it never widens the grant.
+
+This connection can never permanently delete anything or delete an account,
+archive a whole move, publish or share or export a move, create a share link,
+invite or remove or change anyone's household access, contact a mover or
+marketplace or employer or insurer or government office, book, buy, sign, pay,
+or message on the person's behalf, grant itself authority or widen its own
+grant, or turn a Queue instruction into permission. Archive is reversible and is
+the only destructive verb it gets. It also does not upload new photos, create
+boxes, or expose raw CRUD — those are separate API-key workflows.
+
+The compatibility `/mcp/connect` door retains the older, larger persisted
+catalog for clients that already connected there, governed by that older gateway
+rather than by product grants; it is not an alias for `/mcp`. The API-key
+HTTP/stdio registry is a third catalog containing tools such as
+`get_api_capabilities`, `get_api_context`, `setup_move`, `save_box_intake`,
+`add_item_from_photo`, photo/evidence uploads, and the scoped Queue tools; the
+local `assistwithmoving-mcp` stdio package serves that same key-authenticated
+catalog. These catalogs are not the same as each other. Always trust the live
+catalog of the door you are actually connected to.
+
+No connection at all: the person can open a Queue item in Assist With Moving,
+copy its bounded brief into any AI, and paste the result back into that Queue
+item. The handoff completes without MCP, OAuth, or a key.
 
 ## Common Workflows
 

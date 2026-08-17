@@ -120,15 +120,17 @@ describe("MCP door separation (canonical OAuth, compatibility OAuth, API key)", 
     });
   });
 
-  // General MCP setup uses the OAuth door. Canonical Queue stays on the scoped
-  // API-key surface until distinct chosen-AI OAuth grants exist, so the Queue
-  // UI names access readiness without publishing either protocol URL.
+  // Canonical Queue work is now reachable over OAuth under a moving.queue.work
+  // grant, so the Queue screen names both ways in. It still must not publish
+  // either protocol URL: the endpoint belongs on the setup screen, not here.
   describe("user-facing agent surfaces advertise only their supported door", () => {
-    it("the Queue screen does not advertise canonical Queue access through OAuth", () => {
+    it("the Queue screen names Queue access without publishing a protocol URL", () => {
       const src = readFileSync("src/components/queue-experience.tsx", "utf8");
       expect(src).toContain("API-key access is available");
       expect(src).toContain("cannot tell whether an AI client is currently online");
-      expect(src).toContain('/settings/ai-connections');
+      // Authority for Queue work is a grant, and the grant screen is canonical.
+      expect(src).toContain("grant that includes Queue work");
+      expect(src).toContain('/settings/ai"');
       expect(src).not.toContain(OAUTH_DOOR);
       expect(src).not.toContain(API_KEY_DOOR);
     });

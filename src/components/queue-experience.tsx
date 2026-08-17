@@ -193,13 +193,13 @@ function QueueConnectionNote({
             {loading
               ? "Connection status will appear here when it is known."
               : hasKey
-                ? `${activeApiKeyCount} active key${activeApiKeyCount === 1 ? "" : "s"} can reach scoped Queue tools. Assist With Moving cannot tell whether an AI client is currently online.`
-                : "You can still leave handoff notes. Hosted OAuth can save move work, but Queue claims wait for a separately scoped Queue-capable key."}
+                ? `${activeApiKeyCount} active key${activeApiKeyCount === 1 ? "" : "s"} can reach scoped Queue tools, and a connected AI can work this Queue under a grant that includes Queue work. Assist With Moving cannot tell whether an AI client is currently online.`
+                : "You can still leave handoff notes. A connected AI can claim and finish them once you approve a grant that includes Queue work; a scoped API key is the other way in."}
           </p>
         </div>
       </div>
       <Button asChild variant="outline" size="touch" className="self-start sm:self-center">
-        <Link href="/settings/ai-connections">Manage AI access</Link>
+        <Link href="/settings/ai">Manage AI access</Link>
       </Button>
     </div>
   );

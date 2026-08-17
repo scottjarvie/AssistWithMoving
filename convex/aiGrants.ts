@@ -233,7 +233,10 @@ export const noteGrantUse = internalMutation({
       // The client names itself. It is a label, never an authorization.
       observedClientName: args.clientName ?? grant.observedClientName,
       updatedAt: now,
-      version: grant.version + 1,
+      // Version deliberately does not move here. It tracks the person's own
+      // edits, so a busy AI cannot churn it and make their Revoke button fail
+      // an optimistic-concurrency check. Revoking must never lose a race with
+      // the connection being revoked.
     });
     if (newlyBound) {
       await appendGrantActivity(ctx, grant, {

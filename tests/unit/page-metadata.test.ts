@@ -26,7 +26,8 @@ const metadataPages = [
   { path: "src/app/(product)/app/queue/page.tsx", title: "Queue" },
   { path: "src/app/(product)/settings/page.tsx", title: "Settings" },
   {
-    path: "src/app/(product)/settings/ai-connections/page.tsx",
+    // `/settings/ai` is canonical; `/settings/ai-connections` only redirects.
+    path: "src/app/(product)/settings/ai/page.tsx",
     title: "AI connections",
   },
   {

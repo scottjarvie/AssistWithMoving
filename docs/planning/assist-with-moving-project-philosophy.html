@@ -13,7 +13,7 @@
     >
     <meta
       name="source-sha256"
-      content="5399673533511982727596ac226181eee8261c27886711a3fa28515683c6424b"
+      content="869da84c6cf7769bdf5fa2ce3e34d1e2bf013c08c461f0f491b616eefecd95ca"
     >
     <link
       rel="icon"
@@ -1358,7 +1358,7 @@
           </div>
           <div>
             <dt>Source digest</dt>
-            <dd data-source-digest-short>53996735…3c6424b</dd>
+            <dd data-source-digest-short>869da84c…ecd95ca</dd>
           </div>
         </dl>
 
@@ -1405,7 +1405,7 @@
         </p>
         <p class="source-hash">
           Source SHA-256:
-          <span data-source-digest-full>5399673533511982727596ac226181eee8261c27886711a3fa28515683c6424b</span>
+          <span data-source-digest-full>869da84c6cf7769bdf5fa2ce3e34d1e2bf013c08c461f0f491b616eefecd95ca</span>
         </p>
       </div>
     </footer>
@@ -1415,7 +1415,7 @@
 
 > **Project philosophy status:** Canonical product identity and claim boundary
 >
-> **Document version:** 1.8.0
+> **Document version:** 1.9.0
 >
 > **Document date:** 2026-08-16
 >
@@ -2608,10 +2608,10 @@ work lacks an active delivery commitment, it is **Later**, not **Coming soon**.
 | Inventory and packing | Items, planned items, boxes, contents, spaces, photos, disposition, values, review flags, archive or soft-delete paths | **Current/verified repository foundation.** Inventory is a major capability, not the whole identity |
 | Transport and layouts | Resources, zones, trips, trip spaces, capacity, assignments, floor plans, proposals, reversible plan operations, SVG snapshots | **Current/verified repository foundation.** Maps, live routing, booking and provider execution are **Later or outside Moving** |
 | Evidence and documentation | Private photo records, research sources, documentation profiles, exports, recipient-safe fields and packet-oriented source | **Current/verified repository foundation.** Full Document Memory / Move Evidence Packets, extraction-confirmation states, completed-form snapshots, requirements progress and post-move retrieval are **Later / unverified**. Private evidence does not become shareable merely because a summary or packet exists |
-| Questions, Move Brief and queue | Derived readiness questions; a bounded MCP move brief; compact move/context summaries; and a per-user four-state Queue with directives, evidence, claim expiry, delegation, AI question, summary, activity and result references | **Current/verified partial repository foundation.** The complete cross-domain Move Brief and attachable question system are **Later**; canonical OAuth Queue transitions remain held until a distinct chosen-AI grant is proven |
+| Questions, Move Brief and queue | Derived readiness questions; a bounded MCP move brief; compact move/context summaries; and a per-user four-state Queue with directives, evidence, claim expiry, delegation, AI question, summary, activity and result references. The canonical OAuth surface can now list only actionable granted work, claim and release it under a lease, ask the smallest **Needs you** question, and complete it — including a one-call save that finishes the handoff in the same approval | **Current/verified repository foundation.** The complete cross-domain Move Brief and attachable question system are **Later**. Queue transitions are held behind a distinct `moving.queue.work` grant, so a work-write grant links a result and leaves the state to the person |
 | History and provenance | Move-scoped audit logs, actor and API-key fields on selected records, timestamps, review states, research/source checks, MCP client/operation/version receipts, web-visible saved planning results, and plan operation inverses | **Current/verified partial repository foundation.** Complete dependency, revision and AI-activity coverage is **Later** |
-| API and MCP source surfaces | Documented REST API; a canonical stateless Streamable HTTP OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts`; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified production foundation** for anonymous discovery/challenge, door separation, official-SDK consent/token exchange, exact move isolation, complete source-backed save, replay, correction, normal UI reflection, refresh/client/session cleanup and fixture purge. The complete connection is **Partial** because product scopes/grants, immediate OAuth revocation, metadata-document-first client identity, named-product media/reconnect, and canonical Queue transitions are not proved. `MOV-WO-010` owns the Proposed alignment program |
-| Granular chosen-AI grants and external-action handoffs | Scoped API keys, OAuth/client identity, Queue claims and selected audit fields exist. No complete product grant binds one OAuth client to selected moves/data, separate operations, approval, expiry, last use and immediate revocation. No external-action contract binds selected data/intent to an attributable result/failure/return | **Partial product-grant foundations; Later complete contracts.** `MOV-0023` owns product grants inside Moving; `MOV-0036` preserves external-action handoffs outside `MOV-WO-010`. Do not claim every AI can connect or receive an outside-action handoff |
+| API and MCP source surfaces | Documented REST API; a canonical stateless Streamable HTTP OAuth resource in `convex/httpRoutes/mcp.ts` + `convex/mcpPlanning.ts` with fifteen grant-gated workflow tools; a persisted compatibility gateway in `convex/mcp*.ts`; and a separate API-key HTTP/stdio registry in `src/app/api/mcp` + `mcp-server/` | **Current/verified repository foundation** for anonymous discovery/challenge, door separation, exact move isolation, grant-filtered tool discovery, complete source-backed save, replay, correction, canonical Queue claim/question/completion, reversible archive, normal UI reflection and fixture purge. The complete connection is **Partial**: `MOV-WO-010` closed product scopes/grants, immediate revocation, metadata-document-first client identity and Queue transitions in source, but no deployment, no provider metadata-document enablement, and no named AI product lifecycle is proved |
+| Granular chosen-AI grants and external-action handoffs | An `aiGrants` record binds one OAuth client to selected moves, five separate product scopes, an approval, a frozen consent snapshot, an expiry, last use and revocation, re-read from the database on every discovery and every tool call. `aiGrantActivities` keeps an owner-readable use-and-refusal trail. Tested for scope separation, move separation, cross-client isolation, expiry and immediate revocation. No external-action contract binds selected data/intent to an attributable result/failure/return | **Current/verified repository contract for Moving-side grants; Later for deployment proof and for external-action handoffs.** Revocation is immediate in source and untested in production. `MOV-0036` preserves external-action handoffs outside `MOV-WO-010`. Do not claim any particular AI can connect |
 | Costs | Item and replacement values, sale prices and research, planned-item estimate, internal AI-job cost | **Current/verified partial foundation.** General move budgets, vendor quotes, payments and reimbursements are **Later** |
 | Bounded link sharing | Documentation profiles plus move- or profile-scoped links with selected fields/actions, expiry, revocation, access metadata, and recipient comments | **Current/verified recipient-workflow foundation** and **intentional product-specific difference** from family Unlisted. General selected-plan, checklist, item-group and arbitrary-view links are **Later** |
 | General tasks, dependencies, decisions, risks, vendors, and appointments | No complete first-class cross-move model verified | **Later** |
@@ -3001,6 +3001,18 @@ Evidence-led capability updates may change without redefining the philosophy.
 
 ## Document changelog
 
+- **1.9.0 · 2026-08-16** — recorded the implemented `MOV-WO-010` system: five
+  product scopes with published does-not-imply boundaries, an owner-visible
+  grant binding one OAuth client to selected moves with a frozen consent
+  snapshot and expiry, per-call grant re-reads that make revocation immediate,
+  grant-filtered tool discovery, Client ID Metadata Document-first client
+  identity with a labelled dynamic-registration fallback, canonical Queue
+  claim/question/completion with a one-call finish, reversible archive as the
+  only destructive verb, `/settings/ai` as the grant manager, and a scripted
+  nine-step lifecycle harness. This is repository and test evidence only. The
+  connection stays **Partial**: no deployment, no provider metadata-document
+  enablement, and no named AI product lifecycle is proved, so every client
+  remains **Unknown** and the four doors remain distinct.
 - **1.8.0 · 2026-08-16** — adopted the Bring Your AI implementation standard
   as a separate delivery reference; re-audited fresh `origin/main`, all four
   agent doors and live anonymous OAuth discovery; added Partial as a first-class

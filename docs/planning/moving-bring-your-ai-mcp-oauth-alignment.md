@@ -18,6 +18,22 @@ Planning truth is not release truth. Nothing in this document changes a
 provider, registers a client, grants access, deploys software, or upgrades an
 unproved client or capability to Current.
 
+> **Implementation status — 2026-08-16.** The audit below describes the state
+> this plan was written against. `MOV-WO-010` has since been executed in
+> source: see the "What was built" section at the end. Every Partial finding
+> below is now closed in the repository and still unproved in production. The
+> outstanding provider and real-client steps are in
+> `moving-bring-your-ai-provider-actions.md`.
+
+> **Attribution correction.** The "Client ID Metadata Documents first, DCR only
+> as fallback" rule is Moving's own decision, recorded here and adopted by
+> `MOV-0032`. The family standard at its current revision does not require it —
+> its only registration sentence is permissive ("dynamic registration may be
+> enabled during soft-launch client testing when it is needed"). Earlier drafts
+> of this document, and of five sibling products' alignment documents,
+> attributed the rule to the standard. The rule is a good one and worth pushing
+> back into the standard; it should not be described as already being in it.
+
 ## Product and chosen-AI split
 
 > Assist With Moving is the person's durable private move workspace: it keeps
@@ -260,3 +276,29 @@ Current. Each additional named client receives its own evidence row; untested
 clients remain Unknown and are described only by the capability requirement:
 remote Streamable HTTP MCP plus compatible OAuth.
 
+## What was built — 2026-08-16
+
+Implemented on `claude/mov-wo010-bring-your-ai` from `origin/main` `ee16bd4`.
+Each of the seven Partial findings above, and what closed it:
+
+| Partial finding | What closed it | Still unproved |
+|---|---|---|
+| Identity-only OAuth scopes | Five product scopes in `convex/lib/aiGrants.ts`, each with its does-not-imply boundary as product copy, advertised in the protected-resource document as the product ceiling | A live token exchange carrying them |
+| No product grant object | `aiGrants` binds one OAuth client to selected moves, chosen scopes, an approval, a consent snapshot frozen at approval time, an expiry, last use, and revocation; `aiGrantActivities` keeps the owner-readable trail | Production grant data |
+| No immediate revocation | `convex/lib/mcpGrantAccess.ts` re-reads the grant on every discovery and every call, so a revoked connection is refused while its token is still valid | The live revoke → refuse round trip |
+| DCR-default with no CIMD path | `convex/lib/mcpClientIdentity.ts` prefers a metadata document, requires it to name its own URL, validates redirects, binds its digest to the grant, and refuses rather than downgrades on failure | Clerk enabling the metadata-document path |
+| No Queue claim/release/complete/needs-you tools | `convex/mcpQueueWork.ts` adds five tools under `moving.queue.work` over the existing `queueService` primitives, plus a one-call finish on `save_complete_result` | A named client running the loop |
+| Unproved private media delivery | The lifecycle harness returns inline bytes scoped to the item the photo is attached to, with no storage link | Real bucket delivery inside a real AI product |
+| No named-client proof | A scripted nine-step harness with an evidence matrix that labels itself harness proof | Every named client, which stays Unknown |
+
+Two decisions worth recording because they were not in the plan:
+
+- **`describe_connection` is always available and carries no scope.** Filtering
+  the catalog by grant meant a person with no grant saw an opaque protocol
+  failure, because a server with no tools has no `tools` capability. One
+  scope-free tool that explains the connection and points at `/settings/ai` is
+  a better answer than either an empty catalog or a fake one.
+- **A grant binds to the first client that uses it.** This is what makes
+  "revoke this AI" mean one connection rather than all of them, and it is why a
+  second AI arriving on the same sign-in is refused rather than sharing the
+  first one's authority.

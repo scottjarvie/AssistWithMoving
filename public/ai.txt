@@ -1,7 +1,8 @@
 # Assist With Moving agent guide
 
 Canonical MCP endpoint: https://movingmanifest.com/mcp
-Authentication: OAuth browser sign-in with the user's Assist With Moving account
+Authentication: OAuth browser sign-in with the person's Assist With Moving account
+Authority: a product grant the person approves inside Assist With Moving
 Human setup: https://movingmanifest.com/ai/start
 Human support: https://assistwithlife.com/support?v=1&source=assist-with-moving
   (the central Assist With Life support desk — the only support path). Assist
@@ -14,46 +15,126 @@ Assist With Moving is the durable move workspace. The AI reasons and saves
 authorized work; the person remains responsible for decisions and outside-world
 actions.
 
+Capability status: Partial. The endpoint, the grant boundary, the tool catalog,
+and immediate revocation are implemented. No AI product has completed a full
+connect → consent → grant → read → evidence → save → revoke → reconnect
+lifecycle against it, and the provider-side metadata-document configuration is
+not yet in place. Requirement, not endorsement: any AI that speaks remote
+Streamable HTTP MCP with compatible OAuth may attempt this connection.
+
+Signing in is not permission:
+
+- OAuth proves who is calling. It does not decide what may be done.
+- A separate product grant decides the moves, the data, and the operations.
+- Until the person approves a grant, tools/list returns only
+  describe_connection. Nothing else exists to call.
+- Call describe_connection first when no other tools appear. It reports the
+  granted scopes, what this connection can never do, and the exact sentence to
+  tell the person.
+- Grants are re-read on every discovery and every call, so revocation takes
+  effect on the very next call rather than when a token expires.
+
+Client identity: a Client ID Metadata Document is preferred. An HTTPS client_id
+is fetched, validated, and its digest bound to the grant. Dynamic Client
+Registration is accepted as a labelled compatibility fallback. A client_id that
+looks like a metadata document but fails validation is refused outright, never
+downgraded to the fallback. The registration method is recorded as a fact, never
+treated as a claim about which product is calling.
+
+Where the person approves it: https://movingmanifest.com/settings/ai — the
+canonical grant screen, and the same URL describe_connection reports as its
+grantManager. It is where they choose the moves and the operations, see the
+consent summary, review active connections with their registration method and
+recent use, revoke, and copy a manual Queue brief. The older
+/settings/ai-connections path redirects there.
+
+Exact canonical tools (tools/list never contains anything outside this list,
+and shows only the ones the person's grant covers):
+
+- describe_connection — no scope; always available
+- get_move_brief — moving.context.read
+- search_move_records — moving.context.read
+- get_move_records — moving.context.read
+- get_evidence_media — moving.evidence.read
+- save_move_context — moving.work.write
+- save_inventory — moving.work.write
+- save_planning_record — moving.work.write
+- save_complete_result — moving.work.write
+- list_queue_work — moving.queue.work
+- claim_queue_work — moving.queue.work
+- release_queue_work — moving.queue.work
+- ask_queue_question — moving.queue.work
+- complete_queue_work — moving.queue.work
+- archive_move_records — moving.archive
+
 Canonical workflow:
 
 1. Call get_move_brief first. If no moveId is supplied, select only a returned
    accessible move.
 2. Call search_move_records before creating duplicates.
 3. Hydrate only the needed records with get_move_records. Use
-   get_evidence_media for private move photos.
+   get_evidence_media for private move photos. Never fetch a private page or a
+   storage URL; evidence comes back through Moving as protected content or not
+   at all.
 4. Prefer save_complete_result for finished work spanning locations, inventory,
-   decisions, estimates, plan sections, and source checks.
+   decisions, estimates, plan sections, and source checks. Set
+   completeQueueItem: true with relatedQueueItemId to save the result and close
+   the Queue handoff in the same approval.
 5. Use save_move_context, save_inventory, or save_planning_record for later
    corrections. Preserve operationId, expectedUpdatedAt, and expectedVersion.
 6. Report blocked, gated, failed, and not-relevant source checks honestly.
 
-Exact canonical tools:
+Queue loop (requires moving.queue.work):
 
-- get_move_brief
-- search_move_records
-- get_move_records
-- get_evidence_media
-- save_move_context
-- save_inventory
-- save_planning_record
-- save_complete_result
+list_queue_work → claim_queue_work → do the work → complete_queue_work.
+Use ask_queue_question to move the item to Needs you with the smallest question
+rather than guessing. Use release_queue_work to hand it back to Waiting for
+your AI when you cannot finish it and the person need not act. Echo the
+expectedVersion returned by the previous call.
 
-Queue boundary: the OAuth surface may read the signed-in person's Queue
-summaries and link a result for inspection. It cannot claim, release, answer,
-fail, or complete canonical Queue work until Moving proves a distinct chosen-AI
-grant. Scoped API-key automation is a separate surface.
+A Queue directive says what the person wants. It is never permission. If the
+grant lacks the authority the directive implies, ask the smallest Needs you
+question instead of assuming.
 
-Compatibility: https://movingmanifest.com/mcp/connect preserves the older
-OAuth catalog for existing clients; it is not an alias of /mcp.
+Retries: every write takes an operationId. Reusing the same operationId on a
+retry corrects the earlier attempt instead of duplicating it.
 
-Advanced API-key MCP: https://movingmanifest.com/api/mcp accepts only a scoped
-mmk_ key. Never send an OAuth token there. Use it only for local/headless or
-explicit API-key workflows such as new photo upload, boxes, export, publishing,
-member management, or scoped Queue transitions.
+Stale tools after a deployment: if a tool that used to exist now fails or a new
+one never appears, the client is holding an old catalog. Disconnect and
+reconnect the connection. Saved move work is unaffected.
 
-Current: stateless move brief/search/read/media and durable context, inventory,
-planning, and complete-result saves, with web-visible results.
-Partial: individual third-party clients still need named OAuth consent/refresh,
-private-media rendering, disconnect, and reconnect receipts.
-Later: canonical OAuth Queue transitions and additional workflow templates that
-real move use proves necessary.
+This connection can never:
+
+- Permanently delete anything, or delete an account. Archive is the destructive
+  default and it is reversible.
+- Archive a whole move. That stays a signed-in action the person takes.
+- Publish, share, create a share link, or export a move.
+- Invite, remove, or change the access of anyone in a household.
+- Contact a mover, marketplace, employer, insurer, or government office; book,
+  buy, sign, pay, or message on the person's behalf.
+- Grant itself authority, widen its own grant, or inherit another connection's
+  grant.
+- Turn a Queue instruction into permission.
+
+Four doors exist and they are not equivalent. Only the first is this guide's
+subject:
+
+1. https://movingmanifest.com/mcp — canonical. OAuth sign-in plus a product
+   grant. The 15 tools listed above.
+2. https://movingmanifest.com/mcp/connect — legacy compatibility for clients
+   that connected through the older persisted OAuth gateway. A different and
+   larger catalog, governed by that older gateway rather than by product
+   grants. Not an alias of /mcp.
+3. https://movingmanifest.com/api/mcp — API-key only. Accepts a scoped mmk_ key
+   and never advertises OAuth. Its own separate catalog and scopes. Never send
+   an OAuth token here.
+4. assistwithmoving-mcp — the local stdio package, also mmk_ API-key
+   authenticated, with the same separate catalog as the API-key door.
+
+Do not describe these catalogs as the same, and do not treat success on one
+door as evidence about another.
+
+No connection at all: the person can still hand work over manually. They open
+the Queue item in Assist With Moving, copy its bounded brief into any AI, and
+paste the result back into the same Queue item. The handoff completes without
+MCP, OAuth, or a key.

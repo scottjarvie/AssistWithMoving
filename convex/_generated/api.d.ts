@@ -10,6 +10,7 @@
 
 import type * as accountPrivacy from "../accountPrivacy.js";
 import type * as admin from "../admin.js";
+import type * as aiGrants from "../aiGrants.js";
 import type * as aiJobs from "../aiJobs.js";
 import type * as aiPhotoIntake from "../aiPhotoIntake.js";
 import type * as aiPlanningSuggestions from "../aiPlanningSuggestions.js";
@@ -36,6 +37,7 @@ import type * as floorPlans from "../floorPlans.js";
 import type * as health from "../health.js";
 import type * as households from "../households.js";
 import type * as http from "../http.js";
+import type * as httpRoutes_mcp from "../httpRoutes/mcp.js";
 import type * as imageDerivatives from "../imageDerivatives.js";
 import type * as ingestionQueue from "../ingestionQueue.js";
 import type * as inventoryDuplicates from "../inventoryDuplicates.js";
@@ -43,6 +45,7 @@ import type * as items from "../items.js";
 import type * as lib_accountPrivacy from "../lib/accountPrivacy.js";
 import type * as lib_admin from "../lib/admin.js";
 import type * as lib_adminSummaries from "../lib/adminSummaries.js";
+import type * as lib_aiGrants from "../lib/aiGrants.js";
 import type * as lib_aiPlanningSuggestionWorkflow from "../lib/aiPlanningSuggestionWorkflow.js";
 import type * as lib_aiProvider from "../lib/aiProvider.js";
 import type * as lib_aiUsage from "../lib/aiUsage.js";
@@ -71,6 +74,8 @@ import type * as lib_householdMembers from "../lib/householdMembers.js";
 import type * as lib_imageDerivatives from "../lib/imageDerivatives.js";
 import type * as lib_ingestionQueue from "../lib/ingestionQueue.js";
 import type * as lib_inventoryDuplicates from "../lib/inventoryDuplicates.js";
+import type * as lib_mcpClientIdentity from "../lib/mcpClientIdentity.js";
+import type * as lib_mcpGrantAccess from "../lib/mcpGrantAccess.js";
 import type * as lib_mcpIdentity from "../lib/mcpIdentity.js";
 import type * as lib_mcpMediaIngress from "../lib/mcpMediaIngress.js";
 import type * as lib_mediaStorage from "../lib/mediaStorage.js";
@@ -110,7 +115,9 @@ import type * as lib_subManifest from "../lib/subManifest.js";
 import type * as lib_textIntakeParser from "../lib/textIntakeParser.js";
 import type * as lib_transportPresets from "../lib/transportPresets.js";
 import type * as mcp from "../mcp.js";
+import type * as mcpArchive from "../mcpArchive.js";
 import type * as mcpPlanning from "../mcpPlanning.js";
+import type * as mcpQueueWork from "../mcpQueueWork.js";
 import type * as mcpSetup from "../mcpSetup.js";
 import type * as mcpTools from "../mcpTools.js";
 import type * as mcpToolsCanonicalQueue from "../mcpToolsCanonicalQueue.js";
@@ -157,6 +164,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   accountPrivacy: typeof accountPrivacy;
   admin: typeof admin;
+  aiGrants: typeof aiGrants;
   aiJobs: typeof aiJobs;
   aiPhotoIntake: typeof aiPhotoIntake;
   aiPlanningSuggestions: typeof aiPlanningSuggestions;
@@ -183,6 +191,7 @@ declare const fullApi: ApiFromModules<{
   health: typeof health;
   households: typeof households;
   http: typeof http;
+  "httpRoutes/mcp": typeof httpRoutes_mcp;
   imageDerivatives: typeof imageDerivatives;
   ingestionQueue: typeof ingestionQueue;
   inventoryDuplicates: typeof inventoryDuplicates;
@@ -190,6 +199,7 @@ declare const fullApi: ApiFromModules<{
   "lib/accountPrivacy": typeof lib_accountPrivacy;
   "lib/admin": typeof lib_admin;
   "lib/adminSummaries": typeof lib_adminSummaries;
+  "lib/aiGrants": typeof lib_aiGrants;
   "lib/aiPlanningSuggestionWorkflow": typeof lib_aiPlanningSuggestionWorkflow;
   "lib/aiProvider": typeof lib_aiProvider;
   "lib/aiUsage": typeof lib_aiUsage;
@@ -218,6 +228,8 @@ declare const fullApi: ApiFromModules<{
   "lib/imageDerivatives": typeof lib_imageDerivatives;
   "lib/ingestionQueue": typeof lib_ingestionQueue;
   "lib/inventoryDuplicates": typeof lib_inventoryDuplicates;
+  "lib/mcpClientIdentity": typeof lib_mcpClientIdentity;
+  "lib/mcpGrantAccess": typeof lib_mcpGrantAccess;
   "lib/mcpIdentity": typeof lib_mcpIdentity;
   "lib/mcpMediaIngress": typeof lib_mcpMediaIngress;
   "lib/mediaStorage": typeof lib_mediaStorage;
@@ -257,7 +269,9 @@ declare const fullApi: ApiFromModules<{
   "lib/textIntakeParser": typeof lib_textIntakeParser;
   "lib/transportPresets": typeof lib_transportPresets;
   mcp: typeof mcp;
+  mcpArchive: typeof mcpArchive;
   mcpPlanning: typeof mcpPlanning;
+  mcpQueueWork: typeof mcpQueueWork;
   mcpSetup: typeof mcpSetup;
   mcpTools: typeof mcpTools;
   mcpToolsCanonicalQueue: typeof mcpToolsCanonicalQueue;
