@@ -771,7 +771,7 @@ export function createMovingServer(
           principal: convexPrincipal(principal),
           moveId: input.moveId as any,
         });
-        const result = await actionCtx.runAction((api as any).mcpToolsImages.getImages, {
+        const result = await actionCtx.runAction((internal as any).mcpToolsImages.getImages, {
           caller: { subject: principal.subject },
           householdId: scope.householdId,
           moveId: input.moveId,

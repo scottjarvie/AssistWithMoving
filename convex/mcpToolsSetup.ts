@@ -20,8 +20,8 @@ import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import {
-  mutation,
-  query,
+  internalMutation,
+  internalQuery,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
@@ -197,7 +197,7 @@ export const updateMoveArgs = {
   ),
   moveLevelWeightAllowanceLb: v.optional(v.union(v.number(), v.null())),
 };
-export const updateMove = mutation({
+export const updateMove = internalMutation({
   args: updateMoveArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -282,7 +282,7 @@ export const listTransportArgs = {
   householdId: v.id("households"),
   moveId: v.id("moves"),
 };
-export const listTransport = query({
+export const listTransport = internalQuery({
   args: listTransportArgs,
   handler: async (ctx, args) => {
     await requireMoveForSubject(
@@ -363,7 +363,7 @@ export const upsertTransportArgs = {
   moveId: v.id("moves"),
   transports: v.array(transportDraftValidator),
 };
-export const upsertTransport = mutation({
+export const upsertTransport = internalMutation({
   args: upsertTransportArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -605,7 +605,7 @@ export const placeBoxArgs = {
   destinationRoom: v.optional(v.string()),
   destinationRoomId: v.optional(v.id("moveSpaces")),
 };
-export const placeBox = mutation({
+export const placeBox = internalMutation({
   args: placeBoxArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -766,7 +766,7 @@ export const updateBoxArgs = {
   assignmentOverrideReason: v.optional(v.string()),
   dryRun: v.optional(v.boolean()),
 };
-export const updateBox = mutation({
+export const updateBox = internalMutation({
   args: updateBoxArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1103,7 +1103,7 @@ export const updateItemArgs = {
   assignmentOverrideReason: v.optional(v.string()),
   dryRun: v.optional(v.boolean()),
 };
-export const updateItem = mutation({
+export const updateItem = internalMutation({
   args: updateItemArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1436,7 +1436,7 @@ export const addMoveParticipantArgs = {
   ),
   canRunMyQueue: v.optional(v.boolean()),
 };
-export const addMoveParticipant = mutation({
+export const addMoveParticipant = internalMutation({
   args: addMoveParticipantArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1478,7 +1478,7 @@ export const convertItemToBoxArgs = {
   itemId: v.id("items"),
   containerType: v.optional(boxContainerType),
 };
-export const convertItemToBox = mutation({
+export const convertItemToBox = internalMutation({
   args: convertItemToBoxArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -1514,7 +1514,7 @@ export const archiveItemArgs = {
   moveId: v.id("moves"),
   itemId: v.id("items"),
 };
-export const archiveItem = mutation({
+export const archiveItem = internalMutation({
   args: archiveItemArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(

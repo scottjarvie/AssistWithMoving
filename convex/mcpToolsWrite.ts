@@ -7,7 +7,7 @@
 import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import { assertCaptureStructuredRefs } from "./ingestionQueue";
@@ -51,7 +51,7 @@ export const getMoveOverviewArgs = {
   householdId: v.id("households"),
   moveId: v.id("moves"),
 };
-export const getMoveOverview = query({
+export const getMoveOverview = internalQuery({
   args: getMoveOverviewArgs,
   handler: async (ctx, args) => {
     await requireMoveForSubject(
@@ -109,7 +109,7 @@ export const searchInventoryArgs = {
   disposition: v.optional(itemDispositionValidator),
   needsReview: v.optional(v.boolean()),
 };
-export const searchInventory = query({
+export const searchInventory = internalQuery({
   args: searchInventoryArgs,
   handler: async (ctx, args) => {
     await requireMoveForSubject(
@@ -158,7 +158,7 @@ export const getItemArgs = {
   moveId: v.id("moves"),
   itemId: v.id("items"),
 };
-export const getItem = query({
+export const getItem = internalQuery({
   args: getItemArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -245,7 +245,7 @@ export const upsertItemsArgs = {
   items: v.array(itemDraftValidator),
   dryRun: v.optional(v.boolean()),
 };
-export const upsertItems = mutation({
+export const upsertItems = internalMutation({
   args: upsertItemsArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -382,7 +382,7 @@ export const upsertSpacesArgs = {
   moveId: v.id("moves"),
   spaces: v.array(spaceDraftValidator),
 };
-export const upsertSpaces = mutation({
+export const upsertSpaces = internalMutation({
   args: upsertSpacesArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -521,7 +521,7 @@ export const captureToQueueArgs = {
   moveId: v.id("moves"),
   entries: v.array(queueDraftValidator),
 };
-export const captureToQueue = mutation({
+export const captureToQueue = internalMutation({
   args: captureToQueueArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -617,7 +617,7 @@ export const setupMoveArgs = {
   pcsDependentStatus: v.optional(pcsDependentStatusValidator),
   pcsShipmentType: v.optional(pcsShipmentTypeValidator),
 };
-export const setupMove = mutation({
+export const setupMove = internalMutation({
   args: setupMoveArgs,
   handler: async (ctx, args) => {
     const policy = await requireHouseholdForSubject(
@@ -711,7 +711,7 @@ export const packBoxesArgs = {
   moveId: v.id("moves"),
   boxes: v.array(boxDraftValidator),
 };
-export const packBoxes = mutation({
+export const packBoxes = internalMutation({
   args: packBoxesArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(

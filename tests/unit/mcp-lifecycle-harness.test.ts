@@ -28,7 +28,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { api, internal } from "../../convex/_generated/api";
+import { internal } from "../../convex/_generated/api";
 import { createMovingServer } from "../../convex/httpRoutes/mcp";
 import {
   GRANT_BOUNDARY_VERSION,
@@ -391,7 +391,7 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
         },
       })) as typeof fetch;
     try {
-      const result = await fixture.t.action(api.mcpToolsImages.getImages, {
+      const result = await fixture.t.action(internal.mcpToolsImages.getImages, {
         caller: { subject: OWNER_SUBJECT },
         householdId: fixture.owner.householdId,
         moveId: fixture.owner.moveId,

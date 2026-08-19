@@ -9,7 +9,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { api, internal } from "../../convex/_generated/api";
+import { internal } from "../../convex/_generated/api";
 import { createMovingServer, STATELESS_MOVING_TOOL_NAMES } from "../../convex/httpRoutes/mcp";
 import schema from "../../convex/schema";
 
@@ -589,7 +589,7 @@ describe("stateless Moving MCP foundation", () => {
         }),
       ]);
 
-      const hiddenPhotos = await fixture.t.query(api.mcpToolsImages.mcpResolvePhotos, {
+      const hiddenPhotos = await fixture.t.query(internal.mcpToolsImages.mcpResolvePhotos, {
         caller: { subject: "user_moving_mcp_guest" },
         householdId: fixture.householdId,
         moveId: fixture.moveId,

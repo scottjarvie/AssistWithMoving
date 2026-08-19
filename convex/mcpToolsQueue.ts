@@ -17,7 +17,7 @@ import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import type { Doc } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { autoAttachEntryPhotos } from "./lib/queuePhotoAttach";
 import {
@@ -159,7 +159,7 @@ export const listQueueArgs = {
   status: v.optional(ingestionQueueStatusValidator),
   limit: v.optional(v.number()),
 };
-export const listQueue = query({
+export const listQueue = internalQuery({
   args: listQueueArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
@@ -259,7 +259,7 @@ export const claimQueueArgs = {
   // another user's queue requires a move-owner delegation (share a subscription).
   ownerUserId: v.optional(v.id("users")),
 };
-export const claimQueue = mutation({
+export const claimQueue = internalMutation({
   args: claimQueueArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
@@ -377,7 +377,7 @@ export const submitQueueResultArgs = {
   resultBoxIds: v.optional(v.array(v.id("boxes"))),
   needsInputQuestion: v.optional(v.string()),
 };
-export const submitQueueResult = mutation({
+export const submitQueueResult = internalMutation({
   args: submitQueueResultArgs,
   handler: async (ctx, args) => {
     const actor = await resolveQueueSubject(
