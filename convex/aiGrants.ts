@@ -31,6 +31,7 @@ import {
   type MovingScope,
 } from "./lib/aiGrants";
 import { CLIENT_REGISTRATION_LABELS } from "./lib/mcpClientIdentity";
+import { LEGACY_AUTO_GRANT_SCOPES } from "./lib/mcpLegacyGrantGate";
 import {
   aiGrantActivityType,
   mcpClientRegistrationMethod,
@@ -44,6 +45,12 @@ const ACTIVITY_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
 /** Default life of a grant. Long enough to be useful, short enough to lapse. */
 const DEFAULT_GRANT_DAYS = 90;
 const MAX_GRANT_DAYS = 365;
+/**
+ * Life of a grant nobody filled in a form for. Shorter than one the person
+ * shaped themselves on purpose: it lapses into a decision instead of standing
+ * indefinitely on the strength of a single sign-in.
+ */
+const AUTO_GRANT_DAYS = 30;
 
 function grantIsActive(grant: Doc<"aiGrants">, now: number) {
   if (grant.status !== "active") return false;
@@ -177,6 +184,147 @@ export const grantsForPrincipal = internalQuery({
       })),
       scopes,
     };
+  },
+});
+
+/**
+ * Resolve — and on a genuinely first contact, create — the grant governing one
+ * legacy-gateway connection.
+ *
+ * Called once per request by the legacy MCP door in `convex/http.ts`, which
+ * until now asked nothing at all: any Clerk token that resolved to a subject
+ * received all twenty-nine tools.
+ *
+ * Signing in is the approval. A person who completes OAuth and clicks Allow has
+ * finished, so first contact writes a real grant row carrying the default
+ * scopes rather than leaving them waiting at a settings page they were never
+ * told about. What that buys is not ceremony: it is a row that can be read on
+ * every later call, revoked, expired, and attributed on an activity list.
+ *
+ * The one thing it must never do is undo a person's decision. A grant already
+ * bound to this client — active, expired, or revoked — governs, and no new row
+ * is written. Re-granting a revoked connection because a token still worked
+ * would make the Revoke button a suggestion.
+ */
+export const touchLegacyConnection = internalMutation({
+  args: {
+    subject: v.string(),
+    clientId: v.string(),
+    clientName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", args.subject))
+      .unique();
+    if (!user || user.status !== "active") {
+      return { scopes: [] as MovingScope[], block: "noProfile" as const };
+    }
+
+    const now = Date.now();
+    const active = await activeGrantsForUser(ctx, user._id, args.clientId, now);
+    if (active.length > 0) {
+      // Scopes are never summed across grants for a permission decision — that
+      // stays `findPermittingGrant`'s job on each call. This union only decides
+      // which tools are worth listing.
+      return {
+        scopes: [...new Set(active.flatMap((grant) => grant.scopes))],
+        block: undefined,
+      };
+    }
+
+    // No usable grant. Before granting one, find out whether that is because
+    // the person never had one, or because they ended one.
+    const history = await ctx.db
+      .query("aiGrants")
+      .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", user._id))
+      .order("desc")
+      .take(MAX_ACTIVE_GRANTS * 4);
+    const bound = history.find((row) => row.clientId === args.clientId);
+    if (bound) {
+      return {
+        scopes: [] as MovingScope[],
+        block:
+          bound.status === "revoked" ? ("revoked" as const) : ("expired" as const),
+      };
+    }
+
+    if (history.filter((row) => grantIsActive(row, now)).length >= MAX_ACTIVE_GRANTS) {
+      return { scopes: [] as MovingScope[], block: "revoked" as const };
+    }
+
+    // A grant belongs to a household. Prefer a real membership; fall back to a
+    // move-only participation, so an outsider walled to a single move can still
+    // connect their own AI to it.
+    let householdId: Id<"households"> | null = null;
+    const membership = await ctx.db
+      .query("householdMemberships")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", user._id).eq("status", "active"),
+      )
+      .first();
+    if (membership) {
+      householdId = membership.householdId;
+    } else {
+      const participation = await ctx.db
+        .query("moveParticipants")
+        .withIndex("by_user_status", (q) =>
+          q.eq("userId", user._id).eq("status", "active"),
+        )
+        .first();
+      if (participation) householdId = participation.householdId;
+    }
+    if (!householdId) {
+      return { scopes: [] as MovingScope[], block: "noHousehold" as const };
+    }
+
+    const scopes = [...LEGACY_AUTO_GRANT_SCOPES];
+    const label = (args.clientName ?? "Your AI").trim().slice(0, 80) || "Your AI";
+    const grantId = await ctx.db.insert("aiGrants", {
+      ownerUserId: user._id,
+      householdId,
+      label,
+      clientId: args.clientId,
+      observedClientName: args.clientName,
+      scopes,
+      moveScope: "allMoves",
+      status: "active",
+      consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
+      consentSnapshot: buildConsentSnapshot(scopes),
+      expiresAt: now + AUTO_GRANT_DAYS * 24 * 60 * 60 * 1_000,
+      approvedAt: now,
+      useCount: 0,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const grant = await ctx.db.get(grantId);
+    if (grant) {
+      await appendGrantActivity(ctx, grant, {
+        type: "approved",
+        outcome: "recorded",
+        clientId: args.clientId,
+        clientLabel: args.clientName,
+        message: `${label} connected by signing in, which approved ${scopes.length} operations on all your moves for ${AUTO_GRANT_DAYS} days. Change or revoke this any time on this page.`,
+      });
+    }
+    await recordAuditEvent(ctx, {
+      householdId,
+      actorType: "user",
+      actorUserId: user._id,
+      category: "ai",
+      action: "ai_grant.approved",
+      objectTable: "aiGrants",
+      objectId: grantId,
+      metadata: {
+        scopes,
+        moveScope: "allMoves",
+        moveCount: null,
+        source: "legacyGatewaySignIn",
+      },
+    });
+    return { scopes, block: undefined };
   },
 });
 
