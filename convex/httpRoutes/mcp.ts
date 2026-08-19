@@ -132,6 +132,62 @@ function challenge(
   );
 }
 
+/**
+ * The authorization server could not be asked, so we do not know whether the
+ * token is good.
+ *
+ * This is the difference between "your token is bad" and "we cannot check right
+ * now", and it has to be visible from outside. A client told 401 discards a
+ * perfectly good token and starts a fresh authorization it does not need; if
+ * Clerk is briefly unreachable, every connected AI does that at once and none
+ * of them can succeed, because the same outage breaks the authorization too. A
+ * client told 503 waits and retries, which is the only thing that can work.
+ */
+function serviceUnavailable(
+  description = "The authorization server could not be reached. Try again shortly.",
+) {
+  return new Response(
+    JSON.stringify({ error: "temporarily_unavailable", error_description: description }),
+    {
+      status: 503,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "Retry-After": "30",
+      },
+    },
+  );
+}
+
+/**
+ * A fault in the token itself, as opposed to a fault in our ability to check
+ * it. Thrown for the claim checks `verifyOAuth` makes by hand so they are
+ * classified with jose's own token errors rather than mistaken for an outage.
+ */
+class TokenFault extends Error {}
+
+/**
+ * Is this error the token's fault?
+ *
+ * Enumerated in the positive direction on purpose. An unrecognised error is
+ * treated as an outage rather than as a bad token, because the cost of being
+ * wrong runs one way: telling a broken client to retry is recoverable, and
+ * telling a working client its credentials are invalid sends it into a loop it
+ * cannot leave.
+ */
+function isTokenFault(error: unknown): boolean {
+  return (
+    error instanceof TokenFault ||
+    error instanceof joseErrors.JWTExpired ||
+    error instanceof joseErrors.JWTClaimValidationFailed ||
+    error instanceof joseErrors.JWTInvalid ||
+    error instanceof joseErrors.JWSInvalid ||
+    error instanceof joseErrors.JWSSignatureVerificationFailed ||
+    error instanceof joseErrors.JWKSNoMatchingKey ||
+    error instanceof joseErrors.JWKSMultipleMatchingKeys
+  );
+}
+
 function protectedResourceMetadata(resource: URL, issuer: URL) {
   return new Response(
     JSON.stringify({
@@ -213,11 +269,11 @@ async function verifyOAuth(
       result.protectedHeader.typ !== "at+jwt" &&
       result.protectedHeader.typ !== "application/at+jwt"
     ) {
-      throw new Error("Bearer is not an OAuth access token.");
+      throw new TokenFault("Bearer is not an OAuth access token.");
     }
     const subject = result.payload.sub;
     if (!subject || !result.payload.exp) {
-      throw new Error("Missing OAuth subject or expiry.");
+      throw new TokenFault("Missing OAuth subject or expiry.");
     }
     const clientId =
       typeof result.payload.azp === "string"
@@ -225,8 +281,8 @@ async function verifyOAuth(
         : typeof result.payload.client_id === "string"
           ? result.payload.client_id
           : null;
-    if (!clientId) throw new Error("Missing OAuth client identifier.");
-    if (clientId.length > 160) throw new Error("OAuth client identifier is too long.");
+    if (!clientId) throw new TokenFault("Missing OAuth client identifier.");
+    if (clientId.length > 160) throw new TokenFault("OAuth client identifier is too long.");
     // Clerk's production dynamic-registration access tokens currently omit
     // `aud`, even when the authorization request carries the RFC 8707
     // `resource` parameter. Keep the exact issuer, signature, expiry, token
@@ -243,7 +299,7 @@ async function verifyOAuth(
       !audiences.includes(resource.toString()) &&
       !audiences.includes(clientId)
     ) {
-      throw new Error("OAuth audience does not match this resource or client.");
+      throw new TokenFault("OAuth audience does not match this resource or client.");
     }
     const scopeValue = result.payload.scope ?? result.payload.scp;
     const scopes = Array.isArray(scopeValue)
@@ -263,6 +319,18 @@ async function verifyOAuth(
       },
     };
   } catch (error) {
+    // Three outcomes, not two. Only a fault in the token is the token's
+    // problem; anything else means we could not reach or read the
+    // authorization server's keys, and saying 401 to that is what turns a
+    // brief Clerk outage into every connected client re-authorizing forever.
+    if (!isTokenFault(error)) {
+      console.error(
+        `[MCP] Could not verify against the authorization server: ${
+          error instanceof Error ? error.message : "unknown"
+        }`,
+      );
+      return serviceUnavailable();
+    }
     const description =
       error instanceof joseErrors.JWTExpired
         ? "The Assist With Moving OAuth token expired."
@@ -1119,8 +1187,26 @@ export function createMovingServer(
 }
 
 async function handleMcp(actionCtx: ActionCtx, request: Request) {
-  const resource = requiredUrl("MCP_RESOURCE_URL");
-  const issuer = requiredUrl("CLERK_JWT_ISSUER_DOMAIN");
+  // The third outcome: unconfigured. A missing or malformed environment
+  // variable is our fault, not the caller's, and an uncaught throw here is a
+  // Convex 500 that a client reads as "this server is broken" with no idea
+  // whether to retry. Say so in the same shape as an outage, because to a
+  // client that is exactly what it is.
+  let resource: URL;
+  let issuer: URL;
+  try {
+    resource = requiredUrl("MCP_RESOURCE_URL");
+    issuer = requiredUrl("CLERK_JWT_ISSUER_DOMAIN");
+  } catch (error) {
+    console.error(
+      `[MCP] The endpoint is not configured: ${
+        error instanceof Error ? error.message : "unknown"
+      }`,
+    );
+    return serviceUnavailable(
+      "This Assist With Moving endpoint is not configured yet. Try again shortly.",
+    );
+  }
   const url = new URL(request.url);
   if (request.method === "OPTIONS") {
     return new Response(null, {
