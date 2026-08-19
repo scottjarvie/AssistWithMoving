@@ -11,9 +11,9 @@ import type { GenericActionCtx } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
-import { action, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import {
   type EvidenceSkipReason,
   INLINE_IMAGE_LIMIT,
@@ -57,7 +57,7 @@ export const mcpResolvePhotosArgs = {
   filter: imageFilterValidator,
   limit: v.optional(v.number()),
 };
-export const mcpResolvePhotos = query({
+export const mcpResolvePhotos = internalQuery({
   args: mcpResolvePhotosArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -304,7 +304,7 @@ async function deliverOnePhoto(
   return { ok: false, reason: failure ?? "delivery_unavailable" };
 }
 
-export const getImages = action({
+export const getImages = internalAction({
   args: getImagesArgs,
   handler: async (
     ctx,
@@ -314,7 +314,7 @@ export const getImages = action({
   }> => {
     const variant = args.variant ?? "card";
     const cap = Math.min(args.limit ?? 6, INLINE_IMAGE_LIMIT);
-    const photos = await ctx.runQuery(api.mcpToolsImages.mcpResolvePhotos, {
+    const photos = await ctx.runQuery(internal.mcpToolsImages.mcpResolvePhotos, {
       caller: args.caller,
       householdId: args.householdId,
       moveId: args.moveId,
@@ -446,7 +446,7 @@ export const mcpAssertMoveEditableArgs = {
   householdId: v.id("households"),
   moveId: v.id("moves"),
 };
-export const mcpAssertMoveEditable = query({
+export const mcpAssertMoveEditable = internalQuery({
   args: mcpAssertMoveEditableArgs,
   handler: async (ctx, args) => {
     const policy = await requireMoveForSubject(
@@ -468,7 +468,7 @@ function bytesFromBase64(b64: string): Uint8Array {
   return out;
 }
 
-export const addImages = action({
+export const addImages = internalAction({
   args: addImagesArgs,
   handler: async (
     ctx,
@@ -481,7 +481,7 @@ export const addImages = action({
     }>;
   }> => {
     const { userId } = await ctx.runQuery(
-      api.mcpToolsImages.mcpAssertMoveEditable,
+      internal.mcpToolsImages.mcpAssertMoveEditable,
       {
         caller: args.caller,
         householdId: args.householdId,
@@ -594,7 +594,7 @@ export const attachPhotosArgs = {
   photoIds: v.array(v.id("itemPhotos")),
   attachTo: photoTargetValidator,
 };
-export const attachPhotos = mutation({
+export const attachPhotos = internalMutation({
   args: attachPhotosArgs,
   handler: async (ctx, args) => {
     await requireMoveForSubject(

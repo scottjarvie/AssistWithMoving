@@ -6,7 +6,7 @@
 import { ConvexError, v } from "convex/values";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
-import { query } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
 import {
   requireHouseholdForSubject,
   requireMoveForSubject,
@@ -15,7 +15,7 @@ import {
 
 // Call FIRST: confirms who the agent is acting as and which households/moves it
 // can reach, so later calls can pass a real householdId / moveId.
-export const getAgentContext = query({
+export const getAgentContext = internalQuery({
   args: { caller: mcpCallerValidator },
   handler: async (ctx, args) => {
     const user = await requireUserBySubject(ctx, args.caller.subject);
@@ -85,7 +85,7 @@ export const getAgentContext = query({
 const READ_LIMIT = 200;
 
 // List the active (non-archived) moves in a household the caller can read.
-export const listMovesForHousehold = query({
+export const listMovesForHousehold = internalQuery({
   args: {
     caller: mcpCallerValidator,
     householdId: v.id("households"),
@@ -119,7 +119,7 @@ export const listMovesForHousehold = query({
 });
 
 // Basic facts about one move the caller can read.
-export const getMoveSummary = query({
+export const getMoveSummary = internalQuery({
   args: {
     caller: mcpCallerValidator,
     householdId: v.id("households"),
@@ -153,7 +153,7 @@ export const getMoveSummary = query({
 });
 
 // Rooms / spaces in a move. Read-only; non-sensitive fields only.
-export const listMoveSpaces = query({
+export const listMoveSpaces = internalQuery({
   args: {
     caller: mcpCallerValidator,
     householdId: v.id("households"),
@@ -190,7 +190,7 @@ export const listMoveSpaces = query({
 
 // Inventory items in a move. Read-only; sensitive fields (value, serial,
 // private notes) are intentionally omitted regardless of role.
-export const listItems = query({
+export const listItems = internalQuery({
   args: {
     caller: mcpCallerValidator,
     householdId: v.id("households"),
@@ -230,7 +230,7 @@ export const listItems = query({
 });
 
 // Boxes / containers in a move. Read-only.
-export const listBoxes = query({
+export const listBoxes = internalQuery({
   args: {
     caller: mcpCallerValidator,
     householdId: v.id("households"),

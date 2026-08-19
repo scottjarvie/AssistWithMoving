@@ -23,7 +23,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { api } from "../../convex/_generated/api";
+import { internal } from "../../convex/_generated/api";
 import {
   INLINE_IMAGE_LIMIT,
   PER_IMAGE_BYTE_BUDGET,
@@ -242,7 +242,7 @@ describe("private media reaches a connected AI as real bytes", () => {
     ]);
     stubDelivery({ sideboard: { card: 40_000 } });
 
-    const result = await fixture.t.action(api.mcpToolsImages.getImages, {
+    const result = await fixture.t.action(internal.mcpToolsImages.getImages, {
       caller: { subject: SUBJECT },
       householdId: fixture.householdId,
       moveId: fixture.moveId,
@@ -289,7 +289,7 @@ describe("private media reaches a connected AI as real bytes", () => {
       },
     });
 
-    const result = await fixture.t.action(api.mcpToolsImages.getImages, {
+    const result = await fixture.t.action(internal.mcpToolsImages.getImages, {
       caller: { subject: SUBJECT },
       householdId: fixture.householdId,
       moveId: fixture.moveId,
@@ -324,7 +324,7 @@ describe("private media reaches a connected AI as real bytes", () => {
       three: { card: big, thumb: big },
     });
 
-    const result = await fixture.t.action(api.mcpToolsImages.getImages, {
+    const result = await fixture.t.action(internal.mcpToolsImages.getImages, {
       caller: { subject: SUBJECT },
       householdId: fixture.householdId,
       moveId: fixture.moveId,
@@ -355,7 +355,7 @@ describe("private media reaches a connected AI as real bytes", () => {
     ]);
     stubDelivery({});
 
-    const result = await fixture.t.action(api.mcpToolsImages.getImages, {
+    const result = await fixture.t.action(internal.mcpToolsImages.getImages, {
       caller: { subject: SUBJECT },
       householdId: fixture.householdId,
       moveId: fixture.moveId,
@@ -385,7 +385,7 @@ describe("private media reaches a connected AI as real bytes", () => {
     ]);
     stubDelivery({});
 
-    const result = await fixture.t.action(api.mcpToolsImages.getImages, {
+    const result = await fixture.t.action(internal.mcpToolsImages.getImages, {
       caller: { subject: SUBJECT },
       householdId: fixture.householdId,
       moveId: fixture.moveId,
@@ -410,7 +410,7 @@ describe("private media reaches a connected AI as real bytes", () => {
     );
     stubDelivery({});
 
-    const result = await fixture.t.action(api.mcpToolsImages.getImages, {
+    const result = await fixture.t.action(internal.mcpToolsImages.getImages, {
       caller: { subject: SUBJECT },
       householdId: fixture.householdId,
       moveId: fixture.moveId,
