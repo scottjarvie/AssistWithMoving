@@ -78,6 +78,7 @@ import type * as lib_mcpClientIdentity from "../lib/mcpClientIdentity.js";
 import type * as lib_mcpEvidenceMedia from "../lib/mcpEvidenceMedia.js";
 import type * as lib_mcpGrantAccess from "../lib/mcpGrantAccess.js";
 import type * as lib_mcpIdentity from "../lib/mcpIdentity.js";
+import type * as lib_mcpLegacyGrantGate from "../lib/mcpLegacyGrantGate.js";
 import type * as lib_mcpMediaIngress from "../lib/mcpMediaIngress.js";
 import type * as lib_mediaStorage from "../lib/mediaStorage.js";
 import type * as lib_moveAccess from "../lib/moveAccess.js";
@@ -233,6 +234,7 @@ declare const fullApi: ApiFromModules<{
   "lib/mcpEvidenceMedia": typeof lib_mcpEvidenceMedia;
   "lib/mcpGrantAccess": typeof lib_mcpGrantAccess;
   "lib/mcpIdentity": typeof lib_mcpIdentity;
+  "lib/mcpLegacyGrantGate": typeof lib_mcpLegacyGrantGate;
   "lib/mcpMediaIngress": typeof lib_mcpMediaIngress;
   "lib/mediaStorage": typeof lib_mediaStorage;
   "lib/moveAccess": typeof lib_moveAccess;

@@ -1,7 +1,7 @@
 import { anyApi, httpRouter } from "convex/server";
 import type { FunctionReference } from "convex/server";
 
-import { httpAction } from "./_generated/server";
+import { httpAction, type ActionCtx } from "./_generated/server";
 import {
   ClerkWebhookPayloadError,
   normalizeClerkOrganization,
@@ -24,6 +24,10 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { components } from "./_generated/api";
 import { tools as mcpTools } from "./mcp";
 import { registerMcpRoutes } from "./httpRoutes/mcp";
+import {
+  decideLegacyGatewayAccess,
+  type LegacyGrantBlock,
+} from "./lib/mcpLegacyGrantGate";
 
 const http = httpRouter();
 
@@ -119,6 +123,39 @@ const internalMutations = anyApi as unknown as {
       "mutation",
       "internal",
       { clerkOrganizationMembershipId: string }
+    >;
+  };
+  aiGrants: {
+    touchLegacyConnection: FunctionReference<
+      "mutation",
+      "internal",
+      { subject: string; clientId: string; clientName?: string },
+      { scopes: string[]; block?: LegacyGrantBlock }
+    >;
+    noteGrantUse: FunctionReference<
+      "mutation",
+      "internal",
+      {
+        subject: string;
+        toolName: string;
+        scope: string;
+        clientId: string;
+        clientName?: string;
+      },
+      unknown
+    >;
+    noteGrantRefusal: FunctionReference<
+      "mutation",
+      "internal",
+      {
+        subject: string;
+        toolName: string;
+        refusalCode: string;
+        scope?: string;
+        clientId: string;
+        clientName?: string;
+      },
+      unknown
     >;
   };
 };
@@ -1063,17 +1100,122 @@ const resolveMcpIdentity: McpIdentityResolver = async (token) => {
   }
 };
 
-const authorizeMcp: McpAuthorizerHandler = (_ctx, args) =>
-  args.identity?.subject
-    ? { allowed: true }
-    : {
-        allowed: false,
-        reason: "Sign in with your Assist With Moving account to use these tools.",
-      };
+/**
+ * Which OAuth client is calling.
+ *
+ * A grant binds to one client so revoking it cannot disturb another. Clerk
+ * stamps the client on the access token as `client_id` or `azp`; a token
+ * carrying neither still gets a stable identifier rather than an unbound
+ * grant, because an unbound grant is claimable by whatever connects next.
+ */
+function legacyClientIdFrom(claims: Record<string, unknown> | undefined): string {
+  const candidate =
+    (typeof claims?.client_id === "string" && claims.client_id) ||
+    (typeof claims?.azp === "string" && claims.azp) ||
+    null;
+  return candidate ? `legacy:${candidate}` : "legacy:unidentified-client";
+}
+
+function legacyClientNameFrom(
+  claims: Record<string, unknown> | undefined,
+): string | undefined {
+  const name = claims?.client_name ?? claims?.azp;
+  return typeof name === "string" && name.trim() ? name.trim().slice(0, 80) : undefined;
+}
+
+/**
+ * The grant gate for the legacy gateway.
+ *
+ * Before this, the authorizer returned `{ allowed: true }` for any caller whose
+ * Clerk token resolved to a subject. That meant the door people are actually
+ * connected through handed out all twenty-nine tools with no grant row, no
+ * scope check, nothing to revoke, and nothing on the person's activity list —
+ * while the canonical stateless door next to it re-read a grant on every call.
+ *
+ * The gateway calls this per tool for `tools/call` and again per tool while
+ * filtering `tools/list`, so the grant is resolved once per request and reused:
+ * an AI is never shown a capability it would only be refused for, and the
+ * refusal still exists underneath if it calls one anyway.
+ */
+function createLegacyGrantGate(
+  ctx: Pick<ActionCtx, "runMutation">,
+): McpAuthorizerHandler {
+  let resolved:
+    | Promise<{ scopes: string[]; block?: LegacyGrantBlock }>
+    | null = null;
+
+  return async (_gatewayCtx, args) => {
+    const subject = args.identity?.subject;
+    if (!subject) {
+      return decideLegacyGatewayAccess({
+        toolName: args.toolName,
+        grantedScopes: [],
+        block: "noIdentity",
+      });
+    }
+    const claims = args.identity?.claims;
+    const clientId = legacyClientIdFrom(claims);
+    const clientName = legacyClientNameFrom(claims);
+
+    if (!resolved) {
+      resolved = ctx
+        .runMutation(internalMutations.aiGrants.touchLegacyConnection, {
+          subject,
+          clientId,
+          clientName,
+        })
+        .then((result: { scopes?: string[]; block?: LegacyGrantBlock }) => ({
+          scopes: result?.scopes ?? [],
+          block: result?.block,
+        }))
+        // A grant lookup that throws must fail closed. Refusing with a
+        // reconnect message is recoverable; allowing the call is not.
+        .catch((error: unknown) => {
+          console.error("[mcp-auth] legacy grant lookup failed", error);
+          return { scopes: [] as string[], block: "noProfile" as const };
+        });
+    }
+    const grant = await resolved;
+
+    const decision = decideLegacyGatewayAccess({
+      toolName: args.toolName,
+      grantedScopes: grant.scopes,
+      block: grant.block,
+    });
+
+    // Write a receipt for real calls only. Filtering `tools/list` would
+    // otherwise stamp the activity list with a row per tool per connection.
+    if (args.mode === "call") {
+      const record =
+        decision.allowed && decision.scope
+        ? ctx.runMutation(internalMutations.aiGrants.noteGrantUse, {
+            subject,
+            toolName: args.toolName,
+            scope: decision.scope,
+            clientId,
+            clientName,
+          })
+        : ctx.runMutation(internalMutations.aiGrants.noteGrantRefusal, {
+            subject,
+            toolName: args.toolName,
+            refusalCode: decision.refusalCode ?? "GRANT_SCOPE_MISSING",
+            scope: decision.scope,
+            clientId,
+            clientName,
+          });
+      // A receipt that fails to write must not change the decision.
+      await record.catch((error: unknown) => {
+        console.error("[mcp-auth] could not record legacy grant activity", error);
+      });
+    }
+
+    return decision;
+  };
+}
 
 const mcpHttpAction = httpAction((ctx, request) =>
   mcpGatewayClient.handleMcpRequest(ctx, request, {
-    authorize: authorizeMcp,
+    authorize: createLegacyGrantGate(ctx),
     resolveIdentity: resolveMcpIdentity,
     tools: mcpTools,
     requireAuth: true,
