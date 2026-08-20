@@ -15,7 +15,7 @@ import { errors as joseErrors, createRemoteJWKSet, jwtVerify } from "jose";
 import type { HttpRouter } from "convex/server";
 import { z } from "zod";
 
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { httpAction, type ActionCtx } from "../_generated/server";
 import {
   GRANT_BOUNDARY_VERSION,

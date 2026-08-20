@@ -31,7 +31,12 @@ import {
   type MovingScope,
 } from "./lib/aiGrants";
 import { CLIENT_REGISTRATION_LABELS } from "./lib/mcpClientIdentity";
-import { LEGACY_AUTO_GRANT_SCOPES } from "./lib/mcpLegacyGrantGate";
+import {
+  LEGACY_AUTO_GRANT_SCOPES,
+  UNIDENTIFIED_LEGACY_CLIENT,
+  describeLegacyCapabilities,
+} from "./lib/mcpLegacyGrantGate";
+import type { GrantDecisionInput } from "./lib/aiGrants";
 import {
   aiGrantActivityType,
   mcpClientRegistrationMethod,
@@ -206,6 +211,23 @@ export const grantsForPrincipal = internalQuery({
  * is written. Re-granting a revoked connection because a token still worked
  * would make the Revoke button a suggestion.
  */
+/**
+ * The narrow slice of a grant row the legacy gate needs to decide a call.
+ * Deliberately smaller than the stored document: the gate must not see, and so
+ * cannot depend on, anything but scopes, move scope, status and expiry.
+ */
+export type GrantDecisionRow = GrantDecisionInput;
+
+function toDecisionRow(grant: Doc<"aiGrants">): GrantDecisionRow {
+  return {
+    scopes: grant.scopes,
+    moveScope: grant.moveScope,
+    moveIds: (grant.moveIds ?? []).map(String),
+    status: grant.status,
+    expiresAt: grant.expiresAt,
+  };
+}
+
 export const touchLegacyConnection = internalMutation({
   args: {
     subject: v.string(),
@@ -218,39 +240,55 @@ export const touchLegacyConnection = internalMutation({
       .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", args.subject))
       .unique();
     if (!user || user.status !== "active") {
-      return { scopes: [] as MovingScope[], block: "noProfile" as const };
+      return { grants: [] as GrantDecisionRow[], block: "noProfile" as const };
+    }
+
+    // An unidentified client must not be auto-granted. Its id is a shared
+    // sentinel, so binding a grant to it would collapse every unnamed client on
+    // this account onto one row — client B inheriting client A's authority, and
+    // one revoke taking down both. Refuse to auto-connect it; the person can
+    // approve it by hand if they mean to. (Playbook v1.3.0 §2.6, pitfall 2.)
+    if (args.clientId === UNIDENTIFIED_LEGACY_CLIENT) {
+      return { grants: [] as GrantDecisionRow[], block: "unidentifiedClient" as const };
     }
 
     const now = Date.now();
     const active = await activeGrantsForUser(ctx, user._id, args.clientId, now);
     if (active.length > 0) {
-      // Scopes are never summed across grants for a permission decision — that
-      // stays `findPermittingGrant`'s job on each call. This union only decides
-      // which tools are worth listing.
-      return {
-        scopes: [...new Set(active.flatMap((grant) => grant.scopes))],
-        block: undefined,
-      };
+      // Return the grant rows themselves, not a flattened scope union. The gate
+      // decides each call with `findPermittingGrant`, so a `selectedMoves`
+      // grant stays pinned to its moves and two grants never sum into authority
+      // neither one carries.
+      return { grants: active.map(toDecisionRow), block: undefined };
     }
 
-    // No usable grant. Before granting one, find out whether that is because
-    // the person never had one, or because they ended one.
-    const history = await ctx.db
+    // No usable grant. Before minting one, find out whether this client already
+    // had one that ended. This lookup is BY clientId THROUGH AN INDEX, never a
+    // windowed scan: a revoked row must be found however many grants the person
+    // has accumulated, or a months-old revocation resurrects itself the next
+    // time the client signs in. (Playbook v1.3.0 §2.6, pitfall 1.)
+    const boundToClient = await ctx.db
       .query("aiGrants")
-      .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", user._id))
-      .order("desc")
-      .take(MAX_ACTIVE_GRANTS * 4);
-    const bound = history.find((row) => row.clientId === args.clientId);
-    if (bound) {
+      .withIndex("by_owner_client_status", (q) =>
+        q.eq("ownerUserId", user._id).eq("clientId", args.clientId),
+      )
+      .collect();
+    if (boundToClient.length > 0) {
+      const latest = boundToClient.reduce((newest, row) =>
+        row.updatedAt > newest.updatedAt ? row : newest,
+      );
       return {
-        scopes: [] as MovingScope[],
+        grants: [] as GrantDecisionRow[],
         block:
-          bound.status === "revoked" ? ("revoked" as const) : ("expired" as const),
+          latest.status === "revoked" ? ("revoked" as const) : ("expired" as const),
       };
     }
 
-    if (history.filter((row) => grantIsActive(row, now)).length >= MAX_ACTIVE_GRANTS) {
-      return { scopes: [] as MovingScope[], block: "revoked" as const };
+    // Never bound to this client. Honour the per-account connection cap, and
+    // say what actually happened rather than claiming a revocation.
+    const allActive = await activeGrantsForUser(ctx, user._id, undefined, now);
+    if (allActive.length >= MAX_ACTIVE_GRANTS) {
+      return { grants: [] as GrantDecisionRow[], block: "connectionLimit" as const };
     }
 
     // A grant belongs to a household. Prefer a real membership; fall back to a
@@ -275,7 +313,7 @@ export const touchLegacyConnection = internalMutation({
       if (participation) householdId = participation.householdId;
     }
     if (!householdId) {
-      return { scopes: [] as MovingScope[], block: "noHousehold" as const };
+      return { grants: [] as GrantDecisionRow[], block: "noHousehold" as const };
     }
 
     const scopes = [...LEGACY_AUTO_GRANT_SCOPES];
@@ -306,7 +344,11 @@ export const touchLegacyConnection = internalMutation({
         outcome: "recorded",
         clientId: args.clientId,
         clientLabel: args.clientName,
-        message: `${label} connected by signing in, which approved ${scopes.length} operations on all your moves for ${AUTO_GRANT_DAYS} days. Change or revoke this any time on this page.`,
+        // Say what it can do, not how many scope strings that is. "Approved 4
+        // operations" tells a person a number; this tells them the capability.
+        message: `${label} connected by signing in. It can ${describeLegacyCapabilities(
+          scopes,
+        )} — on all your moves, for ${AUTO_GRANT_DAYS} days. Change or revoke this any time on this page.`,
       });
     }
     await recordAuditEvent(ctx, {
@@ -324,7 +366,10 @@ export const touchLegacyConnection = internalMutation({
         source: "legacyGatewaySignIn",
       },
     });
-    return { scopes, block: undefined };
+    return {
+      grants: grant ? [toDecisionRow(grant)] : ([] as GrantDecisionRow[]),
+      block: undefined,
+    };
   },
 });
 

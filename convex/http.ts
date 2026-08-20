@@ -25,9 +25,11 @@ import { components } from "./_generated/api";
 import { tools as mcpTools } from "./mcp";
 import { registerMcpRoutes } from "./httpRoutes/mcp";
 import {
+  UNIDENTIFIED_LEGACY_CLIENT,
   decideLegacyGatewayAccess,
   type LegacyGrantBlock,
 } from "./lib/mcpLegacyGrantGate";
+import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
 
 const http = httpRouter();
 
@@ -1113,7 +1115,10 @@ function legacyClientIdFrom(claims: Record<string, unknown> | undefined): string
     (typeof claims?.client_id === "string" && claims.client_id) ||
     (typeof claims?.azp === "string" && claims.azp) ||
     null;
-  return candidate ? `legacy:${candidate}` : "legacy:unidentified-client";
+  // The sentinel is the single value `touchLegacyConnection` refuses to
+  // auto-grant, so every unidentified client is turned away rather than sharing
+  // one grant row.
+  return candidate ? `legacy:${candidate}` : UNIDENTIFIED_LEGACY_CLIENT;
 }
 
 function legacyClientNameFrom(
@@ -1141,7 +1146,7 @@ function createLegacyGrantGate(
   ctx: Pick<ActionCtx, "runMutation">,
 ): McpAuthorizerHandler {
   let resolved:
-    | Promise<{ scopes: string[]; block?: LegacyGrantBlock }>
+    | Promise<{ grants: LegacyGrantDecisionRow[]; block?: LegacyGrantBlock }>
     | null = null;
 
   return async (_gatewayCtx, args) => {
@@ -1149,7 +1154,8 @@ function createLegacyGrantGate(
     if (!subject) {
       return decideLegacyGatewayAccess({
         toolName: args.toolName,
-        grantedScopes: [],
+        grants: [],
+        mode: args.mode,
         block: "noIdentity",
       });
     }
@@ -1164,22 +1170,43 @@ function createLegacyGrantGate(
           clientId,
           clientName,
         })
-        .then((result: { scopes?: string[]; block?: LegacyGrantBlock }) => ({
-          scopes: result?.scopes ?? [],
-          block: result?.block,
-        }))
-        // A grant lookup that throws must fail closed. Refusing with a
-        // reconnect message is recoverable; allowing the call is not.
+        .then(
+          (result: {
+            grants?: LegacyGrantDecisionRow[];
+            block?: LegacyGrantBlock;
+          }) => ({
+            grants: result?.grants ?? [],
+            block: result?.block,
+          }),
+        )
+        // A grant lookup that threw could not run, so it is neither a bad token
+        // nor a missing account. Fail closed — allowing the call is the only
+        // unrecoverable outcome — but say so honestly: "couldn't check just now,
+        // try again", not "your account does not exist".
         .catch((error: unknown) => {
           console.error("[mcp-auth] legacy grant lookup failed", error);
-          return { scopes: [] as string[], block: "noProfile" as const };
+          return {
+            grants: [] as LegacyGrantDecisionRow[],
+            block: "lookupFailed" as const,
+          };
         });
     }
     const grant = await resolved;
 
+    // The move a per-move grant is checked against. Present on nearly every
+    // tool; absent on get_agent_context, list_moves and setup_move, which name
+    // no existing move and so are permitted only by an all-moves grant.
+    const moveId =
+      typeof (args.args as Record<string, unknown> | undefined)?.moveId ===
+      "string"
+        ? ((args.args as Record<string, unknown>).moveId as string)
+        : undefined;
+
     const decision = decideLegacyGatewayAccess({
       toolName: args.toolName,
-      grantedScopes: grant.scopes,
+      grants: grant.grants,
+      moveId,
+      mode: args.mode,
       block: grant.block,
     });
 
