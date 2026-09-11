@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-05",
+  "product": "Assist With Moving",
+  "slug": "moving",
+  "candidate": "MV01-K",
+  "selectionBasis": "Saved round-six board default plus conversation preferences; browser-local changed selections were not accessible.",
+  "selectionStatus": "Candidate package; final adoption is not implied",
+  "note": "MV01-K is Scott’s current kraft preference. It remains a logo palette study.",
+  "svgMaster": {
+    "available": false,
+    "reason": "Current explored logo has no clean editable vector master"
+  },
+  "rasterBackground": "Opaque warm paper from source; not a transparent or dark-mode logo",
+  "faviconStatus": "Raster candidate exported; integration and actual browser tab verification still needed",
+  "icons": {
+    "ico": "icons/favicon.ico",
+    "sizes": [
+      16,
+      32,
+      48
+    ],
+    "apple": "icons/apple-touch-icon.png",
+    "any": [
+      "icons/app-icon-192.png",
+      "icons/app-icon-512.png"
+    ],
+    "maskable": "icons/app-icon-maskable-512.png"
+  },
+  "repository": {
+    "root": "J:/IDE/AssistWithMoving",
+    "destination": "docs/design/assist-family-brand-2026-09-05",
+    "framework": "Next.js",
+    "existingIconFiles": [
+      "src/app/icon.svg",
+      "public/icons/apple-touch-icon.png",
+      "src/app/manifest.ts",
+      "src/components/brand-mark.tsx"
+    ],
+    "integrationFiles": [
+      "src/app/layout.tsx",
+      "src/components/brand-mark.tsx",
+      "src/app/(product)/layout.tsx",
+      "src/app/(product)/app/moves/[moveId]/layout.tsx"
+    ]
+  },
+  "variants": [
+    {
+      "id": "MV01-K",
+      "name": "Selected box · preferred kraft",
+      "file": "variants/MV01-K.png",
+      "width": 617,
+      "height": 579,
+      "source": "sources/round-four--03-moving-palettes.png",
+      "sourceWidth": 1536,
+      "sourceHeight": 1024,
+      "sourceCrop": [
+        827,
+        198,
+        617,
+        579
+      ],
+      "clip": null,
+      "sourceSha256": "f1a7e533127405a1e742dd6dbab05afc9657c6e40380c306fd17e6bf2722ee1c",
+      "palette": {
+        "primary": "#806E50",
+        "accent": "#C9B796",
+        "ground": "#F7F3EA",
+        "status": "Preferred kraft study"
+      },
+      "status": "Current board candidate"
+    }
+  ]
+}
