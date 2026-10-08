@@ -7,7 +7,7 @@
     "liveOrigin": "https://local.movingmanifest.com",
     "sandboxOrigin": "http://moving.localhost:3827",
     "launcherTestsPassed": 5,
-    "controlledManagedFrontendRestart": "moving-live only",
+    "controlledManagedFrontendRestart": "moving-live and moving-sandbox only",
     "trustedHTTPS": {
       "initialStatus": 200,
       "initialSeconds": 8.185953,
@@ -16,7 +16,12 @@
     },
     "nativeStatePreserved": true,
     "canonicalDirtySourcePreserved": true,
-    "hostedSourceDeployment": false
+    "hostedSourceDeployment": false,
+    "sandboxHTTP": {
+      "status": 200,
+      "seconds": 11.278949
+    },
+    "currentFrontendState": "Both intentionally stopped after HTTP proof at coordinator request to reduce swap/disk pressure; native4321 retained"
   },
   "music": {
     "sourceChanges": false,
@@ -27,7 +32,9 @@
     "coldCompileSecondsObserved": 19.8,
     "publicCorpusPreloadSecondsObserved": 28.852,
     "publicReadOnlyConvexCallsObserved": 31,
-    "interpretation": "Cold first-request work explains earlier20s timeout; warm route is healthy"
+    "interpretation": "Cold first-request work explains earlier20s timeout; warm route is healthy",
+    "currentFrontendState": "Coordinator intentionally stopped after earlier healthy trusted HTTPS proof to reduce swap/disk pressure",
+    "sandboxHTTPProof": "No completion claimed: first compile was interrupted by coordinated pressure reduction"
   },
   "browserAuthenticationProof": false,
   "routerRestarted": false,
