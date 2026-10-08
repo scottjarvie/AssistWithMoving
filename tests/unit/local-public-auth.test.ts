@@ -1,7 +1,8 @@
+// @vitest-environment node
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { generateKeyPair, SignJWT } from "jose";
 import { NextRequest } from "next/server";
-import { LOCAL_LIVE_ISSUER, LOCAL_SANDBOX_ISSUER, localSandboxEnabled, localLiveEnabled, localLiveProxy, verifyLocalSession } from "./localLiveAuth";
+import { LOCAL_LIVE_ISSUER, LOCAL_SANDBOX_ISSUER, localSandboxEnabled, localLiveEnabled, localLiveProxy, verifyLocalSession } from "@/lib/localLiveAuth";
 
 let privateKey: CryptoKey;
 let publicKey: CryptoKey;
