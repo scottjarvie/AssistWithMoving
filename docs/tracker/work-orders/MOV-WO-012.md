@@ -59,3 +59,5 @@ Reviewed source d55386a. Runtime and browser acceptance remain pending.
 ## History
 
 2026-10-07 Codex: recorded direct authorization and source/runtime evidence boundaries.
+
+- 2026-10-07 — Codex: reproduced local metadataBase crash because the sanitized launcher retained an empty NEXT_PUBLIC_APP_URL. Restored the exact mode origin after sanitization (Live trusted hostname; Sandbox dedicated hostname/port). Five launcher tests pass, including the reproduced URL regression. Hosted source/API and native data are unchanged; actual trusted HTTPS receipt is recorded separately.

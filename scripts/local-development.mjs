@@ -39,7 +39,9 @@ export function environment(root, values, mode, inherited = process.env) {
   }
   // Empty strings take precedence over Next's dotenv files, including framework reloads.
   for (const name of names) if (/^(NEXT_PUBLIC_|CONVEX_|CLERK_|B2_|AWS_|OPENROUTER_|MCP_|CDN_|LIBRARY_|VERCEL|LOCAL_)/.test(name) || /(?:SECRET|TOKEN|API_KEY|PASSWORD)/.test(name)) result[name] = '';
-  return { ...result, ...values, CONVEX_DEPLOY_KEY:'', CONVEX_ADMIN_KEY:'', NODE_ENV:'development', LOCAL_DEVELOPMENT_MODE:mode, NEXT_PUBLIC_LOCAL_DEVELOPMENT_MODE:mode, WATCHPACK_POLLING:'true' };
+  const config = JSON.parse(fs.readFileSync(path.join(root,'scripts/local-development.json'),'utf8'));
+  const appOrigin = mode === 'live' ? `https://${config.hostname}` : `http://${config.sandbox.hostname}:${config.sandbox.port}`;
+  return { ...result, ...values, NEXT_PUBLIC_APP_URL:appOrigin, CONVEX_DEPLOY_KEY:'', CONVEX_ADMIN_KEY:'', NODE_ENV:'development', LOCAL_DEVELOPMENT_MODE:mode, NEXT_PUBLIC_LOCAL_DEVELOPMENT_MODE:mode, WATCHPACK_POLLING:'true' };
 }
 export async function available(port) {
   for (const host of ['127.0.0.1', '::1']) {
