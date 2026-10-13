@@ -116,6 +116,16 @@ Convex has separate **dev** and **prod** deployments. Local work and e2e tests p
 
 Secrets live in `.env.local` (never committed). `.env.example` stays placeholder-only.
 
+### Local Live and Sandbox modes
+
+```sh
+npm run dev:live      # local code against the real account backend, port 3828 — changes are real
+npm run dev:sandbox   # local code against a separate native synthetic backend, port 3827
+npm run dev:status    # check both mode bindings without starting anything
+```
+
+Each mode reads its own sanitized `.env.local-live` / `.env.local-sandbox` (ignored by git), refuses any backend or Clerk identity other than the one bound in `scripts/local-development.json`, refuses server secrets, and refuses occupied ports. Both modes refuse to start when `NODE_ENV=production`, `VERCEL` or `CI` is set, and the in-app local auth path (`src/lib/localLiveAuth.ts`) only activates in development with an exact local binding, so hosted production always uses the normal Clerk proxy. Server APIs, media, MCP and provider actions return 503 locally. A banner shows which data the page is using.
+
 ## Checks and tests
 
 ```sh
