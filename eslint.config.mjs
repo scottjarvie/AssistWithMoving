@@ -9,6 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Local Live/Sandbox build output and the generated Sandbox backend snapshot.
+    ".next-local-*/**",
+    "sandbox-backend/**",
     ".vercel/**",
     "out/**",
     "build/**",

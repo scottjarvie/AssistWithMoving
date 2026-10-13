@@ -51,3 +51,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 *.tgz
+
+.env.local-*
+.next-local-*
+sandbox-backend/
+
+sandbox-backend-generated-guard-before-source-owned/

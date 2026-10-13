@@ -1,0 +1,19 @@
+{
+  "project": "moving",
+  "hostname": "local.movingmanifest.com",
+  "live": {
+    "port": 3828,
+    "deployment": "prod:fine-crocodile-51",
+    "backendURL": "https://fine-crocodile-51.convex.cloud",
+    "clerkHost": "clerk.movingmanifest.com"
+  },
+  "sandbox": {
+    "port": 3827,
+    "deployment": "anonymous:anonymous-moving-completion-20261007",
+    "backendURL": "http://127.0.0.1:4321",
+    "siteURL": "http://127.0.0.1:4322",
+    "hostname": "moving.localhost",
+    "clerkHost": "glorious-swine-50.clerk.accounts.dev",
+    "recordOnly": true
+  }
+}

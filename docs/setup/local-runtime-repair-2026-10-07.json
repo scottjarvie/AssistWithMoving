@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-07",
+  "trigger": "Moving Live trusted HTTPS returned500; Music first request timed out",
+  "moving": {
+    "rootCause": "Sanitized launcher blanked NEXT_PUBLIC_APP_URL; metadataBase evaluated new URL(empty string)",
+    "fix": "Restore exact public mode origin from existing local config after sanitization",
+    "liveOrigin": "https://local.movingmanifest.com",
+    "sandboxOrigin": "http://moving.localhost:3827",
+    "launcherTestsPassed": 5,
+    "controlledManagedFrontendRestart": "moving-live and moving-sandbox only",
+    "trustedHTTPS": {
+      "initialStatus": 200,
+      "initialSeconds": 8.185953,
+      "warmStatus": 200,
+      "warmSeconds": 0.163288
+    },
+    "nativeStatePreserved": true,
+    "canonicalDirtySourcePreserved": true,
+    "hostedSourceDeployment": false,
+    "sandboxHTTP": {
+      "status": 200,
+      "seconds": 11.278949
+    },
+    "currentFrontendState": "Both intentionally stopped after HTTP proof at coordinator request to reduce swap/disk pressure; native4321 retained"
+  },
+  "music": {
+    "sourceChanges": false,
+    "restart": false,
+    "cacheRemoval": false,
+    "trustedHTTPSStatus": 200,
+    "warmSeconds": 0.28132,
+    "coldCompileSecondsObserved": 19.8,
+    "publicCorpusPreloadSecondsObserved": 28.852,
+    "publicReadOnlyConvexCallsObserved": 31,
+    "interpretation": "Cold first-request work explains earlier20s timeout; warm route is healthy",
+    "currentFrontendState": "Coordinator intentionally stopped after earlier healthy trusted HTTPS proof to reduce swap/disk pressure",
+    "sandboxHTTPProof": "No completion claimed: first compile was interrupted by coordinated pressure reduction"
+  },
+  "browserAuthenticationProof": false,
+  "routerRestarted": false,
+  "independentReview": "Scoped launcher-origin delta pending coordinator reviewer"
+}

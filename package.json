@@ -43,7 +43,11 @@
     "proof:mcp-lifecycle": "vitest run tests/unit/mcp-lifecycle-harness.test.ts --reporter=verbose",
     "mcp": "node ./mcp-server/assistwithmoving-mcp.mjs",
     "seed": "node scripts/seed.mjs",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "dev:live": "node scripts/local-development.mjs live",
+    "dev:sandbox": "node scripts/local-development.mjs sandbox",
+    "dev:backend": "node scripts/local-development.mjs backend",
+    "dev:status": "node scripts/local-development.mjs status"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",
