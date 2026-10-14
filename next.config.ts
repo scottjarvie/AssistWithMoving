@@ -8,6 +8,7 @@ const securityHeaders = securityHeadersForMode(
 );
 
 const nextConfig: NextConfig = {
+  ...(process.env.NODE_ENV === "development" && process.env.ASSIST_LOCAL_DIST ? { distDir: process.env.ASSIST_LOCAL_DIST } : {}),
   async headers() {
     return [
       {

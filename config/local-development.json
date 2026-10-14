@@ -1,0 +1,12 @@
+{
+  "livePort": 3828,
+  "sandboxPort": 3827,
+  "production": "fine-crocodile-51",
+  "sandbox": "gregarious-goldfinch-763",
+  "domain": "movingmanifest.com",
+  "sandboxBlocker": "Convex B2 and paid AI provider destinations have not been proved isolated. Existing development backend may invoke them.",
+  "project": "AssistWithMoving",
+  "framework": "next",
+  "livePublicProfile": "config/local-live-public.json",
+  "liveBlocker": "Existing Clerk server middleware requires a production server key absent from local mode; production local origin not verified."
+}

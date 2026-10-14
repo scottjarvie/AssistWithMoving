@@ -33,7 +33,11 @@
     "smoke:mcp-stdio": "node scripts/mcp-stdio-smoke.mjs",
     "mcp": "node ./mcp-server/movingmanifest-mcp.mjs",
     "seed": "node scripts/seed.mjs",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "dev:live": "node scripts/dev-local.mjs live",
+    "dev:sandbox": "node scripts/dev-local.mjs sandbox",
+    "dev:backend": "node scripts/dev-local.mjs backend",
+    "dev:status": "node scripts/dev-local.mjs status"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1063.0",

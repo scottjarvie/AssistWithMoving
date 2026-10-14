@@ -1,13 +1,11 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Assist With Moving — project entrypoint
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+No Site Guide was found in the inspected checkouts. Use [README](README.md) for orientation; distinguish plans from implemented behavior.
 
-# Project orientation
+For API or MCP work, read [the API/MCP guide](docs/api-and-mcp.md). The OAuth gateway and `mcp-server/` are separate implementations; inspect both before adding or claiming tools. Agent-facing Convex failures must use `ConvexError`; plain errors are redacted by the gateway.
 
-- Start with [README.md](README.md) — product overview, stack, repo map, local dev, and conventions.
-- Working on the REST API or MCP tools? [docs/api-and-mcp.md](docs/api-and-mcp.md) is the authoritative guide. Note there are TWO MCP surfaces with separate code: the OAuth gateway (`convex/mcp*.ts`) and the stdio/HTTP server (`mcp-server/`) — check both before adding or assuming a capability.
-- Merging to `main` deploys production (Vercel + prod Convex). Keep `main` green: `npm run lint && npm run typecheck && npm run test` before merging.
-- Agent-facing Convex tools must throw `ConvexError`, never plain `Error` (the MCP gateway redacts plain errors to "Tool execution failed").
-- Delete branches after merge; this repo intentionally keeps only `main` plus short-lived PR branches.
+Merging main can deploy both Vercel and production Convex. Follow the repository release checks (`lint`, `typecheck`, `test`) for software delivery; do not treat a local launcher or frontend refresh as backend deployment.
+
+Checkout-specific local bindings and limits: [local runbook](docs/local-development.md). Preserve its pinned identity/backend and record-only guards.
+
+Tracker records, where present, are optional coordination context, not a required approval or startup ritual. Scott’s current instruction supplies authorized scope.

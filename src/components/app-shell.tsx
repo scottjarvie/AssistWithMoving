@@ -14,7 +14,13 @@ import { WorkspaceNav } from "@/components/workspace-nav";
 // (product)/layout.tsx, so every region can read the move.
 const SIDEBAR_WIDTH = "lg:w-56";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  workspaceEnabled = true,
+}: {
+  children: React.ReactNode;
+  workspaceEnabled?: boolean;
+}) {
   return (
     <div className="min-h-screen bg-background">
       <a
@@ -26,21 +32,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <header className="sticky top-0 z-30 border-b border-border bg-background/88 backdrop-blur">
         <div className="flex h-16 w-full items-center justify-between gap-2 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <Link
               href="/app"
               aria-label="MovingManifest home"
               className="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-ring"
             >
-              <BrandMark />
+              <BrandMark compactOnMobile />
             </Link>
             <span className="hidden sm:inline-flex">
               <ShellSectionEyebrow />
             </span>
-            <MoveSwitcher />
+            {workspaceEnabled ? <MoveSwitcher /> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <AccountMenu />
+            {workspaceEnabled ? <AccountMenu /> : null}
           </div>
         </div>
       </header>
@@ -51,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <WorkspaceNav variant="sidebar" />
         <div className="mt-auto">
-          <MobileCaptureAction variant="sidebar" />
+          {workspaceEnabled ? <MobileCaptureAction variant="sidebar" /> : null}
         </div>
       </aside>
 
@@ -70,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-xl items-stretch">
           <WorkspaceNav variant="mobile" />
-          <MobileCaptureAction />
+          {workspaceEnabled ? <MobileCaptureAction /> : null}
         </div>
       </div>
     </div>

@@ -1,0 +1,9 @@
+{
+  "inspectedOn": "2026-10-07",
+  "source": "https://movingmanifest.com",
+  "backend": "https://fine-crocodile-51.convex.cloud",
+  "clerkPublishableKey": "pk_live_Y2xlcmsubW92aW5nbWFuaWZlc3QuY29tJA",
+  "secretRequiredByLocalMiddleware": true,
+  "localOriginVerified": false,
+  "status": "Public production profile prepared; authentication and local origin not verified"
+}

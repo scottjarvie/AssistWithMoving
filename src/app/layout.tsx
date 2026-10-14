@@ -124,6 +124,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
+        {process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_LOCAL_DATA_MODE ? (
+          <aside data-local-data-mode={process.env.NEXT_PUBLIC_LOCAL_DATA_MODE} style={{ position: "sticky", top: 0, zIndex: 9999, padding: "8px 12px", background: "#18372a", color: "#ffffff", fontSize: 13, textAlign: "center" }}>
+            {process.env.NEXT_PUBLIC_LOCAL_DATA_MODE === "live" ? "Local site · Live data · Changes affect your real account." : "Development data · Changes stay here."}
+          </aside>
+        ) : null}
+
         {process.env.NODE_ENV === "development" ? (
           <Script
             id="extension-hydration-guard"
