@@ -142,6 +142,8 @@ npm run verify:launch # all of the above + build, in sequence
 
 Merging to `main` on GitHub **is** the production deploy (Vercel builds and ships automatically, and prod Convex functions deploy with it). There is no separate release step — so `main` must always be green: lint, typecheck, unit tests, and build before merging.
 
+The AI merges and deploys routine work after previewing it locally ([Core Philosophy §16.6](https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md#166-delivering-changes-localhost-first-then-merge)). Vercel builds only `main` and branches named `preview/*`; push to a `preview/` branch when a preview link is wanted. Draft pull requests skip the CI jobs until marked ready.
+
 ## Conventions
 
 - Work happens on short-lived branches PR'd into `main`; branches are deleted after merge. Long-lived experiments get an `archive/*` branch on GitHub.

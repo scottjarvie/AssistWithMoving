@@ -2,6 +2,7 @@ name: AssistWithMoving CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -15,6 +16,9 @@ concurrency:
 jobs:
   required:
     name: Required CI
+    # Draft pull requests skip (a skipped required job reports success);
+    # marking the PR ready runs the full check before merge.
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -103,6 +107,7 @@ jobs:
 
   full-tests:
     name: Unit tests (informational)
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
