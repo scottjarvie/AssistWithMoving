@@ -24,7 +24,20 @@ function requireBuild(reason) {
   process.exitCode = 1;
 }
 
+// Core Philosophy §16.6: Vercel builds production (main) and `preview/*`
+// branches only. Any other non-production ref is skipped before the state
+// classifier runs; production and preview/* keep the fail-closed state logic.
+function skipNonPreviewBranch() {
+  const environment = process.env.VERCEL_ENV?.trim();
+  if (!environment || environment === "production") return false;
+  const ref = process.env.VERCEL_GIT_COMMIT_REF?.trim() ?? "";
+  if (ref.startsWith("preview/")) return false;
+  process.stdout.write(`Vercel build ignored: ${environment} ref "${ref}" is not main or preview/*.\n`);
+  return true;
+}
+
 try {
+  if (skipNonPreviewBranch()) process.exit(0);
   const options = parseArgs(process.argv.slice(2));
   const base = options.base || process.env.VERCEL_GIT_PREVIOUS_SHA?.trim();
   const head = options.head || process.env.VERCEL_GIT_COMMIT_SHA?.trim();

@@ -32,11 +32,14 @@ mean independently audited. There is no automatic dispatch.
 
 ## Authority and handoff
 
-The loop is **AI proposes; Scott approves scope; AI executes; a separate AI
-audits**. Ordinary safe technical judgment belongs to the executor inside an
-approved Work Order. `needs-you` is only for a consequential product, access,
-money, security, production-data, identity, or irreversible choice, and its
-Card must teach before asking.
+The Work Order loop is **AI proposes; Scott approves scope; AI executes; a
+separate AI audits**. A Work Order is optional context for a larger tranche: a
+direct request from Scott in chat authorizes ordinary work without one.
+Ordinary safe technical judgment, including merging and deploying routine work
+([Core Philosophy §16.6](https://github.com/scottjarvie/assistwithlife/blob/main/planning/assist-with-sites-core-philosophy.md#166-delivering-changes-localhost-first-then-merge)), belongs to the AI. `needs-you` is only for a
+consequential product choice, money or billing, deleting real data, domains or
+DNS, secrets, a change to who can access production data, or another
+irreversible choice, and its Card must teach before asking.
 
 Linear is not required for intake, approval, implementation, or normal project
 progress. Old Linear ids may remain as optional historical evidence. Current
