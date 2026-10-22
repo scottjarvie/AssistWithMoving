@@ -8,6 +8,7 @@ import { Check, Home, Info, Plus } from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { canPerformHouseholdAction } from "../../convex/lib/roles";
 import {
   ActiveMoveMenu,
   ArchivedMovesSection,
@@ -113,16 +114,29 @@ export function MovesHome() {
 
   // Archived moves stay out of the active grid but remain restorable; owners can
   // also permanently delete them.
+  const selectedHousehold = households?.find(
+    (entry) => entry.household._id === householdId,
+  );
+  const isMemberHousehold = Boolean(selectedHousehold);
+  const canCreateMove = selectedHousehold
+    ? canPerformHouseholdAction(selectedHousehold.role, "household:edit")
+    : false;
+  const canManageMoves = selectedHousehold
+    ? canPerformHouseholdAction(
+        selectedHousehold.role,
+        "household:manage_settings",
+      )
+    : false;
   const allMoves = useQuery(
     api.moves.listForHousehold,
-    householdId ? { householdId, includeArchived: true } : "skip",
+    householdId && isMemberHousehold
+      ? { householdId, includeArchived: true }
+      : "skip",
   );
   const archivedMoves: ManagedMove[] = (
     Array.isArray(allMoves) ? allMoves : []
   ).filter((move) => move.status === "archived");
-  const canPurge =
-    households?.find((entry) => entry.household._id === householdId)?.role ===
-    "owner";
+  const canPurge = selectedHousehold?.role === "owner";
 
   const identityResolving = loadingIdentity || loadingHouseholds;
   const hasHousehold = Boolean(householdId);
@@ -187,7 +201,7 @@ export function MovesHome() {
         <Button
           type="button"
           className="w-full sm:w-auto"
-          disabled={!hasHousehold}
+          disabled={!canCreateMove}
           onClick={() => setCreateOpen(true)}
         >
           <Plus aria-hidden="true" />
@@ -314,6 +328,7 @@ export function MovesHome() {
                 key={move._id}
                 move={move}
                 householdId={householdId}
+                canManage={canManageMoves}
                 selected={move._id === moveId}
                 onSelect={selectMove}
               />
@@ -359,6 +374,7 @@ export function MovesHome() {
         <ArchivedMovesSection
           householdId={householdId}
           moves={archivedMoves}
+          canManageMoves={canManageMoves}
           canPurge={canPurge}
         />
       ) : null}
@@ -371,11 +387,13 @@ export function MovesHome() {
 function MoveCard({
   move,
   householdId,
+  canManage,
   selected,
   onSelect,
 }: {
   move: HomeMove;
   householdId: Id<"households"> | null;
+  canManage: boolean;
   selected: boolean;
   onSelect: (moveId: Id<"moves">) => void;
 }) {
@@ -441,7 +459,7 @@ function MoveCard({
           </div>
           <div className="relative z-10 flex shrink-0 items-center gap-1.5">
             <MoveIdTooltip moveId={move._id} />
-            {householdId ? (
+            {householdId && canManage ? (
               <ActiveMoveMenu householdId={householdId} move={move} />
             ) : null}
           </div>

@@ -95,10 +95,12 @@ export function ActiveMoveMenu({
 export function ArchivedMovesSection({
   householdId,
   moves,
+  canManageMoves,
   canPurge,
 }: {
   householdId: Id<"households">;
   moves: ManagedMove[];
+  canManageMoves: boolean;
   canPurge: boolean;
 }) {
   const unarchive = useMutation(api.moves.unarchive);
@@ -139,45 +141,51 @@ export function ArchivedMovesSection({
                   {route || "Route not set"}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  disabled={busyId === move._id}
-                  onClick={() => void handleRestore(move._id)}
-                >
-                  {busyId === move._id ? (
-                    <Loader2 className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <RotateCcw aria-hidden="true" />
-                  )}
-                  Restore
-                </Button>
-                {canPurge ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    className="h-8"
-                    onClick={() => setDeleteTarget(move)}
-                  >
-                    <Trash2 aria-hidden="true" />
-                    Delete
-                  </Button>
-                ) : null}
-              </div>
+              {canManageMoves || canPurge ? (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {canManageMoves ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={busyId === move._id}
+                      onClick={() => void handleRestore(move._id)}
+                    >
+                      {busyId === move._id ? (
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <RotateCcw aria-hidden="true" />
+                      )}
+                      Restore
+                    </Button>
+                  ) : null}
+                  {canPurge ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="h-8"
+                      onClick={() => setDeleteTarget(move)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      Delete
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
             </li>
           );
         })}
       </ul>
 
-      <PermanentDeleteSheet
-        householdId={householdId}
-        move={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-      />
+      {canPurge ? (
+        <PermanentDeleteSheet
+          householdId={householdId}
+          move={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+        />
+      ) : null}
     </section>
   );
 }
