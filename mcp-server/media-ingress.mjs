@@ -78,8 +78,21 @@ export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_R
     let url = parsePublicHttpsUrl(sourceUrl);
     for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
       const addresses = await resolvePublicAddresses(url, lookupFn);
-      assertWithinDeadline();
-      const response = await requestFn({ url, address: addresses[0].address, family: addresses[0].family, timeoutMs: Math.max(1, deadline - Date.now()), accept });
+      let response;
+      // DNS validation covers the entire answer set before connecting. Retry
+      // failed connections using only those addresses, each individually pinned
+      // and using the remaining total budget. Once headers arrive, HTTP policy
+      // and body failures are final rather than reasons to try another address.
+      for (const [index, { address, family }] of addresses.entries()) {
+        assertWithinDeadline();
+        try {
+          response = await requestFn({ url, address, family, timeoutMs: Math.max(1, deadline - Date.now()), accept });
+          break;
+        } catch (error) {
+          assertWithinDeadline();
+          if (index === addresses.length - 1) throw error;
+        }
+      }
       activeResponse = response;
       assertWithinDeadline();
       if ([301, 302, 303, 307, 308].includes(response.status)) {

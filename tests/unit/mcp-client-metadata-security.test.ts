@@ -25,6 +25,10 @@ const document = JSON.stringify({
   redirect_uris: ["https://client.example/callback"],
 });
 const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+const dualStackAnswers = [
+  { address: "2606:4700:4700::1111", family: 6 },
+  { address: "93.184.216.34", family: 4 },
+];
 const response = (body: Iterable<Uint8Array> | AsyncIterable<Uint8Array>) => ({
   status: 200,
   headers: new Headers(),
@@ -104,6 +108,69 @@ describe("#220 client metadata outbound policy", () => {
     }));
   });
 
+  it("tries the next validated address when the first public address is unreachable", async () => {
+    const lookupFn = vi.fn(async () => dualStackAnswers);
+    const requestFn = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error("Network unreachable"), { code: "ENETUNREACH" }))
+      .mockResolvedValueOnce(response([Buffer.from(document)]));
+    expect(await fetchClientMetadata(CLIENT_ID, { lookupFn, requestFn })).toBe(document);
+    expect(lookupFn).toHaveBeenCalledTimes(1);
+    expect(requestFn).toHaveBeenCalledTimes(2);
+    dualStackAnswers.forEach((answer, index) => {
+      expect(requestFn).toHaveBeenNthCalledWith(index + 1, expect.objectContaining({
+        ...answer, url: new URL(CLIENT_ID), accept: "application/json",
+      }));
+    });
+  });
+
+  it("shares the remaining deadline across address attempts and streaming", async () => {
+    vi.useFakeTimers();
+    const remote = response((async function* () {
+      yield Buffer.from("{");
+      await new Promise(() => undefined);
+    })());
+    const requestFn = vi.fn()
+      .mockImplementationOnce(() => new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(new Error("Connection failed")), 1_000);
+      }))
+      .mockResolvedValueOnce(remote);
+    const pending = fetchClientMetadata(CLIENT_ID, {
+      lookupFn: async () => dualStackAnswers, requestFn,
+    });
+    const assertion = expect(pending).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const secondAttempt = requestFn.mock.calls[1]?.[0];
+    await vi.advanceTimersByTimeAsync(METADATA_TIMEOUT_MS - 1_000);
+    await assertion;
+    expect(secondAttempt).toEqual(expect.objectContaining({
+      ...dualStackAnswers[1], timeoutMs: METADATA_TIMEOUT_MS - 1_000,
+    }));
+    expect(remote.destroy).toHaveBeenCalled();
+  });
+
+  it("does not start another connection after the total deadline", async () => {
+    vi.useFakeTimers();
+    const requestFn = vi.fn(() => new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error("Connection failed")), METADATA_TIMEOUT_MS);
+    }));
+    const pending = fetchClientMetadata(CLIENT_ID, {
+      lookupFn: async () => dualStackAnswers, requestFn,
+    });
+    const assertion = expect(pending).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(METADATA_TIMEOUT_MS);
+    await assertion;
+    expect(requestFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails when all validated addresses are unreachable", async () => {
+    const error = Object.assign(new Error("Connection refused"), { code: "ECONNREFUSED" });
+    const requestFn = vi.fn().mockRejectedValue(error);
+    await expect(fetchClientMetadata(CLIENT_ID, {
+      lookupFn: async () => dualStackAnswers, requestFn,
+    })).rejects.toBe(error);
+    expect(requestFn).toHaveBeenCalledTimes(2);
+  });
+
   it.each([301, 302, 303, 307, 308])("refuses HTTP %s without requesting a redirect destination", async (status) => {
     const destroy = vi.fn();
     const requestFn = vi.fn(async () => ({
@@ -111,7 +178,7 @@ describe("#220 client metadata outbound policy", () => {
       headers: new Headers({ location: "https://127.0.0.1/internal" }), destroy,
     }));
     await expect(fetchClientMetadata(CLIENT_ID, {
-      lookupFn: publicLookup, requestFn,
+      lookupFn: async () => dualStackAnswers, requestFn,
     })).rejects.toThrow(/0-redirect limit/);
     expect(requestFn).toHaveBeenCalledTimes(1);
     expect(destroy).toHaveBeenCalled();
@@ -129,9 +196,10 @@ describe("#220 client metadata outbound policy", () => {
     expect(requestFn).not.toHaveBeenCalled();
   });
 
-  it("pins the actual HTTPS socket lookup, retaining the hostname and TLS defaults", async () => {
+  it.each([false, true])("pins the actual HTTPS socket lookup, retaining hostname and TLS defaults (fallback: %s)", async (fallback) => {
+    const answers = fallback ? dualStackAnswers : await publicLookup();
     const lookupFn = vi.fn()
-      .mockResolvedValueOnce(await publicLookup())
+      .mockResolvedValueOnce(answers)
       .mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
     httpsRequestMock.mockImplementation((url, options, onResponse) => {
       expect(url.href).toBe(CLIENT_ID);
@@ -143,9 +211,14 @@ describe("#220 client metadata outbound policy", () => {
       expect(options.checkServerIdentity).toBeUndefined();
       const callback = vi.fn();
       options.lookup("client.example", {}, callback);
-      expect(callback).toHaveBeenCalledWith(null, "93.184.216.34", 4);
+      const answer = answers[httpsRequestMock.mock.calls.length - 1];
+      expect(callback).toHaveBeenCalledWith(null, answer.address, answer.family);
       const socket = new EventEmitter() as any;
       socket.end = () => queueMicrotask(() => {
+        if (fallback && answer.family === 6) {
+          socket.emit("error", Object.assign(new Error("Network unreachable"), { code: "ENETUNREACH" }));
+          return;
+        }
         const stream = Readable.from([Buffer.from(document)]);
         Object.assign(stream, { statusCode: 200, headers: {} });
         onResponse(stream);
@@ -154,7 +227,7 @@ describe("#220 client metadata outbound policy", () => {
     });
     expect(await fetchClientMetadata(CLIENT_ID, { lookupFn })).toBe(document);
     expect(lookupFn).toHaveBeenCalledTimes(1);
-    expect(httpsRequestMock).toHaveBeenCalledTimes(1);
+    expect(httpsRequestMock).toHaveBeenCalledTimes(answers.length);
   });
 
   it("destroys a stalled HTTPS request even before headers arrive", async () => {
