@@ -58,6 +58,8 @@ export const STATELESS_MOVING_TOOL_NAMES = [
 const SERVER_NAME = "assistwithmoving";
 const SERVER_VERSION = "0.4.0";
 const MAX_MCP_REQUEST_BYTES = 512 * 1024;
+// Bound key/array traversal before schema errors can expand a compact request.
+const MAX_MCP_TOOL_INPUT_ELEMENTS = 32_768;
 const mcpQueries = (internal as any).mcpPlanning;
 const mcpMutations = (internal as any).mcpPlanning;
 
@@ -545,6 +547,7 @@ export function createMovingServer(
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
+      maxToolInputElements: MAX_MCP_TOOL_INPUT_ELEMENTS,
       instructions: [
         granted.size === 0
           ? "This sign-in has no active Assist With Moving grant, so no tools are available. The person opens Settings → AI connections in Assist With Moving and approves what this AI may do, then you reconnect."
@@ -1330,6 +1333,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
     {
       legacy: "stateless",
       responseMode: "json",
+      maxRequestBodySize: MAX_MCP_REQUEST_BYTES,
       onerror: (error) => console.error("[MCP] Protocol error", error),
     },
   );
