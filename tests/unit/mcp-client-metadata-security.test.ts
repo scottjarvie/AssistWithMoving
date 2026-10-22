@@ -123,6 +123,75 @@ describe("#220 client metadata outbound policy", () => {
     });
   });
 
+  it.each([0, 1_000])("falls back from a stalled IPv6 connection to pinned IPv4 after %sms of DNS", async (dnsMs) => {
+    vi.useFakeTimers();
+    const sockets: any[] = [];
+    const lookupFn = vi.fn(async () => {
+      if (dnsMs) await new Promise((resolve) => setTimeout(resolve, dnsMs));
+      return dualStackAnswers;
+    });
+    httpsRequestMock.mockImplementation((url, options, onResponse) => {
+      const answer = dualStackAnswers[sockets.length];
+      expect(url.href).toBe(CLIENT_ID);
+      expect(options).toMatchObject({
+        agent: false, autoSelectFamily: false,
+        headers: { accept: "application/json" },
+      });
+      expect(options.rejectUnauthorized).not.toBe(false);
+      expect(options.checkServerIdentity).toBeUndefined();
+      const callback = vi.fn();
+      options.lookup("client.example", {}, callback);
+      expect(callback).toHaveBeenCalledWith(null, answer.address, answer.family);
+      const socket = new EventEmitter() as any;
+      socket.destroy = vi.fn((error) => socket.emit("error", error));
+      socket.end = () => {
+        if (answer.family === 4) queueMicrotask(() => {
+          const stream = Readable.from([Buffer.from(document)]);
+          Object.assign(stream, { statusCode: 200, headers: {} });
+          onResponse(stream);
+        });
+      };
+      sockets.push(socket);
+      return socket;
+    });
+    const pending = fetchClientMetadata(CLIENT_ID, { lookupFn });
+    const assertion = expect(pending).resolves.toBe(document);
+    const firstAttemptMs = (METADATA_TIMEOUT_MS - dnsMs) / dualStackAnswers.length;
+    await vi.advanceTimersByTimeAsync(dnsMs + firstAttemptMs - 1);
+    expect(httpsRequestMock).toHaveBeenCalledTimes(1);
+    expect(sockets[0].destroy).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await assertion;
+    expect(sockets[0].destroy).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
+    expect(sockets[1].destroy).not.toHaveBeenCalled();
+    expect(httpsRequestMock).toHaveBeenCalledTimes(2);
+    expect(lookupFn).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("lets a successful first address stream beyond its connection budget within the total deadline", async () => {
+    vi.useFakeTimers();
+    const socket = new EventEmitter() as any;
+    socket.destroy = vi.fn((error) => socket.emit("error", error));
+    socket.end = () => queueMicrotask(() => {
+      const stream = Readable.from((async function* () {
+        yield Buffer.from(document.slice(0, 1));
+        await new Promise((resolve) => setTimeout(resolve, 4_000));
+        yield Buffer.from(document.slice(1));
+      })());
+      Object.assign(stream, { statusCode: 200, headers: {} });
+      httpsRequestMock.mock.calls[0][2](stream);
+    });
+    httpsRequestMock.mockReturnValue(socket);
+    const pending = fetchClientMetadata(CLIENT_ID, { lookupFn: async () => dualStackAnswers });
+    const assertion = expect(pending).resolves.toBe(document);
+    await vi.advanceTimersByTimeAsync(4_000);
+    await assertion;
+    expect(socket.destroy).not.toHaveBeenCalled();
+    expect(httpsRequestMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("shares the remaining deadline across address attempts and streaming", async () => {
     vi.useFakeTimers();
     const remote = response((async function* () {

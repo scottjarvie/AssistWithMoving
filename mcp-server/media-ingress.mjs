@@ -81,12 +81,14 @@ export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_R
       let response;
       // DNS validation covers the entire answer set before connecting. Retry
       // failed connections using only those addresses, each individually pinned
-      // and using the remaining total budget. Once headers arrive, HTTP policy
-      // and body failures are final rather than reasons to try another address.
+      // and sharing the remaining total budget across the remaining addresses.
+      // Once headers arrive, HTTP policy and body failures are final rather
+      // than reasons to try another address.
       for (const [index, { address, family }] of addresses.entries()) {
         assertWithinDeadline();
+        const attemptTimeoutMs = Math.max(1, Math.floor((deadline - Date.now()) / (addresses.length - index)));
         try {
-          response = await requestFn({ url, address, family, timeoutMs: Math.max(1, deadline - Date.now()), accept });
+          response = await requestFn({ url, address, family, timeoutMs: attemptTimeoutMs, accept });
           break;
         } catch (error) {
           assertWithinDeadline();
@@ -141,7 +143,9 @@ function requestPinnedHttps({ url, address, family, timeoutMs, accept }) {
     // A fresh socket and a single pinned lookup preserve the validated DNS
     // destination while retaining the URL hostname for Host and TLS checks.
     const request = httpsRequest(url, { method: "GET", headers: { accept }, agent: false, autoSelectFamily: false, lookup: (_hostname, _options, callback) => callback(null, address, family) }, (response) => {
-      response.once("close", () => clearTimeout(timer));
+      // The attempt budget ends at headers. Streaming keeps the outer total
+      // deadline so a reachable peer can use the full remaining body budget.
+      clearTimeout(timer);
       resolve({ status: response.statusCode ?? 0, headers: response.headers, body: response, destroy: () => response.destroy() });
     });
     // Socket inactivity alone does not stop a peer dripping TLS/HTTP headers.
