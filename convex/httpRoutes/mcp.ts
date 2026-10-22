@@ -59,7 +59,9 @@ const SERVER_NAME = "assistwithmoving";
 const SERVER_VERSION = "0.4.0";
 const MAX_MCP_REQUEST_BYTES = 512 * 1024;
 // Bound key/array traversal before schema errors can expand a compact request.
-const MAX_MCP_TOOL_INPUT_ELEMENTS = 32_768;
+// Complete results combine inventory and planning/reference arrays; the
+// 512 KiB byte limit admits supported batches larger than 32K entries.
+const MAX_MCP_TOOL_INPUT_ELEMENTS = 65_536;
 const mcpQueries = (internal as any).mcpPlanning;
 const mcpMutations = (internal as any).mcpPlanning;
 
