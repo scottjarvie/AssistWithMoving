@@ -22,7 +22,7 @@ import {
   requestHasQueryStringKey,
 } from "@/lib/mcp-request-auth";
 import { mcpBearerChallenge } from "@/lib/mcp-oauth";
-import { boundHostedMcpRequest, MAX_HOSTED_MCP_INPUT_ELEMENTS } from "@/lib/mcp-input-limits";
+import { boundHostedMcpRequest, MAX_HOSTED_MCP_INPUT_ELEMENTS, MAX_HOSTED_MCP_REQUEST_BYTES } from "@/lib/mcp-input-limits";
 import {
   ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS,
   registerTools,
@@ -137,6 +137,7 @@ async function handleMcpRequest(request: Request): Promise<Response> {
       disableSse: true,
       maxDuration: 60,
       verboseLogs: false,
+      maxRequestBodySize: MAX_HOSTED_MCP_REQUEST_BYTES,
     }
   );
 
