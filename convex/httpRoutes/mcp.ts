@@ -26,6 +26,8 @@ import {
 } from "../lib/aiGrants";
 import {
   ClientIdentityError,
+  looksLikeClientIdMetadataDocument,
+  normalizeClientIdUrl,
   resolveClientIdentity,
   type ResolvedClientIdentity,
 } from "../lib/mcpClientIdentity";
@@ -1257,11 +1259,39 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
   // A client id that claims to be a metadata document and fails to validate is
   // refused outright — degrading it to the fallback would let a bad document
   // buy the easier path.
-  let identity: ResolvedClientIdentity;
+  let identity: Pick<
+    VerifiedPrincipal,
+    "clientId" | "clientName" | "registrationMethod" | "metadataDigest"
+  >;
+  let grantedScopes: MovingScope[] = [];
   try {
-    identity = await resolveClientIdentity(auth.clientId, {
-      declaredClientName,
-    });
+    const claimsMetadata = looksLikeClientIdMetadataDocument(auth.clientId);
+    const clientId = claimsMetadata
+      ? normalizeClientIdUrl(auth.clientId).toString()
+      : auth.clientId;
+
+    // Read the grant before any client-controlled outbound request. Without a
+    // grant, only describe_connection is available; leave metadata unverified
+    // (registration method unknown) rather than fetching or claiming DCR.
+    try {
+      const access = (await actionCtx.runQuery(
+        (internal as any).aiGrants.grantsForPrincipal,
+        { subject, clientId },
+      )) as { scopes: MovingScope[] };
+      grantedScopes = access.scopes ?? [];
+    } catch (error) {
+      console.error("[MCP] Could not read product grants", error);
+    }
+    identity = { clientId };
+    if (grantedScopes.length > 0 || !claimsMetadata) {
+      identity = await resolveClientIdentity(clientId, {
+        declaredClientName,
+        fetchMetadata: (metadataClientId) =>
+          actionCtx.runAction((internal as any).mcpClientMetadata.fetchDocument, {
+            clientId: metadataClientId,
+          }),
+      });
+    }
   } catch (error) {
     if (error instanceof ClientIdentityError) {
       return new Response(
@@ -1281,18 +1311,6 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       );
     }
     throw error;
-  }
-
-  // The grant, read fresh on this request. It decides which tools even appear.
-  let grantedScopes: MovingScope[] = [];
-  try {
-    const access = (await actionCtx.runQuery(
-      (internal as any).aiGrants.grantsForPrincipal,
-      { subject, clientId: identity.clientId },
-    )) as { scopes: MovingScope[] };
-    grantedScopes = access.scopes ?? [];
-  } catch (error) {
-    console.error("[MCP] Could not read product grants", error);
   }
 
   const handler = createMcpHandler(

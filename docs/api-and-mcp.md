@@ -1904,6 +1904,14 @@ next call even while the access token is still cryptographically valid. The
 current boundary version is `GRANT_BOUNDARY_VERSION` in
 `convex/lib/aiGrants.ts`.
 
+Client ID Metadata Documents are retrieved only after an active product grant
+is found. Retrieval runs in a Node-only internal Convex action: every resolved
+address must be public, the HTTPS connection is pinned to a validated address,
+redirects are refused, and DNS, connection and streaming share a five-second
+deadline. The body is capped at 32 KiB while streaming; its self-ID and digest
+checks still apply. Without a grant, `describe_connection` remains available
+without fetching metadata or presenting its registration method as verified.
+
 Canonical OAuth tool catalog. This is the exact list in
 `STATELESS_MOVING_TOOL_NAMES` (`convex/httpRoutes/mcp.ts`), with the scope each
 tool requires from `MOVING_TOOL_SCOPES` (`convex/lib/aiGrants.ts`). A tool is
