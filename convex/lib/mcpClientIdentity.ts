@@ -59,7 +59,7 @@ export class ClientIdentityError extends Error {
   }
 }
 
-const MAX_METADATA_BYTES = 32 * 1024;
+export const MAX_METADATA_BYTES = 32 * 1024;
 const METADATA_CACHE_TTL_MS = 5 * 60 * 1_000;
 const MAX_CACHE_ENTRIES = 64;
 
@@ -88,7 +88,7 @@ export function looksLikeClientIdMetadataDocument(clientId: string): boolean {
   }
 }
 
-function normalizeClientIdUrl(clientId: string): URL {
+export function normalizeClientIdUrl(clientId: string): URL {
   const url = new URL(clientId);
   if (url.protocol !== "https:") {
     throw new ClientIdentityError(
@@ -139,7 +139,7 @@ export async function validateClientMetadataDocument(
   raw: string,
 ): Promise<ResolvedClientIdentity> {
   const url = normalizeClientIdUrl(clientId);
-  if (raw.length > MAX_METADATA_BYTES) {
+  if (new TextEncoder().encode(raw).byteLength > MAX_METADATA_BYTES) {
     throw new ClientIdentityError(
       "metadata_too_large",
       "That Client ID Metadata Document is too large to validate.",
@@ -225,11 +225,6 @@ export async function validateClientMetadataDocument(
   };
 }
 
-export type FetchLike = (
-  input: string,
-  init?: { headers?: Record<string, string>; signal?: AbortSignal },
-) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
-
 /**
  * Resolve the calling client's identity.
  *
@@ -239,7 +234,12 @@ export type FetchLike = (
  */
 export async function resolveClientIdentity(
   clientId: string,
-  options: { fetchImpl?: FetchLike; now?: number; declaredClientName?: string } = {},
+  options: {
+    /** Must use the DNS-pinned, bounded Node action; never platform fetch. */
+    fetchMetadata?: (clientId: string) => Promise<string>;
+    now?: number;
+    declaredClientName?: string;
+  } = {},
 ): Promise<ResolvedClientIdentity> {
   const declaredClientName = options.declaredClientName?.slice(0, 160);
   if (!looksLikeClientIdMetadataDocument(clientId)) {
@@ -250,27 +250,23 @@ export async function resolveClientIdentity(
     };
   }
 
+  // Validate the URL before either a cache hit or the outbound request.
+  normalizeClientIdUrl(clientId);
   const now = options.now ?? Date.now();
   const cached = metadataCache.get(clientId);
   if (cached && cached.expiresAt > now) {
     return { ...cached.value, clientName: cached.value.clientName ?? declaredClientName };
   }
 
-  const doFetch: FetchLike =
-    options.fetchImpl ?? ((input, init) => fetch(input, init) as never);
-
   let raw: string;
   try {
-    const response = await doFetch(clientId, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
+    if (!options.fetchMetadata) {
       throw new ClientIdentityError(
-        "metadata_unavailable",
-        `That Client ID Metadata Document returned HTTP ${response.status}.`,
+        "metadata_fetch_unavailable",
+        "Safe Client ID Metadata Document retrieval is unavailable.",
       );
     }
-    raw = await response.text();
+    raw = await options.fetchMetadata(clientId);
   } catch (error) {
     if (error instanceof ClientIdentityError) throw error;
     throw new ClientIdentityError(

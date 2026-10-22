@@ -445,19 +445,19 @@ describe("client identity", () => {
     // path, which is exactly backwards.
     await expect(
       resolveClientIdentity(DOC_URL, {
-        fetchImpl: async () => ({ ok: false, status: 404, text: async () => "" }),
+        fetchMetadata: async () => { throw new Error("HTTP 404"); },
       }),
     ).rejects.toBeInstanceOf(ClientIdentityError);
   });
 
   it("caches a validated document rather than refetching it every call", async () => {
     let fetches = 0;
-    const fetchImpl = async () => {
+    const fetchMetadata = async () => {
       fetches += 1;
-      return { ok: true, status: 200, text: async () => validDoc };
+      return validDoc;
     };
-    await resolveClientIdentity(DOC_URL, { fetchImpl });
-    await resolveClientIdentity(DOC_URL, { fetchImpl });
+    await resolveClientIdentity(DOC_URL, { fetchMetadata });
+    await resolveClientIdentity(DOC_URL, { fetchMetadata });
     expect(fetches).toBe(1);
   });
 });

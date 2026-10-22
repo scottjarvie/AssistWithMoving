@@ -21,7 +21,9 @@
  * reach these guards without a real authorization server. Everything else — the
  * ordering, the status codes, the bodies — is the shipped code path.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getFunctionName } from "convex/server";
+import { clearClientMetadataCache } from "../../convex/lib/mcpClientIdentity";
 
 const verifyMock = vi.fn();
 
@@ -40,13 +42,13 @@ const CLIENT_ID = "guards-test-client";
 const SUBJECT = "user_guards_test";
 
 /** A verified access token shaped the way the route requires. */
-function verifiedToken() {
+function verifiedToken(clientId = CLIENT_ID) {
   return {
     protectedHeader: { typ: "at+jwt" },
     payload: {
       sub: SUBJECT,
       exp: Math.floor(Date.now() / 1000) + 600,
-      azp: CLIENT_ID,
+      azp: clientId,
       scope: "openid profile email",
     },
   };
@@ -90,15 +92,127 @@ function request(body: BodyInit | null, init: RequestInit = {}) {
 
 /** `handleMcp` reads its URLs from the environment at call time. */
 beforeEach(() => {
+  clearClientMetadataCache();
   process.env.MCP_RESOURCE_URL = RESOURCE;
   process.env.CLERK_JWT_ISSUER_DOMAIN = ISSUER;
   verifyMock.mockReset();
   verifyMock.mockResolvedValue(verifiedToken());
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 async function loadRoute() {
   return import("../../convex/httpRoutes/mcp");
 }
+
+describe("#220 canonical /mcp metadata grant gate", () => {
+  const metadataClientId = "https://client.example/client.json";
+  const metadata = JSON.stringify({
+    client_id: metadataClientId,
+    redirect_uris: ["https://client.example/callback"],
+  });
+  const protocolRequest = (body: string) => {
+    const envelope = JSON.parse(body);
+    envelope.params = {
+      ...envelope.params,
+      _meta: {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": { name: "metadata-security-test", version: "1" },
+        "io.modelcontextprotocol/clientCapabilities": {},
+      },
+    };
+    const req = request(JSON.stringify(envelope));
+    req.headers.set("mcp-protocol-version", "2026-07-28");
+    req.headers.set("mcp-method", envelope.method);
+    if (envelope.params.name) req.headers.set("mcp-name", envelope.params.name);
+    return req;
+  };
+  const listTools = () => protocolRequest(JSON.stringify({
+    jsonrpc: "2.0", id: 1, method: "tools/list",
+  }));
+
+  it("does not retrieve metadata without a grant, and still gives connection guidance", async () => {
+    verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = {
+      runQuery: vi.fn(async () => ({ scopes: [] })),
+      runAction: vi.fn(),
+    } as any;
+    const { handleMcpRequestForTests } = await loadRoute();
+    const response = await handleMcpRequestForTests(ctx, listTools());
+    expect(response.status).toBe(200);
+    expect((await response.json()).result.tools.map((tool: any) => tool.name))
+      .toEqual(["describe_connection"]);
+    const described = await handleMcpRequestForTests(ctx, protocolRequest(JSON.stringify({
+      jsonrpc: "2.0", id: 2, method: "tools/call",
+      params: { name: "describe_connection", arguments: {} },
+    })));
+    expect(described.status).toBe(200);
+    const result = JSON.parse((await described.json()).result.content[0].text);
+    expect(result.connected).toBe(false);
+    expect(result.client.registrationMethod).toBe("unknown");
+    expect(ctx.runAction).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on grant lookup failure without making an outbound request", async () => {
+    verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = {
+      runQuery: vi.fn(async () => { throw new Error("synthetic grant outage"); }),
+      runAction: vi.fn(),
+    } as any;
+    const { handleMcpRequestForTests } = await loadRoute();
+    const response = await handleMcpRequestForTests(ctx, listTools());
+    expect(response.status).toBe(200);
+    expect((await response.json()).result.tools).toHaveLength(1);
+    expect(ctx.runAction).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reads grants before invoking the protected Node action, keeping digest validation", async () => {
+    verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
+    const order: string[] = [];
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx = {
+      runQuery: vi.fn(async () => { order.push("grant"); return { scopes: ["moving.context.read"] }; }),
+      runAction: vi.fn(async () => { order.push("metadata"); return metadata; }),
+    } as any;
+    const { handleMcpRequestForTests } = await loadRoute();
+    const response = await handleMcpRequestForTests(ctx, listTools());
+    expect(response.status).toBe(200);
+    expect(order).toEqual(["grant", "metadata"]);
+    expect(ctx.runAction).toHaveBeenCalledWith(expect.anything(), { clientId: metadataClientId });
+    expect(getFunctionName(ctx.runAction.mock.calls[0][0])).toBe("mcpClientMetadata:fetchDocument");
+    expect((await response.json()).result.tools.map((tool: any) => tool.name))
+      .toContain("get_move_brief");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsafe retrieval and swapped self-IDs rather than downgrading to DCR", async () => {
+    const { handleMcpRequestForTests } = await loadRoute();
+    verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
+    const ctx = {
+      runQuery: vi.fn(async () => ({ scopes: ["moving.context.read"] })),
+      runAction: vi.fn(),
+    } as any;
+    ctx.runAction.mockRejectedValueOnce(new Error("safe fetch refused"));
+    let response = await handleMcpRequestForTests(ctx, listTools());
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: "invalid_client", reason: "metadata_unreachable" });
+    ctx.runAction.mockResolvedValueOnce(metadata.replace(metadataClientId, "https://other.example/client.json"));
+    response = await handleMcpRequestForTests(ctx, listTools());
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: "invalid_client", reason: "client_id_mismatch" });
+  });
+});
 
 describe("canonical /mcp request body cap", () => {
   it("caps requests at exactly 512 KiB, read from source", async () => {

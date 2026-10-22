@@ -63,9 +63,9 @@ export async function resolvePublicAddresses(url, lookupFn = /** @type {any} */ 
 
 /**
  * @param {string} sourceUrl
- * @param {{maxBytes?:number, timeoutMs?:number, maxRedirects?:number, lookupFn?:(hostname:string, options:{all:true,verbatim:true})=>Promise<Array<{address:string,family:number}>>, requestFn?:(options:{url:URL,address:string,family:number,timeoutMs:number})=>Promise<{status:number,headers:Headers|Record<string,string|string[]|undefined>,body:AsyncIterable<Uint8Array>|Iterable<Uint8Array>,destroy?:()=>void}>}} [options]
+ * @param {{maxBytes?:number, timeoutMs?:number, maxRedirects?:number, accept?:string, lookupFn?:(hostname:string, options:{all:true,verbatim:true})=>Promise<Array<{address:string,family:number}>>, requestFn?:(options:{url:URL,address:string,family:number,timeoutMs:number,accept:string})=>Promise<{status:number,headers:Headers|Record<string,string|string[]|undefined>,body:AsyncIterable<Uint8Array>|Iterable<Uint8Array>,destroy?:()=>void}>}} [options]
  */
-export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_REMOTE_MEDIA_BYTES, timeoutMs = DEFAULT_REMOTE_MEDIA_TIMEOUT_MS, maxRedirects = DEFAULT_REMOTE_MEDIA_REDIRECTS, lookupFn = /** @type {any} */ (lookup), requestFn = requestPinnedHttps } = {}) {
+export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_REMOTE_MEDIA_BYTES, timeoutMs = DEFAULT_REMOTE_MEDIA_TIMEOUT_MS, maxRedirects = DEFAULT_REMOTE_MEDIA_REDIRECTS, accept = "image/*,audio/*,video/*", lookupFn = /** @type {any} */ (lookup), requestFn = requestPinnedHttps } = {}) {
   const deadline = Date.now() + timeoutMs;
   const timeoutError = () => new Error(`sourceUrl timed out after ${timeoutMs}ms.`);
   let activeResponse;
@@ -79,7 +79,7 @@ export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_R
     for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
       const addresses = await resolvePublicAddresses(url, lookupFn);
       assertWithinDeadline();
-      const response = await requestFn({ url, address: addresses[0].address, family: addresses[0].family, timeoutMs: Math.max(1, deadline - Date.now()) });
+      const response = await requestFn({ url, address: addresses[0].address, family: addresses[0].family, timeoutMs: Math.max(1, deadline - Date.now()), accept });
       activeResponse = response;
       assertWithinDeadline();
       if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -123,11 +123,18 @@ export async function downloadPublicHttpsMedia(sourceUrl, { maxBytes = DEFAULT_R
   });
 }
 
-function requestPinnedHttps({ url, address, family, timeoutMs }) {
+function requestPinnedHttps({ url, address, family, timeoutMs, accept }) {
   return new Promise((resolve, reject) => {
-    const request = httpsRequest(url, { method: "GET", headers: { accept: "image/*,audio/*,video/*" }, lookup: (_hostname, _options, callback) => callback(null, address, family) }, (response) => resolve({ status: response.statusCode ?? 0, headers: response.headers, body: response, destroy: () => response.destroy() }));
-    request.setTimeout(timeoutMs, () => request.destroy(new Error(`sourceUrl timed out after ${timeoutMs}ms.`)));
-    request.once("error", reject);
+    // A fresh socket and a single pinned lookup preserve the validated DNS
+    // destination while retaining the URL hostname for Host and TLS checks.
+    const request = httpsRequest(url, { method: "GET", headers: { accept }, agent: false, autoSelectFamily: false, lookup: (_hostname, _options, callback) => callback(null, address, family) }, (response) => {
+      response.once("close", () => clearTimeout(timer));
+      resolve({ status: response.statusCode ?? 0, headers: response.headers, body: response, destroy: () => response.destroy() });
+    });
+    // Socket inactivity alone does not stop a peer dripping TLS/HTTP headers.
+    // This deadline also destroys requests that have not produced a response.
+    const timer = setTimeout(() => request.destroy(new Error(`sourceUrl timed out after ${timeoutMs}ms.`)), timeoutMs);
+    request.once("error", (error) => { clearTimeout(timer); reject(error); });
     request.end();
   });
 }
@@ -161,7 +168,11 @@ function isPublicIpv6(address) {
   const first = groups[0];
   const second = groups[1];
   const isIpv4Mapped = groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff;
-  return !(groups.every((group) => group === 0) || (groups.slice(0, 7).every((group) => group === 0) && groups[7] === 1) || isIpv4Mapped || (first === 0x0064 && second === 0xff9b) || (first === 0x0100 && second === 0) || (first === 0x2001 && second <= 0x01ff) || (first === 0x2001 && second === 0x0db8) || first === 0x2002 || (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xffc0) === 0xfec0 || (first & 0xff00) === 0xff00);
+  // Fail closed outside global unicast, and exclude special-use ranges inside
+  // it. This also refuses mapped IPv4, translation, and reserved IPv6 space.
+  // https://www.iana.org/assignments/ipv6-address-space/
+  // https://www.iana.org/assignments/iana-ipv6-special-registry/
+  return (first & 0xe000) === 0x2000 && !(isIpv4Mapped || (first === 0x2001 && second <= 0x01ff) || (first === 0x2001 && second === 0x0db8) || first === 0x2002 || (first === 0x3fff && (second & 0xf000) === 0));
 }
 
 function expandIpv6(address) {
