@@ -67,6 +67,7 @@ type BoundaryScope = {
 };
 
 type GrantRow = {
+  householdId: Id<"households">;
   grantId: Id<"aiGrants">;
   label: string;
   status: "active" | "expired" | "revoked";
@@ -165,6 +166,19 @@ export function buildManualQueueBrief(moveTitle: string | null) {
     "",
     "Do not contact a mover, marketplace, employer, insurer, or government office. Do not book, buy, sign, pay, or message anyone on my behalf. I stay the authority: I review your result and save it into the move myself.",
   ].join("\n");
+}
+
+function GrantMovePicker({ grant, canReadHousehold }: { grant: GrantRow; canReadHousehold: boolean }) {
+  const stats = useQuery(api.households.summaryStats, canReadHousehold ? { householdId: grant.householdId } : "skip") as { moves: MoveSummary[] } | undefined;
+  return <fieldset className="space-y-2 rounded border border-border p-3">
+    <legend>Moves this connection may access</legend>
+    <label className="block"><input type="radio" name="moveScope" value="allMoves" defaultChecked={grant.moveScope === "allMoves"} /> All my moves, including future moves</label>
+    <label className="block"><input type="radio" name="moveScope" value="selectedMoves" defaultChecked={grant.moveScope === "selectedMoves"} /> Only the moves checked below</label>
+    {!canReadHousehold ? <p>This household’s moves are not available. Revoke the connection if you no longer need it.</p> : stats === undefined ? <p>Loading moves…</p> : stats.moves.map(move => <label key={String(move.moveId)} className="block">
+      <input type="checkbox" name="moveIds" value={String(move.moveId)} defaultChecked={grant.moveIds.includes(String(move.moveId))} /> {move.title}
+    </label>)}
+    <p className="text-xs text-muted-foreground">Selecting moves changes this existing connection. Its other limits stay in place.</p>
+  </fieldset>;
 }
 
 export function AiConnectionManager() {
@@ -795,7 +809,7 @@ export function AiConnectionManager() {
 
                 {grant.status !== "revoked" ? (
                   <details className="mt-3 text-sm">
-                    <summary className="cursor-pointer">Change permissions or end date</summary>
+                    <summary className="cursor-pointer">Change moves, permissions or end date</summary>
                     <form key={grant.version} className="mt-3 space-y-2" onSubmit={async (event) => {
                       event.preventDefault();
                       const data = new FormData(event.currentTarget);
@@ -805,6 +819,8 @@ export function AiConnectionManager() {
                         await updateLimits({
                           grantId: grant.grantId, expectedVersion: grant.version,
                           scopes: data.getAll("scopes") as GrantScope[],
+                          moveScope: data.get("moveScope") as "allMoves" | "selectedMoves",
+                          moveIds: data.getAll("moveIds") as Id<"moves">[],
                           ...(days === "keep" ? {} : { expiresInDays: days === "0" ? null : Number(days) }),
                         });
                         setMessage("Connection limits saved. An end date you pick is preserved as your choice.");
@@ -812,6 +828,7 @@ export function AiConnectionManager() {
                         setMessage(describeMutationError(error, "Couldn't save connection limits."));
                       } finally { setBusy(null); }
                     }}>
+                      <GrantMovePicker grant={grant} canReadHousehold={Boolean(households?.some(entry => entry.household._id === grant.householdId))} />
                       {boundaryScopes.map((info) => <label key={info.scope} className="flex gap-2">
                         <input type="checkbox" name="scopes" value={info.scope} defaultChecked={grant.scopes.includes(info.scope)} />
                         {info.label}
