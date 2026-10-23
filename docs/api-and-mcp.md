@@ -1895,10 +1895,12 @@ API-key and maintainer stdio sections below still show one CLI's configuration
 syntax; those are key-based transports where the config format is the fact being
 documented, not a claim that an AI product completed an OAuth lifecycle.)
 
-**Signing in is not permission.** OAuth proves who is calling; a product grant,
+**Connecting creates a full-access grant with no end date by default**, including
+future scopes. The person can narrow moves or operations, choose an end date, or
+revoke it at `https://movingmanifest.com/settings/ai`. OAuth proves who is calling; a product grant,
 re-read from the database on every discovery and every tool call, decides what
 that caller may do. Clerk issues identity-only scopes (`openid profile email`)
-and a broader token never widens a grant. People approve, inspect, and revoke
+and a broader token never widens a grant. People inspect, narrow, and revoke
 grants at `https://movingmanifest.com/settings/ai`; revoking refuses the very
 next call even while the access token is still cryptographically valid. The
 current boundary version is `GRANT_BOUNDARY_VERSION` in
