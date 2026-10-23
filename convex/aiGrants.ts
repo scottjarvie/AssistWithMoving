@@ -83,6 +83,7 @@ function shapeGrant(grant: Doc<"aiGrants">, now: number) {
   const active = grantIsActive(grant, now);
   return {
     grantId: grant._id,
+    householdId: grant.householdId,
     label: grant.label,
     status: grant.status === "revoked" ? "revoked" : active ? "active" : "expired",
     scopes: [...effectiveScopes(grant)],
@@ -586,6 +587,31 @@ export const listActivity = query({
   },
 });
 
+async function validateGrantMoves(
+  ctx: MutationCtx, householdId: Id<"households">,
+  moveScope: "allMoves" | "selectedMoves", requestedMoveIds?: Id<"moves">[],
+) {
+    let moveIds: Id<"moves">[] | undefined;
+    if (moveScope === "selectedMoves") {
+      const requested = [...new Set(requestedMoveIds ?? [])];
+      if (requested.length === 0) {
+        throw new ConvexError("Choose at least one move, or grant all moves.");
+      }
+      if (requested.length > 25) {
+        throw new ConvexError("Select 25 moves or fewer for one connection.");
+      }
+      for (const moveId of requested) {
+        const move = await ctx.db.get(moveId);
+        if (!move || move.householdId !== householdId) {
+          throw new ConvexError("That move is not available in this household.");
+        }
+      }
+      moveIds = requested;
+    }
+
+    return moveIds;
+}
+
 export const approve = mutation({
   args: {
     householdId: v.id("households"),
@@ -622,25 +648,7 @@ export const approve = mutation({
       }
     }
 
-    // Selected moves must be moves this person can actually reach. Approving a
-    // grant is not a way to discover that a move exists.
-    let moveIds: Id<"moves">[] | undefined;
-    if (args.moveScope === "selectedMoves") {
-      const requested = [...new Set(args.moveIds ?? [])];
-      if (requested.length === 0) {
-        throw new ConvexError("Choose at least one move, or grant all moves.");
-      }
-      if (requested.length > 25) {
-        throw new ConvexError("Select 25 moves or fewer for one connection.");
-      }
-      for (const moveId of requested) {
-        const move = await ctx.db.get(moveId);
-        if (!move || move.householdId !== args.householdId) {
-          throw new ConvexError("That move is not available in this household.");
-        }
-      }
-      moveIds = requested;
-    }
+    const moveIds = await validateGrantMoves(ctx, args.householdId, args.moveScope, args.moveIds);
 
     const now = Date.now();
     const existing = await ctx.db
@@ -708,6 +716,8 @@ export const updateLimits = mutation({
   args: {
     grantId: v.id("aiGrants"), expectedVersion: v.number(),
     scopes: v.optional(v.array(movingGrantScope)),
+    moveScope: v.optional(v.union(v.literal("allMoves"), v.literal("selectedMoves"))),
+    moveIds: v.optional(v.array(v.id("moves"))),
     // null deliberately removes an end date; omitted preserves it.
     expiresInDays: v.optional(v.union(v.number(), v.null())),
   },
@@ -717,12 +727,22 @@ export const updateLimits = mutation({
     if (!grant || grant.ownerUserId !== user._id) throw new ConvexError("That AI connection is not available.");
     if (grant.status === "revoked") throw new ConvexError("A revoked connection stays revoked. Approve a new connection instead.");
     if (grant.version !== args.expectedVersion) throw new ConvexError("This connection changed. Reload and try again.");
+    const editsMoves = args.moveScope !== undefined || args.moveIds !== undefined;
+    const moveScope = args.moveScope ?? grant.moveScope;
+    let moveIds = grant.moveIds;
+    if (editsMoves) {
+      const membership = await ctx.db.query("householdMemberships")
+        .withIndex("by_household_user", q => q.eq("householdId", grant.householdId).eq("userId", user._id)).unique();
+      if (!membership || membership.status !== "active") throw new ConvexError("You are not an active member of that household.");
+      moveIds = await validateGrantMoves(ctx, grant.householdId, moveScope, args.moveIds ?? grant.moveIds);
+    }
     const now = Date.now();
     const scopes = args.scopes ? [...new Set(args.scopes)] : undefined;
     if (scopes?.length === 0) throw new ConvexError("Choose at least one thing this AI may do.");
     const expiresAt = args.expiresInDays === null ? undefined : chosenExpiry(args.expiresInDays, now);
     const resolved = await resolveLegacyExpiry(ctx, grant);
     const patch = {
+      ...(editsMoves ? { moveScope, moveIds } : {}),
       scopeChoice: effectiveScopeChoice(grant),
       // Freeze person choices; preserve proven automatic removal across edits.
       ...(args.expiresInDays === undefined ? {
@@ -734,8 +754,8 @@ export const updateLimits = mutation({
       version: grant.version + 1, updatedAt: now,
     };
     await ctx.db.patch(grant._id, patch);
-    await appendGrantActivity(ctx, grant, { type: "approved", outcome: "recorded", message: "You changed this connection’s limits. Your chosen scopes and end date are preserved." });
-    await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "user", actorUserId: user._id, category: "ai", action: "ai_grant.limits_changed", objectTable: "aiGrants", objectId: grant._id, metadata: { scopeChoice: patch.scopeChoice ?? null, expiryChoice: patch.expiryChoice ?? null } });
+    await appendGrantActivity(ctx, grant, { type: "approved", outcome: "recorded", message: "You changed this connection’s limits. Your chosen moves, scopes and end date are preserved." });
+    await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "user", actorUserId: user._id, category: "ai", action: "ai_grant.limits_changed", objectTable: "aiGrants", objectId: grant._id, metadata: { scopeChoice: patch.scopeChoice ?? null, expiryChoice: patch.expiryChoice ?? null, moveScope, moveCount: moveIds?.length ?? null } });
     return { grantId: grant._id };
   },
 });
