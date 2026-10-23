@@ -24,15 +24,16 @@ import { requireCurrentUser } from "./lib/auth";
 import { recordAuditEvent } from "./lib/audit";
 import {
   GRANT_BOUNDARY_VERSION,
+  movingScopes,
   buildConsentSnapshot,
   describeGrantBoundary,
   findPermittingGrant,
-  movingScopes,
   effectiveScopes,
   effectiveScopeChoice,
   effectiveExpiry,
-  chosenExpiry,
-  scopeChoiceFor,
+  requireCurrentConsent,
+  explicitScopes,
+  explicitExpiry,
   type MovingScope,
 } from "./lib/aiGrants";
 import { CLIENT_REGISTRATION_LABELS } from "./lib/mcpClientIdentity";
@@ -612,8 +613,16 @@ async function validateGrantMoves(
     return moveIds;
 }
 
+const consentArgs = {
+  consentPolicyVersion: v.optional(v.string()),
+  catalogFingerprint: v.optional(v.string()),
+  scopeIntent: v.optional(v.union(v.literal("full"), v.literal("chosen"), v.literal("preserve"))),
+  expiryIntent: v.optional(v.union(v.literal("none"), v.literal("chosen"))),
+};
+
 export const approve = mutation({
   args: {
+    ...consentArgs,
     householdId: v.id("households"),
     label: v.string(),
     scopes: v.array(movingGrantScope),
@@ -638,15 +647,10 @@ export const approve = mutation({
     if (!label || label.length > 80) {
       throw new ConvexError("Give this connection a short name you'll recognise.");
     }
-    const scopes = [...new Set(args.scopes)];
-    if (scopes.length === 0) {
-      throw new ConvexError("Choose at least one thing this AI may do.");
-    }
-    for (const scope of scopes) {
-      if (!movingScopes.includes(scope)) {
-        throw new ConvexError("That is not an Assist With Moving scope.");
-      }
-    }
+    requireCurrentConsent(args.consentPolicyVersion, args.catalogFingerprint);
+    if (args.scopeIntent === "preserve") throw new ConvexError("Choose permissions for this new connection.");
+    const scopes = explicitScopes(args.scopes, args.scopeIntent);
+    const expiresAt = explicitExpiry(args.expiryIntent, args.expiresInDays, Date.now());
 
     const moveIds = await validateGrantMoves(ctx, args.householdId, args.moveScope, args.moveIds);
 
@@ -663,13 +667,12 @@ export const approve = mutation({
       );
     }
 
-    const expiresAt = chosenExpiry(args.expiresInDays, now);
     const grantId = await ctx.db.insert("aiGrants", {
       ownerUserId: user._id,
       householdId: args.householdId,
       label,
       scopes,
-      scopeChoice: scopeChoiceFor(scopes),
+      scopeChoice: args.scopeIntent as "full" | "chosen",
       expiryChoice: expiresAt === undefined ? "none" : "chosen",
       moveScope: args.moveScope,
       moveIds,
@@ -714,6 +717,7 @@ export const approve = mutation({
 /** Owner-only limit edits. Revoked connections cannot be resurrected here. */
 export const updateLimits = mutation({
   args: {
+    ...consentArgs,
     grantId: v.id("aiGrants"), expectedVersion: v.number(),
     scopes: v.optional(v.array(movingGrantScope)),
     moveScope: v.optional(v.union(v.literal("allMoves"), v.literal("selectedMoves"))),
@@ -737,20 +741,39 @@ export const updateLimits = mutation({
       moveIds = await validateGrantMoves(ctx, grant.householdId, moveScope, args.moveIds ?? grant.moveIds);
     }
     const now = Date.now();
-    const scopes = args.scopes ? [...new Set(args.scopes)] : undefined;
-    if (scopes?.length === 0) throw new ConvexError("Choose at least one thing this AI may do.");
-    const expiresAt = args.expiresInDays === null ? undefined : chosenExpiry(args.expiresInDays, now);
+    let scopes: MovingScope[] | undefined;
+    let scopeChoice = effectiveScopeChoice(grant);
+    if (args.scopes !== undefined) {
+      requireCurrentConsent(args.consentPolicyVersion, args.catalogFingerprint);
+      if (args.scopeIntent === "preserve") {
+        const current = effectiveScopes(grant);
+        const submitted = [...new Set(args.scopes)];
+        if (submitted.length !== current.length || current.some(scope => !submitted.includes(scope as MovingScope))) {
+          throw new ConvexError("Permissions changed. Reload and deliberately choose the permissions you want.");
+        }
+      } else {
+        scopes = explicitScopes(args.scopes, args.scopeIntent);
+        scopeChoice = args.scopeIntent as "full" | "chosen";
+      }
+    } else if (args.scopeIntent !== undefined && args.scopeIntent !== "preserve") {
+      throw new ConvexError("Review the permissions before changing access.");
+    }
+    if (args.expiresInDays !== undefined || args.expiryIntent !== undefined) {
+      requireCurrentConsent(args.consentPolicyVersion, args.catalogFingerprint);
+    }
+    const editsExpiry = args.expiresInDays !== undefined || args.expiryIntent !== undefined;
+    const expiresAt = editsExpiry ? explicitExpiry(args.expiryIntent, args.expiresInDays, now) : undefined;
     const resolved = await resolveLegacyExpiry(ctx, grant);
     const patch = {
       ...(editsMoves ? { moveScope, moveIds } : {}),
-      scopeChoice: effectiveScopeChoice(grant),
+      scopeChoice,
       // Freeze person choices; preserve proven automatic removal across edits.
-      ...(args.expiresInDays === undefined ? {
+      ...(!editsExpiry ? {
         expiresAt: effectiveExpiry(resolved),
         expiryChoice: effectiveExpiry(resolved) === undefined ? "none" as const : "chosen" as const,
       } : {}),
-      ...(scopes ? { scopes, scopeChoice: scopeChoiceFor(scopes), consentSnapshot: buildConsentSnapshot(scopes), consentBoundaryVersion: GRANT_BOUNDARY_VERSION } : {}),
-      ...(args.expiresInDays !== undefined ? { expiresAt, expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const } : {}),
+      ...(scopes ? { scopes, scopeChoice, consentSnapshot: buildConsentSnapshot(scopes), consentBoundaryVersion: GRANT_BOUNDARY_VERSION } : {}),
+      ...(editsExpiry ? { expiresAt, expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const } : {}),
       version: grant.version + 1, updatedAt: now,
     };
     await ctx.db.patch(grant._id, patch);

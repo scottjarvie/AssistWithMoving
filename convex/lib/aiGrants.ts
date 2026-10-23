@@ -28,6 +28,35 @@ export const movingScopes = [
   "moving.archive",
 ] as const;
 
+/** Explicit consent protocol; old forms must reload rather than guess intent. */
+export const GRANT_CONSENT_POLICY = "explicit-intent-v1";
+export function grantCatalogFingerprint(scopes: readonly string[] = movingScopes) {
+  return JSON.stringify([GRANT_BOUNDARY_VERSION, [...scopes].sort()]);
+}
+export function requireCurrentConsent(policy?: string, fingerprint?: string) {
+  if (policy !== GRANT_CONSENT_POLICY || fingerprint !== grantCatalogFingerprint()) {
+    throw new ConvexError("AI connection choices have changed. Reload Settings → AI connections, review the current permissions and end date, then try again.");
+  }
+}
+export function explicitScopes(scopes: readonly MovingScope[], intent?: "full" | "chosen") {
+  if (intent !== "full" && intent !== "chosen") {
+    throw new ConvexError("Reload AI connections and explicitly choose full access or chosen permissions.");
+  }
+  const selected = [...new Set(scopes)];
+  if (!selected.length || selected.some(scope => !movingScopes.includes(scope))) {
+    throw new ConvexError("Choose at least one current Assist With Moving permission.");
+  }
+  if (intent === "full" && (selected.length !== movingScopes.length || movingScopes.some(scope => !selected.includes(scope)))) {
+    throw new ConvexError("Full access must include the current permission catalog. Reload and review your choices.");
+  }
+  return intent === "full" ? [...movingScopes] : selected;
+}
+export function explicitExpiry(intent: "none" | "chosen" | undefined, days: number | null | undefined, now: number) {
+  if (intent === "none" && (days === undefined || days === null)) return undefined;
+  if (intent === "chosen" && typeof days === "number") return chosenExpiry(days, now);
+  throw new ConvexError("Reload AI connections and explicitly choose an end date or no end date.");
+}
+
 /** Frozen legacy baseline: never extend this when adding new scopes. */
 export const LEGACY_FULL_SCOPE_BASELINE = [
   "moving.context.read", "moving.evidence.read", "moving.work.write",
@@ -46,17 +75,13 @@ export function effectiveScopes(grant: ScopeGrant): readonly string[] {
   return effectiveScopeChoice(grant) === "full" ? movingScopes : grant.scopes;
 }
 
-export function scopeChoiceFor(scopes: readonly string[]): "full" | "chosen" {
-  return movingScopes.every((scope) => scopes.includes(scope)) ? "full" : "chosen";
-}
-
 export function effectiveExpiry(grant: {
   expiresAt?: number; expiryChoice?: "none" | "chosen" | "automatic";
 }) {
   return grant.expiryChoice === "automatic" ? undefined : grant.expiresAt;
 }
 
-/** A supplied duration is an explicit choice, including from older frontends. */
+/** Validate a duration only after the caller has established explicit intent. */
 export function chosenExpiry(days: number | undefined, now: number) {
   if (days === undefined) return undefined;
   if (!Number.isFinite(days) || days < 1 || days > 365 || !Number.isInteger(days)) {
@@ -307,6 +332,8 @@ export function buildConsentSnapshot(
 export function describeGrantBoundary() {
   return {
     boundaryVersion: GRANT_BOUNDARY_VERSION,
+    consentPolicyVersion: GRANT_CONSENT_POLICY,
+    catalogFingerprint: grantCatalogFingerprint(),
     scopes: MOVING_SCOPES.map((info) => ({ ...info })),
     neverExposed: [...NEVER_EXPOSED],
     neverPermitted: [...NEVER_PERMITTED],

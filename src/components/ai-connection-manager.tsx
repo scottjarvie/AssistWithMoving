@@ -35,6 +35,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { describeMutationError } from "@/lib/mutation-error";
 
+import { GRANT_CONSENT_POLICY, grantCatalogFingerprint } from "../../convex/lib/aiGrants";
+
 export const MCP_ENDPOINT = "https://movingmanifest.com/mcp";
 
 /** The scope literals the mutation accepts, taken from the shipped contract. */
@@ -72,6 +74,7 @@ type GrantRow = {
   label: string;
   status: "active" | "expired" | "revoked";
   scopes: string[];
+  scopeChoice?: "full" | "chosen";
   moveScope: "allMoves" | "selectedMoves";
   moveIds: string[];
   observedClientName: string | null;
@@ -95,6 +98,8 @@ type GrantRow = {
 
 type GrantsResult = {
   boundaryVersion: string;
+  consentPolicyVersion?: string;
+  catalogFingerprint?: string;
   scopes: BoundaryScope[];
   neverExposed: string[];
   neverPermitted: string[];
@@ -181,6 +186,22 @@ function GrantMovePicker({ grant, canReadHousehold }: { grant: GrantRow; canRead
   </fieldset>;
 }
 
+function GrantPermissionPicker({ grant, scopes }: { grant: GrantRow; scopes: BoundaryScope[] }) {
+  const [intent, setIntent] = useState<"preserve" | "full" | "chosen">("preserve");
+  const [selected, setSelected] = useState(grant.scopes);
+  return <fieldset>
+    <input type="hidden" name="scopeIntent" value={intent} />
+    {scopes.map(info => <label key={info.scope} className="flex gap-2">
+      <input type="checkbox" name="scopes" value={info.scope} checked={selected.includes(info.scope)} onChange={event => {
+        const next = event.target.checked ? [...selected, info.scope] : selected.filter(scope => scope !== info.scope);
+        setSelected(next);
+        setIntent(scopes.every(scope => next.includes(scope.scope)) ? "full" : "chosen");
+      }} />
+      {info.label}
+    </label>)}
+  </fieldset>;
+}
+
 export function AiConnectionManager() {
   const { isLoaded, isSignedIn } = useAuth();
   const ready = isLoaded && isSignedIn;
@@ -231,6 +252,9 @@ export function AiConnectionManager() {
     [moves],
   );
   const boundaryScopes = grantsResult?.scopes ?? [];
+  const canWriteConsent = grantsResult?.consentPolicyVersion === GRANT_CONSENT_POLICY &&
+    grantsResult?.catalogFingerprint === grantCatalogFingerprint();
+  const consent = { consentPolicyVersion: grantsResult?.consentPolicyVersion, catalogFingerprint: grantsResult?.catalogFingerprint };
   const selectedScopes = scopeSelection ?? boundaryScopes.map((info) => info.scope);
   const chosenScopeInfos = boundaryScopes.filter((info) =>
     selectedScopes.includes(info.scope),
@@ -256,11 +280,14 @@ export function AiConnectionManager() {
   }
 
   async function handleApprove() {
-    if (!householdId) return;
+    if (!householdId || !canWriteConsent) return;
     setBusy("approve");
     setMessage(null);
     try {
       await approveGrant({
+        ...consent,
+        scopeIntent: boundaryScopes.every(info => selectedScopes.includes(info.scope)) ? "full" : "chosen",
+        expiryIntent: expiresInDays === 0 ? "none" : "chosen",
         householdId,
         label: label.trim(),
         scopes: selectedScopes as GrantScope[],
@@ -315,6 +342,7 @@ export function AiConnectionManager() {
   }
 
   const canApprove =
+    canWriteConsent &&
     Boolean(householdId) &&
     label.trim().length > 0 &&
     selectedScopes.length > 0 &&
@@ -376,9 +404,9 @@ export function AiConnectionManager() {
               </h3>
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              You point your AI at one address, sign in as yourself, and then
-              get full access with no end date by default. You can choose fewer
-              permissions or an end date here, or revoke access at any time.
+              {canWriteConsent
+                ? "You point your AI at one address, sign in as yourself, and then get full access with no end date by default. You can choose fewer permissions or an end date here, or revoke access at any time."
+                : "You point your AI at one address and sign in as yourself. Review your existing connections below. Updated permission controls will be available when this app and its backend support the same consent policy."}
             </p>
             <div className="mt-4 flex flex-col gap-2 rounded-md border border-border bg-background/70 p-3 sm:flex-row sm:items-center sm:justify-between">
               <code className="min-w-0 break-all text-xs sm:text-sm">
@@ -415,13 +443,14 @@ export function AiConnectionManager() {
           Approve a connection
         </h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Full access includes every current and future tool scope. Limits are
-          optional: turn off permissions or choose an end date if you want them.
+          {canWriteConsent
+            ? "Full access includes every current and future tool scope. Limits are optional: turn off permissions or choose an end date if you want them."
+            : "Connection approvals and limit edits are read-only until the app and backend support the same permission catalog. Reload after the update is available."}
         </p>
 
         {grantsResult === undefined ? (
           <Skeleton className="mt-4 h-64 w-full" />
-        ) : (
+        ) : canWriteConsent ? (
           <div className="mt-4 space-y-5">
             {households && households.length > 1 ? (
               <div className="space-y-1.5">
@@ -670,7 +699,7 @@ export function AiConnectionManager() {
               {busy === "approve" ? "Approving…" : "Approve this connection"}
             </Button>
           </div>
-        )}
+        ) : null}
       </section>
 
       {/* ---------------------------------------------------------------- */}
@@ -807,21 +836,24 @@ export function AiConnectionManager() {
                   </ul>
                 </div>
 
-                {grant.status !== "revoked" ? (
+                {grant.status !== "revoked" && canWriteConsent ? (
                   <details className="mt-3 text-sm">
                     <summary className="cursor-pointer">Change moves, permissions or end date</summary>
-                    <form key={grant.version} className="mt-3 space-y-2" onSubmit={async (event) => {
+                    <form key={`${grant.version}-${grantsResult?.catalogFingerprint}`} className="mt-3 space-y-2" onSubmit={async (event) => {
                       event.preventDefault();
+                      if (!canWriteConsent) return;
                       const data = new FormData(event.currentTarget);
                       setBusy(`limits-${grant.grantId}`);
                       try {
                         const days = String(data.get("days"));
                         await updateLimits({
+                          ...consent,
+                          scopeIntent: data.get("scopeIntent") as "preserve" | "full" | "chosen",
                           grantId: grant.grantId, expectedVersion: grant.version,
                           scopes: data.getAll("scopes") as GrantScope[],
                           moveScope: data.get("moveScope") as "allMoves" | "selectedMoves",
                           moveIds: data.getAll("moveIds") as Id<"moves">[],
-                          ...(days === "keep" ? {} : { expiresInDays: days === "0" ? null : Number(days) }),
+                          ...(days === "keep" ? {} : { expiryIntent: days === "0" ? "none" as const : "chosen" as const, expiresInDays: days === "0" ? null : Number(days) }),
                         });
                         setMessage("Connection limits saved. An end date you pick is preserved as your choice.");
                       } catch (error) {
@@ -829,10 +861,7 @@ export function AiConnectionManager() {
                       } finally { setBusy(null); }
                     }}>
                       <GrantMovePicker grant={grant} canReadHousehold={Boolean(households?.some(entry => entry.household._id === grant.householdId))} />
-                      {boundaryScopes.map((info) => <label key={info.scope} className="flex gap-2">
-                        <input type="checkbox" name="scopes" value={info.scope} defaultChecked={grant.scopes.includes(info.scope)} />
-                        {info.label}
-                      </label>)}
+                      <GrantPermissionPicker grant={grant} scopes={boundaryScopes} />
                       <label className="block">End date
                         <select name="days" defaultValue="keep" className="ml-2 rounded border border-input bg-background p-2">
                           <option value="keep">Keep current end date</option>
