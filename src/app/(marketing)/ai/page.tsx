@@ -9,7 +9,6 @@ import {
   KeyRound,
   MessageSquareText,
   ShieldCheck,
-  Sparkles,
   Truck,
 } from "lucide-react";
 
@@ -19,7 +18,6 @@ import {
 } from "@/components/public-page-chrome";
 import type { PublicNavigationMode } from "@/components/public-page-chrome";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Use Assist With Moving with your chosen AI",
@@ -218,17 +216,6 @@ export default function AiAssistantPage() {
               MCP with compatible OAuth, sign in, and approve a grant for the
               moves and operations you actually want covered.
             </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button asChild size="touch">
-                <Link href="/ai/start">
-                  Start AI setup
-                  <ArrowRight aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="touch">
-                <a href="/llms.txt">AI-readable guide</a>
-              </Button>
-            </div>
             <p className="mt-5 font-mono text-xs leading-5 text-muted-foreground">
               {canonicalEndpoint}
             </p>
@@ -538,12 +525,6 @@ function AssistantVisual() {
           done, and revoking it refuses the very next call.
         </p>
       </div>
-      <Button asChild size="touch" className="mt-4 w-full">
-        <Link href="/ai/start">
-          Start AI setup
-          <Sparkles aria-hidden="true" />
-        </Link>
-      </Button>
     </div>
   );
 }
