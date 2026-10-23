@@ -215,13 +215,13 @@ export const GRANT_ERRORS = {
     code: "GRANT_SCOPE_MISSING",
     message: "This grant does not include the operation you asked for.",
     recovery:
-      "Ask for the smallest additional authority in Settings → AI connections, or do the part the grant already covers.",
+      "Ask for the smallest additional authority at https://movingmanifest.com/settings/ai, or do the part the grant already covers.",
   },
   outOfMoveScope: {
     code: "GRANT_MOVE_MISSING",
     message: "This grant does not cover that move.",
     recovery:
-      "Use a move this connection was approved for, or add it in Settings → AI connections.",
+      "Use a move this connection was approved for, or add it at https://movingmanifest.com/settings/ai.",
   },
   unknownTool: {
     code: "GRANT_SCOPE_MISSING",
