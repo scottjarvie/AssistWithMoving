@@ -152,32 +152,81 @@ async function appendGrantActivity(
 // outside this deployment can supply it.
 // ---------------------------------------------------------------------------
 
-/**
- * Every currently-valid grant for one person, optionally narrowed to the OAuth
- * client that is calling. Read fresh on every discovery and every tool call —
- * that freshness is what makes revocation immediate.
- */
+/** Bounded histories include refusals; a truncated history must never authorize. */
+const MAX_GRANT_HISTORY = 128;
+
+function approvalTime(grant: Doc<"aiGrants">) {
+  return grant.ownerDecisionAt ?? grant.approvedAt;
+}
+
+function decisionTime(grant: Doc<"aiGrants">) {
+  return Math.max(
+    approvalTime(grant),
+    grant.status === "revoked" ? (grant.revokedAt ?? grant.approvedAt) : 0,
+  );
+}
+
+/** Usage never orders authority. Refusal wins equal timestamps; immutable
+ * creation time and id make the remaining ties deterministic on every read. */
+function compareDecisions(a: Doc<"aiGrants">, b: Doc<"aiGrants">, now: number) {
+  return decisionTime(a) - decisionTime(b) ||
+    Number(!grantIsActive(a, now)) - Number(!grantIsActive(b, now)) ||
+    approvalTime(a) - approvalTime(b) ||
+    a._creationTime - b._creationTime ||
+    (a._id < b._id ? -1 : a._id > b._id ? 1 : 0);
+}
+
+async function grantHistory(
+  ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">, clientId?: string,
+) {
+  const rows = await ctx.db.query("aiGrants")
+    .withIndex("by_owner_client_status", q => clientId === undefined
+      ? q.eq("ownerUserId", ownerUserId)
+      : q.eq("ownerUserId", ownerUserId).eq("clientId", clientId))
+    .take(MAX_GRANT_HISTORY + 1);
+  if (rows.length > MAX_GRANT_HISTORY) {
+    throw new ConvexError("AI connection history exceeds the safe read limit. Review connections before retrying.");
+  }
+  return Promise.all(rows.map(row => resolveLegacyExpiry(ctx, row)));
+}
+
+async function governingGrants(
+  ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">,
+  clientId: string | undefined, now: number,
+) {
+  if (clientId === undefined) {
+    const rows = await grantHistory(ctx, ownerUserId);
+    const clients = new Map<string, Doc<"aiGrants">>();
+    const unbound = rows.filter(row => !row.clientId);
+    for (const row of rows) {
+      if (!row.clientId) continue;
+      const previous = clients.get(row.clientId);
+      if (!previous || compareDecisions(row, previous, now) > 0) clients.set(row.clientId, row);
+    }
+    return [...clients.values(), ...unbound];
+  }
+  // Both sets are indexed and independently bounded. A refusal for this
+  // client cannot hide behind unrelated clients or an active-only window.
+  const bound = await grantHistory(ctx, ownerUserId, clientId);
+  const unbound = await ctx.db.query("aiGrants")
+    .withIndex("by_owner_client_status", q => q.eq("ownerUserId", ownerUserId).eq("clientId", undefined))
+    .take(MAX_GRANT_HISTORY + 1);
+  if (unbound.length > MAX_GRANT_HISTORY) throw new ConvexError("AI connection history exceeds the safe read limit. Review connections before retrying.");
+  const candidates = [...bound, ...await Promise.all(unbound.filter(row => row.status === "active").map(row => resolveLegacyExpiry(ctx, row)))];
+  const latest = candidates.reduce<Doc<"aiGrants"> | undefined>((winner, row) =>
+    !winner || compareDecisions(row, winner, now) > 0 ? row : winner, undefined);
+  return latest ? [latest] : [];
+}
+
+/** Re-read the governing decision before filtering status or expiry. */
 export async function activeGrantsForUser(
   ctx: QueryCtx | MutationCtx,
   ownerUserId: Id<"users">,
   clientId: string | undefined,
   now: number,
 ) {
-  const rows = await ctx.db
-    .query("aiGrants")
-    .withIndex("by_owner_status_updated", (q) =>
-      q.eq("ownerUserId", ownerUserId).eq("status", "active"),
-    )
-    .order("desc")
-    .take(MAX_ACTIVE_GRANTS * 2);
-  const resolved = await Promise.all(rows.map((row) => resolveLegacyExpiry(ctx, row)));
-  return resolved.filter((grant) => {
-    if (!grantIsActive(grant, now)) return false;
-    // A grant already bound to another client is that client's authority, not
-    // this one's. An unbound grant is claimable by the first client that uses it.
-    if (grant.clientId && clientId && grant.clientId !== clientId) return false;
-    return true;
-  });
+  return (await governingGrants(ctx, ownerUserId, clientId, now))
+    .filter(grant => grantIsActive(grant, now));
 }
 
 export const grantsForPrincipal = internalQuery({
@@ -274,34 +323,13 @@ export const touchLegacyConnection = internalMutation({
     }
 
     const now = Date.now();
-    const active = await activeGrantsForUser(ctx, user._id, args.clientId, now);
-    if (active.length > 0) {
-      // Return the grant rows themselves, not a flattened scope union. The gate
-      // decides each call with `findPermittingGrant`, so a `selectedMoves`
-      // grant stays pinned to its moves and two grants never sum into authority
-      // neither one carries.
-      return { grants: active.map(toDecisionRow), block: undefined };
-    }
-
-    // No usable grant. Before minting one, find out whether this client already
-    // had one that ended. This lookup is BY clientId THROUGH AN INDEX, never a
-    // windowed scan: a revoked row must be found however many grants the person
-    // has accumulated, or a months-old revocation resurrects itself the next
-    // time the client signs in. (Playbook v1.3.0 §2.6, pitfall 1.)
-    const boundToClient = await ctx.db
-      .query("aiGrants")
-      .withIndex("by_owner_client_status", (q) =>
-        q.eq("ownerUserId", user._id).eq("clientId", args.clientId),
-      )
-      .collect();
-    if (boundToClient.length > 0) {
-      const latest = boundToClient.reduce((newest, row) =>
-        row.updatedAt > newest.updatedAt ? row : newest,
-      );
+    const governing = await governingGrants(ctx, user._id, args.clientId, now);
+    if (governing.length > 0) {
+      const latest = governing[0];
+      if (grantIsActive(latest, now)) return { grants: [toDecisionRow(latest)], block: undefined };
       return {
         grants: [] as GrantDecisionRow[],
-        block:
-          latest.status === "revoked" ? ("revoked" as const) : ("expired" as const),
+        block: latest.status === "revoked" ? ("revoked" as const) : ("expired" as const),
       };
     }
 
@@ -735,6 +763,7 @@ export const updateLimits = mutation({
     const moveScope = args.moveScope ?? grant.moveScope;
     let moveIds = grant.moveIds;
     if (editsMoves) {
+      requireCurrentConsent(args.consentPolicyVersion, args.catalogFingerprint);
       const membership = await ctx.db.query("householdMemberships")
         .withIndex("by_household_user", q => q.eq("householdId", grant.householdId).eq("userId", user._id)).unique();
       if (!membership || membership.status !== "active") throw new ConvexError("You are not an active member of that household.");
@@ -774,6 +803,7 @@ export const updateLimits = mutation({
       } : {}),
       ...(scopes ? { scopes, scopeChoice, consentSnapshot: buildConsentSnapshot(scopes), consentBoundaryVersion: GRANT_BOUNDARY_VERSION } : {}),
       ...(editsExpiry ? { expiresAt, expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const } : {}),
+      ...((editsMoves || args.scopes !== undefined || editsExpiry) ? { ownerDecisionAt: now } : {}),
       version: grant.version + 1, updatedAt: now,
     };
     await ctx.db.patch(grant._id, patch);

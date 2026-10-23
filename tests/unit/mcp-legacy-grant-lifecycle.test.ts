@@ -18,7 +18,7 @@
  *      leaves the other working. (Pitfall 2 — the flip side of refusing the
  *      shared unidentified sentinel.)
  */
-import { convexTest } from "convex-test";
+import { convexTest, type TestConvex } from "convex-test";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -28,6 +28,7 @@ import { api, internal } from "../../convex/_generated/api";
 import { UNIDENTIFIED_LEGACY_CLIENT } from "../../convex/lib/mcpLegacyGrantGate";
 import { GRANT_CONSENT_POLICY, grantCatalogFingerprint, effectiveScopes, effectiveScopeChoice, effectiveExpiry, chosenExpiry, movingScopes, findPermittingGrant } from "../../convex/lib/aiGrants";
 import schema from "../../convex/schema";
+import { hasQueueWorkGrant } from "../../convex/lib/mcpGrantAccess";
 
 const consent = { consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint() };
 
@@ -55,7 +56,7 @@ beforeEach(() => {
   process.env.CLERK_JWT_ISSUER_DOMAIN = ISSUER;
 });
 
-async function seedOwner(t: ReturnType<typeof convexTest>) {
+async function seedOwner(t: TestConvex<typeof schema>) {
   return t.run(async (ctx) => {
     const now = Date.now();
     const userId = await ctx.db.insert("users", {
@@ -363,11 +364,11 @@ it("edits move reach in place, validates ownership, and preserves scope and expi
   const chosen = (await t.run(ctx => ctx.db.get(row._id)))!;
   for (const moveIds of [[], [ids.foreign]]) {
     await expect(owner.mutation(api.aiGrants.updateLimits, {
-      grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds,
+      ...consent, grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds,
     })).rejects.toThrow();
   }
   await owner.mutation(api.aiGrants.updateLimits, {
-    grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds: [ids.selected, ids.selected],
+    ...consent, grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds: [ids.selected, ids.selected],
   });
   const narrowed = (await t.run(ctx => ctx.db.get(row._id)))!;
   expect(narrowed).toMatchObject({
@@ -380,10 +381,10 @@ it("edits move reach in place, validates ownership, and preserves scope and expi
   await expect(t.query(internal.mcpPlanning.getMoveBrief, { principal, moveId: ids.selected })).resolves.toBeTruthy();
   await expect(t.query(internal.mcpPlanning.getMoveBrief, { principal, moveId: ids.excluded })).rejects.toThrow();
   await expect(t.withIdentity({ subject: "other" }).mutation(api.aiGrants.updateLimits, {
-    grantId: row._id, expectedVersion: 3, moveScope: "allMoves",
+    ...consent, grantId: row._id, expectedVersion: 3, moveScope: "allMoves",
   })).rejects.toThrow();
-  await expect(owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 2, moveScope: "allMoves" })).rejects.toThrow(/changed/);
-  await owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 3, moveScope: "allMoves" });
+  await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 2, moveScope: "allMoves" })).rejects.toThrow(/changed/);
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 3, moveScope: "allMoves" });
   const restored = (await t.run(ctx => ctx.db.get(row._id)))!;
   expect(restored.moveIds).toBeUndefined();
   expect(restored.expiresAt).toBe(chosen.expiresAt);
@@ -468,4 +469,212 @@ describe("explicit settings consent protocol", () => {
     await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: 3, scopes: frozen, scopeIntent: "full" });
     expect((await t.run(ctx => ctx.db.get(grantId)))?.scopeChoice).toBe("full");
   });
+});
+
+async function seedDuplicateHistory(t: TestConvex<typeof schema>) {
+  const { userId, householdId } = await seedOwner(t);
+  await t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: "duplicate-client" });
+  return t.run(async ctx => {
+    const original = (await ctx.db.query("aiGrants").first())!;
+    const { _id, _creationTime, ...fields } = original;
+    const now = Math.max(Date.now(), _creationTime);
+    await ctx.db.patch(_id, { approvedAt: now - 10_000, updatedAt: now + 100_000 });
+    const newerId = await ctx.db.insert("aiGrants", {
+      ...fields, approvedAt: now - 5_000, updatedAt: now - 5_000,
+      status: "revoked", revokedAt: now - 1_000,
+    });
+    return { oldId: _id, newerId, userId, householdId };
+  });
+}
+
+async function expectDuplicateRefused(t: TestConvex<typeof schema>, block: "revoked" | "expired") {
+  expect(await t.mutation(internal.aiGrants.touchLegacyConnection, {
+    subject: SUBJECT, clientId: "duplicate-client",
+  })).toEqual({ grants: [], block });
+  expect((await t.query(internal.aiGrants.grantsForPrincipal, {
+    subject: SUBJECT, clientId: "duplicate-client",
+  })).grants).toEqual([]);
+  await expect(t.query(internal.mcpPlanning.getMoveBrief, {
+    principal: { issuer: ISSUER, subject: SUBJECT, clientId: "duplicate-client" },
+  })).rejects.toThrow(/GRANT_REQUIRED/);
+  expect(await t.mutation(internal.aiGrants.noteGrantUse, {
+    subject: SUBJECT, clientId: "duplicate-client", toolName: "get_move_brief", scope: "moving.context.read",
+  })).toBeNull();
+}
+
+describe("persisted duplicate histories resolve owner decisions before active grants", () => {
+  it("refuses already-persisted partial revocation despite later usage on an old active row", async () => {
+    const t = convexTest(schema, modules);
+    const { oldId, newerId } = await seedDuplicateHistory(t);
+    const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+    await expectDuplicateRefused(t, "revoked");
+    // Even replaying revoke on the already-revoked row must leave the old
+    // duplicate powerless; the repair cannot depend on a new revoke mutation.
+    await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.revoke, { grantId: newerId });
+    await expectDuplicateRefused(t, "revoked");
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+    expect((await t.run(ctx => ctx.db.get(oldId)))?.status).toBe("active");
+  });
+
+  it("honors a revocation of an older approval made after the newer approval", async () => {
+    const t = convexTest(schema, modules);
+    const { oldId, newerId } = await seedDuplicateHistory(t);
+    await t.run(async ctx => {
+      await ctx.db.patch(newerId, { status: "active", revokedAt: undefined });
+      await ctx.db.patch(oldId, { status: "revoked", revokedAt: Date.now() });
+    });
+    await expectDuplicateRefused(t, "revoked");
+  });
+
+  it("keeps an elapsed person-chosen approval governing until the owner explicitly removes its date", async () => {
+    const t = convexTest(schema, modules);
+    const { newerId } = await seedDuplicateHistory(t);
+    await t.run(ctx => ctx.db.patch(newerId, {
+      status: "active", revokedAt: undefined, expiryChoice: "chosen", expiresAt: Date.now() - 100,
+    }));
+    await expectDuplicateRefused(t, "expired");
+    await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.updateLimits, {
+      ...consent, grantId: newerId, expectedVersion: 1, expiryIntent: "none", expiresInDays: null,
+    });
+    const result = await t.query(internal.aiGrants.grantsForPrincipal, { subject: SUBJECT, clientId: "duplicate-client" });
+    expect(result.grants.map(row => row.grantId)).toEqual([newerId]);
+  });
+
+  it("allows only a later explicit approval to restore authority and preserves the revoked row binding", async () => {
+    const t = convexTest(schema, modules);
+    const { newerId, householdId } = await seedDuplicateHistory(t);
+    const revoked = await t.run(ctx => ctx.db.get(newerId));
+    const { grantId } = await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.approve, {
+      ...consent, householdId, label: "Explicit reapproval", scopes: ["moving.context.read"],
+      scopeIntent: "chosen", expiryIntent: "none", moveScope: "allMoves",
+    });
+    expect((await t.query(internal.aiGrants.grantsForPrincipal, {
+      subject: SUBJECT, clientId: "duplicate-client",
+    })).grants.map(row => row.grantId)).toEqual([grantId]);
+    await t.mutation(internal.aiGrants.noteGrantUse, {
+      subject: SUBJECT, clientId: "duplicate-client", toolName: "get_move_brief", scope: "moving.context.read",
+    });
+    expect((await t.run(ctx => ctx.db.get(grantId)))?.clientId).toBe("duplicate-client");
+    expect(await t.run(ctx => ctx.db.get(newerId))).toEqual(revoked);
+    expect((await t.query(internal.aiGrants.grantsForPrincipal, {
+      subject: SUBJECT, clientId: "other-client",
+    })).grants).toEqual([]);
+  });
+
+  it("never substitutes an older broad active approval for a newer chosen approval", async () => {
+    const t = convexTest(schema, modules);
+    const { newerId } = await seedDuplicateHistory(t);
+    await t.run(ctx => ctx.db.patch(newerId, {
+      status: "active", revokedAt: undefined, scopes: ["moving.context.read"], scopeChoice: "chosen",
+    }));
+    const result = await t.query(internal.aiGrants.grantsForPrincipal, { subject: SUBJECT, clientId: "duplicate-client" });
+    expect(result.scopes).toEqual(["moving.context.read"]);
+    expect(result.grants.map(row => row.grantId)).toEqual([newerId]);
+  });
+
+  it("makes refusal win timestamp ties, including persisted rows without revokedAt", async () => {
+    const t = convexTest(schema, modules);
+    const { oldId, newerId } = await seedDuplicateHistory(t);
+    await t.run(async ctx => {
+      const approvedAt = Date.now() - 100;
+      await ctx.db.patch(oldId, { approvedAt });
+      await ctx.db.patch(newerId, { approvedAt, revokedAt: undefined });
+    });
+    await expectDuplicateRefused(t, "revoked");
+  });
+
+  it("isolates other owners, clients and verified issuers", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, householdId } = await seedDuplicateHistory(t);
+    await t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: "unrelated-client" });
+    await t.run(async ctx => {
+      const now = Date.now();
+      const otherOwner = await ctx.db.insert("users", {
+        clerkUserId: "other-history-owner", email: "other@example.test", name: "Other", appRole: "member",
+        status: "active", createdAt: now, updatedAt: now, lastSeenAt: now,
+      });
+      const row = (await ctx.db.query("aiGrants").withIndex("by_owner_client_status", q =>
+        q.eq("ownerUserId", userId).eq("clientId", "unrelated-client")).first())!;
+      const { _id, _creationTime, ...fields } = row;
+      await ctx.db.insert("aiGrants", { ...fields, ownerUserId: otherOwner, householdId, clientId: "duplicate-client" });
+      expect(await ctx.db.get(_id)).toEqual({ ...fields, _id, _creationTime });
+    });
+    await expectDuplicateRefused(t, "revoked");
+    expect((await t.query(internal.aiGrants.grantsForPrincipal, { subject: SUBJECT, clientId: "unrelated-client" })).grants).toHaveLength(1);
+    expect((await t.query(internal.aiGrants.grantsForPrincipal, { subject: "other-history-owner", clientId: "duplicate-client" })).grants).toHaveLength(1);
+    await expect(t.query(internal.mcpPlanning.getMoveBrief, {
+      principal: { issuer: "https://foreign-issuer.example.test", subject: SUBJECT, clientId: "unrelated-client" },
+    })).rejects.toThrow(/AUTH_REQUIRED/);
+    const moveId = await t.run(ctx => ctx.db.insert("moves", {
+      householdId, title: "Issuer boundary", type: "local", status: "planning", unitSystem: "imperial",
+      createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now(),
+    }));
+    const principal = { issuer: ISSUER, subject: SUBJECT, clientId: "unrelated-client" };
+    expect(await t.run(ctx => hasQueueWorkGrant(ctx, principal, moveId))).toBe(true);
+    expect(await t.run(ctx => hasQueueWorkGrant(ctx, { ...principal, issuer: "https://foreign-issuer.example.test" }, moveId))).toBe(false);
+    expect(await t.run(ctx => hasQueueWorkGrant(ctx, { ...principal, clientId: "duplicate-client" }, moveId))).toBe(false);
+  });
+
+  it("fails closed on indexed history overflow without minting or using a grant", async () => {
+    const t = convexTest(schema, modules);
+    await seedDuplicateHistory(t);
+    await t.run(async ctx => {
+      const row = (await ctx.db.query("aiGrants").first())!;
+      const { _id, _creationTime, ...fields } = row;
+      for (let i = 0; i < 127; i++) await ctx.db.insert("aiGrants", fields);
+      expect(await ctx.db.get(_id)).toEqual({ ...fields, _id, _creationTime });
+    });
+    const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+    await expect(t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: "duplicate-client" })).rejects.toThrow(/safe read limit/);
+    await expect(t.query(internal.aiGrants.grantsForPrincipal, { subject: SUBJECT, clientId: "duplicate-client" })).rejects.toThrow(/safe read limit/);
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+  });
+});
+
+it("requires current consent for move-only widening and refuses atomically", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const moveId = await t.run(ctx => ctx.db.insert("moves", {
+    householdId, title: "Selected", type: "local", status: "planning", unitSystem: "imperial",
+    createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now(),
+  }));
+  const owner = t.withIdentity({ subject: SUBJECT });
+  const { grantId } = await owner.mutation(api.aiGrants.approve, {
+    ...consent, householdId, label: "Move-only consent", scopes: [...movingScopes],
+    scopeIntent: "full", expiryIntent: "none", moveScope: "selectedMoves", moveIds: [moveId],
+  });
+  const snapshot = () => t.run(async ctx => ({
+    grants: await ctx.db.query("aiGrants").collect(),
+    activities: await ctx.db.query("aiGrantActivities").collect(),
+    audits: await ctx.db.query("auditLogs").collect(),
+  }));
+  const before = await snapshot();
+  for (const metadata of [{}, { ...consent, consentPolicyVersion: "old" }, { ...consent, catalogFingerprint: "stale" }]) {
+    await expect(owner.mutation(api.aiGrants.updateLimits, {
+      ...metadata, grantId, expectedVersion: 1, moveScope: "allMoves",
+    })).rejects.toThrow(/Reload/);
+    expect(await snapshot()).toEqual(before);
+  }
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: 1, moveScope: "allMoves" });
+  expect(await t.run(ctx => ctx.db.get(grantId))).toMatchObject({ moveScope: "allMoves", version: 2 });
+});
+
+it("does not let an old approval's later expiry reorder a newer explicit approval", async () => {
+  const t = convexTest(schema, modules);
+  const { oldId, newerId } = await seedDuplicateHistory(t);
+  await t.run(async ctx => {
+    await ctx.db.patch(oldId, { expiryChoice: "chosen", expiresAt: Date.now() - 1 });
+    await ctx.db.patch(newerId, { status: "active", revokedAt: undefined });
+  });
+  expect((await t.query(internal.aiGrants.grantsForPrincipal, {
+    subject: SUBJECT, clientId: "duplicate-client",
+  })).grants.map(row => row.grantId)).toEqual([newerId]);
+});
+
+it("does not let a markerless no-op owner edit supersede refusal", async () => {
+  const t = convexTest(schema, modules);
+  const { oldId } = await seedDuplicateHistory(t);
+  await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.updateLimits, { grantId: oldId, expectedVersion: 1 });
+  expect((await t.run(ctx => ctx.db.get(oldId)))?.ownerDecisionAt).toBeUndefined();
+  await expectDuplicateRefused(t, "revoked");
 });

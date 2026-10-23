@@ -1529,6 +1529,8 @@ export default defineSchema({
     // No end date by default. Old unmarked dates remain enforced unless proven automatic.
     expiresAt: v.optional(v.number()),
     approvedAt: v.number(),
+    // Explicit owner limit decisions only; usage must never reorder consent.
+    ownerDecisionAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
     lastToolName: v.optional(v.string()),
     useCount: v.number(),
