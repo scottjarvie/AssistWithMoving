@@ -120,7 +120,14 @@ export function PublicPageChrome({
               </Button>
             </div>
           </div>
-          {visual ?? <HowItWorksPanel />}
+          {/* Home already explains how it works; on phones a subpage goes
+              straight to its own content and keeps the panel as a desktop
+              side column. */}
+          {visual ?? (
+            <div className="hidden lg:block">
+              <HowItWorksPanel />
+            </div>
+          )}
         </div>
       </section>
       {children}
