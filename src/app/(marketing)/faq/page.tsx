@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { ArrowRight, ChevronDown, HelpCircle, ShieldCheck } from "lucide-react";
 
 import { PublicBand, PublicPageChrome } from "@/components/public-page-chrome";
-import { Badge } from "@/components/ui/badge";
 import { supportDesk, supportDeskUrl } from "@/lib/support";
 
 export const metadata: Metadata = {
@@ -170,8 +169,7 @@ export default function FaqPage() {
       <PublicBand>
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
-            <Badge variant="secondary">FAQ</Badge>
-            <h2 className="mt-4 text-2xl font-semibold tracking-normal">
+            <h2 className="text-2xl font-semibold tracking-normal">
               The short version.
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
