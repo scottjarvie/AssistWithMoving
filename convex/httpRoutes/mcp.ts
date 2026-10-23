@@ -1275,10 +1275,13 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       ? normalizeClientIdUrl(auth.clientId).toString()
       : auth.clientId;
 
-    // Read the grant before any client-controlled outbound request. Without a
-    // grant, only describe_connection is available; leave metadata unverified
-    // (registration method unknown) rather than fetching or claiming DCR.
+    // Resolve/create the product grant before client-controlled outbound requests.
+    // Existing chosen limits and revoked/expired connections are never reset.
+    // Without usable authority only describe_connection remains available.
     try {
+      await actionCtx.runMutation((internal as any).aiGrants.touchLegacyConnection, {
+        subject, clientId, clientName: declaredClientName,
+      });
       const access = (await actionCtx.runQuery(
         (internal as any).aiGrants.grantsForPrincipal,
         { subject, clientId },

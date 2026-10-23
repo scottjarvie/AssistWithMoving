@@ -23,6 +23,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getFunctionName } from "convex/server";
+import { movingScopes } from "../../convex/lib/aiGrants";
 import { clearClientMetadataCache } from "../../convex/lib/mcpClientIdentity";
 
 const verifyMock = vi.fn();
@@ -134,11 +135,28 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     jsonrpc: "2.0", id: 1, method: "tools/list",
   }));
 
+  it("resolves first contact before discovery so a new connection sees the full catalog", async () => {
+    let connected = false;
+    const ctx = {
+      runMutation: vi.fn(async () => { connected = true; return { grants: [] }; }),
+      runQuery: vi.fn(async () => ({ scopes: connected ? movingScopes : [] })),
+      runAction: vi.fn(),
+    } as any;
+    const { handleMcpRequestForTests, STATELESS_MOVING_TOOL_NAMES } = await loadRoute();
+    const response = await handleMcpRequestForTests(ctx, listTools());
+    expect(response.status).toBe(200);
+    expect((await response.json()).result.tools.map((tool: any) => tool.name).sort())
+      .toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
+    expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("aiGrants:touchLegacyConnection");
+    expect(ctx.runMutation.mock.calls[0][1]).toMatchObject({ subject: SUBJECT, clientId: CLIENT_ID });
+  });
+
   it("does not retrieve metadata without a grant, and still gives connection guidance", async () => {
     verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const ctx = {
+      runMutation: vi.fn(async () => ({ grants: [] })),
       runQuery: vi.fn(async () => ({ scopes: [] })),
       runAction: vi.fn(),
     } as any;
@@ -165,6 +183,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const ctx = {
+      runMutation: vi.fn(async () => ({ grants: [] })),
       runQuery: vi.fn(async () => { throw new Error("synthetic grant outage"); }),
       runAction: vi.fn(),
     } as any;
@@ -182,13 +201,16 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const ctx = {
+      runMutation: vi.fn(async () => { order.push("connect"); return { grants: [] }; }),
       runQuery: vi.fn(async () => { order.push("grant"); return { scopes: ["moving.context.read"] }; }),
       runAction: vi.fn(async () => { order.push("metadata"); return metadata; }),
     } as any;
     const { handleMcpRequestForTests } = await loadRoute();
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
-    expect(order).toEqual(["grant", "metadata"]);
+    expect(order).toEqual(["connect", "grant", "metadata"]);
+    expect(ctx.runMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ clientId: metadataClientId }));
+    expect(getFunctionName(ctx.runMutation.mock.calls[0][0])).toBe("aiGrants:touchLegacyConnection");
     expect(ctx.runAction).toHaveBeenCalledWith(expect.anything(), { clientId: metadataClientId });
     expect(getFunctionName(ctx.runAction.mock.calls[0][0])).toBe("mcpClientMetadata:fetchDocument");
     expect((await response.json()).result.tools.map((tool: any) => tool.name))
@@ -200,6 +222,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const { handleMcpRequestForTests } = await loadRoute();
     verifyMock.mockResolvedValue(verifiedToken(metadataClientId));
     const ctx = {
+      runMutation: vi.fn(async () => ({ grants: [] })),
       runQuery: vi.fn(async () => ({ scopes: ["moving.context.read"] })),
       runAction: vi.fn(),
     } as any;

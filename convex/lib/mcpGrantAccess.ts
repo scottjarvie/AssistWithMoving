@@ -10,7 +10,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { activeGrantsForUser } from "../aiGrants";
-import { findPermittingGrant, grantError, type MovingScope } from "./aiGrants";
+import { effectiveScopeChoice, effectiveScopes, effectiveExpiry, findPermittingGrant, grantError, type MovingScope } from "./aiGrants";
 import { requireMoveForSubject, requireUserBySubject } from "./mcpIdentity";
 
 export const MCP_ERROR_MARKER = "MCP_MOVING_ERROR:";
@@ -105,18 +105,19 @@ export async function requireMcpGrant(
   const permitting = findPermittingGrant(
     grants.map((grant) => ({
       doc: grant,
-      scopes: grant.scopes,
+      scopes: [...effectiveScopes(grant)],
+      scopeChoice: effectiveScopeChoice(grant),
       moveScope: grant.moveScope,
       moveIds: (grant.moveIds ?? []).map(String),
       status: grant.status,
-      expiresAt: grant.expiresAt,
+      expiresAt: effectiveExpiry(grant),
     })),
     scope,
     moveId ? String(moveId) : undefined,
     now,
   );
   if (!permitting) {
-    const holdsScope = grants.some((grant) => grant.scopes.includes(scope));
+    const holdsScope = grants.some((grant) => effectiveScopes(grant).includes(scope));
     grantError(holdsScope ? "outOfMoveScope" : "outOfScope");
   }
   return { user, grant: permitting.doc };
@@ -142,11 +143,12 @@ export async function hasQueueWorkGrant(
       findPermittingGrant(
         grants.map((grant) => ({
           doc: grant,
-          scopes: grant.scopes,
+          scopes: [...effectiveScopes(grant)],
+          scopeChoice: effectiveScopeChoice(grant),
           moveScope: grant.moveScope,
           moveIds: (grant.moveIds ?? []).map(String),
           status: grant.status,
-          expiresAt: grant.expiresAt,
+          expiresAt: effectiveExpiry(grant),
         })),
         "moving.queue.work",
         String(moveId),

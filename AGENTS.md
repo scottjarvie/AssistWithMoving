@@ -18,3 +18,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Merging to `main` deploys production (Vercel + prod Convex). Keep `main` green: `npm run lint && npm run typecheck && npm run test` before merging. Vercel builds `main` and `preview/*` branches only (`scripts/vercel-ignore-build.mjs`).
 - Agent-facing Convex tools must throw `ConvexError`, never plain `Error` (the MCP gateway redacts plain errors to "Tool execution failed").
 - Delete branches after merge; this repo intentionally keeps only `main` plus short-lived PR branches.
+
+- AI connections default to all current/future scopes and no end date. Use `effectiveScopes` / `effectiveExpiry` from `convex/lib/aiGrants.ts` everywhere; never authorize against a stored scope snapshot. The frozen legacy baseline must never grow. Person-chosen limits and revoked grants must survive reconnects. See `docs/api-and-mcp.md` for legacy provenance rules.
