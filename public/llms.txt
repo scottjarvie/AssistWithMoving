@@ -13,9 +13,9 @@ There are TWO ways for an assistant to work in a user's move. Default to MCP.
    user pastes ONE URL — https://movingmanifest.com/mcp — into any AI that
    speaks remote Streamable HTTP MCP with compatible OAuth, and signs in with
    their Assist With Moving account. No API key to create or paste.
-   Signing in is not permission. The person must then approve a product grant
-   in Assist With Moving; until they do, the only tool that appears is
-   describe_connection. Capability status: Partial — see "Bring Your AI: What
+   Connecting creates a full-access grant, including future scopes, with no end
+   date by default. The person can narrow moves or operations, choose an end
+   date, or revoke it at https://movingmanifest.com/settings/ai. Capability status: Partial — see "Bring Your AI: What
    Is Actually True" below.
 2. API (ADVANCED, more work): a scoped mmk_ API key used with the REST API
    (https://movingmanifest.com/api/v1) or the key-only MCP door
@@ -61,7 +61,7 @@ email contact is not available.
   my move. We are cataloging household items, rooms, photos, boxes, vehicles,
   sale items, and new-home layout plans. If you need private access, connect to
   movingmanifest.com/mcp if you support remote MCP with OAuth, and walk me
-  through approving a grant — or walk me through creating a fallback AI helper
+  through reviewing or narrowing the full-access grant — or walk me through creating a fallback AI helper
   key."
 - Treat Assist With Moving as a bounded household moving assistant workflow:
   move context, places, decisions, inventory, evidence, estimates, plans, source
@@ -79,8 +79,9 @@ email contact is not available.
 - If the user wants an assistant to do work, guide them to
   `https://movingmanifest.com/ai/start`, then have them sign in or create an
   account. For an AI that speaks remote Streamable HTTP MCP with compatible
-  OAuth, paste only the endpoint URL, follow browser sign-in, and then approve a
-  grant. Create and paste a fallback helper key only when that is not possible.
+  OAuth, paste only the endpoint URL and follow browser sign-in. Connecting
+  creates a full-access grant with no end date by default; review or narrow it
+  in AI connections. Create and paste a fallback helper key only when that is not possible.
 - Treat API keys as secrets. Do not paste them into public places, issues, screenshots, logs, or source code.
 - Any AI that speaks remote Streamable HTTP MCP with compatible OAuth can
   attempt `https://movingmanifest.com/mcp` — no key, no local install. This is
@@ -173,14 +174,13 @@ the provider-side configuration for the metadata-document client path is not yet
 done. Describe the requirement — any AI that speaks remote Streamable HTTP MCP
 with compatible OAuth — rather than naming an AI product as supported.
 
-Connecting creates a full-access grant with no end date by default. OAuth proves who is calling; a product grant the
-person approves decides which moves, which data, and which operations. The grant
+Connecting creates a full-access grant with no end date by default. OAuth proves who is calling; the product grant decides which moves, which data, and which operations. The grant
 is re-read on every discovery and every call, so revoking it refuses the very
 next call instead of waiting for a token to expire. Until a grant exists,
 `tools/list` returns only `describe_connection` — always available, no scope —
 which reports what this connection may do and what to tell the person.
 
-The person approves a grant at `https://movingmanifest.com/settings/ai` — the
+The person reviews, narrows, or revokes the grant at `https://movingmanifest.com/settings/ai` — the
 canonical grant screen, and the same URL `describe_connection` reports. They
 choose the moves and operations, read the consent summary, review active
 connections with registration method and recent use, revoke, and copy a manual

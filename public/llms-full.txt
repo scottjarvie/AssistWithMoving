@@ -39,16 +39,17 @@ person-approved grant, or an intentionally provided fallback API key.
 
 A good first user prompt is:
 
-`Open movingmanifest.com/ai and help me set up Assist With Moving. Start with my move context, places, decisions, and what needs attention. If you support remote MCP with OAuth, connect to movingmanifest.com/mcp, then ask me to approve a grant. Call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.`
+`Open movingmanifest.com/ai and help me set up Assist With Moving. Start with my move context, places, decisions, and what needs attention. If you support remote MCP with OAuth, connect to movingmanifest.com/mcp, explain that connecting grants full access with no end date by default and show me how to narrow or revoke it in AI connections. Call get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.`
 
 If the user is non-technical, translate API and MCP concepts into plain
 language:
 
 - "Account" means Assist With Moving can save the move.
 - "MCP OAuth" means the user signs in without pasting a raw key.
-- "Grant" means the separate approval that decides what the AI may actually
-  do — which moves, which data, which operations. Signing in alone does
-  nothing; the grant is the permission, and revoking it stops the next call.
+- "Grant" means the permission that decides what the AI may actually do.
+  Connecting creates a full-access grant, including future scopes, with no end
+  date by default. The person can narrow or revoke it in AI connections;
+  revoking it stops the next call.
 - "AI helper key" means a revocable password-like fallback key that lets the
   assistant help with the move when the canonical connection is not available.
 - "API or MCP" means the assistant can use structured tools instead of asking
@@ -77,8 +78,8 @@ Private:
 - API keys.
 
 Never claim you can access private data unless the user has connected the
-canonical MCP endpoint AND approved a grant that covers the work, or has given
-you a valid fallback API key. A completed sign-in on its own is not access.
+canonical MCP endpoint with an active grant covering the work, or has given
+you a valid fallback API key. Connecting creates the product grant by default; always respect its current limits.
 
 ## Phone User Flow
 
@@ -94,8 +95,9 @@ If a user says: "Go to movingmanifest.com and help me use it"
    only `https://movingmanifest.com/mcp` and follow browser sign-in.
    (Do NOT use `https://movingmanifest.com/api/mcp` for OAuth — that is the
    API-key endpoint and rejects OAuth tokens, failing to register.)
-6. Then have them approve a grant in Assist With Moving under Settings → AI
-   connections. Until they do, the connection lists only `describe_connection`.
+6. Explain that connecting creates a full-access grant with no end date by
+   default. At https://movingmanifest.com/settings/ai they can narrow moves or
+   operations, choose an end date, or revoke the connection.
 7. If the canonical connection is not available, have them choose a helper
    preset, create the fallback key, and give it
    `https://movingmanifest.com/api/mcp` with the one-time secret as the bearer
@@ -329,7 +331,7 @@ are not the same. No repository clone is required for the remote ones.
 
 ```
 Canonical door:           https://movingmanifest.com/mcp
-  Auth: OAuth browser sign-in (Clerk), THEN a person-approved product grant.
+  Auth: OAuth browser sign-in (Clerk), creating a full-access grant with no end date by default.
   Catalog: the 15 grant-governed tools listed below, filtered by the grant.
 Legacy compatibility:     https://movingmanifest.com/mcp/connect
   Persisted OAuth gateway for clients that already connected there. A
@@ -352,8 +354,8 @@ metadata-document client path is not yet done. The honest description of what
 can connect is a requirement, not a product name: any AI that speaks remote
 Streamable HTTP MCP with compatible OAuth.
 
-Connecting creates a full-access grant with no end date by default. OAuth proves who is calling. A separate product
-grant, approved by the person and re-read from the database on every discovery
+Connecting creates a full-access grant with no end date by default. OAuth proves who is calling. The product
+grant, re-read from the database on every discovery
 and every call, decides which moves, which data, and which operations. Revoking
 a grant refuses the very next call rather than waiting for a token to expire. A
 broader token never widens a chosen grant. Full-access grants include future scopes.
@@ -364,7 +366,7 @@ granted scopes, the client's recorded registration method, what this connection
 can never do, and the sentence to tell the person. Call it whenever no other
 tools appear instead of reporting an opaque protocol failure.
 
-The person approves a grant at `https://movingmanifest.com/settings/ai` — the
+The person reviews, narrows, or revokes the grant at `https://movingmanifest.com/settings/ai` — the
 canonical grant screen, and the same URL `describe_connection` reports as its
 `grantManager`. There they choose all moves or selected moves, choose the
 operations, read the consent summary that is frozen onto the grant at approval
@@ -410,7 +412,7 @@ The five scopes and their boundaries:
   anything, work the Queue, archive, export, or share.
 - `moving.evidence.read` — the private evidence needed for the approved work,
   returned through Moving as protected content rather than a storage link. It
-  is a separate approval; reading context never includes it.
+  is a distinct scope included by default; a person-chosen context-only grant does not include it.
 - `moving.work.write` — replay-safe saves of context, inventory, decisions,
   estimates, plan sections, source checks, and one complete reviewed result. It
   does not claim or complete Queue handoffs, archive, manage people, export, or

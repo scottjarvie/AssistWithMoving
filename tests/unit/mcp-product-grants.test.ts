@@ -22,6 +22,7 @@ import {
 } from "../../convex/httpRoutes/mcp";
 import {
   GRANT_BOUNDARY_VERSION,
+  GRANT_ERRORS,
   MOVING_SCOPES,
   MOVING_TOOL_SCOPES,
   NEVER_EXPOSED,
@@ -843,4 +844,15 @@ describe("what the person can see afterwards", () => {
     expect(types).toContain("scopeUsed");
     expect(activity.every((row) => row.message.length > 0)).toBe(true);
   });
+});
+
+describe("canonical grant limit recovery", () => {
+  it.each(["outOfScope", "outOfMoveScope"] as const)(
+    "gives the person the exact settings URL for %s",
+    (reason) => {
+      expect(GRANT_ERRORS[reason].recovery).toContain(
+        "https://movingmanifest.com/settings/ai",
+      );
+    },
+  );
 });

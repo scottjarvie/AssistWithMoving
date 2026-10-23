@@ -2,7 +2,7 @@
 
 Canonical MCP endpoint: https://movingmanifest.com/mcp
 Authentication: OAuth browser sign-in with the person's Assist With Moving account
-Authority: a product grant the person approves inside Assist With Moving
+Authority: connecting creates a full-access product grant with no end date by default
 Human setup: https://movingmanifest.com/ai/start
 Human support: https://assistwithlife.com/support?v=1&source=assist-with-moving
   (the central Assist With Life support desk — the only support path). Assist
@@ -41,7 +41,7 @@ looks like a metadata document but fails validation is refused outright, never
 downgraded to the fallback. The registration method is recorded as a fact, never
 treated as a claim about which product is calling.
 
-Where the person approves it: https://movingmanifest.com/settings/ai — the
+Where the person reviews, narrows, or revokes it: https://movingmanifest.com/settings/ai — the
 canonical grant screen, and the same URL describe_connection reports as its
 grantManager. It is where they choose the moves and the operations, see the
 consent summary, review active connections with their registration method and
