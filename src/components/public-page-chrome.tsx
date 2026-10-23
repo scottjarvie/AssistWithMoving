@@ -276,15 +276,12 @@ export function HowItWorksPanel() {
         </div>
         <Badge>
           <ShieldCheck aria-hidden="true" />
-          scoped packets
+          Scoped packets
         </Badge>
       </div>
-      <ol className="space-y-3 py-4">
+      <ol className="divide-y divide-border py-1">
         {howItWorksSteps.map((step) => (
-          <li
-            key={step.label}
-            className="flex items-start gap-3 rounded-md border border-border bg-background/65 p-3"
-          >
+          <li key={step.label} className="flex items-start gap-3 py-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
               <step.icon className="size-5" aria-hidden="true" />
             </span>
