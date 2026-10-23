@@ -21,18 +21,15 @@ export default function UpdatesPage() {
       <section className="border-b border-border">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
           <Badge variant="secondary" className="mb-5">
-            Release notes
+            Release notes · current version{" "}
+            <span className="font-mono">v{appVersion}</span>
           </Badge>
           <h1 className="text-4xl font-semibold leading-tight tracking-normal sm:text-5xl">
             What&apos;s New
           </h1>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
             See what Assist With Moving can do now, what was fixed, and what became
-            easier or safer. Choose a quick scan or learn why each change matters.
-          </p>
-          <p className="mt-4 text-sm text-muted-foreground">
-            Current application version:{" "}
-            <span className="font-mono text-foreground">v{appVersion}</span>
+            easier or safer.
           </p>
         </div>
       </section>
