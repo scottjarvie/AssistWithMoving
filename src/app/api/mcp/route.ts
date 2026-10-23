@@ -15,12 +15,14 @@
 // Tool definitions are shared with the local stdio server in
 // mcp-server/assistwithmoving-mcp.mjs so the two transports cannot drift.
 import { createMcpHandler } from "mcp-handler";
+import type { McpServerOptions } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import {
   apiKeyFromRequest,
   requestHasQueryStringKey,
 } from "@/lib/mcp-request-auth";
 import { mcpBearerChallenge } from "@/lib/mcp-oauth";
+import { boundHostedMcpRequest, MAX_HOSTED_MCP_INPUT_ELEMENTS, MAX_HOSTED_MCP_REQUEST_BYTES } from "@/lib/mcp-input-limits";
 import {
   ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS,
   registerTools,
@@ -107,31 +109,39 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     );
   }
 
+  const boundedRequest = await boundHostedMcpRequest(request);
+  if (boundedRequest instanceof Response) return boundedRequest;
+
   const apiConfig = {
     baseUrl: restApiBaseUrl(),
     apiKey,
     mediaIngress: { transport: "hosted", allowedFileRoots: [] },
   };
 
+  // The wrapper forwards these unchanged but its declarations predate the
+  // guard. Validate against the installed SDK constructor's actual options.
+  const serverOptions = {
+    serverInfo: { name: "assistwithmoving", version: "0.2.0" },
+    instructions: SERVER_INSTRUCTIONS,
+    maxToolInputElements: MAX_HOSTED_MCP_INPUT_ELEMENTS,
+  } satisfies McpServerOptions & { serverInfo: { name: string; version: string } };
   const handler = createMcpHandler(
     (server) => {
       registerTools(server, apiConfig, {
         allowedToolNames: hostedAllowedToolNames(apiKey),
       });
     },
-    {
-      serverInfo: { name: "assistwithmoving", version: "0.2.0" },
-      instructions: SERVER_INSTRUCTIONS,
-    },
+    serverOptions,
     {
       basePath: "/api",
       disableSse: true,
       maxDuration: 60,
       verboseLogs: false,
+      maxRequestBodySize: MAX_HOSTED_MCP_REQUEST_BYTES,
     }
   );
 
-  return handler(request);
+  return handler(boundedRequest);
 }
 
 export async function POST(request: Request): Promise<Response> {
