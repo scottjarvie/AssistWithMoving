@@ -5,6 +5,7 @@ import {
   Camera,
   FileStack,
   KeyRound,
+  QrCode,
   Truck,
 } from "lucide-react";
 
@@ -29,7 +30,7 @@ const featureCards = [
   {
     title: "Box and QR manifest",
     copy: "Create short box codes, add contents, print QR labels, and open a secure lookup route when a mystery box appears.",
-    icon: Boxes,
+    icon: QrCode,
   },
   {
     title: "Photo evidence vault",
