@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Bot,
   Camera,
+  ChevronDown,
   ClipboardList,
   DoorOpen,
   KeyRound,
@@ -447,9 +448,13 @@ function ExpandableSection({
   children: React.ReactNode;
 }) {
   return (
-    <details className="rounded-md border border-border p-4 text-sm leading-6 text-muted-foreground open:bg-muted/25">
-      <summary className="flex min-h-11 cursor-pointer items-center text-base font-medium text-foreground">
+    <details className="group rounded-md border border-border p-4 text-sm leading-6 text-muted-foreground open:bg-muted/25">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-base font-medium text-foreground">
         {title}
+        <ChevronDown
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
       </summary>
       <div className="mt-3">{children}</div>
     </details>
