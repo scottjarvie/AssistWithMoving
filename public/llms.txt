@@ -173,7 +173,7 @@ the provider-side configuration for the metadata-document client path is not yet
 done. Describe the requirement — any AI that speaks remote Streamable HTTP MCP
 with compatible OAuth — rather than naming an AI product as supported.
 
-Signing in is not permission. OAuth proves who is calling; a product grant the
+Connecting creates a full-access grant with no end date by default. OAuth proves who is calling; a product grant the
 person approves decides which moves, which data, and which operations. The grant
 is re-read on every discovery and every call, so revoking it refuses the very
 next call instead of waiting for a token to expire. Until a grant exists,
@@ -279,3 +279,9 @@ Recommended broad AI helper scopes:
 - `members/manage` for explicit spouse/family/collaborator access management
 
 Prefer move-restricted keys when the assistant only needs one move.
+
+AI connection limits: https://movingmanifest.com/settings/ai
+Connections do not expire by default. You may choose fewer permissions or an end
+date, change or remove that date later, and revoke access at any time. A date you
+choose is recorded as your choice and never removed automatically. Legacy grants
+with uncertain scope or expiry history keep their recorded limits.

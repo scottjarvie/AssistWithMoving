@@ -50,6 +50,7 @@ const CLIENT_REQUIREMENT =
   "Any AI that speaks remote Streamable HTTP MCP with compatible OAuth can use this endpoint. We have not yet finished a full connect-to-revoke run with a named AI product, so nothing here is listed as supported.";
 
 const expiryChoices = [
+  { days: 0, label: "No end date" },
   { days: 7, label: "7 days" },
   { days: 30, label: "30 days" },
   { days: 90, label: "90 days" },
@@ -128,7 +129,7 @@ function formatMoment(value: number | null | undefined) {
 }
 
 function formatDay(value: number | null | undefined) {
-  if (typeof value !== "number") return "No expiry recorded";
+  if (typeof value !== "number") return "No end date";
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(value);
 }
 
@@ -194,14 +195,15 @@ export function AiConnectionManager() {
 
   const approveGrant = useMutation(api.aiGrants.approve);
   const revokeGrant = useMutation(api.aiGrants.revoke);
+  const updateLimits = useMutation(api.aiGrants.updateLimits);
 
   const [label, setLabel] = useState("");
   const [moveScope, setMoveScope] = useState<"allMoves" | "selectedMoves">(
     "allMoves",
   );
   const [selectedMoveIds, setSelectedMoveIds] = useState<Id<"moves">[]>([]);
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-  const [expiresInDays, setExpiresInDays] = useState<number>(90);
+  const [scopeSelection, setSelectedScopes] = useState<string[] | null>(null);
+  const [expiresInDays, setExpiresInDays] = useState<number>(0);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -215,6 +217,7 @@ export function AiConnectionManager() {
     [moves],
   );
   const boundaryScopes = grantsResult?.scopes ?? [];
+  const selectedScopes = scopeSelection ?? boundaryScopes.map((info) => info.scope);
   const chosenScopeInfos = boundaryScopes.filter((info) =>
     selectedScopes.includes(info.scope),
   );
@@ -223,10 +226,10 @@ export function AiConnectionManager() {
   const manualBrief = buildManualQueueBrief(moves[0]?.title ?? null);
 
   function toggleScope(scope: string) {
-    setSelectedScopes((current) =>
-      current.includes(scope)
-        ? current.filter((entry) => entry !== scope)
-        : [...current, scope],
+    setSelectedScopes(
+      selectedScopes.includes(scope)
+        ? selectedScopes.filter((entry) => entry !== scope)
+        : [...selectedScopes, scope],
     );
   }
 
@@ -249,14 +252,15 @@ export function AiConnectionManager() {
         scopes: selectedScopes as GrantScope[],
         moveScope,
         moveIds: moveScope === "selectedMoves" ? selectedMoveIds : undefined,
-        expiresInDays,
+        expiresInDays: expiresInDays || undefined,
         note: note.trim() ? note.trim() : undefined,
       });
       setMessage(
         "Approved. Nothing is connected until an AI signs in with this grant — sign in from your AI using the endpoint above.",
       );
       setLabel("");
-      setSelectedScopes([]);
+      setSelectedScopes(null);
+      setExpiresInDays(0);
       setSelectedMoveIds([]);
       setMoveScope("allMoves");
       setNote("");
@@ -359,9 +363,8 @@ export function AiConnectionManager() {
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               You point your AI at one address, sign in as yourself, and then
-              approve a grant below that decides what it may actually do.
-              Signing in only proves who you are. The grant decides the rest,
-              and you can take it back at any time.
+              get full access with no end date by default. You can choose fewer
+              permissions or an end date here, or revoke access at any time.
             </p>
             <div className="mt-4 flex flex-col gap-2 rounded-md border border-border bg-background/70 p-3 sm:flex-row sm:items-center sm:justify-between">
               <code className="min-w-0 break-all text-xs sm:text-sm">
@@ -398,9 +401,8 @@ export function AiConnectionManager() {
           Approve a connection
         </h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Choose the smallest authority that lets the work happen. You can
-          approve a second, narrower connection later instead of widening this
-          one.
+          Full access includes every current and future tool scope. Limits are
+          optional: turn off permissions or choose an end date if you want them.
         </p>
 
         {grantsResult === undefined ? (
@@ -552,7 +554,7 @@ export function AiConnectionManager() {
 
             <div className="space-y-1.5">
               <label htmlFor="ai-grant-expiry" className="text-sm font-medium">
-                Expires after
+                End date
               </label>
               <select
                 id="ai-grant-expiry"
@@ -568,6 +570,7 @@ export function AiConnectionManager() {
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-muted-foreground">An end date you pick is saved as your choice and is never removed automatically.</p>
             </div>
 
             <div className="space-y-1.5">
@@ -612,7 +615,7 @@ export function AiConnectionManager() {
                             )
                             .join(", ")
                         : "no move yet — pick one"}
-                    , for{" "}
+                    , {expiresInDays ? "for " : "with "}
                     {expiryChoices.find(
                       (choice) => choice.days === expiresInDays,
                     )?.label ?? `${expiresInDays} days`}
@@ -779,12 +782,7 @@ export function AiConnectionManager() {
                     What you approved
                   </p>
                   <ul className="mt-1 space-y-1 text-sm leading-6">
-                    {(grant.consentSnapshot.length
-                      ? grant.consentSnapshot
-                      : boundaryScopes.filter((info) =>
-                          grant.scopes.includes(info.scope),
-                        )
-                    ).map((entry) => (
+                    {(boundaryScopes.filter((info) => grant.scopes.includes(info.scope))).map((entry) => (
                       <li key={entry.scope}>
                         <span className="font-medium">{entry.label}.</span>{" "}
                         <span className="text-muted-foreground">
@@ -794,6 +792,41 @@ export function AiConnectionManager() {
                     ))}
                   </ul>
                 </div>
+
+                {grant.status !== "revoked" ? (
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer">Change permissions or end date</summary>
+                    <form key={grant.version} className="mt-3 space-y-2" onSubmit={async (event) => {
+                      event.preventDefault();
+                      const data = new FormData(event.currentTarget);
+                      setBusy(`limits-${grant.grantId}`);
+                      try {
+                        const days = String(data.get("days"));
+                        await updateLimits({
+                          grantId: grant.grantId, expectedVersion: grant.version,
+                          scopes: data.getAll("scopes") as GrantScope[],
+                          ...(days === "keep" ? {} : { expiresInDays: days === "0" ? null : Number(days) }),
+                        });
+                        setMessage("Connection limits saved. An end date you pick is preserved as your choice.");
+                      } catch (error) {
+                        setMessage(describeMutationError(error, "Couldn't save connection limits."));
+                      } finally { setBusy(null); }
+                    }}>
+                      {boundaryScopes.map((info) => <label key={info.scope} className="flex gap-2">
+                        <input type="checkbox" name="scopes" value={info.scope} defaultChecked={grant.scopes.includes(info.scope)} />
+                        {info.label}
+                      </label>)}
+                      <label className="block">End date
+                        <select name="days" defaultValue="keep" className="ml-2 rounded border border-input bg-background p-2">
+                          <option value="keep">Keep current end date</option>
+                          {expiryChoices.map((choice) => <option key={choice.days} value={choice.days}>{choice.days === 0 ? "Remove end date" : choice.label}</option>)}
+                        </select>
+                      </label>
+                      <p className="text-xs text-muted-foreground">All permissions on includes future scopes. Turn any off to keep exactly your choices.</p>
+                      <Button type="submit" disabled={busy === `limits-${grant.grantId}`}>Save limits</Button>
+                    </form>
+                  </details>
+                ) : null}
 
                 {grant.note ? (
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">

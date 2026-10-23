@@ -2271,3 +2271,25 @@ external clients depend on background completion.
 The current API version is `v1` in the URL path. Breaking changes should ship
 under a new path such as `/api/v2`. Additive response fields may be added within
 `v1`; clients should ignore unknown fields.
+
+
+### AI connection defaults (23 October 2026)
+
+New OAuth connections on both `/mcp` and `/mcp/connect` create a full-access
+product grant with no end date. `scopeChoice: "full"` follows the current scope
+catalog, including future additions; it is not a frozen copy of scopes at sign-in.
+Settings at `https://movingmanifest.com/settings/ai` let the owner deliberately
+choose fewer permissions, add/change/remove an end date, or revoke the connection.
+Scope reductions write `scopeChoice: "chosen"`; all permissions on writes `"full"`.
+Explicit durations from older frontends are treated as person choices too.
+
+Legacy unmarked grants infer full access only if they contain every scope in the
+frozen five-scope baseline. Other legacy scope arrays remain exactly as stored,
+including the old four-scope automatic grant: provenance is insufficient to treat
+an arbitrary four-scope row as a request for full access. The owner can restore
+full access in settings. Old expiry is ignored only with an original automatic
+sign-in audit receipt, the exact old 30-day duration, original boundary version,
+and no person edits. Audit receipts are durable; missing proof leaves expiry enforced.
+No migration or production write is required or run for this read-time behavior.
+Revoked grants, selected-move limits, owner checks, and separate per-call safety
+boundaries remain enforced. API-key/stdio explicit key scopes remain separate.

@@ -22,12 +22,12 @@ lifecycle against it, and the provider-side metadata-document configuration is
 not yet in place. Requirement, not endorsement: any AI that speaks remote
 Streamable HTTP MCP with compatible OAuth may attempt this connection.
 
-Signing in is not permission:
+Connecting grants full access with no end date by default:
 
 - OAuth proves who is calling. It does not decide what may be done.
 - A separate product grant decides the moves, the data, and the operations.
-- Until the person approves a grant, tools/list returns only
-  describe_connection. Nothing else exists to call.
+- Connecting creates a full-access grant, including future scopes. Fewer
+  permissions or an end date apply only when the person chooses them in settings.
 - Call describe_connection first when no other tools appear. It reports the
   granted scopes, what this connection can never do, and the exact sentence to
   tell the person.
@@ -142,3 +142,9 @@ No connection at all: the person can still hand work over manually. They open
 the Queue item in Assist With Moving, copy its bounded brief into any AI, and
 paste the result back into the same Queue item. The handoff completes without
 MCP, OAuth, or a key.
+
+AI connection limits: https://movingmanifest.com/settings/ai
+Connections do not expire by default. You may choose fewer permissions or an end
+date, change or remove that date later, and revoke access at any time. A date you
+choose is recorded as your choice and never removed automatically. Legacy grants
+with uncertain scope or expiry history keep their recorded limits.

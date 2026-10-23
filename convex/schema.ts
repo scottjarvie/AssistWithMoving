@@ -1510,6 +1510,8 @@ export default defineSchema({
     // What the client called itself. A label for the person, never authority.
     observedClientName: v.optional(v.string()),
     scopes: v.array(movingGrantScope),
+    scopeChoice: v.optional(v.union(v.literal("full"), v.literal("chosen"))),
+    expiryChoice: v.optional(v.union(v.literal("none"), v.literal("chosen"), v.literal("automatic"))),
     moveScope: v.union(v.literal("allMoves"), v.literal("selectedMoves")),
     moveIds: v.optional(v.array(v.id("moves"))),
     status: v.union(v.literal("active"), v.literal("revoked")),
@@ -1524,7 +1526,7 @@ export default defineSchema({
         doesNotImply: v.string(),
       }),
     ),
-    // A grant that never ends is one nobody remembers agreeing to.
+    // No end date by default. Old unmarked dates remain enforced unless proven automatic.
     expiresAt: v.optional(v.number()),
     approvedAt: v.number(),
     lastUsedAt: v.optional(v.number()),

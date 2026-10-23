@@ -352,11 +352,11 @@ metadata-document client path is not yet done. The honest description of what
 can connect is a requirement, not a product name: any AI that speaks remote
 Streamable HTTP MCP with compatible OAuth.
 
-Signing in is not permission. OAuth proves who is calling. A separate product
+Connecting creates a full-access grant with no end date by default. OAuth proves who is calling. A separate product
 grant, approved by the person and re-read from the database on every discovery
 and every call, decides which moves, which data, and which operations. Revoking
 a grant refuses the very next call rather than waiting for a token to expire. A
-broader token never widens a grant, and an omitted scope always denies.
+broader token never widens a chosen grant. Full-access grants include future scopes.
 
 Until a grant exists, `tools/list` returns exactly one tool:
 `describe_connection`. It takes no scope, is always available, and reports the
@@ -511,3 +511,9 @@ evidence about another.
 - If dimensions, weight, condition, value, price, or contents are estimated,
   store estimate confidence and provenance instead of presenting guesses as
   facts.
+
+AI connection limits: https://movingmanifest.com/settings/ai
+Connections do not expire by default. You may choose fewer permissions or an end
+date, change or remove that date later, and revoke access at any time. A date you
+choose is recorded as your choice and never removed automatically. Legacy grants
+with uncertain scope or expiry history keep their recorded limits.
