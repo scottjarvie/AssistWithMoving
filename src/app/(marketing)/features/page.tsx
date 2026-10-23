@@ -3,6 +3,7 @@ import {
   Bot,
   Boxes,
   Camera,
+  CheckCircle2,
   FileStack,
   KeyRound,
   QrCode,
@@ -81,18 +82,22 @@ export default function FeaturesPage() {
               and what must be findable later.
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
             {[
               "Find unboxed items before load day.",
               "Keep personal transport and first-night items visible.",
               "Export mover-safe packets without private values.",
               "Track claim evidence while packing normally.",
             ].map((item) => (
-              <div key={item} className="rounded-md border border-border p-3 text-sm">
+              <li key={item} className="flex items-start gap-2 text-sm leading-6">
+                <CheckCircle2
+                  className="mt-1 size-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
                 {item}
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       </PublicBand>
     </PublicPageChrome>
