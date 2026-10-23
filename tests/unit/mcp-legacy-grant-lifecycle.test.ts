@@ -26,8 +26,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { api, internal } from "../../convex/_generated/api";
 import { UNIDENTIFIED_LEGACY_CLIENT } from "../../convex/lib/mcpLegacyGrantGate";
-import { effectiveScopes, effectiveScopeChoice, effectiveExpiry, chosenExpiry, movingScopes, findPermittingGrant } from "../../convex/lib/aiGrants";
+import { GRANT_CONSENT_POLICY, grantCatalogFingerprint, effectiveScopes, effectiveScopeChoice, effectiveExpiry, chosenExpiry, movingScopes, findPermittingGrant } from "../../convex/lib/aiGrants";
 import schema from "../../convex/schema";
+
+const consent = { consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint() };
 
 function buildModuleMap(rootDir: string): Record<string, () => Promise<unknown>> {
   const modules: Record<string, () => Promise<unknown>> = {};
@@ -271,13 +273,13 @@ describe("full access and optional end dates", () => {
     expect(row?.scopes).toEqual(movingScopes);
     expect(row?.expiresAt).toBeUndefined();
     const owner = t.withIdentity({ subject: SUBJECT });
-    await owner.mutation(api.aiGrants.updateLimits, { grantId: row!._id, expectedVersion: 1, scopes: ["moving.context.read"], expiresInDays: 7 });
+    await owner.mutation(api.aiGrants.updateLimits, { grantId: row!._id, expectedVersion: 1, ...consent, scopeIntent: "chosen", expiryIntent: "chosen", scopes: ["moving.context.read"], expiresInDays: 7 });
     const chosen = await t.run((ctx) => ctx.db.get(row!._id));
     expect(chosen?.scopeChoice).toBe("chosen");
     expect(chosen?.expiryChoice).toBe("chosen");
     await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "full-client" });
     expect(await t.run((ctx) => ctx.db.get(row!._id))).toEqual(chosen);
-    await owner.mutation(api.aiGrants.updateLimits, { grantId: row!._id, expectedVersion: 2, scopes: [...movingScopes], expiresInDays: null });
+    await owner.mutation(api.aiGrants.updateLimits, { grantId: row!._id, expectedVersion: 2, ...consent, scopeIntent: "full", expiryIntent: "none", scopes: [...movingScopes], expiresInDays: null });
     const restored = await t.run((ctx) => ctx.db.get(row!._id));
     expect(restored?.scopeChoice).toBe("full");
     expect(restored?.expiresAt).toBeUndefined();
@@ -308,7 +310,7 @@ describe("full access and optional end dates", () => {
 
     expect(access.scopes).not.toContain("moving.archive");
     const owner = t.withIdentity({ subject: SUBJECT });
-    await owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 1, scopes: ["moving.context.read"] });
+    await owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 1, ...consent, scopeIntent: "chosen", scopes: ["moving.context.read"] });
     expect((await t.run((ctx) => ctx.db.get(row._id)))?.expiresAt).toBeUndefined();
     await t.run((ctx) => ctx.db.patch(row._id, { expiryChoice: "chosen", expiresAt: approvedAt }));
     expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: "old-client" })).grants).toHaveLength(0);
@@ -318,10 +320,10 @@ describe("full access and optional end dates", () => {
     const t = convexTest(schema, modules);
     const { householdId } = await seedOwner(t);
     const owner = t.withIdentity({ subject: SUBJECT });
-    const common = { householdId, label: "Manual", scopes: [...movingScopes], moveScope: "allMoves" as const };
+    const common = { ...consent, scopeIntent: "full" as const, expiryIntent: "none" as const, householdId, label: "Manual", scopes: [...movingScopes], moveScope: "allMoves" as const };
     const { grantId } = await owner.mutation(api.aiGrants.approve, common);
     expect((await t.run((ctx) => ctx.db.get(grantId)))?.expiryChoice).toBe("none");
-    const dated = await owner.mutation(api.aiGrants.approve, { ...common, expiresInDays: 30 });
+    const dated = await owner.mutation(api.aiGrants.approve, { ...common, expiryIntent: "chosen", expiresInDays: 30 });
     expect((await t.run((ctx) => ctx.db.get(dated.grantId)))?.expiryChoice).toBe("chosen");
     // An unmarked manual grant with the same old duration is still a choice.
     const approvedAt = Date.now() - 31 * 86_400_000;
@@ -357,7 +359,7 @@ it("edits move reach in place, validates ownership, and preserves scope and expi
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "move-limit-client" });
   const row = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
   const owner = t.withIdentity({ subject: SUBJECT });
-  await owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 1, scopes: ["moving.context.read"], expiresInDays: 7 });
+  await owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 1, ...consent, scopeIntent: "chosen", expiryIntent: "chosen", scopes: ["moving.context.read"], expiresInDays: 7 });
   const chosen = (await t.run(ctx => ctx.db.get(row._id)))!;
   for (const moveIds of [[], [ids.foreign]]) {
     await expect(owner.mutation(api.aiGrants.updateLimits, {
@@ -388,4 +390,82 @@ it("edits move reach in place, validates ownership, and preserves scope and expi
   expect(restored.scopes).toEqual(chosen.scopes);
   await owner.mutation(api.aiGrants.revoke, { grantId: row._id });
   await expect(owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 5, moveScope: "selectedMoves", moveIds: [ids.selected] })).rejects.toThrow(/revoked/);
+});
+
+
+describe("explicit settings consent protocol", () => {
+  it("atomically rejects the actual unmarked old manual default of 90 days", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const before = await t.run(async ctx => ({ grants: await ctx.db.query("aiGrants").collect(), activity: await ctx.db.query("aiGrantActivities").collect(), audit: await ctx.db.query("auditLogs").collect() }));
+    await expect(owner.mutation(api.aiGrants.approve, {
+      householdId, label: "Old manual form", scopes: [...movingScopes], moveScope: "allMoves", expiresInDays: 90,
+    })).rejects.toThrow(/Reload/);
+    expect(await t.run(async ctx => ({ grants: await ctx.db.query("aiGrants").collect(), activity: await ctx.db.query("aiGrantActivities").collect(), audit: await ctx.db.query("auditLogs").collect() }))).toEqual(before);
+  });
+
+  it("validates intent consistency and stale catalogs before any writes", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const base = { ...consent, householdId, label: "Explicit", scopes: [...movingScopes], moveScope: "allMoves" as const, scopeIntent: "full" as const, expiryIntent: "none" as const };
+    for (const payload of [
+      { ...base, expiresInDays: 90 },
+      { ...base, expiryIntent: "chosen" as const },
+      { ...base, catalogFingerprint: "old-five-scopes" },
+      { ...base, scopes: ["moving.context.read" as const] },
+    ]) await expect(owner.mutation(api.aiGrants.approve, payload)).rejects.toThrow();
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual([]);
+    const { grantId } = await owner.mutation(api.aiGrants.approve, base);
+    expect(await t.run(ctx => ctx.db.get(grantId))).toMatchObject({ scopeChoice: "full", expiryChoice: "none", scopes: [...movingScopes] });
+    await expect(owner.mutation(api.aiGrants.updateLimits, { grantId, expectedVersion: 1, scopes: [...movingScopes] })).rejects.toThrow(/Reload/);
+    expect((await t.run(ctx => ctx.db.get(grantId)))?.version).toBe(1);
+  });
+
+  it("never lets an unchanged or stale form widen chosen permissions and refuses atomically", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const chosen = movingScopes.filter(scope => scope !== "moving.archive");
+    const { grantId } = await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Limited", scopes: chosen, moveScope: "allMoves", scopeIntent: "chosen", expiryIntent: "none" });
+    const state = () => t.run(async ctx => ({ grant: await ctx.db.get(grantId), activity: await ctx.db.query("aiGrantActivities").collect(), audit: await ctx.db.query("auditLogs").collect() }));
+    const before = await state();
+    for (const payload of [
+      { grantId, expectedVersion: 1, scopes: [...movingScopes] },
+      { ...consent, grantId, expectedVersion: 1, scopes: [...movingScopes], scopeIntent: "preserve" as const },
+      { ...consent, catalogFingerprint: "stale", grantId, expectedVersion: 1, scopes: chosen, scopeIntent: "chosen" as const },
+      { ...consent, grantId, expectedVersion: 1, expiresInDays: 90 },
+    ]) {
+      await expect(owner.mutation(api.aiGrants.updateLimits, payload)).rejects.toThrow();
+      expect(await state()).toEqual(before);
+    }
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: 1, expiresInDays: 7, expiryIntent: "chosen" });
+    expect((await state()).grant).toMatchObject({ scopes: chosen, scopeChoice: "chosen", expiryChoice: "chosen" });
+  });
+
+  it("preserves chosen all-current intent on date-only and unchanged permission edits; deliberate full follows future scopes", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const { grantId } = await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Chosen all", scopes: [...movingScopes], moveScope: "allMoves", scopeIntent: "chosen", expiryIntent: "chosen", expiresInDays: 7 });
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: 1, expiryIntent: "none", expiresInDays: null });
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: 2, scopes: [...movingScopes], scopeIntent: "preserve" });
+    expect((await t.run(ctx => ctx.db.get(grantId)))?.scopeChoice).toBe("chosen");
+    const frozen = [...movingScopes];
+    const catalog = movingScopes as unknown as string[];
+    catalog.push("moving.future.test");
+    try {
+      await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: 3, scopes: frozen, scopeIntent: "full" })).rejects.toThrow(/Reload/);
+      const row = (await t.run(ctx => ctx.db.get(grantId)))!;
+      expect(effectiveScopes(row)).toEqual(frozen);
+      // After reviewing the new catalog the person can deliberately restore full.
+      // The synthetic scope bypasses schema validation here by exercising the pure resolver.
+      const { explicitScopes } = await import("../../convex/lib/aiGrants");
+      expect(explicitScopes([...movingScopes], "full")).toContain("moving.future.test");
+      expect(() => explicitScopes(frozen, "full")).toThrow(/current permission catalog/);
+    } finally { catalog.pop(); }
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: 3, scopes: frozen, scopeIntent: "full" });
+    expect((await t.run(ctx => ctx.db.get(grantId)))?.scopeChoice).toBe("full");
+  });
 });
