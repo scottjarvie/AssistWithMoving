@@ -47,8 +47,8 @@ export default function MarketingPage() {
       <section className="border-b border-border">
         <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.8fr)] lg:px-8 lg:py-16">
           <div className="max-w-2xl">
-            <Badge variant="secondary" className="mb-5 max-w-full whitespace-normal leading-5">
-              Assist With Moving · active development
+            <Badge variant="secondary" className="mb-5">
+              Active development
             </Badge>
             <h1 className="text-5xl font-semibold leading-[0.95] tracking-tight text-balance sm:text-6xl lg:text-7xl">
               Keep the whole move coherent.
