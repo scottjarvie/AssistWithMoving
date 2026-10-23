@@ -244,8 +244,8 @@ export default function AiAssistantPage() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {quickCapabilities.map((card) => (
             <div key={card.title} className="rounded-md border border-border p-4">
-              <card.icon className="mb-4 size-5 text-primary" aria-hidden="true" />
-              <h2 className="text-base font-semibold tracking-normal">
+              <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
+                <card.icon className="size-5 shrink-0 text-primary" aria-hidden="true" />
                 {card.title}
               </h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
