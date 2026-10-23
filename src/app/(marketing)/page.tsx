@@ -6,6 +6,7 @@ import {
   PublicFooter,
   PublicHeader,
 } from "@/components/public-page-chrome";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -80,13 +81,12 @@ export default function MarketingPage() {
               <blockquote className="mt-2 border-l-2 border-primary pl-3 text-sm leading-6">
                 {starterPrompt}
               </blockquote>
-              <Link
-                href="/ai"
-                className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
-              >
-                Open the assistant guide
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </Link>
+              <CopyTextButton
+                text={starterPrompt}
+                label="Copy prompt"
+                ariaLabel="Copy the setup prompt"
+                className="mt-4 min-h-11"
+              />
             </div>
           </div>
 
