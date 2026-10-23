@@ -17,6 +17,7 @@ import {
   PublicPageChrome,
 } from "@/components/public-page-chrome";
 import type { PublicNavigationMode } from "@/components/public-page-chrome";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
@@ -228,6 +229,12 @@ export default function AiAssistantPage() {
             <blockquote className="mt-3 border-l-2 border-primary pl-3 text-sm leading-6">
               {starterPrompt}
             </blockquote>
+            <CopyTextButton
+              text={starterPrompt}
+              label="Copy prompt"
+              ariaLabel="Copy the setup prompt"
+              className="mt-4 min-h-11"
+            />
           </div>
         </div>
       </PublicBand>
