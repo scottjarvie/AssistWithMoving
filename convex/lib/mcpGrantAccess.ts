@@ -136,7 +136,7 @@ export async function hasQueueWorkGrant(
   moveId: Id<"moves">,
 ) {
   try {
-    const user = await requireUserBySubject(ctx, principal.subject);
+    const user = await requireMcpUser(ctx, principal);
     const now = Date.now();
     const grants = await activeGrantsForUser(ctx, user._id, principal.clientId, now);
     return (
