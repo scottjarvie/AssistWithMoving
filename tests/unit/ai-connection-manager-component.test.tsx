@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
     describeBoundary: "aiGrants.describeBoundary",
     approve: "aiGrants.approve",
     revoke: "aiGrants.revoke",
+    updateLimits: "aiGrants.updateLimits",
   },
   households: {
     listMine: "households.listMine",
@@ -27,6 +28,7 @@ const apiMock = vi.hoisted(() => ({
 const connectionData = vi.hoisted(() => ({
   approve: vi.fn(),
   revoke: vi.fn(),
+  updateLimits: vi.fn(),
   grants: {
     boundaryVersion: "2026-08-16",
     scopes: [
@@ -152,9 +154,11 @@ vi.mock("convex/react", () => ({
   useMutation: (mutation: string) =>
     mutation === apiMock.aiGrants.approve
       ? connectionData.approve
-      : mutation === apiMock.aiGrants.revoke
-        ? connectionData.revoke
-        : vi.fn(),
+      : mutation === apiMock.aiGrants.updateLimits
+        ? connectionData.updateLimits
+        : mutation === apiMock.aiGrants.revoke
+          ? connectionData.revoke
+          : vi.fn(),
 }));
 
 import {
@@ -207,7 +211,7 @@ describe("AiConnectionManager", () => {
       "Kitchen table AI",
     );
     await user.click(
-      screen.getByRole("checkbox", { name: /Read the move context you choose/ }),
+      within(screen.getByRole("group", { name: "What this AI may do" })).getByRole("checkbox", { name: /Save the work you asked for/ }),
     );
 
     expect(screen.getByText("Kitchen table AI")).toBeInTheDocument();
@@ -220,9 +224,26 @@ describe("AiConnectionManager", () => {
         label: "Kitchen table AI",
         scopes: ["moving.context.read"],
         moveScope: "allMoves",
-        expiresInDays: 90,
+        expiresInDays: undefined,
       }),
     );
+  });
+
+  it("defaults every permission on with no end date", () => {
+    render(<AiConnectionManager />);
+    const group = screen.getByRole("group", { name: "What this AI may do" });
+    for (const checkbox of within(group).getAllByRole("checkbox")) expect(checkbox).toBeChecked();
+    expect(screen.getByLabelText("End date", { selector: "#ai-grant-expiry" })).toHaveValue("0");
+  });
+
+  it("removes an existing end date deliberately", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    await user.selectOptions(within(form).getByRole("combobox"), "0");
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({ grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"], expiresInDays: null });
   });
 
   it("asks for confirmation before revoking, and says what revoking does", async () => {

@@ -28,6 +28,11 @@ import {
   describeGrantBoundary,
   findPermittingGrant,
   movingScopes,
+  effectiveScopes,
+  effectiveScopeChoice,
+  effectiveExpiry,
+  chosenExpiry,
+  scopeChoiceFor,
   type MovingScope,
 } from "./lib/aiGrants";
 import { CLIENT_REGISTRATION_LABELS } from "./lib/mcpClientIdentity";
@@ -47,20 +52,30 @@ import {
 const MAX_ACTIVE_GRANTS = 8;
 const MAX_ACTIVITY_ROWS = 50;
 const ACTIVITY_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
-/** Default life of a grant. Long enough to be useful, short enough to lapse. */
-const DEFAULT_GRANT_DAYS = 90;
-const MAX_GRANT_DAYS = 365;
-/**
- * Life of a grant nobody filled in a form for. Shorter than one the person
- * shaped themselves on purpose: it lapses into a decision instead of standing
- * indefinitely on the strength of a single sign-in.
- */
-const AUTO_GRANT_DAYS = 30;
-
 function grantIsActive(grant: Doc<"aiGrants">, now: number) {
   if (grant.status !== "active") return false;
-  if (grant.expiresAt !== undefined && grant.expiresAt <= now) return false;
+  const expiry = effectiveExpiry(grant);
+  if (expiry !== undefined && expiry <= now) return false;
   return true;
+}
+
+/** Resolve automatic legacy expiry from its durable audit provenance, not from
+ * duration alone or expiring activity rows. Missing proof preserves the date.
+ * Version increments track person edits; use receipts do not change version.
+ */
+async function resolveLegacyExpiry(ctx: QueryCtx | MutationCtx, grant: Doc<"aiGrants">) {
+  if (grant.status !== "active" || grant.expiryChoice || grant.version !== 1 || !grant.clientId ||
+      grant.expiresAt !== grant.approvedAt + 30 * 86_400_000 ||
+      grant.consentBoundaryVersion !== "2026-08-16") return grant;
+  const approval = await ctx.db.query("auditLogs")
+    .withIndex("by_object_time", (q) => q.eq("objectTable", "aiGrants").eq("objectId", grant._id))
+    .order("asc").first();
+  if (approval?.action === "ai_grant.approved" && approval.actorType === "user" &&
+      approval.actorUserId === grant.ownerUserId &&
+      approval.metadata?.source === "legacyGatewaySignIn") {
+    return { ...grant, expiryChoice: "automatic" as const };
+  }
+  return grant;
 }
 
 /** What the owner sees. Never includes another person's grant or a credential. */
@@ -70,7 +85,8 @@ function shapeGrant(grant: Doc<"aiGrants">, now: number) {
     grantId: grant._id,
     label: grant.label,
     status: grant.status === "revoked" ? "revoked" : active ? "active" : "expired",
-    scopes: grant.scopes,
+    scopes: [...effectiveScopes(grant)],
+    scopeChoice: effectiveScopeChoice(grant),
     moveScope: grant.moveScope,
     moveIds: grant.moveIds ?? [],
     clientId: grant.clientId ?? null,
@@ -83,7 +99,7 @@ function shapeGrant(grant: Doc<"aiGrants">, now: number) {
     consentBoundaryVersion: grant.consentBoundaryVersion,
     consentSnapshot: grant.consentSnapshot,
     approvedAt: grant.approvedAt,
-    expiresAt: grant.expiresAt ?? null,
+    expiresAt: effectiveExpiry(grant) ?? null,
     lastUsedAt: grant.lastUsedAt ?? null,
     lastToolName: grant.lastToolName ?? null,
     useCount: grant.useCount,
@@ -152,7 +168,8 @@ export async function activeGrantsForUser(
     )
     .order("desc")
     .take(MAX_ACTIVE_GRANTS * 2);
-  return rows.filter((grant) => {
+  const resolved = await Promise.all(rows.map((row) => resolveLegacyExpiry(ctx, row)));
+  return resolved.filter((grant) => {
     if (!grantIsActive(grant, now)) return false;
     // A grant already bound to another client is that client's authority, not
     // this one's. An unbound grant is claimable by the first client that uses it.
@@ -176,15 +193,16 @@ export const grantsForPrincipal = internalQuery({
     }
     const now = Date.now();
     const grants = await activeGrantsForUser(ctx, user._id, args.clientId, now);
-    const scopes = [...new Set(grants.flatMap((grant) => grant.scopes))];
+    const scopes = movingScopes.filter((scope) => grants.some((grant) => effectiveScopes(grant).includes(scope)));
     return {
       grants: grants.map((grant) => ({
         grantId: grant._id,
         label: grant.label,
-        scopes: grant.scopes,
+        scopes: [...effectiveScopes(grant)],
+        scopeChoice: effectiveScopeChoice(grant),
         moveScope: grant.moveScope,
         moveIds: (grant.moveIds ?? []).map(String),
-        expiresAt: grant.expiresAt ?? null,
+        expiresAt: effectiveExpiry(grant) ?? null,
         boundClientId: grant.clientId ?? null,
       })),
       scopes,
@@ -220,11 +238,12 @@ export type GrantDecisionRow = GrantDecisionInput;
 
 function toDecisionRow(grant: Doc<"aiGrants">): GrantDecisionRow {
   return {
-    scopes: grant.scopes,
+    scopes: [...effectiveScopes(grant)],
+    scopeChoice: effectiveScopeChoice(grant),
     moveScope: grant.moveScope,
     moveIds: (grant.moveIds ?? []).map(String),
     status: grant.status,
-    expiresAt: grant.expiresAt,
+    expiresAt: effectiveExpiry(grant),
   };
 }
 
@@ -325,11 +344,12 @@ export const touchLegacyConnection = internalMutation({
       clientId: args.clientId,
       observedClientName: args.clientName,
       scopes,
+      scopeChoice: "full",
+      expiryChoice: "none",
       moveScope: "allMoves",
       status: "active",
       consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
       consentSnapshot: buildConsentSnapshot(scopes),
-      expiresAt: now + AUTO_GRANT_DAYS * 24 * 60 * 60 * 1_000,
       approvedAt: now,
       useCount: 0,
       version: 1,
@@ -348,7 +368,7 @@ export const touchLegacyConnection = internalMutation({
         // operations" tells a person a number; this tells them the capability.
         message: `${label} connected by signing in. It can ${describeLegacyCapabilities(
           scopes,
-        )} — on all your moves, for ${AUTO_GRANT_DAYS} days. Change or revoke this any time on this page.`,
+        )} — on all your moves, with no end date. Change or revoke this any time on this page.`,
       });
     }
     await recordAuditEvent(ctx, {
@@ -402,11 +422,12 @@ export const noteGrantUse = internalMutation({
     const permitting = findPermittingGrant(
       grants.map((row) => ({
         doc: row,
-        scopes: row.scopes,
+        scopes: [...effectiveScopes(row)],
+        scopeChoice: effectiveScopeChoice(row),
         moveScope: row.moveScope,
         moveIds: (row.moveIds ?? []).map(String),
         status: row.status,
-        expiresAt: row.expiresAt,
+        expiresAt: effectiveExpiry(row),
       })),
       args.scope,
       args.moveId ? String(args.moveId) : undefined,
@@ -520,7 +541,8 @@ export const listMine = query({
       .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", user._id))
       .order("desc")
       .take(40);
-    const grants = rows.map((row) => shapeGrant(row, now));
+    const resolved = await Promise.all(rows.map((row) => resolveLegacyExpiry(ctx, row)));
+    const grants = resolved.map((row) => shapeGrant(row, now));
     return {
       ...describeGrantBoundary(),
       grants,
@@ -633,21 +655,20 @@ export const approve = mutation({
       );
     }
 
-    const days = Math.min(
-      Math.max(Math.trunc(args.expiresInDays ?? DEFAULT_GRANT_DAYS), 1),
-      MAX_GRANT_DAYS,
-    );
+    const expiresAt = chosenExpiry(args.expiresInDays, now);
     const grantId = await ctx.db.insert("aiGrants", {
       ownerUserId: user._id,
       householdId: args.householdId,
       label,
       scopes,
+      scopeChoice: scopeChoiceFor(scopes),
+      expiryChoice: expiresAt === undefined ? "none" : "chosen",
       moveScope: args.moveScope,
       moveIds,
       status: "active",
       consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
       consentSnapshot: buildConsentSnapshot(scopes),
-      expiresAt: now + days * 24 * 60 * 60 * 1_000,
+      expiresAt,
       approvedAt: now,
       useCount: 0,
       note: args.note?.trim().slice(0, 500) || undefined,
@@ -679,6 +700,43 @@ export const approve = mutation({
       metadata: { scopes, moveScope: args.moveScope, moveCount: moveIds?.length ?? null },
     });
     return { grantId };
+  },
+});
+
+/** Owner-only limit edits. Revoked connections cannot be resurrected here. */
+export const updateLimits = mutation({
+  args: {
+    grantId: v.id("aiGrants"), expectedVersion: v.number(),
+    scopes: v.optional(v.array(movingGrantScope)),
+    // null deliberately removes an end date; omitted preserves it.
+    expiresInDays: v.optional(v.union(v.number(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireCurrentUser(ctx);
+    const grant = await ctx.db.get(args.grantId);
+    if (!grant || grant.ownerUserId !== user._id) throw new ConvexError("That AI connection is not available.");
+    if (grant.status === "revoked") throw new ConvexError("A revoked connection stays revoked. Approve a new connection instead.");
+    if (grant.version !== args.expectedVersion) throw new ConvexError("This connection changed. Reload and try again.");
+    const now = Date.now();
+    const scopes = args.scopes ? [...new Set(args.scopes)] : undefined;
+    if (scopes?.length === 0) throw new ConvexError("Choose at least one thing this AI may do.");
+    const expiresAt = args.expiresInDays === null ? undefined : chosenExpiry(args.expiresInDays, now);
+    const resolved = await resolveLegacyExpiry(ctx, grant);
+    const patch = {
+      scopeChoice: effectiveScopeChoice(grant),
+      // Freeze person choices; preserve proven automatic removal across edits.
+      ...(args.expiresInDays === undefined ? {
+        expiresAt: effectiveExpiry(resolved),
+        expiryChoice: effectiveExpiry(resolved) === undefined ? "none" as const : "chosen" as const,
+      } : {}),
+      ...(scopes ? { scopes, scopeChoice: scopeChoiceFor(scopes), consentSnapshot: buildConsentSnapshot(scopes), consentBoundaryVersion: GRANT_BOUNDARY_VERSION } : {}),
+      ...(args.expiresInDays !== undefined ? { expiresAt, expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const } : {}),
+      version: grant.version + 1, updatedAt: now,
+    };
+    await ctx.db.patch(grant._id, patch);
+    await appendGrantActivity(ctx, grant, { type: "approved", outcome: "recorded", message: "You changed this connection’s limits. Your chosen scopes and end date are preserved." });
+    await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "user", actorUserId: user._id, category: "ai", action: "ai_grant.limits_changed", objectTable: "aiGrants", objectId: grant._id, metadata: { scopeChoice: patch.scopeChoice ?? null, expiryChoice: patch.expiryChoice ?? null } });
+    return { grantId: grant._id };
   },
 });
 

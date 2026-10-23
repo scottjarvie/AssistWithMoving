@@ -248,7 +248,7 @@ describe("listing is a question, calling is an act", () => {
   });
 });
 
-describe("signing in is the approval, but not for everything", () => {
+describe("signing in grants every scope by default", () => {
   it("hands over reading, evidence, writing and queue work", () => {
     for (const name of SCOPED_TOOLS) {
       const scope = legacyScopeForTool(name);
@@ -265,8 +265,8 @@ describe("signing in is the approval, but not for everything", () => {
     }
   });
 
-  it("does not hand over the destructive verb", () => {
-    expect(LEGACY_AUTO_GRANT_SCOPES).not.toContain("moving.archive");
+  it("includes reversible archive by default", () => {
+    expect(LEGACY_AUTO_GRANT_SCOPES).toContain("moving.archive");
     expect(
       decideLegacyGatewayAccess({
         toolName: "archive_item",
@@ -274,7 +274,7 @@ describe("signing in is the approval, but not for everything", () => {
         moveId: "move_a",
         mode: "call",
       }).allowed,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("keeps the raised list separate rather than derived by subtraction", () => {

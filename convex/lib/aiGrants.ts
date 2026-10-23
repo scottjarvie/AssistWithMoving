@@ -9,7 +9,7 @@
  * Nothing in this module trusts a token scope. Clerk currently issues
  * identity-only scopes (`openid profile email`), and even if it issued more,
  * the product ceiling below is what applies. A broader token never widens a
- * grant; an omitted scope always denies.
+ * chosen grant; full-access grants follow the current catalog.
  */
 import { ConvexError } from "convex/values";
 
@@ -18,7 +18,7 @@ import { ConvexError } from "convex/values";
  * Stored on each grant so a person can later see exactly what they approved,
  * rather than today's rendering of it.
  */
-export const GRANT_BOUNDARY_VERSION = "2026-08-16";
+export const GRANT_BOUNDARY_VERSION = "2026-10-23";
 
 export const movingScopes = [
   "moving.context.read",
@@ -27,6 +27,43 @@ export const movingScopes = [
   "moving.queue.work",
   "moving.archive",
 ] as const;
+
+/** Frozen legacy baseline: never extend this when adding new scopes. */
+export const LEGACY_FULL_SCOPE_BASELINE = [
+  "moving.context.read", "moving.evidence.read", "moving.work.write",
+  "moving.queue.work", "moving.archive",
+] as const;
+
+type ScopeGrant = { scopes: readonly string[]; scopeChoice?: "full" | "chosen" };
+export function effectiveScopeChoice(grant: ScopeGrant): "full" | "chosen" {
+  return grant.scopeChoice ?? (LEGACY_FULL_SCOPE_BASELINE.every(
+    (scope) => grant.scopes.includes(scope),
+  ) ? "full" : "chosen");
+}
+
+/** Full connections include future catalog additions; chosen ones never widen. */
+export function effectiveScopes(grant: ScopeGrant): readonly string[] {
+  return effectiveScopeChoice(grant) === "full" ? movingScopes : grant.scopes;
+}
+
+export function scopeChoiceFor(scopes: readonly string[]): "full" | "chosen" {
+  return movingScopes.every((scope) => scopes.includes(scope)) ? "full" : "chosen";
+}
+
+export function effectiveExpiry(grant: {
+  expiresAt?: number; expiryChoice?: "none" | "chosen" | "automatic";
+}) {
+  return grant.expiryChoice === "automatic" ? undefined : grant.expiresAt;
+}
+
+/** A supplied duration is an explicit choice, including from older frontends. */
+export function chosenExpiry(days: number | undefined, now: number) {
+  if (days === undefined) return undefined;
+  if (!Number.isFinite(days) || days < 1 || days > 365 || !Number.isInteger(days)) {
+    throw new ConvexError("Choose a whole number of days from 1 to 365.");
+  }
+  return now + days * 86_400_000;
+}
 
 export type MovingScope = (typeof movingScopes)[number];
 
@@ -62,7 +99,7 @@ export const MOVING_SCOPES: readonly MovingScopeInfo[] = [
     grants:
       "The private move evidence needed for the approved work, returned as protected content through Moving rather than a storage link.",
     doesNotImply:
-      "It does not allow uploading, sharing, publishing, exporting, or reaching evidence outside the moves you selected. Reading context does not include this — it is a separate approval.",
+      "It does not allow uploading, sharing, publishing, exporting, or reaching evidence outside the moves you selected. Reading context does not include this — it is a separate permission you can turn off.",
     writes: false,
   },
   {
@@ -172,7 +209,7 @@ export const GRANT_ERRORS = {
     code: "GRANT_EXPIRED",
     message: "That grant has expired.",
     recovery:
-      "Approve a new grant in Settings → AI connections, then reconnect.",
+      "Open https://movingmanifest.com/settings/ai and remove or change this connection’s end date, then retry.",
   },
   outOfScope: {
     code: "GRANT_SCOPE_MISSING",
@@ -205,6 +242,8 @@ export function grantError(key: GrantErrorKey): never {
 /** The shape the enforcement path needs. Deliberately narrower than the row. */
 export type GrantDecisionInput = {
   scopes: readonly string[];
+  scopeChoice?: "full" | "chosen";
+  expiryChoice?: "none" | "chosen" | "automatic";
   moveScope: "allMoves" | "selectedMoves";
   moveIds: readonly string[];
   status: "active" | "revoked";
@@ -228,8 +267,9 @@ export function findPermittingGrant<T extends GrantDecisionInput>(
 ): T | null {
   for (const grant of grants) {
     if (grant.status !== "active") continue;
-    if (grant.expiresAt !== undefined && grant.expiresAt <= now) continue;
-    if (!grant.scopes.includes(scope)) continue;
+    const expiry = effectiveExpiry(grant);
+    if (expiry !== undefined && expiry <= now) continue;
+    if (!effectiveScopes(grant).includes(scope)) continue;
     if (grant.moveScope === "selectedMoves") {
       if (!moveId || !grant.moveIds.includes(moveId)) continue;
     }
