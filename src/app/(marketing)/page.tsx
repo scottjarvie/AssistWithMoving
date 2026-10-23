@@ -100,9 +100,8 @@ export default function MarketingPage() {
             Learn about the project
           </h2>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Assist With Moving is in active development. Read the current
-            product boundaries, privacy model, and available workflows before
-            you create an account.
+            Read the current product boundaries, privacy model, and available
+            workflows before you create an account.
           </p>
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             {learnMoreLinks.map((item) => (
@@ -111,11 +110,11 @@ export default function MarketingPage() {
                 href={item.href}
                 className="group rounded-md border border-border p-4 hover:bg-muted/40"
               >
-                <item.icon
-                  className="mb-4 size-5 text-primary"
-                  aria-hidden="true"
-                />
                 <div className="flex items-center gap-2 text-lg font-semibold tracking-normal">
+                  <item.icon
+                    className="size-5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
                   {item.title}
                   <ArrowRight
                     className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
