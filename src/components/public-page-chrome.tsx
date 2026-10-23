@@ -207,8 +207,10 @@ export function FeatureGrid({ cards }: { cards: PublicFeatureCard[] }) {
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => (
         <div key={card.title} className="rounded-md border border-border p-4">
-          <card.icon className="mb-5 size-5 text-primary" aria-hidden="true" />
-          <h2 className="text-lg font-semibold tracking-normal">{card.title}</h2>
+          <h3 className="flex items-center gap-2 text-lg font-semibold tracking-normal">
+            <card.icon className="size-5 shrink-0 text-primary" aria-hidden="true" />
+            {card.title}
+          </h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {card.copy}
           </p>
