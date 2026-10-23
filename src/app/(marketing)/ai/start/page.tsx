@@ -116,7 +116,7 @@ export default function AiStartPage() {
               ))}
             </div>
             <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              Approve only what the work needs. Your AI is shown just the tools
+              Review the full-access default and narrow it if you choose. Your AI is shown just the tools
               your grant covers, and revoking it refuses the very next call.
             </p>
           </div>

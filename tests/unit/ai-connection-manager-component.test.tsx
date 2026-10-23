@@ -54,6 +54,7 @@ const connectionData = vi.hoisted(() => ({
     grants: [
       {
         grantId: "ai_grant_123" as Id<"aiGrants">,
+        householdId: "household_123" as Id<"households">,
         label: "My AI on the laptop",
         status: "active" as const,
         scopes: ["moving.context.read"],
@@ -239,11 +240,26 @@ describe("AiConnectionManager", () => {
   it("removes an existing end date deliberately", async () => {
     const user = userEvent.setup();
     render(<AiConnectionManager />);
-    await user.click(screen.getByText("Change permissions or end date"));
+    await user.click(screen.getByText("Change moves, permissions or end date"));
     const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
     await user.selectOptions(within(form).getByRole("combobox"), "0");
     await user.click(within(form).getByRole("button", { name: "Save limits" }));
-    expect(connectionData.updateLimits).toHaveBeenCalledWith({ grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"], expiresInDays: null });
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({ grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"], moveScope: "selectedMoves", moveIds: ["move_123"], expiresInDays: null });
+  });
+
+  it("narrows the existing connection to checked moves without changing its end date", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    expect(within(form).getByRole("radio", { name: "Only the moves checked below" })).toBeChecked();
+    expect(within(form).getByRole("checkbox", { name: "Utah to Virginia" })).toBeChecked();
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({
+      grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"],
+      moveScope: "selectedMoves", moveIds: ["move_123"],
+    });
+    expect(connectionData.approve).not.toHaveBeenCalled();
   });
 
   it("asks for confirmation before revoking, and says what revoking does", async () => {

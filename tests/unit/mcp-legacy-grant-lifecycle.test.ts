@@ -335,3 +335,57 @@ describe("full access and optional end dates", () => {
 
   });
 });
+
+
+it("edits move reach in place, validates ownership, and preserves scope and expiry choices", async () => {
+  const t = convexTest(schema, modules);
+  const { userId, householdId } = await seedOwner(t);
+  const ids = await t.run(async ctx => {
+    await ctx.db.insert("users", {
+      clerkUserId: "other", email: "other-move-owner@example.test", name: "Other owner",
+      appRole: "member", status: "active", createdAt: Date.now(), updatedAt: Date.now(), lastSeenAt: Date.now(),
+    });
+    const foreignHouseholdId = await ctx.db.insert("households", {
+      name: "Other household", createdByUserId: userId, ownerUserId: userId, createdAt: Date.now(), updatedAt: Date.now(),
+    });
+    const makeMove = (household: typeof householdId, title: string) => ctx.db.insert("moves", {
+      householdId: household, title, type: "local", status: "planning", unitSystem: "imperial",
+      createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now(),
+    });
+    return { selected: await makeMove(householdId, "Selected"), excluded: await makeMove(householdId, "Excluded"), foreign: await makeMove(foreignHouseholdId, "Foreign") };
+  });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "move-limit-client" });
+  const row = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  const owner = t.withIdentity({ subject: SUBJECT });
+  await owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 1, scopes: ["moving.context.read"], expiresInDays: 7 });
+  const chosen = (await t.run(ctx => ctx.db.get(row._id)))!;
+  for (const moveIds of [[], [ids.foreign]]) {
+    await expect(owner.mutation(api.aiGrants.updateLimits, {
+      grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds,
+    })).rejects.toThrow();
+  }
+  await owner.mutation(api.aiGrants.updateLimits, {
+    grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds: [ids.selected, ids.selected],
+  });
+  const narrowed = (await t.run(ctx => ctx.db.get(row._id)))!;
+  expect(narrowed).toMatchObject({
+    moveScope: "selectedMoves", moveIds: [ids.selected], scopes: chosen.scopes,
+    scopeChoice: "chosen", expiryChoice: "chosen", expiresAt: chosen.expiresAt,
+    clientId: chosen.clientId, approvedAt: chosen.approvedAt, ownerUserId: chosen.ownerUserId,
+  });
+  expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(1);
+  const principal = { issuer: ISSUER, subject: SUBJECT, clientId: "move-limit-client" };
+  await expect(t.query(internal.mcpPlanning.getMoveBrief, { principal, moveId: ids.selected })).resolves.toBeTruthy();
+  await expect(t.query(internal.mcpPlanning.getMoveBrief, { principal, moveId: ids.excluded })).rejects.toThrow();
+  await expect(t.withIdentity({ subject: "other" }).mutation(api.aiGrants.updateLimits, {
+    grantId: row._id, expectedVersion: 3, moveScope: "allMoves",
+  })).rejects.toThrow();
+  await expect(owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 2, moveScope: "allMoves" })).rejects.toThrow(/changed/);
+  await owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 3, moveScope: "allMoves" });
+  const restored = (await t.run(ctx => ctx.db.get(row._id)))!;
+  expect(restored.moveIds).toBeUndefined();
+  expect(restored.expiresAt).toBe(chosen.expiresAt);
+  expect(restored.scopes).toEqual(chosen.scopes);
+  await owner.mutation(api.aiGrants.revoke, { grantId: row._id });
+  await expect(owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 5, moveScope: "selectedMoves", moveIds: [ids.selected] })).rejects.toThrow(/revoked/);
+});
