@@ -69,7 +69,7 @@ export default function AiStartPage() {
                 your AI
               </Badge>
             </div>
-            <ol className="mt-4 space-y-3">
+            <ol className="divide-y divide-border">
               {[
                 "Create or sign into your account.",
                 "Paste the endpoint into an AI that speaks remote MCP with OAuth.",
@@ -77,10 +77,7 @@ export default function AiStartPage() {
                 "Approve a grant: the moves it covers and what it may do.",
                 "Use a fallback helper key only if that path is unavailable.",
               ].map((step, index) => (
-                <li
-                  key={step}
-                  className="flex gap-3 rounded-md border border-border bg-background/65 p-3"
-                >
+                <li key={step} className="flex gap-3 py-3">
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
                     {index + 1}
                   </span>

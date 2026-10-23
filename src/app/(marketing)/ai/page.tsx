@@ -509,25 +509,22 @@ function AssistantVisual() {
           granted
         </Badge>
       </div>
-      <div className="mt-4 space-y-3">
+      <ol className="divide-y divide-border">
         {[
           ["1", "Create a private move."],
           ["2", "Leave a durable Queue handoff."],
           ["3", "Sign in from a compatible AI, then approve a grant."],
           ["4", "Review saved work inside the move."],
         ].map(([step, copy]) => (
-          <div
-            key={step}
-            className="flex gap-3 rounded-md border border-border bg-background/65 p-3"
-          >
+          <li key={step} className="flex gap-3 py-3">
             <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
               {step}
             </span>
             <p className="text-sm leading-6 text-muted-foreground">{copy}</p>
-          </div>
+          </li>
         ))}
-      </div>
-      <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-sm leading-6">
+      </ol>
+      <div className="mt-1 rounded-md border border-primary/25 bg-primary/5 p-3 text-sm leading-6">
         <span className="flex items-center gap-2 font-medium">
           <Bot className="size-4 text-primary" aria-hidden="true" />
           You stay in control
