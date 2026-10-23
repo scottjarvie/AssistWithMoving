@@ -52,15 +52,9 @@ export default function AboutPage() {
       description="Assist With Moving is a system of record for moves: inventory, box manifests, photo evidence, load plans, and scoped documentation packets. It exists so the details of a move are captured once and stay usable for everyone who needs them."
     >
       <PublicBand>
-        <div className="mb-6 max-w-3xl">
-          <h2 className="text-2xl font-semibold tracking-normal">
-            What we believe
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            These principles shape how {product.name} is built — from how AI fits
-            in to how your records are shared.
-          </p>
-        </div>
+        <h2 className="mb-6 text-2xl font-semibold tracking-normal">
+          What we believe
+        </h2>
         <FeatureGrid cards={principleCards} />
       </PublicBand>
 
