@@ -133,7 +133,7 @@ describe("QueueDesk", () => {
     renderDesk({ onCreateDirective: createDirective });
 
     expect(
-      screen.getByText("Queue-capable API-key access is available"),
+      screen.getByText("A Queue API key is set up"),
     ).toBeInTheDocument();
     expect(screen.getByText(/cannot tell whether an AI client is currently online/i)).toBeInTheDocument();
     expect(screen.getByText(/Nothing runs until an AI claims it/i)).toBeInTheDocument();

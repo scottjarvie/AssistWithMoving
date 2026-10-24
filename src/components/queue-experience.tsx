@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Bot,
   Check,
+  ChevronDown,
   CircleDot,
   ClipboardList,
   Clock3,
@@ -186,16 +187,32 @@ function QueueConnectionNote({
             {loading
               ? "Checking AI access"
               : hasKey
-                ? "Queue-capable API-key access is available"
-                : "No Queue-capable key is set up"}
+                ? "A Queue API key is set up"
+                : "No Queue API key is set up"}
           </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground sm:text-sm">
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
             {loading
               ? "Connection status will appear here when it is known."
               : hasKey
-                ? `${activeApiKeyCount} active key${activeApiKeyCount === 1 ? "" : "s"} can reach scoped Queue tools, and a connected AI can work this Queue under a grant that includes Queue work. Assist With Moving cannot tell whether an AI client is currently online.`
-                : "You can still leave handoff notes. A connected AI can claim and finish them once you approve a grant that includes Queue work; a scoped API key is the other way in."}
+                ? "An AI using that key can pick up these handoffs."
+                : "You can still leave handoffs. An AI you connect with Queue access, or a Queue API key, can pick them up."}
           </p>
+          {loading ? null : (
+            <details className="group mt-1 text-sm">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 font-medium text-foreground [&::-webkit-details-marker]:hidden">
+                How Queue access works
+                <ChevronDown
+                  className="size-4 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                  aria-hidden="true"
+                />
+              </summary>
+              <p className="text-xs leading-5 text-muted-foreground sm:text-sm">
+                {hasKey
+                  ? `Queue-capable API-key access is available: ${activeApiKeyCount} active key${activeApiKeyCount === 1 ? "" : "s"} can reach scoped Queue tools, and a connected AI can work this Queue under a grant that includes Queue work. Assist With Moving cannot tell whether an AI client is currently online.`
+                  : "A connected AI can claim and finish handoffs once you approve a grant that includes Queue work; a scoped API key is the other way in."}
+              </p>
+            </details>
+          )}
         </div>
       </div>
       <Button asChild variant="outline" size="touch" className="self-start sm:self-center">
@@ -648,8 +665,6 @@ export function QueueDesk({
 
   return (
     <div className="space-y-5">
-      <QueueConnectionNote activeApiKeyCount={activeApiKeyCount} />
-
       <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <div className="pointer-events-none absolute -right-8 -top-12 size-44 rounded-full border-[28px] border-primary/[0.04]" aria-hidden="true" />
         <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
@@ -742,7 +757,7 @@ export function QueueDesk({
                     aria-label="Queue owner"
                     value={ownerScope}
                     onChange={(event) => onOwnerScopeChange(event.target.value)}
-                    className="h-8 rounded-lg border border-input bg-background px-2 text-sm font-medium text-foreground"
+                    className="h-11 rounded-lg border border-input bg-background px-2 text-base font-medium text-foreground md:h-8 md:text-sm"
                   >
                     {ownerOptions.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -799,6 +814,10 @@ export function QueueDesk({
           ) : null}
         </section>
       </div>
+
+      {/* Connection status sits after the handoffs: useful, but not what
+          people open the Queue to see. */}
+      <QueueConnectionNote activeApiKeyCount={activeApiKeyCount} />
 
       <QueueDetailSheet
         item={selectedItem}
