@@ -31,7 +31,7 @@ export function MoveWorkspaceHeader({
   }
 
   const routeLabel =
-    [selectedMove?.origin, selectedMove?.destination].filter(Boolean).join(" -> ") ||
+    [selectedMove?.origin, selectedMove?.destination].filter(Boolean).join(" → ") ||
     "route not set";
 
   return (
@@ -53,17 +53,24 @@ export function MoveWorkspaceHeader({
           </p>
           {selectedMove ? (
             <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">
-                {selectedMove.title}
-              </span>
-              <span aria-hidden="true">/</span>
+              {/* The move name is said once: skip it when it is the title. */}
+              {selectedMove.title !== title ? (
+                <>
+                  <span className="font-medium text-foreground">
+                    {selectedMove.title}
+                  </span>
+                  <span aria-hidden="true">/</span>
+                </>
+              ) : null}
               <span className="break-words">{routeLabel}</span>
             </div>
           ) : null}
         </div>
         <div
           className={cn(
-            "flex min-w-0 items-center gap-2",
+            // Phones already have the move switcher in the top bar, so this
+            // second picker only shows on wide screens.
+            "hidden min-w-0 items-center gap-2 lg:flex",
             activeMoves.length > 1 && "lg:justify-end",
           )}
         >

@@ -5,6 +5,8 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bot,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   Inbox,
   PackageCheck,
@@ -18,6 +20,7 @@ import {
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { moveWhenLine } from "@/lib/move-timing";
 import { globalNavItems, type GlobalNavItem } from "@/lib/workspace-nav-items";
 import { cn } from "@/lib/utils";
 
@@ -50,19 +53,21 @@ export function HomeLaunchpad() {
 
   const hasMoves = activeMoves.length > 0;
   const continueMove = selectedMove ?? activeMoves[0];
+  const continueRoute = continueMove
+    ? [continueMove.origin, continueMove.destination].filter(Boolean).join(" → ")
+    : "";
+  const continueWhen = continueMove
+    ? moveWhenLine(continueMove.dateStart, continueMove.dateEnd)
+    : undefined;
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
       <header>
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          Assist With Moving
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Your workspace
         </h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Keep the changing plan clear, or bring your chosen AI into the next
-          bounded piece of work.
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Pick up your move, or jump to boxes, items, and handoffs.
         </p>
       </header>
 
@@ -82,9 +87,19 @@ export function HomeLaunchpad() {
             <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Continue where you left off
             </p>
-            <p className="mt-1 truncate text-base font-semibold">
+            <p className="mt-1 break-words text-lg font-semibold">
               {continueMove.title}
             </p>
+            {continueRoute ? (
+              <p className="mt-1 break-words text-sm text-muted-foreground">
+                {continueRoute}
+              </p>
+            ) : null}
+            {continueWhen ? (
+              <p className="mt-0.5 text-sm font-medium text-foreground">
+                {continueWhen}
+              </p>
+            ) : null}
           </div>
           <ArrowUpRight
             className="size-5 shrink-0 text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
@@ -119,7 +134,7 @@ export function HomeLaunchpad() {
 
       {/* The four main destinations. */}
       <nav aria-label="Main destinations">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {globalNavItems.map((item) => {
             const meta = destinationMeta[item.iconKey];
             const Icon = meta.icon;
@@ -128,19 +143,25 @@ export function HomeLaunchpad() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "group flex flex-col rounded-lg border border-border bg-card p-4",
+                  "group flex min-h-16 items-center gap-3 rounded-lg border border-border bg-card px-3 py-3",
                   "transition-colors hover:border-primary/40 hover:bg-muted/40",
                 )}
               >
-                <span className="flex size-10 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary">
                   <Icon className="size-5" aria-hidden="true" />
                 </span>
-                <span className="mt-4 text-base font-semibold tracking-tight">
-                  {item.label}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-semibold tracking-tight">
+                    {item.label}
+                  </span>
+                  <span className="block text-sm leading-5 text-muted-foreground">
+                    {meta.description}
+                  </span>
                 </span>
-                <span className="mt-1 text-sm leading-5 text-muted-foreground">
-                  {meta.description}
-                </span>
+                <ChevronRight
+                  className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
+                  aria-hidden="true"
+                />
               </Link>
             );
           })}
@@ -159,11 +180,25 @@ export function HomeLaunchpad() {
                 Set up your chosen AI
               </h2>
               <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Connect a compatible AI through hosted MCP OAuth so it can read
-                bounded move context and save decisions, estimates, plans,
-                inventory, and source checks. Queue claiming uses the separate
-                scoped API-key tools today. You can revoke either connection.
+                Let your AI read your move and save plans, inventory, and
+                decisions here. You can disconnect it any time.
               </p>
+              <details className="group mt-2 max-w-xl text-sm">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 font-medium text-foreground [&::-webkit-details-marker]:hidden">
+                  How the connection works
+                  <ChevronDown
+                    className="size-4 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                    aria-hidden="true"
+                  />
+                </summary>
+                <p className="leading-6 text-muted-foreground">
+                  Connect a compatible AI through hosted MCP OAuth so it can
+                  read bounded move context and save decisions, estimates,
+                  plans, inventory, and source checks. Queue claiming uses the
+                  separate scoped API-key tools today. You can revoke either
+                  connection.
+                </p>
+              </details>
             </div>
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end">
