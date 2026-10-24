@@ -1288,12 +1288,18 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       ? normalizeClientIdUrl(auth.clientId).toString()
       : auth.clientId;
 
-    // Resolve/create the product grant before client-controlled outbound requests.
-    // Existing chosen limits and revoked/expired connections are never reset.
-    // Without usable authority only describe_connection remains available.
+    // Validate required client metadata before any issuance or binding. The
+    // mutation below re-reads current history atomically after network I/O.
+    identity = await resolveClientIdentity(clientId, {
+      declaredClientName,
+      fetchMetadata: (metadataClientId) =>
+        actionCtx.runAction((internal as any).mcpClientMetadata.fetchDocument, {
+          clientId: metadataClientId,
+        }),
+    });
     try {
       await actionCtx.runMutation((internal as any).aiGrants.touchLegacyConnection, {
-        subject, clientId, clientName: declaredClientName,
+        subject, clientId, clientName: identity.clientName ?? declaredClientName,
       });
       const access = (await actionCtx.runQuery(
         (internal as any).aiGrants.grantsForPrincipal,
@@ -1302,16 +1308,6 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       grantedScopes = access.scopes ?? [];
     } catch (error) {
       console.error("[MCP] Could not read product grants", error);
-    }
-    identity = { clientId };
-    if (grantedScopes.length > 0 || !claimsMetadata) {
-      identity = await resolveClientIdentity(clientId, {
-        declaredClientName,
-        fetchMetadata: (metadataClientId) =>
-          actionCtx.runAction((internal as any).mcpClientMetadata.fetchDocument, {
-            clientId: metadataClientId,
-          }),
-      });
     }
   } catch (error) {
     if (error instanceof ClientIdentityError) {

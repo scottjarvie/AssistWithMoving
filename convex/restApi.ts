@@ -1534,7 +1534,7 @@ async function routeMe(
 ) {
   const [household, restrictedMove] = await Promise.all([
     ctx.db.get(auth.householdId),
-    auth.moveId ? ctx.db.get(auth.moveId) : Promise.resolve(null),
+    auth.moveId && auth.scopes.includes("moves/read") ? ctx.db.get(auth.moveId) : Promise.resolve(null),
   ]);
   return restOk({
     data: {

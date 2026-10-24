@@ -2307,3 +2307,32 @@ Settings link. Pause ends access immediately; only the person can restore it.
 The change, version and durable audit receipt commit atomically. A caller cannot
 supply a sibling grant/key id. Current consent evidence remains required for
 person-side approvals even when access choices use defaults.
+
+
+### Shared OAuth credential history and connection metadata
+
+The canonical raw OAuth client id and its historical `legacy:` compatibility
+alias share an enforcement boundary. Each alias's latest decision is resolved
+from its complete bounded history before status filtering. If both aliases
+exist, allowed scopes and moves are their intersection, the earliest stored
+end date applies, and a refusal on either alias blocks both doors. Switching
+doors cannot mint another full grant or bypass a reduction. These are read-time
+rules: existing grants, exact legacy arrays, dates and revocations are not
+renamed, migrated or lifted. Only person edits with the existing loaded
+revision and consent checks can increase each governing stored approval.
+Own-access reductions use the effective connection revision (the sum of the
+current alias revisions when both exist), so an edit on either alias invalidates
+a previously loaded reduction revision.
+
+Both OAuth doors validate a required Client ID Metadata Document through the
+bounded, DNS-pinned Node action before creating or binding a grant. Failed
+validation leaves grant and binding state untouched. After network validation,
+the binding mutation re-reads current authority and refusal history atomically;
+a decision made while metadata is loading still governs.
+
+`GET /api/v1/me` and `get_api_context` remain available without a domain read
+scope for connection inspection and own-access reduction. Their restricted move
+payload is returned only with `moves/read`. Removing read access, including
+reducing to an empty scope array, removes move titles, routes and dates from
+context on both API-key MCP doors as well as REST. Ordinary move reads continue
+to require their existing scopes.

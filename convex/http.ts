@@ -29,6 +29,7 @@ import {
   decideLegacyGatewayAccess,
   type LegacyGrantBlock,
 } from "./lib/mcpLegacyGrantGate";
+import { resolveClientIdentity } from "./lib/mcpClientIdentity";
 import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
 
 const http = httpRouter();
@@ -1142,8 +1143,8 @@ function legacyClientNameFrom(
  * an AI is never shown a capability it would only be refused for, and the
  * refusal still exists underneath if it calls one anyway.
  */
-function createLegacyGrantGate(
-  ctx: Pick<ActionCtx, "runMutation">,
+export function createLegacyGrantGate(
+  ctx: Pick<ActionCtx, "runMutation" | "runAction">,
 ): McpAuthorizerHandler {
   let resolved:
     | Promise<{ grants: LegacyGrantDecisionRow[]; block?: LegacyGrantBlock }>
@@ -1164,12 +1165,19 @@ function createLegacyGrantGate(
     const clientName = legacyClientNameFrom(claims);
 
     if (!resolved) {
-      resolved = ctx
-        .runMutation(internalMutations.aiGrants.touchLegacyConnection, {
-          subject,
-          clientId,
-          clientName,
-        })
+      resolved = (async () => {
+        // The compatibility door cannot bypass CIMD validation by binding the
+        // same credential under its historical legacy: alias.
+        if (clientId !== UNIDENTIFIED_LEGACY_CLIENT) {
+          await resolveClientIdentity(clientId.slice("legacy:".length), {
+            declaredClientName: clientName,
+            fetchMetadata: id => ctx.runAction(anyApi.mcpClientMetadata.fetchDocument, { clientId: id }),
+          });
+        }
+        return ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, {
+          subject, clientId, clientName,
+        });
+      })()
         .then(
           (result: {
             grants?: LegacyGrantDecisionRow[];
