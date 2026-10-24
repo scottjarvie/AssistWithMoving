@@ -187,15 +187,15 @@ function QueueConnectionNote({
             {loading
               ? "Checking AI access"
               : hasKey
-                ? "An AI can work this Queue"
-                : "No AI is connected to this Queue yet"}
+                ? "A Queue API key is set up"
+                : "No Queue API key is set up"}
           </p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             {loading
               ? "Connection status will appear here when it is known."
               : hasKey
-                ? "Handoffs you save here wait for it to pick them up."
-                : "You can still leave handoffs. An AI picks them up once you connect one."}
+                ? "An AI using that key can pick up these handoffs."
+                : "You can still leave handoffs. An AI you connect with Queue access, or a Queue API key, can pick them up."}
           </p>
           {loading ? null : (
             <details className="group mt-1 text-sm">
