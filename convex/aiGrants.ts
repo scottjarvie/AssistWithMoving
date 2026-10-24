@@ -178,6 +178,34 @@ async function grantHistory(
   return rows;
 }
 
+/** Historical raw and compatibility ids name the same verified OAuth client.
+ * No stored row is renamed. Resolve each alias's complete decision history,
+ * then intersect authority: a newer broad alias cannot erase an older limit.
+ */
+function clientAliases(clientId: string) {
+  const raw = clientId.startsWith("legacy:") ? clientId.slice(7) : clientId;
+  return [raw, `legacy:${raw}`];
+}
+
+function intersectAliasGrants(rows: Doc<"aiGrants">[], now: number): Doc<"aiGrants"> {
+  const ordered = [...rows].sort((a, b) => compareDecisions(b, a, now));
+  const base = ordered.find(row => !grantIsActive(row, now)) ?? ordered[0];
+  if (rows.length === 1) return base;
+  const selected = rows.filter(row => row.moveScope === "selectedMoves");
+  const expires = rows.map(effectiveExpiry).filter((date): date is number => date !== undefined);
+  return {
+    ...base,
+    // Any alias edit invalidates a loaded reduction revision on both doors.
+    version: rows.reduce((sum, row) => sum + row.version, 0),
+    scopes: movingScopes.filter(scope => rows.every(row => effectiveScopes(row).includes(scope))),
+    scopeChoice: rows.every(row => effectiveScopeChoice(row) === "full") ? "full" : "chosen",
+    moveScope: selected.length ? "selectedMoves" : "allMoves",
+    moveIds: selected.length ? (selected[0].moveIds ?? []).filter(id => selected.every(row => row.moveIds?.includes(id))) : undefined,
+    expiresAt: expires.length ? Math.min(...expires) : undefined,
+    expiryChoice: expires.length ? "chosen" : "none",
+  };
+}
+
 async function governingGrants(
   ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">,
   clientId: string | undefined, now: number,
@@ -195,12 +223,18 @@ async function governingGrants(
   }
   // Both sets are indexed and independently bounded. A refusal for this
   // client cannot hide behind unrelated clients or an active-only window.
-  const bound = await grantHistory(ctx, ownerUserId, clientId);
+  const histories = await Promise.all(clientAliases(clientId).map(alias => grantHistory(ctx, ownerUserId, alias)));
+  const bound = histories.flatMap(rows => {
+    const latest = rows.reduce<Doc<"aiGrants"> | undefined>((winner, row) =>
+      !winner || compareDecisions(row, winner, now) > 0 ? row : winner, undefined);
+    return latest ? [latest] : [];
+  });
+  if (bound.length) return [intersectAliasGrants(bound, now)];
   const unbound = await ctx.db.query("aiGrants")
     .withIndex("by_owner_client_status", q => q.eq("ownerUserId", ownerUserId).eq("clientId", undefined))
     .take(MAX_GRANT_HISTORY + 1);
   if (unbound.length > MAX_GRANT_HISTORY) throw new ConvexError("AI connection history exceeds the safe read limit. Review connections before retrying.");
-  const candidates = bound.length ? bound : unbound;
+  const candidates = unbound;
   const latest = candidates.reduce<Doc<"aiGrants"> | undefined>((winner, row) =>
     !winner || compareDecisions(row, winner, now) > 0 ? row : winner, undefined);
   return latest ? [latest] : [];
@@ -214,7 +248,7 @@ export async function activeGrantsForUser(
   now: number,
 ) {
   return (await governingGrants(ctx, ownerUserId, clientId, now))
-    .filter(grant => grantIsActive(grant, now) && (clientId === undefined || grant.clientId === clientId));
+    .filter(grant => grantIsActive(grant, now) && (clientId === undefined || (grant.clientId !== undefined && clientAliases(clientId).includes(grant.clientId))));
 }
 
 export const grantsForPrincipal = internalQuery({
@@ -523,16 +557,8 @@ export const noteGrantRefusal = internalMutation({
       .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", args.subject))
       .unique();
     if (!user) return null;
-    const rows = await ctx.db
-      .query("aiGrants")
-      .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", user._id))
-      .order("desc")
-      .take(MAX_ACTIVE_GRANTS * 2);
-    // Attribute the refusal to the grant the client is bound to when there is
-    // one. With no grant at all there is nothing to attach it to, and inventing
-    // a row to hold a refusal would be its own kind of dishonesty.
-    const grant = rows.find((row) => row.clientId === args.clientId);
-    if (!grant) return null;
+    const grant = (await governingGrants(ctx, user._id, args.clientId, Date.now()))[0];
+    if (!grant?.clientId) return null;
     await appendGrantActivity(ctx, grant, {
       type: "refused",
       outcome: "refused",
@@ -889,17 +915,18 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
   const user = await ctx.db.query("users").withIndex("by_clerk_user_id", q => q.eq("clerkUserId", subject)).unique();
   if (!user || user.status !== "active" || clientId === UNIDENTIFIED_LEGACY_CLIENT) throw new ConvexError("No active calling connection.");
   const grant = (await governingGrants(ctx, user._id, clientId, Date.now()))[0];
-  if (!grant || grant.clientId !== clientId) throw new ConvexError("No bound calling connection. Reconnect first.");
+  if (!grant || !grant.clientId || !clientAliases(clientId).includes(grant.clientId)) throw new ConvexError("No bound calling connection. Reconnect first.");
   const reduced = reducedAccess({ version: grant.version, scopes: effectiveScopes(grant), moveIds: grant.moveScope === "selectedMoves" ? (grant.moveIds ?? []).map(String) : undefined, expiresAt: effectiveExpiry(grant), active: grant.status === "active" }, input);
   const moveIds = reduced.moveIds as Id<"moves">[] | undefined;
   if (moveIds) await validateGrantMoves(ctx, grant.householdId, "selectedMoves", moveIds);
   const version = grant.version + 1;
+  const stored = (await ctx.db.get(grant._id))!;
   await ctx.db.patch(grant._id, {
     ...(reduced.scopes ? { scopes: reduced.scopes as MovingScope[], scopeChoice: "chosen" as const } : {}),
     ...(moveIds ? { moveScope: "selectedMoves" as const, moveIds } : {}),
     ...(reduced.expiresAt !== undefined ? { expiresAt: reduced.expiresAt!, expiryChoice: "chosen" as const } : {}),
     ...(input.action === "revoke" ? { status: "revoked" as const, revokedAt: Date.now(), revokedReason: "Revoked by this AI connection." } : {}),
-    version, updatedAt: Date.now(), ownerDecisionAt: Date.now(),
+    version: stored.version + 1, updatedAt: Date.now(), ownerDecisionAt: Date.now(),
   });
   await appendGrantActivity(ctx, grant, { type: input.action === "revoke" ? "revoked" : "approved", outcome: "recorded", clientId, message: `This AI reduced its own access (version ${version}).` });
   const receipt = await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, clientId, action: input.action ?? "narrow", previousVersion: grant.version, previousScopes: effectiveScopes(grant), scopes: reduced.scopes ?? effectiveScopes(grant), moveIds: reduced.moveIds ?? grant.moveIds ?? null, expiresAt: reduced.expiresAt ?? effectiveExpiry(grant) ?? null } });

@@ -22,7 +22,7 @@ import { convexTest, type TestConvex } from "convex-test";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api, internal } from "../../convex/_generated/api";
 import { UNIDENTIFIED_LEGACY_CLIENT } from "../../convex/lib/mcpLegacyGrantGate";
@@ -797,4 +797,159 @@ it("requires loaded history for unbound refusal recovery and refuses stale dupli
   const { grantId } = await owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: loaded.historyFingerprint });
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "new-client" });
   expect((await t.run(ctx => ctx.db.get(grantId)))?.clientId).toBe("new-client");
+});
+
+
+describe("R1 OAuth aliases enforce one credential's authority", () => {
+  const aliases = ["alias-client", "legacy:alias-client"];
+  const access = (t: TestConvex<typeof schema>, clientId: string) => t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId });
+
+  for (const first of aliases) {
+    it(`honors narrowing, pause and revocation on both doors after first contact on ${first}`, async () => {
+      const t = convexTest(schema, modules);
+      await seedOwner(t);
+      await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: first });
+      const stored = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+      const date = Date.now() + 100_000;
+      const receipt = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: aliases.find(id => id !== first)!, expectedVersion: 1, scopes: ["moving.context.read"], expiresAt: date });
+      expect(receipt.version).toBe(2);
+      for (const clientId of aliases) {
+        expect((await access(t, clientId)).grants).toEqual([expect.objectContaining({ grantId: stored._id, version: 2, scopes: ["moving.context.read"], expiresAt: date })]);
+        await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+      }
+      expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(1);
+      await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: first, expectedVersion: 2, action: "pause" });
+      for (const clientId of aliases) {
+        expect((await access(t, clientId)).scopes).toEqual([]);
+        expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("expired");
+      }
+      await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.revoke, { grantId: stored._id, expectedVersion: 3 });
+      for (const clientId of aliases) expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
+    });
+  }
+
+  it("intersects disagreeing aliases without rewriting legacy scopes/dates or choosing broader authority", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId, userId } = await seedOwner(t);
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: aliases[0] });
+    const date = Date.now() + 100_000;
+    const [a, b] = await Promise.all(["A", "B"].map(title => t.run(ctx => ctx.db.insert("moves", { householdId, title, type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }))));
+    await t.run(async ctx => {
+      const row = (await ctx.db.query("aiGrants").first())!;
+      await ctx.db.patch(row._id, { scopes: ["moving.context.read", "moving.queue.work"], scopeChoice: undefined, expiresAt: date, expiryChoice: undefined, moveScope: "selectedMoves", moveIds: [a] });
+      const { _id, _creationTime, ...fields } = row;
+      await ctx.db.insert("aiGrants", { ...fields, clientId: aliases[1], approvedAt: row.approvedAt + 1, scopes: ["moving.context.read", "moving.work.write"], scopeChoice: "chosen", moveScope: "selectedMoves", moveIds: [a, b] });
+      expect((await ctx.db.get(_id))?._creationTime).toBe(_creationTime);
+    });
+    const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+    for (const clientId of aliases) {
+      const result = await access(t, clientId);
+      expect(result.grants).toEqual([expect.objectContaining({ scopes: ["moving.context.read"], version: 2, moveIds: [a], expiresAt: date, scopeChoice: "chosen" })]);
+      await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+      expect(await t.run(ctx => hasQueueWorkGrant(ctx, { issuer: ISSUER, subject: SUBJECT, clientId }, a))).toBe(false);
+      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 2, scopes: ["moving.queue.work"] })).rejects.toThrow(/settings/);
+    }
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+    // Only a loaded person edit may widen each existing alias. Neither alias
+    // can hide the other's remaining restriction.
+    for (const row of before) await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, scopes: [...movingScopes], scopeIntent: "full", moveScope: "allMoves", expiresInDays: null, expiryIntent: "none" });
+    for (const clientId of aliases) expect((await access(t, clientId)).grants).toEqual([expect.objectContaining({ scopes: [...movingScopes], expiresAt: null, version: 4, moveScope: "allMoves" })]);
+    const narrowed = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: aliases[1], expectedVersion: 4, scopes: [] });
+    expect(narrowed.version).toBe(5);
+    for (const clientId of aliases) {
+      expect((await access(t, clientId)).scopes).toEqual([]);
+      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, scopes: [] })).rejects.toThrow(/changed/);
+    }
+  });
+
+  for (const restriction of ["revoked", "expired"] as const) {
+    it(`does not hide ${restriction} alias history behind newer broad aliases, duplicates or fresh approvals`, async () => {
+      const t = convexTest(schema, modules);
+      const { householdId } = await seedOwner(t);
+      await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: aliases[0] });
+      await t.run(async ctx => {
+        const row = (await ctx.db.query("aiGrants").first())!;
+        const { _id, _creationTime, ...fields } = row;
+        await ctx.db.insert("aiGrants", { ...fields, clientId: aliases[1], approvedAt: row.approvedAt + 10 });
+        await ctx.db.patch(_id, restriction === "revoked" ? { status: "revoked", revokedAt: row.approvedAt + 1 } : { expiresAt: Date.now() - 1 });
+        // Older broad duplicate is never a substitute for the refused alias.
+        await ctx.db.insert("aiGrants", { ...fields, approvedAt: row.approvedAt - 10 });
+        expect((await ctx.db.get(_id))?._creationTime).toBe(_creationTime);
+      });
+      await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.approve, { ...consent, householdId, label: "Unbound unrelated" });
+      const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+      for (const clientId of aliases) {
+        expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe(restriction);
+        expect((await access(t, clientId)).grants).toEqual([]);
+      }
+      expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+    });
+  }
+
+  it("serializes first-contact alias races to one grant and isolates siblings", async () => {
+    const t = convexTest(schema, modules);
+    await seedOwner(t);
+    await Promise.all(aliases.map(clientId => t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })));
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(1);
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "sibling" });
+    const sibling = (await t.run(ctx => ctx.db.query("aiGrants").collect())).find(row => row.clientId === "sibling")!;
+    await Promise.all([
+      t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: aliases[0], expectedVersion: 1, action: "revoke" }),
+      t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: aliases[1] }),
+    ]);
+    for (const clientId of aliases) expect((await access(t, clientId)).grants).toEqual([]);
+    expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(2);
+  });
+});
+
+
+describe("R1 scope-free API context", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("hides gated move content after zero/readless reductions on REST and both API-key MCP registries, and restores only by person edit", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId, userId } = await seedOwner(t);
+    const { generateApiKeySecret, hashApiKey, apiKeyPrefix } = await import("../../convex/lib/apiKeys");
+    const { registerTools } = await import("../../mcp-server/assistwithmoving-mcp.mjs");
+    const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "PRIVATE move title", origin: "PRIVATE origin", destination: "PRIVATE destination", dateStart: "2027-01-01", dateEnd: "2027-01-02", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+    let raw = generateApiKeySecret();
+    const secretHash = await hashApiKey(raw);
+    const keyId = await t.run(ctx => ctx.db.insert("apiKeys", { householdId, name: "Synthetic context", prefix: apiKeyPrefix(raw), tokenPreview: "synthetic", secretHash, moveId, scopes: ["moves/read", "inventory/read"], status: "active", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+    const context = () => t.mutation(internal.restApi.handle, { method: "GET", path: "me", query: {}, authorization: `Bearer ${raw}` });
+    const readMove = () => t.mutation(internal.restApi.handle, { method: "GET", path: `moves/${moveId}`, query: {}, authorization: `Bearer ${raw}` });
+    const reduce = (version: number, scopes: string[]) => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: `Bearer ${raw}`, body: { expectedVersion: version, scopes } });
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      const path = new URL(url).pathname.replace("/api/v1/", "");
+      const result = await t.mutation(internal.restApi.handle, { method: "GET", path, query: {}, authorization: (init.headers as Record<string, string>).authorization });
+      return new Response(JSON.stringify(result.body), { status: result.status, headers: { "content-type": "application/json" } });
+    });
+    const invokeContext = async (selected: boolean) => {
+      const registrations = new Map<string, any>();
+      registerTools({ registerTool: (name: string, _definition: any, handler: any) => registrations.set(name, handler) }, { baseUrl: "https://synthetic.example/api/v1", apiKey: raw }, selected ? { allowedToolNames: ["get_api_context", "reduce_connection"] } : undefined);
+      return registrations.get("get_api_context")({});
+    };
+    expect(JSON.stringify((await context()).body)).toContain("PRIVATE move title");
+    expect((await readMove()).status).toBe(200);
+    for (const [version, scopes] of [[1, ["inventory/read"]], [2, []]] as const) {
+      const receipt = await reduce(version, [...scopes]);
+      expect(receipt.status).toBe(200);
+      const result = await context();
+      expect(result.status).toBe(200);
+      expect(result.body).toMatchObject({ data: { apiKey: { version: version + 1, scopes: [...scopes] }, restrictedMove: null } });
+      expect(JSON.stringify(result.body)).not.toContain("PRIVATE");
+      expect((await readMove()).status).toBe(403);
+      for (const selected of [false, true]) {
+        const tool = await invokeContext(selected);
+        expect(tool.isError).not.toBe(true);
+        expect(JSON.stringify(tool)).not.toContain("PRIVATE");
+        expect(JSON.parse(tool.content[0].text)).toMatchObject({ data: { restrictedMove: null } });
+      }
+    }
+    const replacement = await t.withIdentity({ subject: SUBJECT }).mutation(api.apiKeys.create, { householdId, moveId, name: "Person restored read authority", scopes: ["moves/read"] });
+    raw = replacement.rawKey;
+    expect((await t.run(ctx => ctx.db.get(keyId)))?.scopes).toEqual([]);
+    expect((await readMove()).status).toBe(200);
+    expect(JSON.stringify((await context()).body)).toContain("PRIVATE move title");
+    for (const selected of [false, true]) expect(JSON.stringify(await invokeContext(selected))).toContain("PRIVATE move title");
+  });
 });
