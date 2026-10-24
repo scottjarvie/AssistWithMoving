@@ -56,10 +56,6 @@ vi.mock("@/components/move-workspace-context", () => ({
   }),
 }));
 
-vi.mock("@/components/moves-stats-strip", () => ({
-  MovesStatsStrip: () => <div data-testid="moves-stats-strip" />,
-}));
-
 vi.mock("@/components/move-management", () => ({
   ActiveMoveMenu: () => <button type="button">Move menu</button>,
   ArchivedMovesSection: () => null,

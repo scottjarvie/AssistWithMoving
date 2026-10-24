@@ -17,7 +17,6 @@ import {
   type MoveWorkspaceValue,
   useMoveWorkspace,
 } from "@/components/move-workspace-context";
-import { MovesStatsStrip } from "@/components/moves-stats-strip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +56,7 @@ import {
   type PcsShipmentType,
 } from "@/lib/move-presets";
 import { moveWorkspacePath } from "@/lib/move-links";
+import { moveWhenLine } from "@/lib/move-timing";
 import { describeMutationError } from "@/lib/mutation-error";
 import { cn } from "@/lib/utils";
 
@@ -168,6 +168,14 @@ export function MovesHome() {
       });
   }, [activeMoves, moveSearch, moveSort, statusFilter]);
   const moveListFiltered = Boolean(moveSearch.trim()) || statusFilter !== "all";
+  // The counts that used to be a strip of chips, said once in the list line.
+  const statusCounts = (["active", "planning", "completed"] as const)
+    .map((status) => ({
+      status,
+      count: activeMoves.filter((move) => move.status === status).length,
+    }))
+    .filter(({ count }) => count > 0)
+    .map(({ status, count }) => `${count} ${moveStatusMeta[status].label.toLowerCase()}`);
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -179,9 +187,8 @@ export function MovesHome() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
             Your moves
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Open a move to capture, plan, and document. Add people to a move and
-            choose what they can do from its Participants tab.
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Open a move to capture, plan, and document it.
           </p>
         </div>
         <Button
@@ -224,33 +231,32 @@ export function MovesHome() {
         </div>
       ) : null}
 
-      {hasHousehold ? <MovesStatsStrip activeMoves={activeMoves} /> : null}
-
       {activeMoves.length > 1 ? (
         <section
           aria-label="Move list controls"
-          className="rounded-xl border border-border bg-card/40 p-3"
+          className="space-y-2"
         >
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem_11rem] md:items-end">
-            <label className="grid gap-1.5 text-sm font-medium">
-              Search moves
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(0,1fr)_11rem_11rem]">
+            <label className="col-span-2 grid gap-1.5 text-sm font-medium md:col-span-1">
+              <span className="sr-only">Search moves</span>
               <Input
                 type="search"
                 value={moveSearch}
                 onChange={(event) => setMoveSearch(event.target.value)}
-                placeholder="Name, origin, or destination"
+                placeholder="Search by name, origin, or destination"
                 aria-label="Search moves"
+                className="h-11 md:h-9"
               />
             </label>
             <label className="grid gap-1.5 text-sm font-medium">
-              Status
+              <span className="sr-only">Status</span>
               <select
                 value={statusFilter}
                 onChange={(event) =>
                   setStatusFilter(event.target.value as MoveStatusFilter)
                 }
                 aria-label="Filter moves by status"
-                className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="h-11 min-w-0 rounded-lg border border-input bg-background px-2.5 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:h-9 md:text-sm"
               >
                 <option value="all">All statuses</option>
                 <option value="planning">Planning</option>
@@ -259,23 +265,23 @@ export function MovesHome() {
               </select>
             </label>
             <label className="grid gap-1.5 text-sm font-medium">
-              Sort
+              <span className="sr-only">Sort</span>
               <select
                 value={moveSort}
                 onChange={(event) => setMoveSort(event.target.value as MoveSort)}
                 aria-label="Sort moves"
-                className="h-8 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="h-11 min-w-0 rounded-lg border border-input bg-background px-2.5 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:h-9 md:text-sm"
               >
                 <option value="updated">Recently updated</option>
                 <option value="name">Move name</option>
               </select>
             </label>
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <p role="status" className="text-xs text-muted-foreground">
+          <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+            <p role="status" className="text-sm text-muted-foreground">
               {moveListFiltered
                 ? `${visibleMoves.length} of ${activeMoves.length} moves`
-                : `${activeMoves.length} moves`}
+                : [`${activeMoves.length} moves`, ...statusCounts].join(" · ")}
             </p>
             {moveListFiltered && visibleMoves.length > 0 ? (
               <Button
@@ -380,6 +386,7 @@ function MoveCard({
   onSelect: (moveId: Id<"moves">) => void;
 }) {
   const route = [move.origin, move.destination].filter(Boolean).join(" → ");
+  const when = moveWhenLine(move.dateStart, move.dateEnd);
   const status = moveStatusMeta[move.status] ?? {
     label: move.status.charAt(0).toUpperCase() + move.status.slice(1),
     hint: `Status: ${move.status}.`,
@@ -426,12 +433,17 @@ function MoveCard({
               </Tooltip>
             ) : null}
             <div className="min-w-0">
-              <CardTitle className="break-words text-xl font-semibold sm:text-2xl">
+              <CardTitle className="break-words text-lg font-semibold sm:text-xl">
                 {move.title}
               </CardTitle>
               <CardDescription className="mt-1">
                 {route || "Route not set"}
               </CardDescription>
+              {when ? (
+                <p className="mt-1 text-sm font-medium text-foreground">
+                  {when}
+                </p>
+              ) : null}
               {/* Status lives in the title block (not the cramped action row) so
                   it never fights the title for width on a phone. */}
               <Badge variant="outline" className="mt-2" title={status.hint}>

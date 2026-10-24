@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import {
   CalendarClock,
+  ChevronDown,
   Gauge,
   HeartPulse,
   Route,
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { moveWorkspacePath } from "@/lib/move-links";
+import { describeMoveTiming, formatMoveDay } from "@/lib/move-timing";
 
 // One agreed vocabulary for a move's lifecycle stage (MOVE-299): Planning →
 // Active → Completed, each with a hover explanation. "Archived" is here only so
@@ -55,19 +57,6 @@ const STAGE_META: Record<string, { label: string; hint: string }> = {
     hint: "Kept out of the active moves list.",
   },
 };
-
-function formatMoveDate(value?: string): string | undefined {
-  if (!value) return undefined;
-  // Date-only strings parse as local midnight (avoids the UTC off-by-one).
-  const parsed = new Date(`${value}T00:00:00`);
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : parsed.toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-}
 
 function FactRow({
   icon: Icon,
@@ -125,8 +114,8 @@ export function MoveSummaryPage() {
       ? `${selectedMove.distanceMiles} mi`
       : undefined;
 
-  const startDate = formatMoveDate(selectedMove?.dateStart);
-  const endDate = formatMoveDate(selectedMove?.dateEnd);
+  const startDate = formatMoveDay(selectedMove?.dateStart);
+  const endDate = formatMoveDay(selectedMove?.dateEnd);
   const datesValue =
     startDate && endDate
       ? `${startDate} → ${endDate}`
@@ -199,50 +188,56 @@ export function MoveSummaryPage() {
       })
     : null;
 
+  const timing = describeMoveTiming(
+    selectedMove?.dateStart,
+    selectedMove?.dateEnd,
+  );
+  const whenValue = startDate ?? endDate;
+
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <MoveWorkspaceHeader
         title={selectedMove?.title ?? "Move"}
-        description="A summary of how this move is set up. Open Configure to change anything."
+        description="Where this move stands. Open Configure to change anything."
       />
 
       <MoveOperationsNav />
 
-      {moveId && selectedMove ? (
-        <FirstMoveJourney moveId={moveId} hasRoute={Boolean(routeValue)} />
-      ) : null}
-
-      {moveId ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/40 p-3">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              Move health & decisions
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Open questions, packing readiness, people, and planning defaults.
-            </p>
-          </div>
-          <Button asChild variant="ghost" size="sm">
-            <Link href={moveWorkspacePath(moveId, "overview")}>
-              <HeartPulse className="size-4" aria-hidden="true" />
-              Open overview
-            </Link>
-          </Button>
-        </div>
-      ) : null}
-
+      {/* The answer first: stage and when, in plain words (MOVE wakeup). */}
       {stage ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-muted-foreground">Stage</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="secondary" className="cursor-help">
-                {stage.label}
-              </Badge>
-            </TooltipTrigger>
-            {stage.hint ? <TooltipContent>{stage.hint}</TooltipContent> : null}
-          </Tooltip>
-        </div>
+        <section
+          aria-label="Where this move stands"
+          className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-primary/25 bg-primary/5 p-4"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Stage</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="cursor-help">
+                  {stage.label}
+                </Badge>
+              </TooltipTrigger>
+              {stage.hint ? <TooltipContent>{stage.hint}</TooltipContent> : null}
+            </Tooltip>
+          </div>
+          <p className="min-w-0 text-base font-semibold text-foreground">
+            {whenValue ? (
+              <>
+                {timing === "under way" ? "Under way" : `Moving ${whenValue}`}
+                {timing && timing !== "under way" ? (
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    · {timing}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <span className="font-normal text-muted-foreground">
+                No move date yet
+              </span>
+            )}
+          </p>
+        </section>
       ) : null}
 
       {facts.length ? (
@@ -264,7 +259,7 @@ export function MoveSummaryPage() {
             Add the route, dates, distance, transportation, and who&apos;s
             helping — then this page shows it all at a glance.
           </p>
-          <Button asChild size="sm" className="mt-3">
+          <Button asChild size="touch" className="mt-3">
             <Link href={configBase}>
               <Settings2 className="size-4" aria-hidden="true" />
               Configure the move
@@ -277,6 +272,45 @@ export function MoveSummaryPage() {
           <Skeleton className="h-16 rounded-md border border-border" />
         </div>
       )}
+
+      {moveId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/40 p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              Move health & decisions
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Open questions, packing readiness, people, and planning defaults.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="touch">
+            <Link href={moveWorkspacePath(moveId, "overview")}>
+              <HeartPulse className="size-4" aria-hidden="true" />
+              Open overview
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+
+      {/* The first-move guide stays one tap away; it opens by itself only
+          while the move has nothing set up yet. */}
+      {moveId && selectedMove ? (
+        <details
+          className="group rounded-lg border border-border"
+          open={facts.length === 0}
+        >
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+            Getting started: three small steps
+            <ChevronDown
+              className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="border-t border-border p-3">
+            <FirstMoveJourney moveId={moveId} hasRoute={Boolean(routeValue)} />
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

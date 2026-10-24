@@ -94,7 +94,7 @@ describe("MoveWorkspaceHeader", () => {
     expect(header).not.toHaveClass("rounded-lg");
     expect(within(header!).getByText("local")).toBeInTheDocument();
     expect(within(header!).getAllByText("Local move")).toHaveLength(2);
-    expect(within(header!).getByText("Old home -> New home")).toBeInTheDocument();
+    expect(within(header!).getByText("Old home → New home")).toBeInTheDocument();
   });
 
   it("switches moves without losing the current workspace section", async () => {
