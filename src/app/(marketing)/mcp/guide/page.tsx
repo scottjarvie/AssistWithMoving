@@ -65,7 +65,7 @@ const mcpCards = [
 const canonicalToolCatalog = [
   {
     scope: "no scope — always available",
-    tools: ["describe_connection"],
+    tools: ["describe_connection", "reduce_connection"],
   },
   {
     scope: "moving.context.read",

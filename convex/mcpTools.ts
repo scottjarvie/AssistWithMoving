@@ -4,6 +4,7 @@
 // the identity bridge — NEVER ctx.auth, which is null across the component
 // boundary. Phase 1 ships a read-only core; write tools follow the same shape.
 import { ConvexError, v } from "convex/values";
+import { activeGrantsForUser } from "./aiGrants";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
 import { internalQuery } from "./_generated/server";
@@ -19,6 +20,9 @@ export const getAgentContext = internalQuery({
   args: { caller: mcpCallerValidator },
   handler: async (ctx, args) => {
     const user = await requireUserBySubject(ctx, args.caller.subject);
+    const client = args.caller.claims?.client_id ?? args.caller.claims?.azp;
+    const connection = typeof client === "string" ? (await activeGrantsForUser(ctx, user._id, `legacy:${client}`, Date.now()))[0] : undefined;
+
 
     const memberships = await ctx.db
       .query("householdMemberships")
@@ -71,6 +75,8 @@ export const getAgentContext = internalQuery({
     ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
     return {
+      connectionVersion: connection?.version ?? null,
+      connectionPolicy: "New connections default to full entitled current/future access and no end date. reduce_connection can reduce only this calling connection; only the person in https://movingmanifest.com/settings/ai can widen or restore access.",
       clerkUserId: user.clerkUserId,
       households,
       moveOnlyMoves: moveOnlyParticipations,

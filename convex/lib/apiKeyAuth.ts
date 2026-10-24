@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
+  effectiveApiKeyScopes,
   apiKeyHasScopes,
   apiKeyPrefix,
   validateApiKeyRecord,
@@ -19,6 +20,7 @@ export async function authenticateApiKey(
     moveId,
     action,
     allowRestrictedKeyWithoutMoveId = false,
+    recordUse = true,
   }: {
     rawKey: string;
     requiredScopes: ApiKeyScope[];
@@ -26,6 +28,7 @@ export async function authenticateApiKey(
     moveId?: Id<"moves">;
     action: string;
     allowRestrictedKeyWithoutMoveId?: boolean;
+    recordUse?: boolean;
   }
 ) {
   const prefix = apiKeyPrefix(rawKey);
@@ -44,6 +47,7 @@ export async function authenticateApiKey(
   if (!hashMatches) {
     throw new Error("Invalid API key.");
   }
+  const scopes = effectiveApiKeyScopes(key);
   const effectiveMoveId =
     allowRestrictedKeyWithoutMoveId && !moveId ? key.moveId : moveId;
   if (key.status !== "active") {
@@ -61,21 +65,21 @@ export async function authenticateApiKey(
   if (key.moveId && !effectiveMoveId) {
     throw new Error("API key is move-restricted; use a move-scoped endpoint.");
   }
-  if (!apiKeyHasScopes(key.scopes, requiredScopes)) {
+  if (!apiKeyHasScopes(scopes, requiredScopes)) {
     const missingScopes = requiredScopes.filter(
-      (scope) => !key.scopes.includes(scope),
+      (scope) => !scopes.includes(scope),
     );
     throw new Error(
       `API key is missing required scope${
         missingScopes.length === 1 ? "" : "s"
-      }: ${missingScopes.join(", ")}. Create or rotate a key in Settings with the needed scope.`,
+      }: ${missingScopes.join(", ")}. The person can change access at https://movingmanifest.com/settings/ai.`,
     );
   }
   if (
     !validateApiKeyRecord({
       record: {
         status: key.status,
-        scopes: key.scopes,
+        scopes,
         householdId: key.householdId,
         moveId: key.moveId,
         expiresAt: key.expiresAt,
@@ -133,7 +137,7 @@ export async function authenticateApiKey(
   const visibility = visibilityForHouseholdRole(effectiveRole);
 
   const now = Date.now();
-  await ctx.db.patch(key._id, {
+  if (recordUse) await ctx.db.patch(key._id, {
     lastUsedAt: now,
     lastUsedAction: action,
     updatedAt: now,
@@ -143,15 +147,16 @@ export async function authenticateApiKey(
     actor: {
       type: "apiKey" as const,
       apiKeyId: String(key._id),
-      scopes: key.scopes,
+      scopes,
     },
+    version: key.version ?? 1,
     apiKeyId: key._id,
     apiKeyName: key.name,
     apiKeyTokenPreview: key.tokenPreview,
     createdByUserId: key.createdByUserId,
     householdId: key.householdId,
     moveId: key.moveId,
-    scopes: key.scopes,
+    scopes,
     effectiveRole,
     visibility,
   };

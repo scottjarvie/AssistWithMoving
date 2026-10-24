@@ -83,6 +83,21 @@ vi.mock("convex/react", () => ({
 import { ApiKeyManager } from "@/components/api-key-manager";
 
 describe("ApiKeyManager task tabs", () => {
+  it("starts and resets new keys to all permissions and no end date", async () => {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+    expect(screen.getByLabelText("End date (optional days)")).toHaveValue("");
+    const checks = screen.getAllByRole("checkbox");
+    expect(checks).toHaveLength(12);
+    checks.forEach(check => expect(check).toBeChecked());
+    await user.click(checks[0]);
+    await user.type(screen.getByLabelText("End date (optional days)"), "7");
+    await user.click(screen.getByRole("button", { name: "Reset new connection" }));
+    screen.getAllByRole("checkbox").forEach(check => expect(check).toBeChecked());
+    expect(screen.getByLabelText("End date (optional days)")).toHaveValue("");
+  });
+
   it("opens on key creation and separates connections, overview, and advanced settings", async () => {
     const user = userEvent.setup();
 
