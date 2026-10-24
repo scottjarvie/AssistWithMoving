@@ -29,7 +29,7 @@ import {
   decideLegacyGatewayAccess,
   type LegacyGrantBlock,
 } from "./lib/mcpLegacyGrantGate";
-import { resolveClientIdentity } from "./lib/mcpClientIdentity";
+import { oauthClientIdFromClaims, resolveClientIdentity } from "./lib/mcpClientIdentity";
 import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
 
 const http = httpRouter();
@@ -1112,10 +1112,7 @@ const resolveMcpIdentity: McpIdentityResolver = async (token) => {
  * grant, because an unbound grant is claimable by whatever connects next.
  */
 function legacyClientIdFrom(claims: Record<string, unknown> | undefined): string {
-  const candidate =
-    (typeof claims?.client_id === "string" && claims.client_id) ||
-    (typeof claims?.azp === "string" && claims.azp) ||
-    null;
+  const candidate = oauthClientIdFromClaims(claims);
   // The sentinel is the single value `touchLegacyConnection` refuses to
   // auto-grant, so every unidentified client is turned away rather than sharing
   // one grant row.
@@ -1161,7 +1158,12 @@ export function createLegacyGrantGate(
       });
     }
     const claims = args.identity?.claims;
-    const clientId = legacyClientIdFrom(claims);
+    let clientId: string;
+    try {
+      clientId = legacyClientIdFrom(claims);
+    } catch {
+      return decideLegacyGatewayAccess({ toolName: args.toolName, grants: [], mode: args.mode, block: "unidentifiedClient" });
+    }
     const clientName = legacyClientNameFrom(claims);
 
     if (!resolved) {
@@ -1169,9 +1171,12 @@ export function createLegacyGrantGate(
         // The compatibility door cannot bypass CIMD validation by binding the
         // same credential under its historical legacy: alias.
         if (clientId !== UNIDENTIFIED_LEGACY_CLIENT) {
-          await resolveClientIdentity(clientId.slice("legacy:".length), {
+          const identity = await resolveClientIdentity(clientId.slice("legacy:".length), {
             declaredClientName: clientName,
             fetchMetadata: id => ctx.runAction(anyApi.mcpClientMetadata.fetchDocument, { clientId: id }),
+          });
+          return ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, {
+            subject, clientId: identity.clientId, clientName: identity.clientName ?? clientName,
           });
         }
         return ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, {

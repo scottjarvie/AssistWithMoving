@@ -39,7 +39,13 @@ import {
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { reductionArgs, reducedAccess } from "./lib/connectionReduction";
 import { mcpCallerValidator } from "convex-mcp-gateway";
-import { CLIENT_REGISTRATION_LABELS } from "./lib/mcpClientIdentity";
+import {
+  oauthClientIdFromClaims,
+  oauthClientHistoryKey,
+  sameOAuthClientHistory,
+  looksLikeClientIdMetadataDocument,
+  CLIENT_REGISTRATION_LABELS,
+} from "./lib/mcpClientIdentity";
 import {
   LEGACY_AUTO_GRANT_SCOPES,
   UNIDENTIFIED_LEGACY_CLIENT,
@@ -221,14 +227,20 @@ async function governingGrants(
     }
     return [...clients.values(), ...unbound];
   }
-  // Both sets are indexed and independently bounded. A refusal for this
-  // client cannot hide behind unrelated clients or an active-only window.
-  const histories = await Promise.all(clientAliases(clientId).map(alias => grantHistory(ctx, ownerUserId, alias)));
-  const bound = histories.flatMap(rows => {
-    const latest = rows.reduce<Doc<"aiGrants"> | undefined>((winner, row) =>
-      !winner || compareDecisions(row, winner, now) > 0 ? row : winner, undefined);
-    return latest ? [latest] : [];
-  });
+  // URL serialization is not invertible (case/default port/dot segments,
+  // etc.). Read the complete bounded owner history rather than guessing raw
+  // spellings, which would strand old refusals. Overflow fails closed; never
+  // filter an incomplete window. Opaque ids keep their exact indexed lookups.
+  const key = oauthClientHistoryKey(clientId);
+  const rows = looksLikeClientIdMetadataDocument(key)
+    ? (await grantHistory(ctx, ownerUserId)).filter(row => row.clientId !== undefined && sameOAuthClientHistory(row.clientId, clientId))
+    : (await Promise.all(clientAliases(clientId).map(alias => grantHistory(ctx, ownerUserId, alias)))).flat();
+  const decisions = new Map<string, Doc<"aiGrants">>();
+  for (const row of rows) {
+    const previous = decisions.get(row.clientId!);
+    if (!previous || compareDecisions(row, previous, now) > 0) decisions.set(row.clientId!, row);
+  }
+  const bound = [...decisions.values()];
   if (bound.length) return [intersectAliasGrants(bound, now)];
   const unbound = await ctx.db.query("aiGrants")
     .withIndex("by_owner_client_status", q => q.eq("ownerUserId", ownerUserId).eq("clientId", undefined))
@@ -248,7 +260,7 @@ export async function activeGrantsForUser(
   now: number,
 ) {
   return (await governingGrants(ctx, ownerUserId, clientId, now))
-    .filter(grant => grantIsActive(grant, now) && (clientId === undefined || (grant.clientId !== undefined && clientAliases(clientId).includes(grant.clientId))));
+    .filter(grant => grantIsActive(grant, now) && (clientId === undefined || (grant.clientId !== undefined && sameOAuthClientHistory(clientId, grant.clientId))));
 }
 
 export const grantsForPrincipal = internalQuery({
@@ -915,7 +927,7 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
   const user = await ctx.db.query("users").withIndex("by_clerk_user_id", q => q.eq("clerkUserId", subject)).unique();
   if (!user || user.status !== "active" || clientId === UNIDENTIFIED_LEGACY_CLIENT) throw new ConvexError("No active calling connection.");
   const grant = (await governingGrants(ctx, user._id, clientId, Date.now()))[0];
-  if (!grant || !grant.clientId || !clientAliases(clientId).includes(grant.clientId)) throw new ConvexError("No bound calling connection. Reconnect first.");
+  if (!grant || !grant.clientId || !sameOAuthClientHistory(clientId, grant.clientId)) throw new ConvexError("No bound calling connection. Reconnect first.");
   const reduced = reducedAccess({ version: grant.version, scopes: effectiveScopes(grant), moveIds: grant.moveScope === "selectedMoves" ? (grant.moveIds ?? []).map(String) : undefined, expiresAt: effectiveExpiry(grant), active: grant.status === "active" }, input);
   const moveIds = reduced.moveIds as Id<"moves">[] | undefined;
   if (moveIds) await validateGrantMoves(ctx, grant.householdId, "selectedMoves", moveIds);
@@ -934,7 +946,11 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
 }
 export const reduceConnection = internalMutation({ args: { subject: v.string(), clientId: v.string(), ...reductionArgs }, handler: (ctx, { subject, clientId, ...input }) => reduceOwnConnection(ctx, subject, clientId, input) });
 export const reduceLegacyConnection = internalMutation({ args: { caller: mcpCallerValidator, ...reductionArgs }, handler: (ctx, { caller, ...input }) => {
-  const id = caller.claims?.client_id ?? caller.claims?.azp;
+  let id: string | undefined;
+  try { id = oauthClientIdFromClaims(caller.claims); }
+  catch { throw new ConvexError("Reconnect with an unambiguous OAuth client identity."); }
   if (typeof id !== "string" || !id) throw new ConvexError("Reconnect with an identified OAuth client.");
+  // Preserve the historical namespace; the shared history resolver derives
+  // the same URL relationship as both validated HTTP doors.
   return reduceOwnConnection(ctx, caller.subject, `legacy:${id}`, input);
 } });
