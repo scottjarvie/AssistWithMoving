@@ -6,6 +6,7 @@ import {
   PublicFooter,
   PublicHeader,
 } from "@/components/public-page-chrome";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -47,8 +48,8 @@ export default function MarketingPage() {
       <section className="border-b border-border">
         <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.8fr)] lg:px-8 lg:py-16">
           <div className="max-w-2xl">
-            <Badge variant="secondary" className="mb-5 max-w-full whitespace-normal leading-5">
-              Assist With Moving · active development
+            <Badge variant="secondary" className="mb-5">
+              Active development
             </Badge>
             <h1 className="text-5xl font-semibold leading-[0.95] tracking-tight text-balance sm:text-6xl lg:text-7xl">
               Keep the whole move coherent.
@@ -80,13 +81,12 @@ export default function MarketingPage() {
               <blockquote className="mt-2 border-l-2 border-primary pl-3 text-sm leading-6">
                 {starterPrompt}
               </blockquote>
-              <Link
-                href="/ai"
-                className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
-              >
-                Open the assistant guide
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </Link>
+              <CopyTextButton
+                text={starterPrompt}
+                label="Copy prompt"
+                ariaLabel="Copy the setup prompt"
+                className="mt-4 min-h-11"
+              />
             </div>
           </div>
 
@@ -100,9 +100,8 @@ export default function MarketingPage() {
             Learn about the project
           </h2>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Assist With Moving is in active development. Read the current
-            product boundaries, privacy model, and available workflows before
-            you create an account.
+            Read the current product boundaries, privacy model, and available
+            workflows before you create an account.
           </p>
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             {learnMoreLinks.map((item) => (
@@ -111,11 +110,11 @@ export default function MarketingPage() {
                 href={item.href}
                 className="group rounded-md border border-border p-4 hover:bg-muted/40"
               >
-                <item.icon
-                  className="mb-4 size-5 text-primary"
-                  aria-hidden="true"
-                />
                 <div className="flex items-center gap-2 text-lg font-semibold tracking-normal">
+                  <item.icon
+                    className="size-5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
                   {item.title}
                   <ArrowRight
                     className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"

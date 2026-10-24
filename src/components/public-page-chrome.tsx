@@ -120,7 +120,14 @@ export function PublicPageChrome({
               </Button>
             </div>
           </div>
-          {visual ?? <HowItWorksPanel />}
+          {/* Home already explains how it works; on phones a subpage goes
+              straight to its own content and keeps the panel as a desktop
+              side column. */}
+          {visual ?? (
+            <div className="hidden lg:block">
+              <HowItWorksPanel />
+            </div>
+          )}
         </div>
       </section>
       {children}
@@ -200,8 +207,10 @@ export function FeatureGrid({ cards }: { cards: PublicFeatureCard[] }) {
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => (
         <div key={card.title} className="rounded-md border border-border p-4">
-          <card.icon className="mb-5 size-5 text-primary" aria-hidden="true" />
-          <h2 className="text-lg font-semibold tracking-normal">{card.title}</h2>
+          <h3 className="flex items-center gap-2 text-lg font-semibold tracking-normal">
+            <card.icon className="size-5 shrink-0 text-primary" aria-hidden="true" />
+            {card.title}
+          </h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             {card.copy}
           </p>
@@ -267,15 +276,12 @@ export function HowItWorksPanel() {
         </div>
         <Badge>
           <ShieldCheck aria-hidden="true" />
-          scoped packets
+          Scoped packets
         </Badge>
       </div>
-      <ol className="space-y-3 py-4">
+      <ol className="divide-y divide-border py-1">
         {howItWorksSteps.map((step) => (
-          <li
-            key={step.label}
-            className="flex items-start gap-3 rounded-md border border-border bg-background/65 p-3"
-          >
+          <li key={step.label} className="flex items-start gap-3 py-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
               <step.icon className="size-5" aria-hidden="true" />
             </span>

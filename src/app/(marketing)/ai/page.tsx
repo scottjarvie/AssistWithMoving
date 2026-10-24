@@ -4,12 +4,12 @@ import {
   ArrowRight,
   Bot,
   Camera,
+  ChevronDown,
   ClipboardList,
   DoorOpen,
   KeyRound,
   MessageSquareText,
   ShieldCheck,
-  Sparkles,
   Truck,
 } from "lucide-react";
 
@@ -18,8 +18,8 @@ import {
   PublicPageChrome,
 } from "@/components/public-page-chrome";
 import type { PublicNavigationMode } from "@/components/public-page-chrome";
+import { CopyTextButton } from "@/components/copy-text-button";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Use Assist With Moving with your chosen AI",
@@ -218,17 +218,6 @@ export default function AiAssistantPage() {
               MCP with compatible OAuth, sign in, and approve a grant for the
               moves and operations you actually want covered.
             </p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button asChild size="touch">
-                <Link href="/ai/start">
-                  Start AI setup
-                  <ArrowRight aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="touch">
-                <a href="/llms.txt">AI-readable guide</a>
-              </Button>
-            </div>
             <p className="mt-5 font-mono text-xs leading-5 text-muted-foreground">
               {canonicalEndpoint}
             </p>
@@ -241,6 +230,12 @@ export default function AiAssistantPage() {
             <blockquote className="mt-3 border-l-2 border-primary pl-3 text-sm leading-6">
               {starterPrompt}
             </blockquote>
+            <CopyTextButton
+              text={starterPrompt}
+              label="Copy prompt"
+              ariaLabel="Copy the setup prompt"
+              className="mt-4 min-h-11"
+            />
           </div>
         </div>
       </PublicBand>
@@ -249,8 +244,8 @@ export default function AiAssistantPage() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {quickCapabilities.map((card) => (
             <div key={card.title} className="rounded-md border border-border p-4">
-              <card.icon className="mb-4 size-5 text-primary" aria-hidden="true" />
-              <h2 className="text-base font-semibold tracking-normal">
+              <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
+                <card.icon className="size-5 shrink-0 text-primary" aria-hidden="true" />
                 {card.title}
               </h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -453,9 +448,13 @@ function ExpandableSection({
   children: React.ReactNode;
 }) {
   return (
-    <details className="rounded-md border border-border p-4 text-sm leading-6 text-muted-foreground open:bg-muted/25">
-      <summary className="flex min-h-11 cursor-pointer items-center text-base font-medium text-foreground">
+    <details className="group rounded-md border border-border p-4 text-sm leading-6 text-muted-foreground open:bg-muted/25">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-base font-medium text-foreground">
         {title}
+        <ChevronDown
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
       </summary>
       <div className="mt-3">{children}</div>
     </details>
@@ -510,25 +509,22 @@ function AssistantVisual() {
           granted
         </Badge>
       </div>
-      <div className="mt-4 space-y-3">
+      <ol className="divide-y divide-border">
         {[
           ["1", "Create a private move."],
           ["2", "Leave a durable Queue handoff."],
           ["3", "Sign in from a compatible AI, then approve a grant."],
           ["4", "Review saved work inside the move."],
         ].map(([step, copy]) => (
-          <div
-            key={step}
-            className="flex gap-3 rounded-md border border-border bg-background/65 p-3"
-          >
+          <li key={step} className="flex gap-3 py-3">
             <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
               {step}
             </span>
             <p className="text-sm leading-6 text-muted-foreground">{copy}</p>
-          </div>
+          </li>
         ))}
-      </div>
-      <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-3 text-sm leading-6">
+      </ol>
+      <div className="mt-1 rounded-md border border-primary/25 bg-primary/5 p-3 text-sm leading-6">
         <span className="flex items-center gap-2 font-medium">
           <Bot className="size-4 text-primary" aria-hidden="true" />
           You stay in control
@@ -538,12 +534,6 @@ function AssistantVisual() {
           done, and revoking it refuses the very next call.
         </p>
       </div>
-      <Button asChild size="touch" className="mt-4 w-full">
-        <Link href="/ai/start">
-          Start AI setup
-          <Sparkles aria-hidden="true" />
-        </Link>
-      </Button>
     </div>
   );
 }
