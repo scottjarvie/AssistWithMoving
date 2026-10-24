@@ -16,6 +16,11 @@ export const apiKeyScopes = [
   "members/manage",
 ] as const;
 
+/** Only newly explicit full keys follow future scopes; legacy arrays stay exact. */
+export function effectiveApiKeyScopes(key: { scopes: ApiKeyScope[]; scopeChoice?: "full" | "chosen" }): ApiKeyScope[] {
+  return key.scopeChoice === "full" ? [...apiKeyScopes] : key.scopes;
+}
+
 export type ApiKeyScope = (typeof apiKeyScopes)[number];
 
 export type ApiKeyVerificationInput = {

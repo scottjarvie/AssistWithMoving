@@ -39,6 +39,7 @@ import {
  */
 export const STATELESS_MOVING_TOOL_NAMES = [
   "describe_connection",
+  "reduce_connection",
   "get_move_brief",
   "search_move_records",
   "get_move_records",
@@ -552,8 +553,9 @@ export function createMovingServer(
       maxToolInputElements: MAX_MCP_TOOL_INPUT_ELEMENTS,
       instructions: [
         granted.size === 0
-          ? "This sign-in has no active Assist With Moving grant, so no tools are available. The person opens Settings → AI connections in Assist With Moving and approves what this AI may do, then you reconnect."
+          ? "This sign-in has no active Assist With Moving grant, so only connection description and reduction are listed. The person opens Settings → AI connections in Assist With Moving and approves what this AI may do, then you reconnect."
           : `This connection holds ${[...granted].join(", ")}. Only tools inside those are listed.`,
+        "New connections default to all entitled current and future scopes, all owned moves, and no end date. Use reduce_connection to narrow only your own access; only the person in Settings can widen or restore it.",
         "Call get_move_brief first and use only returned move and record IDs.",
         "Search before creating duplicates; hydrate only the records needed for the work.",
         "Use get_evidence_media for private photos rather than normal web fetch.",
@@ -644,8 +646,19 @@ export function createMovingServer(
             ? "Call get_move_brief, then list_queue_work if you hold moving.queue.work."
             : "Ask the person to open Assist With Moving → Settings → AI connections and approve what this AI may do, then reconnect. Signing in proved who they are; it did not decide what you may do.",
         grantManager: "https://movingmanifest.com/settings/ai",
+        connection: await actionCtx.runQuery((internal as any).aiGrants.grantsForPrincipal, { subject: principal.subject, clientId: principal.clientId }),
       }),
   );
+
+  server.registerTool("reduce_connection", {
+    title: "Reduce this connection's access",
+    description: "Reduce only this calling connection. Narrow scopes or moveIds, add/shorten expiresAt, pause, or revoke. Only the person in Settings can increase or restore access.",
+    inputSchema: z.object({ expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() }).strict(),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  }, async input => {
+    try { return toolResult(await actionCtx.runMutation((internal as any).aiGrants.reduceConnection, { ...input, subject: principal.subject, clientId: principal.clientId })); }
+    catch (error) { return toolError(error); }
+  });
 
   registerGranted(
     "get_move_brief",

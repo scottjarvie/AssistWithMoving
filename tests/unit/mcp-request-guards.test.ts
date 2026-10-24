@@ -164,7 +164,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
     expect((await response.json()).result.tools.map((tool: any) => tool.name))
-      .toEqual(["describe_connection"]);
+      .toEqual(["describe_connection", "reduce_connection"]);
     const described = await handleMcpRequestForTests(ctx, protocolRequest(JSON.stringify({
       jsonrpc: "2.0", id: 2, method: "tools/call",
       params: { name: "describe_connection", arguments: {} },
@@ -190,7 +190,7 @@ describe("#220 canonical /mcp metadata grant gate", () => {
     const { handleMcpRequestForTests } = await loadRoute();
     const response = await handleMcpRequestForTests(ctx, listTools());
     expect(response.status).toBe(200);
-    expect((await response.json()).result.tools).toHaveLength(1);
+    expect((await response.json()).result.tools).toHaveLength(2);
     expect(ctx.runAction).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });

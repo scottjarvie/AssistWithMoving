@@ -42,7 +42,7 @@ const canonicalToolCatalog = [
     scope: "Always available",
     label: "No approval needed",
     copy: "How your AI finds out what it may do, and what to tell you when it may do nothing.",
-    tools: ["describe_connection"],
+    tools: ["describe_connection", "reduce_connection"],
   },
   {
     scope: "moving.context.read",
