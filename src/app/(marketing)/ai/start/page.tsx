@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 export const metadata: Metadata = {
   title: "Set up your chosen AI",
   description:
-    "A short setup path for using Assist With Moving with an AI you choose: sign in, approve a grant, and know exactly what it covers.",
+    "A short setup path for using Assist With Moving with an AI you choose: connect with full access and no end date by default, then review or narrow the grant.",
 };
 
 const grantChoices = [
@@ -40,13 +40,13 @@ export default function AiStartPage() {
           <div>
             <Badge variant="secondary">AI-assisted setup</Badge>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-normal sm:text-5xl">
-              Your chosen AI can help after you sign in and approve a grant.
+              Connect your chosen AI, then review its access.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
               Assist With Moving keeps the durable record. Your AI can research,
-              organize, and save bounded work into it. Signing in proves who you
-              are; the grant you approve afterwards decides what your AI may
-              actually do. Create a fallback key only for local or non-OAuth
+              organize, and save bounded work into it. Connecting grants full access,
+              including future scopes, with no end date by default. You can narrow
+              or revoke the grant in AI connections. Create a fallback key only for local or non-OAuth
               tools.
             </p>
             <div className="mt-7">
@@ -74,7 +74,7 @@ export default function AiStartPage() {
                 "Create or sign into your account.",
                 "Paste the endpoint into an AI that speaks remote MCP with OAuth.",
                 "Sign in through your browser.",
-                "Approve a grant: the moves it covers and what it may do.",
+                "Review the grant: optionally narrow moves or operations, choose an end date, or revoke it.",
                 "Use a fallback helper key only if that path is unavailable.",
               ].map((step, index) => (
                 <li
@@ -116,7 +116,7 @@ export default function AiStartPage() {
               ))}
             </div>
             <p className="mt-4 text-sm leading-6 text-muted-foreground">
-              Approve only what the work needs. Your AI is shown just the tools
+              Review the full-access default and narrow it if you choose. Your AI is shown just the tools
               your grant covers, and revoking it refuses the very next call.
             </p>
           </div>

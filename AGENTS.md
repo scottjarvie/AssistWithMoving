@@ -14,3 +14,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Merging to `main` deploys production (Vercel + prod Convex). Keep `main` green: `npm run lint && npm run typecheck && npm run test` before merging. Vercel builds `main` and `preview/*` branches only (`scripts/vercel-ignore-build.mjs`).
 - Agent-facing Convex tools must throw `ConvexError`, never plain `Error` (the MCP gateway redacts plain errors to "Tool execution failed").
 - Delete branches after merge; this repo intentionally keeps only `main` plus short-lived PR branches.
+
+- New and reset AI connections default to all entitled current and future scopes, all owned moves, and no end date. Separate permissions start on; optional review restrictions start off. Keep identity, authorization, consent and each door's product ceiling.
+- Only grants explicitly marked `scopeChoice: "full"` follow future scopes. Legacy/unmarked and chosen arrays and expiry dates stay exact; no migration, inference or automatic lift. Use `effectiveScopes` / `effectiveExpiry` and `effectiveApiKeyScopes` at authorization boundaries.
+- `reduce_connection` acts on the verified calling credential only: reduce scopes/moves/expiry, pause or revoke, with atomic durable audit and a version/receipt. Never widen, restore, rotate for more access or touch siblings. Only the person in https://movingmanifest.com/settings/ai can increase access. Owner mutations refuse AI OAuth identities; preserve roles, eligibility and quotas.

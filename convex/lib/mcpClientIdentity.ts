@@ -111,6 +111,48 @@ export function normalizeClientIdUrl(clientId: string): URL {
   return url;
 }
 
+/** Extract only issuer-verified claims. Conflicting claims must never select
+ * different sibling identities on different doors. Equivalent URL spellings
+ * still require the usual metadata proof before issuance or binding.
+ */
+export function oauthClientIdFromClaims(claims: Record<string, unknown> | undefined): string | undefined {
+  const clientId = typeof claims?.client_id === "string" && claims.client_id ? claims.client_id : undefined;
+  const azp = typeof claims?.azp === "string" && claims.azp ? claims.azp : undefined;
+  // legacy: is our stored-history namespace, never a caller-supplied alias.
+  // Accepting it as a raw token id would let an opaque DCR claim impersonate
+  // a CIMD history without passing that URL's required metadata validation.
+  if ([clientId, azp].some(id => id?.startsWith("legacy:"))) {
+    throw new ClientIdentityError("reserved_client_id", "The OAuth client identifier uses a reserved history namespace. Reconnect with the issuer's original client identifier.");
+  }
+  const key = (id: string) => looksLikeClientIdMetadataDocument(id) ? normalizeClientIdUrl(id).toString() : id;
+  if (clientId && azp && key(clientId) !== key(azp)) {
+    throw new ClientIdentityError("conflicting_client_ids", "The OAuth client_id and azp claims name different clients. Reconnect with an unambiguous client identity.");
+  }
+  return clientId ?? azp;
+}
+
+/** Enforcement key derived only from a verified OAuth claim, never a supplied
+ * alias or metadata name. Match exactly the URL transformation used by CIMD
+ * validation; path/query distinctions and opaque DCR ids remain intact.
+ * Internal legacy handlers receive the gateway's verified claims. The HTTP
+ * doors must additionally resolve metadata before issuance/binding.
+ */
+export function oauthClientHistoryKey(clientId: string): string {
+  const raw = clientId.startsWith("legacy:") ? clientId.slice(7) : clientId;
+  return looksLikeClientIdMetadataDocument(raw)
+    ? normalizeClientIdUrl(raw).toString()
+    : raw;
+}
+
+export function sameOAuthClientHistory(a: string, b: string): boolean {
+  try {
+    return oauthClientHistoryKey(a) === oauthClientHistoryKey(b);
+  } catch {
+    // An invalid stored URL is not evidence for a valid caller's identity.
+    return false;
+  }
+}
+
 function asStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const rows = value.filter((entry): entry is string => typeof entry === "string");

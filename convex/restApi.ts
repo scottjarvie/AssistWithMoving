@@ -5,6 +5,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { authenticateApiKey } from "./lib/apiKeyAuth";
+import { reduceOwnApiKey } from "./apiKeys";
+import { SETTINGS_REFUSAL } from "./lib/connectionReduction";
 import { hashApiKey } from "./lib/apiKeys";
 import { getAiProviderStatus } from "./lib/aiProvider";
 import {
@@ -269,7 +271,9 @@ export const handle = internalMutation({
       method: args.method,
       segments,
     });
-    if (!requiredScopes.length) {
+    const selfContext = segments.join("/") === "me" && args.method === "GET";
+    const selfReduction = segments.join("/") === "me/access" && args.method === "POST";
+    if (!requiredScopes.length && !selfReduction && !selfContext) {
       return restError({
         status: 404,
         code: "not_found",
@@ -295,7 +299,8 @@ export const handle = internalMutation({
       const action = `${args.method} /api/v1/${segments.join("/")}`;
       const auth = await authenticateApiKey(ctx, {
         rawKey,
-        requiredScopes,
+        requiredScopes: selfReduction || selfContext ? [] : requiredScopes,
+        recordUse: !selfReduction,
         moveId,
         action,
         allowRestrictedKeyWithoutMoveId:
@@ -312,6 +317,11 @@ export const handle = internalMutation({
         return restRateLimited(rateLimit);
       }
 
+      if (selfReduction) {
+        const body = args.body;
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(name => !["expectedVersion", "scopes", "moveIds", "expiresAt", "action"].includes(name)) || typeof body.expectedVersion !== "number" || (body.scopes !== undefined && (!Array.isArray(body.scopes) || body.scopes.some((s: unknown) => typeof s !== "string"))) || (body.moveIds !== undefined && (!Array.isArray(body.moveIds) || body.moveIds.some((s: unknown) => typeof s !== "string"))) || (body.expiresAt !== undefined && body.expiresAt !== null && typeof body.expiresAt !== "number") || (body.action !== undefined && typeof body.action !== "string")) throw new Error(SETTINGS_REFUSAL);
+        return withRestRateLimitHeaders(restOk({ data: await reduceOwnApiKey(ctx, auth.apiKeyId, body) }), rateLimit);
+      }
       const response = await withIdempotency(ctx, args, auth, async () =>
         routeRequest(ctx, args, segments, auth)
       );
@@ -1524,7 +1534,7 @@ async function routeMe(
 ) {
   const [household, restrictedMove] = await Promise.all([
     ctx.db.get(auth.householdId),
-    auth.moveId ? ctx.db.get(auth.moveId) : Promise.resolve(null),
+    auth.moveId && auth.scopes.includes("moves/read") ? ctx.db.get(auth.moveId) : Promise.resolve(null),
   ]);
   return restOk({
     data: {
@@ -1537,6 +1547,7 @@ async function routeMe(
         : { householdId: auth.householdId },
       apiKey: {
         apiKeyId: auth.apiKeyId,
+        version: auth.version,
         scopes: auth.scopes,
         moveRestricted: Boolean(auth.moveId),
         moveId: auth.moveId,

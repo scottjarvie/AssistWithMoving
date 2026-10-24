@@ -23,6 +23,8 @@
  */
 import {
   MOVING_SCOPES,
+  effectiveScopes,
+  effectiveExpiry,
   findPermittingGrant,
   movingScopes,
   type GrantDecisionInput,
@@ -56,6 +58,7 @@ export const LEGACY_GATEWAY_TOOL_SCOPES: Readonly<
   Record<string, MovingScope>
 > = {
   // --- Reading the move context the person already sees -------------------
+  reduce_connection: "moving.context.read",
   get_agent_context: "moving.context.read",
   list_moves: "moving.context.read",
   get_move_summary: "moving.context.read",
@@ -132,23 +135,10 @@ export const LEGACY_GATEWAY_NEVER_PERMITTED_TOOLS: readonly string[] = [
  * believing they granted something they did not.
  *
  * So a first authenticated call writes a real grant row carrying these scopes.
- * `moving.archive` is deliberately absent: archive is the destructive verb,
- * and the connector playbook keeps destructive authority out of what a
- * sign-in hands over. It stays one switch away on `/settings/ai`.
+ * All current and future scopes are included by default. Limits are opt-in.
  */
-export const LEGACY_AUTO_GRANT_SCOPES: readonly MovingScope[] = [
-  "moving.context.read",
-  "moving.evidence.read",
-  "moving.work.write",
-  "moving.queue.work",
-];
-
-/**
- * Scopes a sign-in never hands over. Written as its own list rather than
- * derived by subtracting the defaults, so the two cannot drift apart when a
- * sixth scope is added.
- */
-export const LEGACY_RAISED_SCOPES: readonly MovingScope[] = ["moving.archive"];
+export const LEGACY_AUTO_GRANT_SCOPES: readonly MovingScope[] = movingScopes;
+export const LEGACY_RAISED_SCOPES: readonly MovingScope[] = [];
 
 export function legacyScopeForTool(toolName: string): MovingScope | null {
   return LEGACY_GATEWAY_TOOL_SCOPES[toolName] ?? null;
@@ -319,7 +309,7 @@ const BLOCK_REFUSALS: Record<
   },
   expired: {
     refusalCode: "GRANT_EXPIRED",
-    reason: `This connection's approval has expired. Ask the person to approve it again at ${GRANT_MANAGER_URL}, then reconnect.`,
+    reason: `This connection has reached its end date. Open ${GRANT_MANAGER_URL} and remove or change its end date, then retry.`,
   },
 };
 
@@ -349,6 +339,8 @@ export function decideLegacyGatewayAccess(input: {
 }): LegacyGateDecision {
   const { toolName, grants, moveId, mode, block } = input;
   const now = input.now ?? Date.now();
+
+  if (toolName === "reduce_connection") return grants.some(grant => grant.status === "active" && (effectiveExpiry(grant) === undefined || effectiveExpiry(grant)! > now)) ? { allowed: true } : { allowed: false, refusalCode: "GRANT_REQUIRED", reason: `No active calling connection. The person can restore access at ${GRANT_MANAGER_URL}.` };
 
   // The product ceiling is checked before anything else, so no grant state and
   // no future scope can talk its way past it.
@@ -415,8 +407,8 @@ export function decideLegacyGatewayAccess(input: {
     const listable = grants.some(
       (grant) =>
         grant.status === "active" &&
-        (grant.expiresAt === undefined || grant.expiresAt > now) &&
-        grant.scopes.includes(movingScope),
+        (effectiveExpiry(grant) === undefined || effectiveExpiry(grant)! > now) &&
+        effectiveScopes(grant).includes(movingScope),
     );
     return listable
       ? { allowed: true, scope: movingScope }
@@ -435,7 +427,7 @@ export function decideLegacyGatewayAccess(input: {
   // Distinguish "you were never approved for this" from "not for that move",
   // because the person fixes them differently.
   const holdsScopeSomewhere = grants.some((grant) =>
-    grant.scopes.includes(movingScope),
+    effectiveScopes(grant).includes(movingScope),
   );
   if (holdsScopeSomewhere) {
     return {

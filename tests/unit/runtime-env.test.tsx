@@ -9,9 +9,8 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-import ProductLayout, {
-  ProductBackendUnavailable,
-} from "../../src/app/(product)/layout";
+import ProductLayout from "../../src/app/(product)/layout";
+import { ProductBackendUnavailable } from "@/components/product-backend-unavailable";
 import { hasPublicConvexUrl } from "@/lib/runtime-env";
 
 afterEach(() => {

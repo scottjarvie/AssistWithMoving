@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 const mcpCards = [
   {
     title: "A grant decides authority",
-    copy: "OAuth proves who is calling. A separate product grant, approved by the person and re-read on every discovery and every call, decides which moves, which data, and which operations. Revoking it refuses the very next call.",
+    copy: "OAuth proves who is calling. Connecting creates a full-access grant, including future scopes, with no end date by default. You can narrow or revoke it in AI connections. The grant is re-read on every discovery and every call. Revoking it refuses the very next call.",
     icon: ShieldCheck,
   },
   {
@@ -65,7 +65,7 @@ const mcpCards = [
 const canonicalToolCatalog = [
   {
     scope: "no scope — always available",
-    tools: ["describe_connection"],
+    tools: ["describe_connection", "reduce_connection"],
   },
   {
     scope: "moving.context.read",
@@ -115,7 +115,7 @@ const doors = [
   {
     name: "https://movingmanifest.com/mcp",
     role: "Canonical",
-    copy: "Stateless Streamable HTTP with OAuth sign-in, then a person-approved product grant. Serves the catalog listed on this page and nothing outside it.",
+    copy: "Stateless Streamable HTTP with OAuth sign-in and a full-access product grant with no end date by default. Serves the catalog listed on this page and nothing outside it.",
   },
   {
     name: "https://movingmanifest.com/mcp/connect",
@@ -146,8 +146,8 @@ Then sign in with your Assist With Moving account — no key needed.
 The client discovers the authorization server from:
 /.well-known/oauth-protected-resource/mcp
 
-Signing in is not permission. Approve a grant in Settings afterwards,
-or the connection will list only describe_connection.`;
+Connecting creates a full-access grant with no end date by default.
+Narrow access, choose an end date, or revoke it at https://movingmanifest.com/settings/ai.`;
 
 const remoteApiKeyFallbackExample = `Advanced — headless / non-OAuth clients ONLY.
 This door is key-only, never advertises OAuth, and rejects OAuth sign-in.
@@ -169,7 +169,7 @@ export default function McpPage() {
     <PublicPageChrome
       eyebrow="Model Context Protocol"
       title="Connect an AI you choose to Assist With Moving tools."
-      description="The canonical endpoint takes an OAuth sign-in and then obeys a product grant the person approves. Three other doors exist for compatibility, keys, and local use; their catalogs are not the same."
+      description="The canonical endpoint uses OAuth sign-in and creates a full-access grant with no end date by default. You can narrow or revoke it in AI connections. Three other doors exist for compatibility, keys, and local use; their catalogs are not the same."
       primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
       secondaryAction={{
         href: "/settings/ai",
@@ -186,7 +186,7 @@ export default function McpPage() {
           <div className="min-w-0">
             <Badge variant="secondary">Hosted connection</Badge>
             <h2 className="mt-3 text-xl font-semibold tracking-normal">
-              Paste the MCP URL, sign in, then approve a grant.
+              Paste the MCP URL, sign in, then review your connection.
             </h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               An OAuth-capable AI can connect without the person handling a raw
@@ -459,7 +459,7 @@ function McpVisual() {
           ],
           [
             "3",
-            "The user approves a grant; only the tools it covers are listed.",
+            "Connecting creates a full-access grant by default; only the tools it currently covers are listed.",
           ],
           ["4", "Revoking the grant refuses the very next call."],
         ].map(([step, copy]) => (

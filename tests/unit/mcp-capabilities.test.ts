@@ -349,7 +349,7 @@ describe("Assist With Moving MCP capability discovery", () => {
     });
     const toolNames = [...registrations.keys()].sort();
 
-    expect(ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(33);
+    expect(ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(34);
     expect(filter("save_box_intake")).toBe(true);
     expect(filter("create_box")).toBe(false);
     expect(toolNames).toContain("save_box_intake");
@@ -709,7 +709,7 @@ describe("Assist With Moving MCP capability discovery", () => {
       canonicalToolNames().length,
     );
     expect(
-      legacyToolNames.filter((name) => canonicalToolNames().includes(name)),
+      legacyToolNames.filter((name) => canonicalToolNames().includes(name) && name !== "reduce_connection"),
     ).toEqual([]);
   });
 
@@ -852,8 +852,18 @@ describe("Bring Your AI documentation truth", () => {
 
       expect(text, `${path} must state Partial`).toMatch(/\bPartial\b/);
       expect(text, `${path} must explain the grant`).toMatch(/\bgrant\b/i);
-      expect(text, `${path} must separate sign-in from permission`).toMatch(
-        /signing in is not permission|signing in proves who|proves who is calling|sign-in ties calls/i,
+      expect(text, `${path} must disclose access at connection`).toMatch(
+        /connecting (?:creates a full-access grant|grants full access)/i,
+      );
+      expect(text, `${path} must disclose no automatic end date`).toMatch(
+        /no\s+end\s+date\s+by\s+default/i,
+      );
+      expect(text, `${path} must disclose future scopes`).toMatch(/future scopes/i);
+      expect(text, `${path} must explain how to change access`).toMatch(
+        /narrow[\s\S]{0,160}revoke/i,
+      );
+      expect(text, `${path} must not invent a manual first-contact approval`).not.toMatch(
+        /signing in is not permission|separate approval|then approve a grant|then (?:have them|ask me to) approve a grant|until (?:you|they) (?:do|approve)/i,
       );
       expect(text, `${path} must not claim eight tools`).not.toMatch(
         /eight (workflow |structured |canonical )?tools/i,

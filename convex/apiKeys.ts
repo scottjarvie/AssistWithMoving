@@ -5,6 +5,8 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
+  apiKeyScopes,
+  effectiveApiKeyScopes,
   apiKeyEffectiveStatus,
   apiKeyPrefix,
   apiKeyPreview,
@@ -13,6 +15,8 @@ import {
   hashApiKey,
   normalizeApiKeyScopes,
 } from "./lib/apiKeys";
+import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
+import { reducedAccess, type Reduction } from "./lib/connectionReduction";
 import { requireHouseholdPermission } from "./lib/permissions";
 
 // Default cap on active connections (API keys) per household, so the "active
@@ -39,7 +43,8 @@ const apiKeyWriteArgs = {
   householdId: v.id("households"),
   moveId: v.optional(v.id("moves")),
   name: v.string(),
-  scopes: v.array(apiKeyScopeValidator),
+  scopes: v.optional(v.array(apiKeyScopeValidator)),
+  scopeChoice: v.optional(v.union(v.literal("full"), v.literal("chosen"))),
   expiresAt: v.optional(v.number()),
 };
 
@@ -63,7 +68,8 @@ export const listForHousehold = query({
         moveId: key.moveId,
         name: key.name,
         tokenPreview: key.tokenPreview,
-        scopes: key.scopes,
+        scopes: effectiveApiKeyScopes(key),
+        version: key.version ?? 1,
         status: apiKeyEffectiveStatus(key, now),
         expiresAt: key.expiresAt,
         revokedAt: key.revokedAt,
@@ -77,6 +83,7 @@ export const listForHousehold = query({
 export const create = mutation({
   args: apiKeyWriteArgs,
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const { actor } = await requireHouseholdPermission(
       ctx,
       args.householdId,
@@ -109,10 +116,11 @@ export const create = mutation({
     }
 
     await assertMoveRestriction(ctx, args);
-    const scopes = normalizeApiKeyScopes(args.scopes);
+    const scopes = normalizeApiKeyScopes(args.scopes ?? [...apiKeyScopes]);
     if (!scopes.length) {
       throw new ConvexError("Select at least one thing this connection can do.");
     }
+    if (args.scopeChoice === "full" && scopes.length !== apiKeyScopes.length) throw new ConvexError("Full access requires every current API scope.");
     const rawKey = generateApiKeySecret();
     const prefix = apiKeyPrefix(rawKey);
     const existing = await ctx.db
@@ -132,6 +140,8 @@ export const create = mutation({
       tokenPreview: apiKeyPreview(rawKey),
       secretHash: await hashApiKey(rawKey),
       scopes,
+      scopeChoice: args.scopeChoice ?? (args.scopes === undefined ? "full" : "chosen"),
+      version: 1,
       status: "active",
       expiresAt: normalizeExpiration(args.expiresAt),
       createdByUserId: actor.userId,
@@ -166,6 +176,7 @@ export const revoke = mutation({
     apiKeyId: v.id("apiKeys"),
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const { actor } = await requireHouseholdPermission(
       ctx,
       args.householdId,
@@ -203,6 +214,7 @@ export const rotate = mutation({
     apiKeyId: v.id("apiKeys"),
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const { actor } = await requireHouseholdPermission(
       ctx,
       args.householdId,
@@ -255,6 +267,8 @@ export async function rotateApiKeyForUser(
       tokenPreview: apiKeyPreview(rawKey),
       secretHash: await hashApiKey(rawKey),
       scopes: key.scopes,
+      scopeChoice: key.scopeChoice,
+      version: 1,
       status: "active",
       expiresAt: key.expiresAt,
       rotatedFromApiKeyId: key._id,
@@ -335,4 +349,24 @@ function normalizeExpiration(expiresAt: number | undefined) {
     throw new ConvexError("Expiration must be in the future.");
   }
   return expiresAt;
+}
+
+/** Only called after authenticating this exact bearer, in the same mutation. */
+export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">, input: Reduction) {
+  const key = await ctx.db.get(apiKeyId);
+  if (!key) throw new ConvexError("Calling connection unavailable.");
+  const reduced = reducedAccess({ version: key.version ?? 1, scopes: effectiveApiKeyScopes(key), moveIds: key.moveId ? [String(key.moveId)] : undefined, expiresAt: key.expiresAt, active: key.status === "active" }, input);
+  if (reduced.moveIds && reduced.moveIds.length !== 1) throw new ConvexError("This door supports one selected move. Choose one move or preserve the current restriction.");
+  const moveId = reduced.moveIds?.[0] as Id<"moves"> | undefined;
+  if (moveId) await assertMoveRestriction(ctx, { householdId: key.householdId, moveId });
+  const version = (key.version ?? 1) + 1;
+  await ctx.db.patch(key._id, {
+    ...(reduced.scopes ? { scopes: reduced.scopes as import("./lib/apiKeys").ApiKeyScope[], scopeChoice: "chosen" as const } : {}),
+    ...(moveId ? { moveId } : {}),
+    ...(reduced.expiresAt !== undefined ? { expiresAt: reduced.expiresAt! } : {}),
+    ...(input.action === "revoke" ? { status: "revoked" as const, revokedAt: Date.now() } : {}),
+    version, updatedAt: Date.now(),
+  });
+  const receipt = await recordAuditEvent(ctx, { householdId: key.householdId, moveId: key.moveId, actorType: "apiKey", actorApiKeyId: key._id, actorUserId: key.createdByUserId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: key._id, metadata: { version, action: input.action ?? "narrow", previousVersion: key.version ?? 1, previousScopes: effectiveApiKeyScopes(key), scopes: reduced.scopes ?? effectiveApiKeyScopes(key), moveId: moveId ?? key.moveId ?? null, expiresAt: reduced.expiresAt ?? key.expiresAt ?? null } });
+  return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
 }

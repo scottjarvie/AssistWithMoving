@@ -5,7 +5,7 @@ import AiAssistantPage from "@/app/(marketing)/ai/page";
 import AiStartPage from "@/app/(marketing)/ai/start/page";
 
 describe("AI guidance truth", () => {
-  it("leads with the grant rather than the sign-in", () => {
+  it("discloses full-access connection defaults and the identity/grant boundary", () => {
     render(<AiAssistantPage />);
 
     expect(
@@ -13,9 +13,9 @@ describe("AI guidance truth", () => {
         name: "Give your chosen AI the right move context.",
       }),
     ).toBeVisible();
-    expect(screen.getByText("A grant, not a sign-in")).toBeVisible();
+    expect(screen.getByText("Your connection’s access")).toBeVisible();
     expect(
-      screen.getByText(/Signing in proves who you are\. A separate approval/),
+      screen.getByText(/Signing in proves who you are\. Connecting grants full access/),
     ).toBeVisible();
     expect(
       screen.getByText(/revoking it refuses the very next call/i),
@@ -33,9 +33,9 @@ describe("AI guidance truth", () => {
     expect(screen.getByText("Bring your AI")).toBeVisible();
     expect(screen.getByText("Partial")).toBeVisible();
     expect(screen.getByText("The grant screen")).toBeVisible();
-    expect(
-      screen.getByText(/is where you approve a grant, choose all moves/),
-    ).toBeVisible();
+    expect(screen.getByText(/Settings → AI connections lets you narrow moves or operations/)).toBeVisible();
+    expect(screen.getAllByText(/no end date by default/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "AI connections" })).toHaveAttribute("href", "/settings/ai");
     expect(
       screen.getByText(/No AI product has yet completed a full connect/),
     ).toBeVisible();
@@ -100,7 +100,7 @@ describe("AI guidance truth", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Your chosen AI can help after you sign in and approve a grant.",
+        name: "Connect your chosen AI, then review its access.",
       }),
     ).toBeVisible();
     expect(

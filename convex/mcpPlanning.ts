@@ -1,3 +1,4 @@
+import { effectiveScopes } from "./lib/aiGrants";
 import { ConvexError, v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -293,7 +294,7 @@ async function listAccessibleMoves(ctx: QueryCtx, principal: McpPrincipal) {
   const now = Date.now();
   const grants = (
     await activeGrantsForUser(ctx, user._id, principal.clientId, now)
-  ).filter((grant) => grant.scopes.includes("moving.context.read"));
+  ).filter((grant) => effectiveScopes(grant).includes("moving.context.read"));
   if (grants.length === 0) {
     grantError(
       (await activeGrantsForUser(ctx, user._id, principal.clientId, now)).length

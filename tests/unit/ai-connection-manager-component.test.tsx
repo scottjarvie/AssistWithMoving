@@ -2,6 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { GRANT_CONSENT_POLICY, grantCatalogFingerprint } from "../../convex/lib/aiGrants";
+
 import type { Id } from "../../convex/_generated/dataModel";
 
 const apiMock = vi.hoisted(() => ({
@@ -11,6 +13,7 @@ const apiMock = vi.hoisted(() => ({
     describeBoundary: "aiGrants.describeBoundary",
     approve: "aiGrants.approve",
     revoke: "aiGrants.revoke",
+    updateLimits: "aiGrants.updateLimits",
   },
   households: {
     listMine: "households.listMine",
@@ -27,8 +30,11 @@ const apiMock = vi.hoisted(() => ({
 const connectionData = vi.hoisted(() => ({
   approve: vi.fn(),
   revoke: vi.fn(),
+  updateLimits: vi.fn(),
   grants: {
     boundaryVersion: "2026-08-16",
+    consentPolicyVersion: "",
+    catalogFingerprint: "",
     scopes: [
       {
         scope: "moving.context.read",
@@ -52,6 +58,7 @@ const connectionData = vi.hoisted(() => ({
     grants: [
       {
         grantId: "ai_grant_123" as Id<"aiGrants">,
+        householdId: "household_123" as Id<"households">,
         label: "My AI on the laptop",
         status: "active" as const,
         scopes: ["moving.context.read"],
@@ -152,9 +159,11 @@ vi.mock("convex/react", () => ({
   useMutation: (mutation: string) =>
     mutation === apiMock.aiGrants.approve
       ? connectionData.approve
-      : mutation === apiMock.aiGrants.revoke
-        ? connectionData.revoke
-        : vi.fn(),
+      : mutation === apiMock.aiGrants.updateLimits
+        ? connectionData.updateLimits
+        : mutation === apiMock.aiGrants.revoke
+          ? connectionData.revoke
+          : vi.fn(),
 }));
 
 import {
@@ -164,6 +173,9 @@ import {
 
 describe("AiConnectionManager", () => {
   beforeEach(() => {
+    connectionData.grants.consentPolicyVersion = GRANT_CONSENT_POLICY;
+    connectionData.grants.catalogFingerprint = grantCatalogFingerprint();
+    connectionData.updateLimits.mockReset();
     connectionData.approve.mockReset();
     connectionData.approve.mockResolvedValue({ grantId: "ai_grant_456" });
     connectionData.revoke.mockReset();
@@ -207,7 +219,7 @@ describe("AiConnectionManager", () => {
       "Kitchen table AI",
     );
     await user.click(
-      screen.getByRole("checkbox", { name: /Read the move context you choose/ }),
+      within(screen.getByRole("group", { name: "What this AI may do" })).getByRole("checkbox", { name: /Save the work you asked for/ }),
     );
 
     expect(screen.getByText("Kitchen table AI")).toBeInTheDocument();
@@ -220,9 +232,93 @@ describe("AiConnectionManager", () => {
         label: "Kitchen table AI",
         scopes: ["moving.context.read"],
         moveScope: "allMoves",
-        expiresInDays: 90,
+        expiresInDays: undefined,
       }),
     );
+  });
+
+  it("defaults every permission on with no end date", () => {
+    render(<AiConnectionManager />);
+    const group = screen.getByRole("group", { name: "What this AI may do" });
+    for (const checkbox of within(group).getAllByRole("checkbox")) expect(checkbox).toBeChecked();
+    expect(screen.getByLabelText("End date", { selector: "#ai-grant-expiry" })).toHaveValue("0");
+  });
+
+  it("submits explicit full access and no end date once the backend advertises support", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.type(screen.getByLabelText("Name this connection"), "Current form");
+    await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+    expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({
+      consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(),
+      scopeIntent: "full", expiryIntent: "none", expiresInDays: undefined,
+    }));
+  });
+
+  it("marks an opted-in approval end date as chosen", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.type(screen.getByLabelText("Name this connection"), "Seven day AI");
+    await user.selectOptions(screen.getByLabelText("End date", { selector: "#ai-grant-expiry" }), "7");
+    await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+    expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ expiryIntent: "chosen", expiresInDays: 7 }));
+  });
+
+  it("removes an existing end date deliberately", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    await user.selectOptions(within(form).getByRole("combobox"), "0");
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({ consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve", expiryIntent: "none", grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"], moveScope: "selectedMoves", moveIds: ["move_123"], expiresInDays: null });
+  });
+
+  it("narrows the existing connection to checked moves without changing its end date", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    expect(within(form).getByRole("radio", { name: "Only the moves checked below" })).toBeChecked();
+    expect(within(form).getByRole("checkbox", { name: "Utah to Virginia" })).toBeChecked();
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({
+      consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve",
+      grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"],
+      moveScope: "selectedMoves", moveIds: ["move_123"],
+    });
+    expect(connectionData.approve).not.toHaveBeenCalled();
+  });
+
+  it("keeps old backends and stale catalogs readable while refusing unsupported writes", () => {
+    connectionData.grants.consentPolicyVersion = "";
+    const { rerender } = render(<AiConnectionManager />);
+    expect(screen.getByText("My AI on the laptop")).toBeInTheDocument();
+    expect(screen.getByText(/approvals and limit edits are read-only/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve this connection" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Change moves, permissions or end date")).not.toBeInTheDocument();
+    expect(screen.queryByText(/get full access with no end date by default/)).not.toBeInTheDocument();
+    connectionData.grants.consentPolicyVersion = GRANT_CONSENT_POLICY;
+    connectionData.grants.catalogFingerprint = "new-server-catalog";
+    rerender(<AiConnectionManager />);
+    expect(screen.queryByRole("button", { name: "Approve this connection" })).not.toBeInTheDocument();
+    expect(connectionData.approve).not.toHaveBeenCalled();
+    expect(connectionData.updateLimits).not.toHaveBeenCalled();
+    connectionData.grants.catalogFingerprint = grantCatalogFingerprint();
+    rerender(<AiConnectionManager />);
+    expect(screen.getByRole("button", { name: "Approve this connection" })).toBeInTheDocument();
+    expect(screen.getByText(/get full access with no end date by default/)).toBeInTheDocument();
+  });
+
+  it("sends deliberate full intent only after turning all permissions on", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    await user.click(within(form).getByRole("checkbox", { name: "Save the work you asked for" }));
+    await user.selectOptions(within(form).getByRole("combobox"), "7");
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ scopeIntent: "full", expiryIntent: "chosen", expiresInDays: 7 }));
   });
 
   it("asks for confirmation before revoking, and says what revoking does", async () => {

@@ -328,12 +328,12 @@ describe("Bring Your AI lifecycle (synthetic, marked, reversible)", () => {
     const handler = handlerFor(fixture, OWNER_SUBJECT, CLIENT_A, []);
     const listed = await handler.fetch(modernRequest("tools/list"));
     const names = ((await listed.json()) as any).result.tools.map((t: any) => t.name);
-    expect(names).toEqual(["describe_connection"]);
+    expect(names).toEqual(["describe_connection", "reduce_connection"]);
     await handler.close();
     record(
       "1. Discover without authority",
       "Refused",
-      "Signing in lists no product tools; only the self-describing tool appears",
+      "Signing in lists no product tools; only connection description and own-access reduction appear",
     );
   });
 
