@@ -811,6 +811,74 @@
           }
         }
       }
+    },
+    "/me/access": {
+      "post": {
+        "summary": "Reduce only the calling API key connection",
+        "description": "Derives the connection from the authenticated bearer; no sibling key id is accepted. Only the person in Settings can increase or restore access. Changes and the durable audit receipt/version are atomic.",
+        "operationId": "reduceOwnConnection",
+        "security": [
+          {
+            "bearerApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "moveIds": {
+                    "type": "array",
+                    "maxItems": 1,
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "expiresAt": {
+                    "type": "number",
+                    "description": "Unix milliseconds, added or shortened only. Cannot be removed or extended."
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "narrow",
+                      "pause",
+                      "revoke"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reduced connection with version and durable audit receipt"
+          },
+          "400": {
+            "description": "Invalid or wider access requested; visit Settings"
+          },
+          "401": {
+            "description": "Invalid, expired or revoked bearer"
+          }
+        }
+      }
     }
   },
   "components": {

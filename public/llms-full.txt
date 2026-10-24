@@ -332,7 +332,7 @@ are not the same. No repository clone is required for the remote ones.
 ```
 Canonical door:           https://movingmanifest.com/mcp
   Auth: OAuth browser sign-in (Clerk), creating a full-access grant with no end date by default.
-  Catalog: the 15 grant-governed tools listed below, filtered by the grant.
+  Catalog: the 16 connection and grant-governed tools listed below, filtered by the grant.
 Legacy compatibility:     https://movingmanifest.com/mcp/connect
   Persisted OAuth gateway for clients that already connected there. A
   different, larger catalog governed by that older gateway rather than by
@@ -389,6 +389,7 @@ Send an API key for the key doors in the `Authorization: Bearer mmk_...` header
 Canonical tools and the scope each one requires:
 
 - `describe_connection` — no scope; always available
+- reduce_connection — no scope; reduce only the verified calling connection with expectedVersion, durable audit receipt and version. Only the person in Settings can widen or restore access.
 - `get_move_brief` — `moving.context.read` (first call)
 - `search_move_records` — `moving.context.read`
 - `get_move_records` — `moving.context.read`
@@ -519,3 +520,5 @@ Connections do not expire by default. You may choose fewer permissions or an end
 date, change or remove that date later, and revoke access at any time. A date you
 choose is recorded as your choice and never removed automatically. Legacy grants
 with uncertain scope or expiry history keep their recorded limits.
+
+New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Existing chosen and legacy limits remain exact. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.

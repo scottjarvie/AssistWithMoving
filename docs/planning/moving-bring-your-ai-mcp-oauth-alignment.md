@@ -110,7 +110,7 @@ this Work Order.
 
 - Permanent delete, export, publishing/sharing, member management, and broad
   external-action handoffs are not initial canonical OAuth authority.
-- The 29-tool persisted `/mcp/connect` catalog and the larger API-key/stdio
+- The 30-tool persisted `/mcp/connect` catalog and the larger API-key/stdio
   automation catalog remain compatibility surfaces. This Work Order does not
   collapse them into `/mcp`, market their catalogs as equivalent, or remove
   them before migration evidence exists.

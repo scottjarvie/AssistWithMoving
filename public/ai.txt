@@ -52,6 +52,7 @@ Exact canonical tools (tools/list never contains anything outside this list,
 and shows only the ones the person's grant covers):
 
 - describe_connection — no scope; always available
+- reduce_connection — no scope; reduce only the verified calling connection with expectedVersion, durable audit receipt and version. Only the person in Settings can widen or restore access.
 - get_move_brief — moving.context.read
 - search_move_records — moving.context.read
 - get_move_records — moving.context.read
@@ -124,7 +125,7 @@ Four doors exist and they are not equivalent. Only the first is this guide's
 subject:
 
 1. https://movingmanifest.com/mcp — canonical. OAuth sign-in plus a product
-   grant. The 15 tools listed above.
+   grant. The 16 tools listed above.
 2. https://movingmanifest.com/mcp/connect — legacy compatibility for clients
    that connected through the older persisted OAuth gateway. A different and
    larger catalog, governed by that older gateway rather than by product
@@ -148,3 +149,5 @@ Connections do not expire by default. You may choose fewer permissions or an end
 date, change or remove that date later, and revoke access at any time. A date you
 choose is recorded as your choice and never removed automatically. Legacy grants
 with uncertain scope or expiry history keep their recorded limits.
+
+New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Existing chosen and legacy limits remain exact. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.

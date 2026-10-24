@@ -65,9 +65,7 @@ export const LEGACY_FULL_SCOPE_BASELINE = [
 
 type ScopeGrant = { scopes: readonly string[]; scopeChoice?: "full" | "chosen" };
 export function effectiveScopeChoice(grant: ScopeGrant): "full" | "chosen" {
-  return grant.scopeChoice ?? (LEGACY_FULL_SCOPE_BASELINE.every(
-    (scope) => grant.scopes.includes(scope),
-  ) ? "full" : "chosen");
+  return grant.scopeChoice ?? "chosen";
 }
 
 /** Full connections include future catalog additions; chosen ones never widen. */
@@ -78,14 +76,14 @@ export function effectiveScopes(grant: ScopeGrant): readonly string[] {
 export function effectiveExpiry(grant: {
   expiresAt?: number; expiryChoice?: "none" | "chosen" | "automatic";
 }) {
-  return grant.expiryChoice === "automatic" ? undefined : grant.expiresAt;
+  return grant.expiresAt;
 }
 
 /** Validate a duration only after the caller has established explicit intent. */
 export function chosenExpiry(days: number | undefined, now: number) {
   if (days === undefined) return undefined;
-  if (!Number.isFinite(days) || days < 1 || days > 365 || !Number.isInteger(days)) {
-    throw new ConvexError("Choose a whole number of days from 1 to 365.");
+  if (!Number.isFinite(days) || days < 1 || !Number.isInteger(days)) {
+    throw new ConvexError("Choose a whole number of days of at least 1.");
   }
   return now + days * 86_400_000;
 }

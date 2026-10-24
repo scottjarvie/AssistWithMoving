@@ -1091,6 +1091,8 @@ export default defineSchema({
     tokenPreview: v.string(),
     secretHash: v.string(),
     scopes: v.array(apiKeyScope),
+    scopeChoice: v.optional(v.union(v.literal("full"), v.literal("chosen"))),
+    version: v.optional(v.number()),
     status: apiKeyStatus,
     expiresAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),

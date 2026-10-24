@@ -349,7 +349,7 @@ describe("Assist With Moving MCP capability discovery", () => {
     });
     const toolNames = [...registrations.keys()].sort();
 
-    expect(ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(33);
+    expect(ASSISTWITHMOVING_TRUSTED_HELPER_MCP_TOOLS).toHaveLength(34);
     expect(filter("save_box_intake")).toBe(true);
     expect(filter("create_box")).toBe(false);
     expect(toolNames).toContain("save_box_intake");
@@ -709,7 +709,7 @@ describe("Assist With Moving MCP capability discovery", () => {
       canonicalToolNames().length,
     );
     expect(
-      legacyToolNames.filter((name) => canonicalToolNames().includes(name)),
+      legacyToolNames.filter((name) => canonicalToolNames().includes(name) && name !== "reduce_connection"),
     ).toEqual([]);
   });
 

@@ -41,7 +41,7 @@ export const MCP_ENDPOINT = "https://movingmanifest.com/mcp";
 
 /** The scope literals the mutation accepts, taken from the shipped contract. */
 type ApproveArgs = FunctionArgs<typeof api.aiGrants.approve>;
-type GrantScope = ApproveArgs["scopes"][number];
+type GrantScope = NonNullable<ApproveArgs["scopes"]>[number];
 
 /**
  * The connection requirement, stated as a capability rather than a product
@@ -100,6 +100,7 @@ type GrantsResult = {
   boundaryVersion: string;
   consentPolicyVersion?: string;
   catalogFingerprint?: string;
+  historyFingerprint?: string;
   scopes: BoundaryScope[];
   neverExposed: string[];
   neverPermitted: string[];
@@ -286,6 +287,7 @@ export function AiConnectionManager() {
     try {
       await approveGrant({
         ...consent,
+        ...(grantsResult?.historyFingerprint ? { expectedHistoryFingerprint: grantsResult.historyFingerprint } : {}),
         scopeIntent: boundaryScopes.every(info => selectedScopes.includes(info.scope)) ? "full" : "chosen",
         expiryIntent: expiresInDays === 0 ? "none" : "chosen",
         householdId,

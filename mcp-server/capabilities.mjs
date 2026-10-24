@@ -51,11 +51,12 @@ export const ASSISTWITHMOVING_API_CAPABILITIES = [
     purpose:
       "Confirm the current API key's household, scopes, move restriction, and safe account context.",
     requiredScopes: ["valid API key"],
-    restEndpoints: ["GET /api/v1/me"],
-    mcpTools: ["get_api_context"],
+    restEndpoints: ["GET /api/v1/me", "POST /api/v1/me/access"],
+    mcpTools: ["get_api_context", "reduce_connection"],
     agentWorkflows: [
       "Check what a local agent is allowed to read or write before making changes.",
       "Detect whether a key is restricted to one move.",
+      "New keys default to all entitled current/future scopes, all owned moves and no end date. reduce_connection can only narrow the calling key, with a durable receipt and version. Only the person in Settings can widen or restore access.",
     ],
   },
   {

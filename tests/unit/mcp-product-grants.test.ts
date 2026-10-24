@@ -243,6 +243,7 @@ async function seedWorkspace(grant?: GrantOptions) {
     }
     return { userId, householdId, moveId, otherMoveId, itemId, queueItemId, grantId };
   });
+  if (grant && !grant.clientId) await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: CLIENT_ID });
   return { t, ...ids };
 }
 
@@ -274,7 +275,7 @@ describe("the scope catalog", () => {
     // ever consulted permissively; a scope with no tool is copy promising an
     // authority nothing can exercise.
     for (const name of STATELESS_MOVING_TOOL_NAMES) {
-      if (name === "describe_connection") continue;
+      if (["describe_connection", "reduce_connection"].includes(name)) continue;
       expect(scopeForTool(name), `${name} has no scope`).not.toBeNull();
     }
     const used = new Set(Object.values(MOVING_TOOL_SCOPES));
@@ -282,7 +283,7 @@ describe("the scope catalog", () => {
       expect([...used], `${scope} is published but unreachable`).toContain(scope);
     }
     expect(Object.keys(MOVING_TOOL_SCOPES).sort()).toEqual(
-      STATELESS_MOVING_TOOL_NAMES.filter((n) => n !== "describe_connection")
+      STATELESS_MOVING_TOOL_NAMES.filter((n) => !["describe_connection", "reduce_connection"].includes(n))
         .slice()
         .sort(),
     );
@@ -482,7 +483,7 @@ describe("enforcement on every call", () => {
     );
     const listed = await handler.fetch(modernRequest("tools/list"));
     const names = ((await listed.json()) as any).result.tools.map((t: any) => t.name);
-    expect(names).toEqual(["describe_connection"]);
+    expect(names).toEqual(["describe_connection", "reduce_connection"]);
     await handler.close();
   });
 

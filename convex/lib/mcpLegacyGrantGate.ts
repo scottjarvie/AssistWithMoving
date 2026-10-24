@@ -58,6 +58,7 @@ export const LEGACY_GATEWAY_TOOL_SCOPES: Readonly<
   Record<string, MovingScope>
 > = {
   // --- Reading the move context the person already sees -------------------
+  reduce_connection: "moving.context.read",
   get_agent_context: "moving.context.read",
   list_moves: "moving.context.read",
   get_move_summary: "moving.context.read",
@@ -338,6 +339,8 @@ export function decideLegacyGatewayAccess(input: {
 }): LegacyGateDecision {
   const { toolName, grants, moveId, mode, block } = input;
   const now = input.now ?? Date.now();
+
+  if (toolName === "reduce_connection") return grants.some(grant => grant.status === "active" && (effectiveExpiry(grant) === undefined || effectiveExpiry(grant)! > now)) ? { allowed: true } : { allowed: false, refusalCode: "GRANT_REQUIRED", reason: `No active calling connection. The person can restore access at ${GRANT_MANAGER_URL}.` };
 
   // The product ceiling is checked before anything else, so no grant state and
   // no future scope can talk its way past it.

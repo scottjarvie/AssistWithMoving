@@ -1850,8 +1850,9 @@ and retain only the labeled non-privileged test identity after cleanup.
   browser-sign-in clients.** Discovery:
   `/.well-known/oauth-protected-resource/mcp`.
 - **Legacy persisted OAuth compatibility:**
-  `https://movingmanifest.com/mcp/connect` — preserves the older 29-tool
-  Convex-gateway catalog for already-connected clients. It is not an alias for
+  `https://movingmanifest.com/mcp/connect` — preserves the original 29-tool
+  Convex-gateway catalog for already-connected clients plus `reduce_connection`
+  (30 tools total). It is not an alias for
   the canonical grant-gated catalog; do not use it for new setup unless
   compatibility is specifically required.
 - **API-key door:** `https://movingmanifest.com/api/mcp` — accepts `mmk_` API
@@ -1923,6 +1924,7 @@ connection never sees a capability nobody approved.
 | Tool | Required scope | Purpose |
 | --- | --- | --- |
 | `describe_connection` | none — always available | Report what this connection may currently do, what it can never do, and how the person changes that. Safe to call first when no other tools are listed. |
+| `reduce_connection` | none — always available | Reduce only the verified calling connection’s scopes, moveIds or expiry; pause or revoke. Requires expectedVersion; returns atomic durable audit receipt and version. Only the person in Settings can widen or restore access. |
 | `get_move_brief` | `moving.context.read` | First call. List bounded accessible moves or return one move's route, spaces, counts, review attention, saved planning records, and Queue summaries. |
 | `search_move_records` | `moving.context.read` | Search bounded items, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue summaries. |
 | `get_move_records` | `moving.context.read` | Hydrate up to 25 selected records with role-filtered detail. |
@@ -2097,7 +2099,8 @@ If that decision changes, maintainers must bump the version in
 `mcp-server/assistwithmoving-mcp.mjs`, publish from `mcp-server`, verify a clean
 install, and update every public setup surface in the same release.
 
-Available API-key HTTP/stdio MCP tools:
+Available API-key HTTP/stdio MCP tools (95 registered tools in the full registry;
+34 in the optional hosted trusted-helper subset, including `reduce_connection`):
 
 Agents using this larger registry should usually call `get_api_capabilities`
 first. It returns supported workflows, required scopes, REST endpoints, tool
@@ -2107,6 +2110,7 @@ names, and known launch blockers.
 | --- | --- |
 | `get_api_capabilities` | Inspect supported REST/MCP workflows, required scopes, tools, and known launch blockers without calling the API. |
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
+| `reduce_connection` | Reduce only this bearer key’s scopes, one selected move, or expiry; pause or revoke. Requires expectedVersion from get_api_context and returns a durable receipt/version. |
 | `list_household_members` | List real household login access for the API key household. |
 | `add_household_member` | Add an existing user or create a pending household invitation by email, with `dryRun` support. |
 | `list_moves` | List accessible moves. |
@@ -2247,13 +2251,13 @@ Recommended MCP key scopes depend on the intended agent:
 | Broad move assistant | `moves/read`, `moves/write`, `inventory/read`, `inventory/write`, `queue/read`, `queue/write`, `plans/read`, `plans/write`, `photos/write`, `exports/read`, `exports/create`, `members/manage` |
 | Layout Studio helper | `plans/read`, `plans/write`, plus `inventory/read` when placing real items or boxes |
 
-Prefer move-restricted API keys for headless or non-OAuth agents.
+Move-restricted API keys are an optional person choice for headless or non-OAuth agents.
 
 ## Security Guidance
 
 - Use separate keys per agent/client.
-- Prefer the smallest scope set that supports the workflow.
-- Prefer move-restricted keys when the agent only needs one move.
+- New connections default to full entitled access; the person may choose a smaller scope set.
+- The person may choose a move restriction when useful.
 - Store keys in an environment variable, secret manager, or password manager,
   not source code.
 - Use `dryRun` before write tools when an agent is planning a bulk change.
@@ -2285,13 +2289,21 @@ choose fewer permissions, add/change/remove an end date, or revoke the connectio
 Scope reductions write `scopeChoice: "chosen"`; all permissions on writes `"full"`.
 Explicit durations from older frontends are treated as person choices too.
 
-Legacy unmarked grants infer full access only if they contain every scope in the
-frozen five-scope baseline. Other legacy scope arrays remain exactly as stored,
-including the old four-scope automatic grant: provenance is insufficient to treat
-an arbitrary four-scope row as a request for full access. The owner can restore
-full access in settings. Old expiry is ignored only with an original automatic
-sign-in audit receipt, the exact old 30-day duration, original boundary version,
-and no person edits. Audit receipts are durable; missing proof leaves expiry enforced.
-No migration or production write is required or run for this read-time behavior.
-Revoked grants, selected-move limits, owner checks, and separate per-call safety
-boundaries remain enforced. API-key/stdio explicit key scopes remain separate.
+Only explicitly full grants follow future scopes. Legacy/unmarked and chosen
+scope arrays and every stored end date remain exact, including automatic old
+durations. No migration, lift, backfill or production record write is performed.
+New API keys likewise default to the full API catalog and no end date; explicit
+scope arrays remain chosen unless the person selects full. API-key exports and
+members capabilities retain their existing ceiling; canonical OAuth does not
+inherit those capabilities.
+
+All four doors offer `reduce_connection`. OAuth takes the calling client's
+current `expectedVersion` from `describe_connection` (canonical) or
+`connectionVersion` from `get_agent_context` (legacy). API-key HTTP/stdio use
+`get_api_context` and `POST /api/v1/me/access`. Inputs are `scopes`, `moveIds`,
+`expiresAt` and `action` (`narrow`, `pause`, `revoke`). Omitted fields preserve
+limits; null expiry, additions, reactivation and extension are refused with a
+Settings link. Pause ends access immediately; only the person can restore it.
+The change, version and durable audit receipt commit atomically. A caller cannot
+supply a sibling grant/key id. Current consent evidence remains required for
+person-side approvals even when access choices use defaults.
