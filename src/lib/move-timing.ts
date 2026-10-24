@@ -32,34 +32,46 @@ function relative(days: number): string {
   return days > 0 ? `in ${days} days` : `${-days} days ago`;
 }
 
-/** e.g. "in 21 days", "today", "under way", "ended 3 days ago". */
-export function describeMoveTiming(
+export type MoveWhen = {
+  /** "upcoming" (start today or later), "underWay" (between dates), "past". */
+  phase: "upcoming" | "underWay" | "past";
+  /** The date the wording is about: the start while upcoming, the end once past. */
+  day: string;
+  /** "in 21 days", "today", "3 days ago"; undefined while under way or unparseable. */
+  relative?: string;
+};
+
+/** Which date to talk about and how far away it is; undefined with no dates. */
+export function describeMoveWhen(
   dateStart?: string,
   dateEnd?: string,
   today: Date = new Date(),
-): string | undefined {
+): MoveWhen | undefined {
   const start = parseDay(dateStart);
   const end = parseDay(dateEnd);
-  if (start && end && daysBetween(start, today) > 0 && daysBetween(today, end) >= 0) {
-    return "under way";
+  if (start && daysBetween(today, start) >= 0) {
+    return { phase: "upcoming", day: formatMoveDay(dateStart)!, relative: relative(daysBetween(today, start)) };
   }
-  if (start && daysBetween(today, start) >= 0) return relative(daysBetween(today, start));
-  if (end) {
-    const untilEnd = daysBetween(today, end);
-    return untilEnd >= 0 ? relative(untilEnd) : `ended ${relative(untilEnd)}`;
+  if (end && daysBetween(today, end) >= 0) {
+    return start
+      ? { phase: "underWay", day: formatMoveDay(dateEnd)! }
+      : { phase: "upcoming", day: formatMoveDay(dateEnd)!, relative: relative(daysBetween(today, end)) };
   }
-  if (start) return relative(daysBetween(today, start));
-  return undefined;
+  if (end) return { phase: "past", day: formatMoveDay(dateEnd)!, relative: relative(daysBetween(today, end)) };
+  if (start) return { phase: "past", day: formatMoveDay(dateStart)!, relative: relative(daysBetween(today, start)) };
+  const raw = dateStart ?? dateEnd;
+  return raw ? { phase: "upcoming", day: raw } : undefined;
 }
 
-/** One line for cards: "Nov 14, 2026 · in 21 days", or undefined with no dates. */
+/** One line for cards: "Nov 14, 2026 · in 21 days", "Under way until Nov 15, 2026", "Moved Oct 21, 2026 · 3 days ago". */
 export function moveWhenLine(
   dateStart?: string,
   dateEnd?: string,
   today: Date = new Date(),
 ): string | undefined {
-  const day = formatMoveDay(dateStart) ?? formatMoveDay(dateEnd);
-  if (!day) return undefined;
-  const timing = describeMoveTiming(dateStart, dateEnd, today);
-  return timing ? `${day} · ${timing}` : day;
+  const when = describeMoveWhen(dateStart, dateEnd, today);
+  if (!when) return undefined;
+  if (when.phase === "underWay") return `Under way until ${when.day}`;
+  const day = when.phase === "past" ? `Moved ${when.day}` : when.day;
+  return when.relative ? `${day} · ${when.relative}` : day;
 }

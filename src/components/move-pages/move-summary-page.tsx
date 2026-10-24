@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { moveWorkspacePath } from "@/lib/move-links";
-import { describeMoveTiming, formatMoveDay } from "@/lib/move-timing";
+import { describeMoveWhen, formatMoveDay } from "@/lib/move-timing";
 
 // One agreed vocabulary for a move's lifecycle stage (MOVE-299): Planning →
 // Active → Completed, each with a hover explanation. "Archived" is here only so
@@ -188,11 +188,14 @@ export function MoveSummaryPage() {
       })
     : null;
 
-  const timing = describeMoveTiming(
-    selectedMove?.dateStart,
-    selectedMove?.dateEnd,
-  );
-  const whenValue = startDate ?? endDate;
+  const when = describeMoveWhen(selectedMove?.dateStart, selectedMove?.dateEnd);
+  const whenHeadline = !when
+    ? undefined
+    : when.phase === "underWay"
+      ? `Under way until ${when.day}`
+      : when.phase === "past"
+        ? `Moved ${when.day}`
+        : `Moving ${when.day}`;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -221,13 +224,13 @@ export function MoveSummaryPage() {
             </Tooltip>
           </div>
           <p className="min-w-0 text-base font-semibold text-foreground">
-            {whenValue ? (
+            {whenHeadline ? (
               <>
-                {timing === "under way" ? "Under way" : `Moving ${whenValue}`}
-                {timing && timing !== "under way" ? (
+                {whenHeadline}
+                {when?.relative ? (
                   <span className="font-normal text-muted-foreground">
                     {" "}
-                    · {timing}
+                    · {when.relative}
                   </span>
                 ) : null}
               </>
