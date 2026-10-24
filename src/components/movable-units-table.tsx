@@ -1224,6 +1224,12 @@ function MovableUnitCard({
   photoIds?: readonly Id<"itemPhotos">[];
 }) {
   const followUps = visibleFollowUps(unit);
+  const knownFacts = [
+    unit.missingFields.includes("weight") ? null : unit.weightLabel,
+    unit.densityLbPerCuFt === undefined ? null : unit.densityLabel,
+    unit.missingFields.includes("dimensions") ? null : unit.dimensionsLabel,
+    unit.missingFields.includes("volume") ? null : unit.volumeLabel,
+  ].filter((fact): fact is string => Boolean(fact));
 
   // The whole card opens detail (box → its page, loose item → the sheet). Taps
   // that land on the checkbox / a button / link are ignored by the shared guard
@@ -1269,7 +1275,7 @@ function MovableUnitCard({
           {/* The name is the row's identity — let it wrap instead of truncating. */}
           <p className="mt-1 text-sm font-medium leading-snug">{unit.name}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {unit.roomLabel} to {unit.destinationLabel}
+            {unit.roomLabel} → {unit.destinationLabel}
           </p>
         </div>
         {/* Big, comfortable selection target. */}
@@ -1284,34 +1290,23 @@ function MovableUnitCard({
         </label>
       </div>
 
-      {/* One bordered container with dividers instead of three nested boxes. */}
-      <div className="mt-3 grid grid-cols-2 divide-x divide-y divide-border rounded-md border border-border bg-muted/20 text-xs sm:grid-cols-3 sm:divide-y-0">
-        <div className="p-2">
-          <p className="text-muted-foreground">Weight</p>
-          <p className="mt-0.5 font-medium">{unit.weightLabel}</p>
-          {unit.densityLbPerCuFt === undefined ? null : (
-            <p className="text-muted-foreground">{unit.densityLabel}</p>
-          )}
-        </div>
-        <div className="p-2">
-          <p className="text-muted-foreground">Size</p>
-          <p className="mt-0.5 font-medium">{unit.dimensionsLabel}</p>
-          <p className="text-muted-foreground">{unit.volumeLabel}</p>
-        </div>
-        <div className="col-span-2 p-2 sm:col-span-1">
-          <p className="text-muted-foreground">Load</p>
-          <div className="mt-0.5">
-            <AssignmentBadge
-              state={unit.assignmentState}
-              label={unit.assignmentLabel}
-              className="h-auto max-w-full whitespace-normal break-words text-left"
-            />
-          </div>
-        </div>
+      {/* One line of what is known, then the load state. Missing measurements
+          are said once — as the "add …" chips below, which open the editor. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        {knownFacts.length ? (
+          <span className="font-medium text-foreground">
+            {knownFacts.join(" · ")}
+          </span>
+        ) : null}
+        <AssignmentBadge
+          state={unit.assignmentState}
+          label={unit.assignmentLabel}
+          className="h-auto max-w-full whitespace-normal break-words text-left"
+        />
       </div>
 
       {followUps.length ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {followUps.map((followUp) =>
             isSizeFollowUp(followUp) ? (
               <EditSizeButton

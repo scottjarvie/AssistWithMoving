@@ -157,9 +157,7 @@ describe("InventoryTable", () => {
       within(facetGroup).getByRole("button", { name: /All/ }),
     ).toHaveAttribute("aria-pressed", "true");
 
-    // Action strip + counts.
-    expect(screen.getByText("Inventory actions")).toBeInTheDocument();
-    expect(screen.getByText("1 shown / 1 total")).toBeInTheDocument();
+    // Shortcuts + the one count line, beside the records.
     expect(
       screen.getByRole("button", { name: "Add item" }),
     ).toBeInTheDocument();

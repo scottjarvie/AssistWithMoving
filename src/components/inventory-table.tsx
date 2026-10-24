@@ -1146,7 +1146,6 @@ export function InventoryTable({
                 inline, or select rows to re-classify in a batch.
               </CardDescription>
             </div>
-            <Badge variant="secondary">{filteredItems.length} visible</Badge>
           </div>
         </CardHeader>
         <CardContent>
@@ -1222,48 +1221,6 @@ export function InventoryTable({
                 })}
               </div>
 
-              <div className="rounded-md border border-border bg-background p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-medium">Inventory actions</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {filteredItems.length} shown / {totalItemCount} total
-                      {selectedCount ? ` / ${selectedCount} selected` : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => setActiveTaskTab("add")}
-                    >
-                      <PackagePlus aria-hidden="true" />
-                      Add item
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setActiveTaskTab("bulk")}
-                    >
-                      <ClipboardList aria-hidden="true" />
-                      Bulk paste
-                    </Button>
-                    {hasActiveBrowseFilters ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={clearBrowseFilters}
-                      >
-                        <RotateCcw aria-hidden="true" />
-                        Clear filters
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
               <section
                 aria-labelledby="inventory-filter-heading"
                 className="rounded-md border border-border bg-muted/20 p-3"
@@ -1281,27 +1238,16 @@ export function InventoryTable({
                       Find and filter
                     </h3>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <Badge variant="outline">
-                      {activeSavedFilter?.label ?? "All inventory"}
-                    </Badge>
-                    <Badge variant="secondary">
-                      {filteredItems.length} of {totalItemCount} records
-                    </Badge>
-                    <Badge variant="outline">
-                      {visibleColumnCount} columns
-                    </Badge>
-                  </div>
                 </div>
 
                 <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
                   <div className="relative min-w-0">
                     <Search
-                      className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+                      className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                       aria-hidden="true"
                     />
                     <Input
-                      className="pl-8"
+                      className="h-11 pl-8 md:h-9"
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Search items, rooms, people, categories"
@@ -1309,7 +1255,7 @@ export function InventoryTable({
                     />
                   </div>
                   <select
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    className="h-11 rounded-md border border-input bg-background px-2 text-base md:h-9 md:text-sm"
                     value={ownerFilter}
                     aria-label="Owner or contact filter"
                     onChange={(event) =>
@@ -1325,12 +1271,15 @@ export function InventoryTable({
                     ))}
                   </select>
                   <details className="rounded-md border border-border bg-background px-3 py-2">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
+                    <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 text-sm font-medium">
                       <Columns3
                         className="size-4 text-primary"
                         aria-hidden="true"
                       />
                       Columns
+                      <span className="font-normal text-muted-foreground">
+                        {visibleColumnCount} shown
+                      </span>
                     </summary>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {hideableColumns.map((column) => {
@@ -1377,8 +1326,11 @@ export function InventoryTable({
                 </div>
 
                 <details className="mt-2 rounded-md border border-border bg-background px-3 py-2 md:hidden">
-                  <summary className="cursor-pointer list-none text-sm font-medium">
+                  <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 text-sm font-medium">
                     Saved views
+                    <span className="font-normal text-muted-foreground">
+                      {activeSavedFilter?.label ?? "All inventory"}
+                    </span>
                   </summary>
                   <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                     {inventorySavedFilters.map((filter) => (
@@ -1423,12 +1375,42 @@ export function InventoryTable({
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold">Inventory records</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {filteredItems.length} filtered
-                    {selectedCount ? ` / ${selectedCount} selected` : ""}
+                  <p className="text-xs text-muted-foreground" role="status">
+                    {filteredItems.length} of {totalItemCount} records
+                    {selectedCount ? ` · ${selectedCount} selected` : ""}
                   </p>
                 </div>
-                <SortMenu value={sortField} onChange={setSortField} />
+                <div className="flex flex-wrap items-center gap-2">
+                  {hasActiveBrowseFilters ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearBrowseFilters}
+                    >
+                      <RotateCcw aria-hidden="true" />
+                      Clear filters
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActiveTaskTab("bulk")}
+                  >
+                    <ClipboardList aria-hidden="true" />
+                    Bulk paste
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setActiveTaskTab("add")}
+                  >
+                    <PackagePlus aria-hidden="true" />
+                    Add item
+                  </Button>
+                  <SortMenu value={sortField} onChange={setSortField} />
+                </div>
               </div>
 
               <DataTable
