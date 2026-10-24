@@ -2311,9 +2311,17 @@ person-side approvals even when access choices use defaults.
 
 ### Shared OAuth credential history and connection metadata
 
-The canonical raw OAuth client id and its historical `legacy:` compatibility
-alias share an enforcement boundary. Each alias's latest decision is resolved
-from its complete bounded history before status filtering. If both aliases
+Both doors use the resolved identity from the verified OAuth claim after required
+metadata validation. Both `client_id` and `azp` use the same extraction rule;
+conflicting client identities are refused before effects. The internal `legacy:`
+history namespace cannot be supplied as an OAuth client claim to skip CIMD proof.
+Historical raw ids, their `legacy:` compatibility aliases,
+and equivalent CIMD URL serializations share an enforcement boundary. URL
+comparison uses the same URL serialization as metadata validation (including
+host case, default port, root slash and dot segments); distinct paths, queries
+and opaque client ids remain distinct. No caller-supplied alias or metadata name
+can link unrelated identities. Each exact stored alias's latest decision is
+resolved from its complete bounded history before status filtering. If aliases
 exist, allowed scopes and moves are their intersection, the earliest stored
 end date applies, and a refusal on either alias blocks both doors. Switching
 doors cannot mint another full grant or bypass a reduction. These are read-time
@@ -2321,8 +2329,11 @@ rules: existing grants, exact legacy arrays, dates and revocations are not
 renamed, migrated or lifted. Only person edits with the existing loaded
 revision and consent checks can increase each governing stored approval.
 Own-access reductions use the effective connection revision (the sum of the
-current alias revisions when both exist), so an edit on either alias invalidates
-a previously loaded reduction revision.
+current alias revisions), so an edit on either alias invalidates
+a previously loaded reduction revision. Because URL serialization cannot be
+reversed to enumerate all historical spellings, URL clients read the complete
+owner history with a 128-row safety bound and fail closed on overflow. Opaque
+clients keep bounded exact indexed lookups. No truncated scan may authorize.
 
 Both OAuth doors validate a required Client ID Metadata Document through the
 bounded, DNS-pinned Node action before creating or binding a grant. Failed

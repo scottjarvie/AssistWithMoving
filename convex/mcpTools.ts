@@ -4,6 +4,7 @@
 // the identity bridge — NEVER ctx.auth, which is null across the component
 // boundary. Phase 1 ships a read-only core; write tools follow the same shape.
 import { ConvexError, v } from "convex/values";
+import { oauthClientIdFromClaims } from "./lib/mcpClientIdentity";
 import { activeGrantsForUser } from "./aiGrants";
 import { mcpCallerValidator } from "convex-mcp-gateway";
 
@@ -20,7 +21,10 @@ export const getAgentContext = internalQuery({
   args: { caller: mcpCallerValidator },
   handler: async (ctx, args) => {
     const user = await requireUserBySubject(ctx, args.caller.subject);
-    const client = args.caller.claims?.client_id ?? args.caller.claims?.azp;
+    let client: string | undefined;
+    try { client = oauthClientIdFromClaims(args.caller.claims); }
+    catch { throw new ConvexError("Reconnect with an unambiguous OAuth client identity."); }
+    // The shared resolver includes normalized URL history for this verified claim.
     const connection = typeof client === "string" ? (await activeGrantsForUser(ctx, user._id, `legacy:${client}`, Date.now()))[0] : undefined;
 
 
