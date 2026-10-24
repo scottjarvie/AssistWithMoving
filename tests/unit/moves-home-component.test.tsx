@@ -20,6 +20,8 @@ const movesHomeData = vi.hoisted(() => ({
   push: vi.fn(),
   selectHousehold: vi.fn(),
   selectMove: vi.fn(),
+  listForHouseholdArgs: null as unknown,
+  allMoves: [] as unknown[],
   workspace: {
     householdId: null as Id<"households"> | null,
     households: [] as unknown[],
@@ -41,7 +43,13 @@ vi.mock("convex/react", () => ({
     mutation === apiMock.households.create
       ? movesHomeData.createHousehold
       : movesHomeData.createMove,
-  useQuery: () => [],
+  useQuery: (query: string, args?: unknown) => {
+    if (query === apiMock.moves.listForHousehold) {
+      movesHomeData.listForHouseholdArgs = args;
+      return movesHomeData.allMoves;
+    }
+    return [];
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -86,6 +94,8 @@ describe("MovesHome", () => {
     movesHomeData.workspace.loadingHouseholds = false;
     movesHomeData.workspace.loadingMoves = false;
     movesHomeData.workspace.loadingParticipantMoves = false;
+    movesHomeData.listForHouseholdArgs = null;
+    movesHomeData.allMoves = [];
   });
 
   it("creates the private workspace and first move from one short form", async () => {
@@ -145,6 +155,24 @@ describe("MovesHome", () => {
     expect(link).toHaveClass("absolute", "inset-0", "z-0");
     expect(menu.closest("a")).toBeNull();
     expect(menu.closest(".z-10")).not.toBeNull();
+  });
+
+  it("keeps participant-only moves visible without household-only queries or actions", () => {
+    movesHomeData.workspace.householdId = "household_shared" as Id<"households">;
+    movesHomeData.workspace.activeMoves = [
+      {
+        _id: "move_shared" as Id<"moves">,
+        title: "Shared move",
+        status: "active",
+      },
+    ];
+
+    render(<MovesHome />);
+
+    expect(movesHomeData.listForHouseholdArgs).toBe("skip");
+    expect(screen.getByRole("link", { name: "Open Shared move" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "New move" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Move menu" })).toBeNull();
   });
 
   it("keeps a dense move list searchable, filterable, and deterministically sortable", async () => {
