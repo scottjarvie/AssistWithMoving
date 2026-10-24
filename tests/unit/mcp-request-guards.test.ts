@@ -494,6 +494,147 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
     req.headers.set("mcp-method", "tools/list");
     return req;
   }
+  // Actual HTTP/gateway handlers and direct internal legacy handlers share a
+  // real DB. Only token verification and the protected outbound fetch are fake.
+  for (const claim of ["https://client.example", "https://CLIENT.example:443", "https://client.example/a/../"]) {
+    for (const firstDoor of ["canonical", "persisted"]) {
+      it(`keeps reductions across both doors and normalized tokens: ${claim}, first ${firstDoor}`, async () => {
+        const f = await fixture(false);
+        const normalized = new URL(claim).toString();
+        const ctx = {
+          runQuery: (ref: any, args: any) => f.t.query(ref, args),
+          runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+          runAction: async () => JSON.stringify({ client_id: normalized, redirect_uris: ["https://client.example/callback"] }),
+        } as any;
+        const { createLegacyGrantGate } = await import("../../convex/http");
+        const { handleMcpRequestForTests } = await loadRoute();
+        const canonical = async (id = claim) => {
+          const token = verifiedToken(id);
+          verifyMock.mockResolvedValue({ ...token, payload: { ...token.payload, client_id: normalized } });
+          const response = await handleMcpRequestForTests(ctx, listRequest());
+          expect(response.status).toBe(200);
+          return (await response.json()).result.tools.map((tool: any) => tool.name);
+        };
+        const persisted = (id = claim) => createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: id, azp: normalized } }, toolName: "list_moves", mode: "list" } as any);
+        if (firstDoor === "canonical") await canonical(); else expect((await persisted()).allowed).toBe(true);
+        const initial = await f.snapshot();
+        expect(initial.grants).toHaveLength(1);
+        expect(initial.grants[0]).toMatchObject({ clientId: normalized, scopeChoice: "full", moveScope: "allMoves", expiryChoice: "none" });
+        const expiresAt = Date.now() + 200_000;
+        const caller = { subject: SUBJECT, claims: { client_id: claim } };
+        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: ["moving.queue.work"], expiresAt });
+        expect(await canonical()).not.toContain("get_move_brief");
+        expect((await persisted()).allowed).toBe(false);
+        expect(await canonical(normalized)).not.toContain("get_move_brief");
+        expect((await persisted(normalized)).allowed).toBe(false);
+        expect((await f.t.query(internal.mcpTools.getAgentContext, { caller })).connectionVersion).toBe(2);
+        const narrowed = await f.snapshot();
+        expect(narrowed.grants).toHaveLength(1);
+        expect(narrowed.grants[0]).toMatchObject({ expiresAt, scopes: ["moving.queue.work"] });
+        await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/changed/);
+        expect(await f.snapshot()).toEqual(narrowed);
+        await f.t.mutation(internal.aiGrants.reduceConnection, { subject: SUBJECT, clientId: normalized, expectedVersion: 2, expiresAt: expiresAt - 10_000, scopes: [] });
+        expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+        expect((await persisted()).allowed).toBe(false);
+        await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 3, action: "pause" });
+        expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+        expect((await persisted(normalized)).allowed).toBe(false);
+        const row = (await f.snapshot()).grants[0];
+        await f.owner.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: row.version });
+        const revoked = await f.snapshot();
+        await canonical(normalized);
+        expect((await persisted()).allowed).toBe(false);
+        expect(await f.snapshot()).toEqual(revoked);
+      });
+    }
+  }
+
+  for (const door of ["canonical", "persisted"]) {
+    for (const restriction of ["expired", "revoke-during-metadata", "invalid-metadata"]) {
+      it(`honors raw history on ${door}: ${restriction}`, async () => {
+        const f = await fixture(false);
+        const claim = "https://CLIENT.example:443";
+        const normalized = "https://client.example/";
+        await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: `legacy:${claim}` });
+        const row = (await f.snapshot()).grants[0];
+        if (restriction === "expired") await f.t.run(ctx => ctx.db.patch(row._id, { expiresAt: Date.now() - 1, expiryChoice: undefined }));
+        let expected = await f.snapshot();
+        const ctx = {
+          runQuery: (ref: any, args: any) => f.t.query(ref, args),
+          runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+          runAction: async () => {
+            if (restriction === "revoke-during-metadata") {
+              await f.owner.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: row.version });
+              expected = await f.snapshot();
+            }
+            return JSON.stringify({ client_id: restriction === "invalid-metadata" ? "https://unrelated.example/" : normalized, redirect_uris: ["https://client.example/callback"] });
+          },
+        } as any;
+        if (door === "canonical") {
+          verifyMock.mockResolvedValue(verifiedToken(claim));
+          const { handleMcpRequestForTests } = await loadRoute();
+          const response = await handleMcpRequestForTests(ctx, listRequest());
+          expect(response.status).toBe(restriction === "invalid-metadata" ? 401 : 200);
+          if (response.status === 200) expect((await response.json()).result.tools.map((tool: any) => tool.name)).toEqual(["describe_connection", "reduce_connection"]);
+        } else {
+          vi.spyOn(console, "error").mockImplementation(() => undefined);
+          const { createLegacyGrantGate } = await import("../../convex/http");
+          expect((await createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: claim } }, toolName: "list_moves", mode: "list" } as any)).allowed).toBe(false);
+        }
+        expect(await f.snapshot()).toEqual(expected);
+      });
+    }
+  }
+
+  it.each([
+    { client_id: "sibling-b", azp: "sibling-a" },
+    { client_id: "legacy:https://client.example/", azp: "legacy:https://client.example/" },
+  ])("rejects ambiguous or supplied history-alias claims %j on both doors and direct legacy handlers without effects", async (invalidClaims) => {
+    const f = await fixture(true);
+    const before = await f.snapshot();
+    const token = verifiedToken("sibling-a");
+    const claims = { ...token.payload, ...invalidClaims };
+    verifyMock.mockResolvedValue({ ...token, payload: claims });
+    const ctx = {
+      runQuery: (ref: any, args: any) => f.t.query(ref, args),
+      runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+      runAction: vi.fn(),
+    } as any;
+    const { createLegacyGrantGate } = await import("../../convex/http");
+    const { handleMcpRequestForTests } = await loadRoute();
+    expect((await handleMcpRequestForTests(ctx, listRequest())).status).toBe(401);
+    expect((await createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims }, toolName: "list_moves", mode: "list" } as any)).allowed).toBe(false);
+    const caller = { subject: SUBJECT, claims };
+    await expect(f.t.query(internal.mcpTools.getAgentContext, { caller })).rejects.toThrow(/unambiguous/);
+    await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: 1, scopes: [] })).rejects.toThrow(/unambiguous/);
+    expect(ctx.runAction).not.toHaveBeenCalled();
+    expect(await f.snapshot()).toEqual(before);
+  });
+
+  it("serializes first contact through both real doors after metadata validation", async () => {
+    const f = await fixture(true);
+    const claim = "https://CLIENT.example:443";
+    const normalized = "https://client.example/";
+    verifyMock.mockResolvedValue(verifiedToken(claim));
+    const ctx = {
+      runQuery: (ref: any, args: any) => f.t.query(ref, args),
+      runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+      runAction: async () => JSON.stringify({ client_id: normalized, redirect_uris: ["https://client.example/callback"] }),
+    } as any;
+    const { createLegacyGrantGate } = await import("../../convex/http");
+    const { handleMcpRequestForTests } = await loadRoute();
+    const [canonical, persisted] = await Promise.all([
+      handleMcpRequestForTests(ctx, listRequest()),
+      createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: claim } }, toolName: "list_moves", mode: "list" } as any),
+    ]);
+    expect(canonical.status).toBe(200);
+    expect(persisted.allowed).toBe(true);
+    const after = await f.snapshot();
+    expect(after.grants).toHaveLength(1);
+    expect(after.grants[0].clientId).toBe(normalized);
+    expect(after.activities.filter(row => row.type === "clientBound")).toHaveLength(1);
+  });
+
   for (const invalid of ["unreachable", "malformed", "wrong-id"]) {
     it(`also refuses ${invalid} on the persisted compatibility door before binding`, async () => {
       const f = await fixture(true);

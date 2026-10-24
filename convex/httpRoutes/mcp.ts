@@ -26,8 +26,7 @@ import {
 } from "../lib/aiGrants";
 import {
   ClientIdentityError,
-  looksLikeClientIdMetadataDocument,
-  normalizeClientIdUrl,
+  oauthClientIdFromClaims,
   resolveClientIdentity,
   type ResolvedClientIdentity,
 } from "../lib/mcpClientIdentity";
@@ -185,6 +184,7 @@ class TokenFault extends Error {}
 function isTokenFault(error: unknown): boolean {
   return (
     error instanceof TokenFault ||
+    error instanceof ClientIdentityError ||
     error instanceof joseErrors.JWTExpired ||
     error instanceof joseErrors.JWTClaimValidationFailed ||
     error instanceof joseErrors.JWTInvalid ||
@@ -282,12 +282,7 @@ async function verifyOAuth(
     if (!subject || !result.payload.exp) {
       throw new TokenFault("Missing OAuth subject or expiry.");
     }
-    const clientId =
-      typeof result.payload.azp === "string"
-        ? result.payload.azp
-        : typeof result.payload.client_id === "string"
-          ? result.payload.client_id
-          : null;
+    const clientId = oauthClientIdFromClaims(result.payload);
     if (!clientId) throw new TokenFault("Missing OAuth client identifier.");
     if (clientId.length > 160) throw new TokenFault("OAuth client identifier is too long.");
     // Clerk's production dynamic-registration access tokens currently omit
@@ -1283,20 +1278,16 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
   >;
   let grantedScopes: MovingScope[] = [];
   try {
-    const claimsMetadata = looksLikeClientIdMetadataDocument(auth.clientId);
-    const clientId = claimsMetadata
-      ? normalizeClientIdUrl(auth.clientId).toString()
-      : auth.clientId;
-
     // Validate required client metadata before any issuance or binding. The
     // mutation below re-reads current history atomically after network I/O.
-    identity = await resolveClientIdentity(clientId, {
+    identity = await resolveClientIdentity(auth.clientId, {
       declaredClientName,
       fetchMetadata: (metadataClientId) =>
         actionCtx.runAction((internal as any).mcpClientMetadata.fetchDocument, {
           clientId: metadataClientId,
         }),
     });
+    const clientId = identity.clientId;
     try {
       await actionCtx.runMutation((internal as any).aiGrants.touchLegacyConnection, {
         subject, clientId, clientName: identity.clientName ?? declaredClientName,

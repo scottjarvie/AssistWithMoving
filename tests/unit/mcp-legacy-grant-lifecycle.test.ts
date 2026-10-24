@@ -800,8 +800,12 @@ it("requires loaded history for unbound refusal recovery and refuses stale dupli
 });
 
 
-describe("R1 OAuth aliases enforce one credential's authority", () => {
-  const aliases = ["alias-client", "legacy:alias-client"];
+describe.each([
+  [["alias-client", "legacy:alias-client"]],
+  [["https://client.example", "legacy:https://client.example/"]],
+  [["https://client.example/", "legacy:https://CLIENT.example:443"]],
+  [["https://CLIENT.example:443/a/../client.json", "legacy:https://client.example/client.json"]],
+])("OAuth history variants %j enforce one credential's authority", (aliases) => {
   const access = (t: TestConvex<typeof schema>, clientId: string) => t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId });
 
   for (const first of aliases) {
@@ -900,6 +904,77 @@ describe("R1 OAuth aliases enforce one credential's authority", () => {
     for (const clientId of aliases) expect((await access(t, clientId)).grants).toEqual([]);
     expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(2);
+  });
+});
+
+
+describe("normalized URL histories preserve all governing stored decisions", () => {
+  const aliases = ["https://CLIENT.example:443", "legacy:https://client.example", "https://client.example/", "legacy:https://client.example/"];
+  for (const refusal of ["limits", "revoked", "expired", "paused"] as const) {
+    it(`honors ${refusal} across raw/legacy/normalized duplicates without touching rows`, async () => {
+      const t = convexTest(schema, modules);
+      const { householdId, userId } = await seedOwner(t);
+      const [a, b] = await Promise.all(["A", "B"].map(title => t.run(ctx => ctx.db.insert("moves", { householdId, title, type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }))));
+      await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: aliases[0] });
+      const expiry = Date.now() + 100_000;
+      await t.run(async ctx => {
+        const original = (await ctx.db.query("aiGrants").first())!;
+        const { _id, _creationTime, ...fields } = original;
+        expect(_creationTime).toBeTypeOf("number");
+        for (const [index, clientId] of aliases.entries()) {
+          if (index === 0) await ctx.db.patch(_id, { scopes: ["moving.context.read", "moving.queue.work"], scopeChoice: undefined, moveScope: "selectedMoves", moveIds: [a], expiresAt: expiry, expiryChoice: undefined });
+          else await ctx.db.insert("aiGrants", { ...fields, clientId, approvedAt: original.approvedAt + index, scopes: ["moving.context.read", "moving.work.write"], scopeChoice: "chosen", moveScope: "selectedMoves", moveIds: [a, b], expiresAt: expiry + index * 10_000 });
+        }
+        if (refusal === "revoked") await ctx.db.patch(_id, { status: "revoked", revokedAt: original.approvedAt + 1 });
+        if (refusal === "expired" || refusal === "paused") await ctx.db.patch(_id, { expiresAt: Date.now() - 1, ...(refusal === "paused" ? { expiryChoice: "chosen" as const } : {}) });
+        // An older broad duplicate must not replace the raw alias's decision.
+        await ctx.db.insert("aiGrants", { ...fields, approvedAt: original.approvedAt - 10 });
+      });
+      const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+      for (const clientId of aliases) {
+        const result = await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId });
+        const touched = await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+        if (refusal === "limits") {
+          expect(result.grants).toEqual([expect.objectContaining({ scopes: ["moving.context.read"], moveIds: [a], expiresAt: expiry, version: 4 })]);
+          expect(touched.block).toBeUndefined();
+          await expect(t.run(ctx => hasQueueWorkGrant(ctx, { subject: SUBJECT, issuer: ISSUER, clientId }, b))).resolves.toBe(false);
+          await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, moveIds: [b] })).rejects.toThrow(/settings/);
+          await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, expiresAt: expiry + 1 })).rejects.toThrow(/settings/);
+        } else {
+          expect(result.grants).toEqual([]);
+          expect(touched.block).toBe(refusal === "revoked" ? "revoked" : "expired");
+        }
+      }
+      expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+      if (refusal === "limits") {
+        await t.mutation(grants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: aliases[0] } }, expectedVersion: 4, scopes: [], expiresAt: expiry - 1 });
+        for (const clientId of aliases) {
+          expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).grants).toEqual([expect.objectContaining({ scopes: [], version: 5, expiresAt: expiry - 1 })]);
+          await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, scopes: [] })).rejects.toThrow(/changed/);
+        }
+      }
+    });
+  }
+
+  it("does not merge distinct URL paths/queries, opaque siblings or invalid stored URLs", async () => {
+    const t = convexTest(schema, modules);
+    await seedOwner(t);
+    for (const clientId of ["https://client.example/path", "https://client.example/path/", "https://client.example/path?x=1", "https://client.example/path?x=2", "opaque-client"]) {
+      await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+    }
+    const rows = await t.run(ctx => ctx.db.query("aiGrants").collect());
+    expect(rows).toHaveLength(5);
+    await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "https://CLIENT.example:443/path", expectedVersion: 1, action: "revoke" });
+    for (const row of rows.filter(row => row.clientId !== "https://client.example/path")) {
+      expect(await t.run(ctx => ctx.db.get(row._id))).toEqual(row);
+      expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: row.clientId })).grants).toHaveLength(1);
+    }
+    await t.run(async ctx => {
+      const { _id, _creationTime, ...fields } = rows[0];
+      await ctx.db.insert("aiGrants", { ...fields, clientId: "https://client.example/path#not-a-valid-CIMD", status: "revoked" });
+      expect((await ctx.db.get(_id))?._creationTime).toBe(_creationTime);
+    });
+    expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: "https://client.example/path/" })).grants).toHaveLength(1);
   });
 });
 
