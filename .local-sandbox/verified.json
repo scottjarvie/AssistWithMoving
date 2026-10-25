@@ -1,0 +1,46 @@
+{
+  "verifiedAt": "2026-10-08T02:02:15.816Z",
+  "deployment": "anonymous:anonymous-moving-completion-20261007",
+  "api": "http://127.0.0.1:4321",
+  "site": "http://127.0.0.1:4322",
+  "issuer": "https://glorious-swine-50.clerk.accounts.dev",
+  "audience": "convex",
+  "sourcePushed": true,
+  "sourcePin": "eff429bb8f77a2bf09da97a4f14de1af4eebd7da",
+  "providerEnvironmentEmpty": true,
+  "observedProviderEnvironmentNames": [],
+  "observedCronCount": 0,
+  "cronsDisabled": true,
+  "observedAuthProviders": [
+    {
+      "domain": "https://glorious-swine-50.clerk.accounts.dev",
+      "applicationID": "convex"
+    }
+  ],
+  "providerActionsDisabled": true,
+  "httpActionsDisabled": true,
+  "guardSha256": "dbfddd46b6e30b382d1a5b62f8475325ae8c02348cbbabbd9fcbe0fb8e2f49ed",
+  "authConfigSha256": "a4f2db41aea9deb6028af7b3fff1865735fb33778811c655eaac319e080b6f9c",
+  "cronsSha256": "7ffad2ec729089754a8b5e4c65c8aaf6408e3d22bdc9e4fb63a18017786fb66c",
+  "synthetic": {
+    "run": "moving-native-synthetic-1791424935610",
+    "createFreshRead": true,
+    "updateFreshRead": true,
+    "foreignReadDenied": true,
+    "foreignWriteDenied": true,
+    "ownerId": "rn74q5dam616kttjcweapq12js8fxxj9",
+    "otherId": "rn75mpa10jmtgyrsk2mnqf3qpd8fxg1m",
+    "cleanup": "Existing cleanup gate refused; no ordinary household removal exists. Retained clearly marked synthetic owner/other users, their implicit containers, proof household/membership and audit rows. No gate weakened.",
+    "fixtureId": "n17bfygpznrf4nf3afr0sjajd58fwxcj"
+  },
+  "method": "Native admin acting-identity simulation only; not browser JWT acceptance",
+  "browser": "Sign-in/token/save/reload still unverified",
+  "fullSandboxOwnerAcceptance": "Native supported record path proved; browser acceptance pending",
+  "observedRetainedTableCounts": {
+    "users": 2,
+    "households": 3,
+    "householdMemberships": 3,
+    "auditLogs": 4
+  },
+  "retainedCountsObservedAt": "2026-10-08T02:03:07.262Z"
+}
