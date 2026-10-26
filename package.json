@@ -104,6 +104,6 @@
       "@modelcontextprotocol/sdk": "$@modelcontextprotocol/sdk"
     },
     "hono": "4.13.11",
-    "undici": "7.29.1"
+    "undici": "7.30.1"
   }
 }
