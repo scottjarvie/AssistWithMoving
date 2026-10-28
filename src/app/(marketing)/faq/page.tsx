@@ -125,19 +125,18 @@ const faqs: Faq[] = [
     question: "How do I get help or report a problem?",
     answer: (
       <>
-        Through the{" "}
+        Check the{" "}
         <a
           href={supportDeskUrl("home")}
           className="text-foreground underline underline-offset-4 hover:text-primary"
         >
           {supportDesk.name}
         </a>
-        . Every Assist With product shares that one desk, so a question, bug
-        report, or privacy request about your move goes to the same place and
-        arrives tagged as coming from Assist With Moving. There is no support
-        email address, and none is planned — Assist With Moving does not run a
-        mailbox, so the desk is the whole support path. If you see an email
-        address claiming to be Assist With Moving support, it is not us.
+        . It shows the current intake status for the whole family. When intake
+        is open, use it for questions, bug reports, or privacy requests about
+        your move. When intake is closed, the desk cannot accept or save requests.
+        There is no support email address, and none is planned — Assist With
+        Moving does not run a mailbox.
       </>
     ),
   },
@@ -216,8 +215,9 @@ export default function FaqPage() {
             The feature, AI, and privacy pages go deeper than this list. If you
             want to see how your assistant connects or how packets stay scoped to
             each recipient, those are the best next reads. If the answer is not
-            written down anywhere, ask at the {supportDesk.name} — there is no
-            support email address to write to instead.
+            written down anywhere, check the {supportDesk.name} for its current
+            intake status before preparing a request. There is no support email
+            address to write to instead.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <a
