@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Server-side parser: jsdom swaps in its own File class, which Node 24's
+// built-in multipart parser rejects, so request.formData() fails under jsdom.
+
 import { describe, expect, it } from "vitest";
 
 import {
