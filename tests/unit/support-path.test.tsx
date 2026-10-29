@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
   default: ({
@@ -17,6 +17,9 @@ vi.mock("next/link", () => ({
 }));
 
 import { PublicFooter } from "@/components/public-page-chrome";
+import AboutPage from "@/app/(marketing)/about/page";
+import FaqPage from "@/app/(marketing)/faq/page";
+import PrivacyPage from "@/app/(marketing)/privacy/page";
 import { supportDesk, supportDeskUrl } from "@/lib/support";
 
 const repoRoot = path.resolve(__dirname, "../..");
@@ -35,6 +38,42 @@ const publicCopySources = [
 ];
 
 describe("support path", () => {
+  afterEach(cleanup);
+
+  it.each([
+    ["About", AboutPage],
+    ["FAQ", FaqPage],
+    ["Privacy", PrivacyPage],
+  ] as const)(
+    "%s explains that closed intake cannot accept or save requests",
+    (_name, Page) => {
+      const { container } = render(<Page />);
+      expect(container).toHaveTextContent(/current intake status/);
+      expect(container).toHaveTextContent(
+        /when intake is closed, the desk cannot accept or save (?:reports|requests)/i,
+      );
+    },
+  );
+
+  it("keeps the privacy request path conditional without removing account controls", () => {
+    render(<PrivacyPage />);
+    const heading = screen.getByRole("heading", {
+      name: "Privacy questions and requests",
+    });
+    const paragraph = heading.nextElementSibling;
+    expect(paragraph).toHaveTextContent(/check the current intake status/i);
+    expect(paragraph).toHaveTextContent(
+      /when intake is open, use it for a privacy question, data request/i,
+    );
+    expect(paragraph).toHaveTextContent(/direct email contact is not available/i);
+    expect(paragraph).toHaveTextContent(
+      /account-level export and deletion controls also live in your settings once you are signed in/i,
+    );
+    expect(paragraph?.querySelector("a")).toHaveAttribute(
+      "href", supportDeskUrl("home"),
+    );
+  });
+
   it("builds a desk link the central desk can attribute to Assist With Moving", () => {
     const url = new URL(supportDeskUrl("home"));
 

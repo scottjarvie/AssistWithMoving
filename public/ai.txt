@@ -5,7 +5,9 @@ Authentication: OAuth browser sign-in with the person's Assist With Moving accou
 Authority: a product grant the person approves inside Assist With Moving
 Human setup: https://movingmanifest.com/ai/start
 Human support: https://assistwithlife.com/support?v=1&source=assist-with-moving
-  (the central Assist With Life support desk — the only support path). Assist
+  (the central Assist With Life support desk — the only support path). Check
+  its current intake status; when intake is closed, the desk cannot accept or
+  save requests. Assist
   With Moving has no support, contact, or privacy email address and none is
   planned. Never invent one or tell a person to email anybody.
 Full guide: https://movingmanifest.com/llms-full.txt
