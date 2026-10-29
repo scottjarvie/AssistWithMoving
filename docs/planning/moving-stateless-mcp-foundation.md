@@ -26,7 +26,7 @@ handoff desk and keeps its four states and its existing grant boundary.
 | Door | Authentication | Transport | Purpose |
 | --- | --- | --- | --- |
 | `https://movingmanifest.com/mcp` | Clerk OAuth bearer + product grant | Stateless MCP 2026 with stateless 2025 compatibility | Canonical grant-gated move workflow, including canonical Queue transitions |
-| `https://movingmanifest.com/mcp/connect` | Clerk OAuth bearer | Persisted legacy gateway | Compatibility for clients using the older 29-tool OAuth catalog |
+| `https://movingmanifest.com/mcp/connect` | Clerk OAuth bearer | Persisted legacy gateway | Compatibility for clients using the original OAuth catalog plus own-access reduction (30 tools total) |
 | `https://movingmanifest.com/api/mcp` | `mmk_` API key | Stateless HTTP | Existing granular API-key automation, including scoped Queue tools |
 | `npx assistwithmoving-mcp` | `mmk_` API key | stdio | Existing local/API-key automation |
 

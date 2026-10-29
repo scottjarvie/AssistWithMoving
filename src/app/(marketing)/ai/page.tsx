@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 const canonicalEndpoint = "https://movingmanifest.com/mcp";
 
 const starterPrompt =
-  "Open https://movingmanifest.com/ai and help me use Assist With Moving. If you speak remote Streamable HTTP MCP with compatible OAuth, connect to https://movingmanifest.com/mcp. Signing in is not permission — I then approve a grant that decides what you may do. Call describe_connection if no tools appear, get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.";
+  "Open https://movingmanifest.com/ai and help me use Assist With Moving. If you speak remote Streamable HTTP MCP with compatible OAuth, connect to https://movingmanifest.com/mcp. Connecting creates a full-access grant with no end date by default. I can narrow or revoke it in Settings → AI connections. Call describe_connection if no tools appear, get_move_brief first, search before creating duplicates, and save finished work with save_complete_result.";
 
 // canonical-tool-catalog:start
 // Every tool the canonical door can ever list, with the approval each one
@@ -42,7 +42,7 @@ const canonicalToolCatalog = [
     scope: "Always available",
     label: "No approval needed",
     copy: "How your AI finds out what it may do, and what to tell you when it may do nothing.",
-    tools: ["describe_connection"],
+    tools: ["describe_connection", "reduce_connection"],
   },
   {
     scope: "moving.context.read",
@@ -90,8 +90,8 @@ const canonicalToolCatalog = [
 
 const quickCapabilities = [
   {
-    title: "A grant, not a sign-in",
-    copy: "Signing in proves who you are. A separate approval decides what your AI may do — which moves, which data, which operations. Revoking it stops the very next call.",
+    title: "Your connection’s access",
+    copy: "Signing in proves who you are. Connecting grants full access, including future scopes, with no end date by default. You can narrow access, choose an end date, or revoke it in Settings → AI connections. Revoking it stops the very next call.",
     icon: ShieldCheck,
   },
   {
@@ -115,7 +115,7 @@ const setupSteps = [
   "Create your private move and keep only the context that is useful now.",
   "Leave a Queue handoff in your own words when work should survive the chat.",
   "Paste the endpoint into an AI that speaks remote MCP with OAuth, and sign in.",
-  "Approve a grant: choose the moves and the operations it covers.",
+  "Review your connection: optionally limit its moves, operations, or end date.",
   "Ask it to save finished work, then review the result inside the move.",
 ];
 
@@ -129,7 +129,7 @@ const examplePrompts = [
 
 const safetyRules = [
   "Public pages are safe for your AI to read.",
-  "Private move data needs your sign-in plus a grant you approved, or a scoped key you created.",
+  "Private move data needs your connected AI’s active grant, or a scoped key you created.",
   "A grant is re-read on every call, so revoking it refuses the next one instead of waiting for a token to expire.",
   "A key is like a temporary password. Only paste it into an AI you trust, and revoke or rotate it in Settings.",
   "A Queue note records intent. It does not start an AI, and it never widens what that AI may do.",
@@ -149,7 +149,7 @@ const connectionDoors = [
   {
     name: "https://movingmanifest.com/mcp",
     role: "Canonical",
-    copy: "Sign-in plus the grant you approve. The tool list on this page, and nothing outside it.",
+    copy: "Sign-in creates a full-access grant by default. The tool list on this page, and nothing outside it.",
   },
   {
     name: "https://movingmanifest.com/mcp/connect",
@@ -177,7 +177,7 @@ const connectionTruth = [
   {
     status: "Current",
     title: "The grant screen",
-    copy: "Settings → AI connections is where you approve a grant, choose all moves or only some, read the consent summary, see each connection's client, last use, and activity, and revoke it. Until you approve one, a connected AI sees only describe_connection, which tells it to ask you.",
+    copy: "Connecting creates a full-access grant with no end date by default. Settings → AI connections lets you narrow moves or operations, choose an end date, review the client and recent activity, or revoke the connection.",
   },
   {
     status: "Current",
@@ -196,7 +196,7 @@ export default function AiAssistantPage() {
     <PublicPageChrome
       eyebrow="Bring your own AI"
       title="Give your chosen AI the right move context."
-      description="Assist With Moving keeps the durable move record. An AI you choose can reason in its own environment, use bounded tools, and save useful work back to the move. Signing in proves who you are; a grant you approve decides what it may do."
+      description="Assist With Moving keeps the durable move record. An AI you choose can reason in its own environment, use bounded tools, and save useful work back to the move. Connecting grants full access with no end date by default; you can narrow or revoke it in AI connections."
       primaryAction={{ href: "/ai/start", label: "Start AI setup" }}
       secondaryAction={{
         href: "/llms.txt",
@@ -215,8 +215,8 @@ export default function AiAssistantPage() {
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Create a private move and leave a Queue handoff first. Then paste
               the endpoint below into an AI that speaks remote Streamable HTTP
-              MCP with compatible OAuth, sign in, and approve a grant for the
-              moves and operations you actually want covered.
+              MCP with compatible OAuth and sign in. Connecting grants full access
+              with no end date by default; review or narrow it in AI connections.
             </p>
             <p className="mt-5 font-mono text-xs leading-5 text-muted-foreground">
               {canonicalEndpoint}
@@ -513,7 +513,7 @@ function AssistantVisual() {
         {[
           ["1", "Create a private move."],
           ["2", "Leave a durable Queue handoff."],
-          ["3", "Sign in from a compatible AI, then approve a grant."],
+          ["3", "Connect from a compatible AI; review or narrow its access in settings."],
           ["4", "Review saved work inside the move."],
         ].map(([step, copy]) => (
           <li key={step} className="flex gap-3 py-3">

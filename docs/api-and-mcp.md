@@ -1850,8 +1850,9 @@ and retain only the labeled non-privileged test identity after cleanup.
   browser-sign-in clients.** Discovery:
   `/.well-known/oauth-protected-resource/mcp`.
 - **Legacy persisted OAuth compatibility:**
-  `https://movingmanifest.com/mcp/connect` — preserves the older 29-tool
-  Convex-gateway catalog for already-connected clients. It is not an alias for
+  `https://movingmanifest.com/mcp/connect` — preserves the original 29-tool
+  Convex-gateway catalog for already-connected clients plus `reduce_connection`
+  (30 tools total). It is not an alias for
   the canonical grant-gated catalog; do not use it for new setup unless
   compatibility is specifically required.
 - **API-key door:** `https://movingmanifest.com/api/mcp` — accepts `mmk_` API
@@ -1895,10 +1896,12 @@ API-key and maintainer stdio sections below still show one CLI's configuration
 syntax; those are key-based transports where the config format is the fact being
 documented, not a claim that an AI product completed an OAuth lifecycle.)
 
-**Signing in is not permission.** OAuth proves who is calling; a product grant,
+**Connecting creates a full-access grant with no end date by default**, including
+future scopes. The person can narrow moves or operations, choose an end date, or
+revoke it at `https://movingmanifest.com/settings/ai`. OAuth proves who is calling; a product grant,
 re-read from the database on every discovery and every tool call, decides what
 that caller may do. Clerk issues identity-only scopes (`openid profile email`)
-and a broader token never widens a grant. People approve, inspect, and revoke
+and a broader token never widens a grant. People inspect, narrow, and revoke
 grants at `https://movingmanifest.com/settings/ai`; revoking refuses the very
 next call even while the access token is still cryptographically valid. The
 current boundary version is `GRANT_BOUNDARY_VERSION` in
@@ -1921,6 +1924,7 @@ connection never sees a capability nobody approved.
 | Tool | Required scope | Purpose |
 | --- | --- | --- |
 | `describe_connection` | none — always available | Report what this connection may currently do, what it can never do, and how the person changes that. Safe to call first when no other tools are listed. |
+| `reduce_connection` | none — always available | Reduce only the verified calling connection’s scopes, moveIds or expiry; pause or revoke. Requires expectedVersion; returns atomic durable audit receipt and version. Only the person in Settings can widen or restore access. |
 | `get_move_brief` | `moving.context.read` | First call. List bounded accessible moves or return one move's route, spaces, counts, review attention, saved planning records, and Queue summaries. |
 | `search_move_records` | `moving.context.read` | Search bounded items, boxes, spaces, decisions, estimates, plan results, source checks, and the person's Queue summaries. |
 | `get_move_records` | `moving.context.read` | Hydrate up to 25 selected records with role-filtered detail. |
@@ -2095,7 +2099,8 @@ If that decision changes, maintainers must bump the version in
 `mcp-server/assistwithmoving-mcp.mjs`, publish from `mcp-server`, verify a clean
 install, and update every public setup surface in the same release.
 
-Available API-key HTTP/stdio MCP tools:
+Available API-key HTTP/stdio MCP tools (95 registered tools in the full registry;
+34 in the optional hosted trusted-helper subset, including `reduce_connection`):
 
 Agents using this larger registry should usually call `get_api_capabilities`
 first. It returns supported workflows, required scopes, REST endpoints, tool
@@ -2105,6 +2110,7 @@ names, and known launch blockers.
 | --- | --- |
 | `get_api_capabilities` | Inspect supported REST/MCP workflows, required scopes, tools, and known launch blockers without calling the API. |
 | `get_api_context` | Inspect the current API key's household, scopes, and move restriction. |
+| `reduce_connection` | Reduce only this bearer key’s scopes, one selected move, or expiry; pause or revoke. Requires expectedVersion from get_api_context and returns a durable receipt/version. |
 | `list_household_members` | List real household login access for the API key household. |
 | `add_household_member` | Add an existing user or create a pending household invitation by email, with `dryRun` support. |
 | `list_moves` | List accessible moves. |
@@ -2245,13 +2251,13 @@ Recommended MCP key scopes depend on the intended agent:
 | Broad move assistant | `moves/read`, `moves/write`, `inventory/read`, `inventory/write`, `queue/read`, `queue/write`, `plans/read`, `plans/write`, `photos/write`, `exports/read`, `exports/create`, `members/manage` |
 | Layout Studio helper | `plans/read`, `plans/write`, plus `inventory/read` when placing real items or boxes |
 
-Prefer move-restricted API keys for headless or non-OAuth agents.
+Move-restricted API keys are an optional person choice for headless or non-OAuth agents.
 
 ## Security Guidance
 
 - Use separate keys per agent/client.
-- Prefer the smallest scope set that supports the workflow.
-- Prefer move-restricted keys when the agent only needs one move.
+- New connections default to full entitled access; the person may choose a smaller scope set.
+- The person may choose a move restriction when useful.
 - Store keys in an environment variable, secret manager, or password manager,
   not source code.
 - Use `dryRun` before write tools when an agent is planning a bulk change.
@@ -2271,3 +2277,73 @@ external clients depend on background completion.
 The current API version is `v1` in the URL path. Breaking changes should ship
 under a new path such as `/api/v2`. Additive response fields may be added within
 `v1`; clients should ignore unknown fields.
+
+
+### AI connection defaults (23 October 2026)
+
+New OAuth connections on both `/mcp` and `/mcp/connect` create a full-access
+product grant with no end date. `scopeChoice: "full"` follows the current scope
+catalog, including future additions; it is not a frozen copy of scopes at sign-in.
+Settings at `https://movingmanifest.com/settings/ai` let the owner deliberately
+choose fewer permissions, add/change/remove an end date, or revoke the connection.
+Scope reductions write `scopeChoice: "chosen"`; all permissions on writes `"full"`.
+Explicit durations from older frontends are treated as person choices too.
+
+Only explicitly full grants follow future scopes. Legacy/unmarked and chosen
+scope arrays and every stored end date remain exact, including automatic old
+durations. No migration, lift, backfill or production record write is performed.
+New API keys likewise default to the full API catalog and no end date; explicit
+scope arrays remain chosen unless the person selects full. API-key exports and
+members capabilities retain their existing ceiling; canonical OAuth does not
+inherit those capabilities.
+
+All four doors offer `reduce_connection`. OAuth takes the calling client's
+current `expectedVersion` from `describe_connection` (canonical) or
+`connectionVersion` from `get_agent_context` (legacy). API-key HTTP/stdio use
+`get_api_context` and `POST /api/v1/me/access`. Inputs are `scopes`, `moveIds`,
+`expiresAt` and `action` (`narrow`, `pause`, `revoke`). Omitted fields preserve
+limits; null expiry, additions, reactivation and extension are refused with a
+Settings link. Pause ends access immediately; only the person can restore it.
+The change, version and durable audit receipt commit atomically. A caller cannot
+supply a sibling grant/key id. Current consent evidence remains required for
+person-side approvals even when access choices use defaults.
+
+
+### Shared OAuth credential history and connection metadata
+
+Both doors use the resolved identity from the verified OAuth claim after required
+metadata validation. Both `client_id` and `azp` use the same extraction rule;
+conflicting client identities are refused before effects. The internal `legacy:`
+history namespace cannot be supplied as an OAuth client claim to skip CIMD proof.
+Historical raw ids, their `legacy:` compatibility aliases,
+and equivalent CIMD URL serializations share an enforcement boundary. URL
+comparison uses the same URL serialization as metadata validation (including
+host case, default port, root slash and dot segments); distinct paths, queries
+and opaque client ids remain distinct. No caller-supplied alias or metadata name
+can link unrelated identities. Each exact stored alias's latest decision is
+resolved from its complete bounded history before status filtering. If aliases
+exist, allowed scopes and moves are their intersection, the earliest stored
+end date applies, and a refusal on either alias blocks both doors. Switching
+doors cannot mint another full grant or bypass a reduction. These are read-time
+rules: existing grants, exact legacy arrays, dates and revocations are not
+renamed, migrated or lifted. Only person edits with the existing loaded
+revision and consent checks can increase each governing stored approval.
+Own-access reductions use the effective connection revision (the sum of the
+current alias revisions), so an edit on either alias invalidates
+a previously loaded reduction revision. Because URL serialization cannot be
+reversed to enumerate all historical spellings, URL clients read the complete
+owner history with a 128-row safety bound and fail closed on overflow. Opaque
+clients keep bounded exact indexed lookups. No truncated scan may authorize.
+
+Both OAuth doors validate a required Client ID Metadata Document through the
+bounded, DNS-pinned Node action before creating or binding a grant. Failed
+validation leaves grant and binding state untouched. After network validation,
+the binding mutation re-reads current authority and refusal history atomically;
+a decision made while metadata is loading still governs.
+
+`GET /api/v1/me` and `get_api_context` remain available without a domain read
+scope for connection inspection and own-access reduction. Their restricted move
+payload is returned only with `moves/read`. Removing read access, including
+reducing to an empty scope array, removes move titles, routes and dates from
+context on both API-key MCP doors as well as REST. Ordinary move reads continue
+to require their existing scopes.

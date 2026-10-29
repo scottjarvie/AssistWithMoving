@@ -29,6 +29,7 @@ import {
   decideLegacyGatewayAccess,
   type LegacyGrantBlock,
 } from "./lib/mcpLegacyGrantGate";
+import { oauthClientIdFromClaims, resolveClientIdentity } from "./lib/mcpClientIdentity";
 import type { GrantDecisionInput as LegacyGrantDecisionRow } from "./lib/aiGrants";
 
 const http = httpRouter();
@@ -1111,10 +1112,7 @@ const resolveMcpIdentity: McpIdentityResolver = async (token) => {
  * grant, because an unbound grant is claimable by whatever connects next.
  */
 function legacyClientIdFrom(claims: Record<string, unknown> | undefined): string {
-  const candidate =
-    (typeof claims?.client_id === "string" && claims.client_id) ||
-    (typeof claims?.azp === "string" && claims.azp) ||
-    null;
+  const candidate = oauthClientIdFromClaims(claims);
   // The sentinel is the single value `touchLegacyConnection` refuses to
   // auto-grant, so every unidentified client is turned away rather than sharing
   // one grant row.
@@ -1142,8 +1140,8 @@ function legacyClientNameFrom(
  * an AI is never shown a capability it would only be refused for, and the
  * refusal still exists underneath if it calls one anyway.
  */
-function createLegacyGrantGate(
-  ctx: Pick<ActionCtx, "runMutation">,
+export function createLegacyGrantGate(
+  ctx: Pick<ActionCtx, "runMutation" | "runAction">,
 ): McpAuthorizerHandler {
   let resolved:
     | Promise<{ grants: LegacyGrantDecisionRow[]; block?: LegacyGrantBlock }>
@@ -1160,16 +1158,31 @@ function createLegacyGrantGate(
       });
     }
     const claims = args.identity?.claims;
-    const clientId = legacyClientIdFrom(claims);
+    let clientId: string;
+    try {
+      clientId = legacyClientIdFrom(claims);
+    } catch {
+      return decideLegacyGatewayAccess({ toolName: args.toolName, grants: [], mode: args.mode, block: "unidentifiedClient" });
+    }
     const clientName = legacyClientNameFrom(claims);
 
     if (!resolved) {
-      resolved = ctx
-        .runMutation(internalMutations.aiGrants.touchLegacyConnection, {
-          subject,
-          clientId,
-          clientName,
-        })
+      resolved = (async () => {
+        // The compatibility door cannot bypass CIMD validation by binding the
+        // same credential under its historical legacy: alias.
+        if (clientId !== UNIDENTIFIED_LEGACY_CLIENT) {
+          const identity = await resolveClientIdentity(clientId.slice("legacy:".length), {
+            declaredClientName: clientName,
+            fetchMetadata: id => ctx.runAction(anyApi.mcpClientMetadata.fetchDocument, { clientId: id }),
+          });
+          return ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, {
+            subject, clientId: identity.clientId, clientName: identity.clientName ?? clientName,
+          });
+        }
+        return ctx.runMutation(internalMutations.aiGrants.touchLegacyConnection, {
+          subject, clientId, clientName,
+        });
+      })()
         .then(
           (result: {
             grants?: LegacyGrantDecisionRow[];
@@ -1212,7 +1225,9 @@ function createLegacyGrantGate(
 
     // Write a receipt for real calls only. Filtering `tools/list` would
     // otherwise stamp the activity list with a row per tool per connection.
-    if (args.mode === "call") {
+    // Own reductions append their activity and durable audit atomically in the
+    // reduction mutation; a domain-use receipt here would falsely record refusal.
+    if (args.mode === "call" && args.toolName !== "reduce_connection") {
       const record =
         decision.allowed && decision.scope
         ? ctx.runMutation(internalMutations.aiGrants.noteGrantUse, {

@@ -57,3 +57,6 @@ next-env.d.ts
 sandbox-backend/
 
 sandbox-backend-generated-guard-before-source-owned/
+
+# Worktree-local temporary files for bounded test runs
+/.tmp/

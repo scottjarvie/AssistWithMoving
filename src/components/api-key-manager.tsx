@@ -94,20 +94,7 @@ type HelperPreset = {
   recommended?: boolean;
 };
 
-const fullTrustedAccessScopes: ApiKeyScope[] = [
-  "moves/read",
-  "moves/write",
-  "inventory/read",
-  "inventory/write",
-  "queue/read",
-  "queue/write",
-  "plans/read",
-  "plans/write",
-  "photos/write",
-  "exports/read",
-  "exports/create",
-  "members/manage",
-];
+const fullTrustedAccessScopes: ApiKeyScope[] = apiKeyScopeOptions.map(([scope]) => scope);
 
 const readOnlyScopes: ApiKeyScope[] = [
   "moves/read",
@@ -256,7 +243,7 @@ export function ApiKeyManager({
   const rotateKey = useMutation(api.apiKeys.rotate);
 
   const [name, setName] = useState("Full trusted AI helper key");
-  const [expiresInDays, setExpiresInDays] = useState("90");
+  const [expiresInDays, setExpiresInDays] = useState("");
   const [selectedMoveRestrictionId, setSelectedMoveRestrictionId] = useState<
     Id<"moves"> | "all"
   >("all");
@@ -326,13 +313,14 @@ export function ApiKeyManager({
       const days = Number(expiresInDays);
       const expiresAt =
         Number.isFinite(days) && days > 0
-          ? Date.now() + Math.min(days, 3660) * 24 * 60 * 60 * 1000
+          ? Date.now() + days * 24 * 60 * 60 * 1000
           : undefined;
       const result = await createKey({
         householdId: effectiveHouseholdId,
         moveId: moveRestrictionId === "all" ? undefined : moveRestrictionId,
         name,
         scopes,
+        scopeChoice: sameScopes(scopes, fullTrustedAccessScopes) ? "full" : "chosen",
         expiresAt,
       });
       setOneTimeSecret(result.rawKey);
@@ -418,6 +406,14 @@ export function ApiKeyManager({
     } catch {
       setMessage("Browser copy was blocked. Select and copy the handoff text.");
     }
+  }
+
+  function resetNewConnection() {
+    setScopes(fullTrustedAccessScopes);
+    setExpiresInDays("");
+    setSelectedMoveRestrictionId("all");
+    setName("Full trusted helper");
+    setMessage(null);
   }
 
   function toggleScope(scope: ApiKeyScope) {
@@ -847,20 +843,21 @@ export function ApiKeyManager({
           </div>
           <div className="space-y-2">
             <label htmlFor="api-key-expiration" className="text-sm font-medium">
-              Expires in days
+              End date (optional days)
             </label>
             <Input
               id="api-key-expiration"
               value={expiresInDays}
               onChange={(event) => setExpiresInDays(event.target.value)}
               inputMode="numeric"
-              placeholder="90"
+              placeholder="No end date"
             />
           </div>
         </div>
 
         <div>
-          <p className="text-sm font-medium">Exact permissions</p>
+          <Button type="button" size="sm" variant="outline" onClick={resetNewConnection}>Reset new connection</Button>
+          <p className="mt-3 text-sm font-medium">Exact permissions</p>
           <p className="mt-1 text-xs text-muted-foreground">
             These are the technical scopes used by API and MCP clients.
           </p>
