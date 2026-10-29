@@ -149,7 +149,7 @@ export const releaseEntries: ReleaseEntry[] = [
         category: "fixed",
         impactTier: "meaningful",
         impactRank: 3,
-        short: "Every page that offers help now points somewhere that works.",
+        short: "Help links now lead to the shared support desk and its current intake status.",
         long: {
           what:
             "One shared support path replaces the missing contact address referenced across the marketing, about, FAQ, privacy, and agent-facing pages.",

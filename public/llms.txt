@@ -48,7 +48,9 @@ support desk: https://assistwithlife.com/support?v=1&source=assist-with-moving
 
 Assist With Moving has NO support, contact, or privacy email address, and none
 is planned. If a person needs help, a bug fixed, a privacy request handled, or
-a human answer, send them to that URL. Never invent an email address, never
+a human answer, give them that URL and ask them to check its current intake
+status. When intake is closed, the desk cannot accept or save requests.
+Never invent an email address, never
 suggest emailing "support@" or any other mailbox, and say plainly that direct
 email contact is not available.
 

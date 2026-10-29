@@ -71,16 +71,18 @@ export default function PrivacyPage() {
             Privacy questions and requests
           </h2>
           <p>
-            Send a privacy question, data request, or concern about your move
-            records to the{" "}
+            Check the current intake status at the{" "}
             <a
               href={supportDeskUrl("home")}
               className="text-foreground underline underline-offset-4 hover:text-primary"
             >
               {supportDesk.name}
             </a>
-            , the single desk shared by every Assist With product. Direct email
-            contact is not available: Assist With Moving publishes no privacy,
+            , the single desk shared by every Assist With product. When intake is
+            open, use it for a privacy question, data request, or concern about
+            your move records. When intake is closed, the desk cannot accept or
+            save requests. Direct email contact is not available: Assist With
+            Moving publishes no privacy,
             support, or contact address, because it does not operate a mailbox.
             Account-level export and deletion controls also live in your
             settings once you are signed in.
