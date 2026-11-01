@@ -21,6 +21,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
+import { resolveMoveAccess } from "./lib/moveAccess";
 import { recordAuditEvent } from "./lib/audit";
 import {
   GRANT_BOUNDARY_VERSION,
@@ -651,7 +652,7 @@ export const listActivity = query({
 });
 
 async function validateGrantMoves(
-  ctx: MutationCtx, householdId: Id<"households">,
+  ctx: MutationCtx, access: { householdId: Id<"households"> } | { userId: Id<"users"> },
   moveScope: "allMoves" | "selectedMoves", requestedMoveIds?: Id<"moves">[],
 ) {
     let moveIds: Id<"moves">[] | undefined;
@@ -665,8 +666,14 @@ async function validateGrantMoves(
       }
       for (const moveId of requested) {
         const move = await ctx.db.get(moveId);
-        if (!move || move.householdId !== householdId) {
+        if (!move || ("householdId" in access && move.householdId !== access.householdId)) {
           throw new ConvexError("That move is not available in this household.");
+        }
+        if ("userId" in access) {
+          // All-moves grants span every current membership and move-only
+          // participation, rather than just the household where they began.
+          if (move.status === "archived") throw new ConvexError("That active move is not available.");
+          await resolveMoveAccess(ctx, access.userId, move.householdId, moveId);
         }
       }
       moveIds = requested;
@@ -722,7 +729,7 @@ export const approve = mutation({
     const expiresAt = explicitExpiry(args.expiryIntent ?? (args.expiresInDays === undefined ? "none" : "chosen"), args.expiresInDays, Date.now());
 
     const moveScope = args.moveScope ?? (args.moveIds === undefined ? "allMoves" : "selectedMoves");
-    const moveIds = await validateGrantMoves(ctx, args.householdId, moveScope, args.moveIds);
+    const moveIds = await validateGrantMoves(ctx, { householdId: args.householdId }, moveScope, args.moveIds);
 
     const now = Date.now();
     const existing = await ctx.db
@@ -813,7 +820,7 @@ export const updateLimits = mutation({
       const membership = await ctx.db.query("householdMemberships")
         .withIndex("by_household_user", q => q.eq("householdId", grant.householdId).eq("userId", user._id)).unique();
       if (!membership || membership.status !== "active") throw new ConvexError("You are not an active member of that household.");
-      moveIds = await validateGrantMoves(ctx, grant.householdId, moveScope, args.moveIds ?? grant.moveIds);
+      moveIds = await validateGrantMoves(ctx, { householdId: grant.householdId }, moveScope, args.moveIds ?? grant.moveIds);
     }
     const now = Date.now();
     let scopes: MovingScope[] | undefined;
@@ -930,7 +937,7 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
   if (!grant || !grant.clientId || !sameOAuthClientHistory(clientId, grant.clientId)) throw new ConvexError("No bound calling connection. Reconnect first.");
   const reduced = reducedAccess({ version: grant.version, scopes: effectiveScopes(grant), moveIds: grant.moveScope === "selectedMoves" ? (grant.moveIds ?? []).map(String) : undefined, expiresAt: effectiveExpiry(grant), active: grant.status === "active" }, input);
   const moveIds = reduced.moveIds as Id<"moves">[] | undefined;
-  if (moveIds) await validateGrantMoves(ctx, grant.householdId, "selectedMoves", moveIds);
+  if (moveIds) await validateGrantMoves(ctx, { userId: user._id }, "selectedMoves", moveIds);
   const version = grant.version + 1;
   const stored = (await ctx.db.get(grant._id))!;
   await ctx.db.patch(grant._id, {

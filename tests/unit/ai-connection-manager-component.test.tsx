@@ -271,10 +271,10 @@ describe("AiConnectionManager", () => {
     const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
     await user.selectOptions(within(form).getByRole("combobox"), "0");
     await user.click(within(form).getByRole("button", { name: "Save limits" }));
-    expect(connectionData.updateLimits).toHaveBeenCalledWith({ consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve", expiryIntent: "none", grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"], moveScope: "selectedMoves", moveIds: ["move_123"], expiresInDays: null });
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({ consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve", expiryIntent: "none", grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"], expiresInDays: null });
   });
 
-  it("narrows the existing connection to checked moves without changing its end date", async () => {
+  it("preserves unchanged move choices without submitting a move edit", async () => {
     const user = userEvent.setup();
     render(<AiConnectionManager />);
     await user.click(screen.getByText("Change moves, permissions or end date"));
@@ -285,9 +285,71 @@ describe("AiConnectionManager", () => {
     expect(connectionData.updateLimits).toHaveBeenCalledWith({
       consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve",
       grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"],
-      moveScope: "selectedMoves", moveIds: ["move_123"],
     });
     expect(connectionData.approve).not.toHaveBeenCalled();
+  });
+
+  it("submits a deliberate move change", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    await user.click(within(form).getByRole("radio", { name: "All my moves, including future moves" }));
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ moveScope: "allMoves" }));
+    expect(connectionData.updateLimits.mock.calls[0][0]).not.toHaveProperty("moveIds");
+  });
+
+  it("submits changed selected moves", async () => {
+    const moves = connectionData.stats.moves;
+    connectionData.stats.moves = [...moves, { moveId: "move_456" as Id<"moves">, title: "Another move", status: "active" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.click(screen.getByText("Change moves, permissions or end date"));
+      const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+      await user.click(within(form).getByRole("checkbox", { name: "Another move" }));
+      await user.click(within(form).getByRole("button", { name: "Save limits" }));
+      expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({
+        moveScope: "selectedMoves", moveIds: ["move_123", "move_456"],
+      }));
+    } finally {
+      connectionData.stats.moves = moves;
+    }
+  });
+
+  it("omits move edits when the person returns to the original selection", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    const move = within(form).getByRole("checkbox", { name: "Utah to Virginia" });
+    await user.click(move);
+    await user.click(move);
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits.mock.calls[0][0]).not.toHaveProperty("moveScope");
+    expect(connectionData.updateLimits.mock.calls[0][0]).not.toHaveProperty("moveIds");
+  });
+
+  it("lets a participant-only owner edit permissions and expiry without submitting unavailable moves", async () => {
+    const households = connectionData.households;
+    connectionData.households = [];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.click(screen.getByText("Change moves, permissions or end date"));
+      const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+      await user.click(within(form).getByRole("checkbox", { name: "Save the work you asked for" }));
+      await user.selectOptions(within(form).getByRole("combobox"), "7");
+      await user.click(within(form).getByRole("button", { name: "Save limits" }));
+      expect(connectionData.updateLimits).toHaveBeenCalledWith({
+        consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(),
+        scopeIntent: "full", grantId: "ai_grant_123", expectedVersion: 3,
+        scopes: ["moving.context.read", "moving.work.write"], expiryIntent: "chosen", expiresInDays: 7,
+      });
+    } finally {
+      connectionData.households = households;
+    }
   });
 
   it("keeps old backends and stale catalogs readable while refusing unsupported writes", () => {

@@ -91,6 +91,97 @@ async function seedOwner(t: TestConvex<typeof schema>) {
   });
 }
 
+describe("participant settings and cross-household self-reduction", () => {
+  async function seedMoves(t: TestConvex<typeof schema>) {
+    const { userId, householdId } = await seedOwner(t);
+    return t.run(async ctx => {
+      const now = Date.now();
+      const otherHouseholdId = await ctx.db.insert("households", {
+        name: "Another synthetic household", createdByUserId: userId,
+        ownerUserId: userId, createdAt: now, updatedAt: now,
+      });
+      const move = (title: string) => ctx.db.insert("moves", {
+        householdId: otherHouseholdId, title, type: "local", status: "planning",
+        unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now,
+      });
+      return { userId, householdId, otherHouseholdId, moveId: await move("Reachable move"), otherMoveId: await move("Unreachable move") };
+    });
+  }
+
+  it("lets a participant-only grant owner change scopes and end date while preserving moves", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, moveId, otherHouseholdId } = await seedMoves(t);
+    await t.run(async ctx => {
+      const membership = (await ctx.db.query("householdMemberships").first())!;
+      await ctx.db.patch(membership._id, { status: "disabled" });
+      await ctx.db.insert("moveParticipants", {
+        householdId: otherHouseholdId, moveId, userId, role: "viewer", accessKind: "moveOnly",
+        participantType: "helper", status: "active", createdAt: Date.now(), updatedAt: Date.now(),
+      });
+    });
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "participant" });
+    const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    expect(grant.householdId).toBe(otherHouseholdId);
+    await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.updateLimits, {
+      ...consent, grantId: grant._id, expectedVersion: 1,
+      scopes: ["moving.context.read"], scopeIntent: "chosen", expiryIntent: "chosen", expiresInDays: 7,
+    });
+    const updated = (await t.run(ctx => ctx.db.get(grant._id)))!;
+    expect(updated).toMatchObject({
+      scopes: ["moving.context.read"], scopeChoice: "chosen", expiryChoice: "chosen",
+      moveScope: grant.moveScope, version: 2,
+    });
+    expect(updated.moveIds).toEqual(grant.moveIds);
+    expect(updated.expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it.each(["membership", "participant"] as const)("reduces all-moves access to another household via %s", async kind => {
+    const t = convexTest(schema, modules);
+    const { userId, otherHouseholdId, moveId } = await seedMoves(t);
+    await t.run(async ctx => {
+      const now = Date.now();
+      if (kind === "membership") {
+        await ctx.db.insert("householdMemberships", {
+          householdId: otherHouseholdId, userId, role: "viewer", status: "active",
+          apiAccessStatus: "enabled", createdByUserId: userId, createdAt: now, updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("moveParticipants", {
+          householdId: otherHouseholdId, moveId, userId, role: "viewer", accessKind: "moveOnly",
+          participantType: "helper", status: "active", createdAt: now, updatedAt: now,
+        });
+      }
+    });
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "own" });
+    const principal = { issuer: ISSUER, subject: SUBJECT, clientId: "own" };
+    const before = await t.query(internal.mcpPlanning.getMoveBrief, { principal });
+    expect(before.moves?.map(move => move.moveId)).toContain(moveId);
+    const receipt = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "own", expectedVersion: 1, moveIds: [moveId] });
+    expect(receipt.version).toBe(2);
+    expect(await t.run(ctx => ctx.db.query("aiGrants").first())).toMatchObject({ moveScope: "selectedMoves", moveIds: [moveId] });
+    await expect(t.query(internal.mcpPlanning.getMoveBrief, { principal, moveId })).resolves.toBeTruthy();
+  });
+
+  it("refuses unreachable moves atomically, including a participant's sibling move", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, otherHouseholdId, moveId, otherMoveId } = await seedMoves(t);
+    await t.run(ctx => ctx.db.insert("moveParticipants", {
+      householdId: otherHouseholdId, moveId, userId, role: "viewer", accessKind: "moveOnly",
+      participantType: "helper", status: "active", createdAt: Date.now(), updatedAt: Date.now(),
+    }));
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "own" });
+    const snapshot = () => t.run(async ctx => ({
+      grants: await ctx.db.query("aiGrants").collect(),
+      activity: await ctx.db.query("aiGrantActivities").collect(), audit: await ctx.db.query("auditLogs").collect(),
+    }));
+    const before = await snapshot();
+    await expect(t.mutation(grants.reduceConnection, {
+      subject: SUBJECT, clientId: "own", expectedVersion: 1, moveIds: [moveId, otherMoveId],
+    })).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
 describe("a revoked connection stays revoked past the old scan window", () => {
   it("does not resurrect when many other grant rows exist (pitfall 1)", async () => {
     const t = convexTest(schema, modules);
