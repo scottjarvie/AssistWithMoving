@@ -12,6 +12,11 @@ for f in pnpm-lock.yaml package-lock.json; do [ -f "$f" ] && { lock=$f; break; }
 log=${TMPDIR:-/tmp}/cloud-session-setup.log
 : > "$log"
 
+warn() {
+  printf 'Cloud setup: %s See %s.\n' "$1" "$log" >> "$log"
+  printf 'Cloud setup: %s See %s.\n' "$1" "$log"
+}
+
 # Match .nvmrc's major Node version when the image has a different default.
 want=$([ -f .nvmrc ] && tr -d 'v \n' < .nvmrc); want=${want%%.*}
 have=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)
@@ -24,37 +29,30 @@ if [ -n "$want" ] && [ "$want" != "$have" ] && [ -s "$nvm_sh" ]; then
   fi
 fi
 
-# Never reinstall dependencies with an unavailable or incorrect runtime.
-if ! command -v node >/dev/null 2>&1; then
-  echo "Cloud setup: warning: Node is unavailable; keeping existing dependencies. See $log."
-  exit 0
-fi
+# Never let npm ci remove a resumed session's dependencies on the wrong Node.
 have=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)
 if [ -n "$want" ] && [ "$want" != "$have" ]; then
-  echo "Cloud setup: warning: Node $want is unavailable; keeping existing dependencies. See $log."
+  warn "could not restore Node $want; skipping dependency install."
   exit 0
 fi
+node_version=$(node -v 2>/dev/null) || {
+  warn 'Node is unavailable; skipping dependency install.'
+  exit 0
+}
 
 # A resumed shell still needs Node restored before it can reuse dependencies.
 # Content checks also detect manifest edits that preserve file timestamps.
 stamp=node_modules/.cloud-session-setup
 if command -v sha256sum >/dev/null 2>&1; then
-  hashes=$(sha256sum "$lock" package.json)
-  hash_status=$?
+  hash_command=(sha256sum)
 elif command -v shasum >/dev/null 2>&1; then
-  echo "Cloud setup: warning: sha256sum is unavailable; using shasum -a 256."
-  hashes=$(shasum -a 256 "$lock" package.json)
-  hash_status=$?
+  hash_command=(shasum -a 256)
 else
-  echo "Cloud setup: warning: SHA-256 tools are unavailable; keeping existing dependencies. See $log."
+  warn 'no SHA-256 tool is available; skipping dependency install.'
   exit 0
 fi
-if [ "$hash_status" -ne 0 ]; then
-  echo "Cloud setup: warning: could not hash dependency inputs; keeping existing dependencies. See $log."
-  exit 0
-fi
-cache_key=$(printf '%s\n' "$hashes" && node -v) || {
-  echo "Cloud setup: warning: could not check Node; keeping existing dependencies. See $log."
+cache_key=$("${hash_command[@]}" "$lock" package.json && printf '%s\n' "$node_version") || {
+  warn 'could not hash dependency manifests; skipping dependency install.'
   exit 0
 }
 [ -d node_modules ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$cache_key" ] && exit 0
@@ -69,7 +67,7 @@ case "$lock" in
 esac
 status=$?
 
-# Hook output goes into Claude's context, so keep it to one line.
+# Stdout goes into Claude's context; keep each summary or warning to one line.
 if [ $status -eq 0 ]; then
   printf '%s\n' "$cache_key" > "$stamp"
   echo "Cloud setup: installed dependencies from $lock on Node $(node -v)."

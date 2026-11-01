@@ -6,9 +6,9 @@ set -euo pipefail
 test_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 hook=${1:-$test_dir/cloud-session-setup.sh}
 scenario=${2:-all}
-work=$(mktemp -d "$test_dir/.cloud-setup-test.XXXXXX")
-# Only remove the fixture directory created inside this checkout.
-case "$work" in "$test_dir"/.cloud-setup-test.*) ;; *) exit 1 ;; esac
+work=$(mktemp -d "${TMPDIR:-/tmp}/cloud-setup-test.XXXXXX")
+# Only remove the fixture directory created with the expected temp prefix.
+case "$work" in "${TMPDIR:-/tmp}"/cloud-setup-test.*) ;; *) exit 1 ;; esac
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/old/bin" "$work/new/bin" "$work/nvm" "$work/project" "$work/tmp"
 
@@ -29,16 +29,19 @@ MOCK
 cat > "$work/nvm/nvm.sh" <<'MOCK'
 nvm() {
   case "$1" in
-    use)
-      echo use >> "$MOCK_WORK/nvm-calls"
-      [ "$2" = --silent ] && [ "$3" = 24 ] || return 1
-      [ "${MOCK_OFFLINE:-0}" = 0 ] || return 1
-      echo "$3" >> "$MOCK_WORK/restores"
+    install)
+      [ "$2" = 24 ] || return 1
+      echo install >> "$MOCK_WORK/nvm-calls"
+      [ "${MOCK_NVM_INSTALL_STATUS:-0}" = 0 ] || return 1
+      echo "$2" >> "$MOCK_WORK/restores"
       export PATH="$MOCK_WORK/new/bin:$PATH"
       ;;
-    install)
-      echo install >> "$MOCK_WORK/nvm-calls"
-      return 1
+    use)
+      [ "$2" = --silent ] && [ "$3" = 24 ] || return 1
+      echo use >> "$MOCK_WORK/nvm-calls"
+      [ "${MOCK_NVM_USE_STATUS:-0}" = 0 ] || return 1
+      echo "$3" >> "$MOCK_WORK/restores"
+      export PATH="$MOCK_WORK/new/bin:$PATH"
       ;;
     which) printf '%s/new/bin/node\n' "$MOCK_WORK" ;;
     *) return 1 ;;
@@ -54,7 +57,7 @@ printf '24\n' > "$work/project/.nvmrc"
 printf '{"name":"fixture","version":"1.0.0"}\n' > "$work/project/package.json"
 printf '{"lockfileVersion":3}\n' > "$work/project/package-lock.json"
 
-run_hook() { bash --noprofile --norc "$hook"; }
+run_hook() { "$BASH" --noprofile --norc "$hook"; }
 install_count() { wc -l < "$work/installs" | tr -d ' '; }
 assert_equal() {
   [ "$1" = "$2" ] || { printf 'FAIL: %s (got %s, expected %s)\n' "$3" "$1" "$2" >&2; exit 1; }
@@ -74,6 +77,76 @@ if [ "$scenario" = resume ] || [ "$scenario" = all ]; then
     restored=$( . "$work/session-path"; node -v )
     assert_equal "$restored" v24.0.0 'resume persists Node for subsequent commands'
     echo 'PASS: resumed session restores Node and skips reinstall'
+fi
+if [ "$scenario" = offline-resume ] || [ "$scenario" = all ]; then
+    before=$(install_count)
+    stamp_before=$(cat "$work/project/node_modules/.cloud-session-setup")
+    printf 'keep me\n' > "$work/project/node_modules/keep"
+    : > "$work/nvm-calls"
+    MOCK_NVM_USE_STATUS=1 MOCK_NVM_INSTALL_STATUS=1 run_hook > "$work/warning" 2> "$work/stderr"
+    assert_equal "$(wc -c < "$work/stderr" | tr -d ' ')" 0 'offline warning leaves stderr empty'
+    assert_equal "$(install_count)" "$before" 'offline wrong Node never runs npm ci'
+    assert_equal "$(cat "$work/project/node_modules/keep")" 'keep me' 'offline resume preserves node_modules'
+    assert_equal "$(cat "$work/project/node_modules/.cloud-session-setup")" "$stamp_before" 'offline resume preserves cache stamp'
+    assert_equal "$(cat "$work/nvm-calls")" "$(printf 'use\ninstall')" 'offline resume tries local Node before download'
+    assert_equal "$(wc -l < "$work/warning" | tr -d ' ')" 1 'offline resume emits one warning'
+    echo 'PASS: offline resume leaves dependencies and stamp untouched when Node cannot be restored'
+fi
+if [ "$scenario" = local-node ] || [ "$scenario" = all ]; then
+    before=$(install_count)
+    : > "$work/nvm-calls"
+    MOCK_NVM_INSTALL_STATUS=1 run_hook
+    assert_equal "$(cat "$work/nvm-calls")" use 'local Node skips nvm install'
+    assert_equal "$(install_count)" "$before" 'local Node reuses cache offline'
+    echo 'PASS: locally installed Node restores without nvm install'
+fi
+if [ "$scenario" = download-node ] || [ "$scenario" = all ]; then
+    before=$(install_count)
+    : > "$work/nvm-calls"
+    MOCK_NVM_USE_STATUS=1 run_hook
+    assert_equal "$(cat "$work/nvm-calls")" "$(printf 'use\ninstall')" 'missing local Node falls back to nvm install'
+    assert_equal "$(install_count)" "$before" 'downloaded Node reuses matching cache'
+    echo 'PASS: unavailable local Node falls back to nvm install'
+fi
+if [ "$scenario" = missing-tools ] || [ "$scenario" = all ]; then
+    # A restricted PATH models macOS (shasum only), then missing hash/Node tools.
+    mkdir "$work/tools"
+    for tool in bash cat dirname tr; do
+      printf '#!/bin/bash\nexec %q "$@"\n' "$(command -v "$tool")" > "$work/tools/$tool"
+      chmod +x "$work/tools/$tool"
+    done
+    export MOCK_SHA256SUM
+    MOCK_SHA256SUM=$(command -v sha256sum || true)
+    if [ -z "$MOCK_SHA256SUM" ]; then
+      MOCK_SHA256SUM="$work/sha256sum"
+      printf '#!/bin/bash\nexec %q -a 256 "$@"\n' "$(command -v shasum)" > "$MOCK_SHA256SUM"
+      chmod +x "$MOCK_SHA256SUM"
+    fi
+    cat > "$work/tools/shasum" <<'MOCK'
+#!/usr/bin/env bash
+[ "$1" = -a ] && [ "$2" = 256 ] || exit 1
+shift 2
+echo shasum >> "$MOCK_WORK/hash-calls"
+"$MOCK_SHA256SUM" "$@"
+MOCK
+    chmod +x "$work/tools/shasum"
+    before=$(install_count)
+    stamp_before=$(cat "$work/project/node_modules/.cloud-session-setup")
+    PATH="$work/old/bin:$work/tools" run_hook
+    assert_equal "$(cat "$work/hash-calls")" shasum 'shasum -a 256 fallback is used'
+    assert_equal "$(install_count)" "$before" 'shasum fallback reuses matching cache'
+    mv "$work/tools/shasum" "$work/hidden-shasum"
+    PATH="$work/old/bin:$work/tools" run_hook > "$work/warning"
+    assert_equal "$(wc -l < "$work/warning" | tr -d ' ')" 1 'missing hash tool emits one warning'
+    assert_equal "$(cat "$work/warning")" "$(cat "$work/tmp/cloud-session-setup.log")" 'hash warning is also logged'
+    assert_equal "$(install_count)" "$before" 'missing hash tool skips npm ci'
+    mv "$work/project/.nvmrc" "$work/hidden-nvmrc"
+    PATH="$work/tools" run_hook > "$work/warning"
+    assert_equal "$(wc -l < "$work/warning" | tr -d ' ')" 1 'missing Node emits one warning'
+    assert_equal "$(install_count)" "$before" 'missing Node skips npm ci'
+    assert_equal "$(cat "$work/project/node_modules/.cloud-session-setup")" "$stamp_before" 'missing tools preserve cache stamp'
+    mv "$work/hidden-nvmrc" "$work/project/.nvmrc"
+    echo 'PASS: shasum fallback and one-line warnings for missing Node/hash tools'
 fi
 if [ "$scenario" = missing-modules ] || [ "$scenario" = all ]; then
     mv "$work/project/node_modules" "$work/removed-node-modules"
@@ -110,41 +183,4 @@ if [ "$scenario" = failed-install ] || [ "$scenario" = all ]; then
     run_hook
     assert_equal "$(install_count)" "$((before + 2))" 'failed install is retried'
     echo 'PASS: failed install does not validate cache'
-fi
-
-if [ "$scenario" = use-success ] || [ "$scenario" = all ]; then
-  if /usr/bin/grep -q '^install$' "$work/nvm-calls"; then
-    echo 'FAIL: nvm use success must skip nvm install' >&2
-    exit 1
-  fi
-  echo 'PASS: nvm use success skips nvm install'
-fi
-
-if [ "$scenario" = offline ] || [ "$scenario" = all ]; then
-  before=$(install_count)
-  printf 'preserve\n' > "$work/project/node_modules/keep"
-  output=$(MOCK_OFFLINE=1 run_hook)
-  assert_equal "$(install_count)" "$before" 'offline wrong Node skips npm ci'
-  assert_equal "$(cat "$work/project/node_modules/keep")" preserve 'offline preserves node_modules'
-  case "$output" in *'warning: Node 24 is unavailable'*) ;; *) echo 'FAIL: missing runtime warning'; exit 1 ;; esac
-  assert_equal "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" 1 'one-line runtime warning'
-  echo 'PASS: offline resume with wrong Node preserves dependencies and skips npm ci'
-fi
-
-# Isolate PATH without changing host tools to exercise missing-tool warnings.
-if [ "$scenario" = missing-tools ] || [ "$scenario" = all ]; then
-  mkdir -p "$work/tools"
-  for tool in bash tr cat dirname mkdir shasum; do
-    tool_path=$(command -v "$tool")
-    ln -s "$tool_path" "$work/tools/$tool"
-  done
-  output=$(PATH="$work/tools" NVM_DIR="$work/no-nvm" /bin/bash "$hook")
-  case "$output" in *'warning: Node is unavailable'*) ;; *) echo 'FAIL: missing Node warning'; exit 1 ;; esac
-  ln -s "$work/new/bin/node" "$work/tools/node"
-  output=$(PATH="$work/tools" /bin/bash "$hook")
-  case "$output" in *'warning: sha256sum is unavailable; using shasum -a 256.'*) ;; *) echo 'FAIL: missing hash fallback warning'; exit 1 ;; esac
-  rm "$work/tools/shasum"
-  output=$(PATH="$work/tools" /bin/bash "$hook")
-  case "$output" in *'warning: SHA-256 tools are unavailable'*) ;; *) echo 'FAIL: missing hash tools warning'; exit 1 ;; esac
-  echo 'PASS: missing Node and hash tools warn; shasum fallback works'
 fi
