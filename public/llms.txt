@@ -176,7 +176,10 @@ the provider-side configuration for the metadata-document client path is not yet
 done. Describe the requirement — any AI that speaks remote Streamable HTTP MCP
 with compatible OAuth — rather than naming an AI product as supported.
 
-Connecting creates a full-access grant with no end date by default. OAuth proves who is calling; the product grant decides which moves, which data, and which operations. The grant
+New connections default to all permissions the person is entitled to grant,
+all their accessible moves, and no end date. Existing chosen limits stay exact.
+OAuth proves who is calling; the product grant decides which moves, which data,
+and which operations. The grant
 is re-read on every discovery and every call, so revoking it refuses the very
 next call instead of waiting for a token to expire. Until a grant exists,
 `tools/list` returns only `describe_connection` — always available, no scope —

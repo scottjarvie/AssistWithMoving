@@ -176,11 +176,13 @@ export function buildManualQueueBrief(moveTitle: string | null) {
 
 function GrantMovePicker({ grant, canReadHousehold }: { grant: GrantRow; canReadHousehold: boolean }) {
   const stats = useQuery(api.households.summaryStats, canReadHousehold ? { householdId: grant.householdId } : "skip") as { moves: MoveSummary[] } | undefined;
-  return <fieldset className="space-y-2 rounded border border-border p-3">
+  const [changed, setChanged] = useState(false);
+  return <fieldset disabled={!canReadHousehold || stats === undefined} onChange={() => setChanged(true)} className="space-y-2 rounded border border-border p-3">
     <legend>Moves this connection may access</legend>
+    <input type="hidden" name="movesChanged" value={changed ? "yes" : "no"} />
     <label className="block"><input type="radio" name="moveScope" value="allMoves" defaultChecked={grant.moveScope === "allMoves"} /> All my moves, including future moves</label>
     <label className="block"><input type="radio" name="moveScope" value="selectedMoves" defaultChecked={grant.moveScope === "selectedMoves"} /> Only the moves checked below</label>
-    {!canReadHousehold ? <p>This household’s moves are not available. Revoke the connection if you no longer need it.</p> : stats === undefined ? <p>Loading moves…</p> : stats.moves.map(move => <label key={String(move.moveId)} className="block">
+    {!canReadHousehold ? <p>Move choices are unavailable here. You can still change permissions and the end date.</p> : stats === undefined ? <p>Loading moves…</p> : stats.moves.map(move => <label key={String(move.moveId)} className="block">
       <input type="checkbox" name="moveIds" value={String(move.moveId)} defaultChecked={grant.moveIds.includes(String(move.moveId))} /> {move.title}
     </label>)}
     <p className="text-xs text-muted-foreground">Selecting moves changes this existing connection. Its other limits stay in place.</p>
@@ -848,13 +850,19 @@ export function AiConnectionManager() {
                       setBusy(`limits-${grant.grantId}`);
                       try {
                         const days = String(data.get("days"));
+                        const moveScope = data.get("moveScope") as "allMoves" | "selectedMoves" | null;
+                        const moveIds = data.getAll("moveIds") as Id<"moves">[];
+                        const editsMoves = data.get("movesChanged") === "yes" && moveScope !== null && (
+                          moveScope !== grant.moveScope || (moveScope === "selectedMoves" && (
+                            moveIds.length !== grant.moveIds.length || moveIds.some(id => !grant.moveIds.includes(id))
+                          ))
+                        );
                         await updateLimits({
                           ...consent,
                           scopeIntent: data.get("scopeIntent") as "preserve" | "full" | "chosen",
                           grantId: grant.grantId, expectedVersion: grant.version,
                           scopes: data.getAll("scopes") as GrantScope[],
-                          moveScope: data.get("moveScope") as "allMoves" | "selectedMoves",
-                          moveIds: data.getAll("moveIds") as Id<"moves">[],
+                          ...(editsMoves ? { moveScope, ...(moveScope === "selectedMoves" ? { moveIds } : {}) } : {}),
                           ...(days === "keep" ? {} : { expiryIntent: days === "0" ? "none" as const : "chosen" as const, expiresInDays: days === "0" ? null : Number(days) }),
                         });
                         setMessage("Connection limits saved. An end date you pick is preserved as your choice.");
