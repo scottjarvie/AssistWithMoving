@@ -5,6 +5,9 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
+  # Manual runs at an exact branch head (gh workflow run required-ci.yml --ref <branch>),
+  # including draft PR branches that the pull_request trigger skips.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,8 +20,9 @@ jobs:
   required:
     name: Required CI
     # Draft pull requests skip (a skipped required job reports success);
-    # marking the PR ready runs the full check before merge.
-    if: github.event.pull_request.draft != true
+    # marking the PR ready runs the full check before merge. Manual
+    # workflow_dispatch runs always execute, whatever the PR's draft state.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -30,7 +34,7 @@ jobs:
       - name: Classify CI scope
         id: scope
         env:
-          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'workflow_dispatch' && 'origin/main' || github.event.before }}
           CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: node scripts/classify-ci-change.mjs --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA" --event "${{ github.event_name }}" --github-output "$GITHUB_OUTPUT"
 
@@ -107,7 +111,7 @@ jobs:
 
   full-tests:
     name: Unit tests (informational)
-    if: github.event.pull_request.draft != true
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -119,7 +123,7 @@ jobs:
       - name: Classify CI scope
         id: scope
         env:
-          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          CI_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'workflow_dispatch' && 'origin/main' || github.event.before }}
           CI_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: node scripts/classify-ci-change.mjs --base "$CI_BASE_SHA" --head "$CI_HEAD_SHA" --event "${{ github.event_name }}" --github-output "$GITHUB_OUTPUT"
 
