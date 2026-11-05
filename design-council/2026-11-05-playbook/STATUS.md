@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Home desk and collection review fixes pass source checks; rendered page samples and the next exact-head review are pending.
+[Open newest-first gallery](gallery.html) · Round 02 adds four synthetic Home captures; code checks pass and exact-head source/image council review is next.
 
 # Moving design council status
 
@@ -15,6 +15,7 @@ Run `2026-11-05-playbook`. Local-only branch `design/assistwithmoving-council-20
 - Collections now offer Table/List/Grid, density, real column controls and grouping/sorting over the existing row model. Inventory and movable-unit Grid use actual photo slots or a decorative domain SVG. The two existing inventory suites and five new collection tests passed; full typecheck and lint passed. The full collection pattern and all remaining pages are not yet accepted.
 - Candidate Q received source scores 8 (Sol) and 7.3 (Opus), both changes requested. Preset-sort recovery, first-visit phone List and complete normalized grouping have been corrected; two affected suites passed 22 tests, typecheck and focused lint passed. Original verdicts remain recorded.
 - Home now uses three labelled desk trays with real loaded data and all previous destinations/guidance. Three Home tests, typecheck and focused lint passed. Offline actual-component samples use synthetic data and label their limitations; rendered review is pending.
+- Round 02 now shows Home at 1440px and 390px in both themes, generated from the actual component/CSS with synthetic data. Four captures and the updated gallery preview reported no console messages; the gallery was shown inline. Authenticated chrome, live interaction and final typography remain unverified.
 
 ## Remaining scope
 
@@ -22,4 +23,4 @@ Collection controls and all collection pages; dossier/evidence stream records; t
 
 ## Host use
 
-One low-priority, single-worker source check at a time. The gallery sampler was previewed/rendered in a coordinated brief slot; no Next server or owned browser process was started. The slot was released afterward and code work continued. Actual page rendering still awaits another coordinated handoff.
+One low-priority, single-worker source check at a time. The gallery sampler and later four synthetic Home samples were captured/rendered during coordinated brief slots; no Next server or owned browser process was started. Each slot was released directly afterward and code work continued. Authenticated full-page rendering still requires its own coordinated handoff.

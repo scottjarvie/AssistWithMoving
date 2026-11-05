@@ -1,0 +1,58 @@
+[
+  {
+    "label": "desktop-light",
+    "width": 1440,
+    "contentHeight": 743,
+    "capturedHeight": 743,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 1440,
+      "height": 743
+    },
+    "evidence": "synthetic SSR component; no authenticated shell; system font fallback",
+    "sourceHead": "cca4dd4bf611d6228854018a37874cbb036e4921"
+  },
+  {
+    "label": "phone-light",
+    "width": 390,
+    "contentHeight": 1008,
+    "capturedHeight": 1008,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 390,
+      "height": 1008
+    },
+    "evidence": "synthetic SSR component; no authenticated shell; system font fallback",
+    "sourceHead": "cca4dd4bf611d6228854018a37874cbb036e4921"
+  },
+  {
+    "label": "desktop-dark",
+    "width": 1440,
+    "contentHeight": 743,
+    "capturedHeight": 743,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 1440,
+      "height": 743
+    },
+    "evidence": "synthetic SSR component; no authenticated shell; system font fallback",
+    "sourceHead": "cca4dd4bf611d6228854018a37874cbb036e4921"
+  },
+  {
+    "label": "phone-dark",
+    "width": 390,
+    "contentHeight": 1008,
+    "capturedHeight": 1008,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 390,
+      "height": 1008
+    },
+    "evidence": "synthetic SSR component; no authenticated shell; system font fallback",
+    "sourceHead": "cca4dd4bf611d6228854018a37874cbb036e4921"
+  }
+]

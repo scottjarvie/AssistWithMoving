@@ -1,10 +1,38 @@
 {
-  "rounds": [{
-    "id": "01-foundations",
-    "createdAt": "2026-11-05T11:00:00Z",
-    "kind": "foundation",
-    "title": "01 · Shared foundations",
-    "status": "Source implementation · rendered page review pending",
-    "description": "Kraft light/dark roles, approved branding, Codex-written image slots, display preferences, pinned section chooser and phone contents. These are actual SVG components rendered into this sampler; they are not screenshots of an authenticated page."
-  }]
+  "rounds": [
+    {
+      "id": "01-foundations",
+      "createdAt": "2026-11-05T11:00:00Z",
+      "kind": "foundation",
+      "title": "01 · Shared foundations",
+      "status": "Source implementation · rendered page review pending",
+      "description": "Kraft light/dark roles, approved branding, Codex-written image slots, display preferences, pinned section chooser and phone contents. These are actual SVG components rendered into this sampler; they are not screenshots of an authenticated page."
+    },
+    {
+      "id": "02-home-desk",
+      "createdAt": "2026-11-05T11:56:21.884Z",
+      "kind": "screenshots",
+      "title": "02 · Home desk",
+      "status": "Synthetic component captures · council review pending",
+      "description": "Actual HomeLaunchpad and application CSS, with synthetic data. Desktop 1440px and phone 390px; light and dark. No authenticated shell or live data; system font fallback. This decided Home pattern has no A/B exploration. Whole-page interaction and final taste remain pending.",
+      "images": [
+        {
+          "path": "captures/home-desktop-light.png",
+          "caption": "Home · desktop · light · synthetic component evidence"
+        },
+        {
+          "path": "captures/home-phone-light.png",
+          "caption": "Home · phone · light · synthetic component evidence"
+        },
+        {
+          "path": "captures/home-desktop-dark.png",
+          "caption": "Home · desktop · dark · synthetic component evidence"
+        },
+        {
+          "path": "captures/home-phone-dark.png",
+          "caption": "Home · phone · dark · synthetic component evidence"
+        }
+      ]
+    }
+  ]
 }
