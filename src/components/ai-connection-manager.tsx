@@ -227,14 +227,17 @@ export function AiConnectionManager() {
     ready ? {} : "skip",
   ) as HouseholdEntry[] | undefined;
 
+  const [reconnectGrantId, setReconnectGrantId] = useState<Id<"aiGrants"> | null>(null);
+  const reconnectTarget = grantsResult?.grants.find(grant => grant.grantId === reconnectGrantId);
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const householdId =
-    selectedHouseholdId ?? households?.[0]?.household._id ?? null;
+    selectedHouseholdId ?? households?.[0]?.household._id ?? reconnectTarget?.householdId ?? null;
+  const canReadApprovalHousehold = households?.some(entry => entry.household._id === householdId) ?? false;
 
   const stats = useQuery(
     api.households.summaryStats,
-    ready && householdId ? { householdId } : "skip",
+    ready && householdId && canReadApprovalHousehold ? { householdId } : "skip",
   ) as { moves: MoveSummary[] } | undefined;
 
   const approveGrant = useMutation(api.aiGrants.approve);
@@ -242,7 +245,6 @@ export function AiConnectionManager() {
   const updateLimits = useMutation(api.aiGrants.updateLimits);
 
   const [label, setLabel] = useState("");
-  const [reconnectGrantId, setReconnectGrantId] = useState<Id<"aiGrants"> | null>(null);
   const [moveScope, setMoveScope] = useState<"allMoves" | "selectedMoves">(
     "allMoves",
   );
@@ -494,6 +496,7 @@ export function AiConnectionManager() {
                   <option value="">New connection</option>
                   {reconnectable.map(grant => <option key={grant.grantId} value={grant.grantId}>Reconnect {grant.label}</option>)}
                 </select>
+                {reconnectGrantId && !canReadApprovalHousehold ? <p className="text-xs text-muted-foreground">Your AI can use only moves you currently have access to as a participant. Reconnecting does not give household access.</p> : null}
                 {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client&apos;s previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
               </div>
             ) : null}

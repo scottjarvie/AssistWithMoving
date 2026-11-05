@@ -628,7 +628,7 @@ describe("explicit owner reconnect", () => {
       }
       expect(restored.version).toBeGreaterThan(3);
       const audit = await t.run(ctx => ctx.db.query("auditLogs").filter(q => q.eq(q.field("objectId"), grantId)).first());
-      expect(audit).toMatchObject({ actorType: "user", action: "ai_grant.approved", metadata: { reconnectGrantId: original._id, reconnectsClientHistory: restored.reconnectsClientHistory } });
+      expect(audit).toMatchObject({ actorType: "user", action: "ai_grant.approved", metadata: { reconnected: true } });
       await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: loaded.historyFingerprint })).rejects.toThrow(/history changed/);
       const current = await owner.query(api.aiGrants.listMine, {});
       await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: current.historyFingerprint })).rejects.toThrow(/already has active/);
@@ -1417,4 +1417,74 @@ it("pages private original source history even after the owner loses household a
   expect(last.isDone).toBe(true);
   expect(last.page[0].source).toEqual(source);
   await expect(owner.query(api.audit.listForHousehold, { householdId: source.householdId })).rejects.toThrow();
+});
+
+
+describe("private owner queries and participant reconnects", () => {
+  it.each([{ client_id: "own-client" }, { clientId: "own-client" }, { azp: "opaque-client" }, { scope: "openid" }, { scp: ["openid"] }, { tokenType: "oauth" }])("refuses an OAuth identity %j on all owner-facing queries", async claims => {
+    const t = convexTest(schema, modules);
+    await seedOwner(t);
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "sibling" });
+    const oauth = t.withIdentity({ subject: SUBJECT, ...claims });
+    await expect(oauth.query(api.aiGrants.listMine, {})).rejects.toThrow(/settings/);
+    await expect(oauth.query(api.aiGrants.listActivity, {})).rejects.toThrow(/settings/);
+    await expect(oauth.query(api.aiGrants.listSourceHistory, {})).rejects.toThrow(/settings/);
+    expect((await t.withIdentity({ subject: SUBJECT }).query(api.aiGrants.listMine, {})).grants).toHaveLength(1);
+  });
+
+  it.each([0, 127, 129])("lets a current move-only participant recover with %s other historical rows", async noise => {
+    const t = convexTest(schema, modules);
+    const { userId, householdId } = await seedOwner(t);
+    const participantId = await t.run(async ctx => {
+      const membership = (await ctx.db.query("householdMemberships").first())!;
+      await ctx.db.patch(membership._id, { status: "disabled" });
+      const moveId = await ctx.db.insert("moves", { householdId, title: "Participant move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() });
+      return ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: Date.now(), updatedAt: Date.now() });
+    });
+    const clientId = "https://participant.example/client.json";
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    const owner = t.withIdentity({ subject: SUBJECT });
+    await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: 1 });
+    await t.run(async ctx => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- original historical fixtures omit system fields.
+      const { _id, _creationTime, ...fields } = original;
+      for (let i = 0; i < noise; i++) await ctx.db.insert("aiGrants", { ...fields, clientId: "participant-noise-" + i, status: "revoked" });
+    });
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    const payload = { ...consent, householdId, label: "Reconnect participant AI", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint, expectedRecoveryFingerprint: loaded.recoveryFingerprint };
+    await t.run(ctx => ctx.db.patch(participantId, { status: "disabled" }));
+    await expect(owner.mutation(api.aiGrants.approve, payload)).rejects.toThrow(/active member or move participant/);
+    await t.run(ctx => ctx.db.patch(participantId, { status: "active" }));
+    await expect(owner.mutation(api.aiGrants.approve, { ...payload, catalogFingerprint: "stale" })).rejects.toThrow(/Reload/);
+    const { grantId } = await owner.mutation(api.aiGrants.approve, payload);
+    const recovered = (await t.run(ctx => ctx.db.get(grantId)))!;
+    expect(recovered).toMatchObject({ scopeChoice: "full", expiryChoice: "none", moveScope: "allMoves" });
+    expect(recovered.expiresAt).toBeUndefined();
+    for (const id of [clientId, "legacy:" + clientId]) expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(movingScopes);
+    expect((await t.run(ctx => ctx.db.query("aiGrants").collect())).length).toBe(noise === 0 ? 2 : noise + 1);
+  });
+
+  it("exposes no prior client identifiers or source revisions to another household administrator", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const clientId = "https://private-client.example/secret-history.json";
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    const owner = t.withIdentity({ subject: SUBJECT });
+    await owner.mutation(api.aiGrants.revoke, { grantId: original._id });
+    await t.run(async ctx => {
+      const now = Date.now();
+      const adminId = await ctx.db.insert("users", { clerkUserId: "separate-admin", name: "Another admin", appRole: "member", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now });
+      await ctx.db.insert("householdMemberships", { householdId, userId: adminId, role: "admin", status: "active", apiAccessStatus: "enabled", createdAt: now, updatedAt: now, createdByUserId: adminId });
+    });
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    const { grantId } = await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Private reconnect", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint });
+    const audit = await t.withIdentity({ subject: "separate-admin" }).query(api.audit.listForHousehold, { householdId });
+    const approval = audit.find(row => row.objectId === grantId && row.action === "ai_grant.approved")!;
+    expect(approval.metadata).toEqual({ scopes: [...movingScopes], moveScope: "allMoves", moveCount: null, reconnected: true });
+    expect(JSON.stringify(approval.metadata)).not.toContain(clientId);
+    expect(JSON.stringify(approval.metadata)).not.toContain(original._id);
+    expect((await t.withIdentity({ subject: "separate-admin" }).query(api.aiGrants.listSourceHistory, {})).page).toEqual([]);
+  });
 });

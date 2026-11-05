@@ -28,6 +28,7 @@ const apiMock = vi.hoisted(() => ({
 }));
 
 const connectionData = vi.hoisted(() => ({
+  queryCalls: vi.fn(),
   approve: vi.fn(),
   revoke: vi.fn(),
   updateLimits: vi.fn(),
@@ -145,7 +146,9 @@ vi.mock("@clerk/nextjs", () => ({
 }));
 
 vi.mock("convex/react", () => ({
-  useQuery: (query: string) => {
+  useQuery: (query: string, args: unknown) => {
+    connectionData.queryCalls(query, args);
+    if (args === "skip") return undefined;
     switch (query) {
       case apiMock.aiGrants.listMine:
         return connectionData.grants;
@@ -180,6 +183,7 @@ describe("AiConnectionManager", () => {
   beforeEach(() => {
     connectionData.grants.consentPolicyVersion = GRANT_CONSENT_POLICY;
     connectionData.grants.catalogFingerprint = grantCatalogFingerprint();
+    connectionData.queryCalls.mockClear();
     connectionData.updateLimits.mockReset();
     connectionData.approve.mockReset();
     connectionData.approve.mockResolvedValue({ grantId: "ai_grant_456" });
@@ -267,6 +271,23 @@ describe("AiConnectionManager", () => {
       }));
       expect(screen.getByText(/Reconnected with the permissions and end date you approved/)).toBeInTheDocument();
     } finally { connectionData.grants.grants = original; }
+  });
+
+  it("reconnects a move-only participant without querying household-only data", async () => {
+    const original = connectionData.grants.grants;
+    const households = connectionData.households;
+    connectionData.households = [];
+    connectionData.grants.grants = [{ ...original[0], status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      expect(screen.getByText(/Reconnecting does not give household access/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Approve this connection" })).toBeEnabled();
+      expect(connectionData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.summaryStats, { householdId: "household_123" });
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "household_123", reconnectGrantId: "ai_grant_123", scopeIntent: "full", expiryIntent: "none", moveScope: "allMoves" }));
+    } finally { connectionData.households = households; connectionData.grants.grants = original; }
   });
 
   it("blocks another new row at history capacity while allowing explicit reconnect", async () => {
