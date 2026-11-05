@@ -1085,6 +1085,7 @@ export default defineSchema({
     .index("by_move_email", ["moveId", "invitedEmail"])
     .index("by_email_status", ["invitedEmail", "status"])
     .index("by_user_status", ["userId", "status"])
+    .index("by_user_household_status", ["userId", "householdId", "status"])
     .index("by_household_move", ["householdId", "moveId"]),
 
   documentationProfiles: defineTable({
@@ -1171,7 +1172,8 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_created_by", ["createdByUserId"])
     .index("by_household_creator", ["householdId", "createdByUserId", "status"])
-    .index("by_expires", ["expiresAt"]),
+    .index("by_expires", ["expiresAt"])
+    .index("by_household_created", ["householdId", "createdAt"]),
 
   apiIdempotencyKeys: defineTable({
     householdId: v.id("households"),

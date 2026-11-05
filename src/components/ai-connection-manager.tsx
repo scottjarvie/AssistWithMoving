@@ -179,17 +179,29 @@ export function buildManualQueueBrief(moveTitle: string | null) {
   ].join("\n");
 }
 
-function GrantMovePicker({ grant, canReadHousehold }: { grant: GrantRow; canReadHousehold: boolean }) {
-  const stats = useQuery(api.households.summaryStats, canReadHousehold ? { householdId: grant.householdId } : "skip") as { moves: MoveSummary[] } | undefined;
+function useConnectionMoveChoices(householdId: Id<"households"> | null) {
+  const [page, setPage] = useState<{ householdId: Id<"households">; cursor: string } | null>(null);
+  const cursor = page?.householdId === householdId ? page.cursor : undefined;
+  const result = useQuery(api.aiGrants.listMoveChoices, householdId ? { householdId, ...(cursor ? { cursor } : {}) } : "skip") as { moves: MoveSummary[]; nextCursor?: string | null } | undefined;
+  return { result, cursor, next: () => { if (householdId && result?.nextCursor) setPage({ householdId, cursor: result.nextCursor }); }, first: () => setPage(null) };
+}
+
+function GrantMovePicker({ grant }: { grant: GrantRow }) {
+  const choices = useConnectionMoveChoices(grant.householdId);
   const [changed, setChanged] = useState(false);
-  return <fieldset disabled={!canReadHousehold || stats === undefined} onChange={() => setChanged(true)} className="space-y-2 rounded border border-border p-3">
+  const [moveScope, setMoveScope] = useState(grant.moveScope);
+  const [selected, setSelected] = useState(grant.moveIds);
+  return <fieldset disabled={choices.result === undefined} className="space-y-2 rounded border border-border p-3">
     <legend>Moves this connection may access</legend>
     <input type="hidden" name="movesChanged" value={changed ? "yes" : "no"} />
-    <label className="block"><input type="radio" name="moveScope" value="allMoves" defaultChecked={grant.moveScope === "allMoves"} /> All my moves, including future moves</label>
-    <label className="block"><input type="radio" name="moveScope" value="selectedMoves" defaultChecked={grant.moveScope === "selectedMoves"} /> Only the moves checked below</label>
-    {!canReadHousehold ? <p>Move choices are unavailable here. You can still change permissions and the end date.</p> : stats === undefined ? <p>Loading moves…</p> : stats.moves.map(move => <label key={String(move.moveId)} className="block">
-      <input type="checkbox" name="moveIds" value={String(move.moveId)} defaultChecked={grant.moveIds.includes(String(move.moveId))} /> {move.title}
+    {selected.map(id => <input key={id} type="hidden" name="moveIds" value={id} />)}
+    <label className="block"><input type="radio" name="moveScope" value="allMoves" checked={moveScope === "allMoves"} onChange={() => { setMoveScope("allMoves"); setChanged(true); }} /> All my moves, including future moves</label>
+    <label className="block"><input type="radio" name="moveScope" value="selectedMoves" checked={moveScope === "selectedMoves"} onChange={() => { setMoveScope("selectedMoves"); setChanged(true); }} /> Only the moves checked below</label>
+    {choices.result === undefined ? <p>Loading moves?</p> : choices.result.moves.map(move => <label key={String(move.moveId)} className="block">
+      <input type="checkbox" checked={selected.includes(String(move.moveId))} onChange={event => { setSelected(current => event.target.checked ? [...current, String(move.moveId)] : current.filter(id => id !== String(move.moveId))); setChanged(true); }} /> {move.title}
     </label>)}
+    {choices.result?.nextCursor ? <Button type="button" variant="outline" onClick={choices.next}>More move choices</Button> : null}
+    {choices.cursor ? <Button type="button" variant="outline" onClick={choices.first}>First move choices</Button> : null}
     <p className="text-xs text-muted-foreground">Selecting moves changes this existing connection. Its other limits stay in place.</p>
   </fieldset>;
 }
@@ -232,13 +244,11 @@ export function AiConnectionManager() {
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const householdId =
-    selectedHouseholdId ?? households?.[0]?.household._id ?? reconnectTarget?.householdId ?? null;
+    reconnectTarget?.householdId ?? selectedHouseholdId ?? households?.[0]?.household._id ?? null;
   const canReadApprovalHousehold = households?.some(entry => entry.household._id === householdId) ?? false;
 
-  const stats = useQuery(
-    api.households.summaryStats,
-    ready && householdId && canReadApprovalHousehold ? { householdId } : "skip",
-  ) as { moves: MoveSummary[] } | undefined;
+  const moveChoices = useConnectionMoveChoices(ready ? householdId : null);
+  const stats = moveChoices.result;
 
   const approveGrant = useMutation(api.aiGrants.approve);
   const revokeGrant = useMutation(api.aiGrants.revoke);
@@ -500,7 +510,7 @@ export function AiConnectionManager() {
                 {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client&apos;s previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
               </div>
             ) : null}
-            {households && households.length > 1 ? (
+            {!reconnectGrantId && households && households.length > 1 ? (
               <div className="space-y-1.5">
                 <label
                   htmlFor="ai-grant-household"
@@ -583,7 +593,7 @@ export function AiConnectionManager() {
                 <div className="space-y-2 rounded-md border border-border p-3">
                   {moves.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No active moves in this household yet.
+                      No available moves on this page.
                     </p>
                   ) : (
                     moves.map((move) => (
@@ -605,6 +615,8 @@ export function AiConnectionManager() {
                   )}
                 </div>
               ) : null}
+              {moveChoices.result?.nextCursor ? <Button type="button" variant="outline" onClick={moveChoices.next}>More move choices</Button> : null}
+              {moveChoices.cursor ? <Button type="button" variant="outline" onClick={moveChoices.first}>First move choices</Button> : null}
             </fieldset>
 
             <fieldset className="space-y-2">
@@ -920,7 +932,7 @@ export function AiConnectionManager() {
                         setMessage(describeMutationError(error, "Couldn't save connection limits."));
                       } finally { setBusy(null); }
                     }}>
-                      <GrantMovePicker grant={grant} canReadHousehold={Boolean(households?.some(entry => entry.household._id === grant.householdId))} />
+                      <GrantMovePicker grant={grant} />
                       <GrantPermissionPicker grant={grant} scopes={boundaryScopes} />
                       <label className="block">End date
                         <select name="days" defaultValue="keep" className="ml-2 rounded border border-input bg-background p-2">

@@ -51,18 +51,18 @@ const apiKeyWriteArgs = {
 export const listForHousehold = query({
   args: {
     householdId: v.id("households"),
+    cursor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     await requireHouseholdPermission(ctx, args.householdId, "api_keys:manage");
-    const keys = await ctx.db
+    const page = await ctx.db
       .query("apiKeys")
-      .withIndex("by_household_status", (q) => q.eq("householdId", args.householdId))
-      .collect();
+      .withIndex("by_household_created", (q) => q.eq("householdId", args.householdId))
+      .order("desc").paginate({ numItems: 50, cursor: args.cursor ?? null });
 
     const now = Date.now();
-    return keys
-      .sort((first, second) => second.createdAt - first.createdAt)
-      .map((key) => ({
+    const keys = page.page.map((key) => ({
         apiKeyId: key._id,
         householdId: key.householdId,
         moveId: key.moveId,
@@ -77,6 +77,7 @@ export const listForHousehold = query({
         lastUsedAction: key.lastUsedAction,
         createdAt: key.createdAt,
       }));
+    return { keys, nextCursor: page.isDone ? null : page.continueCursor };
   },
 });
 

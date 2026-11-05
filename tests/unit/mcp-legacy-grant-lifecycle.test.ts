@@ -1428,6 +1428,7 @@ describe("private owner queries and participant reconnects", () => {
     const oauth = t.withIdentity({ subject: SUBJECT, ...claims });
     await expect(oauth.query(api.aiGrants.listMine, {})).rejects.toThrow(/settings/);
     await expect(oauth.query(api.aiGrants.listActivity, {})).rejects.toThrow(/settings/);
+    await expect(oauth.query(api.aiGrants.listMoveChoices, { householdId: (await t.run(ctx => ctx.db.query("households").first()))!._id })).rejects.toThrow(/settings/);
     await expect(oauth.query(api.aiGrants.listSourceHistory, {})).rejects.toThrow(/settings/);
     expect((await t.withIdentity({ subject: SUBJECT }).query(api.aiGrants.listMine, {})).grants).toHaveLength(1);
   });
@@ -1487,4 +1488,81 @@ describe("private owner queries and participant reconnects", () => {
     expect(JSON.stringify(approval.metadata)).not.toContain(original._id);
     expect((await t.withIdentity({ subject: "separate-admin" }).query(api.aiGrants.listSourceHistory, {})).page).toEqual([]);
   });
+});
+
+
+describe("paged owner settings and participant move limits", () => {
+  it("pages API-key history without exposing settings to OAuth identities", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, householdId } = await seedOwner(t);
+    await t.run(async ctx => {
+      for (let i = 0; i < 57; i++) await ctx.db.insert("apiKeys", { householdId, name: "Historical fixture " + i, prefix: "synthetic", tokenPreview: "synthetic-preview", secretHash: "synthetic-non-secret-hash", scopes: ["moves/read"], status: i === 0 ? "active" : "revoked", createdByUserId: userId, createdAt: i, updatedAt: i });
+    });
+    for (const claims of [{ client_id: "oauth" }, { clientId: "oauth" }, { azp: "opaque" }, { scope: "openid" }, { scp: ["openid"] }, { tokenType: "oauth" }]) await expect(t.withIdentity({ subject: SUBJECT, ...claims }).query(api.apiKeys.listForHousehold, { householdId })).rejects.toThrow(/settings/);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const first = await owner.query(api.apiKeys.listForHousehold, { householdId });
+    expect(first.keys).toHaveLength(50);
+    expect(first.nextCursor).toBeTruthy();
+    expect(first.keys[0].name).toBe("Historical fixture 56");
+    const older = await owner.query(api.apiKeys.listForHousehold, { householdId, cursor: first.nextCursor! });
+    expect(older.keys).toHaveLength(7);
+    expect(older.nextCursor).toBeNull();
+    expect(older.keys.find(key => key.status === "active")?.name).toBe("Historical fixture 0");
+    for (const key of [...first.keys, ...older.keys]) expect(key).not.toHaveProperty("secretHash");
+    expect(new Set([...first.keys, ...older.keys].map(key => key.apiKeyId)).size).toBe(57);
+  });
+
+  it("lets a move-only owner narrow, expand only to entitled moves, and restore all-current-move access", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, householdId } = await seedOwner(t);
+    const ids = await t.run(async ctx => {
+      const member = (await ctx.db.query("householdMemberships").first())!;
+      await ctx.db.patch(member._id, { status: "disabled" });
+      const now = Date.now();
+      const makeMove = (title: string) => ctx.db.insert("moves", { householdId, title, type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+      const a = await makeMove("Participant A"), b = await makeMove("Participant B"), foreign = await makeMove("Private other move");
+      for (const moveId of [a, b]) await ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: now, updatedAt: now });
+      return { a, b, foreign };
+    });
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "participant-move-edits" });
+    const row = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const choices = await owner.query(api.aiGrants.listMoveChoices, { householdId });
+    expect(choices.moves.map(move => move.moveId)).toEqual([ids.a, ids.b]);
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, moveScope: "selectedMoves", moveIds: [ids.a] });
+    expect((await t.run(ctx => ctx.db.get(row._id)))?.moveIds).toEqual([ids.a]);
+    await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds: [ids.foreign] })).rejects.toThrow();
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 2, moveScope: "selectedMoves", moveIds: [ids.a, ids.b] });
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 3, moveScope: "allMoves" });
+    const restored = (await t.run(ctx => ctx.db.get(row._id)))!;
+    expect(restored.moveScope).toBe("allMoves");
+    expect(restored.moveIds).toBeUndefined();
+    expect(restored.scopeChoice).toBe("full");
+    expect(restored.expiresAt).toBeUndefined();
+  });
+});
+
+
+it("pages only accessible move choices for a participant without household access", async () => {
+  const t = convexTest(schema, modules);
+  const { userId, householdId } = await seedOwner(t);
+  await t.run(async ctx => {
+    const member = (await ctx.db.query("householdMemberships").first())!;
+    await ctx.db.patch(member._id, { status: "disabled" });
+    const now = Date.now();
+    for (let i = 0; i < 27; i++) {
+      const moveId = await ctx.db.insert("moves", { householdId, title: "Paged move " + i, type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+      await ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: now, updatedAt: now });
+    }
+    await ctx.db.insert("moves", { householdId, title: "Unshared household move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+  });
+  const owner = t.withIdentity({ subject: SUBJECT });
+  const first = await owner.query(api.aiGrants.listMoveChoices, { householdId });
+  expect(first.moves).toHaveLength(25);
+  expect(first.nextCursor).toBeTruthy();
+  const next = await owner.query(api.aiGrants.listMoveChoices, { householdId, cursor: first.nextCursor! });
+  expect(next.moves).toHaveLength(2);
+  expect(next.nextCursor).toBeNull();
+  expect(new Set([...first.moves, ...next.moves].map(move => move.moveId)).size).toBe(27);
+  expect([...first.moves, ...next.moves].some(move => move.title === "Unshared household move")).toBe(false);
 });

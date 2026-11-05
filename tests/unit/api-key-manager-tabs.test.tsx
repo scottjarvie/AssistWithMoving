@@ -20,6 +20,8 @@ const apiMock = vi.hoisted(() => ({
 
 const apiKeyManagerData = vi.hoisted(() => ({
   mutation: vi.fn(),
+  historyMode: false,
+  queryCalls: vi.fn(),
   households: [
     {
       household: {
@@ -66,14 +68,15 @@ vi.mock("../../convex/_generated/api", () => ({
 
 vi.mock("convex/react", () => ({
   useMutation: () => apiKeyManagerData.mutation,
-  useQuery: (query: string) => {
+  useQuery: (query: string, args: { cursor?: string }) => {
+    apiKeyManagerData.queryCalls(query, args);
     switch (query) {
       case apiMock.households.listMine:
         return apiKeyManagerData.households;
       case apiMock.households.summaryStats:
         return apiKeyManagerData.stats;
       case apiMock.apiKeys.listForHousehold:
-        return apiKeyManagerData.keys;
+        return apiKeyManagerData.historyMode ? { keys: args?.cursor ? [{ ...apiKeyManagerData.keys[0], apiKeyId: "old_key" as Id<"apiKeys">, name: "Older archived key", status: "revoked" }]: apiKeyManagerData.keys, nextCursor: args?.cursor ? null : "older-keys" } : apiKeyManagerData.keys;
       default:
         return undefined;
     }
@@ -251,4 +254,20 @@ describe("ApiKeyManager task tabs", () => {
       apiKeyManagerData.stats.activeApiKeyCount = originalCount;
     }
   });
+});
+
+
+it("pages older API keys and returns to recent keys", async () => {
+  apiKeyManagerData.historyMode = true;
+  apiKeyManagerData.queryCalls.mockClear();
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("tab", { name: "Connections" }));
+    await user.click(screen.getByRole("button", { name: "Older API keys" }));
+    expect(apiKeyManagerData.queryCalls).toHaveBeenCalledWith(apiMock.apiKeys.listForHousehold, { householdId: "household_123", cursor: "older-keys" });
+    expect(screen.getByText("Older archived key")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Recent API keys" }));
+    expect(screen.getByText("Photo helper key")).toBeInTheDocument();
+  } finally { apiKeyManagerData.historyMode = false; }
 });
