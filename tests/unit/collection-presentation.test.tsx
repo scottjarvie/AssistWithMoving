@@ -9,7 +9,7 @@ type Entry = { id: string; name: string; room: string };
 const entries: Entry[] = [{ id: "synthetic-1", name: "[synthetic] Lamp", room: "Den" }, { id: "synthetic-2", name: "[synthetic] Box", room: "Garage" }, { id: "synthetic-3", name: "[synthetic] Desk", room: "Den" }];
 const columns: ColumnDef<Entry, unknown>[] = [
   { accessorKey: "name", meta: { label: "Name", mobile: "primary" }, header: ({ column }) => <DataTableColumnHeader column={column} label="Name" /> },
-  { accessorKey: "room", meta: { label: "Room", mobile: "primary" }, header: ({ column }) => <DataTableColumnHeader column={column} label="Room" /> },
+  { accessorKey: "room", meta: { label: "Room", mobile: "primary", groupable: true }, header: ({ column }) => <DataTableColumnHeader column={column} label="Room" /> },
 ];
 let fixtureKey = 0;
 function Collection({ onOpen }: { onOpen?: (row: Entry) => void }) {
@@ -18,7 +18,7 @@ function Collection({ onOpen }: { onOpen?: (row: Entry) => void }) {
 }
 
 describe("collection presentations share one record model", () => {
-  beforeEach(() => { fixtureKey += 1; });
+  beforeEach(() => { fixtureKey += 1; Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200, writable: true }); });
 
   it("starts with Table and preserves selection and search through List and Grid", async () => {
     const user = userEvent.setup();
@@ -46,6 +46,7 @@ describe("collection presentations share one record model", () => {
   it("groups before pagination, reports real matching counts and reverses header sort", async () => {
     const user = userEvent.setup();
     render(<Collection />);
+    await user.click(screen.getByRole("button", { name: "Sort by Name" }));
     await user.selectOptions(screen.getByLabelText("Group records by"), "room");
     let rows = within(screen.getByRole("table")).getAllByRole("row");
     expect(rows[1]).toHaveTextContent("Room: Den");
@@ -57,6 +58,7 @@ describe("collection presentations share one record model", () => {
     await user.click(screen.getByRole("button", { name: "Sort by Room" }));
     rows = within(screen.getByRole("table")).getAllByRole("row");
     expect(rows[1]).toHaveTextContent("Room: Den");
+    expect(rows[2]).toHaveTextContent("[synthetic] Desk");
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(within(screen.getByRole("table")).getByText("[synthetic] Box")).toBeInTheDocument();
   });
@@ -74,6 +76,47 @@ describe("collection presentations share one record model", () => {
     expect(screen.queryByRole("button", { name: "Sort by Room" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "List" }));
     expect(within(screen.getByRole("list")).queryByText("Room")).not.toBeInTheDocument();
+  });
+
+  it("keeps normalized complete groups contiguous across a page boundary in every presentation", () => {
+    type MixedEntry = { id: string; name: string; room?: string | null };
+    const mixed: MixedEntry[] = Array.from({ length: 12 }, (_, index) => ({ id: `mixed-${index}`, name: `Synthetic ${index}`, room: index < 8 ? ["Den", "den", " Den "][index % 3] : [undefined, "", null, " "][index - 8] }));
+    const mixedColumns: ColumnDef<MixedEntry, unknown>[] = [
+      { accessorKey: "name", meta: { label: "Name", mobile: "primary" }, header: "Name" },
+      { accessorKey: "room", meta: { label: "Room", mobile: "primary", groupable: true }, header: "Room" },
+    ];
+    render(<DataTable data={mixed} columns={mixedColumns} getRowId={row => row.id} preferenceKey={`mixed-${fixtureKey}`} pageSize={5} />);
+    fireEvent.change(screen.getByLabelText("Group records by"), { target: { value: "room" } });
+    let headings = screen.getByRole("table").querySelectorAll('th[scope="rowgroup"]');
+    expect(headings).toHaveLength(2);
+    expect(headings[0]).toHaveTextContent("Not recorded");
+    expect(headings[0]).toHaveTextContent("4 matching");
+    expect(headings[1]).toHaveTextContent("8 matching");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    headings = screen.getByRole("table").querySelectorAll('th[scope="rowgroup"]');
+    expect(headings).toHaveLength(1);
+    expect(headings[0]).toHaveTextContent("8 matching");
+    for (const view of ["List", "Grid"]) {
+      fireEvent.click(screen.getByRole("button", { name: view }));
+      expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1);
+      expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent("8 matching");
+      expect(screen.getAllByRole("listitem")).toHaveLength(5);
+    }
+  });
+
+  it("chooses List once on a phone and retains that choice after resize and remount", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390, writable: true });
+    const first = render(<Collection />);
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    const list = screen.getByRole("list");
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440, writable: true });
+    fireEvent(window, new Event("resize"));
+    expect(screen.getByRole("list")).toBe(list);
+    first.unmount();
+    render(<Collection />);
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
   });
 
   it("does not open a record when a nested checkbox is activated", () => {

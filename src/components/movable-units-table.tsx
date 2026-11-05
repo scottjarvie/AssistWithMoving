@@ -586,9 +586,10 @@ export function MovableUnitsTable({
       },
       {
         id: "location",
-        accessorFn: (unit) => `${unit.roomLabel} ${unit.destinationLabel}`,
+        accessorFn: (unit) => `${unit.roomLabel} → ${unit.destinationLabel}`,
         meta: {
           label: "Location",
+          groupable: true,
           mobile: "primary",
           cellClassName: "max-w-[16rem] whitespace-normal",
         },
@@ -670,7 +671,7 @@ export function MovableUnitsTable({
       {
         id: "load",
         accessorFn: (unit) => unit.assignmentState,
-        meta: { label: "Load", mobile: "primary", headClassName: "w-40" },
+        meta: { label: "Load", mobile: "primary", headClassName: "w-40", groupable: true },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Load" />
         ),
@@ -827,6 +828,7 @@ export function MovableUnitsTable({
         }
         ariaLabel="Movable units"
         preferenceKey="movable-units"
+        showSortControl={false}
         unfilteredCount={summary.total}
         onClearFilters={() => { setSearch(""); setStatFilter(null); }}
         enableRowSelection

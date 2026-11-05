@@ -71,6 +71,8 @@ export type ColumnMeta = {
   description?: string
   align?: "start" | "end"
   editable?: boolean
+  groupable?: boolean
+  groupLabel?: (value: unknown) => string
 }
 
 declare module "@tanstack/react-table" {
@@ -83,6 +85,8 @@ declare module "@tanstack/react-table" {
     description?: string
     align?: "start" | "end"
     editable?: boolean
+    groupable?: boolean
+    groupLabel?: (value: unknown) => string
   }
 }
 
@@ -236,6 +240,7 @@ export type DataTableProps<TData> = {
   cardOnly?: boolean
   preferenceKey?: string
   showColumnControl?: boolean
+  showSortControl?: boolean
   /** Loaded accessible records before filters owned by the caller. */
   unfilteredCount?: number
   onClearFilters?: () => void
@@ -290,6 +295,18 @@ function useControllableState<S>(
   return [value, setValue]
 }
 
+function normalizedGroupKey(value: unknown): string {
+  if (value == null || (typeof value === "string" && !value.trim()) || (typeof value === "number" && !Number.isFinite(value))) return "empty"
+  return `${typeof value}:${String(value).normalize("NFKC").trim().toLowerCase()}`
+}
+
+function compareGroups(left: unknown, right: unknown): number {
+  const a = normalizedGroupKey(left), b = normalizedGroupKey(right)
+  if (a === b) return 0
+  if (typeof left === "number" && typeof right === "number" && Number.isFinite(left) && Number.isFinite(right)) return left - right
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "variant" }) || (a < b ? -1 : 1)
+}
+
 export function DataTable<TData>({
   data,
   columns,
@@ -309,6 +326,7 @@ export function DataTable<TData>({
   cardOnly = false,
   preferenceKey,
   showColumnControl = true,
+  showSortControl = true,
   unfilteredCount,
   onClearFilters,
   onRowOpen,
@@ -319,7 +337,8 @@ export function DataTable<TData>({
   ariaLabel,
   minWidthClassName = "min-w-[980px]",
 }: DataTableProps<TData>) {
-  const [presentation, setPresentation] = useCollectionPresentation(preferenceKey ?? ariaLabel ?? "records", cardOnly ? "list" : "table")
+  const instanceKey = React.useId()
+  const [presentation, setPresentation] = useCollectionPresentation(preferenceKey ?? ariaLabel ?? `records-${instanceKey}`, cardOnly ? "list" : "table")
   const [sorting, setSorting] = useControllableState<SortingState>(
     sortingProp,
     onSortingChange,
@@ -381,7 +400,11 @@ export function DataTable<TData>({
 
   // Grouping is a leading sort over the same bounded row model. Pagination,
   // selection and all existing secondary sorts remain owned by this table.
-  const groupBy = resolvedColumns.some(column => (column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "")) === presentation.groupBy) ? presentation.groupBy : ""
+  const groupBy = resolvedColumns.some(column => column.meta?.groupable && column.enableSorting !== false && (column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "")) === presentation.groupBy) ? presentation.groupBy : ""
+  const groupedColumns = React.useMemo(() => resolvedColumns.map(column =>
+    groupBy && (column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "")) === groupBy
+      ? { ...column, sortUndefined: false as const, sortingFn: (left: Row<TData>, right: Row<TData>, id: string) => compareGroups(left.getValue(id), right.getValue(id)) }
+      : column), [groupBy, resolvedColumns])
   const tableSorting = React.useMemo<SortingState>(() => groupBy
     ? [{ id: groupBy, desc: presentation.groupDesc }, ...sorting.filter(sort => sort.id !== groupBy)]
     : sorting, [groupBy, presentation.groupDesc, sorting])
@@ -391,7 +414,7 @@ export function DataTable<TData>({
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
-    columns: resolvedColumns,
+    columns: groupedColumns,
     getRowId,
     state: {
       sorting: tableSorting,
@@ -412,7 +435,9 @@ export function DataTable<TData>({
       if (groupBy) {
         const groupSort = next.find(sort => sort.id === groupBy)
         if (groupSort && groupSort.desc !== presentation.groupDesc) setPresentation({ groupDesc: groupSort.desc })
-        setSorting(next.filter(sort => sort.id !== groupBy))
+        // TanStack replaces a non-multi header sort with just that column.
+        // A group-direction toggle must retain the existing secondary sorts.
+        setSorting(groupSort && groupSort.desc !== presentation.groupDesc && next.length === 1 ? sorting : next.filter(sort => sort.id !== groupBy))
       } else setSorting(next)
     },
     onColumnFiltersChange: setColumnFilters,
@@ -443,10 +468,11 @@ export function DataTable<TData>({
   const selectedRows = selectedRowModel.map((row) => row.original)
   const selectedRowCount = selectedRows.length
   const filteredRowCount = table.getFilteredRowModel().rows.length
-  const groupKey = (row: Row<TData>) => groupBy ? JSON.stringify([typeof row.getValue(groupBy), row.getValue(groupBy) ?? null]) : "all"
+  const groupKey = (row: Row<TData>) => groupBy ? normalizedGroupKey(row.getValue(groupBy)) : "all"
   const groupLabel = (row: Row<TData>) => {
     const value = groupBy ? row.getValue(groupBy) : null
-    return value === undefined || value === null || value === "" ? "Not recorded" : typeof value === "boolean" ? value ? "Yes" : "No" : String(value)
+    if (normalizedGroupKey(value) === "empty") return "Not recorded"
+    return table.getColumn(groupBy)?.columnDef.meta?.groupLabel?.(value) ?? (typeof value === "boolean" ? value ? "Yes" : "No" : String(value).trim())
   }
   const groupCounts = new Map<string, number>()
   if (groupBy) for (const row of table.getFilteredRowModel().rows) groupCounts.set(groupKey(row), (groupCounts.get(groupKey(row)) ?? 0) + 1)
@@ -466,11 +492,11 @@ export function DataTable<TData>({
 
   return (
     <div className="space-y-2">
-      {toolbar}
+      {toolbar ? <div className="collection-controls">{toolbar}</div> : null}
       <CollectionPresentationControls table={table} preferences={{ ...presentation, groupBy }} onChange={patch => {
         setPresentation(patch)
         if (patch.groupBy !== undefined) table.setPageIndex(0)
-      }} showColumns={showColumnControl} />
+      }} showColumns={showColumnControl} showSort={showSortControl} />
 
       {enableRowSelection && batchActions ? (
         <BatchActionToolbar
@@ -551,7 +577,7 @@ export function DataTable<TData>({
                   const openable = Boolean(onRowOpen)
                   return (
                   <React.Fragment key={row.id}>
-                  {groupBy && (index === 0 || groupKey(pageRows[index - 1]) !== groupKey(row)) ? <TableRow><TableCell colSpan={table.getVisibleLeafColumns().length} className="bg-muted px-2 py-2 text-sm font-medium">{table.getColumn(groupBy)?.columnDef.meta?.label ?? groupBy}: {groupLabel(row)} <Badge variant="outline" className="ml-2">{groupCounts.get(groupKey(row))} matching</Badge></TableCell></TableRow> : null}
+                  {groupBy && (index === 0 || groupKey(pageRows[index - 1]) !== groupKey(row)) ? <TableRow><TableHead scope="rowgroup" colSpan={table.getVisibleLeafColumns().length} className="bg-muted px-2 py-2 text-sm font-medium text-foreground">{table.getColumn(groupBy)?.columnDef.meta?.label ?? groupBy}: {groupLabel(row)} <Badge variant="outline" className="ml-2">{groupCounts.get(groupKey(row))} matching</Badge></TableHead></TableRow> : null}
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() ? "selected" : undefined}
@@ -655,7 +681,7 @@ function DataTablePagination<TData>({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
       <div><p>{shown} of {matching} matching shown{hidden ? ` · ${hidden} hidden by this view` : ""}{matching > shown ? ` · ${matching - shown} on other pages` : ""}{hidden && (onClearFilters || table.getState().columnFilters.length > 0) ? <Button type="button" variant="link" size="sm" onClick={() => { table.resetColumnFilters(); onClearFilters?.(); table.setPageIndex(0) }}>Show all</Button> : null}</p><p>Page {table.getState().pagination.pageIndex + 1} of {pageCount}</p></div>
-      <div className="flex items-center gap-2">
+      <div className="collection-controls flex items-center gap-2">
         <Button
           type="button"
           size="sm"
@@ -706,7 +732,7 @@ export function BatchActionToolbar({
     filteredRowCount > 0 && selectedRowCount < filteredRowCount
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
+    <div className="collection-controls flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/30 p-2">
       <Badge>{selectedRowCount} selected</Badge>
       {canSelectAllFiltered ? (
         <Button

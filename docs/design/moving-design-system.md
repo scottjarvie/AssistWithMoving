@@ -32,6 +32,10 @@ On phones with task sections, only the task strip sticks; operations scroll away
 
 Collection presentation is one mounted interaction tree: Table compares, List scans, Grid recognizes photos/illustrations. The person chooses the view; resizing does not remount it. Browser-local view/density/group preferences retain an in-memory fallback if storage refuses writes. Search, filters, selection, sort, editing, row opening and pagination continue through the same table state. Grouping is a leading sort before pagination, with counts over the actual matching loaded records. Footer distinguishes view-hidden records from records on other pages; it never invents archived totals. No new backend query or authority is implied.
 
+Without a saved presentation, phones choose List on their first client visit, desktops Table. That choice then persists across resizing. Grouping is explicit per categorical column, with one normalized identity/comparator for case variants and absent values; measurement sorting sentinels are never group labels. Preset sorting clears a conflicting column sort while retaining the chosen group.
+
+Home is a desk of labelled folder trays, with loaded move records and domain image slots first, a compact library, then AI setup. Every count says what it counts. Unsupported activity/connection/Queue totals are omitted rather than guessed. The overview shows the top few real move records with one named path to the entire collection.
+
 Print remains a document surface: preserve QR codes, labels, fields and pagination; no interactive chrome or dark backgrounds on paper.
 
 ## Verification

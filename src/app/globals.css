@@ -191,6 +191,7 @@
   }
   .workspace-header, .workspace-side-navigation, .workspace-top-navigation, .workspace-mobile-navigation, .moving-operation-strip, .moving-phone-contents, [data-moving-sections] { display: none !important; }
   .workspace-main { padding: 0 !important; }
+  .collection-controls { display: none !important; }
 }
 
 ::selection {

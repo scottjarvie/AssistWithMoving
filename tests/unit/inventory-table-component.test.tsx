@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +111,7 @@ import { InventoryTable } from "@/components/inventory-table";
 
 describe("InventoryTable", () => {
   beforeEach(() => {
+    setViewportWidth(1440);
     window.localStorage.removeItem("assistwithmoving.collection.items.v1");
     window.history.replaceState(null, "", "/app/moves/move_123/inventory");
     mockItems.rows = [
@@ -224,6 +225,23 @@ describe("InventoryTable", () => {
     ).toBeInTheDocument();
   });
 
+  it.each(["Table", "List", "Grid"])("lets an inventory preset regain control after a column sort in %s", async view => {
+    const user = userEvent.setup();
+    mockItems.rows = [
+      inventoryItem("synthetic-heavy", "[synthetic] Z heavy", { estimatedWeightLb: 100, createdAt: 1 }),
+      inventoryItem("synthetic-light", "[synthetic] A light", { estimatedWeightLb: 1, createdAt: 2 }),
+    ];
+    render(<InventoryTable householdId={"household_123" as Id<"households">} moveId={"move_123" as Id<"moves">} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Item" }));
+    fireEvent.click(screen.getByRole("button", { name: view }));
+    const recordButtons = () => screen.getAllByRole("button", { name: /^Open \[synthetic\]/ });
+    expect(recordButtons()[0]).toHaveAccessibleName(/A light/);
+    await user.click(screen.getByRole("button", { name: /Added/ }));
+    await user.click(screen.getByRole("menuitem", { name: /^Weight/ }));
+    expect(recordButtons()[0]).toHaveAccessibleName(/Z heavy/);
+    expect(screen.queryByRole("button", { name: "Sort records" })).not.toBeInTheDocument();
+  });
+
   it("opens on browsing items and keeps add/import workflows separate", async () => {
     const user = userEvent.setup();
 
@@ -330,8 +348,7 @@ describe("InventoryTable", () => {
   ])(
     "mounts one paginated interaction tree for 100 marked-synthetic records at %s width",
     (_viewport, width) => {
-      // Presentation is a user choice, not a viewport remount. Table opens
-      // first at each width; the person can choose List or Grid explicitly.
+      // Pick an initial presentation once; later resizes never remount it.
       setViewportWidth(width);
       mockItems.rows = Array.from({ length: 100 }, (_, index) =>
         inventoryItem(
@@ -353,8 +370,13 @@ describe("InventoryTable", () => {
         />,
       );
 
-      expect(screen.queryByRole("list")).not.toBeInTheDocument();
-      expect(screen.getAllByRole("table")).toHaveLength(1);
+      if (width < 768) {
+        expect(screen.getAllByRole("list")).toHaveLength(1);
+        expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      } else {
+        expect(screen.queryByRole("list")).not.toBeInTheDocument();
+        expect(screen.getAllByRole("table")).toHaveLength(1);
+      }
       // Ten mounted rows is the deliberate dense-list performance boundary.
       expect(
         screen.getAllByRole("button", { name: /^Open \[synthetic\]/ }),

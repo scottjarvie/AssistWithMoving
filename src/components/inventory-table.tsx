@@ -929,6 +929,7 @@ export function InventoryTable({
       {
         accessorKey: "status",
         meta: {
+          groupable: true,
           label: "Status",
           mobile: "primary",
           headClassName: "w-36",
@@ -954,6 +955,7 @@ export function InventoryTable({
       {
         accessorKey: "disposition",
         meta: {
+          groupable: true,
           label: "Disposition",
           mobile: "primary",
           headClassName: "w-36",
@@ -993,7 +995,7 @@ export function InventoryTable({
       },
       {
         accessorKey: "room",
-        meta: { label: "Room", mobile: "primary" },
+        meta: { label: "Room", mobile: "primary", groupable: true },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Room" />
         ),
@@ -1001,7 +1003,7 @@ export function InventoryTable({
       },
       {
         accessorKey: "category",
-        meta: { label: "Category", mobile: "expansion" },
+        meta: { label: "Category", mobile: "expansion", groupable: true },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Category" />
         ),
@@ -1011,6 +1013,7 @@ export function InventoryTable({
         id: "ownerContact",
         accessorFn: (row) => row.ownerContact?.name ?? "",
         meta: {
+          groupable: true,
           label: "Owner / contact",
           mobile: "expansion",
           cellClassName: "max-w-[14rem] whitespace-normal",
@@ -1036,7 +1039,7 @@ export function InventoryTable({
       },
       {
         accessorKey: "condition",
-        meta: { label: "Condition", mobile: "expansion" },
+        meta: { label: "Condition", mobile: "expansion", groupable: true },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Condition" />
         ),
@@ -1062,6 +1065,7 @@ export function InventoryTable({
         accessorKey: "needsReview",
         id: "review",
         meta: {
+          groupable: true,
           label: "Review",
           mobile: "hidden",
           headClassName: "w-32",
@@ -1414,7 +1418,7 @@ export function InventoryTable({
                     <PackagePlus aria-hidden="true" />
                     Add item
                   </Button>
-                  <SortMenu value={sortField} onChange={setSortField} />
+                  <SortMenu value={sortField} onChange={field => { setSortField(field); setSorting([]); }} />
                 </div>
               </div>
 
@@ -1430,6 +1434,7 @@ export function InventoryTable({
                 ariaLabel="Inventory records table"
                 preferenceKey="items"
                 showColumnControl={false}
+                showSortControl={false}
                 unfilteredCount={totalItemCount}
                 onClearFilters={clearBrowseFilters}
                 enableRowSelection

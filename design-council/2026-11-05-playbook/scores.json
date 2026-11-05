@@ -1,9 +1,28 @@
 {
   "runId": "2026-11-05-playbook",
-  "rubric": {"patternFidelity": 10, "preservation": 10, "clarity": 10, "phoneParity": 10, "movingIdentity": 10, "accessibility": 10},
+  "rubric": {
+    "patternFidelity": 10,
+    "preservation": 10,
+    "clarity": 10,
+    "phoneParity": 10,
+    "movingIdentity": 10,
+    "accessibility": 10
+  },
   "assumedTarget": "Each judge overall >= 8/10; zero unresolved preservation, capability, access or accessibility blockers",
   "assumedRoundCap": 3,
-  "judges": [{"provider": "codex", "model": "gpt-6.1-sol", "effort": "high"}, {"provider": "claudeAgent", "model": "claude-opus-5-5", "effort": "high", "finalTasteAuthorityAmongAIs": true}],
+  "judges": [
+    {
+      "provider": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high"
+    },
+    {
+      "provider": "claudeAgent",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "finalTasteAuthorityAmongAIs": true
+    }
+  ],
   "reviews": [
     {
       "exactHead": "1ec0fdfcf140efa679ef78d2bfb8b9bfdffed5a5",
@@ -66,6 +85,127 @@
       "authorModel": "gpt-6.1-sol",
       "crossModelCodeReview": true,
       "reviewRecord": "reviews/01-P-opus.md"
+    },
+    {
+      "exactHead": "3e845357ed5bb6789063efb2d3167020865e7f8b",
+      "observedHead": "3e845357ed5bb6789063efb2d3167020865e7f8b",
+      "implementationBase": "1ec0fdfcf140efa679ef78d2bfb8b9bfdffed5a5",
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "Codex gpt-6.1-sol high",
+      "blindLabel": "Q",
+      "evidenceType": "source-only",
+      "rubric": {
+        "scale": "0–10",
+        "foundationFixImplementation": 9,
+        "capabilityRetention": 7,
+        "collectionStateAndOrdering": 6,
+        "filterAndCountTruth": 9,
+        "storageAndHydration": 9,
+        "accessibilitySemantics": 8,
+        "renderedPolish": null,
+        "responsiveRendering": null,
+        "printRendering": null,
+        "finalTaste": null
+      },
+      "overallSourceScore": 8,
+      "visualVerdict": "unverified",
+      "disposition": "request_changes",
+      "blockingFindings": [
+        {
+          "severity": "P2",
+          "location": "src/components/inventory-table.tsx:1417",
+          "title": "Inventory presets cannot regain control after a column sort",
+          "trigger": "Sort Item through the table header or new Sort popover, then choose Weight or Recently added in the existing preset menu.",
+          "behavior": "The preset updates sortField and reorders input data, but the controlled TanStack sorting remains active and overrides that order. The preset menu displays the selected choice without delivering it. Sorting removal is disabled, and the new controls offer no reset.",
+          "fix": "Clear sorting when a preset is chosen, following MovableUnitsTable's existing handler. Preserve the independently selected grouping. Add coverage that applies a column sort and then verifies a preset becomes effective in Table, List and Grid."
+        },
+        {
+          "severity": "P2",
+          "location": "src/components/ui/data-table.tsx:385",
+          "relatedLocation": "src/components/ui/data-table.tsx:446",
+          "title": "Grouping identity and sorting equality disagree",
+          "trigger": "Group at least eleven records by a text field containing alternating values such as Den and den.",
+          "behavior": "TanStack's automatic text comparator treats those values as equal, while groupKey treats them as distinct. A small library probe confirmed the alternating order survives sorting. Table repeats group headings; List/Grid merge only the current page's members. Both groups can therefore be spread across pages despite grouping being selected.",
+          "fix": "Ensure complete groups are contiguous before pagination. Use a group comparator with an exact-identity tie-break matching groupKey, or build and order complete groups before flattening them into the paginated row model. Cover mixed-case values and a page boundary."
+        }
+      ],
+      "nonBlockingFindings": [
+        {
+          "severity": "P3",
+          "location": "src/components/ui/data-table.tsx:449",
+          "title": "Group headings expose missing-measurement sentinels",
+          "trigger": "Group movable units with unknown weight or density by Weight or Density.",
+          "behavior": "Those accessors use -1 for missing measurements, and groupLabel displays the raw value. Headings consequently report Weight: -1 or Density: -1 instead of identifying an unknown measurement.",
+          "fix": "Provide column-specific group labels or separate grouping values from sorting sentinels, preserving missing-value ordering while displaying Not recorded."
+        }
+      ],
+      "evidenceNotes": [
+        "The requested foundation fixes are present in the frozen source; no additional foundation source blocker identified.",
+        "Caller filter clearing, footer count separation, selection state, storage fallback and deterministic hydration snapshots are implemented.",
+        "Reported test results were considered; no suites, application server or browser were run.",
+        "Phone rendering, print rendering and visual acceptance remain unverified. The table default retains a 980px minimum width, making authenticated phone verification important.",
+        "Saved views, facets and other unfinished page families were excluded from completion judgments.",
+        "Prohibited scores and other judges' records were not read.",
+        "HEAD remained unchanged. Concurrent uncommitted changes were not reviewed."
+      ],
+      "filesChanged": [],
+      "crossModelCodeReview": false,
+      "reviewRecord": "reviews/02-Q-sol.md"
+    },
+    {
+      "exactHead": "3e845357ed5bb6789063efb2d3167020865e7f8b",
+      "implementationBase": "1ec0fdfcf140efa679ef78d2bfb8b9bfdffed5a5",
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "claude-opus-5-5",
+      "blindLabel": "Q",
+      "evidenceType": "source-only",
+      "rubric": {
+        "foundationFixCorrectness": 8.5,
+        "capabilityRetention": 6.5,
+        "crossViewStateIntegrity": 8.5,
+        "groupingSortingCorrectness": 6.5,
+        "footerCountTruthfulness": 8.5,
+        "storageFallbackAndHydration": 8.5,
+        "accessibilitySource": 7,
+        "phoneRiskSource": 5.5,
+        "testCoverage": 7,
+        "codeClarity": 7,
+        "renderedPolish": null,
+        "responsiveRendering": null,
+        "printRendering": null,
+        "finalTaste": null
+      },
+      "overallSourceScore": 7.3,
+      "visualVerdict": "unverified",
+      "disposition": "changes-requested",
+      "blockingFindings": [
+        {
+          "id": "B1",
+          "severity": "major",
+          "file": "src/components/inventory-table.tsx",
+          "line": 1417,
+          "related": [
+            "src/components/ui/data-table.tsx:409",
+            "src/components/collection-presentation-controls.tsx:31"
+          ],
+          "summary": "Inventory Sort menu no longer changes the order once a Table header or generic Sort popover sort is chosen; no control clears that sort (sorting removal disabled) until reload.",
+          "fix": "Sort menu onChange also calls setSorting([]) (as movable units does), or keep one sort control on Inventory; add a test."
+        },
+        {
+          "id": "B2",
+          "severity": "major",
+          "file": "src/components/ui/data-table.tsx",
+          "line": 322,
+          "related": [
+            "src/components/ui/data-table.tsx:320",
+            "src/components/inventory-table.tsx:1421"
+          ],
+          "summary": "With no saved view, phones open every collection as a min-w-980px table; before, movable units showed cards below md and Inventory showed its list at every width.",
+          "fix": "When nothing is stored, pick the default once on the client after first render (List below md) and save it; never change it on resize."
+        }
+      ],
+      "crossModelCodeReview": true,
+      "reviewRecord": "reviews/02-Q-opus.md"
     }
   ],
   "scottPicks": []
