@@ -76,7 +76,7 @@ const connectionData = vi.hoisted(() => ({
         status: "active" as "active" | "expired" | "revoked",
         clientId: "verified-client" as string | null,
         scopes: ["moving.context.read"],
-        effectiveAuthority: { status: "active" as const, scopes: ["moving.context.read"] },
+        effectiveAuthority: { status: "active" as const, scopes: ["moving.context.read"], moveScope: "selectedMoves" as "allMoves" | "selectedMoves", moveIds: ["move_123"], expiresAt: 1_780_000_000_000 as number | null },
         moveScope: "selectedMoves" as "selectedMoves" | "allMoves",
         moveIds: ["move_123"],
         observedClientName: "Some AI Client",
@@ -775,12 +775,17 @@ it.each(["household", "reconnect"])("clears selected moves when the approval %s 
 
 it("labels resolved alias authority separately from the saved full row", () => {
   const original = connectionData.grants.grants;
-  connectionData.grants.grants = [{ ...original[0], scopes: ["moving.context.read", "moving.work.write"], effectiveAuthority: { status: "active", scopes: ["moving.context.read"] } }];
+  connectionData.grants.grants = [{ ...original[0], scopes: ["moving.context.read", "moving.work.write"], moveScope: "allMoves", moveIds: [], expiresAt: null, effectiveAuthority: { status: "active", scopes: ["moving.context.read"], moveScope: "selectedMoves", moveIds: ["move_123"], expiresAt: 1_780_000_000_000 } }];
   try {
     render(<AiConnectionManager />);
     const authority = screen.getByText(/Resolved connection permissions/);
     expect(authority).toHaveTextContent("Read the move context you choose");
     expect(authority).not.toHaveTextContent("Save the work you asked for");
+    expect(screen.getByText("Saved moves").nextElementSibling).toHaveTextContent("All your moves");
+    expect(screen.getByText("Saved end date").nextElementSibling).toHaveTextContent("No end date");
+    expect(screen.getByText("Effective moves").nextElementSibling).toHaveTextContent("Utah to Virginia");
+    expect(screen.getByText("Effective moves").nextElementSibling).not.toHaveTextContent("All your moves");
+    expect(screen.getByText("Effective end date").nextElementSibling).not.toHaveTextContent("No end date");
   } finally { connectionData.grants.grants = original; }
 });
 
