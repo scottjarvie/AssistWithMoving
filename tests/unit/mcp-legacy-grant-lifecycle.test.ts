@@ -1582,3 +1582,73 @@ it("ignores long expired-key history while enforcing both permanent and future-e
   expect(current).toHaveLength(2);
   expect(current.every(row => row.scopeChoice === "full")).toBe(true);
 });
+
+
+it("rolls back the API-key patch if its receipt write fails inside REST reduction", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const { generateApiKeySecret, hashApiKey, apiKeyPrefix } = await import("../../convex/lib/apiKeys");
+  const raw = generateApiKeySecret();
+  const secretHash = await hashApiKey(raw);
+  const keyId = await t.run(ctx => ctx.db.insert("apiKeys", { householdId, name: "Rollback fixture", prefix: apiKeyPrefix(raw), tokenPreview: "synthetic", secretHash, scopes: ["moves/read"], scopeChoice: "chosen", status: "active", version: 1, createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+  const request = () => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: "Bearer " + raw, body: { expectedVersion: 1, scopes: [] } });
+  const before = await t.run(ctx => ctx.db.get(keyId));
+  const auditModule = await import("../../convex/lib/audit");
+  const actual = auditModule.recordAuditEvent;
+  const receiptSpy = vi.spyOn(auditModule, "recordAuditEvent").mockImplementation(async (ctx, input) => {
+    if (input.action === "api_key.self_reduced") throw new Error("synthetic receipt failure");
+    return actual(ctx, input);
+  });
+  try {
+    expect((await request()).status).toBeGreaterThanOrEqual(400);
+    expect(receiptSpy).toHaveBeenCalled();
+    expect(await t.run(ctx => ctx.db.get(keyId))).toEqual(before);
+    expect(await t.run(ctx => ctx.db.query("auditLogs").collect())).toEqual([]);
+  } finally { receiptSpy.mockRestore(); }
+  const response = await request();
+  expect(response.status).toBe(200);
+  expect((await t.run(ctx => ctx.db.get(keyId)))?.version).toBe(2);
+  expect((await t.run(ctx => ctx.db.query("auditLogs").collect()))).toEqual([expect.objectContaining({ action: "api_key.self_reduced", metadata: expect.objectContaining({ version: 2 }) })]);
+});
+
+it.each(["opaque-description", "https://description.example/client.json"])("describes only the calling legacy credential %s without context scope or unrestricted moves", async clientId => {
+  const t = convexTest(schema, modules);
+  const { userId, householdId } = await seedOwner(t);
+  const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "PRIVATE domain move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "legacy:" + clientId });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "legacy:sibling-description" });
+  const row = (await t.run(ctx => ctx.db.query("aiGrants").collect())).find(row => row.clientId === "legacy:" + clientId)!;
+  const sibling = (await t.run(ctx => ctx.db.query("aiGrants").collect())).find(row => row.clientId === "legacy:sibling-description")!;
+  const owner = t.withIdentity({ subject: SUBJECT });
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, moveScope: "selectedMoves", moveIds: [moveId], scopes: ["moving.work.write"], scopeIntent: "chosen" });
+  const caller = { subject: SUBJECT, claims: { client_id: clientId } };
+  const ctx = { runQuery: (ref: any, args: any) => t.query(ref, args), runMutation: (ref: any, args: any) => t.mutation(ref, args) } as any;
+  const { createLegacyGrantGate } = await import("../../convex/http");
+  const gate = (toolName: string) => createLegacyGrantGate(ctx)({} as any, { identity: caller, toolName, mode: "call" } as any);
+  expect((await gate("get_agent_context")).allowed).toBe(false);
+  expect((await gate("describe_connection")).allowed).toBe(true);
+  const description = await t.query(internal.aiGrants.describeLegacyConnection, { caller });
+  expect(description).toEqual({ version: 2, status: "active", settings: "https://movingmanifest.com/settings/ai" });
+  expect(JSON.stringify(description)).not.toContain("PRIVATE");
+  await t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: description.version!, scopes: [] });
+  const empty = await t.query(internal.aiGrants.describeLegacyConnection, { caller });
+  expect(empty.version).toBe(3);
+  expect((await gate("describe_connection")).allowed).toBe(true);
+  await t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: empty.version!, action: "revoke" });
+  expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
+  expect((await t.query(internal.aiGrants.describeLegacyConnection, { caller })).status).toBe("revoked");
+});
+
+it("counts summary API keys by effective expiry and marks a bounded count as truncated", async () => {
+  const t = convexTest(schema, modules);
+  const { userId, householdId } = await seedOwner(t);
+  await t.run(async ctx => {
+    for (let i = 0; i < 160; i++) await ctx.db.insert("apiKeys", { householdId, name: "Summary fixture", prefix: "synthetic", tokenPreview: "synthetic", secretHash: "synthetic-hash", scopes: ["moves/read"], status: "active", expiresAt: 1, createdByUserId: userId, createdAt: i, updatedAt: i });
+  });
+  const owner = t.withIdentity({ subject: SUBJECT });
+  expect(await owner.query(api.households.summaryStats, { householdId })).toMatchObject({ activeApiKeyCount: 0, activeApiKeyCountTruncated: false });
+  await t.run(async ctx => {
+    for (let i = 0; i < 103; i++) await ctx.db.insert("apiKeys", { householdId, name: "Current summary fixture", prefix: "synthetic", tokenPreview: "synthetic", secretHash: "synthetic-hash", scopes: ["moves/read"], status: "active", createdByUserId: userId, createdAt: i, updatedAt: i });
+  });
+  expect(await owner.query(api.households.summaryStats, { householdId })).toMatchObject({ activeApiKeyCount: 100, activeApiKeyCountTruncated: true });
+});

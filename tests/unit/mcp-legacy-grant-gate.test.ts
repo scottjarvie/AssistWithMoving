@@ -50,7 +50,7 @@ function grant(
 }
 
 /** Every scoped tool, but never the media tools while Q9 could reshape them. */
-const SCOPED_TOOLS = Object.keys(LEGACY_GATEWAY_TOOL_SCOPES);
+const SCOPED_TOOLS = Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).filter(name => name !== "describe_connection");
 
 describe("legacy gateway catalog", () => {
   it("has an authority decision for every tool the gateway registers", () => {
@@ -65,7 +65,7 @@ describe("legacy gateway catalog", () => {
   });
 
   it("covers the whole live surface rather than a sample of it", () => {
-    expect(registeredNames.length).toBe(30);
+    expect(registeredNames.length).toBe(31);
     expect(
       Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).length +
         LEGACY_GATEWAY_NEVER_PERMITTED_TOOLS.length,
@@ -401,4 +401,12 @@ describe("refusals name the actor who can lift them", () => {
       }
     }
   });
+});
+
+
+it("allows only credential description independently of scopes and selected moves", () => {
+  for (const grants of [[], [grant([], { moveScope: "selectedMoves", moveIds: ["move-a"] })]]) {
+    expect(decideLegacyGatewayAccess({ toolName: "describe_connection", grants, mode: "call" }).allowed).toBe(true);
+    expect(decideLegacyGatewayAccess({ toolName: "get_agent_context", grants, mode: "call" }).allowed).toBe(false);
+  }
 });

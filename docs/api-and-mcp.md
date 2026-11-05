@@ -2304,7 +2304,7 @@ revocable in Settings while incomplete-history authorization stays closed.
 Older records can be paged through in Settings. A person can explicitly recover
 a selected verified client even from an oversized history: current consent and
 the loaded owner-management revision are required, and the original selected
-record is preserved in private owner history before reuse. The paginated
+record is preserved in private owner history before reuse. Settings exposes those pages under **Original connection records**. The paginated
 `aiGrants.listSourceHistory` query returns complete originals only to the signed-in
 person owner, without requiring household admin permission. Household audit
 contains the approval summary, never client identity, superseded source IDs or
@@ -2319,7 +2319,9 @@ currently accessible moves. API-key settings reads also require a person session
 Existing role and move ceilings still apply. Only that client's indexed
 recovered decision becomes authoritative; other incomplete histories stay
 closed. Recovered revisions are negative and decrease on edits and reconnects;
-clients must echo the exact version they receive. Positive legacy versions can
+clients must echo the exact version they receive. The legacy `describe_connection`
+tool reports only the calling credential?s version/status, independently of
+domain scopes and move restrictions; use it before `reduce_connection`. Positive legacy versions can
 never match a recovered generation. Later revocation of a historical alias also
 stops its recovered client; older alias forms cannot edit the new decision.
 
@@ -2332,13 +2334,14 @@ members capabilities retain their existing ceiling; canonical OAuth does not
 inherit those capabilities.
 
 All four doors offer `reduce_connection`. OAuth takes the calling client's
-current `expectedVersion` from `describe_connection` (canonical) or
-`connectionVersion` from `get_agent_context` (legacy). API-key HTTP/stdio use
+current `expectedVersion` from `describe_connection` on either OAuth door. API-key HTTP/stdio use
 `get_api_context` and `POST /api/v1/me/access`. Inputs are `scopes`, `moveIds`,
 `expiresAt` and `action` (`narrow`, `pause`, `revoke`). Omitted fields preserve
 limits; null expiry, additions, reactivation and extension are refused with a
 Settings link. Pause ends access immediately; only the person can restore it.
-The change, version and durable audit receipt commit atomically. A caller cannot
+The change, version and durable audit receipt commit atomically. API-key REST
+reductions execute in a Convex subtransaction, so a receipt failure rolls back
+the key change before the facade maps the failure to an HTTP response. A caller cannot
 supply a sibling grant/key id. Current consent evidence remains required for
 person-side approvals even when access choices use defaults.
 

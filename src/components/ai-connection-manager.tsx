@@ -13,7 +13,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import type { FunctionArgs } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { useAuth } from "@clerk/nextjs";
 import {
   Activity,
@@ -220,6 +220,28 @@ function GrantPermissionPicker({ grant, scopes }: { grant: GrantRow; scopes: Bou
       {info.label}
     </label>)}
   </fieldset>;
+}
+
+function OriginalConnectionHistory({ ready }: { ready: boolean }) {
+  const [opened, setOpened] = useState(false);
+  const [cursor, setCursor] = useState<string | undefined>();
+  const history = useQuery(api.aiGrants.listSourceHistory, ready && opened ? (cursor ? { cursor } : {}) : "skip") as FunctionReturnType<typeof api.aiGrants.listSourceHistory> | undefined;
+  return <details className="rounded-lg border border-border p-4" onToggle={event => setOpened(event.currentTarget.open)}>
+    <summary className="cursor-pointer font-medium">Original connection records</summary>
+    <p className="mt-2 text-sm text-muted-foreground">Saved approvals from before a connection was reconnected at its history limit. These originals belong only to you.</p>
+    {opened && history === undefined ? <p>Loading original records...</p> : null}
+    {history?.page.length === 0 ? <p className="mt-3 text-sm">No archived originals yet.</p> : null}
+    <div className="mt-3 space-y-3">{history?.page.map(row => <article key={row._id} className="rounded border border-border p-3 text-sm">
+      <p className="font-medium">{row.source.label}</p>
+      <p>Saved {formatMoment(row.archivedAt)}. Original version {row.source.version}.</p>
+      <ul>{row.source.consentSnapshot.map(entry => <li key={entry.scope}><strong>{entry.label}.</strong> {entry.grants} {entry.doesNotImply}</li>)}</ul>
+      <details className="mt-2"><summary className="cursor-pointer">Complete saved record</summary><pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(row.source, null, 2)}</pre></details>
+    </article>)}</div>
+    <div className="mt-3 flex flex-wrap gap-2">
+      {history && !history.isDone ? <Button type="button" variant="outline" onClick={() => setCursor(history.continueCursor)}>Older original records</Button> : null}
+      {cursor ? <Button type="button" variant="outline" onClick={() => setCursor(undefined)}>Recent original records</Button> : null}
+    </div>
+  </details>;
 }
 
 export function AiConnectionManager() {
@@ -891,15 +913,16 @@ export function AiConnectionManager() {
                     What you approved
                   </p>
                   <ul className="mt-1 space-y-1 text-sm leading-6">
-                    {(boundaryScopes.filter((info) => grant.scopes.includes(info.scope))).map((entry) => (
+                    {grant.consentSnapshot.map((entry) => (
                       <li key={entry.scope}>
                         <span className="font-medium">{entry.label}.</span>{" "}
                         <span className="text-muted-foreground">
-                          {entry.doesNotImply}
+                          {entry.grants} {entry.doesNotImply}
                         </span>
                       </li>
                     ))}
                   </ul>
+                  <p className="mt-2 text-sm text-muted-foreground">Current effective permissions: {grant.scopes.map(scope => boundaryScopes.find(info => info.scope === scope)?.label ?? scope).join(", ") || "None"}.</p>
                 </div>
 
                 {grant.status !== "revoked" && canWriteConsent ? (
@@ -1156,6 +1179,8 @@ export function AiConnectionManager() {
       {/* ---------------------------------------------------------------- */}
       {/* 7. API keys — a different door, kept secondary and separate.      */}
       {/* ---------------------------------------------------------------- */}
+      <OriginalConnectionHistory ready={ready} />
+
       <details className="rounded-lg border border-border bg-card p-4 sm:p-5">
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-medium">
           <KeyRound className="size-4 text-primary" aria-hidden="true" />

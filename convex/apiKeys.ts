@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
@@ -15,7 +15,7 @@ import {
   normalizeApiKeyScopes,
 } from "./lib/apiKeys";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
-import { reducedAccess, type Reduction } from "./lib/connectionReduction";
+import { reductionArgs, reducedAccess, type Reduction } from "./lib/connectionReduction";
 import { requireHouseholdPermission } from "./lib/permissions";
 
 // Default cap on active connections (API keys) per household, so the "active
@@ -367,3 +367,9 @@ export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">,
   const receipt = await recordAuditEvent(ctx, { householdId: key.householdId, moveId: key.moveId, actorType: "apiKey", actorApiKeyId: key._id, actorUserId: key.createdByUserId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: key._id, metadata: { version, action: input.action ?? "narrow", previousVersion: key.version ?? 1, previousScopes: effectiveApiKeyScopes(key), scopes: reduced.scopes ?? effectiveApiKeyScopes(key), moveId: moveId ?? key.moveId ?? null, expiresAt: reduced.expiresAt ?? key.expiresAt ?? null } });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
 }
+
+/** The REST facade maps failures only after this subtransaction rolls back. */
+export const reduceCallingKey = internalMutation({
+  args: { apiKeyId: v.id("apiKeys"), ...reductionArgs },
+  handler: (ctx, { apiKeyId, ...input }) => reduceOwnApiKey(ctx, apiKeyId, input),
+});

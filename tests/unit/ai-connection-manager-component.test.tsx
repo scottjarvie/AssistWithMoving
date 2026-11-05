@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
     listMine: "aiGrants.listMine",
     listActivity: "aiGrants.listActivity",
     listMoveChoices: "aiGrants.listMoveChoices",
+    listSourceHistory: "aiGrants.listSourceHistory",
     describeBoundary: "aiGrants.describeBoundary",
     approve: "aiGrants.approve",
     revoke: "aiGrants.revoke",
@@ -31,6 +32,7 @@ const apiMock = vi.hoisted(() => ({
 const connectionData = vi.hoisted(() => ({
   queryCalls: vi.fn(),
   moveChoicesPaging: false,
+  archivedRecords: false,
   approve: vi.fn(),
   revoke: vi.fn(),
   updateLimits: vi.fn(),
@@ -156,6 +158,8 @@ vi.mock("convex/react", () => ({
         return connectionData.grants;
       case apiMock.aiGrants.listActivity:
         return connectionData.activity;
+      case apiMock.aiGrants.listSourceHistory:
+        return { page: connectionData.archivedRecords ? [{ _id: "saved-source", archivedAt: 1770000000000, source: { ...connectionData.grants.grants[0], _id: "original-grant", label: (args as { cursor?: string })?.cursor ? "Earlier original approval" : "Original approval", version: 1 } }] : [], isDone: Boolean((args as { cursor?: string })?.cursor), continueCursor: "older-originals" };
       case apiMock.households.listMine:
         return connectionData.households;
       case apiMock.households.summaryStats:
@@ -629,4 +633,34 @@ it("preserves selected move limits across pages", async () => {
     await user.click(within(form).getByRole("button", { name: "Save limits" }));
     expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ moveScope: "selectedMoves", moveIds: ["move_123", "move_456"] }));
   } finally { connectionData.moveChoicesPaging = false; }
+});
+
+
+it("shows original approval records in owner Settings and pages their history", async () => {
+  connectionData.archivedRecords = true;
+  connectionData.queryCalls.mockClear();
+  try {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Original connection records"));
+    expect(await screen.findByText("Original approval")).toBeInTheDocument();
+    await user.click(screen.getByText("Complete saved record"));
+    expect(screen.getByText(/original-grant/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Older original records" }));
+    expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listSourceHistory, { cursor: "older-originals" });
+    expect(await screen.findByText("Earlier original approval")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Recent original records" }));
+    expect(await screen.findByText("Original approval")).toBeInTheDocument();
+  } finally { connectionData.archivedRecords = false; }
+});
+
+it("shows frozen historical consent separately from current permission wording", () => {
+  const original = connectionData.grants.grants;
+  connectionData.grants.grants = [{ ...original[0], consentSnapshot: [{ scope: "moving.context.read", label: "Saved old approval wording", grants: "Saved original consent terms.", doesNotImply: "Saved exclusions." }] }];
+  try {
+    render(<AiConnectionManager />);
+    expect(screen.getByText("Saved old approval wording.")).toBeInTheDocument();
+    expect(screen.getByText(/Saved original consent terms/)).toBeInTheDocument();
+    expect(screen.getByText(/Current effective permissions: Read the move context you choose/)).toBeInTheDocument();
+  } finally { connectionData.grants.grants = original; }
 });
