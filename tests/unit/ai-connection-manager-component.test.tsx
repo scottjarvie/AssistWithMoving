@@ -36,6 +36,8 @@ const connectionData = vi.hoisted(() => ({
     consentPolicyVersion: "",
     catalogFingerprint: "",
     historyFingerprint: "current-history",
+    historyAtCapacity: false,
+    historyOverflow: false,
     scopes: [
       {
         scope: "moving.context.read",
@@ -264,6 +266,26 @@ describe("AiConnectionManager", () => {
       }));
       expect(screen.getByText(/Reconnected with the permissions and end date you approved/)).toBeInTheDocument();
     } finally { connectionData.grants.grants = original; }
+  });
+
+  it("blocks another new row at history capacity while allowing explicit reconnect", async () => {
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], status: "revoked" }];
+    connectionData.grants.historyAtCapacity = true;
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.type(screen.getByLabelText("Name this connection"), "Another connection");
+      expect(screen.getByRole("button", { name: "Approve this connection" })).toBeDisabled();
+      expect(screen.getByText(/Connection history is full/)).toBeInTheDocument();
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      expect(screen.getByRole("button", { name: "Approve this connection" })).toBeEnabled();
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ reconnectGrantId: "ai_grant_123", expectedHistoryFingerprint: "current-history" }));
+    } finally {
+      connectionData.grants.grants = original;
+      connectionData.grants.historyAtCapacity = false;
+    }
   });
 
   it("submits explicit full access and no end date once the backend advertises support", async () => {
