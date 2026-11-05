@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -64,11 +64,14 @@ const activity: QueueDeskActivity[] = [
   },
 ];
 
+let fixtureScope = 0;
 function renderDesk(
   overrides: Partial<React.ComponentProps<typeof QueueDesk>> = {},
+  presentation: "list" | "table" = "list",
 ) {
   const props: React.ComponentProps<typeof QueueDesk> = {
     items,
+    preferenceScope: `synthetic-test-${++fixtureScope}`,
     activeApiKeyCount: 1,
     loading: false,
     hasMoreHandoffs: false,
@@ -90,6 +93,9 @@ function renderDesk(
     savedWorkPath: "/app/moves/move_1/overview#planning-results",
     ...overrides,
   };
+  // Existing card/thread tests explicitly choose List; Table has separate
+  // consumer coverage below. jsdom does not establish responsive CSS proof.
+  window.localStorage.setItem(`assistwithmoving.collection.queue.${props.preferenceScope}.${props.ownerScope}.v1`, JSON.stringify({ view: presentation, density: "compact", groupBy: "state", groupDesc: false }));
   return { ...render(<QueueDesk {...props} />), props };
 }
 
@@ -132,17 +138,12 @@ describe("QueueDesk", () => {
     expect(screen.getByLabelText("Your answer for needsYou route note")).toHaveValue("Synthetic retained input");
     expect(screen.getByRole("button", { name: "Send answer" })).toBeEnabled();
   });
-  it("uses exactly the four person-facing Queue states", () => {
+  it("offers six real views over the same four stored Queue states", () => {
     renderDesk();
-
-    const nav = screen.getByRole("navigation", { name: "Queue states" });
-    expect(within(nav).getAllByRole("button")).toHaveLength(4);
-    expect(within(nav).getByRole("button", { name: /Needs You/ })).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: /Working/ })).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: /Waiting for your AI/ })).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: /Done/ })).toBeInTheDocument();
+    const views = screen.getByRole("group", { name: "Queue views" });
+    expect(within(views).getAllByRole("button")).toHaveLength(6);
+    for (const name of [/Needs You/, /Waiting for your AI/, /Working/, /Done this week/, /Everything/, /All Done/]) expect(within(views).getByRole("button", { name })).toBeInTheDocument();
     expect(screen.queryByText(/^To do$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Review$/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Archive$/i)).not.toBeInTheDocument();
   });
 
@@ -161,7 +162,7 @@ describe("QueueDesk", () => {
     await user.click(screen.getByRole("button", { name: /Waiting for your AI/ }));
     expect(screen.getByText("Ready for your chosen AI to claim.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Done/ }));
+    await user.click(screen.getByRole("button", { name: /All Done/ }));
     expect(screen.getByText("Comparison saved to the move.")).toBeInTheDocument();
   });
 
@@ -174,6 +175,7 @@ describe("QueueDesk", () => {
       screen.getByText("A Queue API key is set up"),
     ).toBeInTheDocument();
     expect(screen.getByText(/cannot tell whether an AI client is currently online/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add handoff" }));
     expect(screen.getByText(/Nothing runs until an AI claims it/i)).toBeInTheDocument();
 
     await user.type(
@@ -259,11 +261,11 @@ describe("QueueDesk", () => {
   it("renders loading and empty states without inventing work", async () => {
     const user = userEvent.setup();
     const { rerender, props } = renderDesk({ items: [], loading: true });
-    expect(screen.getByLabelText("Loading Queue")).toBeInTheDocument();
+    expect(screen.getByText("Loading Queue")).toBeInTheDocument();
 
     rerender(<QueueDesk {...props} items={[]} loading={false} />);
     expect(screen.getByText("Nothing needs you")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Done/ }));
+    await user.click(screen.getByRole("button", { name: /All Done/ }));
     expect(screen.getByText("No completed handoffs yet")).toBeInTheDocument();
   });
 
@@ -281,7 +283,8 @@ describe("QueueDesk", () => {
       onOwnerScopeChange,
     });
 
-    expect(screen.getAllByText("Alex's Queue")).toHaveLength(2);
+    expect(screen.getByRole("option", { name: "Alex's Queue" })).toBeInTheDocument();
+    expect(within(screen.getByRole("list")).getByText("Alex's Queue")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Queue owner"), "user_2");
     expect(onOwnerScopeChange).toHaveBeenCalledWith("user_2");
   });
@@ -345,12 +348,13 @@ describe("QueueDesk", () => {
     expect(onLoadMoreActivities).toHaveBeenCalledOnce();
   });
 
-  it("disables the composer until one person's Queue is selected", () => {
+  it("disables the composer until one person's Queue is selected", async () => {
     renderDesk({
       canCreateDirective: false,
       directiveTargetLabel: "Choose one person's Queue",
     });
 
+    await userEvent.click(screen.getByRole("button", { name: "Add handoff" }));
     expect(screen.getByLabelText("What should your AI pick up next?")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save handoff" })).toBeDisabled();
     expect(
@@ -367,4 +371,130 @@ describe("QueueDesk", () => {
 
     expect(onStateChange).toHaveBeenCalledWith("waitingForAi");
   });
+  it("retains a Table answer's DOM identity, exact version and post-answer focus", async () => {
+    const user = userEvent.setup();
+    const item = queueItem("needsYou", { id: "synthetic-table-question", version: 9 });
+    const provideInput = vi.fn().mockResolvedValue(true);
+    renderDesk({ items: [item], onProvideInput: provideInput }, "table");
+    const input = screen.getByLabelText("Your answer for needsYou route note");
+    await user.type(input, "Synthetic room");
+    expect(screen.getByLabelText("Your answer for needsYou route note")).toBe(input);
+    expect(input).toHaveFocus();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+    expect(provideInput).toHaveBeenCalledWith(item, "Synthetic room");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Search Queue" })).toHaveFocus());
+    expect(screen.getByRole("heading", { name: "Waiting for your AI" })).toBeInTheDocument();
+  });
+
+  it("keeps the composer draft through closing and refusal, then focuses Search on save", async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderDesk({ onCreateDirective: save });
+    expect(screen.queryByLabelText("What should your AI pick up next?")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add handoff" }));
+    await user.type(screen.getByLabelText("What should your AI pick up next?"), "Synthetic direction");
+    await user.click(screen.getByRole("button", { name: "Keep draft and close" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add handoff" })).toHaveFocus());
+    await user.click(screen.getByRole("button", { name: "Add handoff" }));
+    expect(screen.getByLabelText("What should your AI pick up next?")).toHaveValue("Synthetic direction");
+    await user.click(screen.getByRole("button", { name: "Save handoff" }));
+    expect(screen.getByLabelText("What should your AI pick up next?")).toHaveValue("Synthetic direction");
+    await user.click(screen.getByRole("button", { name: "Save handoff" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Search Queue" })).toHaveFocus());
+    expect(save).toHaveBeenNthCalledWith(2, "Synthetic direction");
+  });
+
+  it("keeps every loaded state and both older-page controls reachable from Everything", async () => {
+    const user = userEvent.setup();
+    const moreHandoffs = vi.fn();
+    const moreCaptures = vi.fn();
+    renderDesk({ hasMoreHandoffs: true, hasMoreCaptures: true, onLoadMoreHandoffs: moreHandoffs, onLoadMoreCaptures: moreCaptures });
+    await user.click(within(screen.getByRole("group", { name: "Queue views" })).getByRole("button", { name: "Everything" }));
+    for (const state of ["needsYou", "working", "waitingForAi", "done"]) expect(screen.getByRole("button", { name: new RegExp(state + " route note") })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load older handoffs" }));
+    await user.click(screen.getByRole("button", { name: "Load older captures" }));
+    expect(moreHandoffs).toHaveBeenCalledOnce();
+    expect(moreCaptures).toHaveBeenCalledOnce();
+    await user.type(screen.getByRole("textbox", { name: "Search Queue" }), "synthetic no match");
+    expect(screen.getByText(/Older pages may contain more matches/)).toBeInTheDocument();
+  });
+
+  it("discards presentation-only edits and reapplies a real named view after remount", async () => {
+    const user = userEvent.setup();
+    const first = renderDesk();
+    const original = first.props;
+    await user.selectOptions(screen.getByRole("combobox", { name: "Group records by" }), "source");
+    expect(screen.getByText("Needs You modified")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("combobox", { name: "Group records by" })).toHaveValue("state");
+    await user.click(within(screen.getByRole("group", { name: "Queue views" })).getByRole("button", { name: "Everything" }));
+    await user.type(screen.getByRole("textbox", { name: "Search Queue" }), "working");
+    await user.click(screen.getByRole("button", { name: "Save as view" }));
+    await user.type(screen.getByLabelText("View name"), "Synthetic working view");
+    await user.click(screen.getByRole("button", { name: "Save view" }));
+    first.unmount();
+    render(<QueueDesk {...original} />);
+    await user.click(within(screen.getByRole("group", { name: "Queue views" })).getByRole("button", { name: "Synthetic working view" }));
+    expect(screen.getByRole("textbox", { name: "Search Queue" })).toHaveValue("working");
+    expect(screen.getByRole("heading", { name: "Everything" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /working route note/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /needsYou route note/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
+  });
+
+  it("retains answer drafts when the owner scope changes and returns", async () => {
+    const user = userEvent.setup();
+    const { props, rerender } = renderDesk();
+    await user.type(screen.getByLabelText("Your answer for needsYou route note"), "Synthetic retained owner draft");
+    rerender(<QueueDesk {...props} items={[]} ownerScope="synthetic-other-owner" />);
+    rerender(<QueueDesk {...props} />);
+    expect(screen.getByLabelText("Your answer for needsYou route note")).toHaveValue("Synthetic retained owner draft");
+  });
+
+  it("preserves a draft through Options presentation changes and counted source filtering", async () => {
+    const user = userEvent.setup();
+    renderDesk({ items: [queueItem("needsYou"), queueItem("needsYou", { id: "synthetic-capture-options", source: "capture", directive: "[synthetic] Photo evidence" })] }, "table");
+    const answerName = "Your answer for needsYou route note";
+    await user.type(screen.getByLabelText(answerName), "Synthetic answer across views");
+    for (const view of ["List", "Grid", "Table"]) {
+      await user.click(screen.getByRole("button", { name: "Collection options" }));
+      const options = screen.getByRole("dialog", { name: "Collection options" });
+      await user.click(within(options).getByRole("button", { name: view }));
+      await user.click(within(options).getByRole("button", { name: "Show records" }));
+      expect(screen.getByLabelText(answerName)).toHaveValue("Synthetic answer across views");
+    }
+    await user.click(screen.getByRole("button", { name: "Add filter" }));
+    const filters = screen.getByRole("dialog", { name: "Filter records" });
+    const kind = within(filters).getByRole("group", { name: "Kind" });
+    expect(within(kind).getByRole("checkbox", { name: /^Capture\s*1$/ })).toBeInTheDocument();
+    await user.click(within(kind).getByRole("checkbox", { name: /^Handoff\s*1$/ }));
+    await user.click(within(filters).getByRole("button", { name: "Show records" }));
+    expect(screen.getByLabelText(answerName)).toHaveValue("Synthetic answer across views");
+    expect(screen.queryByText("[synthetic] Photo evidence")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove filter Kind: Handoff" }));
+    expect(screen.getByText("[synthetic] Photo evidence")).toBeInTheDocument();
+  });
+
+  it("uses real completion dates for the week view and refreshes its disclosed time window", async () => {
+    const user = userEvent.setup();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(new Date(2026, 10, 5, 12).getTime());
+    try {
+      renderDesk({ items: [
+        queueItem("done", { id: "synthetic-this-week", directive: "[synthetic] This week", completedAt: new Date(2026, 10, 2, 10).getTime() }),
+        queueItem("done", { id: "synthetic-previous-week", directive: "[synthetic] Previous week", completedAt: new Date(2026, 10, 1, 10).getTime() }),
+        queueItem("done", { id: "synthetic-undated", source: "capture", directive: "[synthetic] Undated capture", completedAt: null }),
+      ] });
+      await user.click(within(screen.getByRole("group", { name: "Queue views" })).getByRole("button", { name: "Done this week" }));
+      expect(screen.getByRole("button", { name: /\[synthetic\] This week/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /\[synthetic\] Previous week/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /\[synthetic\] Undated capture/ })).not.toBeInTheDocument();
+      clock.mockReturnValue(new Date(2026, 10, 9, 12).getTime());
+      await user.click(screen.getByRole("button", { name: "Refresh week" }));
+      expect(screen.queryByRole("button", { name: /\[synthetic\] This week/ })).not.toBeInTheDocument();
+      await user.click(within(screen.getByRole("group", { name: "Queue views" })).getByRole("button", { name: "All Done" }));
+      for (const name of [/\[synthetic\] This week/, /\[synthetic\] Previous week/, /\[synthetic\] Undated capture/]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    } finally { clock.mockRestore(); }
+  });
+
 });

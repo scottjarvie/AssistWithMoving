@@ -40,13 +40,13 @@ All baseline routes remain accounted for. Shared tokens or navigation do not est
 | `/app/moves/[moveId]` | Shared tokens/navigation only. Page-specific decided pattern and rendered verification remain. |
 | `/app/moves/[moveId]/photos` | Original redirect retained; destination upgrade and runtime verification remain in progress. |
 | `/app/moves/[moveId]/plan` | Shared foundation only. Domain capability inventory, unchanged now baseline and three genuinely different compositions still required. |
-| `/app/moves/[moveId]/queue` | Current four-state backend contract retained. Decided collection list, row answer and item thread redesign remain. |
+| `/app/moves/[moveId]/queue` | Six real collection views and shared controls, inline answers, parent-owned drafts, compact composer and retained thread integrated in source. Written regression tests and independent source review pending; no current runtime/rendered acceptance. Four-state backend/access/write contract retained. |
 | `/app/moves/[moveId]/sell` | Original redirect retained; destination upgrade and runtime verification remain in progress. |
 | `/app/moves/[moveId]/spaces` | Original redirect retained; destination upgrade and runtime verification remain in progress. |
 | `/app/moves` | Shared tokens/navigation only. Page-specific decided pattern and rendered verification remain. |
 | `/app` | Three real desk trays. Bounded synthetic Home component pass; authenticated shell, final fonts and whole-page behavior remain. |
 | `/app/pcs-packet` | Shared tokens/navigation only. Page-specific decided pattern and rendered verification remain. |
-| `/app/queue` | Current four-state backend contract retained. Decided collection list, row answer and item thread redesign remain. |
+| `/app/queue` | Six real collection views and shared controls, inline answers, parent-owned drafts, compact composer and retained thread integrated in source. Written regression tests and independent source review pending; no current runtime/rendered acceptance. Four-state backend/access/write contract retained. |
 | `/app/spaces-transport` | Shared tokens/navigation only. Page-specific decided pattern and rendered verification remain. |
 | `/app/sub-manifest` | Shared tokens/navigation only. Page-specific decided pattern and rendered verification remain. |
 | `/settings/ai-connections` | Original redirect retained; destination upgrade and runtime verification remain in progress. |

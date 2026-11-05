@@ -15,6 +15,14 @@ export const queueViews: { key: QueueViewKey; label: string; description: string
 export function queueQueryState(view: QueueViewKey): QueueState | undefined {
   return view === "all" ? undefined : view === "doneWeek" ? "done" : view;
 }
+export function queueWaitingReasonLabel(reason: string | null) {
+  switch (reason) {
+    case "aiConnectionRequired": return "An AI connection must be set up before this can be claimed.";
+    case "retryScheduled": return "A bounded retry is scheduled.";
+    case "released": return "The previous claim was released and the handoff is ready again.";
+    default: return "Ready for your chosen AI to claim.";
+  }
+}
 export function queueViewMatches(item: Pick<QueueDeskItem, "state" | "completedAt">, view: QueueViewKey, now = Date.now()) {
   if (view === "all") return true;
   if (view !== "doneWeek") return item.state === view;
@@ -48,7 +56,7 @@ export function parseQueueView(value: unknown): QueueViewSnapshot | null {
   if (!Object.entries(value.columns).every(([id, visible]) => columnIds.includes(id) && typeof visible === "boolean")) return null;
   if (!value.sorting.every(sort => object(sort) && columnIds.includes(String(sort.id)) && typeof sort.desc === "boolean")) return null;
   const presentation = value.presentation;
-  if (!["table", "list", "grid"].includes(String(presentation.view)) || !["compact", "comfortable"].includes(String(presentation.density)) || typeof presentation.groupBy !== "string" || (presentation.groupBy && !columnIds.includes(presentation.groupBy)) || typeof presentation.groupDesc !== "boolean") return null;
+  if (!["table", "list", "grid"].includes(String(presentation.view)) || !["compact", "comfortable"].includes(String(presentation.density)) || typeof presentation.groupBy !== "string" || (presentation.groupBy && !["state", "source"].includes(presentation.groupBy)) || typeof presentation.groupDesc !== "boolean") return null;
   return {
     view: value.view as QueueViewKey, search: value.search, facets,
     sorting: value.sorting.map(sort => ({ id: sort.id, desc: sort.desc })),

@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) ? Source execution yielded for release-critical PR work; Queue phase-two source saved but unverified/unwired. Last green full unit checkpoint: 61a0d70 (222 files /1,396 tests).
+[Open newest-first gallery](gallery.html) ? Queue collection integrated in source; regression tests written but NOT RUN. One independent source review pending. HOST/SITE NONE; last green full suite remains 61a0d70 (222 files /1,396 tests).
 
 # Moving design council status
 

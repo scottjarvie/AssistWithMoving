@@ -10,8 +10,8 @@ import {
   QueueDesk,
   type QueueDeskActivity,
   type QueueDeskItem,
-  type QueueState,
 } from "@/components/queue-experience";
+import { queueQueryState, type QueueViewKey } from "@/lib/queue-collection";
 import { describeMutationError } from "@/lib/mutation-error";
 import { defaultQueueOwnerScope } from "@/lib/queue-owner-scope";
 import { toastError, toastSaved } from "@/lib/toast";
@@ -45,6 +45,7 @@ function mapCanonicalItem(
     version: item.version,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+    completedAt: item.completedAt,
   };
 }
 
@@ -73,6 +74,7 @@ function mapCaptureItem(
     version: null,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+    completedAt: null,
   };
 }
 
@@ -101,7 +103,8 @@ export function QueueExperience({
     null,
   );
   const [ownerScope, setOwnerScope] = useState<string>("default");
-  const [activeState, setActiveState] = useState<QueueState>("needsYou");
+  const [activeState, setActiveState] = useState<QueueViewKey>("needsYou");
+  const requestedState = queueQueryState(activeState);
 
   const currentUser = useQuery(api.users.current);
   const scopes = useQuery(api.moveParticipants.queueScopes, {
@@ -131,14 +134,14 @@ export function QueueExperience({
   const handoffs = usePaginatedQuery(
     api.queue.listForMove,
     paginationReady
-      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: activeState }
+      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: requestedState }
       : "skip",
     { initialNumItems: 50 },
   );
   const captures = usePaginatedQuery(
     api.queue.listCaptureAdapter,
     paginationReady
-      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: activeState }
+      ? { householdId, moveId, ownerUserId: selectedOwnerUserId, state: requestedState }
       : "skip",
     { initialNumItems: 50 },
   );
@@ -149,7 +152,7 @@ export function QueueExperience({
           householdId,
           moveId,
           ownerUserId: selectedOwnerUserId,
-          state: activeState,
+          state: requestedState,
         }
       : "skip",
     { initialNumItems: 50 },
@@ -299,6 +302,7 @@ export function QueueExperience({
   return (
     <QueueDesk
       items={items}
+      preferenceScope={`${householdId}.${moveId}`}
       selectedState={activeState}
       onStateChange={setActiveState}
       canCreateDirective={selectedOwnerUserId !== undefined}

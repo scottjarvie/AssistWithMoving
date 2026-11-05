@@ -50,6 +50,8 @@ Print remains a document surface: preserve QR codes, labels, fields and paginati
 
 ## Verification
 
+Queue uses the shared collection over its four existing states. Needs You, Waiting for your AI, Working, Done this week, Everything and All Done are views, not extra workflow states. State and kind grouping, search/facets, reversible sorting, presentation/density and table columns share one row model; owner facets retain distinct owner IDs. Named views are browser-local and household/move/owner scoped. The large handoff composer is one compact labelled action away, retaining its parent-owned draft. Answers share a parent-owned draft between table, cards and thread. Captures retain their separate review actions; existing owner/version/idempotency writes stay in the controller. The week view uses recorded completion dates with an explicit evaluation time and Refresh week, never update dates or a fabricated capture completion. This Queue integration is source-only until admitted checks and rendering establish behavior.
+
 Check both themes, 320/390px phones and desktop, keyboard/tap navigation, every section reachable without sideways scrolling, storage failure, same-tab/system preference changes, and unfinished draft/upload preservation. Every code change receives exact-head different-model review. See run evidence for results; design intent is not proof.
 
 ### Council V correction pass (2026-11-05, verification pending)

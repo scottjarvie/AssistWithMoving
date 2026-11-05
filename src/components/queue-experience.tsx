@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useRef, useState } from "react";
+import { QueueCollection } from "@/components/queue-collection";
+import { QueueAnswerContext, QueueAnswerField } from "@/components/queue-answer-field";
+import { queueWaitingReasonLabel as waitingReasonLabel, type QueueViewKey } from "@/lib/queue-collection";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
 
 import { Badge } from "@/components/ui/badge";
@@ -58,13 +62,6 @@ export type QueueDeskActivity = {
   message: string;
   createdAt: number;
 };
-
-const stateOrder: QueueState[] = [
-  "needsYou",
-  "working",
-  "waitingForAi",
-  "done",
-];
 
 const statePresentation: Record<
   QueueState,
@@ -123,19 +120,6 @@ function formatWhen(value: number) {
     hour: "numeric",
     minute: "2-digit",
   }).format(value);
-}
-
-function waitingReasonLabel(reason: string | null) {
-  switch (reason) {
-    case "aiConnectionRequired":
-      return "An AI connection must be set up before this can be claimed.";
-    case "retryScheduled":
-      return "A bounded retry is scheduled.";
-    case "released":
-      return "The previous claim was released and the handoff is ready again.";
-    default:
-      return "Ready for your chosen AI to claim.";
-  }
 }
 
 function activityTypeLabel(type: string) {
@@ -210,13 +194,10 @@ function QueueConnectionNote({
 function QueueItemCard({
   item,
   onOpen,
-  response, onResponseChange, onProvideInput, busy,
 }: {
   item: QueueDeskItem;
   onOpen: (item: QueueDeskItem) => void;
-  response: string; onResponseChange: (value: string) => void; onProvideInput: () => void; busy: boolean;
 }) {
-  const answerId = useId();
   const presentation = statePresentation[item.state];
   const primaryDetail =
     item.state === "needsYou"
@@ -287,10 +268,7 @@ function QueueItemCard({
         />
       </div>
     </button>
-    {item.state === "needsYou" && item.source === "handoff" ? <form className="space-y-2 border-t border-border px-3 py-2" onSubmit={event => { event.preventDefault(); onProvideInput(); }}>
-      <label htmlFor={answerId} className="text-xs font-medium">Your answer for {item.directive}</label>
-      <div className="flex items-end gap-2"><Textarea id={answerId} value={response} onChange={event => onResponseChange(event.target.value)} maxLength={4000} className="min-h-11 flex-1" placeholder="The smallest answer needed" disabled={busy} /><Button type="submit" variant="outline" size="sm" className="min-h-11 shrink-0 sm:min-h-8" disabled={busy || !response.trim()}><MovingSymbol name={busy ? "reset" : "arrow"} className={busy ? "animate-spin" : undefined} />Send answer</Button></div>
-    </form> : null}
+    {item.state === "needsYou" && item.source === "handoff" ? <div className="border-t border-border px-3 py-2"><QueueAnswerField item={item} /></div> : null}
     </article>
   );
 }
@@ -309,6 +287,7 @@ function QueueDetailSheet({
   captureWorkspacePath,
   savedWorkPath,
   onClose,
+  onReturnFocus,
 }: {
   item: QueueDeskItem | null;
   activities: QueueDeskActivity[];
@@ -323,13 +302,14 @@ function QueueDetailSheet({
   captureWorkspacePath: string | null;
   savedWorkPath: string | null;
   onClose: () => void;
+  onReturnFocus: () => void;
 }) {
   if (!item) return null;
   const presentation = statePresentation[item.state];
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+      <SheetContent className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-xl" onCloseAutoFocus={event => { event.preventDefault(); onReturnFocus(); }}>
         <SheetHeader className="border-b pr-12">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge variant="outline">{presentation.label}</Badge>
@@ -367,6 +347,8 @@ function QueueDetailSheet({
                   <Button
                     onClick={onProvideInput}
                     disabled={busy || !response.trim()}
+                    size="sm"
+                    className="min-h-11 md:min-h-8"
                   >
                     {busy ? <MovingSymbol name="reset" className="animate-spin" aria-hidden="true" /> : <MovingSymbol name="arrow" aria-hidden="true" />}
                     Send answer
@@ -550,6 +532,7 @@ function QueueDetailSheet({
 export function QueueDesk({
   items,
   selectedState,
+  preferenceScope = "local",
   onStateChange,
   canCreateDirective = true,
   directiveTargetLabel = "My Queue",
@@ -574,8 +557,9 @@ export function QueueDesk({
   savedWorkPath,
 }: {
   items: QueueDeskItem[];
-  selectedState?: QueueState;
-  onStateChange?: (state: QueueState) => void;
+  selectedState?: QueueViewKey;
+  preferenceScope?: string;
+  onStateChange?: (state: QueueViewKey) => void;
   canCreateDirective?: boolean;
   directiveTargetLabel?: string;
   activeApiKeyCount: number | null;
@@ -599,9 +583,15 @@ export function QueueDesk({
   savedWorkPath: string | null;
 }) {
   const [internalActiveState, setInternalActiveState] =
-    useState<QueueState>("needsYou");
+    useState<QueueViewKey>("needsYou");
   const activeState = selectedState ?? internalActiveState;
   const [directive, setDirective] = useState("");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const desk = useRef<HTMLDivElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const savedComposer = useRef(false);
+  function focusSearch() { desk.current?.querySelector<HTMLInputElement>('input[aria-label="Search Queue"]')?.focus(); }
   const [selectedItemKey, setSelectedItemKey] = useState<{
     source: QueueDeskItem["source"];
     id: string;
@@ -611,12 +601,11 @@ export function QueueDesk({
   const changeResponse = (item: QueueDeskItem, value: string) => setResponses(current => ({ ...current, [responseKey(item)]: value }));
   const [busy, setBusy] = useState(false);
 
-  function selectState(state: QueueState) {
+  function selectState(state: QueueViewKey) {
     setInternalActiveState(state);
     onStateChange?.(state);
   }
 
-  const visibleItems = items.filter((item) => item.state === activeState);
   const selectedItem = selectedItemKey
     ? items.find(
         (item) =>
@@ -627,12 +616,15 @@ export function QueueDesk({
   async function createDirective() {
     if (!canCreateDirective || !directive.trim() || busy) return;
     setBusy(true);
-    const saved = await onCreateDirective(directive.trim());
-    setBusy(false);
-    if (saved) {
-      setDirective("");
-      selectState("waitingForAi");
-    }
+    try {
+      const saved = await onCreateDirective(directive.trim());
+      if (saved) {
+        setDirective("");
+        savedComposer.current = true;
+        setComposerOpen(false);
+        selectState("waitingForAi");
+      }
+    } finally { setBusy(false); }
   }
 
   async function answerItem(item: QueueDeskItem, response: string) {
@@ -646,7 +638,9 @@ export function QueueDesk({
           setSelectedItemKey(null);
           onSelectItem(null);
         }
+        returnFocus.current = null;
         selectState("waitingForAi");
+        focusSearch();
       }
     } finally { setBusy(false); }
   }
@@ -654,168 +648,60 @@ export function QueueDesk({
   async function cancel() {
     if (!selectedItem || busy) return;
     setBusy(true);
-    const saved = await onCancel(selectedItem);
-    setBusy(false);
-    if (saved) {
-      setSelectedItemKey(null);
-      onSelectItem(null);
-      selectState("done");
-    }
+    try {
+      const saved = await onCancel(selectedItem);
+      if (saved) {
+        returnFocus.current = null;
+        setSelectedItemKey(null);
+        onSelectItem(null);
+        selectState("done");
+        focusSearch();
+      }
+    } finally { setBusy(false); }
+  }
+
+  function openItem(item: QueueDeskItem) {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelectedItemKey({ source: item.source, id: item.id });
+    onSelectItem(item);
   }
 
   return (
-    <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-        <div className="pointer-events-none absolute -right-8 -top-12 size-44 rounded-full border-[28px] border-primary/[0.04]" aria-hidden="true" />
-        <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div>
-            <div className="flex items-center gap-2 text-primary">
-              <MovingSymbol name="route" className="size-4" aria-hidden="true" />
-              <p className="text-xs font-semibold uppercase tracking-[0.18em]">Leave a route note</p>
-            </div>
-            <label htmlFor="queue-directive" className="mt-2 block text-lg font-semibold">
-              What should your AI pick up next?
-            </label>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-              A clear direction is enough. The selected move is attached automatically; room, belongings, and evidence can be added when useful.
-            </p>
-            <Textarea
-              id="queue-directive"
-              value={directive}
-              onChange={(event) => setDirective(event.target.value)}
-              placeholder="Example: Compare the two mover estimates and flag anything that needs my decision."
-              maxLength={4000}
-              className="mt-3 min-h-24 bg-background"
-              disabled={!canCreateDirective}
-            />
-          </div>
-          <div className="flex flex-col items-start gap-2 lg:w-52">
-            <Button
-              onClick={createDirective}
-              disabled={!canCreateDirective || busy || !directive.trim()}
-              size="sm"
-              className="min-h-11 sm:min-h-8"
-            >
-              {busy ? <MovingSymbol name="reset" className="animate-spin" aria-hidden="true" /> : <MovingSymbol name="queue" aria-hidden="true" />}
-              Save handoff
-            </Button>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {canCreateDirective ? (
-                <>
-                  Saves to <strong className="font-medium text-foreground">{directiveTargetLabel}</strong> in Waiting for your AI. Nothing runs until an AI claims it.
-                </>
-              ) : (
-                <>Choose one person&apos;s Queue before saving a handoff.</>
-              )}
-            </p>
-          </div>
+    <QueueAnswerContext.Provider value={{ getResponse: item => responses[responseKey(item)] ?? "", onResponseChange: changeResponse, onProvideInput: (item, value) => { void answerItem(item, value); }, busy }}>
+    <div ref={desk} className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">Move handoffs · answers, evidence and recorded outcomes</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {ownerOptions.length > 1 ? <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            Showing
+            <select aria-label="Queue owner" value={ownerScope} onChange={event => onOwnerScopeChange(event.target.value)} className="h-11 rounded-md border border-input bg-background px-2 text-base font-medium text-foreground md:h-8 md:text-sm">
+              {ownerOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label> : null}
+          <Button ref={addButton} type="button" size="sm" className="min-h-11 md:min-h-8" onClick={() => setComposerOpen(true)}><MovingSymbol name="add" />Add handoff</Button>
         </div>
-      </section>
-
-      <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
-        <nav aria-label="Queue states" className="grid grid-cols-2 gap-2 lg:sticky lg:top-4 lg:grid-cols-1">
-          {stateOrder.map((state) => {
-            const stateMeta = statePresentation[state];
-            const active = activeState === state;
-            return (
-              <button
-                key={state}
-                type="button"
-                aria-current={active ? "page" : undefined}
-                onClick={() => selectState(state)}
-                className={cn(
-                  "relative overflow-hidden rounded-xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  active ? "border-primary/35 bg-primary/[0.065] shadow-sm" : "border-border bg-card hover:border-primary/25",
-                )}
-              >
-                <span className={cn("absolute inset-y-0 left-0 w-1", stateMeta.markerClass)} aria-hidden="true" />
-                <div className="flex items-center gap-2 pl-1">
-                  <MovingSymbol name={stateMeta.icon} className={cn("size-4 shrink-0", state === "working" && active && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
-                  <span className="min-w-0 flex-1 text-sm font-semibold">{stateMeta.label}</span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
-                    {active ? visibleItems.length : "—"}
-                  </span>
-                </div>
-                <p className="mt-2 hidden pl-1 text-xs leading-5 text-muted-foreground lg:block">{stateMeta.shortDescription}</p>
-              </button>
-            );
-          })}
-        </nav>
-
-        <section aria-labelledby="queue-state-heading" className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Move handoffs</p>
-              <h2 id="queue-state-heading" className="mt-1 text-lg font-semibold">{statePresentation[activeState].label}</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              {ownerOptions.length > 1 ? (
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  Showing
-                  <select
-                    aria-label="Queue owner"
-                    value={ownerScope}
-                    onChange={(event) => onOwnerScopeChange(event.target.value)}
-                    className="h-11 rounded-lg border border-input bg-background px-2 text-base font-medium text-foreground md:h-8 md:text-sm"
-                  >
-                    {ownerOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <span className="text-xs text-muted-foreground">{visibleItems.length} loaded</span>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="space-y-3" aria-label="Loading Queue">
-              <Skeleton className="h-36 rounded-xl" />
-              <Skeleton className="h-36 rounded-xl" />
-              <Skeleton className="h-36 rounded-xl" />
-            </div>
-          ) : visibleItems.length ? (
-            <div className="space-y-3">
-              {visibleItems.map((item) => (
-                <QueueItemCard
-                  key={`${item.source}:${item.id}`}
-                  item={item}
-                  response={responses[responseKey(item)] ?? ""}
-                  onResponseChange={value => changeResponse(item, value)}
-                  onProvideInput={() => void answerItem(item, responses[responseKey(item)] ?? "")}
-                  busy={busy}
-                  onOpen={(nextItem) => {
-                    setSelectedItemKey({
-                      source: nextItem.source,
-                      id: nextItem.id,
-                    });
-                    onSelectItem(nextItem);
-                  }}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/25 px-5 py-12 text-center">
-              <span className="mx-auto flex size-11 items-center justify-center rounded-xl border border-border bg-background text-primary">
-                <MovingSymbol name="box" className="size-5" aria-hidden="true" />
-              </span>
-              <h3 className="mt-3 font-semibold">{statePresentation[activeState].emptyTitle}</h3>
-              <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">{statePresentation[activeState].emptyBody}</p>
-            </div>
-          )}
-
-          {(hasMoreHandoffs || hasMoreCaptures) ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {hasMoreHandoffs ? (
-                <Button variant="outline" size="sm" onClick={onLoadMoreHandoffs}>Load older handoffs</Button>
-              ) : null}
-              {hasMoreCaptures ? (
-                <Button variant="outline" size="sm" onClick={onLoadMoreCaptures}>Load older captures</Button>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
       </div>
+      <QueueCollection key={preferenceScope + "." + ownerScope} items={items} view={activeState} onViewChange={selectState} preferenceScope={preferenceScope + "." + ownerScope} loading={loading} hasMore={hasMoreHandoffs || hasMoreCaptures} onOpen={openItem} renderCard={item => <QueueItemCard item={item} onOpen={openItem} />} />
+      {hasMoreHandoffs || hasMoreCaptures ? <div className="flex flex-wrap gap-2">
+        {hasMoreHandoffs ? <Button variant="outline" size="sm" className="min-h-11 md:min-h-8" onClick={onLoadMoreHandoffs}>Load older handoffs</Button> : null}
+        {hasMoreCaptures ? <Button variant="outline" size="sm" className="min-h-11 md:min-h-8" onClick={onLoadMoreCaptures}>Load older captures</Button> : null}
+      </div> : null}
+      <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
+        <DialogContent className="p-4 sm:max-w-xl [&_button]:min-h-11 md:[&_button]:min-h-8" onCloseAutoFocus={event => {
+          event.preventDefault();
+          if (savedComposer.current) { savedComposer.current = false; focusSearch(); }
+          else addButton.current?.focus();
+        }}>
+          <form onSubmit={event => { event.preventDefault(); void createDirective(); }} className="space-y-4">
+            <DialogHeader className="p-0 pr-10"><DialogTitle>Add a handoff</DialogTitle><DialogDescription>A clear direction is enough. The selected move is attached automatically; room, belongings, and evidence can be added when useful.</DialogDescription></DialogHeader>
+            <label className="grid gap-2 text-sm font-medium" htmlFor="queue-directive">What should your AI pick up next?
+              <Textarea id="queue-directive" value={directive} onChange={event => setDirective(event.target.value)} placeholder="Example: Compare the two mover estimates and flag anything that needs my decision." maxLength={4000} className="min-h-28" disabled={!canCreateDirective || busy} />
+            </label>
+            <p className="text-xs leading-5 text-muted-foreground">{canCreateDirective ? <>Saves to <strong className="font-medium text-foreground">{directiveTargetLabel}</strong> in Waiting for your AI. Nothing runs until an AI claims it.</> : <>Choose one person&apos;s Queue before saving a handoff.</>}</p>
+            <DialogFooter className="p-0"><Button type="button" size="sm" variant="ghost" onClick={() => setComposerOpen(false)}>Keep draft and close</Button><Button type="submit" size="sm" disabled={!canCreateDirective || busy || !directive.trim()}><MovingSymbol name={busy ? "reset" : "queue"} className={busy ? "animate-spin" : undefined} />Save handoff</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Connection status sits after the handoffs: useful, but not what
           people open the Queue to see. */}
@@ -831,6 +717,7 @@ export function QueueDesk({
         onResponseChange={value => { if (selectedItem) changeResponse(selectedItem, value); }}
         onProvideInput={() => { if (selectedItem) void answerItem(selectedItem, responses[responseKey(selectedItem)] ?? ""); }}
         onCancel={cancel}
+        onReturnFocus={() => { if (returnFocus.current?.isConnected && returnFocus.current !== document.body) returnFocus.current.focus(); else focusSearch(); }}
         busy={busy}
         captureWorkspacePath={captureWorkspacePath}
         savedWorkPath={savedWorkPath}
@@ -840,5 +727,6 @@ export function QueueDesk({
         }}
       />
     </div>
+    </QueueAnswerContext.Provider>
   );
 }

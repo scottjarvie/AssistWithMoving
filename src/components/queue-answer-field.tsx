@@ -23,7 +23,7 @@ export function QueueAnswerField({ item, includeDirective = true }: { item: Queu
     <label htmlFor={id} className="text-xs font-medium">Your answer{includeDirective ? <span className="sr-only"> for {item.directive}</span> : null}</label>
     <div className="flex items-end gap-2">
       <Textarea id={id} value={response} onChange={event => context.onResponseChange(item, event.target.value)} maxLength={4000} className="min-h-11 min-w-0 flex-1" placeholder="The smallest answer needed" disabled={context.busy} />
-      <Button type="submit" variant="outline" size="sm" className="min-h-11 shrink-0 sm:min-h-8" disabled={context.busy || !response.trim()}><MovingSymbol name={context.busy ? "reset" : "arrow"} className={context.busy ? "animate-spin" : undefined} />Send answer</Button>
+      <Button type="submit" variant="outline" size="sm" className="min-h-11 shrink-0 md:min-h-8" disabled={context.busy || !response.trim()}><MovingSymbol name={context.busy ? "reset" : "arrow"} className={context.busy ? "animate-spin" : undefined} />Send answer</Button>
     </div>
   </form>;
 }

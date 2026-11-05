@@ -74,3 +74,7 @@ Initial source-document intake was blocked after independent preparation. Scott'
 - Newest-first gallery is available to Scott and accurately describes verification status.
 - Appropriate lint, typecheck, tests, and build checks pass or unresolved failures are honestly recorded without claiming completion.
 - All intended work is committed locally on the requested branch; no remote publication occurs.
+
+### Source resumption after c92ea37
+
+Scott/Vin Chief explicitly lifted the source execution yield and superseded the earlier Codex 95% stop. No banked reset was used, no usage sampling claimed, and native HOST/SITE holds remain. The next coherent Queue collection source batch and written regressions are saved in 09-X-source-checkpoint.md. No current runtime PASS or whole-site completion is asserted. One fresh independent source review follows the frozen useful cut; no duplicate same-head loop.

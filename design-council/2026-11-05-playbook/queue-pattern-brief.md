@@ -29,3 +29,7 @@ Real tests must cover inline and sheet response behavior, draft retention, owner
 ## Initial implementation checkpoint
 
 Canonical Needs you rows now accept an answer using the existing callback/item/version, without opening the sheet. Drafts live above the row and sheet and survive state navigation; a refused save retains the draft. Capture adapters retain their separate workspace flow. The detail question and answer precede optional context in document order. Queue glyphs are authored Moving SVG and status tones use semantic tokens; compact Save/Manage actions retain phone targets. Three new behavior tests and the original Queue suite passed in the 158-test checkpoint. The collection toolbar/views, thread composition, explicit post-action focus and rendered verification remain future work, so Queue is not declared complete.
+
+## Phase-two source integration (unverified)
+
+The shared collection is wired into QueueDesk with six real views, counted facets, named browser-local views, grouping/sort, Table/List/Grid and phone Options. Canonical completion dates support the disclosed week view; undated captures remain in All Done/Everything. The compact composer retains its draft, while shared answer state stays above row and thread. Older paging, activity, owner/access and exact write paths remain. New consumer and controller regressions are written but not run. See 09-X-source-checkpoint.md for the precise source/result boundary. HOST/SITE remain NONE. The green 222-file/1,396-test result belongs only to 61a0d70.

@@ -13,10 +13,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { countFacets, matchesFacets, type CollectionFacet, type FacetSelection } from "@/lib/collection-facets";
-import { parseQueueView, queueDefaultColumns, queueViewMatches, queueViews, type QueueViewKey, type QueueViewSnapshot } from "@/lib/queue-collection";
+import { parseQueueView, queueDefaultColumns, queueViewMatches, queueViews, queueWaitingReasonLabel, type QueueViewKey, type QueueViewSnapshot } from "@/lib/queue-collection";
 import { queueStateLabels } from "../../convex/lib/queue";
 
-function step(item: QueueDeskItem) { return item.requiredAction ?? item.nextStep ?? item.resultSummary ?? item.summary ?? ""; }
+function step(item: QueueDeskItem) {
+  if (item.state === "needsYou") return item.requiredAction ?? "Review this handoff and provide the missing detail.";
+  if (item.state === "working") return item.nextStep ?? "The claimed work is in progress.";
+  if (item.state === "waitingForAi") return queueWaitingReasonLabel(item.waitingReason);
+  return item.resultSummary ?? (item.terminalReason === "canceled" ? "This handoff was canceled." : item.terminalReason === "expired" ? "This handoff expired before completion." : "The handoff is complete.");
+}
 function when(value: number) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(value); }
 const columns: ColumnDef<QueueDeskItem, unknown>[] = [
   { accessorKey: "directive", meta: { label: "Handoff", mobile: "primary", description: "The full direction remains in its thread." }, header: ({column}) => <DataTableColumnHeader column={column} label="Handoff" />, cell: ({row}) => <p className="min-w-40 max-w-sm whitespace-normal text-sm font-medium">{row.original.directive}</p> },
@@ -41,9 +46,10 @@ export function QueueCollection({ items, view, onViewChange, preferenceScope, lo
   const [sorting, setSorting] = useState<SortingState>([{ id: "updatedAt", desc: true }]);
   const [visibility, setVisibility] = useState<VisibilityState>(queueDefaultColumns);
   const [selection, setSelection] = useState({ id: "built-in:" + view, view });
+  const [weekAsOf, setWeekAsOf] = useState(() => Date.now());
   const selectedId = selection.view === view ? selection.id : "built-in:" + view;
   const currentView = queueViews.find(candidate => candidate.key === view)!;
-  const viewItems = useMemo(() => items.filter(item => queueViewMatches(item, view)), [items, view]);
+  const viewItems = useMemo(() => items.filter(item => queueViewMatches(item, view, weekAsOf)), [items, view, weekAsOf]);
   const searched = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return viewItems.filter(item => [item.directive, item.summary, item.requiredAction, item.nextStep, item.resultSummary, item.ownerLabel, item.claimLabel, item.failure?.message, ...item.resultRefs.map(ref => ref.label)].some(value => value?.toLocaleLowerCase().includes(query)) || !query);
@@ -59,20 +65,25 @@ export function QueueCollection({ items, view, onViewChange, preferenceScope, lo
   }, [items]);
   const counted = useMemo(() => countFacets(searched, definitions, facets), [searched, definitions, facets]);
   const filtered = useMemo(() => searched.filter(item => matchesFacets(item, definitions, facets)), [searched, definitions, facets]);
-  const snapshot: QueueViewSnapshot = { view, search, facets, sorting, columns: visibility, presentation };
+  // TanStack treats absent visibility entries as true. Dropping redundant
+  // explicit true entries prevents a false modified dot after hide/show.
+  const columnsSnapshot = Object.fromEntries(Object.entries(visibility).filter(([id, visible]) => visible !== true || queueDefaultColumns[id] === false));
+  const snapshot: QueueViewSnapshot = { view, search, facets, sorting, columns: columnsSnapshot, presentation };
   function apply(next: QueueViewSnapshot) {
+    if (next.view === "doneWeek") setWeekAsOf(Date.now());
     setSelection(current => ({ ...current, view: next.view }));
     onViewChange(next.view);
     setSearch(next.search); setFacets(next.facets); setSorting(next.sorting); setVisibility(next.columns); setPresentation(next.presentation);
   }
   function clear() { setSearch(""); setFacets({}); onViewChange("all"); }
-  const builtIns = queueViews.map(candidate => ({ id: "built-in:" + candidate.key, label: candidate.label, description: candidate.description, count: candidate.key === view ? viewItems.length : undefined, snapshot: { view: candidate.key, search: "", facets: {}, sorting, columns: visibility, presentation } satisfies QueueViewSnapshot }));
-  return <section aria-labelledby="queue-state-heading" className="min-w-0 space-y-3">
+  const builtIns = queueViews.map(candidate => ({ id: "built-in:" + candidate.key, label: candidate.label, description: candidate.description, count: candidate.key === view ? viewItems.length : undefined, snapshot: { view: candidate.key, search: "", facets: {}, sorting, columns: columnsSnapshot, presentation } satisfies QueueViewSnapshot }));
+  return <section aria-labelledby="queue-state-heading" aria-busy={loading} className="min-w-0 space-y-3">
+    <p role="status" aria-live="polite" className="sr-only">{loading ? "Loading Queue" : ""}</p>
     <CollectionViewTabs storageKey={"assistwithmoving.views." + key + ".v1"} builtIns={builtIns} snapshot={snapshot} onApply={apply} parseSnapshot={parseQueueView} ready={ready} selectedId={selectedId} onSelectedIdChange={id => setSelection({ id, view })} ariaLabel="Queue views" />
     <div className="flex items-center gap-2"><div className="relative min-w-0 flex-1"><MovingSymbol name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search Queue" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search handoffs, questions and results" className="h-11 pl-8 md:h-9" /></div><CollectionFilterSheet facets={counted} selection={facets} onChange={setFacets} loading={loading} /></div>
     {search.trim() || Object.values(facets).some(values => values.length) ? <div role="group" aria-label="Active Queue filters" className="flex flex-wrap gap-1">{search.trim() ? <Button size="sm" variant="secondary" className="h-auto whitespace-normal" onClick={() => setSearch("")}>Search: {search}<MovingSymbol name="close" className="size-3" /></Button> : null}<CollectionFilterChips facets={counted} selection={facets} onChange={setFacets} /><Button size="sm" variant="ghost" onClick={clear}>Clear all</Button></div> : null}
     <div><h2 id="queue-state-heading" className="text-base font-semibold">{currentView.label}</h2><p className="text-xs text-muted-foreground">{viewItems.length} loaded · {currentView.description}</p></div>
-    {view === "doneWeek" ? <p className="text-xs text-muted-foreground">This calendar week starts Monday in your browser's time zone. Captures without a recorded completion date stay in All Done and Everything.</p> : null}
+    {view === "doneWeek" ? <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><p>This calendar week starts Monday in your browser&apos;s time zone. Evaluated {when(weekAsOf)}. Captures without a recorded completion date stay in All Done and Everything.</p><Button type="button" variant="ghost" size="sm" onClick={() => setWeekAsOf(Date.now())}><MovingSymbol name="reset" />Refresh week</Button></div> : null}
     <DataTable data={filtered} columns={columns} getRowId={item => item.source + ":" + item.id} ariaLabel="Queue records" preferenceKey={key} initialGroupBy="state" columnVisibility={visibility} onColumnVisibilityChange={setVisibility} sorting={sorting} onSortingChange={setSorting} onRowOpen={onOpen} getRowOpenLabel={item => "Open " + item.directive + " details"} renderMobileCard={({row}) => renderCard(row)} unfilteredCount={items.length} onClearFilters={clear} loading={loading} minWidthClassName="min-w-[900px]" emptyState={<div className="border border-dashed border-border p-5 text-sm"><h3 className="font-medium">{view === "needsYou" ? "Nothing needs you" : view === "done" ? "No completed handoffs yet" : "No matching loaded records"}</h3><p className="mt-1 text-muted-foreground">{hasMore ? "Older pages may contain more matches. Load older handoffs or captures below." : "Try another view or clear the filters."}</p></div>} />
   </section>;
 }

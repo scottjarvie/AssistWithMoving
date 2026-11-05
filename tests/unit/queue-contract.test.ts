@@ -262,7 +262,7 @@ describe("canonical Queue behavior contract", () => {
     expect(dataSource).toContain("usePaginatedQuery(");
     expect(dataSource).toContain("api.queue.listActivity");
     expect(dataSource).toContain("activities.loadMore(50)");
-    expect(dataSource).toContain("state: activeState");
+    expect(dataSource).toContain("state: requestedState");
     expect(dataSource).toContain("ownerUserId: selectedOwnerUserId");
     expect(dataSource).toContain('handoffs.status === "CanLoadMore"');
     expect(dataSource).not.toContain("setOlderHandoffs");
