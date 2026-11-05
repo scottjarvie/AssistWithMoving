@@ -163,7 +163,29 @@ async function advanceHistory(ctx: MutationCtx, ownerUserId: Id<"users">) {
 
 // Recovered decisions use a disjoint revision space. Decreasing negatives can
 // never match a delayed positive legacy revision, even with incomplete history.
-function nextGrantVersion(version: number) { return version < 0 ? version - 1 : version + 1; }
+function nextGrantVersion(version: number) {
+  const next = version < 0 ? version - 1 : version + 1;
+  if (!Number.isSafeInteger(next)) throw new ConvexError("This connection's revision range is exhausted.");
+  return next;
+}
+
+/** A historical refusal can govern with a lower row revision. Allocate beyond
+ * every revision ever discoverable from the complete history, not just that
+ * current refusal. An alias intersection includes at most one row per stored
+ * client spelling, so the sum of each spelling's maximum bounds every prior
+ * positive credential revision. Numeric exhaustion enters indexed recovery's
+ * disjoint negative space rather than rounding or reusing a positive value. */
+function nextReconnectVersion(current: number, history: Doc<"aiGrants">[], overflow: boolean) {
+  if (current < 0) return nextGrantVersion(current);
+  if (overflow) return -1;
+  const maximumByAlias = new Map<string, number>();
+  for (const row of history) {
+    const alias = row.clientId ?? "";
+    maximumByAlias.set(alias, Math.max(maximumByAlias.get(alias) ?? 0, row.version));
+  }
+  const ceiling = Math.max(current, [...maximumByAlias.values()].reduce((sum, version) => sum + version, 0));
+  return Number.isSafeInteger(ceiling + 1) ? ceiling + 1 : -1;
+}
 
 /** Old stored identifiers remain readable, but invalid URLs confer no authority. */
 function storedClientHistoryKey(clientId: string): string | undefined {
@@ -767,6 +789,8 @@ export const listMoveChoices = query({
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
+    const household = await ctx.db.get(args.householdId);
+    if (!household || household.archivedAt !== undefined) return { moves: [], nextCursor: null };
     const membership = await ctx.db.query("householdMemberships")
       .withIndex("by_household_user", q => q.eq("householdId", args.householdId).eq("userId", user._id)).unique();
     if (membership?.status === "active") {
@@ -944,23 +968,20 @@ export const approve = mutation({
     if (args.reconnectGrantId && !reconnect?.clientId) {
       throw new ConvexError("Choose one of your previously connected AI clients to reconnect.");
     }
+    const clientHistory = !overflow && reconnect?.clientId
+      ? history.filter(row => row.clientId && sameOAuthClientHistory(row.clientId, reconnect.clientId!))
+      : [];
     let initialVersion = 1;
     if (reconnect?.clientId) {
       const current = overflow ? reconnect : (await governingGrants(ctx, user._id, reconnect.clientId, Date.now()))[0];
       if (!current || grantIsActive(current, Date.now())) {
         throw new ConvexError("This client already has active access. Change its limits instead.");
       }
-      // Complete histories advance their effective alias version. Recovery of
-      // incomplete history uses decreasing negatives, disjoint from legacy
-      // positive revisions that cannot all be enumerated safely.
-      initialVersion = overflow ? (current.version < 0 ? nextGrantVersion(current.version) : -1) : nextGrantVersion(current.version);
+      initialVersion = nextReconnectVersion(current.version, clientHistory, overflow);
     }
     if (!reconnect && history.length >= MAX_GRANT_HISTORY) {
       throw new ConvexError("AI connection history is full. Reconnect an existing client or edit its limits instead of adding another connection.");
     }
-    const clientHistory = !overflow && reconnect?.clientId
-      ? history.filter(row => row.clientId && sameOAuthClientHistory(row.clientId, reconnect.clientId!))
-      : [];
     const reconnectsClientHistory = clientHistory.map(row => ({ grantId: row._id, version: row.version }));
     const now = Date.now();
     const label = args.label.trim();
@@ -983,7 +1004,7 @@ export const approve = mutation({
       householdId: args.householdId,
       label,
       ...(reconnect ? { clientId: reconnect.clientId, reconnectsClientHistory } : {}),
-      ...(overflow && reconnect?.clientId ? { recoveredClientKey: oauthClientHistoryKey(reconnect.clientId) } : {}),
+      ...(initialVersion < 0 && reconnect?.clientId ? { recoveredClientKey: oauthClientHistoryKey(reconnect.clientId) } : {}),
       scopes,
       scopeChoice: scopeIntent,
       expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const,
@@ -1003,7 +1024,7 @@ export const approve = mutation({
     // At capacity reconnect the selected row instead of adding row 129.
     // Preserve the complete source privately in the same transaction.
     // Version and acknowledged alias revisions still advance.
-    const reuse = reconnect && history.length >= MAX_GRANT_HISTORY;
+    const reuse = reconnect && (history.length >= MAX_GRANT_HISTORY || initialVersion < 0);
     const grantId = reuse ? reconnect._id : await ctx.db.insert("aiGrants", approval);
     if (reuse) {
       await ctx.db.insert("aiGrantSourceHistory", { ownerUserId: user._id, grantId, archivedAt: now, source: reconnect });
