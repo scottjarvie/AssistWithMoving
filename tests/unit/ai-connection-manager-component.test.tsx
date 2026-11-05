@@ -147,6 +147,7 @@ const connectionData = vi.hoisted(() => ({
   participantRecovery: false,
   participantOrigin: null as string | null,
   participantSameHousehold: false,
+  recoveryEmptyLast: false,
   memberPaging: false,
 }));
 
@@ -182,6 +183,7 @@ vi.mock("convex/react", () => ({
       case apiMock.aiGrants.listMoveChoices:
         return connectionData.moveChoicesPaging ? { moves: (args as { cursor?: string })?.cursor ? [{ ...connectionData.stats.moves[0], moveId: "move_456", title: "Later move" }] : connectionData.stats.moves, nextCursor: (args as { cursor?: string })?.cursor ? null : "later-moves" } : connectionData.stats;
       case apiMock.aiGrants.listRecoveryHouseholds:
+        if (connectionData.recoveryEmptyLast && (args as { cursor?: string })?.cursor) return { households: [], nextCursor: null };
         if (connectionData.participantOrigin) return { households: [{ householdId: connectionData.participantOrigin, label: "Current participant household", moveId: "participant_witness" }], nextCursor: null };
         return connectionData.participantRecovery ? { households: [{ householdId: (args as { cursor?: string })?.cursor && !connectionData.participantSameHousehold ? "participant_later" : "participant_current", label: (args as { cursor?: string })?.cursor ? "Move: Later participant move" : "Move: Current participant move", moveId: (args as { cursor?: string })?.cursor ? "move_witness_later" : "move_witness_current" }], nextCursor: (args as { cursor?: string })?.cursor ? null : "later-households" } : { households: [], nextCursor: null };
       case apiMock.apiKeys.listForHousehold:
@@ -429,6 +431,48 @@ describe("AiConnectionManager", () => {
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
       expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_current", eligibilityMoveId: "move_witness_later" }));
     } finally { connectionData.grants.grants = original; connectionData.households = households; connectionData.participantRecovery = false; connectionData.participantSameHousehold = false; }
+  });
+
+  it.each([false, true])("keeps the default recovery household across both paging actions, empty last page: %s", async emptyLast => {
+    const original = connectionData.grants.grants;
+    const households = connectionData.households;
+    connectionData.households = [];
+    connectionData.participantRecovery = true;
+    connectionData.recoveryEmptyLast = emptyLast;
+    connectionData.grants.grants = [{ ...original[0], householdId: "previous_household" as Id<"households">, status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      const household = screen.getByLabelText("Household", { selector: "#ai-grant-household" });
+      // Deliberately do not select the automatic default through the picker.
+      expect(household).toHaveValue("participant_current");
+      await user.click(screen.getByRole("button", { name: "More recovery households" }));
+      expect(household).toHaveValue("participant_current");
+      expect(screen.getByRole("button", { name: "Approve this connection" })).toBeEnabled();
+      await user.click(screen.getByRole("button", { name: "First recovery households" }));
+      expect(household).toHaveValue("participant_current");
+      await user.click(screen.getByRole("button", { name: "More recovery households" }));
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_current", eligibilityMoveId: "move_witness_current" }));
+    } finally {
+      connectionData.grants.grants = original;
+      connectionData.households = households;
+      connectionData.participantRecovery = false;
+      connectionData.recoveryEmptyLast = false;
+    }
+  });
+
+  it("keeps Settings readable for an unsupported historical expiry without calling it unlimited", () => {
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], expiresAt: 1e20, lastUsedAt: 1e20,
+      effectiveAuthority: { ...original[0].effectiveAuthority, expiresAt: 1e20 } }];
+    try {
+      render(<AiConnectionManager />);
+      expect(screen.getAllByText("Saved end date is outside the supported range")).toHaveLength(2);
+      expect(screen.getByText("Saved date is outside the supported range")).toBeInTheDocument();
+      expect(connectionData.grants.grants[0].expiresAt).toBe(1e20);
+    } finally { connectionData.grants.grants = original; }
   });
 
   it("allows a participant-only person to select moves for existing limits", async () => {

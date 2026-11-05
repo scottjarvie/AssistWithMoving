@@ -43,6 +43,40 @@ async function updateOwner(owner: any, args: any) {
 }
 const consent = { consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint() };
 
+it.each([1e20, -1e20])("refuses unrenderable expiry %s on both OAuth doors and API keys without partial writes", async expiresAt => {
+  const t = convexTest(schema, modules);
+  const { householdId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const clientId = "supported-expiry-client";
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+  const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Supported expiry key" });
+  const snapshot = () => t.run(async ctx => ({ grants: await ctx.db.query("aiGrants").collect(), keys: await ctx.db.query("apiKeys").collect(), audits: await ctx.db.query("auditLogs").collect() }));
+  const before = await snapshot();
+  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, expiresAt })).rejects.toThrow();
+  await expect(t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: 1, expiresAt })).rejects.toThrow();
+  await expect(t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, expiresAt })).rejects.toThrow();
+  await expect(owner.mutation(api.apiKeys.create, { householdId, name: "Invalid owner expiry", expiresAt })).rejects.toThrow(/supported date/);
+  expect(await snapshot()).toEqual(before);
+  const validExpiry = Date.now() + 60_000;
+  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, expiresAt: validExpiry });
+  await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, expiresAt: validExpiry });
+  expect((await snapshot()).grants[0].expiresAt).toBe(validExpiry);
+  expect((await t.run(ctx => ctx.db.get(apiKeyId)))?.expiresAt).toBe(validExpiry);
+});
+
+it.each([100_000_000, Number.MAX_VALUE])("refuses a chosen duration of %s days on approval and limit editing", async expiresInDays => {
+  const t = convexTest(schema, modules);
+  const { householdId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Invalid chosen expiry", expiresInDays, expiryIntent: "chosen" })).rejects.toThrow(/supported date range/);
+  expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual([]);
+  const { grantId } = await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "No expiry" });
+  const before = await t.run(ctx => ctx.db.get(grantId));
+  await expect(updateOwner(owner, { ...consent, grantId, expectedVersion: 1, expiresInDays, expiryIntent: "chosen" })).rejects.toThrow(/supported date range/);
+  expect(await t.run(ctx => ctx.db.get(grantId))).toEqual(before);
+  expect(chosenExpiry(1, 8_640_000_000_000_000 - 86_400_000)).toBe(8_640_000_000_000_000);
+});
+
 it("rejects a stale alias limit edit after a newer reconnect, even if that old row did not change", async () => {
   const t = convexTest(schema, modules);
   const { householdId } = await seedOwner(t);
