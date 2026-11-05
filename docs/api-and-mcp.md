@@ -2459,3 +2459,12 @@ selected moves and earliest end date. Current move eligibility rejects either
 archive marker. When widening a grant after it narrowed itself to another
 accessible household's move, the owner must still have access to that retained
 move; its original household is not treated as the move's household.
+
+Canonical `describe_connection` returns only this credential's revision,
+status, scopes, expiry and a move-restriction indicator, without selected move
+or source grant IDs. Settings keeps selections across pages and lets the person
+remove retained moves even when they are absent from the current choices.
+Participant limit edits resolve an eligibility witness in its actual current
+household. Person API-key revocation requires the displayed `expectedVersion`
+and advances that revision atomically; rotation also advances the revoked
+source row and creates a distinct key ID, never reusing a prior generation.

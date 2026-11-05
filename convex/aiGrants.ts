@@ -901,6 +901,14 @@ async function requireGrantEligibility(ctx: MutationCtx, user: Doc<"users">, hou
   throw new ConvexError("You are not an active member or move participant of that household.");
 }
 
+/** Edits may retain a move in any household the person currently accesses. */
+async function requireGrantEditEligibility(ctx: MutationCtx, user: Doc<"users">, grant: Doc<"aiGrants">, witness?: Id<"moves">) {
+  if (!witness) return requireGrantEligibility(ctx, user, grant.householdId, true);
+  const move = await ctx.db.get(witness);
+  if (!move || move.status === "archived" || move.archivedAt !== undefined) throw new ConvexError("That active eligibility move is not available.");
+  return requireGrantEligibility(ctx, user, move.householdId, true, move._id);
+}
+
 export const approve = mutation({
   args: {
     ...consentArgs,
@@ -1057,7 +1065,7 @@ export const updateLimits = mutation({
     let moveIds = grant.moveIds;
     if (editsMoves) {
       requireCurrentConsent(args.consentPolicyVersion, args.catalogFingerprint);
-      await requireGrantEligibility(ctx, user, grant.householdId, true, args.eligibilityMoveId ?? args.moveIds?.[0] ?? grant.moveIds?.[0]);
+      await requireGrantEditEligibility(ctx, user, grant, args.eligibilityMoveId ?? args.moveIds?.[0] ?? grant.moveIds?.[0]);
       moveIds = await validateGrantMoves(ctx, { userId: user._id }, moveScope, args.moveIds ?? grant.moveIds);
     }
     const now = Date.now();
@@ -1093,7 +1101,7 @@ export const updateLimits = mutation({
     const extendsExpiry = currentExpiry !== undefined && (nextExpiry === undefined || nextExpiry > currentExpiry);
     const restores = !grantIsActive(grant, now) && (nextExpiry === undefined || nextExpiry > now);
     if (widensScopes || widensMoves || extendsExpiry || restores) {
-      await requireGrantEligibility(ctx, user, grant.householdId, true, args.eligibilityMoveId ?? moveIds?.[0]);
+      await requireGrantEditEligibility(ctx, user, grant, args.eligibilityMoveId ?? moveIds?.[0] ?? grant.moveIds?.[0]);
       if (moveScope === "selectedMoves") {
         await validateGrantMoves(ctx, { userId: user._id }, moveScope, moveIds);
       }
@@ -1241,6 +1249,25 @@ export const reduceLegacyConnection = internalMutation({ args: { caller: mcpCall
 } });
 
 /** Credential-only metadata; no domain scope, move content or sibling grants. */
+export const describeConnection = internalQuery({
+  args: { subject: v.string(), clientId: v.string() },
+  handler: async (ctx, { subject, clientId }) => {
+    const user = await ctx.db.query("users").withIndex("by_clerk_user_id", q => q.eq("clerkUserId", subject)).unique();
+    if (!user || user.status !== "active") throw new ConvexError("No active calling profile.");
+    const now = Date.now();
+    const grant = (await governingGrants(ctx, user._id, clientId, now))[0];
+    const bound = grant?.clientId && sameOAuthClientHistory(grant.clientId, clientId) ? grant : undefined;
+    return {
+      version: bound?.version ?? null,
+      status: bound ? (bound.status === "revoked" ? "revoked" : grantIsActive(bound, now) ? "active" : "expired") : "unconnected",
+      scopes: bound && grantIsActive(bound, now) ? [...effectiveScopes(bound)] : [],
+      moveRestricted: bound?.moveScope === "selectedMoves",
+      expiresAt: bound ? effectiveExpiry(bound) ?? null : null,
+      settings: "https://movingmanifest.com/settings/ai",
+    };
+  },
+});
+
 export const describeLegacyConnection = internalQuery({
   args: { caller: mcpCallerValidator },
   handler: async (ctx, { caller }) => {

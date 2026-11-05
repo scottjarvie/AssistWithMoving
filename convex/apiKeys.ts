@@ -188,6 +188,7 @@ export const revoke = mutation({
   args: {
     householdId: v.id("households"),
     apiKeyId: v.id("apiKeys"),
+    expectedVersion: v.number(),
   },
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
@@ -197,15 +198,18 @@ export const revoke = mutation({
       "api_keys:manage"
     );
     if (actor.type !== "user") {
-      throw new Error("API-key management requires a user actor.");
+      throw new ConvexError("API-key management requires a user actor.");
     }
     const key = await getMutableKey(ctx, args);
+    if (args.expectedVersion !== (key.version ?? 1)) throw new ConvexError("This connection changed. Reload Settings before revoking it.");
     const now = Date.now();
+    const version = (key.version ?? 1) + 1;
 
     await ctx.db.patch(args.apiKeyId, {
       status: "revoked",
       revokedAt: key.revokedAt ?? now,
       revokedByUserId: key.revokedByUserId ?? actor.userId,
+      version,
       updatedAt: now,
     });
 
@@ -218,7 +222,9 @@ export const revoke = mutation({
       action: "api_key.revoked",
       objectTable: "apiKeys",
       objectId: args.apiKeyId,
+      metadata: { version, previousVersion: key.version ?? 1 },
     });
+    return { version };
   },
 });
 
@@ -270,6 +276,7 @@ export async function rotateApiKeyForUser(
       status: "revoked",
       revokedAt: key.revokedAt ?? now,
       revokedByUserId: key.revokedByUserId ?? actorUserId,
+      version: (key.version ?? 1) + 1,
       updatedAt: now,
     });
 
