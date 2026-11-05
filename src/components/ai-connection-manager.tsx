@@ -104,6 +104,8 @@ type GrantsResult = {
   historyAtCapacity?: boolean;
   historyOverflow?: boolean;
   historyFingerprint?: string;
+  recoveryFingerprint?: string;
+  nextCursor?: string | null;
   scopes: BoundaryScope[];
   neverExposed: string[];
   neverPermitted: string[];
@@ -211,8 +213,9 @@ function GrantPermissionPicker({ grant, scopes }: { grant: GrantRow; scopes: Bou
 export function AiConnectionManager() {
   const { isLoaded, isSignedIn } = useAuth();
   const ready = isLoaded && isSignedIn;
+  const [historyCursor, setHistoryCursor] = useState<string | undefined>();
 
-  const grantsResult = useQuery(api.aiGrants.listMine, ready ? {} : "skip") as
+  const grantsResult = useQuery(api.aiGrants.listMine, ready ? (historyCursor ? { cursor: historyCursor } : {}) : "skip") as
     | GrantsResult
     | undefined;
   const activityResult = useQuery(
@@ -296,6 +299,7 @@ export function AiConnectionManager() {
         ...consent,
         ...(grantsResult?.historyFingerprint ? { expectedHistoryFingerprint: grantsResult.historyFingerprint } : {}),
         ...(reconnectGrantId ? { reconnectGrantId } : {}),
+        ...(reconnectGrantId && grantsResult?.historyOverflow ? { expectedRecoveryFingerprint: grantsResult.recoveryFingerprint } : {}),
         scopeIntent: boundaryScopes.every(info => selectedScopes.includes(info.scope)) ? "full" : "chosen",
         expiryIntent: expiresInDays === 0 ? "none" : "chosen",
         householdId,
@@ -358,7 +362,7 @@ export function AiConnectionManager() {
     canWriteConsent &&
     Boolean(householdId) &&
     (!grantsResult?.historyAtCapacity || Boolean(reconnectGrantId)) &&
-    (!reconnectGrantId || Boolean(grantsResult?.historyFingerprint)) &&
+    (!reconnectGrantId || Boolean(grantsResult?.historyFingerprint || (grantsResult?.historyOverflow && grantsResult.recoveryFingerprint))) &&
     label.trim().length > 0 &&
     selectedScopes.length > 0 &&
     (moveScope === "allMoves" || selectedMoveIds.length > 0) &&
@@ -465,7 +469,7 @@ export function AiConnectionManager() {
         {grantsResult?.historyAtCapacity ? (
           <p className="mt-2 text-sm text-muted-foreground">
             {grantsResult.historyOverflow
-              ? "Connection history exceeds the safe approval limit. You can still review and revoke the connections shown here; new approvals remain blocked."
+              ? "Connection history exceeds the safe approval limit. You can explicitly reconnect a listed client with new choices, or review older connections below. Earlier records stay saved."
               : "Connection history is full. Reconnect an existing client below or change its current limits. Earlier records stay saved."}
           </p>
         ) : null}
@@ -760,6 +764,10 @@ export function AiConnectionManager() {
             These are grants you approved for an AI signing in as you. They are
             not people in your household, not share links, and not API keys.
           </p>
+          <div className="mt-2 flex gap-2">
+            {historyCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(undefined); setReconnectGrantId(null); setLabel(""); }}>Recent connections</Button> : null}
+            {grantsResult?.nextCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(grantsResult.nextCursor!); setReconnectGrantId(null); setLabel(""); }}>Older connections</Button> : null}
+          </div>
         </div>
         {grantsResult === undefined ? (
           <Skeleton className="h-40 w-full" />

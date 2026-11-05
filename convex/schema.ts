@@ -810,6 +810,7 @@ export default defineSchema({
     appRole,
     status: v.union(v.literal("active"), v.literal("disabled")),
     defaultHouseholdId: v.optional(v.id("households")),
+    aiGrantHistoryVersion: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSeenAt: v.number(),
@@ -1536,6 +1537,8 @@ export default defineSchema({
       grantId: v.id("aiGrants"),
       version: v.number(),
     }))),
+    // Written only by explicit owner recovery; canonical verified OAuth key.
+    recoveredClientKey: v.optional(v.string()),
     // Explicit owner limit decisions only; usage must never reorder consent.
     ownerDecisionAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),
@@ -1552,6 +1555,7 @@ export default defineSchema({
     .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
     .index("by_owner_updated", ["ownerUserId", "updatedAt"])
     .index("by_owner_client_status", ["ownerUserId", "clientId", "status"])
+    .index("by_owner_recovered_client", ["ownerUserId", "recoveredClientKey"])
     .index("by_household_updated", ["householdId", "updatedAt"]),
 
   // Append-only, owner-readable history for one grant: approvals, uses,

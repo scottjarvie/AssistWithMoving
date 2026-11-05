@@ -540,6 +540,31 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       await f.owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: reconnected.version });
       expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
       expect((await persisted()).allowed).toBe(false);
+      await f.t.run(async ctx => {
+        const current = (await ctx.db.get(grantId))!;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- historical fixtures omit Convex system fields.
+        const { _id, _creationTime, ...fields } = current;
+        for (let i = 0; i < 129; i++) await ctx.db.insert("aiGrants", { ...fields, clientId: `door-overflow-${i}` });
+      });
+      const recovery = await f.owner.query(api.aiGrants.listMine, {});
+      expect(recovery.historyOverflow).toBe(true);
+      await f.owner.mutation(api.aiGrants.approve, {
+        ...consent, householdId: f.householdId, label: "Recover oversized history",
+        reconnectGrantId: grantId, expectedRecoveryFingerprint: recovery.recoveryFingerprint,
+      });
+      expect((await canonical()).sort()).toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
+      expect((await persisted()).allowed).toBe(true);
+      const reductionRequest = request(JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: {
+        name: "reduce_connection", arguments: { expectedVersion: -1, scopes: ["moving.context.read"] },
+        _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "overflow-test", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} },
+      } }));
+      reductionRequest.headers.set("mcp-protocol-version", "2026-07-28");
+      reductionRequest.headers.set("mcp-method", "tools/call");
+      reductionRequest.headers.set("mcp-name", "reduce_connection");
+      expect((await handleMcpRequestForTests(ctx, reductionRequest)).status).toBe(200);
+      expect(await f.t.run(ctx => ctx.db.get(grantId))).toMatchObject({ version: -2, scopes: ["moving.context.read"] });
+      expect((await f.t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: -2, scopes: [] })).version).toBe(-3);
+      expect((await persisted()).allowed).toBe(false);
     });
   }
   // Actual HTTP/gateway handlers and direct internal legacy handlers share a

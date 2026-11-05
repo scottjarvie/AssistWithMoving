@@ -2301,6 +2301,15 @@ New rows stop at the bounded history limit. At that limit an explicit reconnect
 reuses the selected record, preserving its full prior snapshot in durable audit
 in the same transaction. Oversized existing histories remain viewable and
 revocable in Settings while incomplete-history authorization stays closed.
+Older records can be paged through in Settings. A person can explicitly recover
+a selected verified client even from an oversized history: current consent and
+the loaded owner-management revision are required, and the original selected
+record is preserved in durable audit before reuse. Only that client's indexed
+recovered decision becomes authoritative; other incomplete histories stay
+closed. Recovered revisions are negative and decrease on edits and reconnects;
+clients must echo the exact version they receive. Positive legacy versions can
+never match a recovered generation. Later revocation of a historical alias also
+stops its recovered client; older alias forms cannot edit the new decision.
 
 Only explicitly full grants follow future scopes. Legacy/unmarked and chosen
 scope arrays and every stored end date remain exact, including automatic old

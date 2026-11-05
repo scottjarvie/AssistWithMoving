@@ -146,6 +146,24 @@ async function appendGrantActivity(
 /** Bounded histories include refusals; a truncated history must never authorize. */
 const MAX_GRANT_HISTORY = 128;
 
+function recoveryFingerprint(user: Doc<"users">) {
+  return JSON.stringify([user._id, user.aiGrantHistoryVersion ?? 0]);
+}
+
+async function advanceHistory(ctx: MutationCtx, ownerUserId: Id<"users">) {
+  const user = await ctx.db.get(ownerUserId);
+  if (user) await ctx.db.patch(ownerUserId, { aiGrantHistoryVersion: (user.aiGrantHistoryVersion ?? 0) + 1 });
+}
+
+// Recovered decisions use a disjoint revision space. Decreasing negatives can
+// never match a delayed positive legacy revision, even with incomplete history.
+function nextGrantVersion(version: number) { return version < 0 ? version - 1 : version + 1; }
+
+async function recoveredGrant(ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">, clientId: string) {
+  return ctx.db.query("aiGrants").withIndex("by_owner_recovered_client", q =>
+    q.eq("ownerUserId", ownerUserId).eq("recoveredClientKey", oauthClientHistoryKey(clientId))).unique();
+}
+
 function approvalTime(grant: Doc<"aiGrants">) {
   return grant.ownerDecisionAt ?? grant.approvedAt;
 }
@@ -228,6 +246,8 @@ async function governingGrants(
     }
     return [...clients.values(), ...unbound];
   }
+  const recovered = await recoveredGrant(ctx, ownerUserId, clientId);
+  if (recovered) return [recovered];
   // URL serialization is not invertible (case/default port/dot segments,
   // etc.). Read the complete bounded owner history rather than guessing raw
   // spellings, which would strand old refusals. Overflow fails closed; never
@@ -371,6 +391,7 @@ export const touchLegacyConnection = internalMutation({
       if (grantIsActive(latest, now)) {
         if (!latest.clientId) {
           await ctx.db.patch(latest._id, { clientId: args.clientId, updatedAt: now });
+          await advanceHistory(ctx, user._id);
           await appendGrantActivity(ctx, latest, { type: "clientBound", outcome: "recorded", clientId: args.clientId, message: "Bound this grant atomically to the verified calling connection." });
         }
         return { grants: [toDecisionRow(latest)], block: undefined };
@@ -439,6 +460,7 @@ export const touchLegacyConnection = internalMutation({
     });
 
     const grant = await ctx.db.get(grantId);
+    await advanceHistory(ctx, user._id);
     if (grant) {
       await appendGrantActivity(ctx, grant, {
         type: "approved",
@@ -534,6 +556,7 @@ export const noteGrantUse = internalMutation({
       // the connection being revoked.
     });
     if (newlyBound) {
+      await advanceHistory(ctx, user._id);
       await appendGrantActivity(ctx, grant, {
         type: "clientBound",
         outcome: "recorded",
@@ -605,24 +628,29 @@ export const describeBoundary = query({
 });
 
 export const listMine = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
     const now = Date.now();
-    const rows = await ctx.db
+    const page = await ctx.db
       .query("aiGrants")
       .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", user._id))
       .order("desc")
-      .take(MAX_GRANT_HISTORY + 1);
+      .paginate({ numItems: MAX_GRANT_HISTORY + 1, cursor: args.cursor ?? null });
+    const rows = page.page;
+    const history = await ctx.db.query("aiGrants")
+      .withIndex("by_owner_updated", q => q.eq("ownerUserId", user._id)).order("desc").take(MAX_GRANT_HISTORY + 1);
     const resolved = rows;
     const grants = resolved.map((row) => shapeGrant(row, now));
     return {
       ...describeGrantBoundary(),
       // Settings must remain readable even for preexisting oversized histories.
       // Never offer a consent fingerprint for an incomplete history window.
-      historyFingerprint: rows.length <= MAX_GRANT_HISTORY ? historyFingerprint(rows) : undefined,
-      historyAtCapacity: rows.length >= MAX_GRANT_HISTORY,
-      historyOverflow: rows.length > MAX_GRANT_HISTORY,
+      historyFingerprint: history.length <= MAX_GRANT_HISTORY ? historyFingerprint(history) : undefined,
+      recoveryFingerprint: recoveryFingerprint(user),
+      nextCursor: page.isDone ? null : page.continueCursor,
+      historyAtCapacity: history.length >= MAX_GRANT_HISTORY,
+      historyOverflow: history.length > MAX_GRANT_HISTORY,
       grants,
       activeCount: grants.filter((grant) => grant.status === "active").length,
       maxActive: MAX_ACTIVE_GRANTS,
@@ -708,6 +736,7 @@ export const approve = mutation({
     householdId: v.id("households"),
     label: v.string(),
     expectedHistoryFingerprint: v.optional(v.string()),
+    expectedRecoveryFingerprint: v.optional(v.string()),
     reconnectGrantId: v.optional(v.id("aiGrants")),
     scopes: v.optional(v.array(movingGrantScope)),
     moveScope: v.optional(v.union(v.literal("allMoves"), v.literal("selectedMoves"))),
@@ -728,28 +757,36 @@ export const approve = mutation({
       throw new ConvexError("You are not an active member of that household.");
     }
 
-    const history = await grantHistory(ctx, user._id);
-    if ((args.reconnectGrantId || history.some(row => !row.clientId && !grantIsActive(row, Date.now()))) && args.expectedHistoryFingerprint !== historyFingerprint(history)) {
+    const history = await ctx.db.query("aiGrants").withIndex("by_owner_client_status", q => q.eq("ownerUserId", user._id)).take(MAX_GRANT_HISTORY + 1);
+    const overflow = history.length > MAX_GRANT_HISTORY;
+    if (overflow && (!args.reconnectGrantId || args.expectedRecoveryFingerprint !== recoveryFingerprint(user))) {
+      throw new ConvexError("AI connection history changed. Reload Settings and explicitly reconnect the client with your new choices.");
+    }
+    if (!overflow && (args.reconnectGrantId || history.some(row => !row.clientId && !grantIsActive(row, Date.now()))) && args.expectedHistoryFingerprint !== historyFingerprint(history)) {
       throw new ConvexError("AI connection history changed. Reload Settings → AI connections and review the current refusal before approving another connection.");
     }
-    const reconnect = args.reconnectGrantId ? history.find(row => row._id === args.reconnectGrantId) : undefined;
+    const selected = args.reconnectGrantId ? await ctx.db.get(args.reconnectGrantId) : null;
+    if (selected && selected.ownerUserId !== user._id) throw new ConvexError("Choose one of your previously connected AI clients to reconnect.");
+    const canonical = selected?.clientId ? await recoveredGrant(ctx, user._id, selected.clientId) : null;
+    const reconnect = canonical ?? selected ?? undefined;
     if (args.reconnectGrantId && !reconnect?.clientId) {
       throw new ConvexError("Choose one of your previously connected AI clients to reconnect.");
     }
     let initialVersion = 1;
     if (reconnect?.clientId) {
-      const current = (await governingGrants(ctx, user._id, reconnect.clientId, Date.now()))[0];
+      const current = overflow ? reconnect : (await governingGrants(ctx, user._id, reconnect.clientId, Date.now()))[0];
       if (!current || grantIsActive(current, Date.now())) {
         throw new ConvexError("This client already has active access. Change its limits instead.");
       }
-      // Reconnect is a new generation, so old delayed reductions cannot match
-      // it. Advance beyond the effective version across ALL current aliases.
-      initialVersion = current.version + 1;
+      // Complete histories advance their effective alias version. Recovery of
+      // incomplete history uses decreasing negatives, disjoint from legacy
+      // positive revisions that cannot all be enumerated safely.
+      initialVersion = overflow ? (current.version < 0 ? nextGrantVersion(current.version) : -1) : nextGrantVersion(current.version);
     }
     if (!reconnect && history.length >= MAX_GRANT_HISTORY) {
       throw new ConvexError("AI connection history is full. Reconnect an existing client or edit its limits instead of adding another connection.");
     }
-    const clientHistory = reconnect?.clientId
+    const clientHistory = !overflow && reconnect?.clientId
       ? history.filter(row => row.clientId && sameOAuthClientHistory(row.clientId, reconnect.clientId!))
       : [];
     const reconnectsClientHistory = clientHistory.map(row => ({ grantId: row._id, version: row.version }));
@@ -784,6 +821,7 @@ export const approve = mutation({
       householdId: args.householdId,
       label,
       ...(reconnect ? { clientId: reconnect.clientId, reconnectsClientHistory } : {}),
+      ...(overflow && reconnect?.clientId ? { recoveredClientKey: oauthClientHistoryKey(reconnect.clientId) } : {}),
       scopes,
       scopeChoice: scopeIntent,
       expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const,
@@ -806,6 +844,7 @@ export const approve = mutation({
     const reuse = reconnect && history.length >= MAX_GRANT_HISTORY;
     const grantId = reuse ? reconnect._id : await ctx.db.insert("aiGrants", approval);
     if (reuse) await ctx.db.replace(grantId, approval);
+    await advanceHistory(ctx, user._id);
 
     const grant = await ctx.db.get(grantId);
     if (grant) {
@@ -849,7 +888,8 @@ export const updateLimits = mutation({
     const user = await requireCurrentUser(ctx);
     const grant = await ctx.db.get(args.grantId);
     if (!grant || grant.ownerUserId !== user._id) throw new ConvexError("That AI connection is not available.");
-    const sameConnection = (await grantHistory(ctx, user._id, grant.clientId)).filter(row => row.clientId === grant.clientId);
+    const recovered = grant.clientId ? await recoveredGrant(ctx, user._id, grant.clientId) : null;
+    const sameConnection = recovered ? [recovered] : (await grantHistory(ctx, user._id, grant.clientId)).filter(row => row.clientId === grant.clientId);
     const latest = sameConnection.reduce<Doc<"aiGrants"> | undefined>((winner, row) => !winner || compareDecisions(row, winner, Date.now()) > 0 ? row : winner, undefined);
     if (latest?._id !== grant._id) throw new ConvexError("A newer connection decision exists. Reload Settings → AI connections and edit the current connection.");
     if (grant.status === "revoked") throw new ConvexError("A revoked connection stays revoked. Approve a new connection instead.");
@@ -899,9 +939,10 @@ export const updateLimits = mutation({
       ...(scopes ? { scopes, scopeChoice, consentSnapshot: buildConsentSnapshot(scopes), consentBoundaryVersion: GRANT_BOUNDARY_VERSION } : {}),
       ...(editsExpiry ? { expiresAt, expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const } : {}),
       ...((editsMoves || args.scopes !== undefined || editsExpiry) ? { ownerDecisionAt: now } : {}),
-      version: grant.version + 1, updatedAt: now,
+      version: nextGrantVersion(grant.version), updatedAt: now,
     };
     await ctx.db.patch(grant._id, patch);
+    await advanceHistory(ctx, user._id);
     await appendGrantActivity(ctx, grant, { type: "approved", outcome: "recorded", message: "You changed this connection’s limits. Your chosen moves, scopes and end date are preserved." });
     await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "user", actorUserId: user._id, category: "ai", action: "ai_grant.limits_changed", objectTable: "aiGrants", objectId: grant._id, metadata: { scopeChoice: patch.scopeChoice ?? null, expiryChoice: patch.expiryChoice ?? null, moveScope, moveCount: moveIds?.length ?? null } });
     return { grantId: grant._id };
@@ -933,8 +974,17 @@ export const revoke = mutation({
       revokedByUserId: user._id,
       revokedReason: reason,
       updatedAt: now,
-      version: grant.version + 1,
+      version: nextGrantVersion(grant.version),
     });
+    const recovered = grant.clientId ? await recoveredGrant(ctx, user._id, grant.clientId) : null;
+    if (recovered && recovered._id !== grant._id && recovered.status !== "revoked") {
+      await ctx.db.patch(recovered._id, {
+        status: "revoked", revokedAt: now, revokedByUserId: user._id,
+        revokedReason: reason, updatedAt: now, version: nextGrantVersion(recovered.version),
+      });
+      await appendGrantActivity(ctx, recovered, { type: "revoked", outcome: "recorded", message: "You revoked another historical alias of this same verified client. Its recovered connection is stopped too." });
+    }
+    await advanceHistory(ctx, user._id);
     // Attribution survives revocation on purpose. Taking away future access is
     // not a reason to erase the record of work already done.
     await appendGrantActivity(ctx, grant, {
@@ -950,7 +1000,7 @@ export const revoke = mutation({
       action: "ai_grant.revoked",
       objectTable: "aiGrants",
       objectId: grant._id,
-      metadata: { reason },
+      metadata: { reason, recoveredGrantId: recovered?._id ?? null },
     });
     return { grantId: grant._id, alreadyRevoked: false };
   },
@@ -980,15 +1030,16 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
   const reduced = reducedAccess({ version: grant.version, scopes: effectiveScopes(grant), moveIds: grant.moveScope === "selectedMoves" ? (grant.moveIds ?? []).map(String) : undefined, expiresAt: effectiveExpiry(grant), active: grant.status === "active" }, input);
   const moveIds = reduced.moveIds as Id<"moves">[] | undefined;
   if (moveIds) await validateGrantMoves(ctx, { userId: user._id }, "selectedMoves", moveIds);
-  const version = grant.version + 1;
+  const version = nextGrantVersion(grant.version);
   const stored = (await ctx.db.get(grant._id))!;
   await ctx.db.patch(grant._id, {
     ...(reduced.scopes ? { scopes: reduced.scopes as MovingScope[], scopeChoice: "chosen" as const } : {}),
     ...(moveIds ? { moveScope: "selectedMoves" as const, moveIds } : {}),
     ...(reduced.expiresAt !== undefined ? { expiresAt: reduced.expiresAt!, expiryChoice: "chosen" as const } : {}),
     ...(input.action === "revoke" ? { status: "revoked" as const, revokedAt: Date.now(), revokedReason: "Revoked by this AI connection." } : {}),
-    version: stored.version + 1, updatedAt: Date.now(), ownerDecisionAt: Date.now(),
+    version: nextGrantVersion(stored.version), updatedAt: Date.now(), ownerDecisionAt: Date.now(),
   });
+  await advanceHistory(ctx, user._id);
   await appendGrantActivity(ctx, grant, { type: input.action === "revoke" ? "revoked" : "approved", outcome: "recorded", clientId, message: `This AI reduced its own access (version ${version}).` });
   const receipt = await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, clientId, action: input.action ?? "narrow", previousVersion: grant.version, previousScopes: effectiveScopes(grant), scopes: reduced.scopes ?? effectiveScopes(grant), moveIds: reduced.moveIds ?? grant.moveIds ?? null, expiresAt: reduced.expiresAt ?? effectiveExpiry(grant) ?? null } });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
