@@ -1,0 +1,114 @@
+[
+  {
+    "label": "desktop-light",
+    "scenario": "populated",
+    "width": 1440,
+    "contentHeight": 953,
+    "capturedHeight": 953,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 1440,
+      "height": 953
+    },
+    "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+    "sourceDirty": false,
+    "evidence": "actual Home component/CSS/canvas; synthetic data; no authenticated shell; system font fallback"
+  },
+  {
+    "label": "phone-light",
+    "scenario": "populated",
+    "width": 390,
+    "contentHeight": 1238,
+    "capturedHeight": 1238,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 390,
+      "height": 1238
+    },
+    "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+    "sourceDirty": false,
+    "evidence": "actual Home component/CSS/canvas; synthetic data; no authenticated shell; system font fallback"
+  },
+  {
+    "label": "desktop-dark",
+    "scenario": "populated",
+    "width": 1440,
+    "contentHeight": 953,
+    "capturedHeight": 953,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 1440,
+      "height": 953
+    },
+    "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+    "sourceDirty": false,
+    "evidence": "actual Home component/CSS/canvas; synthetic data; no authenticated shell; system font fallback"
+  },
+  {
+    "label": "phone-dark",
+    "scenario": "populated",
+    "width": 390,
+    "contentHeight": 1238,
+    "capturedHeight": 1238,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 390,
+      "height": 1238
+    },
+    "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+    "sourceDirty": false,
+    "evidence": "actual Home component/CSS/canvas; synthetic data; no authenticated shell; system font fallback"
+  },
+  {
+    "label": "phone-320-light",
+    "scenario": "populated",
+    "width": 320,
+    "contentHeight": 1422,
+    "capturedHeight": 1422,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 320,
+      "height": 1422
+    },
+    "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+    "sourceDirty": false,
+    "evidence": "actual Home component/CSS/canvas; synthetic data; no authenticated shell; system font fallback"
+  },
+  {
+    "label": "empty-phone-light",
+    "scenario": "empty",
+    "width": 390,
+    "contentHeight": 1025,
+    "capturedHeight": 1025,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 390,
+      "height": 1025
+    },
+    "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+    "sourceDirty": false,
+    "evidence": "actual Home component/CSS/canvas; synthetic data; no authenticated shell; system font fallback"
+  },
+  {
+    "label": "loading-phone-light",
+    "scenario": "loading",
+    "width": 390,
+    "contentHeight": 1014,
+    "capturedHeight": 1014,
+    "consoleMessages": [],
+    "screenshot": {
+      "mimeType": "image/png",
+      "width": 390,
+      "height": 1014
+    },
+    "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+    "sourceDirty": false,
+    "evidence": "actual Home component/CSS/canvas; synthetic data; no authenticated shell; system font fallback"
+  }
+]
