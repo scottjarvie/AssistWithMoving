@@ -2360,6 +2360,14 @@ reduction. Recovery and widening recheck that the household and selected moves
 are still active. Participant choices carry an eligible move ID, validated
 directly against current access when submitted, so later pages work without an
 unbounded participation scan. The move ID is an eligibility hint, never authority.
+
+Shared domain-work audit reads, including Claim Center, also remove credential
+identifiers and connection-attributed private reasons recursively. Stored source
+records remain intact. Account export creation, artifact retrieval and account
+controls require the same signed person-session boundary as connection settings.
+Private grant reduction receipts retain the before and after version, scopes,
+move limits, expiry and active state atomically. Scope-free API-key discovery
+omits the restricted move's ID as well as its content.
 Move-only participants can select a revoked or expired client in Settings and
 explicitly reconnect using verified current participation, even without a
 household membership. Selecting a reconnect uses that connection?s household,

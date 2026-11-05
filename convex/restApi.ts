@@ -1550,7 +1550,7 @@ async function routeMe(
         version: auth.version,
         scopes: auth.scopes,
         moveRestricted: Boolean(auth.moveId),
-        moveId: auth.moveId,
+        moveId: auth.scopes.includes("moves/read") ? auth.moveId : undefined,
         createdByUserId: auth.createdByUserId,
       },
       restrictedMove:

@@ -1415,11 +1415,13 @@ describe("R1 scope-free API context", () => {
       expect(result.status).toBe(200);
       expect(result.body).toMatchObject({ data: { household: null, apiKey: { version: version + 1, scopes: [...scopes] }, restrictedMove: null } });
       expect(JSON.stringify(result.body)).not.toContain("PRIVATE");
+      expect(JSON.stringify(result.body)).not.toContain(moveId);
       expect((await readMove()).status).toBe(403);
       for (const selected of [false, true]) {
         const tool = await invokeContext(selected);
         expect(tool.isError).not.toBe(true);
         expect(JSON.stringify(tool)).not.toContain("PRIVATE");
+        expect(JSON.stringify(tool)).not.toContain(moveId);
         expect(JSON.parse(tool.content[0].text)).toMatchObject({ data: { restrictedMove: null } });
       }
     }
@@ -1939,4 +1941,65 @@ it.each(["allMoves", "selectedMoves"] as const)("recovers a later eligible parti
   const stored = (await t.run(ctx => ctx.db.get(grantId)))!;
   await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: stored.version, eligibilityMoveId: eligible.moveId, scopeIntent: "chosen", scopes: ["moving.context.read"] });
   await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: stored.version + 1, eligibilityMoveId: eligible.moveId, scopeIntent: "full", scopes: [...movingScopes] });
+});
+
+it("redacts connection identity from every shared work-event read while retaining the source", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const { moveId, eventId } = await t.run(async ctx => {
+    const now = Date.now();
+    const moveId = await ctx.db.insert("moves", { householdId, title: "Shared work", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+    const eventId = await ctx.db.insert("auditLogs", { householdId, moveId, actorType: "agent", actorUserId: userId, actorApiKeyId: "PRIVATE-key-id", category: "plan", action: "mcp.move_context_saved", objectTable: "moves", objectId: moveId, metadata: { clientId: "PRIVATE-client-id", reason: "PRIVATE-work-reason", changedFields: ["title"], nested: [{ client_id: "PRIVATE-nested-id", reason: "PRIVATE-nested-reason", count: 4 }] }, createdAt: now });
+    return { moveId, eventId };
+  });
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const sources = [await owner.query(api.audit.listForHousehold, { householdId }), await owner.query(api.audit.listForMove, { householdId, moveId }), await owner.query(api.audit.listForObject, { householdId, moveId, objectTable: "moves", objectId: moveId })];
+  for (const rows of sources) {
+    expect(JSON.stringify(rows)).not.toContain("PRIVATE");
+    expect(rows[0]).toMatchObject({ action: "mcp.move_context_saved", objectId: moveId, metadata: { changedFields: ["title"], nested: [{ count: 4 }] } });
+  }
+  expect(JSON.stringify(await owner.query(api.claimCenter.summaryForMove, { householdId, moveId }))).not.toContain("PRIVATE");
+  expect((await t.run(ctx => ctx.db.get(eventId)))?.metadata?.clientId).toBe("PRIVATE-client-id");
+});
+
+it("requires a person session for account export creation, artifacts and account controls", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  await owner.mutation(api.apiKeys.create, { householdId, name: "Exported settings fixture" });
+  const exported = await owner.mutation(api.accountPrivacy.createAccountExport, {});
+  const artifact = await owner.query(api.accountPrivacy.getAccountExportArtifact, { exportJobId: exported.exportJobId });
+  expect(artifact.artifactText).toContain("Exported settings fixture");
+  const requestId = await owner.mutation(api.accountPrivacy.requestAccountDeletion, {});
+  const before = await t.run(async ctx => ({ requests: await ctx.db.query("accountDeletionRequests").collect(), jobs: await ctx.db.query("accountExportJobs").collect(), user: await ctx.db.query("users").first() }));
+  for (const claims of [{ azp: "https://oauth.example/client.json" }, { client_id: "oauth-client" }, {}]) {
+    const oauth = t.withIdentity({ subject: SUBJECT, ...claims });
+    await expect(oauth.query(api.accountPrivacy.status, {})).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.accountPrivacy.createAccountExport, {})).rejects.toThrow(/settings/);
+    await expect(oauth.query(api.accountPrivacy.getAccountExportArtifact, { exportJobId: exported.exportJobId })).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.accountPrivacy.requestAccountDeletion, {})).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.accountPrivacy.cancelAccountDeletion, { requestId })).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.accountPrivacy.completeAccountDeletion, { requestId, confirmation: "DELETE MY ACCOUNT" })).rejects.toThrow(/settings/);
+  }
+  expect(await t.run(async ctx => ({ requests: await ctx.db.query("accountDeletionRequests").collect(), jobs: await ctx.db.query("accountExportJobs").collect(), user: await ctx.db.query("users").first() }))).toEqual(before);
+  await owner.mutation(api.accountPrivacy.cancelAccountDeletion, { requestId });
+});
+
+it("preserves before and after authority in durable private grant reduction receipts", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "Receipt scope move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+  const clientId = "receipt-history-client";
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+  const expiry = Date.now() + 600000;
+  const reduced = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: expiry });
+  const first = await t.run(ctx => ctx.db.get(reduced.receipt));
+  expect(first?.metadata).toMatchObject({ before: { version: 1, active: true, scopes: [...movingScopes], moveScope: "allMoves", moveIds: [], expiresAt: null }, after: { version: 2, active: true, scopes: ["moving.context.read"], moveScope: "selectedMoves", moveIds: [moveId], expiresAt: expiry } });
+  const revoked = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 2, action: "revoke" });
+  const last = await t.run(ctx => ctx.db.get(revoked.receipt));
+  expect(last?.metadata).toMatchObject({ before: first?.metadata?.after, after: { version: 3, status: "revoked", active: false, moveIds: [moveId], scopes: ["moving.context.read"], expiresAt: expiry } });
+  expect(first?.householdId).toBeUndefined();
+  expect(last?.householdId).toBeUndefined();
+  expect((await owner.query(api.aiGrants.listReceipts, {})).page.some(row => row._id === last?._id)).toBe(true);
 });
