@@ -9,40 +9,53 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const project = fileURLToPath(new URL("../../", import.meta.url));
-const launcher = fileURLToPath(new URL("./cloud-session-setup.mjs", import.meta.url));
 const settings = JSON.parse(readFileSync(new URL("../settings.json", import.meta.url), "utf8"));
 const command = settings.hooks.SessionStart[0].hooks[0].command;
 
-test("configured command stays silent locally in the native platform shell", () => {
-  for (const remote of [undefined, "false"]) {
-    const env = { ...process.env, PATH: path.dirname(process.execPath) };
-    delete env.CLAUDE_CODE_REMOTE;
-    if (remote !== undefined) env.CLAUDE_CODE_REMOTE = remote;
-    const windows = process.platform === "win32";
-    const shell = windows
-      ? path.join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe")
-      : "/bin/sh";
-    const args = windows ? ["-NoProfile", "-NonInteractive", "-Command", command] : ["-c", command];
-    const result = spawnSync(shell, args, { cwd: project, env, encoding: "utf8", windowsHide: true });
-    assert.ifError(result.error);
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "");
-    assert.equal(result.stderr, "");
+function configuredCommand(env) {
+  const windows = process.platform === "win32";
+  const shell = windows
+    ? path.join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe")
+    : "/bin/sh";
+  const args = windows ? ["-NoProfile", "-NonInteractive", "-Command", command] : ["-c", command];
+  return spawnSync(shell, args, { cwd: project, env, encoding: "utf8", windowsHide: true });
+}
+
+test("configured command stays silent locally with and without Node on PATH", () => {
+  for (const nodePath of ["", path.dirname(process.execPath)]) {
+    for (const remote of [undefined, "false"]) {
+      const env = { ...process.env, PATH: nodePath };
+      delete env.CLAUDE_CODE_REMOTE;
+      if (remote !== undefined) env.CLAUDE_CODE_REMOTE = remote;
+      const result = configuredCommand(env);
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, "");
+      assert.equal(result.stderr, "");
+    }
   }
 });
 
-test("remote launcher warns without blocking when Bash is unavailable", () => {
-  const result = spawnSync(process.execPath, [launcher], {
-    cwd: project,
-    env: { ...process.env, PATH: "", CLAUDE_CODE_REMOTE: "true" },
-    encoding: "utf8",
-    windowsHide: true,
-  });
+test("configured remote command warns without blocking with Node and Bash absent", () => {
+  const result = configuredCommand({ ...process.env, PATH: "", CLAUDE_CODE_REMOTE: "true" });
   assert.ifError(result.error);
   assert.equal(result.status, 0);
   assert.equal(result.stdout.trim().split("\n").length, 1);
-  assert.match(result.stdout, /shell setup could not complete/);
+  assert.match(result.stdout, /Bash is unavailable/);
   assert.equal(result.stderr, "");
+});
+
+test("configured POSIX entry point restores runtime and repairs dependencies", (context) => {
+  const result = spawnSync("bash", [
+    ".claude/hooks/cloud-session-setup.test.sh", command,
+  ], { cwd: project, encoding: "utf8", windowsHide: true });
+  if (result.error?.code === "ENOENT" && process.platform === "win32") {
+    context.skip("Bash unavailable: native local/missing-runtime contracts still run");
+    return;
+  }
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /truly absent Node warns safely/);
 });
 
 test("CI mode makes a real patch-package application failure fail postinstall", () => {

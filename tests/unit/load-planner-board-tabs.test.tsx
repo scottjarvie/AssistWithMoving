@@ -1837,10 +1837,8 @@ describe("LoadPlannerBoard task tabs", () => {
       screen.getByLabelText("Mixed-unit bulk assignment zone"),
       "zone_1",
     );
-    await user.type(
-      screen.getByLabelText("Mixed-unit bulk assignment override reason"),
-      "Putting garage overflow in the front zone.",
-    );
+    await user.click(screen.getByLabelText("Mixed-unit bulk assignment override reason"));
+    await user.paste("Putting garage overflow in the front zone.");
     await user.click(screen.getByRole("button", { name: "Assign selected" }));
 
     await waitFor(() =>

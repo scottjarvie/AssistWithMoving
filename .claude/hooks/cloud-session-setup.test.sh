@@ -3,12 +3,15 @@
 # Run: bash .claude/hooks/cloud-session-setup.test.sh
 set -eu
 test_dir=$(cd -- "$(dirname -- "$0")" && pwd)
-hook=${1:-$test_dir/cloud-session-setup.sh}
-shell=${TEST_SHELL:-bash}
+entry_command=${1:-./.claude/hooks/cloud-session-setup.cmd}
+shell=$(command -v "${TEST_SHELL:-sh}")
 work=$(mktemp -d "${TMPDIR:-/tmp}/cloud-setup-test.XXXXXX")
 case "$work" in "${TMPDIR:-/tmp}"/cloud-setup-test.*) ;; *) exit 1 ;; esac
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/old/bin" "$work/new/bin" "$work/nvm" "$work/project/patches" "$work/tmp"
+mkdir -p "$work/project/.claude/hooks"
+cp "$test_dir/cloud-session-setup.cmd" "$test_dir/cloud-session-setup.sh" "$work/project/.claude/hooks/"
+chmod +x "$work/project/.claude/hooks/cloud-session-setup.cmd"
 cat > "$work/old/bin/node" <<'MOCK'
 #!/bin/sh
 [ "${MOCK_NODE_UNAVAILABLE:-0}" = 0 ] || exit 1
@@ -65,7 +68,7 @@ export PATH="$work/old/bin:$PATH"
 printf '24\n' > "$work/project/.nvmrc"
 printf '{"name":"fixture","version":"1.0.0"}\n' > "$work/project/package.json"
 printf '{"lockfileVersion":3}\n' > "$work/project/package-lock.json"
-run_hook() { "$shell" "$hook" > "$work/stdout" 2> "$work/stderr"; }
+run_hook() { (cd "$work/project"; "$shell" -c "$entry_command") > "$work/stdout" 2> "$work/stderr"; }
 count() { wc -l < "$work/installs" | tr -d ' '; }
 equal() { [ "$1" = "$2" ] || { echo "FAIL: $3 (got $1, expected $2)" >&2; exit 1; }; }
 one_line() {
@@ -134,6 +137,16 @@ before=$(count)
 MOCK_NODE_UNAVAILABLE=1 run_hook; one_line
 equal "$(count)" "$before" 'missing Node skips install'
 echo 'PASS: unpinned runtime preserved and missing Node warns safely'
+echo preserve > "$work/project/node_modules/keep"
+mkdir "$work/no-node"
+for tool in bash mktemp tr; do
+  ln -s "$(command -v "$tool")" "$work/no-node/$tool"
+done
+PATH="$work/no-node" run_hook; one_line
+equal "$(count)" "$before" 'truly absent Node skips install'
+grep -q 'Node is unavailable' "$work/stdout"
+equal "$(cat "$work/project/node_modules/keep")" preserve 'absent Node preserves dependencies'
+echo 'PASS: configured remote entry with truly absent Node warns safely'
 before=$(count)
 mv "$work/project/package-lock.json" "$work/hidden-lock"
 run_hook; one_line
