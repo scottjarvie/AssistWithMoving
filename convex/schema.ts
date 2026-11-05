@@ -1173,7 +1173,8 @@ export default defineSchema({
     .index("by_created_by", ["createdByUserId"])
     .index("by_household_creator", ["householdId", "createdByUserId", "status"])
     .index("by_expires", ["expiresAt"])
-    .index("by_household_created", ["householdId", "createdAt"]),
+    .index("by_household_created", ["householdId", "createdAt"])
+    .index("by_household_status_expiry", ["householdId", "status", "expiresAt"]),
 
   apiIdempotencyKeys: defineTable({
     householdId: v.id("households"),

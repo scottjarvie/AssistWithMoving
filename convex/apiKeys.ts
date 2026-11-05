@@ -10,7 +10,6 @@ import {
   apiKeyEffectiveStatus,
   apiKeyPrefix,
   apiKeyPreview,
-  countEffectivelyActiveApiKeys,
   generateApiKeySecret,
   hashApiKey,
   normalizeApiKeyScopes,
@@ -99,17 +98,14 @@ export const create = mutation({
       dimension: "activeApiKeys",
     });
 
-    const activeKeys = await ctx.db
-      .query("apiKeys")
-      .withIndex("by_household_status", (q) =>
-        q.eq("householdId", args.householdId).eq("status", "active"),
-      )
-      .collect();
     const effectiveStateNow = Date.now();
-    const effectiveActiveKeyCount = countEffectivelyActiveApiKeys(
-      activeKeys,
-      effectiveStateNow,
-    );
+    const [withoutExpiry, withFutureExpiry] = await Promise.all([
+      ctx.db.query("apiKeys").withIndex("by_household_status_expiry", q =>
+        q.eq("householdId", args.householdId).eq("status", "active").eq("expiresAt", undefined)).take(MAX_ACTIVE_API_KEYS),
+      ctx.db.query("apiKeys").withIndex("by_household_status_expiry", q =>
+        q.eq("householdId", args.householdId).eq("status", "active").gt("expiresAt", effectiveStateNow)).take(MAX_ACTIVE_API_KEYS),
+    ]);
+    const effectiveActiveKeyCount = withoutExpiry.length + withFutureExpiry.length;
     if (effectiveActiveKeyCount >= MAX_ACTIVE_API_KEYS) {
       throw new ConvexError(
         `You can have up to ${MAX_ACTIVE_API_KEYS} active connections. Revoke one before adding another.`,
