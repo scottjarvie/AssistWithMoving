@@ -370,12 +370,14 @@ export function AiConnectionManager() {
   }
 
   async function handleRevoke(grant: GrantRow) {
+    if (!grantsResult?.recoveryFingerprint) { setMessage("Reload Settings before revoking this connection."); return; }
     setBusy(`revoke-${grant.grantId}`);
     setMessage(null);
     try {
       await revokeGrant({
         grantId: grant.grantId,
         expectedVersion: grant.version,
+        expectedRecoveryFingerprint: grantsResult.recoveryFingerprint,
       });
       setConfirmingRevokeId(null);
       setMessage(

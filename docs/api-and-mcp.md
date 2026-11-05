@@ -2293,7 +2293,9 @@ catalog, including future additions; it is not a frozen copy of scopes at sign-i
 Settings show the resolved alias-intersected connection authority separately
 from saved row choices and historical consent. Incomplete history has no claimed
 effective authority until explicit recovery. Every owner revoke requires the
-loaded generation-safe version; legacy ID-only revokes fail closed.
+loaded generation-safe version and owner-management revision. Reconnect
+invalidates a delayed revoke even when its old alias row version is unchanged;
+legacy ID-only revokes fail closed.
 
 Settings at `https://movingmanifest.com/settings/ai` let the owner deliberately
 choose fewer permissions, add/change/remove an end date, or revoke the connection.

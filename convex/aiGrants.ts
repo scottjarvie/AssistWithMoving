@@ -1048,11 +1048,13 @@ export const revoke = mutation({
   args: {
     grantId: v.id("aiGrants"),
     expectedVersion: v.number(),
+    expectedRecoveryFingerprint: v.string(),
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
+    if (args.expectedRecoveryFingerprint !== recoveryFingerprint(user)) throw new ConvexError("AI connection history changed. Reload Settings before revoking the current decision.");
     const grant = await ctx.db.get(args.grantId);
     if (!grant || grant.ownerUserId !== user._id) {
       throw new ConvexError("That AI connection is not available.");

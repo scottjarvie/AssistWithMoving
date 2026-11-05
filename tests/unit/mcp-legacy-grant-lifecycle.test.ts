@@ -30,6 +30,12 @@ import { GRANT_CONSENT_POLICY, grantCatalogFingerprint, effectiveScopes, effecti
 import schema from "../../convex/schema";
 import { hasQueueWorkGrant } from "../../convex/lib/mcpGrantAccess";
 
+// Owner controls carry the loaded management revision, as the Settings form does.
+async function revokeOwner(owner: any, args: any) {
+  const loaded = await owner.query(api.aiGrants.listMine, {});
+  return owner.mutation(api.aiGrants.revoke, { ...args, expectedRecoveryFingerprint: loaded.recoveryFingerprint });
+}
+
 const consent = { consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint() };
 
 function buildModuleMap(rootDir: string): Record<string, () => Promise<unknown>> {
@@ -377,7 +383,7 @@ describe("full access and optional end dates", () => {
     expect(restored?.expiresAt).toBeUndefined();
     expect(restored?.expiryChoice).toBe("none");
     await expect(t.withIdentity({ subject: "other" }).mutation(api.aiGrants.updateLimits, { grantId: row!._id, expectedVersion: 3, expiresInDays: null })).rejects.toThrow();
-    await owner.mutation(api.aiGrants.revoke, { grantId: row!._id, expectedVersion: 3 });
+    await revokeOwner(owner, { grantId: row!._id, expectedVersion: 3 });
     await expect(owner.mutation(api.aiGrants.updateLimits, { grantId: row!._id, expectedVersion: 4, expiresInDays: null })).rejects.toThrow(/revoked/);
   });
 
@@ -479,7 +485,7 @@ it("edits move reach in place, validates ownership, and preserves scope and expi
   expect(restored.moveIds).toBeUndefined();
   expect(restored.expiresAt).toBe(chosen.expiresAt);
   expect(restored.scopes).toEqual(chosen.scopes);
-  await owner.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: restored.version });
+  await revokeOwner(owner, { grantId: row._id, expectedVersion: restored.version });
   await expect(owner.mutation(api.aiGrants.updateLimits, { grantId: row._id, expectedVersion: 5, moveScope: "selectedMoves", moveIds: [ids.selected] })).rejects.toThrow(/revoked/);
 });
 
@@ -595,7 +601,7 @@ describe("explicit owner reconnect", () => {
         return ctx.db.insert("aiGrants", { ...fields, clientId: alias });
       });
       await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "untouched-sibling" });
-      await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: 1 });
+      await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
       await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Unrelated approval" });
       const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
       for (const clientId of [first, alias]) {
@@ -618,6 +624,7 @@ describe("explicit owner reconnect", () => {
         { grantId: original._id, version: 2 }, { grantId: aliasId, version: 1 },
       ]));
       expect(restored.reconnectsClientHistory).toHaveLength(2);
+      await expect(owner.mutation(api.aiGrants.revoke, { grantId: aliasId, expectedVersion: 1, expectedRecoveryFingerprint: loaded.recoveryFingerprint })).rejects.toThrow(/history changed/);
       for (const previous of before) expect(await t.run(ctx => ctx.db.get(previous._id))).toEqual(previous);
       for (const clientId of [first, alias]) {
         expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).scopes).toEqual(movingScopes);
@@ -634,7 +641,7 @@ describe("explicit owner reconnect", () => {
       await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: current.historyFingerprint })).rejects.toThrow(/already has active/);
 
       // A later refusal on an acknowledged alias still wins in the SAME ms.
-      await owner.mutation(api.aiGrants.revoke, { grantId: aliasId, expectedVersion: 1 });
+      await revokeOwner(owner, { grantId: aliasId, expectedVersion: 1 });
       for (const clientId of [first, alias]) {
         expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
       }
@@ -692,7 +699,7 @@ describe("explicit owner reconnect", () => {
     await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
     const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
     const owner = t.withIdentity({ subject: SUBJECT });
-    await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: 1 });
+    await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
     await t.run(async ctx => {
       const row = (await ctx.db.get(original._id))!;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit Convex system fields from historical fixture copies.
@@ -714,8 +721,8 @@ describe("explicit owner reconnect", () => {
     const restored = (await t.run(ctx => ctx.db.get(grantId)))!;
     expect(restored).toMatchObject({ version: 3, status: "active", scopeChoice: "full", expiryChoice: "none" });
     expect(restored.expiresAt).toBeUndefined();
-    await expect(owner.mutation(api.aiGrants.revoke, { grantId } as any)).rejects.toThrow(/expectedVersion/);
-    await expect(owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: original.version })).rejects.toThrow(/changed/);
+    await expect(revokeOwner(owner, { grantId } as any)).rejects.toThrow(/expectedVersion/);
+    await expect(revokeOwner(owner, { grantId, expectedVersion: original.version })).rejects.toThrow(/changed/);
     expect(await t.run(ctx => ctx.db.get(grantId))).toEqual(restored);
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(128);
     const audits = await t.run(ctx => ctx.db.query("auditLogs").collect());
@@ -726,7 +733,7 @@ describe("explicit owner reconnect", () => {
       await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
     }
     expect((await owner.query(api.aiGrants.listMine, {})).grants).toHaveLength(128);
-    await owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: restored.version });
+    await revokeOwner(owner, { grantId, expectedVersion: restored.version });
     expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
   });
 
@@ -742,7 +749,7 @@ describe("explicit owner reconnect", () => {
       for (let i = 0; i < 129; i++) await ctx.db.insert("aiGrants", { ...fields, status: "revoked", clientId: `overflow-noise-${i}` });
       return ctx.db.insert("aiGrants", { ...fields, clientId: `legacy:${clientId}` });
     });
-    await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: 1 });
+    await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
     const loaded = await owner.query(api.aiGrants.listMine, {});
     expect(loaded.historyFingerprint).toBeUndefined();
     expect(loaded.nextCursor).toBeTruthy();
@@ -760,8 +767,9 @@ describe("explicit owner reconnect", () => {
     const recovered = (await t.run(ctx => ctx.db.get(grantId)))!;
     expect(recovered).toMatchObject({ version: -1, recoveredClientKey: clientId, scopeChoice: "full", expiryChoice: "none" });
     expect(recovered.expiresAt).toBeUndefined();
-    await expect(owner.mutation(api.aiGrants.revoke, { grantId } as any)).rejects.toThrow(/expectedVersion/);
-    await expect(owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: original.version })).rejects.toThrow(/changed/);
+    await expect(owner.mutation(api.aiGrants.revoke, { grantId: aliasId, expectedVersion: 1, expectedRecoveryFingerprint: loaded.recoveryFingerprint })).rejects.toThrow(/history changed/);
+    await expect(revokeOwner(owner, { grantId } as any)).rejects.toThrow(/expectedVersion/);
+    await expect(revokeOwner(owner, { grantId, expectedVersion: original.version })).rejects.toThrow(/changed/);
     expect(await t.run(ctx => ctx.db.get(grantId))).toEqual(recovered);
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(count);
     const audits = await t.run(ctx => ctx.db.query("auditLogs").collect());
@@ -780,7 +788,7 @@ describe("explicit owner reconnect", () => {
     await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: -1, scopes: ["moving.context.read"], scopeIntent: "chosen" });
     expect((await t.run(ctx => ctx.db.get(grantId)))?.version).toBe(-2);
     const beforeStaleRecovery = await owner.query(api.aiGrants.listMine, {});
-    await owner.mutation(api.aiGrants.revoke, { grantId: aliasId, expectedVersion: 1 });
+    await revokeOwner(owner, { grantId: aliasId, expectedVersion: 1 });
     for (const id of [clientId, `legacy:${clientId}`]) expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: id })).block).toBe("revoked");
     await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedRecoveryFingerprint: beforeStaleRecovery.recoveryFingerprint })).rejects.toThrow(/history changed/);
     const current = await owner.query(api.aiGrants.listMine, {});
@@ -816,7 +824,7 @@ describe("persisted duplicate histories resolve owner decisions before active gr
     await expectDuplicateRefused(t, "revoked");
     // Even replaying revoke on the already-revoked row must leave the old
     // duplicate powerless; the repair cannot depend on a new revoke mutation.
-    await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.revoke, { grantId: newerId, expectedVersion: (await t.run(ctx => ctx.db.get(newerId)))!.version });
+    await revokeOwner(t.withIdentity({ subject: SUBJECT }), { grantId: newerId, expectedVersion: (await t.run(ctx => ctx.db.get(newerId)))!.version });
     await expectDuplicateRefused(t, "revoked");
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
     expect((await t.run(ctx => ctx.db.get(oldId)))?.status).toBe("active");
@@ -931,7 +939,7 @@ describe("persisted duplicate histories resolve owner decisions before active gr
     expect(settings.historyFingerprint).toBeUndefined();
     expect(settings.grants).toHaveLength(129);
     const active = before.find(row => row.status === "active")!;
-    await owner.mutation(api.aiGrants.revoke, { grantId: active._id, expectedVersion: active.version });
+    await revokeOwner(owner, { grantId: active._id, expectedVersion: active.version });
     expect((await owner.query(api.aiGrants.listMine, {})).grants.find(row => row.grantId === active._id)?.status).toBe("revoked");
   });
 });
@@ -1033,7 +1041,7 @@ describe("FAD own-connection authority", () => {
     await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "own" });
     const row = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
     await expect(oauth.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, scopes: [...movingScopes], scopeIntent: "full" })).rejects.toThrow(/settings/);
-    await expect(oauth.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: row.version })).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: row.version, expectedRecoveryFingerprint: "not-owner-consent" })).rejects.toThrow(/settings/);
   });
 
   it("refuses explicit scope and date edits to older duplicates", async () => {
@@ -1142,7 +1150,7 @@ describe.each([
         expect((await access(t, clientId)).scopes).toEqual([]);
         expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("expired");
       }
-      await t.withIdentity({ subject: SUBJECT }).mutation(api.aiGrants.revoke, { grantId: stored._id, expectedVersion: 3 });
+      await revokeOwner(t.withIdentity({ subject: SUBJECT }), { grantId: stored._id, expectedVersion: 3 });
       for (const clientId of aliases) expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
     });
   }
@@ -1381,7 +1389,7 @@ describe("current eligibility and capacity when owner edits restore access", () 
     const payload = { ...consent, grantId: original._id, expectedVersion: 1, expiryIntent: "none" as const, expiresInDays: null };
     await expect(owner.mutation(api.aiGrants.updateLimits, payload)).rejects.toThrow(/8 active/);
     expect((await t.run(ctx => ctx.db.get(original._id)))?.version).toBe(1);
-    await owner.mutation(api.aiGrants.revoke, { grantId: activeIds[0], expectedVersion: 1 });
+    await revokeOwner(owner, { grantId: activeIds[0], expectedVersion: 1 });
     await owner.mutation(api.aiGrants.updateLimits, payload);
     expect((await t.run(ctx => ctx.db.get(original._id)))?.expiresAt).toBeUndefined();
   });
@@ -1452,7 +1460,7 @@ describe("private owner queries and participant reconnects", () => {
     await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
     const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
     const owner = t.withIdentity({ subject: SUBJECT });
-    await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: 1 });
+    await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
     await t.run(async ctx => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars -- original historical fixtures omit system fields.
       const { _id, _creationTime, ...fields } = original;
@@ -1479,7 +1487,7 @@ describe("private owner queries and participant reconnects", () => {
     await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
     const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
     const owner = t.withIdentity({ subject: SUBJECT });
-    await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: original.version });
+    await revokeOwner(owner, { grantId: original._id, expectedVersion: original.version });
     await t.run(async ctx => {
       const now = Date.now();
       const adminId = await ctx.db.insert("users", { clerkUserId: "separate-admin", name: "Another admin", appRole: "member", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now });
@@ -1675,6 +1683,6 @@ it.each(["display-client", "https://display.example/client.json"])("reports inte
   expect(loaded.grants.find(row => row.grantId === broad._id)?.scopes).toEqual(movingScopes);
   for (const row of loaded.grants) expect(row.effectiveAuthority).toMatchObject({ scopes: ["moving.context.read"], moveScope: "selectedMoves", status: "active", version: 3 });
   for (const id of [clientId, "legacy:" + clientId]) expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(["moving.context.read"]);
-  await owner.mutation(api.aiGrants.revoke, { grantId: aliasId, expectedVersion: 2 });
+  await revokeOwner(owner, { grantId: aliasId, expectedVersion: 2 });
   for (const row of (await owner.query(api.aiGrants.listMine, {})).grants) expect(row.effectiveAuthority).toMatchObject({ status: "revoked", scopes: [] });
 });
