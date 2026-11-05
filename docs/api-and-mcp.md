@@ -2295,6 +2295,12 @@ An unrelated new approval never overrides a client's refusal. Reconnect requires
 current person consent and the loaded history fingerprint; it binds a new grant
 to that client's existing verified identity on both OAuth doors. The exact prior
 grant revisions stay stored and audited. Later edits or revocations still apply.
+Reconnect advances the effective connection version beyond the previous
+generation, so an old delayed reduction cannot affect the new approval.
+New rows stop at the bounded history limit. At that limit an explicit reconnect
+reuses the selected record, preserving its full prior snapshot in durable audit
+in the same transaction. Oversized existing histories remain viewable and
+revocable in Settings while incomplete-history authorization stays closed.
 
 Only explicitly full grants follow future scopes. Legacy/unmarked and chosen
 scope arrays and every stored end date remain exact, including automatic old

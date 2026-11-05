@@ -621,7 +621,12 @@ describe("explicit owner reconnect", () => {
       for (const previous of before) expect(await t.run(ctx => ctx.db.get(previous._id))).toEqual(previous);
       for (const clientId of [first, alias]) {
         expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).scopes).toEqual(movingScopes);
+        // Versions 1 and 3 were observable before this reconnect (two aliases).
+        for (const expectedVersion of [1, 3]) await expect(t.mutation(grants.reduceConnection, {
+          subject: SUBJECT, clientId, expectedVersion, action: "revoke",
+        })).rejects.toThrow(/changed/);
       }
+      expect(restored.version).toBeGreaterThan(3);
       const audit = await t.run(ctx => ctx.db.query("auditLogs").filter(q => q.eq(q.field("objectId"), grantId)).first());
       expect(audit).toMatchObject({ actorType: "user", action: "ai_grant.approved", metadata: { reconnectGrantId: original._id, reconnectsClientHistory: restored.reconnectsClientHistory } });
       await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: loaded.historyFingerprint })).rejects.toThrow(/history changed/);
@@ -678,6 +683,47 @@ describe("explicit owner reconnect", () => {
       await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Invalid reconnect", reconnectGrantId, expectedHistoryFingerprint: loaded.historyFingerprint })).rejects.toThrow(/previously connected/);
     }
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+  });
+
+  it("keeps settings and explicit reconnect usable at the history limit without adding a row", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const clientId = "https://capacity.example/client.json";
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    const owner = t.withIdentity({ subject: SUBJECT });
+    await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: 1 });
+    await t.run(async ctx => {
+      const row = (await ctx.db.get(original._id))!;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit Convex system fields from historical fixture copies.
+      const { _id, _creationTime, ...fields } = row;
+      for (let i = 0; i < 127; i++) await ctx.db.insert("aiGrants", { ...fields, clientId: `capacity-noise-${i}` });
+    });
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    expect(loaded.grants).toHaveLength(128);
+    expect(loaded).toMatchObject({ historyAtCapacity: true, historyOverflow: false });
+    expect(loaded.historyFingerprint).toBeTruthy();
+    await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Would overflow" })).rejects.toThrow(/history is full/);
+    expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "would-overflow" })).block).toBe("connectionLimit");
+    const previous = await t.run(ctx => ctx.db.get(original._id));
+    const { grantId } = await owner.mutation(api.aiGrants.approve, {
+      ...consent, householdId, label: "Reconnect at capacity", reconnectGrantId: original._id,
+      expectedHistoryFingerprint: loaded.historyFingerprint,
+    });
+    expect(grantId).toBe(original._id);
+    const restored = (await t.run(ctx => ctx.db.get(grantId)))!;
+    expect(restored).toMatchObject({ version: 3, status: "active", scopeChoice: "full", expiryChoice: "none" });
+    expect(restored.expiresAt).toBeUndefined();
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(128);
+    const audits = await t.run(ctx => ctx.db.query("auditLogs").collect());
+    expect(audits.find(event => event.metadata?.previousGrant)?.metadata?.previousGrant).toEqual(previous);
+    for (const id of [clientId, `legacy:${clientId}`]) {
+      expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(movingScopes);
+      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
+    }
+    expect((await owner.query(api.aiGrants.listMine, {})).grants).toHaveLength(128);
+    await owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: restored.version });
+    expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
   });
 });
 
@@ -813,6 +859,14 @@ describe("persisted duplicate histories resolve owner decisions before active gr
     await expect(t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: "duplicate-client" })).rejects.toThrow(/safe read limit/);
     await expect(t.query(internal.aiGrants.grantsForPrincipal, { subject: SUBJECT, clientId: "duplicate-client" })).rejects.toThrow(/safe read limit/);
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const settings = await owner.query(api.aiGrants.listMine, {});
+    expect(settings).toMatchObject({ historyAtCapacity: true, historyOverflow: true });
+    expect(settings.historyFingerprint).toBeUndefined();
+    expect(settings.grants).toHaveLength(129);
+    const active = before.find(row => row.status === "active")!;
+    await owner.mutation(api.aiGrants.revoke, { grantId: active._id, expectedVersion: active.version });
+    expect((await owner.query(api.aiGrants.listMine, {})).grants.find(row => row.grantId === active._id)?.status).toBe("revoked");
   });
 });
 

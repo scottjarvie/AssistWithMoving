@@ -101,6 +101,8 @@ type GrantsResult = {
   boundaryVersion: string;
   consentPolicyVersion?: string;
   catalogFingerprint?: string;
+  historyAtCapacity?: boolean;
+  historyOverflow?: boolean;
   historyFingerprint?: string;
   scopes: BoundaryScope[];
   neverExposed: string[];
@@ -355,6 +357,7 @@ export function AiConnectionManager() {
   const canApprove =
     canWriteConsent &&
     Boolean(householdId) &&
+    (!grantsResult?.historyAtCapacity || Boolean(reconnectGrantId)) &&
     (!reconnectGrantId || Boolean(grantsResult?.historyFingerprint)) &&
     label.trim().length > 0 &&
     selectedScopes.length > 0 &&
@@ -459,6 +462,13 @@ export function AiConnectionManager() {
             ? "Full access includes every current and future tool scope. Limits are optional: turn off permissions or choose an end date if you want them."
             : "Connection approvals and limit edits are read-only until the app and backend support the same permission catalog. Reload after the update is available."}
         </p>
+        {grantsResult?.historyAtCapacity ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {grantsResult.historyOverflow
+              ? "Connection history exceeds the safe approval limit. You can still review and revoke the connections shown here; new approvals remain blocked."
+              : "Connection history is full. Reconnect an existing client below or change its current limits. Earlier records stay saved."}
+          </p>
+        ) : null}
 
         {grantsResult === undefined ? (
           <Skeleton className="mt-4 h-64 w-full" />

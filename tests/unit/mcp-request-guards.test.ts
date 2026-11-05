@@ -529,6 +529,14 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       expect(reconnected).toMatchObject({ clientId, scopeChoice: "full", expiryChoice: "none" });
       expect(reconnected.expiresAt).toBeUndefined();
       for (const row of before.grants) expect(await f.t.run(ctx => ctx.db.get(row._id))).toEqual(row);
+      const beforeDelayed = await f.snapshot();
+      await expect(f.t.mutation(internal.aiGrants.reduceConnection, {
+        subject: SUBJECT, clientId, expectedVersion: original.version, action: "revoke",
+      })).rejects.toThrow(/changed/);
+      await expect(f.t.mutation(internal.aiGrants.reduceLegacyConnection, {
+        caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: original.version, action: "revoke",
+      })).rejects.toThrow(/changed/);
+      expect(await f.snapshot()).toEqual(beforeDelayed);
       await f.owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: reconnected.version });
       expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
       expect((await persisted()).allowed).toBe(false);

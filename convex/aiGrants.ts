@@ -387,6 +387,9 @@ export const touchLegacyConnection = internalMutation({
     if (allActive.length >= MAX_ACTIVE_GRANTS) {
       return { grants: [] as GrantDecisionRow[], block: "connectionLimit" as const };
     }
+    if ((await grantHistory(ctx, user._id)).length >= MAX_GRANT_HISTORY) {
+      return { grants: [] as GrantDecisionRow[], block: "connectionLimit" as const };
+    }
 
     // A grant belongs to a household. Prefer a real membership; fall back to a
     // move-only participation, so an outsider walled to a single move can still
@@ -610,12 +613,16 @@ export const listMine = query({
       .query("aiGrants")
       .withIndex("by_owner_updated", (q) => q.eq("ownerUserId", user._id))
       .order("desc")
-      .take(40);
+      .take(MAX_GRANT_HISTORY + 1);
     const resolved = rows;
     const grants = resolved.map((row) => shapeGrant(row, now));
     return {
       ...describeGrantBoundary(),
-      historyFingerprint: historyFingerprint(await grantHistory(ctx, user._id)),
+      // Settings must remain readable even for preexisting oversized histories.
+      // Never offer a consent fingerprint for an incomplete history window.
+      historyFingerprint: rows.length <= MAX_GRANT_HISTORY ? historyFingerprint(rows) : undefined,
+      historyAtCapacity: rows.length >= MAX_GRANT_HISTORY,
+      historyOverflow: rows.length > MAX_GRANT_HISTORY,
       grants,
       activeCount: grants.filter((grant) => grant.status === "active").length,
       maxActive: MAX_ACTIVE_GRANTS,
@@ -729,11 +736,18 @@ export const approve = mutation({
     if (args.reconnectGrantId && !reconnect?.clientId) {
       throw new ConvexError("Choose one of your previously connected AI clients to reconnect.");
     }
+    let initialVersion = 1;
     if (reconnect?.clientId) {
       const current = (await governingGrants(ctx, user._id, reconnect.clientId, Date.now()))[0];
       if (!current || grantIsActive(current, Date.now())) {
         throw new ConvexError("This client already has active access. Change its limits instead.");
       }
+      // Reconnect is a new generation, so old delayed reductions cannot match
+      // it. Advance beyond the effective version across ALL current aliases.
+      initialVersion = current.version + 1;
+    }
+    if (!reconnect && history.length >= MAX_GRANT_HISTORY) {
+      throw new ConvexError("AI connection history is full. Reconnect an existing client or edit its limits instead of adding another connection.");
     }
     const clientHistory = reconnect?.clientId
       ? history.filter(row => row.clientId && sameOAuthClientHistory(row.clientId, reconnect.clientId!))
@@ -765,27 +779,33 @@ export const approve = mutation({
       );
     }
 
-    const grantId = await ctx.db.insert("aiGrants", {
+    const approval = {
       ownerUserId: user._id,
       householdId: args.householdId,
       label,
       ...(reconnect ? { clientId: reconnect.clientId, reconnectsClientHistory } : {}),
       scopes,
       scopeChoice: scopeIntent,
-      expiryChoice: expiresAt === undefined ? "none" : "chosen",
+      expiryChoice: expiresAt === undefined ? "none" as const : "chosen" as const,
       moveScope,
       moveIds,
-      status: "active",
+      status: "active" as const,
       consentBoundaryVersion: GRANT_BOUNDARY_VERSION,
       consentSnapshot: buildConsentSnapshot(scopes),
       expiresAt,
       approvedAt: now,
       useCount: 0,
       note: args.note?.trim().slice(0, 500) || undefined,
-      version: 1,
+      version: initialVersion,
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    // At capacity reconnect the selected row instead of adding row 129.
+    // Preserve its complete prior source record in the same durable audit
+    // transaction. Version and acknowledged alias revisions still advance.
+    const reuse = reconnect && history.length >= MAX_GRANT_HISTORY;
+    const grantId = reuse ? reconnect._id : await ctx.db.insert("aiGrants", approval);
+    if (reuse) await ctx.db.replace(grantId, approval);
 
     const grant = await ctx.db.get(grantId);
     if (grant) {
@@ -807,7 +827,7 @@ export const approve = mutation({
       action: "ai_grant.approved",
       objectTable: "aiGrants",
       objectId: grantId,
-      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null, ...(reconnect ? { reconnectGrantId: reconnect._id, clientId: reconnect.clientId, reconnectsClientHistory } : {}) },
+      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null, ...(reconnect ? { reconnectGrantId: reconnect._id, clientId: reconnect.clientId, reconnectsClientHistory, ...(reuse ? { previousGrant: reconnect } : {}) } : {}) },
     });
     return { grantId };
   },
