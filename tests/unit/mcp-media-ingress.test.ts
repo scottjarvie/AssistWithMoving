@@ -138,12 +138,17 @@ describe("MCP media ingress policy", () => {
     await mkdir(allowedRoot);
     await writeFile(insideFile, pngBytes);
     await writeFile(outsideFile, pngBytes);
-    await symlink(outsideFile, symlinkPath);
     try {
+      // Windows file symlinks need an elevated privilege; directory junctions
+      // exercise the same refusal without changing machine security settings.
+      await symlink(process.platform === "win32" ? tempDir : outsideFile, symlinkPath, process.platform === "win32" ? "junction" : "file");
       await expect(readAllowedLocalMedia({ filePath: insideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).resolves.toMatchObject({ bytes: pngBytes });
       await expect(readAllowedLocalMedia({ filePath: outsideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/outside ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS/i);
       await expect(readAllowedLocalMedia({ filePath: symlinkPath, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/symlinks, devices, directories, and pipes/i);
-      await expect(readAllowedLocalMedia({ filePath: "/dev/zero", transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/regular file/i);
+      await expect(readAllowedLocalMedia({ filePath: allowedRoot, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/regular file/i);
+      if (process.platform !== "win32") {
+        await expect(readAllowedLocalMedia({ filePath: "/dev/zero", transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/regular file/i);
+      }
     } finally { await rm(tempDir, { recursive: true, force: true }); }
   });
 

@@ -1302,8 +1302,8 @@ describe("LoadPlannerBoard task tabs", () => {
 
     renderLoadPlannerBoard();
 
-    await user.type(
-      screen.getByLabelText("Rough movable unit list"),
+    await user.click(screen.getByLabelText("Rough movable unit list"));
+    await user.paste(
       "Garage: 2 medium boxes 30 lb 18x16x12 3 cu ft, treadmill 220 lb 72x34x58, camera backpack goes with me 12 lb 14x8x10 1.5 cu ft",
     );
     await user.click(screen.getByRole("button", { name: "Parse list" }));
@@ -1401,8 +1401,8 @@ describe("LoadPlannerBoard task tabs", () => {
 
     renderLoadPlannerBoard();
 
-    await user.type(
-      screen.getByLabelText("Rough movable unit list"),
+    await user.click(screen.getByLabelText("Rough movable unit list"));
+    await user.paste(
       "Garage: B-012 kitchen dishes 35 lb 18x12x12, #13 Christmas totes",
     );
     await user.click(screen.getByRole("button", { name: "Parse list" }));
