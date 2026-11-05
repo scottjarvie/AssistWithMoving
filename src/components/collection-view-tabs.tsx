@@ -67,16 +67,19 @@ function useSavedViews<T>(key: string, parseSnapshot: (value: unknown) => T | nu
 }
 
 /** Built-ins describe real states. Named views exist only after someone saves one. */
-export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply, parseSnapshot, ready = true }: {
+export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply, parseSnapshot, ready = true, selectedId, onSelectedIdChange, ariaLabel = "Inventory views" }: {
   storageKey: string;
   builtIns: BuiltInView<T>[];
   snapshot: T;
   onApply: (value: T) => void;
   parseSnapshot: (value: unknown) => T | null;
   ready?: boolean;
+  selectedId?: string;
+  onSelectedIdChange?: (id: string) => void;
+  ariaLabel?: string;
 }) {
   const { views, save, update, remove } = useSavedViews(storageKey, parseSnapshot);
-  const [selection, setSelection] = useState<SavedView<T> | null>(() => ready ? builtIns[0] ?? null : null);
+  const [selection, setSelection] = useState<SavedView<T> | null>(() => ready ? builtIns.find(view => view.id === selectedId) ?? builtIns[0] ?? null : null);
   const [naming, setNaming] = useState<"save" | "rename" | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [chooserOpen, setChooserOpen] = useState(false);
@@ -91,18 +94,19 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
   // is available. A guarded adjustment of this component's own state prevents
   // an intermediate false modified mark; later edits never replace baseline.
   if (ready && (!selection || !allViews.some(view => view.id === selection.id)) && builtIns[0]) setSelection(builtIns[0]);
-  const selected = allViews.find(view => view.id === selection?.id) ?? builtIns[0];
+  const selected = allViews.find(view => view.id === (selectedId ?? selection?.id)) ?? builtIns[0];
+  if (ready && selectedId && selected && selected.id !== selection?.id) setSelection(selected);
   const baseline = selected && selection && selected.id === selection.id && selected.id.startsWith("built-in:") ? selection.snapshot : selected?.snapshot;
   const edited = Boolean(selected && signature(baseline) !== signature(snapshot));
   const isSaved = selected?.id.startsWith("saved:") ?? false;
   useEffect(() => {
     if (selected?.id) revealHorizontalItem(strip.current, triggers.current.get(selected.id));
   }, [selected?.id, selected?.label, edited]);
-  function selectView(view: SavedView<T>) { setSelection(view); onApply(view.snapshot); setMessage(""); }
+  function selectView(view: SavedView<T>) { setSelection(view); onSelectedIdChange?.(view.id); onApply(view.snapshot); setMessage(""); }
   function report(persisted: boolean, action: string) { setMessage(persisted ? `${action} on this browser.` : `${action} for this session; browser storage is unavailable.`); }
   return <div className="space-y-2">
     <div className="flex min-w-0 items-start gap-2 border-b border-border pb-2">
-    <div ref={strip} role="group" aria-label="Inventory views" className="moving-view-strip min-w-0 flex-1 overflow-x-auto sm:overflow-visible">
+    <div ref={strip} role="group" aria-label={ariaLabel} className="moving-view-strip min-w-0 flex-1 overflow-x-auto sm:overflow-visible">
       <div className="moving-view-items">{allViews.map(view => <Button key={view.id} ref={element => { if (element) triggers.current.set(view.id, element); else triggers.current.delete(view.id); }} type="button" size="sm" variant={selected?.id === view.id ? "secondary" : "ghost"} className="h-auto min-h-11 min-w-0 shrink-0 whitespace-normal break-words py-1.5 text-left sm:min-h-8 sm:max-w-full" title={view.description ?? "Saved on this browser"} aria-pressed={selected?.id === view.id} onClick={() => selectView(view)}>
         {view.label}{selected?.id === view.id && edited ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-accent" /><span className="sr-only">modified</span></> : null}{typeof view.count === "number" ? <span className="font-mono text-xs text-muted-foreground">{view.count}</span> : null}
       </Button>)}</div>
@@ -129,7 +133,7 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
         const renaming = naming === "rename" && isSaved && selected;
         const view = renaming ? { ...selected, label: name.trim() } : { id: `saved:${crypto.randomUUID()}`, label: name.trim(), snapshot };
         const persisted = renaming ? update(view) : save(view);
-        setSelection(view); setNaming(null);
+        setSelection(view); onSelectedIdChange?.(view.id); setNaming(null);
         report(persisted, renaming ? "View renamed" : "View saved");
       }}>
         <DialogHeader className="p-0 pr-8"><DialogTitle>{naming === "rename" ? "Rename this view" : "Save this view"}</DialogTitle><DialogDescription>Keep its search, filters, sorting, grouping, presentation, density and columns on this browser.</DialogDescription></DialogHeader>
@@ -142,7 +146,7 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
       <DialogFooter className="p-0"><Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(false)}>Keep view</Button><Button type="button" size="sm" variant="destructive" onClick={() => {
         if (!selected || !isSaved) return;
         const persisted = remove(selected.id);
-        const first = builtIns[0]; if (first) { setSelection(first); onApply(first.snapshot); }
+        const first = builtIns[0]; if (first) { setSelection(first); onSelectedIdChange?.(first.id); onApply(first.snapshot); }
         setDeleting(false); report(persisted, "View deleted");
       }}>Delete this view</Button></DialogFooter>
     </DialogContent></Dialog>

@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) ? Full unit suite green at 61a0d70: 222 files/1,396 tests; TypeScript and focused lint pass; build and fresh visuals remain pending SITE clearance.
+[Open newest-first gallery](gallery.html) ? Source execution yielded for release-critical PR work; Queue phase-two source saved but unverified/unwired. Last green full unit checkpoint: 61a0d70 (222 files /1,396 tests).
 
 # Moving design council status
 

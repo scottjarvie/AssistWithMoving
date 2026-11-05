@@ -46,6 +46,7 @@ export type QueueDeskItem = {
   version: number | null;
   createdAt: number;
   updatedAt: number;
+  completedAt?: number | null;
 };
 
 export type QueueDeskActivity = {

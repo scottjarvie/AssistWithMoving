@@ -244,6 +244,7 @@ export type DataTableProps<TData> = {
   /** Legacy initial List preference. All three presentations remain available. */
   cardOnly?: boolean
   preferenceKey?: string
+  initialGroupBy?: string
   showColumnControl?: boolean
   showSortControl?: boolean
   sortPresets?: CollectionSortPresets
@@ -339,6 +340,7 @@ export function DataTable<TData>({
   renderMobileCard,
   cardOnly = false,
   preferenceKey,
+  initialGroupBy = "",
   showColumnControl = true,
   showSortControl = true,
   sortPresets,
@@ -353,7 +355,7 @@ export function DataTable<TData>({
   minWidthClassName = "min-w-[980px]",
 }: DataTableProps<TData>) {
   const instanceKey = React.useId()
-  const [presentation, setPresentation] = useCollectionPresentation(preferenceKey ?? ariaLabel ?? `records-${instanceKey}`, cardOnly ? "list" : "table")
+  const [presentation, setPresentation] = useCollectionPresentation(preferenceKey ?? ariaLabel ?? `records-${instanceKey}`, cardOnly ? "list" : "table", initialGroupBy)
   const [sorting, setSorting] = useControllableState<SortingState>(
     sortingProp,
     onSortingChange,

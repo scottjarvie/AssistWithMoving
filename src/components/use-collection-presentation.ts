@@ -19,7 +19,7 @@ function persist(key: string, value: CollectionPresentation) {
   window.dispatchEvent(new CustomEvent(eventName, { detail: key }));
 }
 
-export function useCollectionPresentation(id: string, initialView: CollectionView = "table") {
+export function useCollectionPresentation(id: string, initialView: CollectionView = "table", initialGroupBy = "") {
   const key = `assistwithmoving.collection.${id}.v1`;
   const getSnapshot = useCallback(() => {
     if (!memoryOnly.has(key)) try { cache.set(key, window.localStorage.getItem(key)); } catch { /* Keep any in-memory fallback. */ }
@@ -46,19 +46,19 @@ export function useCollectionPresentation(id: string, initialView: CollectionVie
     persist(key, {
       view: initialView === "list" || window.innerWidth < 768 ? "list" : "table",
       density: stored.density === "comfortable" ? "comfortable" : "compact",
-      groupBy: typeof stored.groupBy === "string" ? stored.groupBy : "",
+      groupBy: typeof stored.groupBy === "string" ? stored.groupBy : initialGroupBy,
       groupDesc: stored.groupDesc === true,
     });
-  }, [getSnapshot, initialView, key]);
+  }, [getSnapshot, initialView, initialGroupBy, key]);
   const preferences = useMemo<CollectionPresentation>(() => {
     const stored = readStored(raw);
     return {
       view: stored.view === "table" || stored.view === "list" || stored.view === "grid" ? stored.view : initialView,
       density: stored.density === "comfortable" ? "comfortable" : "compact",
-      groupBy: typeof stored.groupBy === "string" ? stored.groupBy : "",
+      groupBy: typeof stored.groupBy === "string" ? stored.groupBy : initialGroupBy,
       groupDesc: stored.groupDesc === true,
     };
-  }, [raw, initialView]);
+  }, [raw, initialView, initialGroupBy]);
   const setPreferences = useCallback((patch: Partial<CollectionPresentation>) => {
     persist(key, { ...preferences, ...patch });
   }, [key, preferences]);
