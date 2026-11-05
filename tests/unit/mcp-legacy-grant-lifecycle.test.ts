@@ -1566,3 +1566,19 @@ it("pages only accessible move choices for a participant without household acces
   expect(new Set([...first.moves, ...next.moves].map(move => move.moveId)).size).toBe(27);
   expect([...first.moves, ...next.moves].some(move => move.title === "Unshared household move")).toBe(false);
 });
+
+
+it("ignores long expired-key history while enforcing both permanent and future-expiry active slots", async () => {
+  const t = convexTest(schema, modules);
+  const { userId, householdId } = await seedOwner(t);
+  await t.run(async ctx => {
+    for (let i = 0; i < 160; i++) await ctx.db.insert("apiKeys", { householdId, name: "Expired quota fixture", prefix: "synthetic", tokenPreview: "synthetic-preview", secretHash: "synthetic-hash", scopes: ["moves/read"], status: "active", expiresAt: 1, createdByUserId: userId, createdAt: i, updatedAt: i });
+  });
+  const owner = t.withIdentity({ subject: SUBJECT });
+  for (let i = 0; i < 3; i++) await owner.mutation(api.apiKeys.create, { householdId, name: "New default " + i, ...(i === 1 ? { expiresAt: Date.now() + 86400000 } : {}) });
+  await expect(owner.mutation(api.apiKeys.create, { householdId, name: "Beyond quota" })).rejects.toThrow(/active connections/);
+  const rows = await t.run(ctx => ctx.db.query("apiKeys").collect());
+  const current = rows.filter(row => row.expiresAt === undefined);
+  expect(current).toHaveLength(2);
+  expect(current.every(row => row.scopeChoice === "full")).toBe(true);
+});
