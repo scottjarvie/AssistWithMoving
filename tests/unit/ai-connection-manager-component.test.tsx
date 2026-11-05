@@ -12,6 +12,8 @@ const apiMock = vi.hoisted(() => ({
     listActivity: "aiGrants.listActivity",
     listMoveChoices: "aiGrants.listMoveChoices",
     listRecoveryHouseholds: "aiGrants.listRecoveryHouseholds",
+    listHouseholdChoices: "aiGrants.listHouseholdChoices",
+    listReceipts: "aiGrants.listReceipts",
     listSourceHistory: "aiGrants.listSourceHistory",
     describeBoundary: "aiGrants.describeBoundary",
     approve: "aiGrants.approve",
@@ -23,6 +25,7 @@ const apiMock = vi.hoisted(() => ({
     summaryStats: "households.summaryStats",
   },
   apiKeys: {
+    settingsSummary: "apiKeys.settingsSummary",
     listForHousehold: "apiKeys.listForHousehold",
     create: "apiKeys.create",
     revoke: "apiKeys.revoke",
@@ -142,6 +145,7 @@ const connectionData = vi.hoisted(() => ({
   },
   keys: [] as unknown[],
   participantRecovery: false,
+  memberPaging: false,
 }));
 
 vi.mock("../../convex/_generated/api", () => ({
@@ -165,6 +169,12 @@ vi.mock("convex/react", () => ({
         return { page: connectionData.archivedRecords ? [{ _id: "saved-source", archivedAt: 1770000000000, source: { ...connectionData.grants.grants[0], _id: "original-grant", label: (args as { cursor?: string })?.cursor ? "Earlier original approval" : "Original approval", version: 1 } }] : [], isDone: Boolean((args as { cursor?: string })?.cursor), continueCursor: "older-originals" };
       case apiMock.households.listMine:
         return connectionData.households;
+      case apiMock.aiGrants.listHouseholdChoices:
+        return { households: connectionData.memberPaging && (args as { cursor?: string })?.cursor ? [{ household: { _id: "member_later", name: "Later membership" }, role: "owner" }] : connectionData.households, nextCursor: connectionData.memberPaging && !(args as { cursor?: string })?.cursor ? "later-members" : null };
+      case apiMock.aiGrants.listReceipts:
+        return { page: [], isDone: true, continueCursor: "" };
+      case apiMock.apiKeys.settingsSummary:
+        return connectionData.stats;
       case apiMock.households.summaryStats:
         return connectionData.stats;
       case apiMock.aiGrants.listMoveChoices:
@@ -751,4 +761,20 @@ it("labels resolved alias authority separately from the saved full row", () => {
     expect(authority).toHaveTextContent("Read the move context you choose");
     expect(authority).not.toHaveTextContent("Save the work you asked for");
   } finally { connectionData.grants.grants = original; }
+});
+
+it("pages member households without calling the unbounded dashboard query", async () => {
+  connectionData.memberPaging = true;
+  connectionData.queryCalls.mockClear();
+  try {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByRole("button", { name: "More member households" }));
+    const household = screen.getByLabelText("Household", { selector: "#ai-grant-household" });
+    expect(household).toHaveValue("household_123");
+    await user.selectOptions(household, "member_later");
+    await user.click(screen.getByRole("button", { name: "First member households" }));
+    expect(household).toHaveValue("member_later");
+    expect(connectionData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.listMine, expect.anything());
+  } finally { connectionData.memberPaging = false; }
 });

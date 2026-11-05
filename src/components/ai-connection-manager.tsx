@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { useAuth } from "@clerk/nextjs";
+import { useMemberHouseholdChoices } from "./connection-household-choices";
 import {
   Activity,
   KeyRound,
@@ -124,11 +125,6 @@ type ActivityRow = {
   message: string;
   outcome: "allowed" | "refused" | "recorded";
   createdAt: number;
-};
-
-type HouseholdEntry = {
-  household: { _id: Id<"households">; name: string };
-  role: string;
 };
 
 type MoveSummary = { moveId: Id<"moves">; title: string; status: string };
@@ -245,6 +241,19 @@ function OriginalConnectionHistory({ ready }: { ready: boolean }) {
   </details>;
 }
 
+function PrivateConnectionReceipts({ ready }: { ready: boolean }) {
+  const [opened, setOpened] = useState(false);
+  const [cursor, setCursor] = useState<string | undefined>();
+  const receipts = useQuery(api.aiGrants.listReceipts, ready && opened ? (cursor ? { cursor } : {}) : "skip");
+  return <details className="rounded-lg border border-border p-4" onToggle={event => setOpened(event.currentTarget.open)}>
+    <summary className="cursor-pointer font-medium">Private connection receipts</summary>
+    <p className="mt-2 text-sm">Detailed connection decisions belong only to you.</p>
+    {receipts?.page.map(row => <details key={row._id} className="mt-3 text-sm"><summary>{row.action} — {formatMoment(row.createdAt)}</summary><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(row, null, 2)}</pre></details>)}
+    {receipts && !receipts.isDone ? <Button variant="outline" onClick={() => setCursor(receipts.continueCursor)}>Older private receipts</Button> : null}
+    {cursor ? <Button variant="outline" onClick={() => setCursor(undefined)}>Recent private receipts</Button> : null}
+  </details>;
+}
+
 export function AiConnectionManager() {
   const { isLoaded, isSignedIn } = useAuth();
   const ready = isLoaded && isSignedIn;
@@ -257,10 +266,8 @@ export function AiConnectionManager() {
     api.aiGrants.listActivity,
     ready ? { limit: 20 } : "skip",
   ) as { activity: ActivityRow[] } | undefined;
-  const households = useQuery(
-    api.households.listMine,
-    ready ? {} : "skip",
-  ) as HouseholdEntry[] | undefined;
+  const memberChoices = useMemberHouseholdChoices(ready);
+  const households = memberChoices.households;
 
   const [reconnectGrantId, setReconnectGrantId] = useState<Id<"aiGrants"> | null>(null);
   const reconnectTarget = grantsResult?.grants.find(grant => grant.grantId === reconnectGrantId);
@@ -585,6 +592,10 @@ export function AiConnectionManager() {
               {recoveryHouseholds?.nextCursor ? <Button type="button" variant="outline" onClick={() => setRecoveryHouseholdCursor(recoveryHouseholds.nextCursor!)}>More recovery households</Button> : null}
               {recoveryHouseholdCursor ? <Button type="button" variant="outline" onClick={() => setRecoveryHouseholdCursor(undefined)}>First recovery households</Button> : null}
             </div> : null}
+            <div className="flex flex-wrap gap-2">
+              {memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); memberChoices.next(householdId); }}>More member households</Button> : null}
+              {memberChoices.cursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); memberChoices.first(householdId); }}>First member households</Button> : null}
+            </div>
 
             <div className="space-y-1.5">
               <label htmlFor="ai-grant-label" className="text-sm font-medium">
@@ -1204,6 +1215,7 @@ export function AiConnectionManager() {
       {/* 7. API keys — a different door, kept secondary and separate.      */}
       {/* ---------------------------------------------------------------- */}
       <OriginalConnectionHistory ready={ready} />
+      <PrivateConnectionReceipts ready={ready} />
 
       <details className="rounded-lg border border-border bg-card p-4 sm:p-5">
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-medium">

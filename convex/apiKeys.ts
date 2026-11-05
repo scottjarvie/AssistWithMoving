@@ -13,6 +13,7 @@ import {
   generateApiKeySecret,
   hashApiKey,
   normalizeApiKeyScopes,
+  readActiveApiKeyCount,
 } from "./lib/apiKeys";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
 import { reductionArgs, reducedAccess, type Reduction } from "./lib/connectionReduction";
@@ -22,6 +23,16 @@ import { requireHouseholdPermission } from "./lib/permissions";
 // connections" count stays legible to a non-technical user (MOVE-279). Revoke
 // one to free a slot.
 const MAX_ACTIVE_API_KEYS = 3;
+
+export const settingsSummary = query({
+  args: { householdId: v.id("households") },
+  handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
+    await requireHouseholdPermission(ctx, args.householdId, "api_keys:manage");
+    const count = await readActiveApiKeyCount(ctx.db, args.householdId);
+    return { activeApiKeyCount: count.count, activeApiKeyCountTruncated: count.truncated };
+  },
+});
 
 const apiKeyScopeValidator = v.union(
   v.literal("moves/read"),

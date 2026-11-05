@@ -1386,6 +1386,7 @@ describe("R1 scope-free API context", () => {
   it("hides gated move content after zero/readless reductions on REST and both API-key MCP registries, and restores only by person edit", async () => {
     const t = convexTest(schema, modules);
     const { householdId, userId } = await seedOwner(t);
+    await t.run(ctx => ctx.db.patch(householdId, { name: "PRIVATE household name", slug: "private-household" }));
     const { generateApiKeySecret, hashApiKey, apiKeyPrefix } = await import("../../convex/lib/apiKeys");
     const { registerTools } = await import("../../mcp-server/assistwithmoving-mcp.mjs");
     const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "PRIVATE move title", origin: "PRIVATE origin", destination: "PRIVATE destination", dateStart: "2027-01-01", dateEnd: "2027-01-02", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
@@ -1412,7 +1413,7 @@ describe("R1 scope-free API context", () => {
       expect(receipt.status).toBe(200);
       const result = await context();
       expect(result.status).toBe(200);
-      expect(result.body).toMatchObject({ data: { apiKey: { version: version + 1, scopes: [...scopes] }, restrictedMove: null } });
+      expect(result.body).toMatchObject({ data: { household: null, apiKey: { version: version + 1, scopes: [...scopes] }, restrictedMove: null } });
       expect(JSON.stringify(result.body)).not.toContain("PRIVATE");
       expect((await readMove()).status).toBe(403);
       for (const selected of [false, true]) {
@@ -1524,6 +1525,8 @@ describe("private owner queries and participant reconnects", () => {
     await expect(oauth.query(api.aiGrants.listMoveChoices, { householdId: (await t.run(ctx => ctx.db.query("households").first()))!._id })).rejects.toThrow(/settings/);
     await expect(oauth.query(api.aiGrants.listSourceHistory, {})).rejects.toThrow(/settings/);
     await expect(oauth.query(api.aiGrants.listRecoveryHouseholds, {})).rejects.toThrow(/settings/);
+    await expect(oauth.query(api.aiGrants.listHouseholdChoices, {})).rejects.toThrow(/settings/);
+    await expect(oauth.query(api.aiGrants.listReceipts, {})).rejects.toThrow(/settings/);
     expect((await t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" }).query(api.aiGrants.listMine, {})).grants).toHaveLength(1);
   });
 
@@ -1636,17 +1639,48 @@ describe("private owner queries and participant reconnects", () => {
     });
     const loaded = await owner.query(api.aiGrants.listMine, {});
     const { grantId } = await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Private reconnect", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint });
+    const current = (await t.run(ctx => ctx.db.get(grantId)))!;
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: current.version, scopeIntent: "chosen", scopes: ["moving.context.read"] });
+    const reduction = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: current.version + 1, scopes: [] });
+    await revokeOwner(owner, { grantId, expectedVersion: reduction.version, reason: "PRIVATE reason" });
+    const historicalReceipt = await t.run(ctx => ctx.db.insert("auditLogs", { householdId, actorType: "user", actorUserId: original.ownerUserId, category: "ai", action: "ai_grant.revoked", objectTable: "aiGrants", objectId: original._id, metadata: { reason: "PRIVATE historical reason" }, createdAt: Date.now() }));
     const audit = await t.withIdentity({ subject: "separate-admin" }).query(api.audit.listForHousehold, { householdId });
-    const approval = audit.find(row => row.objectId === grantId && row.action === "ai_grant.approved")!;
-    expect(approval.metadata).toEqual({ scopes: [...movingScopes], moveScope: "allMoves", moveCount: null, reconnected: true });
-    expect(JSON.stringify(approval.metadata)).not.toContain(clientId);
-    expect(JSON.stringify(approval.metadata)).not.toContain(original._id);
+    expect(audit.length).toBeGreaterThan(0);
+    for (const row of audit) expect(row).toMatchObject({ action: "ai_connection.changed" });
+    for (const value of [clientId, original._id, grantId, "PRIVATE", "scopeChoice", "reconnected"]) expect(JSON.stringify(audit)).not.toContain(value);
+    const receipts = await owner.query(api.aiGrants.listReceipts, {});
+    expect(receipts.page.some(row => row.objectId === grantId && row.action === "ai_grant.approved")).toBe(true);
+    expect(JSON.stringify(receipts)).toContain("PRIVATE reason");
+    expect((await t.run(ctx => ctx.db.get(historicalReceipt)))?.metadata).toEqual({ reason: "PRIVATE historical reason" });
+    expect((await t.withIdentity({ subject: "separate-admin", sid: "sess_separate_admin" }).query(api.aiGrants.listReceipts, {})).page).toEqual([]);
     expect((await t.withIdentity({ subject: "separate-admin", sid: "sess_separate_admin" }).query(api.aiGrants.listSourceHistory, {})).page).toEqual([]);
   });
 });
 
 
 describe("paged owner settings and participant move limits", () => {
+  it("pages member households and uses a key-only summary independent of unrelated records", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId, userId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+    await t.run(async ctx => {
+      for (let i = 0; i < 30; i++) {
+        const household = await ctx.db.insert("households", { name: `Member household ${i}`, createdByUserId: userId, ownerUserId: userId, createdAt: i, updatedAt: i });
+        await ctx.db.insert("householdMemberships", { householdId: household, userId, role: "owner", status: "active", createdAt: i, updatedAt: i });
+      }
+      for (let i = 0; i < 160; i++) await ctx.db.insert("apiKeys", { householdId, name: "Expired summary fixture", prefix: "synthetic", tokenPreview: "synthetic", secretHash: "synthetic", scopes: ["moves/read"], status: "active", expiresAt: 1, createdByUserId: userId, createdAt: i, updatedAt: i });
+    });
+    const first = await owner.query(api.aiGrants.listHouseholdChoices, {});
+    expect(first.households).toHaveLength(25);
+    const last = await owner.query(api.aiGrants.listHouseholdChoices, { cursor: first.nextCursor! });
+    expect(last.households).toHaveLength(6);
+    expect(last.nextCursor).toBeNull();
+    expect(new Set([...first.households, ...last.households].map(row => row.household._id)).size).toBe(31);
+    expect(await owner.query(api.apiKeys.settingsSummary, { householdId })).toEqual({ activeApiKeyCount: 0, activeApiKeyCountTruncated: false });
+    await owner.mutation(api.apiKeys.create, { householdId, name: "Current connection" });
+    expect(await owner.query(api.apiKeys.settingsSummary, { householdId })).toEqual({ activeApiKeyCount: 1, activeApiKeyCountTruncated: false });
+    await expect(t.withIdentity({ subject: SUBJECT, azp: "https://oauth.example/" }).query(api.apiKeys.settingsSummary, { householdId })).rejects.toThrow(/settings/);
+  });
   it("pages API-key history without exposing settings to OAuth identities", async () => {
     const t = convexTest(schema, modules);
     const { userId, householdId } = await seedOwner(t);
