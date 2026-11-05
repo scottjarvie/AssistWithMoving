@@ -91,7 +91,7 @@ const connectionData = vi.hoisted(() => ({
           },
         ],
         approvedAt: 1_770_000_000_000,
-        expiresAt: 1_780_000_000_000,
+        expiresAt: 1_780_000_000_000 as number | null,
         lastUsedAt: 1_771_000_000_000,
         lastToolName: "get_move_brief",
         useCount: 12,
