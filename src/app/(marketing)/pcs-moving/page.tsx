@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { BadgeCheck, FileText, ShieldAlert, Truck } from "lucide-react";
 
 import {
   FeatureGrid,
@@ -17,22 +16,22 @@ const pcsCards = [
   {
     title: "Mixed shipment planning",
     copy: "Plan personal vehicles, trailers, storage, HHG movers, PPM loads, donations, dump runs, and unassigned boxes together.",
-    icon: Truck,
+    icon: "truck" as const,
   },
   {
     title: "Configurable PCS fields",
     copy: "Track branch, rank or pay grade, shipment type, weight allowance, and transportation-office notes without hardcoding policy assumptions.",
-    icon: BadgeCheck,
+    icon: "check" as const,
   },
   {
     title: "PCS packet exports",
     copy: "Produce PCS-focused packets with load summaries, personal transport lists, evidence checklists, and verification language.",
-    icon: FileText,
+    icon: "note" as const,
   },
   {
     title: "Verification reminders",
     copy: "The app helps organize records, but it does not replace official guidance from a transportation office, insurer, mover, or legal advisor.",
-    icon: ShieldAlert,
+    icon: "warning" as const,
   },
 ];
 

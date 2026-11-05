@@ -1,5 +1,5 @@
+import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
 import Link from "next/link";
-import { ArrowRight, Bot, HelpCircle, Info, LayoutGrid } from "lucide-react";
 
 import {
   HowItWorksPanel,
@@ -18,25 +18,25 @@ const learnMoreLinks: {
   href: string;
   title: string;
   copy: string;
-  icon: typeof Info;
+  icon: MovingSymbolName;
 }[] = [
   {
     href: "/about",
     title: "About",
     copy: "Why a move needs durable memory, not another disposable checklist.",
-    icon: Info,
+    icon: "info" as const,
   },
   {
     href: "/faq",
     title: "FAQ",
     copy: "Common questions about accounts, privacy, and AI.",
-    icon: HelpCircle,
+    icon: "question" as const,
   },
   {
     href: "/features",
     title: "Features",
     copy: "Everything the workspace can do.",
-    icon: LayoutGrid,
+    icon: "grid" as const,
   },
 ];
 
@@ -63,7 +63,7 @@ export default function MarketingPage() {
               <Button asChild size="touch">
                 <Link href="/ai">
                   Set up your chosen AI
-                  <ArrowRight aria-hidden="true" />
+                  <MovingSymbol name="arrow" aria-hidden="true" />
                 </Link>
               </Button>
               <Button asChild variant="outline" size="touch">
@@ -72,7 +72,7 @@ export default function MarketingPage() {
             </div>
             <div className="mt-6 rounded-md border border-primary/25 bg-primary/5 p-4">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Bot className="size-4 text-primary" aria-hidden="true" />
+                <MovingSymbol name="ai" className="size-4 text-primary" aria-hidden="true" />
                 Assist your AI, so it can assist you with moving
               </div>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -111,12 +111,12 @@ export default function MarketingPage() {
                 className="group rounded-md border border-border p-4 hover:bg-muted/40"
               >
                 <div className="flex items-center gap-2 text-lg font-semibold tracking-normal">
-                  <item.icon
+                  <MovingSymbol name={item.icon}
                     className="size-5 shrink-0 text-primary"
                     aria-hidden="true"
                   />
                   {item.title}
-                  <ArrowRight
+                  <MovingSymbol name="arrow"
                     className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
                     aria-hidden="true"
                   />

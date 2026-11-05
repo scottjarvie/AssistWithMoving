@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Camera, ClipboardCheck, FileWarning, ShieldCheck } from "lucide-react";
 
 import {
   FeatureGrid,
@@ -17,22 +16,22 @@ const claimCards = [
   {
     title: "Evidence while packing",
     copy: "Attach photos, condition notes, receipt markers, serial numbers, and value fields as part of normal inventory work.",
-    icon: Camera,
+    icon: "camera" as const,
   },
   {
     title: "Evidence completeness",
     copy: "Find high-value, personal, sensitive, damaged, missing, or claim-relevant items that still need photos or details.",
-    icon: ClipboardCheck,
+    icon: "check" as const,
   },
   {
     title: "Claim packet export",
     copy: "Generate a focused packet with item details, evidence metadata, values, condition, status, and clear disclaimers.",
-    icon: FileWarning,
+    icon: "warning" as const,
   },
   {
     title: "Private originals",
     copy: "Original photo storage is private by default. Recipient packets can be scoped so private notes and sensitive assets stay hidden.",
-    icon: ShieldCheck,
+    icon: "shield" as const,
   },
 ];
 

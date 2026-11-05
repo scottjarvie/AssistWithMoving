@@ -1,13 +1,6 @@
+import { MovingSymbol } from "@/components/moving-symbol";
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  ArrowRight,
-  Bot,
-  CheckCircle2,
-  ClipboardList,
-  KeyRound,
-  ShieldAlert,
-} from "lucide-react";
 
 import { AiStartActions } from "@/components/ai-start-actions";
 import { PublicFooter, PublicHeader } from "@/components/public-page-chrome";
@@ -65,7 +58,7 @@ export default function AiStartPage() {
                 </p>
               </div>
               <Badge>
-                <Bot aria-hidden="true" />
+                <MovingSymbol name="ai" aria-hidden="true" />
                 your AI
               </Badge>
             </div>
@@ -95,7 +88,7 @@ export default function AiStartPage() {
         <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6 md:grid-cols-2 lg:px-8">
           <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <KeyRound className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="key" className="size-4 text-primary" aria-hidden="true" />
               What the grant asks you to choose
             </div>
             <div className="mt-4 grid gap-2">
@@ -104,7 +97,7 @@ export default function AiStartPage() {
                   key={option}
                   className="flex items-center gap-2 rounded-md border border-border bg-background/65 p-3 text-sm"
                 >
-                  <CheckCircle2
+                  <MovingSymbol name="check"
                     className="size-4 shrink-0 text-primary"
                     aria-hidden="true"
                   />
@@ -119,7 +112,7 @@ export default function AiStartPage() {
           </div>
           <div className="rounded-md border border-border p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <Bot className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="ai" className="size-4 text-primary" aria-hidden="true" />
               Canonical MCP endpoint
             </div>
             <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted/35 p-3 font-mono text-xs leading-5 text-muted-foreground">
@@ -146,7 +139,7 @@ export default function AiStartPage() {
           </div>
           <div className="rounded-md border border-border p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <ShieldAlert className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="warning" className="size-4 text-primary" aria-hidden="true" />
               Use the key carefully
             </div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -162,12 +155,12 @@ export default function AiStartPage() {
               className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
             >
               Learn what your AI can help with
-              <ArrowRight className="size-4" aria-hidden="true" />
+              <MovingSymbol name="arrow" className="size-4" aria-hidden="true" />
             </Link>
           </div>
           <div className="rounded-md border border-border p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <ClipboardList className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="queue" className="size-4 text-primary" aria-hidden="true" />
               No connection needed to hand work over
             </div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -182,7 +175,7 @@ export default function AiStartPage() {
               className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
             >
               Read the MCP overview
-              <ArrowRight className="size-4" aria-hidden="true" />
+              <MovingSymbol name="arrow" className="size-4" aria-hidden="true" />
             </Link>
           </div>
         </div>

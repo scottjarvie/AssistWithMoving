@@ -1,15 +1,6 @@
+import { MovingSymbol } from "@/components/moving-symbol";
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  ArrowRight,
-  Bot,
-  Cable,
-  DoorOpen,
-  FileJson,
-  KeyRound,
-  Laptop,
-  ShieldCheck,
-} from "lucide-react";
 
 import {
   FeatureGrid,
@@ -30,32 +21,32 @@ const mcpCards = [
   {
     title: "A grant decides authority",
     copy: "OAuth proves who is calling. A separate product grant, approved by the person and re-read on every discovery and every call, decides which moves, which data, and which operations. Revoking it refuses the very next call.",
-    icon: ShieldCheck,
+    icon: "shield" as const,
   },
   {
     title: "The tool list is the grant",
     copy: "tools/list shows only the tools the current grant covers, so nothing is advertised that would only be refused. describe_connection is always listed and needs no scope.",
-    icon: Bot,
+    icon: "ai" as const,
   },
   {
     title: "Canonical door first",
     copy: "Connect to https://movingmanifest.com/mcp and sign in — no key to copy. The API-key door at https://movingmanifest.com/api/mcp is a separate surface with a separate catalog for headless or non-OAuth tools.",
-    icon: Laptop,
+    icon: "system" as const,
   },
   {
     title: "Capability discovery",
     copy: "Canonical clients call describe_connection when nothing is listed, then get_move_brief. API-key clients use get_api_capabilities, because that automation catalog is different and larger.",
-    icon: FileJson,
+    icon: "note" as const,
   },
   {
     title: "Client identity",
     copy: "A Client ID Metadata Document is preferred, validated, and its digest bound to the grant. Dynamic registration is a labelled fallback. A metadata document that fails validation is refused, never downgraded.",
-    icon: KeyRound,
+    icon: "key" as const,
   },
   {
     title: "Batch over chatty loops",
     copy: "save_complete_result keeps a finished plan, its inventory, locations, decisions, estimates, and source checks together in one replay-safe operation — and can close the Queue handoff in the same approval.",
-    icon: Cable,
+    icon: "connection" as const,
   },
 ];
 
@@ -198,7 +189,7 @@ export default function McpPage() {
             <Button asChild size="touch">
               <Link href="/settings/ai">
                 Open AI connections
-                <ArrowRight aria-hidden="true" />
+                <MovingSymbol name="arrow" aria-hidden="true" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="touch">
@@ -354,7 +345,7 @@ export default function McpPage() {
             {doors.map((door) => (
               <article key={door.name} className="rounded-md border border-border p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <DoorOpen className="size-4 text-primary" aria-hidden="true" />
+                  <MovingSymbol name="entry" className="size-4 text-primary" aria-hidden="true" />
                   <span className="break-all font-mono text-xs">{door.name}</span>
                   <Badge variant="outline">{door.role}</Badge>
                 </div>
@@ -446,7 +437,7 @@ function McpVisual() {
           <p className="mt-1 text-lg font-semibold">Your AI calls tools</p>
         </div>
         <Badge>
-          <Bot aria-hidden="true" />
+          <MovingSymbol name="ai" aria-hidden="true" />
           tools
         </Badge>
       </div>
@@ -479,7 +470,7 @@ function McpVisual() {
         className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm text-primary"
       >
         REST API fallback
-        <ArrowRight className="size-4" aria-hidden="true" />
+        <MovingSymbol name="arrow" className="size-4" aria-hidden="true" />
       </Link>
     </div>
   );

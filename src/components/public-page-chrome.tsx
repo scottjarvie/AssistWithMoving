@@ -1,18 +1,9 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowRight,
-  Boxes,
-  Camera,
-  FileText,
-  Lock,
-  PackageCheck,
-  ShieldCheck,
-  Truck,
-} from "lucide-react";
+import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { DisplayPreferences } from "@/components/display-preferences";
+import { MoveIllustration, MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
 import { PublicMobileNav } from "@/components/public-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +33,7 @@ const footerNav = [...publicNavPrimary, ...publicNavSecondary] as const;
 export type PublicFeatureCard = {
   title: string;
   copy: string;
-  icon: LucideIcon;
+  icon: MovingSymbolName;
 };
 
 export type PublicNavigationMode = "app" | "document";
@@ -52,6 +43,22 @@ type PublicPageAction = {
   label: string;
   navigation?: PublicNavigationMode;
 };
+
+function headingText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(headingText).join("");
+  return isValidElement<{ children?: ReactNode }>(node) ? headingText(node.props.children) : "";
+}
+
+function firstHeading(node: ReactNode): string | undefined {
+  let found: string | undefined;
+  Children.forEach(node, child => {
+    if (found || !isValidElement<{ children?: ReactNode }>(child)) return;
+    if (child.type === "h2") found = headingText(child.props.children).trim();
+    else found = firstHeading(child.props.children);
+  });
+  return found;
+}
 
 export function PublicPageChrome({
   eyebrow,
@@ -78,37 +85,46 @@ export function PublicPageChrome({
     href: "/ai",
     label: "Set up your chosen AI",
   };
+  const sections: Array<{ id: string; label: string }> = [];
+  const readingContent = Children.map(children, child => {
+    if (!isValidElement(child) || child.type !== PublicBand) return child;
+    const band = child as ReactElement<{ children?: ReactNode; id?: string; reader?: boolean }>;
+    const id = band.props.id ?? `guide-section-${sections.length + 1}`;
+    const label = firstHeading(band.props.children) ?? (sections.length === 0 ? "At a glance" : `Guide section ${sections.length + 1}`);
+    sections.push({ id, label });
+    return cloneElement(band, { id, reader: true });
+  });
 
   return (
     <main className="min-h-screen bg-background text-foreground">
       <PublicHeader />
       <section className="border-b border-border">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.7fr)] lg:px-8 lg:py-16">
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
           <div>
-            <Badge variant="secondary" className="mb-5">
+            <Badge variant="secondary" className="mb-3">
               {eyebrow}
             </Badge>
-            <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-normal sm:text-5xl">
+            <h1 className="max-w-4xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
               {title}
             </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
+            <p className="mt-4 max-w-[72ch] text-base leading-7 text-muted-foreground">
               {description}
             </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="touch">
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button asChild size="sm" className="min-h-11 sm:min-h-8">
                 {resolvedPrimaryAction.navigation === "document" ? (
                   <a href={resolvedPrimaryAction.href}>
                     {resolvedPrimaryAction.label}
-                    <ArrowRight aria-hidden="true" />
+                    <MovingSymbol name="arrow" aria-hidden="true" />
                   </a>
                 ) : (
                   <Link href={resolvedPrimaryAction.href}>
                     {resolvedPrimaryAction.label}
-                    <ArrowRight aria-hidden="true" />
+                    <MovingSymbol name="arrow" aria-hidden="true" />
                   </Link>
                 )}
               </Button>
-              <Button asChild size="touch" variant="outline">
+              <Button asChild size="sm" variant="outline" className="min-h-11 sm:min-h-8">
                 {resolvedSecondaryAction.navigation === "document" ? (
                   <a href={resolvedSecondaryAction.href}>
                     {resolvedSecondaryAction.label}
@@ -121,17 +137,20 @@ export function PublicPageChrome({
               </Button>
             </div>
           </div>
-          {/* Home already explains how it works; on phones a subpage goes
-              straight to its own content and keeps the panel as a desktop
-              side column. */}
-          {visual ?? (
-            <div className="hidden lg:block">
-              <HowItWorksPanel />
-            </div>
-          )}
         </div>
       </section>
-      {children}
+      <div className="mx-auto grid w-full max-w-7xl gap-x-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_17rem] lg:px-8">
+        <article className="min-w-0 [&_p]:max-w-[75ch]">{readingContent}</article>
+        <aside aria-label="Guide context" className="order-first min-w-0 border-b border-border py-5 lg:order-last lg:border-b-0 lg:border-l lg:pl-5">
+          {sections.length ? <nav aria-label="On this page" className="mb-4"><h2 className="text-sm font-semibold">Contents</h2><ol className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 lg:grid-cols-1">{sections.map(section => <li key={section.id}><a href={`#${section.id}`} className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring lg:min-h-8"><MovingSymbol name="arrow" className="size-3 shrink-0" />{section.label}</a></li>)}</ol></nav> : null}
+          <div className="space-y-3 border-t border-border pt-4">
+            <div className="hidden lg:block"><MoveIllustration kind="route" decorative className="h-24 w-full" /></div>
+            <h2 className="text-sm font-semibold">About this guide</h2>
+            <dl className="space-y-2 text-xs leading-5"><div><dt className="text-muted-foreground">Published by</dt><dd>{product.name}</dd></div><div><dt className="text-muted-foreground">Guide</dt><dd>{eyebrow}</dd></div></dl>
+          </div>
+          <div className="mt-4 min-w-0">{visual ?? <details><summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring"><MovingSymbol name="route" className="size-4" />How Moving works</summary><div className="mt-2"><HowItWorksPanel /></div></details>}</div>
+        </aside>
+      </div>
       <PublicFooter />
     </main>
   );
@@ -157,7 +176,7 @@ export function PublicHeader() {
         <Button asChild size="touch" className="hidden lg:inline-flex">
           <Link href="/sign-in">
             Sign in
-            <ArrowRight aria-hidden="true" />
+            <MovingSymbol name="arrow" aria-hidden="true" />
           </Link>
         </Button>
         <div className="lg:hidden">
@@ -206,14 +225,14 @@ export function PublicFooter() {
 
 export function FeatureGrid({ cards }: { cards: PublicFeatureCard[] }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="divide-y divide-border border-y border-border">
       {cards.map((card) => (
-        <div key={card.title} className="rounded-md border border-border p-4">
+        <div key={card.title} className="py-4">
           <h3 className="flex items-center gap-2 text-lg font-semibold tracking-normal">
-            <card.icon className="size-5 shrink-0 text-primary" aria-hidden="true" />
+            <MovingSymbol name={card.icon} className="size-5 shrink-0 text-primary" aria-hidden="true" />
             {card.title}
           </h3>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          <p className="mt-2 pl-7 text-sm leading-6 text-muted-foreground">
             {card.copy}
           </p>
         </div>
@@ -222,10 +241,10 @@ export function FeatureGrid({ cards }: { cards: PublicFeatureCard[] }) {
   );
 }
 
-export function PublicBand({ children }: { children: React.ReactNode }) {
+export function PublicBand({ children, id, reader = false }: { children: React.ReactNode; id?: string; reader?: boolean }) {
   return (
-    <section className="border-b border-border">
-      <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <section id={id} className="scroll-mt-6 border-b border-border">
+      <div className={reader ? "min-w-0 py-6 sm:py-8" : "mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8"}>
         {children}
       </div>
     </section>
@@ -235,32 +254,32 @@ export function PublicBand({ children }: { children: React.ReactNode }) {
 // Honest "how it works" explainer — a labeled workflow diagram, not a
 // screenshot of live data. No counts, metrics, or progress bars.
 const howItWorksSteps: {
-  icon: LucideIcon;
+  icon: MovingSymbolName;
   label: string;
   copy: string;
 }[] = [
   {
-    icon: Boxes,
+    icon: "box" as const,
     label: "Start with the move",
     copy: "Capture where, when, why, and the decisions that shape everything else.",
   },
   {
-    icon: PackageCheck,
+    icon: "box" as const,
     label: "Build the living plan",
     copy: "Keep questions, handoffs, timing, and next decisions together as plans change.",
   },
   {
-    icon: Camera,
+    icon: "camera" as const,
     label: "Map places and belongings",
     copy: "Connect rooms, items, boxes, destinations, transport, and private evidence.",
   },
   {
-    icon: Truck,
+    icon: "truck" as const,
     label: "Work with your chosen AI",
     copy: "Let your AI research and organize while the workspace keeps durable context and provenance.",
   },
   {
-    icon: FileText,
+    icon: "note" as const,
     label: "Return to trusted results",
     copy: "Review decisions, estimates, plans, source checks, evidence, and scoped packets later.",
   },
@@ -268,7 +287,7 @@ const howItWorksSteps: {
 
 export function HowItWorksPanel() {
   return (
-    <div className="rounded-md border border-border bg-card p-4 shadow-xl shadow-black/25">
+    <div className="rounded-md border border-border bg-card p-3">
       <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
@@ -277,7 +296,7 @@ export function HowItWorksPanel() {
           <p className="mt-1 text-lg font-semibold">A move becomes a usable record</p>
         </div>
         <Badge>
-          <ShieldCheck aria-hidden="true" />
+          <MovingSymbol name="shield" aria-hidden="true" />
           Scoped packets
         </Badge>
       </div>
@@ -285,7 +304,7 @@ export function HowItWorksPanel() {
         {howItWorksSteps.map((step) => (
           <li key={step.label} className="flex items-start gap-3 py-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
-              <step.icon className="size-5" aria-hidden="true" />
+              <MovingSymbol name={step.icon} className="size-5" aria-hidden="true" />
             </span>
             <div>
               <div className="text-sm font-semibold">{step.label}</div>
@@ -298,7 +317,7 @@ export function HowItWorksPanel() {
       </ol>
       <div className="rounded-md bg-muted/45 p-3 text-xs leading-5 text-muted-foreground">
         <span className="mb-2 flex items-center gap-2 font-medium text-foreground">
-          <Lock className="size-4 text-primary" aria-hidden="true" />
+          <MovingSymbol name="lock" className="size-4 text-primary" aria-hidden="true" />
           Privacy default
         </span>
         Values, serials, private notes, and sensitive photos stay hidden from

@@ -1,11 +1,5 @@
+import { MovingSymbol } from "@/components/moving-symbol";
 import type { Metadata } from "next";
-import {
-  Boxes,
-  Bot,
-  EyeOff,
-  HeartHandshake,
-  ShieldCheck,
-} from "lucide-react";
 
 import {
   FeatureGrid,
@@ -25,22 +19,22 @@ const principleCards = [
   {
     title: "Your AI, not ours",
     copy: "Bring your own assistant — Claude, ChatGPT, or Codex — over scoped MCP and API keys. Assist With Moving is the structured record, not another locked-in chatbot. We don't bundle an AI model.",
-    icon: Bot,
+    icon: "ai" as const,
   },
   {
     title: "Review, not autopilot",
     copy: "AI can suggest estimates, categories, box contents, and assignments, but a human approves. The app never silently changes your data behind your back.",
-    icon: ShieldCheck,
+    icon: "shield" as const,
   },
   {
     title: "Private by default",
     copy: "Original photos and records stay private. Recipient packets are designed to hide values, serials, private notes, and sensitive photos unless you choose to share them.",
-    icon: EyeOff,
+    icon: "private" as const,
   },
   {
     title: "Built for real moves",
     copy: "Household moves, military PCS with mixed HHG and PPM, insurance and claims evidence, employer relocation, storage, and donation — not a one-size checklist.",
-    icon: Boxes,
+    icon: "box" as const,
   },
 ];
 
@@ -91,7 +85,7 @@ export default function AboutPage() {
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
             <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-normal">
-              <HeartHandshake
+              <MovingSymbol name="heart"
                 className="size-6 text-primary"
                 aria-hidden="true"
               />

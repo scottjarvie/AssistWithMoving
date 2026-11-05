@@ -1,17 +1,6 @@
+import { MovingSymbol } from "@/components/moving-symbol";
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  ArrowRight,
-  Bot,
-  Camera,
-  ChevronDown,
-  ClipboardList,
-  DoorOpen,
-  KeyRound,
-  MessageSquareText,
-  ShieldCheck,
-  Truck,
-} from "lucide-react";
 
 import {
   PublicBand,
@@ -92,22 +81,22 @@ const quickCapabilities = [
   {
     title: "A grant, not a sign-in",
     copy: "Signing in proves who you are. A separate approval decides what your AI may do — which moves, which data, which operations. Revoking it stops the very next call.",
-    icon: ShieldCheck,
+    icon: "shield" as const,
   },
   {
     title: "Use evidence with inventory",
     copy: "When you approve evidence reading, your AI can open the private photos for that work, create or correct inventory, keep source notes, and mark what still needs review.",
-    icon: Camera,
+    icon: "camera" as const,
   },
   {
     title: "Keep move context current",
     copy: "Your AI reads a compact move brief, searches before creating duplicates, and adds or corrects the move, place, and inventory context you approved.",
-    icon: Truck,
+    icon: "truck" as const,
   },
   {
     title: "Keep finished planning work",
     copy: "One call saves the decisions, estimates, readable plan result, and honest source checks together — and can close the Queue handoff in the same approval.",
-    icon: ClipboardList,
+    icon: "queue" as const,
   },
 ];
 
@@ -224,7 +213,7 @@ export default function AiAssistantPage() {
           </div>
           <div className="rounded-md border border-primary/25 bg-primary/5 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <MessageSquareText className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="note" className="size-4 text-primary" aria-hidden="true" />
               Paste this into a compatible AI
             </div>
             <blockquote className="mt-3 border-l-2 border-primary pl-3 text-sm leading-6">
@@ -245,7 +234,7 @@ export default function AiAssistantPage() {
           {quickCapabilities.map((card) => (
             <div key={card.title} className="rounded-md border border-border p-4">
               <h2 className="flex items-center gap-2 text-base font-semibold tracking-normal">
-                <card.icon className="size-5 shrink-0 text-primary" aria-hidden="true" />
+                <MovingSymbol name={card.icon} className="size-5 shrink-0 text-primary" aria-hidden="true" />
                 {card.title}
               </h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -336,7 +325,7 @@ export default function AiAssistantPage() {
             {connectionDoors.map((door) => (
               <article key={door.name} className="rounded-md border border-border p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <DoorOpen className="size-4 text-primary" aria-hidden="true" />
+                  <MovingSymbol name="entry" className="size-4 text-primary" aria-hidden="true" />
                   <span className="break-all font-mono text-xs">{door.name}</span>
                   <Badge variant="outline">{door.role}</Badge>
                 </div>
@@ -451,7 +440,7 @@ function ExpandableSection({
     <details className="group rounded-md border border-border p-4 text-sm leading-6 text-muted-foreground open:bg-muted/25">
       <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-base font-medium text-foreground">
         {title}
-        <ChevronDown
+        <MovingSymbol name="chevron"
           className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
           aria-hidden="true"
         />
@@ -475,7 +464,7 @@ function DocLink({
   const content = (
     <>
       {title}
-      <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+      <MovingSymbol name="arrow" className="size-4 text-primary" aria-hidden="true" />
     </>
   );
 
@@ -505,7 +494,7 @@ function AssistantVisual() {
           <p className="mt-1 text-lg font-semibold">Connect an AI you choose</p>
         </div>
         <Badge>
-          <KeyRound aria-hidden="true" />
+          <MovingSymbol name="key" aria-hidden="true" />
           granted
         </Badge>
       </div>
@@ -526,7 +515,7 @@ function AssistantVisual() {
       </ol>
       <div className="mt-1 rounded-md border border-primary/25 bg-primary/5 p-3 text-sm leading-6">
         <span className="flex items-center gap-2 font-medium">
-          <Bot className="size-4 text-primary" aria-hidden="true" />
+          <MovingSymbol name="ai" className="size-4 text-primary" aria-hidden="true" />
           You stay in control
         </span>
         <p className="mt-2 text-muted-foreground">

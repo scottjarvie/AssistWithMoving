@@ -18,7 +18,7 @@ export function AiPermissionsMatrix({ grants, abilities, recentRefusals, onRevie
   reviewingId: string | null;
 }) {
   return <table role="table" aria-label="AI connection permissions" className="block w-full border-separate border-spacing-0 text-sm lg:table lg:table-fixed">
-    <caption className="caption-bottom pb-2 text-left text-xs leading-5 text-muted-foreground">Approvals describe this grant only. Expired and revoked grants retain their history. Open a connection to see its approved wording, move names, usage and revocation controls.</caption>
+    <caption className="block w-full pb-2 text-left text-xs leading-5 text-muted-foreground lg:table-caption lg:caption-bottom">Approvals describe this grant only. Expired and revoked grants retain their history. Open a connection to see its approved wording, move names, usage and revocation controls.</caption>
     <thead role="rowgroup" className="hidden lg:table-header-group"><tr role="row">
       <th scope="col" className="w-56 border-b border-border px-3 py-2 text-left text-xs font-medium text-muted-foreground">Connection</th>
       {abilities.map(ability => <th key={ability.scope} scope="col" aria-label={ability.label} className="border-b border-border p-1 text-left align-top">

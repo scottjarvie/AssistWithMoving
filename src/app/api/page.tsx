@@ -1,15 +1,6 @@
+import { MovingSymbol } from "@/components/moving-symbol";
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  ArrowRight,
-  Boxes,
-  Camera,
-  FileText,
-  KeyRound,
-  Map,
-  RefreshCw,
-  ShieldCheck,
-} from "lucide-react";
 
 import {
   FeatureGrid,
@@ -28,32 +19,32 @@ const apiCards = [
   {
     title: "Move setup",
     copy: "Create or update a move, origin/destination context, spaces, transport resources, transport zones, and starter inventory.",
-    icon: Map,
+    icon: "plan" as const,
   },
   {
     title: "Inventory intake",
     copy: "Create one item or batch upsert up to 100 items with dimensions, weight estimates, provenance, review flags, and disposition.",
-    icon: Boxes,
+    icon: "box" as const,
   },
   {
     title: "Photo evidence",
     copy: "Upload JPEG, PNG, or WebP evidence in one API call as raw bytes, multipart form data, URL, data URL, or base64. Images get web-ready derivatives server-side, uploads can queue AI review suggestions, and direct uploads return agentReview summaries for quick user correction.",
-    icon: Camera,
+    icon: "camera" as const,
   },
   {
     title: "Sell workflow",
     copy: "Prepare sale listings for sell-marked items with platform status, title, description, pricing, research depth, and buyer counts.",
-    icon: FileText,
+    icon: "note" as const,
   },
   {
     title: "Layout and load planning",
     copy: "Fetch agent context, planned items, floor plans, resources, zones, capacity reports, and move-day checklists.",
-    icon: RefreshCw,
+    icon: "reset" as const,
   },
   {
     title: "Scoped access",
     copy: "Use revocable API keys with explicit scopes. Add or invite household collaborators by email with the members/manage scope.",
-    icon: ShieldCheck,
+    icon: "shield" as const,
   },
 ];
 
@@ -162,7 +153,7 @@ function ApiVisual() {
           <p className="mt-1 text-lg font-semibold">Assistant-safe order</p>
         </div>
         <Badge>
-          <KeyRound aria-hidden="true" />
+          <MovingSymbol name="key" aria-hidden="true" />
           scoped key
         </Badge>
       </div>
@@ -192,7 +183,7 @@ function ApiVisual() {
         className="mt-4 inline-flex items-center gap-2 text-sm text-primary"
       >
         Open machine-readable OpenAPI
-        <ArrowRight className="size-4" aria-hidden="true" />
+        <MovingSymbol name="arrow" className="size-4" aria-hidden="true" />
       </Link>
     </div>
   );

@@ -11,7 +11,7 @@ const grants = ["active", "expired", "revoked"].map((status, index) => ({
   revokedAt: status === "revoked" ? moment - 86400000 : null, revokedReason: null, note: "Fictional offline design evidence.", version: 1,
 }));
 export const items = ["Workshop table", "Reading lamp", "Bookcase", "Blue tools case", "Folding chairs", "Kitchen shelf", "Desk with a long name and a carefully recorded packing note", "Garden bench", "Floor mirror", "Cotton blankets", "Ceramic bowl", "Spare cabinet"].map((name, index) => ({
-  _id: `synthetic-item-${index}`, _creationTime: moment - index * 86400000, householdId: "synthetic-household", moveId: "synthetic-move",
+  _id: `synthetic-item-${index}`, _creationTime: moment - index * 86400000, createdAt: moment - index * 86400000, updatedAt: moment, householdId: "synthetic-household", moveId: "synthetic-move",
   name: `[synthetic] ${name}`, description: "Recorded for the fictional move. Keep the small fittings with the item.", room: index % 2 ? "Workshop" : "Reading room", category: index % 3 ? "Furniture" : "Household",
   ownerContact: null, condition: "good", weightConfidence: "low", volumeConfidence: "medium", status: "active", disposition: index % 4 === 0 ? "donate" : "mover",
   needsReview: index % 3 === 0, highValue: index === 8, requiresPersonalTransport: index === 8, planningDefaultKeys: [],

@@ -1,6 +1,6 @@
+import { MovingSymbol } from "@/components/moving-symbol";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowRight, ChevronDown, HelpCircle, ShieldCheck } from "lucide-react";
 
 import { PublicBand, PublicPageChrome } from "@/components/public-page-chrome";
 import { supportDesk, supportDeskUrl } from "@/lib/support";
@@ -186,12 +186,12 @@ export default function FaqPage() {
                 className="group rounded-md border border-border p-4 open:bg-muted/25"
               >
                 <summary className="flex min-h-11 cursor-pointer items-start gap-3 py-2 text-base font-medium text-foreground">
-                  <HelpCircle
+                  <MovingSymbol name="question"
                     className="mt-0.5 size-5 shrink-0 text-primary"
                     aria-hidden="true"
                   />
                   <span className="flex-1">{faq.question}</span>
-                  <ChevronDown
+                  <MovingSymbol name="chevron"
                     className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
                     aria-hidden="true"
                   />
@@ -208,7 +208,7 @@ export default function FaqPage() {
       <PublicBand>
         <div className="rounded-md border border-primary/25 bg-primary/5 p-5">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
+            <MovingSymbol name="shield" className="size-4 text-primary" aria-hidden="true" />
             Still have a question?
           </div>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -225,28 +225,28 @@ export default function FaqPage() {
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
             >
               Support desk
-              <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="arrow" className="size-4 text-primary" aria-hidden="true" />
             </a>
             <Link
               href="/features"
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
             >
               Features
-              <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="arrow" className="size-4 text-primary" aria-hidden="true" />
             </Link>
             <Link
               href="/privacy"
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
             >
               Privacy
-              <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="arrow" className="size-4 text-primary" aria-hidden="true" />
             </Link>
             <Link
               href="/ai"
               className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted/40"
             >
               AI assistants
-              <ArrowRight className="size-4 text-primary" aria-hidden="true" />
+              <MovingSymbol name="arrow" className="size-4 text-primary" aria-hidden="true" />
             </Link>
           </div>
         </div>

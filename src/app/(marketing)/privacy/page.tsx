@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { EyeOff, KeyRound, Lock, ShieldCheck } from "lucide-react";
 
 import {
   FeatureGrid,
@@ -18,22 +17,22 @@ const privacyCards = [
   {
     title: "Private originals",
     copy: "Original photo files are intended to stay private and require authorized, audited access rather than public bucket URLs.",
-    icon: Lock,
+    icon: "lock" as const,
   },
   {
     title: "Scoped sharing",
     copy: "Helper, mover, employer, and documentation views are designed to hide private values, serials, notes, and sensitive photos by default.",
-    icon: EyeOff,
+    icon: "private" as const,
   },
   {
     title: "Permissioned API keys",
     copy: "External tools and agents use scoped API keys. Keys should be limited to the moves and actions they actually need.",
-    icon: KeyRound,
+    icon: "key" as const,
   },
   {
     title: "Owner control",
     copy: "Owners can manage households, collaborators, documentation links, exports, photo privacy, and account privacy controls.",
-    icon: ShieldCheck,
+    icon: "shield" as const,
   },
 ];
 

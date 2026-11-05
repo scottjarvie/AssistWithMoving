@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ClipboardList, FileWarning, ShieldAlert, UserCheck } from "lucide-react";
 
 import {
   FeatureGrid,
@@ -17,22 +16,22 @@ const termsCards = [
   {
     title: "User-controlled records",
     copy: "The workspace helps owners and collaborators organize inventory, boxes, photos, load plans, and packets. Users remain responsible for their records.",
-    icon: UserCheck,
+    icon: "person" as const,
   },
   {
     title: "Documentation aid",
     copy: "Packets organize available information. They do not guarantee acceptance by movers, employers, insurers, or government offices.",
-    icon: ClipboardList,
+    icon: "queue" as const,
   },
   {
     title: "AI needs review",
     copy: "AI suggestions can be useful, but they are estimates and drafts. Human review is required before relying on them.",
-    icon: ShieldAlert,
+    icon: "warning" as const,
   },
   {
     title: "Launch-stage terms",
     copy: "This page is product-facing terms scaffolding and should be replaced or reviewed before broad commercial launch.",
-    icon: FileWarning,
+    icon: "warning" as const,
   },
 ];
 

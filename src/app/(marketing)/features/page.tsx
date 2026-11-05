@@ -1,14 +1,5 @@
+import { MovingSymbol } from "@/components/moving-symbol";
 import type { Metadata } from "next";
-import {
-  Bot,
-  Boxes,
-  Camera,
-  CheckCircle2,
-  FileStack,
-  KeyRound,
-  QrCode,
-  Truck,
-} from "lucide-react";
 
 import {
   FeatureGrid,
@@ -26,37 +17,37 @@ const featureCards = [
   {
     title: "Inventory source of truth",
     copy: "Track rooms, owners, disposition, status, values, serial numbers, estimates, review flags, and evidence signals in one searchable workspace.",
-    icon: Boxes,
+    icon: "box" as const,
   },
   {
     title: "Box and QR manifest",
     copy: "Create short box codes, add contents, print QR labels, and open a secure lookup route when a mystery box appears.",
-    icon: QrCode,
+    icon: "qr" as const,
   },
   {
     title: "Photo evidence vault",
     copy: "Attach item, room, condition, serial, receipt, damage, and box photos while keeping originals private and delivery scoped.",
-    icon: Camera,
+    icon: "camera" as const,
   },
   {
     title: "Capacity load planner",
     copy: "Assign boxes to trucks, trailers, storage, movers, donation, dump, or personal vehicles with capacity warnings visible.",
-    icon: Truck,
+    icon: "truck" as const,
   },
   {
     title: "Documentation packets",
     copy: "Export focused PCS, mover, employer, claim, load crew, donation, storage, and owner packets with recipient-safe fields.",
-    icon: FileStack,
+    icon: "contents" as const,
   },
   {
     title: "AI review, not AI autopilot",
     copy: "Let AI suggest estimates, categories, box contents, duplicates, and assignments while keeping human approval in the loop.",
-    icon: Bot,
+    icon: "ai" as const,
   },
   {
     title: "API and MCP access",
     copy: "Use scoped API keys and agent tools for imports, summaries, assignment suggestions, exports, and move automation.",
-    icon: KeyRound,
+    icon: "key" as const,
   },
 ];
 
@@ -90,7 +81,7 @@ export default function FeaturesPage() {
               "Track claim evidence while packing normally.",
             ].map((item) => (
               <li key={item} className="flex items-start gap-2 text-sm leading-6">
-                <CheckCircle2
+                <MovingSymbol name="check"
                   className="mt-1 size-4 shrink-0 text-primary"
                   aria-hidden="true"
                 />
