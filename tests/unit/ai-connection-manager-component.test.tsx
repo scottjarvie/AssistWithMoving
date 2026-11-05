@@ -460,7 +460,7 @@ describe("AiConnectionManager", () => {
     const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
     await user.selectOptions(within(form).getByRole("combobox"), "0");
     await user.click(within(form).getByRole("button", { name: "Save limits" }));
-    expect(connectionData.updateLimits).toHaveBeenCalledWith({ consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve", expiryIntent: "none", grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"], expiresInDays: null });
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({ consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve", expiryIntent: "none", grantId: "ai_grant_123", expectedVersion: 3, eligibilityMoveId: "move_123", scopes: ["moving.context.read"], expiresInDays: null });
   });
 
   it("preserves unchanged move choices without submitting a move edit", async () => {
@@ -474,6 +474,7 @@ describe("AiConnectionManager", () => {
     expect(connectionData.updateLimits).toHaveBeenCalledWith({
       consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve",
       grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"],
+      eligibilityMoveId: "move_123",
     });
     expect(connectionData.approve).not.toHaveBeenCalled();
   });
@@ -534,6 +535,7 @@ describe("AiConnectionManager", () => {
       expect(connectionData.updateLimits).toHaveBeenCalledWith({
         consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(),
         scopeIntent: "full", grantId: "ai_grant_123", expectedVersion: 3,
+        eligibilityMoveId: "move_123",
         scopes: ["moving.context.read", "moving.work.write"], expiryIntent: "chosen", expiresInDays: 7,
       });
     } finally {

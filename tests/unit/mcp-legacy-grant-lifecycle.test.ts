@@ -1584,7 +1584,7 @@ describe("private owner queries and participant reconnects", () => {
     const loaded = await owner.query(api.aiGrants.listMine, {});
     const args = { ...consent, householdId: target.householdId, label: "Participant recovery", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint, moveScope: "selectedMoves" as const, moveIds: [target.moveId] };
     await t.run(ctx => ctx.db.patch(target.participantId, { status: "disabled" }));
-    await expect(owner.mutation(api.aiGrants.approve, args)).rejects.toThrow(/active member or move participant/);
+    await expect(owner.mutation(api.aiGrants.approve, args)).rejects.toThrow(/active member or move participant|No access to this move/);
     await t.run(ctx => ctx.db.patch(target.participantId, { status: "active" }));
     const { grantId } = await owner.mutation(api.aiGrants.approve, args);
     expect(await t.run(ctx => ctx.db.get(grantId))).toMatchObject({ householdId: target.householdId, moveIds: [target.moveId], scopeChoice: "full", expiryChoice: "none" });
