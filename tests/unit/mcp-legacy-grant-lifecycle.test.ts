@@ -897,11 +897,15 @@ describe("persisted duplicate histories resolve owner decisions before active gr
     const { oldId, newerId } = await seedDuplicateHistory(t);
     const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
     await expectDuplicateRefused(t, "revoked");
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
     // Even replaying revoke on the already-revoked row must leave the old
     // duplicate powerless; the repair cannot depend on a new revoke mutation.
     await revokeOwner(t.withIdentity({ subject: SUBJECT }), { grantId: newerId, expectedVersion: (await t.run(ctx => ctx.db.get(newerId)))!.version });
     await expectDuplicateRefused(t, "revoked");
-    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+    // A fresh person decision advances its receipt even if the selected
+    // source was already revoked; enforcement itself never rewrites history.
+    expect(await t.run(ctx => ctx.db.get(newerId))).toMatchObject({ status: "revoked", version: before.find(row => row._id === newerId)!.version + 1 });
+    expect(await t.run(ctx => ctx.db.get(oldId))).toEqual(before.find(row => row._id === oldId));
     expect((await t.run(ctx => ctx.db.get(oldId)))?.status).toBe("active");
   });
 
