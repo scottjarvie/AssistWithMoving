@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { recordAuditEvent, type AuditEventInput } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
@@ -369,7 +369,9 @@ function normalizeExpiration(expiresAt: number | undefined) {
 export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">, input: Reduction) {
   const key = await ctx.db.get(apiKeyId);
   if (!key) throw new ConvexError("Calling connection unavailable.");
-  const reduced = reducedAccess({ version: key.version ?? 1, scopes: effectiveApiKeyScopes(key), moveIds: key.moveId ? [String(key.moveId)] : undefined, expiresAt: key.expiresAt, active: key.status === "active" }, input);
+  const now = Date.now();
+  const before = keyReceiptLimits(key, now);
+  const reduced = reducedAccess({ version: key.version ?? 1, scopes: effectiveApiKeyScopes(key), moveIds: key.moveId ? [String(key.moveId)] : undefined, expiresAt: key.expiresAt, active: key.status === "active" }, input, now);
   if (reduced.moveIds && reduced.moveIds.length !== 1) throw new ConvexError("This door supports one selected move. Choose one move or preserve the current restriction.");
   const moveId = reduced.moveIds?.[0] as Id<"moves"> | undefined;
   if (moveId) await assertMoveRestriction(ctx, { householdId: key.householdId, moveId });
@@ -378,11 +380,19 @@ export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">,
     ...(reduced.scopes ? { scopes: reduced.scopes as import("./lib/apiKeys").ApiKeyScope[], scopeChoice: "chosen" as const } : {}),
     ...(moveId ? { moveId } : {}),
     ...(reduced.expiresAt !== undefined ? { expiresAt: reduced.expiresAt! } : {}),
-    ...(input.action === "revoke" ? { status: "revoked" as const, revokedAt: Date.now() } : {}),
-    version, updatedAt: Date.now(),
+    ...(input.action === "revoke" ? { status: "revoked" as const, revokedAt: now } : {}),
+    version, updatedAt: now,
   });
-  const receipt = await recordPrivateKeyAudit(ctx, { householdId: key.householdId, moveId: key.moveId, actorType: "apiKey", actorApiKeyId: key._id, actorUserId: key.createdByUserId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: key._id, metadata: { version, action: input.action ?? "narrow", previousVersion: key.version ?? 1, previousScopes: effectiveApiKeyScopes(key), scopes: reduced.scopes ?? effectiveApiKeyScopes(key), moveId: moveId ?? key.moveId ?? null, expiresAt: reduced.expiresAt ?? key.expiresAt ?? null } });
+  const changed = await ctx.db.get(key._id);
+  if (!changed) throw new ConvexError("Calling connection unavailable.");
+  const after = keyReceiptLimits(changed, now);
+  const receipt = await recordPrivateKeyAudit(ctx, { householdId: key.householdId, moveId: key.moveId, actorType: "apiKey", actorApiKeyId: key._id, actorUserId: key.createdByUserId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: key._id, metadata: { version, action: input.action ?? "narrow", previousVersion: before.version, previousScopes: before.scopes, scopes: after.scopes, moveId: after.moveId, expiresAt: after.expiresAt, before, after } });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
+}
+
+function keyReceiptLimits(key: Doc<"apiKeys">, now: number) {
+  const status = apiKeyEffectiveStatus(key, now);
+  return { version: key.version ?? 1, status, active: status === "active", scopes: [...effectiveApiKeyScopes(key)], moveId: key.moveId ?? null, expiresAt: key.expiresAt ?? null };
 }
 
 /** The REST facade maps failures only after this subtransaction rolls back. */

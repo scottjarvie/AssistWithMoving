@@ -25,6 +25,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api, internal } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { UNIDENTIFIED_LEGACY_CLIENT } from "../../convex/lib/mcpLegacyGrantGate";
 import { GRANT_CONSENT_POLICY, grantCatalogFingerprint, effectiveScopes, effectiveScopeChoice, effectiveExpiry, chosenExpiry, movingScopes, findPermittingGrant } from "../../convex/lib/aiGrants";
 import schema from "../../convex/schema";
@@ -1392,7 +1393,8 @@ describe("R1 scope-free API context", () => {
     const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "PRIVATE move title", origin: "PRIVATE origin", destination: "PRIVATE destination", dateStart: "2027-01-01", dateEnd: "2027-01-02", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
     let raw = generateApiKeySecret();
     const secretHash = await hashApiKey(raw);
-    const keyId = await t.run(ctx => ctx.db.insert("apiKeys", { householdId, name: "Synthetic context", prefix: apiKeyPrefix(raw), tokenPreview: "synthetic", secretHash, moveId, scopes: ["moves/read", "inventory/read"], status: "active", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+    const expiresAt = Date.now() + 600000;
+    const keyId = await t.run(ctx => ctx.db.insert("apiKeys", { householdId, name: "Synthetic context", prefix: apiKeyPrefix(raw), tokenPreview: "synthetic", secretHash, moveId, scopes: ["moves/read", "inventory/read"], expiresAt, status: "active", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
     const context = () => t.mutation(internal.restApi.handle, { method: "GET", path: "me", query: {}, authorization: `Bearer ${raw}` });
     const readMove = () => t.mutation(internal.restApi.handle, { method: "GET", path: `moves/${moveId}`, query: {}, authorization: `Bearer ${raw}` });
     const reduce = (version: number, scopes: string[]) => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: `Bearer ${raw}`, body: { expectedVersion: version, scopes } });
@@ -1407,13 +1409,19 @@ describe("R1 scope-free API context", () => {
       return registrations.get("get_api_context")({});
     };
     expect(JSON.stringify((await context()).body)).toContain("PRIVATE move title");
+    expect((await context()).body).toMatchObject({ data: { apiKey: { status: "active", expiresAt } } });
+    for (const selected of [false, true]) {
+      const tool = await invokeContext(selected);
+      expect(JSON.parse(tool.content[0].text)).toMatchObject({ data: { apiKey: { status: "active", expiresAt } } });
+      expect(JSON.stringify(tool)).toContain("PRIVATE move title");
+    }
     expect((await readMove()).status).toBe(200);
     for (const [version, scopes] of [[1, ["inventory/read"]], [2, []]] as const) {
       const receipt = await reduce(version, [...scopes]);
       expect(receipt.status).toBe(200);
       const result = await context();
       expect(result.status).toBe(200);
-      expect(result.body).toMatchObject({ data: { household: null, apiKey: { version: version + 1, scopes: [...scopes] }, restrictedMove: null } });
+      expect(result.body).toMatchObject({ data: { household: null, apiKey: { version: version + 1, scopes: [...scopes], status: "active", expiresAt }, restrictedMove: null } });
       expect(JSON.stringify(result.body)).not.toContain("PRIVATE");
       expect(JSON.stringify(result.body)).not.toContain(moveId);
       expect((await readMove()).status).toBe(403);
@@ -1422,11 +1430,12 @@ describe("R1 scope-free API context", () => {
         expect(tool.isError).not.toBe(true);
         expect(JSON.stringify(tool)).not.toContain("PRIVATE");
         expect(JSON.stringify(tool)).not.toContain(moveId);
-        expect(JSON.parse(tool.content[0].text)).toMatchObject({ data: { restrictedMove: null } });
+        expect(JSON.parse(tool.content[0].text)).toMatchObject({ data: { apiKey: { status: "active", expiresAt }, restrictedMove: null } });
       }
     }
     const replacement = await t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" }).mutation(api.apiKeys.create, { householdId, moveId, name: "Person restored read authority", scopes: ["moves/read"] });
     raw = replacement.rawKey;
+    expect((await context()).body).toMatchObject({ data: { apiKey: { status: "active", expiresAt: null } } });
     expect((await t.run(ctx => ctx.db.get(keyId)))?.scopes).toEqual([]);
     expect((await readMove()).status).toBe(200);
     expect(JSON.stringify((await context()).body)).toContain("PRIVATE move title");
@@ -1994,12 +2003,34 @@ it("preserves before and after authority in durable private grant reduction rece
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
   const expiry = Date.now() + 600000;
   const reduced = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: expiry });
-  const first = await t.run(ctx => ctx.db.get(reduced.receipt));
+  const first = await t.run(ctx => ctx.db.get(reduced.receipt as Id<"auditLogs">));
   expect(first?.metadata).toMatchObject({ before: { version: 1, active: true, scopes: [...movingScopes], moveScope: "allMoves", moveIds: [], expiresAt: null }, after: { version: 2, active: true, scopes: ["moving.context.read"], moveScope: "selectedMoves", moveIds: [moveId], expiresAt: expiry } });
   const revoked = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 2, action: "revoke" });
-  const last = await t.run(ctx => ctx.db.get(revoked.receipt));
+  const last = await t.run(ctx => ctx.db.get(revoked.receipt as Id<"auditLogs">));
   expect(last?.metadata).toMatchObject({ before: first?.metadata?.after, after: { version: 3, status: "revoked", active: false, moveIds: [moveId], scopes: ["moving.context.read"], expiresAt: expiry } });
   expect(first?.householdId).toBeUndefined();
   expect(last?.householdId).toBeUndefined();
   expect((await owner.query(api.aiGrants.listReceipts, {})).page.some(row => row._id === last?._id)).toBe(true);
+});
+
+it.each(["pause", "revoke"] as const)("preserves API-key limits before narrowing and %s in private receipts", async action => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Key limit receipt" });
+  const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "Key receipt move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+  const expiresAt = Date.now() + 600000;
+  const firstResult = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: ["moves/read"], moveIds: [moveId], expiresAt });
+  const first = (await t.run(ctx => ctx.db.get(firstResult.receipt)))!;
+  const { apiKeyScopes } = await import("../../convex/lib/apiKeys");
+  expect(first.metadata).toMatchObject({ before: { version: 1, status: "active", active: true, scopes: [...apiKeyScopes], moveId: null, expiresAt: null }, after: { version: 2, status: "active", active: true, scopes: ["moves/read"], moveId, expiresAt } });
+  const lastResult = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 2, action });
+  const last = (await t.run(ctx => ctx.db.get(lastResult.receipt)))!;
+  expect(last.metadata).toMatchObject({ before: first.metadata?.after, after: { version: 3, status: action === "pause" ? "expired" : "revoked", active: false, scopes: ["moves/read"], moveId, expiresAt: action === "pause" ? expect.any(Number) : expiresAt } });
+  if (action === "pause") expect(last.metadata?.after.expiresAt).toBeLessThanOrEqual(Date.now());
+  for (const row of [first, last]) {
+    expect(row.householdId).toBeUndefined();
+    expect(row.moveId).toBeUndefined();
+  }
+  expect((await owner.query(api.aiGrants.listReceipts, {})).page.some(row => row._id === last._id)).toBe(true);
 });

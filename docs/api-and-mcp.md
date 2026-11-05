@@ -215,9 +215,12 @@ curl https://movingmanifest.com/api/v1/me \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-The context response includes the household id/name, key scopes, whether the
-key is move-restricted, and the restricted move when applicable. This endpoint
-does not return the raw key or secret hash.
+The context response includes the key's version, status, expiry (null for no
+end date), scopes and whether it is move-restricted. With `moves/read`, it also
+includes the authorized household id/name and restricted move when applicable.
+Without that scope it returns credential metadata only, without household or
+move identifiers or content. This endpoint does not return the raw key or
+secret hash. Revoked or expired keys are refused by authentication.
 
 ## Queue handoffs
 
@@ -2442,3 +2445,9 @@ payload is returned only with `moves/read`. Removing read access, including
 reducing to an empty scope array, removes move titles, routes and dates from
 context on both API-key MCP doors as well as REST. Ordinary move reads continue
 to require their existing scopes.
+
+The context endpoint is intentionally enriched with authorized household and
+move context for callers with `moves/read`; it is credential-only when that
+scope is absent. Credential status and expiry are included in either case.
+API-key self-reduction receipts preserve before and after scopes, move limit,
+expiry, status and version privately and atomically, including pause and revoke.

@@ -1548,6 +1548,8 @@ async function routeMe(
       apiKey: {
         apiKeyId: auth.apiKeyId,
         version: auth.version,
+        status: auth.status,
+        expiresAt: auth.expiresAt ?? null,
         scopes: auth.scopes,
         moveRestricted: Boolean(auth.moveId),
         moveId: auth.scopes.includes("moves/read") ? auth.moveId : undefined,

@@ -150,6 +150,8 @@ export async function authenticateApiKey(
       scopes,
     },
     version: key.version ?? 1,
+    status: key.status,
+    expiresAt: key.expiresAt,
     apiKeyId: key._id,
     apiKeyName: key.name,
     apiKeyTokenPreview: key.tokenPreview,
