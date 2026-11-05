@@ -1,0 +1,9 @@
+{
+  "runId": "2026-11-05-playbook",
+  "rubric": {"patternFidelity": 10, "preservation": 10, "clarity": 10, "phoneParity": 10, "movingIdentity": 10, "accessibility": 10},
+  "assumedTarget": "Each judge overall >= 8/10; zero unresolved preservation, capability, access or accessibility blockers",
+  "assumedRoundCap": 3,
+  "judges": [{"provider": "codex", "model": "gpt-6.1-sol", "effort": "high"}, {"provider": "claudeAgent", "model": "claude-opus-5-5", "effort": "high", "finalTasteAuthorityAmongAIs": true}],
+  "reviews": [],
+  "scottPicks": []
+}
