@@ -2096,7 +2096,7 @@ it("refuses participant recovery witnesses marked archived even when their statu
     const membership = (await ctx.db.query("householdMemberships").first())!;
     await ctx.db.patch(membership._id, { status: "disabled" });
     const moveId = await ctx.db.insert("moves", { householdId, title: "Archived witness", type: "local", status: "planning", archivedAt: now, unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
-    await ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", apiAccessStatus: "enabled", invitedByUserId: userId, createdAt: now, updatedAt: now });
+    await ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", agentAccessStatus: "enabled", invitedByUserId: userId, createdAt: now, updatedAt: now });
     return moveId;
   });
   expect((await owner.query(api.aiGrants.listRecoveryHouseholds, {})).households).toEqual([]);
