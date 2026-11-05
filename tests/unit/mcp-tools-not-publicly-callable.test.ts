@@ -99,6 +99,6 @@ describe("the gateway reaches the handlers internally", () => {
   });
 
   it("registers one tool per catalogued name", () => {
-    expect([...registry.matchAll(/^\s+fn: internal\./gm)].length).toBe(30);
+    expect([...registry.matchAll(/^\s+fn: internal\./gm)].length).toBe(31);
   });
 });
