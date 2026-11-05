@@ -2298,10 +2298,19 @@ product grant with no end date. `scopeChoice: "full"` follows the current scope
 catalog, including future additions; it is not a frozen copy of scopes at sign-in.
 Settings show the resolved alias-intersected connection authority separately
 from saved row choices and historical consent. Incomplete history has no claimed
-effective authority until explicit recovery. Every owner revoke requires the
+effective authority until explicit recovery. Every owner limit edit and revoke requires the
 loaded generation-safe version and owner-management revision. Reconnect
 invalidates a delayed revoke even when its old alias row version is unchanged;
 legacy ID-only revokes fail closed.
+
+Limit edits also require the loaded owner-management revision, even if the
+selected historical row itself has not changed. A row acknowledged by a newer
+reconnect cannot be edited back into governing authority. Connection quotas
+count resolved clients, including alias intersections and historical refusals,
+rather than preserved active rows from prior approvals. Original records stay
+intact. Oversized incomplete histories retain conservative bounded admission.
+Recovery offers currently eligible household choices only; an archived previous
+household remains historical context and cannot become the default target.
 
 Settings at `https://movingmanifest.com/settings/ai` let the owner deliberately
 choose fewer permissions, add/change/remove an end date, or revoke the connection.

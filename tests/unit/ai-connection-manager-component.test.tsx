@@ -145,6 +145,7 @@ const connectionData = vi.hoisted(() => ({
   },
   keys: [] as unknown[],
   participantRecovery: false,
+  participantOrigin: null as string | null,
   participantSameHousehold: false,
   memberPaging: false,
 }));
@@ -181,6 +182,7 @@ vi.mock("convex/react", () => ({
       case apiMock.aiGrants.listMoveChoices:
         return connectionData.moveChoicesPaging ? { moves: (args as { cursor?: string })?.cursor ? [{ ...connectionData.stats.moves[0], moveId: "move_456", title: "Later move" }] : connectionData.stats.moves, nextCursor: (args as { cursor?: string })?.cursor ? null : "later-moves" } : connectionData.stats;
       case apiMock.aiGrants.listRecoveryHouseholds:
+        if (connectionData.participantOrigin) return { households: [{ householdId: connectionData.participantOrigin, label: "Current participant household", moveId: "participant_witness" }], nextCursor: null };
         return connectionData.participantRecovery ? { households: [{ householdId: (args as { cursor?: string })?.cursor && !connectionData.participantSameHousehold ? "participant_later" : "participant_current", label: (args as { cursor?: string })?.cursor ? "Move: Later participant move" : "Move: Current participant move", moveId: (args as { cursor?: string })?.cursor ? "move_witness_later" : "move_witness_current" }], nextCursor: (args as { cursor?: string })?.cursor ? null : "later-households" } : { households: [], nextCursor: null };
       case apiMock.apiKeys.listForHousehold:
         return connectionData.keys;
@@ -301,6 +303,7 @@ describe("AiConnectionManager", () => {
     const original = connectionData.grants.grants;
     const households = connectionData.households;
     connectionData.households = [];
+    connectionData.participantOrigin = "household_123";
     connectionData.grants.grants = [{ ...original[0], status: "revoked" }];
     try {
       const user = userEvent.setup();
@@ -311,11 +314,12 @@ describe("AiConnectionManager", () => {
       expect(connectionData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.summaryStats, { householdId: "household_123" });
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
       expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "household_123", reconnectGrantId: "ai_grant_123", scopeIntent: "full", expiryIntent: "none", moveScope: "allMoves" }));
-    } finally { connectionData.households = households; connectionData.grants.grants = original; }
+    } finally { connectionData.households = households; connectionData.grants.grants = original; connectionData.participantOrigin = null; }
   });
 
   it("keeps a participant reconnect in its original household when the person also belongs to another household", async () => {
     const original = connectionData.grants.grants;
+    connectionData.participantOrigin = "participant_household";
     connectionData.grants.grants = [{ ...original[0], householdId: "participant_household" as Id<"households">, status: "revoked" }];
     try {
       const user = userEvent.setup();
@@ -324,30 +328,65 @@ describe("AiConnectionManager", () => {
       expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listMoveChoices, { householdId: "participant_household" });
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
       expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_household", reconnectGrantId: "ai_grant_123" }));
-    } finally { connectionData.grants.grants = original; }
+    } finally { connectionData.grants.grants = original; connectionData.participantOrigin = null; }
   });
 
   it("lets the person move recovery to an eligible household and clears the prior move choice", async () => {
     const original = connectionData.grants.grants;
-    connectionData.grants.grants = [{ ...original[0], householdId: "inaccessible_previous" as Id<"households">, status: "revoked" }];
+    const households = connectionData.households;
+    connectionData.households = [...households, { household: { _id: "eligible_other" as Id<"households">, name: "Other eligible household" }, role: "owner" }];
+    connectionData.grants.grants = [{ ...original[0], status: "revoked" }];
     try {
       const user = userEvent.setup();
       render(<AiConnectionManager />);
       await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
       const household = screen.getByLabelText("Household", { selector: "#ai-grant-household" });
-      expect(household).toHaveValue("inaccessible_previous");
+      expect(household).toHaveValue("household_123");
       const moves = screen.getByRole("group", { name: "Which moves" });
       await user.click(within(moves).getByRole("radio", { name: /Only the moves I pick/ }));
       await user.click(within(moves).getByRole("checkbox", { name: "Utah to Virginia" }));
-      await user.selectOptions(household, "household_123");
+      await user.selectOptions(household, "eligible_other");
       expect(within(moves).getByRole("radio", { name: /All my moves/ })).toBeChecked();
       await user.click(within(moves).getByRole("radio", { name: /Only the moves I pick/ }));
       expect(within(moves).getByRole("checkbox", { name: "Utah to Virginia" })).not.toBeChecked();
       await user.click(within(moves).getByRole("radio", { name: /All my moves/ }));
-      expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listMoveChoices, { householdId: "household_123" });
+      expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listMoveChoices, { householdId: "eligible_other" });
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
-      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "household_123", reconnectGrantId: "ai_grant_123", moveScope: "allMoves", moveIds: undefined }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "eligible_other", reconnectGrantId: "ai_grant_123", moveScope: "allMoves", moveIds: undefined }));
+    } finally { connectionData.grants.grants = original; connectionData.households = households; }
+  });
+
+  it("never offers an archived previous household and defaults recovery to a current eligible choice", async () => {
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], householdId: "archived_previous" as Id<"households">, status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      const household = screen.getByLabelText("Household", { selector: "#ai-grant-household" });
+      expect(household).toHaveValue("household_123");
+      expect(within(household).getAllByRole("option").map(option => (option as HTMLOptionElement).value)).toEqual(["household_123"]);
+      expect(screen.getByText(/previous household is not among your current choices/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "household_123" }));
+      expect(connectionData.queryCalls).not.toHaveBeenCalledWith(apiMock.aiGrants.listMoveChoices, { householdId: "archived_previous" });
     } finally { connectionData.grants.grants = original; }
+  });
+
+  it("leaves recovery disabled when an archived previous household has no eligible replacement", async () => {
+    const original = connectionData.grants.grants;
+    const households = connectionData.households;
+    connectionData.households = [];
+    connectionData.grants.grants = [{ ...original[0], householdId: "archived_previous" as Id<"households">, status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      expect(screen.getByLabelText("Household", { selector: "#ai-grant-household" })).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Approve this connection" })).toBeDisabled();
+      expect(screen.getByRole("option", { name: "No eligible household on this page" })).toBeInTheDocument();
+      expect(connectionData.approve).not.toHaveBeenCalled();
+    } finally { connectionData.grants.grants = original; connectionData.households = households; }
   });
 
   it("pages move-only recovery households and keeps a chosen household across pages", async () => {
@@ -479,7 +518,7 @@ describe("AiConnectionManager", () => {
     const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
     await user.selectOptions(within(form).getByRole("combobox"), "0");
     await user.click(within(form).getByRole("button", { name: "Save limits" }));
-    expect(connectionData.updateLimits).toHaveBeenCalledWith({ consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve", expiryIntent: "none", grantId: "ai_grant_123", expectedVersion: 3, eligibilityMoveId: "move_123", scopes: ["moving.context.read"], expiresInDays: null });
+    expect(connectionData.updateLimits).toHaveBeenCalledWith({ consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve", expiryIntent: "none", grantId: "ai_grant_123", expectedVersion: 3, expectedRecoveryFingerprint: "current-recovery", eligibilityMoveId: "move_123", scopes: ["moving.context.read"], expiresInDays: null });
   });
 
   it("preserves unchanged move choices without submitting a move edit", async () => {
@@ -492,10 +531,29 @@ describe("AiConnectionManager", () => {
     await user.click(within(form).getByRole("button", { name: "Save limits" }));
     expect(connectionData.updateLimits).toHaveBeenCalledWith({
       consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(), scopeIntent: "preserve",
-      grantId: "ai_grant_123", expectedVersion: 3, scopes: ["moving.context.read"],
+      grantId: "ai_grant_123", expectedVersion: 3, expectedRecoveryFingerprint: "current-recovery", scopes: ["moving.context.read"],
       eligibilityMoveId: "move_123",
     });
     expect(connectionData.approve).not.toHaveBeenCalled();
+  });
+
+  it("discards unsaved limit choices when another alias advances the management revision", async () => {
+    const previous = connectionData.grants.recoveryFingerprint;
+    try {
+      const user = userEvent.setup();
+      const { rerender } = render(<AiConnectionManager />);
+      await user.click(screen.getByText("Change moves, permissions or end date"));
+      const oldForm = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+      await user.selectOptions(within(oldForm).getByRole("combobox"), "7");
+      connectionData.grants.recoveryFingerprint = "new-alias-decision";
+      rerender(<AiConnectionManager />);
+      const currentForm = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+      expect(currentForm).not.toBe(oldForm);
+      expect(within(currentForm).getByRole("combobox")).toHaveValue("keep");
+      await user.click(within(currentForm).getByRole("button", { name: "Save limits" }));
+      expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ expectedRecoveryFingerprint: "new-alias-decision" }));
+      expect(connectionData.updateLimits.mock.calls[0][0]).not.toHaveProperty("expiresInDays");
+    } finally { connectionData.grants.recoveryFingerprint = previous; }
   });
 
   it("submits a deliberate move change", async () => {
@@ -553,7 +611,7 @@ describe("AiConnectionManager", () => {
       await user.click(within(form).getByRole("button", { name: "Save limits" }));
       expect(connectionData.updateLimits).toHaveBeenCalledWith({
         consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(),
-        scopeIntent: "full", grantId: "ai_grant_123", expectedVersion: 3,
+        scopeIntent: "full", grantId: "ai_grant_123", expectedVersion: 3, expectedRecoveryFingerprint: "current-recovery",
         eligibilityMoveId: "move_123",
         scopes: ["moving.context.read", "moving.work.write"], expiryIntent: "chosen", expiresInDays: 7,
       });

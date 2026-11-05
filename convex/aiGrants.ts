@@ -279,20 +279,31 @@ function resolveAliasRows(rows: Doc<"aiGrants">[], now: number) {
   return bound.length ? intersectAliasGrants(bound, now) : undefined;
 }
 
+/** Count verified clients, not preserved approvals for the same client. */
+function resolveOwnerHistory(rows: Doc<"aiGrants">[], now: number) {
+  const groups = new Map<string, Doc<"aiGrants">[]>();
+  const unbound = rows.filter(row => !row.clientId);
+  for (const row of rows) {
+    if (!row.clientId) continue;
+    const key = storedClientHistoryKey(row.clientId);
+    const groupKey = key === undefined ? `invalid:${row._id}` : `client:${key}`;
+    const group = groups.get(groupKey) ?? [];
+    group.push(row);
+    groups.set(groupKey, group);
+  }
+  return [...groups.values()].flatMap(group => {
+    const authority = group.find(row => row.recoveredClientKey !== undefined) ?? resolveAliasRows(group, now);
+    return authority ? [authority] : [];
+  }).concat(unbound);
+}
+
 async function governingGrants(
   ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">,
   clientId: string | undefined, now: number,
 ) {
   if (clientId === undefined) {
     const rows = await grantHistory(ctx, ownerUserId);
-    const clients = new Map<string, Doc<"aiGrants">>();
-    const unbound = rows.filter(row => !row.clientId);
-    for (const row of rows) {
-      if (!row.clientId) continue;
-      const previous = clients.get(row.clientId);
-      if (!previous || compareDecisions(row, previous, now) > 0) clients.set(row.clientId, row);
-    }
-    return [...clients.values(), ...unbound];
+    return resolveOwnerHistory(rows, now);
   }
   const recovered = await recoveredGrant(ctx, ownerUserId, clientId);
   if (recovered) return [recovered];
@@ -711,7 +722,7 @@ export const listMine = query({
       historyAtCapacity: history.length >= MAX_GRANT_HISTORY,
       historyOverflow: history.length > MAX_GRANT_HISTORY,
       grants,
-      activeCount: grants.filter((grant) => grant.status === "active").length,
+      activeCount: await countActiveConnections(ctx, user._id, now, history) ?? MAX_ACTIVE_GRANTS,
       maxActive: MAX_ACTIVE_GRANTS,
     };
   },
@@ -887,12 +898,29 @@ const consentArgs = {
   expiryIntent: v.optional(v.union(v.literal("none"), v.literal("chosen"))),
 };
 
-/** Bound the scan and fail closed if legacy rows prevent a complete count. */
-async function requireConnectionCapacity(ctx: MutationCtx, ownerUserId: Id<"users">, now: number) {
-  const rows = await ctx.db.query("aiGrants")
+/** Complete bounded history resolves refusals and superseded aliases. On old
+ * oversized histories, count active candidates conservatively, except that
+ * an indexed recovery remains authoritative even when it is revoked. */
+async function countActiveConnections(ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">, now: number, history?: Doc<"aiGrants">[]) {
+  const complete = history ?? await ctx.db.query("aiGrants")
+    .withIndex("by_owner_client_status", q => q.eq("ownerUserId", ownerUserId)).take(MAX_GRANT_HISTORY + 1);
+  if (complete.length <= MAX_GRANT_HISTORY) return resolveOwnerHistory(complete, now).filter(row => grantIsActive(row, now)).length;
+  const active = await ctx.db.query("aiGrants")
     .withIndex("by_owner_status_updated", q => q.eq("ownerUserId", ownerUserId).eq("status", "active"))
     .take(MAX_GRANT_HISTORY + 1);
-  if (rows.length > MAX_GRANT_HISTORY || rows.filter(row => grantIsActive(row, now)).length >= MAX_ACTIVE_GRANTS) {
+  if (active.length > MAX_GRANT_HISTORY) return undefined;
+  const candidates = resolveOwnerHistory(active, now);
+  let count = 0;
+  for (const candidate of candidates) {
+    const recovered = candidate.clientId ? await recoveredGrant(ctx, ownerUserId, candidate.clientId) : null;
+    if (grantIsActive(recovered ?? candidate, now)) count++;
+  }
+  return count;
+}
+
+async function requireConnectionCapacity(ctx: MutationCtx, ownerUserId: Id<"users">, now: number) {
+  const count = await countActiveConnections(ctx, ownerUserId, now);
+  if (count === undefined || count >= MAX_ACTIVE_GRANTS) {
     throw new ConvexError("You already have 8 active AI connections or an incomplete active history. Revoke one first.");
   }
 }
@@ -1064,6 +1092,7 @@ export const updateLimits = mutation({
     ...consentArgs,
     eligibilityMoveId: v.optional(v.id("moves")),
     grantId: v.id("aiGrants"), expectedVersion: v.number(),
+    expectedRecoveryFingerprint: v.string(),
     scopes: v.optional(v.array(movingGrantScope)),
     moveScope: v.optional(v.union(v.literal("allMoves"), v.literal("selectedMoves"))),
     moveIds: v.optional(v.array(v.id("moves"))),
@@ -1073,10 +1102,19 @@ export const updateLimits = mutation({
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
+    if (args.expectedRecoveryFingerprint !== recoveryFingerprint(user)) throw new ConvexError("AI connection history changed. Reload Settings before editing the current decision.");
     const grant = await ctx.db.get(args.grantId);
     if (!grant || grant.ownerUserId !== user._id) throw new ConvexError("That AI connection is not available.");
     const recovered = grant.clientId ? await recoveredGrant(ctx, user._id, grant.clientId) : null;
-    const sameConnection = recovered ? [recovered] : (await grantHistory(ctx, user._id, grant.clientId)).filter(row => row.clientId === grant.clientId);
+    const related = recovered ? [recovered] : grant.clientId
+      ? looksLikeClientIdMetadataDocument(oauthClientHistoryKey(grant.clientId))
+        ? (await grantHistory(ctx, user._id)).filter(row => row.clientId !== undefined && sameOAuthClientHistory(row.clientId, grant.clientId!))
+        : (await Promise.all(clientAliases(grant.clientId).map(alias => grantHistory(ctx, user._id, alias)))).flat()
+      : (await grantHistory(ctx, user._id)).filter(row => !row.clientId);
+    if (related.some(row => row.reconnectsClientHistory?.some(previous => previous.grantId === grant._id && previous.version === grant.version))) {
+      throw new ConvexError("A newer connection decision exists. Reload Settings → AI connections and edit the current connection.");
+    }
+    const sameConnection = related.filter(row => row.clientId === grant.clientId || row._id === recovered?._id);
     const latest = sameConnection.reduce<Doc<"aiGrants"> | undefined>((winner, row) => !winner || compareDecisions(row, winner, Date.now()) > 0 ? row : winner, undefined);
     if (latest?._id !== grant._id) throw new ConvexError("A newer connection decision exists. Reload Settings → AI connections and edit the current connection.");
     if (grant.status === "revoked") throw new ConvexError("A revoked connection stays revoked. Approve a new connection instead.");

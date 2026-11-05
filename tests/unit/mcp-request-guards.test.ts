@@ -742,7 +742,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
   it("binds a validated first contact once, without widening its unbound chosen approval", async () => {
     const f = await fixture(true);
     const row = (await f.snapshot()).grants[0];
-    await f.owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, scopes: ["moving.context.read"], scopeIntent: "chosen", expiresInDays: 3, expiryIntent: "chosen" });
+    await f.owner.mutation(api.aiGrants.updateLimits, { ...consent, expectedRecoveryFingerprint: (await f.owner.query(api.aiGrants.listMine, {})).recoveryFingerprint, grantId: row._id, expectedVersion: 1, scopes: ["moving.context.read"], scopeIntent: "chosen", expiresInDays: 3, expiryIntent: "chosen" });
     const chosen = (await f.snapshot()).grants[0];
     verifyMock.mockResolvedValue(verifiedToken(clientId));
     const { handleMcpRequestForTests } = await loadRoute();
