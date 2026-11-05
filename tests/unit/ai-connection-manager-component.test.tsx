@@ -10,6 +10,7 @@ const apiMock = vi.hoisted(() => ({
   aiGrants: {
     listMine: "aiGrants.listMine",
     listActivity: "aiGrants.listActivity",
+    listMoveChoices: "aiGrants.listMoveChoices",
     describeBoundary: "aiGrants.describeBoundary",
     approve: "aiGrants.approve",
     revoke: "aiGrants.revoke",
@@ -29,6 +30,7 @@ const apiMock = vi.hoisted(() => ({
 
 const connectionData = vi.hoisted(() => ({
   queryCalls: vi.fn(),
+  moveChoicesPaging: false,
   approve: vi.fn(),
   revoke: vi.fn(),
   updateLimits: vi.fn(),
@@ -158,6 +160,8 @@ vi.mock("convex/react", () => ({
         return connectionData.households;
       case apiMock.households.summaryStats:
         return connectionData.stats;
+      case apiMock.aiGrants.listMoveChoices:
+        return connectionData.moveChoicesPaging ? { moves: (args as { cursor?: string })?.cursor ? [{ ...connectionData.stats.moves[0], moveId: "move_456", title: "Later move" }] : connectionData.stats.moves, nextCursor: (args as { cursor?: string })?.cursor ? null : "later-moves" } : connectionData.stats;
       case apiMock.apiKeys.listForHousehold:
         return connectionData.keys;
       default:
@@ -288,6 +292,34 @@ describe("AiConnectionManager", () => {
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
       expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "household_123", reconnectGrantId: "ai_grant_123", scopeIntent: "full", expiryIntent: "none", moveScope: "allMoves" }));
     } finally { connectionData.households = households; connectionData.grants.grants = original; }
+  });
+
+  it("keeps a participant reconnect in its original household when the person also belongs to another household", async () => {
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], householdId: "participant_household" as Id<"households">, status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listMoveChoices, { householdId: "participant_household" });
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_household", reconnectGrantId: "ai_grant_123" }));
+    } finally { connectionData.grants.grants = original; }
+  });
+
+  it("allows a participant-only person to select moves for existing limits", async () => {
+    const households = connectionData.households;
+    connectionData.households = [];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.click(screen.getByText("Change moves, permissions or end date"));
+      const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+      await user.click(within(form).getByRole("radio", { name: "Only the moves checked below" }));
+      await user.click(within(form).getByRole("checkbox", { name: "Utah to Virginia" }));
+      await user.click(within(form).getByRole("button", { name: "Save limits" }));
+      expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ moveScope: "selectedMoves", moveIds: ["move_123"] }));
+    } finally { connectionData.households = households; }
   });
 
   it("blocks another new row at history capacity while allowing explicit reconnect", async () => {
@@ -576,4 +608,24 @@ describe("AiConnectionManager", () => {
       screen.getByText("Permanently delete anything, or delete your account."),
     ).toBeInTheDocument();
   });
+});
+
+
+it("preserves selected move limits across pages", async () => {
+  connectionData.grants.consentPolicyVersion = GRANT_CONSENT_POLICY;
+  connectionData.grants.catalogFingerprint = grantCatalogFingerprint();
+  connectionData.updateLimits.mockClear();
+  connectionData.moveChoicesPaging = true;
+  try {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    await user.click(within(form).getByRole("radio", { name: "Only the moves checked below" }));
+    await user.click(within(form).getByRole("checkbox", { name: "Utah to Virginia" }));
+    await user.click(within(form).getByRole("button", { name: "More move choices" }));
+    await user.click(within(form).getByRole("checkbox", { name: "Later move" }));
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ moveScope: "selectedMoves", moveIds: ["move_123", "move_456"] }));
+  } finally { connectionData.moveChoicesPaging = false; }
 });

@@ -234,10 +234,14 @@ export function ApiKeyManager({
     api.households.summaryStats,
     effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip",
   ) as HouseholdStats | undefined;
-  const keys = useQuery(
+  const [historyPage, setHistoryPage] = useState<{ householdId: Id<"households">; cursor: string } | null>(null);
+  const historyCursor = historyPage?.householdId === effectiveHouseholdId ? historyPage.cursor : undefined;
+  const keysResult = useQuery(
     api.apiKeys.listForHousehold,
-    effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip",
-  ) as ApiKeySummary[] | undefined;
+    effectiveHouseholdId ? { householdId: effectiveHouseholdId, ...(historyCursor ? { cursor: historyCursor } : {}) } : "skip",
+  ) as { keys: ApiKeySummary[]; nextCursor: string | null } | ApiKeySummary[] | undefined;
+  const keys = Array.isArray(keysResult) ? keysResult : keysResult?.keys;
+  const nextCursor = Array.isArray(keysResult) ? null : keysResult?.nextCursor;
   const createKey = useMutation(api.apiKeys.create);
   const revokeKey = useMutation(api.apiKeys.revoke);
   const rotateKey = useMutation(api.apiKeys.rotate);
@@ -441,7 +445,7 @@ export function ApiKeyManager({
               household.
             </p>
           </div>
-          <Badge variant="outline">{activeKeys.length} active</Badge>
+          <Badge variant="outline">{stats?.activeApiKeyCount ?? activeKeys.length} active</Badge>
         </div>
 
         {keys === undefined && effectiveHouseholdId ? (
@@ -464,7 +468,7 @@ export function ApiKeyManager({
           </div>
         ) : (
           <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-            No active AI connections yet.
+            No active AI connections on this page.
           </p>
         )}
 
@@ -487,6 +491,8 @@ export function ApiKeyManager({
             </div>
           </details>
         ) : null}
+        {nextCursor && effectiveHouseholdId ? <Button type="button" variant="outline" onClick={() => setHistoryPage({ householdId: effectiveHouseholdId, cursor: nextCursor })}>Older API keys</Button> : null}
+        {historyCursor ? <Button type="button" variant="outline" onClick={() => setHistoryPage(null)}>Recent API keys</Button> : null}
       </div>
     );
   }
@@ -528,7 +534,7 @@ export function ApiKeyManager({
           <StatusTile
             icon={Activity}
             label="AI connections"
-            value={formatStat(activeKeys.length)}
+            value={formatStat(stats?.activeApiKeyCount ?? activeKeys.length)}
             note={
               lastUsedKey
                 ? `Last used ${formatApiKeyDate(lastUsedKey.lastUsedAt)}`
