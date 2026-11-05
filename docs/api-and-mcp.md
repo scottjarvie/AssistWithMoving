@@ -2323,6 +2323,22 @@ person owner, without requiring household admin permission. Household audit
 contains the approval summary, never client identity, superseded source IDs or
 revisions, or the private source document. Owner settings and activity queries
 also require a person session; OAuth callers cannot read sibling connections.
+
+Owner connection settings require a signed Clerk session token with a `sid`,
+not an OAuth access token or a legacy custom JWT template. Before release,
+enable Clerk's native Convex integration (session audience `convex`) for the
+app's Clerk instance. The existing `ConvexProviderWithClerk` supports it and
+uses the session token automatically. Keep the existing verified issuer and
+`convex` audience configuration. Legacy JWT templates do not carry session
+claims and are refused for owner administration; ordinary OAuth connections
+continue through their existing verified doors. No Clerk setting is changed
+by this PR. See [Clerk's Convex integration](https://clerk.com/docs/guides/development/integrations/databases/convex)
+and [JWT template claim limits](https://clerk.com/docs/guides/sessions/jwt-templates).
+
+Recovery household choices also include current move-only participation, in
+25-record pages. Labels expose only an accessible move's title; household
+profiles and unrelated moves stay private. Current participation is checked
+again when the person submits recovery.
 Move-only participants can select a revoked or expired client in Settings and
 explicitly reconnect using verified current participation, even without a
 household membership. Selecting a reconnect uses that connection?s household,

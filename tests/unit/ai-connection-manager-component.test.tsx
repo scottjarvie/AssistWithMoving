@@ -11,6 +11,7 @@ const apiMock = vi.hoisted(() => ({
     listMine: "aiGrants.listMine",
     listActivity: "aiGrants.listActivity",
     listMoveChoices: "aiGrants.listMoveChoices",
+    listRecoveryHouseholds: "aiGrants.listRecoveryHouseholds",
     listSourceHistory: "aiGrants.listSourceHistory",
     describeBoundary: "aiGrants.describeBoundary",
     approve: "aiGrants.approve",
@@ -140,6 +141,7 @@ const connectionData = vi.hoisted(() => ({
     pendingInvitationCount: 0,
   },
   keys: [] as unknown[],
+  participantRecovery: false,
 }));
 
 vi.mock("../../convex/_generated/api", () => ({
@@ -167,6 +169,8 @@ vi.mock("convex/react", () => ({
         return connectionData.stats;
       case apiMock.aiGrants.listMoveChoices:
         return connectionData.moveChoicesPaging ? { moves: (args as { cursor?: string })?.cursor ? [{ ...connectionData.stats.moves[0], moveId: "move_456", title: "Later move" }] : connectionData.stats.moves, nextCursor: (args as { cursor?: string })?.cursor ? null : "later-moves" } : connectionData.stats;
+      case apiMock.aiGrants.listRecoveryHouseholds:
+        return connectionData.participantRecovery ? { households: [{ householdId: (args as { cursor?: string })?.cursor ? "participant_later" : "participant_current", label: (args as { cursor?: string })?.cursor ? "Move: Later participant move" : "Move: Current participant move" }], nextCursor: (args as { cursor?: string })?.cursor ? null : "later-households" } : { households: [], nextCursor: null };
       case apiMock.apiKeys.listForHousehold:
         return connectionData.keys;
       default:
@@ -333,6 +337,30 @@ describe("AiConnectionManager", () => {
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
       expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "household_123", reconnectGrantId: "ai_grant_123", moveScope: "allMoves", moveIds: undefined }));
     } finally { connectionData.grants.grants = original; }
+  });
+
+  it("pages move-only recovery households and keeps a chosen household across pages", async () => {
+    const original = connectionData.grants.grants;
+    const households = connectionData.households;
+    connectionData.households = [];
+    connectionData.participantRecovery = true;
+    connectionData.grants.grants = [{ ...original[0], householdId: "previous_household" as Id<"households">, status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      const household = screen.getByLabelText("Household", { selector: "#ai-grant-household" });
+      await user.selectOptions(household, "participant_current");
+      expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listMoveChoices, { householdId: "participant_current" });
+      await user.click(screen.getByRole("button", { name: "More recovery households" }));
+      expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listRecoveryHouseholds, { cursor: "later-households" });
+      expect(household).toHaveValue("participant_current");
+      await user.selectOptions(household, "participant_later");
+      await user.click(screen.getByRole("button", { name: "First recovery households" }));
+      expect(household).toHaveValue("participant_later");
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_later", reconnectGrantId: "ai_grant_123" }));
+    } finally { connectionData.grants.grants = original; connectionData.households = households; connectionData.participantRecovery = false; }
   });
 
   it("allows a participant-only person to select moves for existing limits", async () => {

@@ -488,7 +488,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       await ctx.db.insert("householdMemberships", { householdId, userId, role: "owner", status: "active", apiAccessStatus: "enabled", createdByUserId: userId, createdAt: now, updatedAt: now });
       return householdId;
     });
-    const owner = t.withIdentity({ subject: SUBJECT });
+    const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
     if (unbound) await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Unbound approval" });
     const snapshot = () => t.run(async ctx => ({ grants: await ctx.db.query("aiGrants").collect(), activities: await ctx.db.query("aiGrantActivities").collect(), audits: await ctx.db.query("auditLogs").collect() }));
     return { t, owner, householdId, snapshot };

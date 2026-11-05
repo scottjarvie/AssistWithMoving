@@ -266,11 +266,20 @@ export function AiConnectionManager() {
   const reconnectTarget = grantsResult?.grants.find(grant => grant.grantId === reconnectGrantId);
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
+  const [recoveryHouseholdCursor, setRecoveryHouseholdCursor] = useState<string | undefined>();
+  const recoveryHouseholds = useQuery(api.aiGrants.listRecoveryHouseholds,
+    ready && reconnectGrantId ? (recoveryHouseholdCursor ? { cursor: recoveryHouseholdCursor } : {}) : "skip") as FunctionReturnType<typeof api.aiGrants.listRecoveryHouseholds> | undefined;
   const householdId =
     selectedHouseholdId ?? reconnectTarget?.householdId ?? households?.[0]?.household._id ?? null;
   const approvalHouseholds = (households ?? []).map(entry => ({ id: entry.household._id, name: entry.household.name }));
+  if (reconnectTarget) for (const entry of recoveryHouseholds?.households ?? []) {
+    if (!approvalHouseholds.some(choice => choice.id === entry.householdId)) approvalHouseholds.push({ id: entry.householdId, name: entry.label });
+  }
   if (reconnectTarget && !approvalHouseholds.some(entry => entry.id === reconnectTarget.householdId)) {
     approvalHouseholds.unshift({ id: reconnectTarget.householdId, name: "Previous connection household" });
+  }
+  if (reconnectTarget && selectedHouseholdId && !approvalHouseholds.some(entry => entry.id === selectedHouseholdId)) {
+    approvalHouseholds.push({ id: selectedHouseholdId, name: "Selected move household" });
   }
   const canReadApprovalHousehold = households?.some(entry => entry.household._id === householdId) ?? false;
 
@@ -571,6 +580,11 @@ export function AiConnectionManager() {
                 </select>
               </div>
             ) : null}
+
+            {reconnectGrantId ? <div className="flex flex-wrap gap-2">
+              {recoveryHouseholds?.nextCursor ? <Button type="button" variant="outline" onClick={() => setRecoveryHouseholdCursor(recoveryHouseholds.nextCursor!)}>More recovery households</Button> : null}
+              {recoveryHouseholdCursor ? <Button type="button" variant="outline" onClick={() => setRecoveryHouseholdCursor(undefined)}>First recovery households</Button> : null}
+            </div> : null}
 
             <div className="space-y-1.5">
               <label htmlFor="ai-grant-label" className="text-sm font-medium">
