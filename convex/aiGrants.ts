@@ -159,9 +159,16 @@ async function advanceHistory(ctx: MutationCtx, ownerUserId: Id<"users">) {
 // never match a delayed positive legacy revision, even with incomplete history.
 function nextGrantVersion(version: number) { return version < 0 ? version - 1 : version + 1; }
 
+/** Old stored identifiers remain readable, but invalid URLs confer no authority. */
+function storedClientHistoryKey(clientId: string): string | undefined {
+  try { return oauthClientHistoryKey(clientId); } catch { return undefined; }
+}
+
 async function recoveredGrant(ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">, clientId: string) {
+  const key = storedClientHistoryKey(clientId);
+  if (key === undefined) return null;
   return ctx.db.query("aiGrants").withIndex("by_owner_recovered_client", q =>
-    q.eq("ownerUserId", ownerUserId).eq("recoveredClientKey", oauthClientHistoryKey(clientId))).unique();
+    q.eq("ownerUserId", ownerUserId).eq("recoveredClientKey", key)).unique();
 }
 
 function approvalTime(grant: Doc<"aiGrants">) {
@@ -653,9 +660,9 @@ export const listMine = query({
     const authorityByClient = new Map<string, Promise<Doc<"aiGrants"> | undefined>>();
     const grants = await Promise.all(rows.map(async row => {
       let authority: Doc<"aiGrants"> | undefined;
-      if (row.clientId) {
+      const key = row.clientId ? storedClientHistoryKey(row.clientId) : undefined;
+      if (row.clientId && key !== undefined) {
         const clientId = row.clientId;
-        const key = oauthClientHistoryKey(clientId);
         if (!authorityByClient.has(key)) authorityByClient.set(key, (async () => {
           if (history.length > MAX_GRANT_HISTORY) return (await recoveredGrant(ctx, user._id, clientId)) ?? undefined;
           const related = history.filter(previous => previous.clientId && sameOAuthClientHistory(previous.clientId, clientId));
@@ -1062,7 +1069,11 @@ export const revoke = mutation({
     if (grant.version !== args.expectedVersion) {
       throw new ConvexError("This connection changed. Reload and try again.");
     }
-    if (grant.status === "revoked") return { grantId: grant._id, alreadyRevoked: true };
+    // A fresh owner decision on an acknowledged historical refusal must stop
+    // the reconnected client too. Advance even a revoked row's revision so a
+    // normal reconnect can no longer supersede it; capacity recovery below
+    // also stops its indexed governing decision. Both loaded revisions above
+    // remain mandatory, so a delayed pre-reconnect request cannot do this.
     const now = Date.now();
     const reason = args.reason?.trim().slice(0, 300) || "Revoked by the owner.";
     await ctx.db.patch(grant._id, {

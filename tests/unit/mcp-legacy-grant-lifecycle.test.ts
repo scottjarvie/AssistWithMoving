@@ -584,6 +584,81 @@ async function seedDuplicateHistory(t: TestConvex<typeof schema>) {
 }
 
 describe("explicit owner reconnect", () => {
+  it.each([2, 128, 129])("a fresh revoke of an already-revoked alias stops recovery with %i records", async count => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const clientId = "acknowledged-revoked-client";
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    const aliasId = await t.run(async ctx => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- fixture copies persisted fields only.
+      const { _id, _creationTime, ...fields } = original;
+      for (let i = 2; i < count; i++) await ctx.db.insert("aiGrants", { ...fields, status: "revoked", clientId: `history-${i}` });
+      return ctx.db.insert("aiGrants", { ...fields, clientId: `legacy:${clientId}` });
+    });
+    await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
+    await revokeOwner(owner, { grantId: aliasId, expectedVersion: 1 });
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Recovered client", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint, expectedRecoveryFingerprint: loaded.recoveryFingerprint });
+    expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).scopes).toEqual(movingScopes);
+    // Both requests refer to the same already-revoked row revision. Only the
+    // fresh management revision expresses a decision after the reconnect.
+    await expect(owner.mutation(api.aiGrants.revoke, { grantId: aliasId, expectedVersion: 2, expectedRecoveryFingerprint: loaded.recoveryFingerprint })).rejects.toThrow(/history changed/);
+    expect(await revokeOwner(owner, { grantId: aliasId, expectedVersion: 2 })).toMatchObject({ alreadyRevoked: false });
+    expect((await t.run(ctx => ctx.db.get(aliasId)))?.version).toBe(3);
+    for (const id of [clientId, `legacy:${clientId}`]) {
+      expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: id })).block).toBe("revoked");
+      expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual([]);
+    }
+  });
+
+  it("keeps malformed historical URL ids readable and revocable without authorizing their valid URL", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "healthy-client" });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    const invalidIds = await t.run(async ctx => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- fixture preserves old stored identifiers verbatim.
+      const { _id, _creationTime, ...fields } = original;
+      return Promise.all(["https://client.example/id#instance", "legacy:https://client.example/id#other"].map(clientId => ctx.db.insert("aiGrants", { ...fields, householdId, clientId })));
+    });
+    const page = await owner.query(api.aiGrants.listMine, {});
+    expect(page.grants).toHaveLength(3);
+    for (const id of invalidIds) {
+      expect(page.grants.find(row => row.grantId === id)?.effectiveAuthority).toBeNull();
+      await revokeOwner(owner, { grantId: id, expectedVersion: 1 });
+    }
+    expect((await owner.query(api.aiGrants.listMine, {})).grants).toHaveLength(3);
+    expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: "healthy-client" })).scopes).toEqual(movingScopes);
+    expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: "https://client.example/id" })).scopes).toEqual([]);
+    expect((await t.run(ctx => ctx.db.get(invalidIds[0])))?.clientId).toBe("https://client.example/id#instance");
+  });
+
+  it("reconnects into a currently eligible household after losing the original membership", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId, userId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "relocated-client" });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
+    const target = await t.run(async ctx => {
+      const membership = (await ctx.db.query("householdMemberships").first())!;
+      await ctx.db.patch(membership._id, { status: "disabled" });
+      const next = await ctx.db.insert("households", { name: "Current household", createdByUserId: userId, ownerUserId: userId, createdAt: Date.now(), updatedAt: Date.now() });
+      await ctx.db.insert("householdMemberships", { householdId: next, userId, role: "owner", status: "active", apiAccessStatus: "enabled", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() });
+      return next;
+    });
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    const args = { ...consent, householdId, label: "Relocated connection", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint };
+    await expect(owner.mutation(api.aiGrants.approve, args)).rejects.toThrow();
+    const { grantId } = await owner.mutation(api.aiGrants.approve, { ...args, householdId: target });
+    expect((await t.run(ctx => ctx.db.get(grantId)))?.householdId).toBe(target);
+    expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: "relocated-client" })).scopes).toEqual(movingScopes);
+    expect((await t.run(ctx => ctx.db.get(original._id)))?.householdId).toBe(householdId);
+  });
+
   it.each([
     ["reconnect-client", "legacy:reconnect-client"],
     ["https://CLIENT.example:443/a/../client.json", "legacy:https://client.example/client.json"],
