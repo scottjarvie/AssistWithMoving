@@ -1,0 +1,2188 @@
+{
+  "baseline": "964eec223b8fb1ec3a3c8ff8926dd4c5806b2076",
+  "description": "Immutable source snapshot for route and functionality preservation. Static facts do not prove runtime or visual acceptance.",
+  "pageCount": 50,
+  "pageCountByArea": {
+    "public": 12,
+    "auth": 2,
+    "product": 34,
+    "other": 2
+  },
+  "pages": [
+    {
+      "file": "src/app/(auth)/sign-in/[[...sign-in]]/page.tsx",
+      "blob": "a7a55a245283f7e3637f6855f491cd4082bb4690",
+      "route": "/sign-in/[[...sign-in]]",
+      "area": "auth",
+      "imports": [
+        "next/link",
+        "next",
+        "@clerk/nextjs",
+        "lucide-react",
+        "@/components/brand-mark",
+        "@/components/ui/button"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(auth)/sign-up/[[...sign-up]]/page.tsx",
+      "blob": "bf7d19b03c246f4e1a007dbcf0db6f5318b1cf18",
+      "route": "/sign-up/[[...sign-up]]",
+      "area": "auth",
+      "imports": [
+        "next/link",
+        "next",
+        "@clerk/nextjs",
+        "lucide-react",
+        "@/components/brand-mark",
+        "@/components/ui/button"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/about/page.tsx",
+      "blob": "1de662909f2c8f3be846aea662acc3cb73c154b5",
+      "route": "/about",
+      "area": "public",
+      "imports": [
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome",
+        "@/lib/product",
+        "@/lib/support"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/ai/page.tsx",
+      "blob": "00f351b2d5aba35124236029618f72d0fccd0a2e",
+      "route": "/ai",
+      "area": "public",
+      "imports": [
+        "next/link",
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome",
+        "@/components/public-page-chrome",
+        "@/components/copy-text-button",
+        "@/components/ui/badge"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/ai/start/page.tsx",
+      "blob": "d302adbea4faf2ed4140341deb69505a7add5224",
+      "route": "/ai/start",
+      "area": "public",
+      "imports": [
+        "next/link",
+        "next",
+        "lucide-react",
+        "@/components/ai-start-actions",
+        "@/components/public-page-chrome",
+        "@/components/ui/badge"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/claims-inventory/page.tsx",
+      "blob": "cf4ff1bb448d05a34b0eec0caf3be3aa997ee99f",
+      "route": "/claims-inventory",
+      "area": "public",
+      "imports": [
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/faq/page.tsx",
+      "blob": "3b74196f617778ff72d37bd2383a879afd035d29",
+      "route": "/faq",
+      "area": "public",
+      "imports": [
+        "next/link",
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome",
+        "@/lib/support"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/features/page.tsx",
+      "blob": "f7d7ce0aaafaa2fa98ea65f3c4d8e534b85588a5",
+      "route": "/features",
+      "area": "public",
+      "imports": [
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/mcp/guide/page.tsx",
+      "blob": "2a978cb50049aaac1a34537283d28541d2b7538f",
+      "route": "/mcp/guide",
+      "area": "public",
+      "imports": [
+        "next/link",
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome",
+        "@/components/copy-text-button",
+        "@/components/ui/badge",
+        "@/components/ui/button"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/page.tsx",
+      "blob": "7fc4dad7a24366e81c406a890ee80adc00b913a0",
+      "route": "/",
+      "area": "public",
+      "imports": [
+        "next/link",
+        "lucide-react",
+        "@/components/public-page-chrome",
+        "@/components/copy-text-button",
+        "@/components/ui/badge",
+        "@/components/ui/button"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/pcs-moving/page.tsx",
+      "blob": "111f0db718e222efb0f4a1f2826599a9d5ae86f7",
+      "route": "/pcs-moving",
+      "area": "public",
+      "imports": [
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/privacy/page.tsx",
+      "blob": "656414c5455de5e47cfcf82dababad34e8f07a57",
+      "route": "/privacy",
+      "area": "public",
+      "imports": [
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome",
+        "@/lib/support"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/terms/page.tsx",
+      "blob": "ac0e955ec52472c5102b14e7588e54058cc992e1",
+      "route": "/terms",
+      "area": "public",
+      "imports": [
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(marketing)/updates/page.tsx",
+      "blob": "9ac9736e7c826b462db9f4e57e7e307a4af36785",
+      "route": "/updates",
+      "area": "public",
+      "imports": [
+        "next",
+        "@/components/public-page-chrome",
+        "@/components/updates-release-list",
+        "@/components/ui/badge",
+        "@/lib/release-notes"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/admin/page.tsx",
+      "blob": "4a7e0be318778d8ad389a5e568ed1728ea18c9bf",
+      "route": "/admin",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/admin-dashboard"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/box-labels/page.tsx",
+      "blob": "c2bda7c94bce44f93d19c480aadb57d722a755ef",
+      "route": "/app/box-labels",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/printable-box-labels"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/boxes/[boxId]/page.tsx",
+      "blob": "369d856340f900d24180044e607284245ac3f024",
+      "route": "/app/boxes/[boxId]",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/box-lookup"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/claim-packet/page.tsx",
+      "blob": "c989ce917dc89ce05cef2db566c00f2068a5ee9f",
+      "route": "/app/claim-packet",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/printable-claim-packet"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/dashboard/page.tsx",
+      "blob": "2f90392d54f911c8dd71aae5dbc617c5811ec407",
+      "route": "/app/dashboard",
+      "area": "product",
+      "imports": [
+        "next/navigation"
+      ],
+      "redirects": [
+        "redirect(\"/app/moves\");"
+      ],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/employer-packet/page.tsx",
+      "blob": "d59ce3a4d9564b740cd32b09c4f50f687ca00ce1",
+      "route": "/app/employer-packet",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/printable-employer-packet"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/items/page.tsx",
+      "blob": "c03083aebb9c8e6944dd8623da07a69b6d5ff6b3",
+      "route": "/app/items",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/global-table-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/load-plan-packet/page.tsx",
+      "blob": "fc84d1237f71db46b4d2fd34472ae14ae8da957f",
+      "route": "/app/load-plan-packet",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/printable-load-plan-packet"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/movable-units/page.tsx",
+      "blob": "3eb359613e89e508d184130a7235f1189f6aa0c7",
+      "route": "/app/movable-units",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/global-table-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/mover-packet/page.tsx",
+      "blob": "0877f56d2fda391957ab705991d3e6eb2c2ab9aa",
+      "route": "/app/mover-packet",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/printable-mover-packet"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/ai-review/page.tsx",
+      "blob": "a738d8782b6961b67d0b3226bf50cc3cd2afeadd",
+      "route": "/app/moves/[moveId]/ai-review",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/ai-review-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/boxes/page.tsx",
+      "blob": "1482882b48d0dc4ffebb0e79f55af559303dee0e",
+      "route": "/app/moves/[moveId]/boxes",
+      "area": "product",
+      "imports": [
+        "next/navigation"
+      ],
+      "redirects": [
+        "redirect(\"/app/movable-units\");"
+      ],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/capture/page.tsx",
+      "blob": "c419597d5047ffd27b55e1b3c439d1198b272d30",
+      "route": "/app/moves/[moveId]/capture",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/capture-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/configure/page.tsx",
+      "blob": "ffaf7c2c7a23edc55f74f58cc8eab30d86d65c73",
+      "route": "/app/moves/[moveId]/configure",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/configure-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/inventory/page.tsx",
+      "blob": "6d8126eb19802d799347804ea29000fa677d9373",
+      "route": "/app/moves/[moveId]/inventory",
+      "area": "product",
+      "imports": [
+        "next/navigation"
+      ],
+      "redirects": [
+        "redirect(\"/app/items\");"
+      ],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/load-plan/page.tsx",
+      "blob": "9b527e1db36d169b380ebb38661137e7b5825c61",
+      "route": "/app/moves/[moveId]/load-plan",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/load-plan-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/move-day/page.tsx",
+      "blob": "84caad76cd84cae3e275fd7a1bf84655dce8e773",
+      "route": "/app/moves/[moveId]/move-day",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/move-day-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/overview/page.tsx",
+      "blob": "9c6172f0bbaf5cf7925b381000878276d467144d",
+      "route": "/app/moves/[moveId]/overview",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/overview-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/packets/page.tsx",
+      "blob": "525dc368220fc5027c838ef39673996cb90ef33b",
+      "route": "/app/moves/[moveId]/packets",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/packets-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/page.tsx",
+      "blob": "54f0df338b747b326e24df9225c468857f0217da",
+      "route": "/app/moves/[moveId]",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/move-summary-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/photos/page.tsx",
+      "blob": "c48e6a60fc07437afd7422e5e491e894d1651e4c",
+      "route": "/app/moves/[moveId]/photos",
+      "area": "product",
+      "imports": [
+        "next/navigation"
+      ],
+      "redirects": [
+        "redirect(\"/app/items\");"
+      ],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/plan/page.tsx",
+      "blob": "c34150ce09eb8e744a0718ec2bde8c099808c7de",
+      "route": "/app/moves/[moveId]/plan",
+      "area": "product",
+      "imports": [
+        "@/components/layout-studio/plan-workspace-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/queue/page.tsx",
+      "blob": "a1ef71047669ea64f26747395b4377b18c138237",
+      "route": "/app/moves/[moveId]/queue",
+      "area": "product",
+      "imports": [
+        "@/components/move-pages/queue-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/sell/page.tsx",
+      "blob": "7a4f260c7a0e17ba103323c28b821be21eeaa0ac",
+      "route": "/app/moves/[moveId]/sell",
+      "area": "product",
+      "imports": [
+        "next/navigation"
+      ],
+      "redirects": [
+        "redirect(\"/app/items\");"
+      ],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/spaces/page.tsx",
+      "blob": "6ab0f4e66a637be1d47ee512fdf59888aee58ec9",
+      "route": "/app/moves/[moveId]/spaces",
+      "area": "product",
+      "imports": [
+        "next/navigation"
+      ],
+      "redirects": [
+        "redirect(`/app/moves/${encodeURIComponent(moveId)}#start`);"
+      ],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/moves/page.tsx",
+      "blob": "caa5bbd62db0b3f3ce41ba3c90c75ac5669ef284",
+      "route": "/app/moves",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/moves-home"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/page.tsx",
+      "blob": "d3869b58a5478b221242ec0a3589b67095d34002",
+      "route": "/app",
+      "area": "product",
+      "imports": [
+        "@/components/home-launchpad"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/pcs-packet/page.tsx",
+      "blob": "f0fef908f7ece8820539c8f6313752d7468cd834",
+      "route": "/app/pcs-packet",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/printable-pcs-packet"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/queue/page.tsx",
+      "blob": "db25f646f537a8cc367f8715da9e1bb88ac28e6e",
+      "route": "/app/queue",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/queue-home"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/spaces-transport/page.tsx",
+      "blob": "149e64908c8f42a63640269bb706b89961d9494f",
+      "route": "/app/spaces-transport",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/spaces-transport-page"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/app/sub-manifest/page.tsx",
+      "blob": "5e067fc54bf907336da625efb98af90a1ed97f18",
+      "route": "/app/sub-manifest",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/printable-sub-manifest",
+        "@/lib/sub-manifest"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/settings/ai-connections/page.tsx",
+      "blob": "6f403b8dbed6d26e9bf8393df6151468c8180d5a",
+      "route": "/settings/ai-connections",
+      "area": "product",
+      "imports": [
+        "next/navigation"
+      ],
+      "redirects": [
+        "redirect(\"/settings/ai\");"
+      ],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/settings/ai/page.tsx",
+      "blob": "c175f308a997826792cc6407ad606b641e8e5388",
+      "route": "/settings/ai",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/ai-connection-manager"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/(product)/settings/page.tsx",
+      "blob": "9f4451e6f32a3237eef372b3984592200f57ad37",
+      "route": "/settings",
+      "area": "product",
+      "imports": [
+        "next",
+        "@/components/settings-feature-sections"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/api/page.tsx",
+      "blob": "48afe1a9d878df7c64cbe83693fd3aa5926ce86b",
+      "route": "/api",
+      "area": "other",
+      "imports": [
+        "next/link",
+        "next",
+        "lucide-react",
+        "@/components/public-page-chrome",
+        "@/components/ui/badge"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    },
+    {
+      "file": "src/app/share/[token]/page.tsx",
+      "blob": "e1f9d686832a4151788de3e68beb052df4f70797",
+      "route": "/share/[token]",
+      "area": "other",
+      "imports": [
+        "next",
+        "@/components/public-share-viewer"
+      ],
+      "redirects": [],
+      "status": "baseline only; not redesigned or runtime-verified"
+    }
+  ],
+  "stateFiles": [
+    {
+      "file": "src/app/(marketing)/error.tsx",
+      "blob": "890b8dd2666935b0eff6ca06d757e32d97f81763"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/layout.tsx",
+      "blob": "d6372a841301ad25b41d2642304336ae1246fcd0"
+    },
+    {
+      "file": "src/app/(product)/app/moves/[moveId]/queue/error.tsx",
+      "blob": "1a9f69758279abd09ba17640756fdb96c392aed0"
+    },
+    {
+      "file": "src/app/(product)/app/queue/error.tsx",
+      "blob": "911ec28a27bc40ae2861332abd1c7766bc6f011f"
+    },
+    {
+      "file": "src/app/(product)/error.tsx",
+      "blob": "3f1f5e9ae56d636c8461d53daa24740dff4fe395"
+    },
+    {
+      "file": "src/app/(product)/layout.tsx",
+      "blob": "663c20fd3d09c395b6147ba07f4eb4112bade847"
+    },
+    {
+      "file": "src/app/error.tsx",
+      "blob": "4f164cd1e69a4476fb2ef7520d31e9977cad1a22"
+    },
+    {
+      "file": "src/app/layout.tsx",
+      "blob": "8cb1425ef85f481b29951ec7114063f5581b7bfb"
+    },
+    {
+      "file": "src/app/loading.tsx",
+      "blob": "c99cc89f7b1b9aaeaab95e8bbf71a7951f06f195"
+    },
+    {
+      "file": "src/app/not-found.tsx",
+      "blob": "66ae29ddab799f8537956fca8b8cd4b736c18672"
+    }
+  ],
+  "components": [
+    {
+      "file": "src/components/account-menu.tsx",
+      "blob": "7243d141b6ec0cccbf7b97e5b9959957d4f1dc62"
+    },
+    {
+      "file": "src/components/account-privacy-controls.tsx",
+      "blob": "a40f3614bfc4bdff384b2e01453a3d646a8d86b7"
+    },
+    {
+      "file": "src/components/add-to-queue-button.tsx",
+      "blob": "2db319de9de18873d39bf737e3ecd0103312aba0"
+    },
+    {
+      "file": "src/components/admin-dashboard.tsx",
+      "blob": "6835056f851d5afbfd3f5cb0983dc32e7f271220"
+    },
+    {
+      "file": "src/components/ai-connection-manager.tsx",
+      "blob": "90e3fcb379de4963b7c52857726f9357d230e3d1"
+    },
+    {
+      "file": "src/components/ai-job-monitor.tsx",
+      "blob": "962f34a4ec316c05551fca6e2e8c88aab9c1cef3"
+    },
+    {
+      "file": "src/components/ai-photo-intake.tsx",
+      "blob": "b948e3212dda42544e2ff184778693231d5efe5d"
+    },
+    {
+      "file": "src/components/ai-planning-suggestions.tsx",
+      "blob": "99d27c6c7e3bcd0f3b3082fb51c16f355878ccee"
+    },
+    {
+      "file": "src/components/ai-review-queue.tsx",
+      "blob": "b3fdca4aa1303027528c65637d279e47d9654030"
+    },
+    {
+      "file": "src/components/ai-start-actions.tsx",
+      "blob": "6141dcd4abe6f0867d626980780751814d0280d9"
+    },
+    {
+      "file": "src/components/ai-text-intake.tsx",
+      "blob": "6cdc7f59c9768c0f1d0725605569fd293c3d426d"
+    },
+    {
+      "file": "src/components/api-key-manager.tsx",
+      "blob": "aaaffc9e7701d6e2427dc1eb37eaf6a9d6946d4a"
+    },
+    {
+      "file": "src/components/app-shell.tsx",
+      "blob": "9fa38b4222aa8f37c730bb3efb4cd90d58168621"
+    },
+    {
+      "file": "src/components/auth-controls.tsx",
+      "blob": "cde56b649a8e5854918182067a43cf9c738b7a67"
+    },
+    {
+      "file": "src/components/billing-readiness-panel.tsx",
+      "blob": "4463d3f55d557c0780a80b9f4a45f3fdc308757a"
+    },
+    {
+      "file": "src/components/box-lookup.tsx",
+      "blob": "5cf439a5eba8d619c51230d20ceeafcade12ada3"
+    },
+    {
+      "file": "src/components/box-qr-code.tsx",
+      "blob": "624110995ec0f3a3e340b90bdce1890c61a9ddc9"
+    },
+    {
+      "file": "src/components/brand-mark.tsx",
+      "blob": "d5d51ec1b4a173990c399f51baa23b49b8610ce4"
+    },
+    {
+      "file": "src/components/bulk-inventory-intake.tsx",
+      "blob": "ffd35a2c562aaf65278b5aeaee451c7e780e161c"
+    },
+    {
+      "file": "src/components/capture-move-switcher.tsx",
+      "blob": "ff13b6eb3b41c91b416af9b817cbef5318306b20"
+    },
+    {
+      "file": "src/components/claims-center-panel.tsx",
+      "blob": "adc46628df8033164658fb3290f904a5ec913475"
+    },
+    {
+      "file": "src/components/configure/location-config-card.tsx",
+      "blob": "918a46c3944b406d5045d273c7bd1bbe433730e2"
+    },
+    {
+      "file": "src/components/configure/move-areas-panel.tsx",
+      "blob": "37d564e2682446527918536fb20973061aebfb5d"
+    },
+    {
+      "file": "src/components/configure/move-details-panel.tsx",
+      "blob": "bd46e361aac7e510f012cd11afd44425b95758ff"
+    },
+    {
+      "file": "src/components/configure/transport-methods-panel.tsx",
+      "blob": "192542ba010c2703794b9b46c3333e558a54ba73"
+    },
+    {
+      "file": "src/components/configure/transport-trips-editor.tsx",
+      "blob": "b9ee8330bd029cc10494442f0ac6ff0e00aeb877"
+    },
+    {
+      "file": "src/components/convex-auth-status.tsx",
+      "blob": "e378aac9b18fccfc976e2909aa8fb68add34d88a"
+    },
+    {
+      "file": "src/components/convex-client-provider.tsx",
+      "blob": "b4cade63fc6ddef24c2ed69ca8a5001c8fe2440d"
+    },
+    {
+      "file": "src/components/copy-text-button.tsx",
+      "blob": "e96be39a76b3074da3435166fc937143fee53f3c"
+    },
+    {
+      "file": "src/components/disposition-pipeline-panel.tsx",
+      "blob": "02c54200ccbc64ccd3ef54330e9c87d7d09dafbd"
+    },
+    {
+      "file": "src/components/documentation-packet-builder.tsx",
+      "blob": "7d6d02ef071084b27cbbbb0554d83496593ebbcd"
+    },
+    {
+      "file": "src/components/estimate-summary.tsx",
+      "blob": "b325824724fc77b803e1fb5140f986de639b6cb2"
+    },
+    {
+      "file": "src/components/evidence-density-panel.tsx",
+      "blob": "9a769e747306420d3f3a65bfecf84a11a77c78af"
+    },
+    {
+      "file": "src/components/feature-flag-controls.tsx",
+      "blob": "56b8232d7d9081e4b4d036cc9698e839ba29f6ab"
+    },
+    {
+      "file": "src/components/feature-unavailable.tsx",
+      "blob": "67de97c480b38a7bdb50c1cf45c4ba0417ca9e11"
+    },
+    {
+      "file": "src/components/first-move-journey.tsx",
+      "blob": "e28b1c3f21d5b31eb52cebaae90a0bacbaa86053"
+    },
+    {
+      "file": "src/components/global-table-page.tsx",
+      "blob": "c9fad5b1e4279cd78a0351435c63f2ef46a2018b"
+    },
+    {
+      "file": "src/components/home-launchpad.tsx",
+      "blob": "627c3191da82e54d15a52b242ef610975fbf9475"
+    },
+    {
+      "file": "src/components/household-member-manager.tsx",
+      "blob": "bde61e92ca66a54d094c03a4bc74c8e95872836d"
+    },
+    {
+      "file": "src/components/identity-bootstrapper.tsx",
+      "blob": "c5c54da6ec2241d6dd892c522ab8b066e71ee368"
+    },
+    {
+      "file": "src/components/ingestion-capture-form.tsx",
+      "blob": "17015d91f5159ea0f52c142c3dd68d5410cd66b7"
+    },
+    {
+      "file": "src/components/ingestion-queue-list.tsx",
+      "blob": "4531c604c7d8e2d25a16ea2e0dd436a2beb24430"
+    },
+    {
+      "file": "src/components/install-prompt.tsx",
+      "blob": "8dec11f43adaf26741551a9955a4520a7cebbcf9"
+    },
+    {
+      "file": "src/components/inventory-duplicate-review.tsx",
+      "blob": "1385d77cde8ad8b25f26d8f26ad2b3d107ea4ed5"
+    },
+    {
+      "file": "src/components/inventory-sort-menu.tsx",
+      "blob": "d820110c3e619c8a81520ddf91251425cd706fb2"
+    },
+    {
+      "file": "src/components/inventory-table.tsx",
+      "blob": "fb87499200e273f5af9ca4895745930bb4872085"
+    },
+    {
+      "file": "src/components/item-detail-sheet.tsx",
+      "blob": "acfdcc972aa790eda31f1eaed899d95444b40d64"
+    },
+    {
+      "file": "src/components/item-hero-image.tsx",
+      "blob": "bd1c0eee6c24918028ac50cfb47791a617ca4bc9"
+    },
+    {
+      "file": "src/components/launch-readiness-panel.tsx",
+      "blob": "a20d0f4af7f6413b47f76e699207df0ef2890e5c"
+    },
+    {
+      "file": "src/components/layout-studio/plan-workspace-page.tsx",
+      "blob": "23709f7accbbd43a891b11706205cc5b60243d27"
+    },
+    {
+      "file": "src/components/load-planner-board.tsx",
+      "blob": "c83e62ddb70dec9c9a8eacbe9dd21a52fc743d45"
+    },
+    {
+      "file": "src/components/media-upload-provider.tsx",
+      "blob": "a6707f2915f9302b6ab72e0b1af6e1c44cf2a0a4"
+    },
+    {
+      "file": "src/components/mobile-capture-action.tsx",
+      "blob": "229279dbe22d5321f53977ef010582c9fa0c4faf"
+    },
+    {
+      "file": "src/components/movable-units-table.tsx",
+      "blob": "ba490199d2a3dc269d91606a84649b3af45e5f93"
+    },
+    {
+      "file": "src/components/move-day-view.tsx",
+      "blob": "9f29e6b043de8f5a02d22f050cc9296aba125d4d"
+    },
+    {
+      "file": "src/components/move-management.tsx",
+      "blob": "799488e0265da681611dae60b442235d435b6dce"
+    },
+    {
+      "file": "src/components/move-operations-nav.tsx",
+      "blob": "42cb373e0b79e78a6357fcca6180a5db6167f603"
+    },
+    {
+      "file": "src/components/move-pages/ai-review-page.tsx",
+      "blob": "a33d1d1747d658d40f491774b0ca202426050ca6"
+    },
+    {
+      "file": "src/components/move-pages/capture-page.tsx",
+      "blob": "9e18d88154dfd4d88fc0db1335c8fadbf869d23c"
+    },
+    {
+      "file": "src/components/move-pages/configure-page.tsx",
+      "blob": "59caa7709b756eaf307618e36cd3b2fa621ade86"
+    },
+    {
+      "file": "src/components/move-pages/inventory-page.tsx",
+      "blob": "f6e097007903ba505d5dc43b1819bbbfe180bd97"
+    },
+    {
+      "file": "src/components/move-pages/load-plan-page.tsx",
+      "blob": "bbe3ed0413a7c9e2b78f62a540cb78caae79aff1"
+    },
+    {
+      "file": "src/components/move-pages/move-day-page.tsx",
+      "blob": "8e5c0be00a1e32c0d85cddfb5ef9a83f061d35c6"
+    },
+    {
+      "file": "src/components/move-pages/move-summary-page.tsx",
+      "blob": "2b8cb7ad71dc4901aaa9ed6d914aa579eba42450"
+    },
+    {
+      "file": "src/components/move-pages/overview-page.tsx",
+      "blob": "b27d2d7a38bb15002305e802d3827f4f0e58bd18"
+    },
+    {
+      "file": "src/components/move-pages/packets-page.tsx",
+      "blob": "b0bd93a721ce2012fdc8b209619dcc39aa870aaa"
+    },
+    {
+      "file": "src/components/move-pages/photos-page.tsx",
+      "blob": "5cb7396fca88a2eae36466dc1ac1085aee3af3b3"
+    },
+    {
+      "file": "src/components/move-pages/queue-page.tsx",
+      "blob": "f510a3f8a08239b48ce33494caa4efda433b763b"
+    },
+    {
+      "file": "src/components/move-pages/sell-page.tsx",
+      "blob": "98df7d9df8f699e2f50617e331991eac5ddfe0d0"
+    },
+    {
+      "file": "src/components/move-pages/spaces-page.tsx",
+      "blob": "9acfc0265bc42d9ae190259f160f85908fe2acfd"
+    },
+    {
+      "file": "src/components/move-participants-manager.tsx",
+      "blob": "a833dcb73ecd912d351ca2b88ba73b69258be1cc"
+    },
+    {
+      "file": "src/components/move-people-manager.tsx",
+      "blob": "48ea91eab2b91e973cf7a577a1d2a971c3d61cc0"
+    },
+    {
+      "file": "src/components/move-planning-results-panel.tsx",
+      "blob": "ed1a97317d64286e60b44a7e599575092c00e873"
+    },
+    {
+      "file": "src/components/move-questions-panel.tsx",
+      "blob": "86bc53261556d7ce35085c667bf5fffd1809153e"
+    },
+    {
+      "file": "src/components/move-switcher.tsx",
+      "blob": "507ffd2eebb462c9d860460d1da9b1c466b5925f"
+    },
+    {
+      "file": "src/components/move-workspace-context.tsx",
+      "blob": "2459c1da636c6b8263a47ece3ad2e6a52c34160e"
+    },
+    {
+      "file": "src/components/move-workspace-header.tsx",
+      "blob": "c29ef31fee8eedb04a8b9d818e559ad64073dfa3"
+    },
+    {
+      "file": "src/components/move-workspace-tab-list.tsx",
+      "blob": "4c4447dfb6b3a026103e28545f4bc99e33501765"
+    },
+    {
+      "file": "src/components/moves-home.tsx",
+      "blob": "79956ffd438f1e5da1bf12bd404ef827c3465b0b"
+    },
+    {
+      "file": "src/components/operational-signals-panel.tsx",
+      "blob": "e14ebf123ec6aa33a723e14da0f5f6479221da41"
+    },
+    {
+      "file": "src/components/packing-debt-dashboard.tsx",
+      "blob": "4912c885433d3c2c9831f74038f87fa4c168f18f"
+    },
+    {
+      "file": "src/components/photo-evidence-strip.tsx",
+      "blob": "2b035acc261626ca98fb17d3b52dfd54ce28cbd7"
+    },
+    {
+      "file": "src/components/photo-lightbox.tsx",
+      "blob": "3bd0c2f99a94880033f85408fd7babf7e95ac053"
+    },
+    {
+      "file": "src/components/photo-picker-dialog.tsx",
+      "blob": "4344b18195576309dcffc01044c5a951883380f3"
+    },
+    {
+      "file": "src/components/photo-review-workspace.tsx",
+      "blob": "24786bb72ba85e9dfafb309e9fc6c103a91ab036"
+    },
+    {
+      "file": "src/components/photo-upload-control.tsx",
+      "blob": "49aa7216cd8b55e905d4ca406364c4c7eb9992a9"
+    },
+    {
+      "file": "src/components/planned-items-panel.tsx",
+      "blob": "808c5794d1e2fa0b75ba4178a19132333f746055"
+    },
+    {
+      "file": "src/components/planning-defaults-panel.tsx",
+      "blob": "be9fea398b77bb1a8e0b1c3e2e226b29bee3301f"
+    },
+    {
+      "file": "src/components/printable-box-labels.tsx",
+      "blob": "3f59cb7e021d779177f8427cbbda800cddc60c48"
+    },
+    {
+      "file": "src/components/printable-claim-packet.tsx",
+      "blob": "dcc8cef4039790e07d45e8b7fb61a09ee8464996"
+    },
+    {
+      "file": "src/components/printable-employer-packet.tsx",
+      "blob": "b5065168e2a5379d5262a309148f90da919a6d88"
+    },
+    {
+      "file": "src/components/printable-load-plan-packet.tsx",
+      "blob": "07e9408a20206bb49c5ea80c027376824e1fe2df"
+    },
+    {
+      "file": "src/components/printable-mover-packet.tsx",
+      "blob": "924db0d67eb1f954a9e176fd26d94fd849db4b63"
+    },
+    {
+      "file": "src/components/printable-pcs-packet.tsx",
+      "blob": "e402487023ef25b0e17604bf588f09f731d80900"
+    },
+    {
+      "file": "src/components/printable-sub-manifest.tsx",
+      "blob": "d4c45eb5ce3c5de2665ee20c765ccc6b4c574be7"
+    },
+    {
+      "file": "src/components/public-nav.tsx",
+      "blob": "cf61c5577fdf4ca955679d6c18b9821044f2f4f5"
+    },
+    {
+      "file": "src/components/public-page-chrome.tsx",
+      "blob": "f1c4c1195b7b75c47c0ecbb5e12aeef4a20214af"
+    },
+    {
+      "file": "src/components/public-share-viewer.tsx",
+      "blob": "9301a5194fcd992ebc3e2d2116a249f1f9891d31"
+    },
+    {
+      "file": "src/components/queue-entry-detail-sheet.tsx",
+      "blob": "bb03b0112dbdd0c551c2461c15114ca9ecaac8d4"
+    },
+    {
+      "file": "src/components/queue-experience-data.tsx",
+      "blob": "74d98e48c956fcd20b867566635a48a0b090ce3e"
+    },
+    {
+      "file": "src/components/queue-experience.tsx",
+      "blob": "712b285fd10fe9764e681f2acd810dcc913a17ca"
+    },
+    {
+      "file": "src/components/queue-home.tsx",
+      "blob": "759fbee3e44e55ac7c52edd24d2bd20b31a254b6"
+    },
+    {
+      "file": "src/components/queue-route-error.tsx",
+      "blob": "2206031f2312d62e8cea1696086187c0e23d07ee"
+    },
+    {
+      "file": "src/components/room-walk-intake.tsx",
+      "blob": "ef39ff1787107a2e092928a0708d714e2453639b"
+    },
+    {
+      "file": "src/components/settings-feature-sections.tsx",
+      "blob": "b5dcb3e3b7ffb44db60b3525332b4bab5e34a23d"
+    },
+    {
+      "file": "src/components/settings-posture-overview.tsx",
+      "blob": "0a4765d92a74cea16db777ceecc6666aaadfb2a4"
+    },
+    {
+      "file": "src/components/shell-section-eyebrow.tsx",
+      "blob": "b5513139d330f5bef2e9ac60e57e52bfd65820f7"
+    },
+    {
+      "file": "src/components/space-select.tsx",
+      "blob": "adc6cd6f7e9d082aedfb7752342db331172e60a4"
+    },
+    {
+      "file": "src/components/spaces-transport-page.tsx",
+      "blob": "3341d643595d0f1b13e855e551d507bb3c26e472"
+    },
+    {
+      "file": "src/components/transport-resources-panel.tsx",
+      "blob": "32a6a01cb15453cb0cedcecd91fad219525647e8"
+    },
+    {
+      "file": "src/components/ui/badge.tsx",
+      "blob": "cacff11dce8d09f7882da68c971b3a7e5be3e78a"
+    },
+    {
+      "file": "src/components/ui/button.tsx",
+      "blob": "1caa2e25d2c69105d2c3a9d963f2e4d31d372ddf"
+    },
+    {
+      "file": "src/components/ui/card.tsx",
+      "blob": "e87667a77d7b6bb904b666e2db549bf97493e9ba"
+    },
+    {
+      "file": "src/components/ui/checkbox.tsx",
+      "blob": "b98e403146bfb28d0f61cf65d635ca073e3d0861"
+    },
+    {
+      "file": "src/components/ui/data-table.tsx",
+      "blob": "fda886a99058ec16eb574da8730274cfb861c5c8"
+    },
+    {
+      "file": "src/components/ui/dialog.tsx",
+      "blob": "4adb54ed4e0556a97568a25e8119794a0da30739"
+    },
+    {
+      "file": "src/components/ui/dropdown-menu.tsx",
+      "blob": "c263ad57ea58d9c9949891fc869993cf6928a3fd"
+    },
+    {
+      "file": "src/components/ui/input.tsx",
+      "blob": "d763cd9ab0e151d4bd8e32b337fbf6278bcdf3fb"
+    },
+    {
+      "file": "src/components/ui/popover.tsx",
+      "blob": "ddcc5441706821ff66d8f97c4e20f17c1d2e1f57"
+    },
+    {
+      "file": "src/components/ui/select.tsx",
+      "blob": "b0b5681f0a6f08176260ab7e1bd4e5401c8aeb26"
+    },
+    {
+      "file": "src/components/ui/separator.tsx",
+      "blob": "d4570908d42d3da4e15111a776f52c88bd0e6911"
+    },
+    {
+      "file": "src/components/ui/sheet.tsx",
+      "blob": "8d0e1d3ecd4b0743045480d81d27cf114bd06b2f"
+    },
+    {
+      "file": "src/components/ui/skeleton.tsx",
+      "blob": "0118624f6e6a64b90c24502a4e2b8c5513098072"
+    },
+    {
+      "file": "src/components/ui/sonner.tsx",
+      "blob": "c49bd4007e56f80a863b29351856fbe0db3eaab2"
+    },
+    {
+      "file": "src/components/ui/status-badges.tsx",
+      "blob": "fd59b1756087285e8e6424b9d770ee98fb52139b"
+    },
+    {
+      "file": "src/components/ui/table.tsx",
+      "blob": "abeaced4b2efac98bf5c50ec2c3791bbc88bc0bd"
+    },
+    {
+      "file": "src/components/ui/tabs.tsx",
+      "blob": "05f469f2afa93c7bc96070aead57021011c7916e"
+    },
+    {
+      "file": "src/components/ui/textarea.tsx",
+      "blob": "04d27f7d17584cd77ba7d6f2377f5be6779f1270"
+    },
+    {
+      "file": "src/components/ui/tooltip.tsx",
+      "blob": "6cb7d7e6d18935bbd02520e1a35fdca85953fced"
+    },
+    {
+      "file": "src/components/updates-release-list.tsx",
+      "blob": "76fa786d5772e0b679353d89b5b9fe6bad4d45da"
+    },
+    {
+      "file": "src/components/use-hash-tab.ts",
+      "blob": "02d3d80a4f0d8f6ca8dc191968e98fe43403db83"
+    },
+    {
+      "file": "src/components/use-scroll-restoration.ts",
+      "blob": "3346b58de3aaf40653a40e7382f323cdb2d72fac"
+    },
+    {
+      "file": "src/components/workspace-nav.tsx",
+      "blob": "a29d41bc519161dd6484a47aaaa5726e247694dc"
+    }
+  ],
+  "dataContracts": [
+    {
+      "file": "convex/_generated/api.d.ts",
+      "blob": "f0ae092dd48b5f21a8db92eed9f0e6e5995ad7c8"
+    },
+    {
+      "file": "convex/_generated/api.js",
+      "blob": "44bf98583204c1f9474b38f84b48659b192eea8b"
+    },
+    {
+      "file": "convex/_generated/dataModel.d.ts",
+      "blob": "f97fd1942151eef5b818c0679f7a12f2c22557b5"
+    },
+    {
+      "file": "convex/_generated/server.d.ts",
+      "blob": "bec05e6816acdfd63e38f63f130d5eecd078d373"
+    },
+    {
+      "file": "convex/_generated/server.js",
+      "blob": "bf3d25ad33f675ef36e9b7064d9fd80c99f22c9c"
+    },
+    {
+      "file": "convex/accountPrivacy.ts",
+      "blob": "18ac0705a4858b3b141189cf56771d960e5aa466"
+    },
+    {
+      "file": "convex/admin.ts",
+      "blob": "797923a3d0c983d6c61337d5d2fd6cb720795624"
+    },
+    {
+      "file": "convex/aiGrants.ts",
+      "blob": "c77910094c162c9ba1f536399fa3dd022ed89a75"
+    },
+    {
+      "file": "convex/aiJobs.ts",
+      "blob": "911b65ecdb52e9ec61d0e0c49b7f71f9a3c1e665"
+    },
+    {
+      "file": "convex/aiPhotoIntake.ts",
+      "blob": "3481345ea9e1da1d12d75ae4a0d1a2b1580a7f1d"
+    },
+    {
+      "file": "convex/aiPlanningSuggestions.ts",
+      "blob": "a88589e250aad3ce9693fb0ae53ab4b87c7833dd"
+    },
+    {
+      "file": "convex/aiTextIntake.ts",
+      "blob": "d6d701cf55b73ba9cd1633382e786f5f65e1bdc0"
+    },
+    {
+      "file": "convex/aiUsage.ts",
+      "blob": "57739b3dbfb3dca26c5004fb2260a363e01b6357"
+    },
+    {
+      "file": "convex/apiKeys.ts",
+      "blob": "ad8bed95714cb368cb7f448babe032a1f22ad8d2"
+    },
+    {
+      "file": "convex/audit.ts",
+      "blob": "39a3d1fb617059880c5efc9dab4014545bfcf898"
+    },
+    {
+      "file": "convex/auth.config.ts",
+      "blob": "59fcbd7bf54560e0bf513db800063b8df01853c0"
+    },
+    {
+      "file": "convex/billing.ts",
+      "blob": "f10805d23a3a2837663526c4827943090c710eda"
+    },
+    {
+      "file": "convex/boxes.ts",
+      "blob": "6b8063b03b547f89fbd07846cbb47f4ae860a590"
+    },
+    {
+      "file": "convex/claimCenter.ts",
+      "blob": "c577c3c43991e10cc1c6bf45521a11bb1c75d59a"
+    },
+    {
+      "file": "convex/claimPackets.ts",
+      "blob": "473360170dc1ca4def0eb7d8fd90fc32c4abca12"
+    },
+    {
+      "file": "convex/clerkIdentity.ts",
+      "blob": "9ce9bd78e9d19b10f7fcdd7fb58873d90bf9c9d8"
+    },
+    {
+      "file": "convex/clerkUsers.ts",
+      "blob": "06a00bb6a138ae7d6a423244ece3492063173541"
+    },
+    {
+      "file": "convex/consolidateMove.ts",
+      "blob": "beaa7acf7c5509dbbce65a7cc1aa1f6067a9ec5e"
+    },
+    {
+      "file": "convex/convex.config.ts",
+      "blob": "145ccf8eab598c78a2681b0d08a8a63c854b59ef"
+    },
+    {
+      "file": "convex/crons.ts",
+      "blob": "5a89c32510cc53fc2eb484e4bb03240cbacbcd68"
+    },
+    {
+      "file": "convex/dispositionPipelines.ts",
+      "blob": "51ce1b078bb79c1aecc556eb0b7025a0c72869ca"
+    },
+    {
+      "file": "convex/documentationProfiles.ts",
+      "blob": "90d5d23bd215ebe1e4d0ab52bbc43400d2514c70"
+    },
+    {
+      "file": "convex/employerPackets.ts",
+      "blob": "0f6ef7fcdac88b3b19d659982a78ac7769de17e8"
+    },
+    {
+      "file": "convex/estimates.ts",
+      "blob": "a93064616a25aa3d6149f98ee89dc6e10b0ddb9d"
+    },
+    {
+      "file": "convex/evidenceDensity.ts",
+      "blob": "b5cce5aec77ecec4bb36b5101398850d8e852963"
+    },
+    {
+      "file": "convex/exports.ts",
+      "blob": "be62d28c416ce53ad39cd5f5584e079ae9f6ec41"
+    },
+    {
+      "file": "convex/featureFlags.ts",
+      "blob": "99a568b66153d464683498f6ba26447a1afdc75b"
+    },
+    {
+      "file": "convex/floorPlans.ts",
+      "blob": "c236d0f38a69622ca6f2f937f53da1270d8cf546"
+    },
+    {
+      "file": "convex/health.ts",
+      "blob": "0f668416ce9cae2f9ffbcbfcf4c0f4b4b7f21651"
+    },
+    {
+      "file": "convex/households.ts",
+      "blob": "6ba70f0011dc2f8e0f45ae71e25ea8e88bf0445c"
+    },
+    {
+      "file": "convex/http.ts",
+      "blob": "909c196d96428abfa65206efa57a0683aabfe81a"
+    },
+    {
+      "file": "convex/httpRoutes/mcp.ts",
+      "blob": "676d6eba69d5535af3e350f3fa961b47bfd20358"
+    },
+    {
+      "file": "convex/imageDerivatives.ts",
+      "blob": "74b3793be7fa5e25b311292b6c433b2a182a358a"
+    },
+    {
+      "file": "convex/ingestionQueue.ts",
+      "blob": "890870083debb85fd4e22099d625a3e395b4e867"
+    },
+    {
+      "file": "convex/inventoryDuplicates.ts",
+      "blob": "07f0fa51ed7e4cdf995030892db849ad4eaf53c1"
+    },
+    {
+      "file": "convex/items.ts",
+      "blob": "8e43f3dfd1be0daef722860ff55908ce05b24d9e"
+    },
+    {
+      "file": "convex/lib/accountPrivacy.ts",
+      "blob": "cab117a57893fd296c9e505f95537f6b2c08ad38"
+    },
+    {
+      "file": "convex/lib/admin.ts",
+      "blob": "311389a3c6d4887833f7c0c059997b479e2a9b0b"
+    },
+    {
+      "file": "convex/lib/adminSummaries.ts",
+      "blob": "14fecadba878339aa5b7e47fad3751c5a5a188c1"
+    },
+    {
+      "file": "convex/lib/aiGrants.ts",
+      "blob": "006ff672eabd0a8ec9fe06c1089a1962d647d45c"
+    },
+    {
+      "file": "convex/lib/aiPlanningSuggestionWorkflow.ts",
+      "blob": "59926120a54119c675bc6115b69a37f112a26cb7"
+    },
+    {
+      "file": "convex/lib/aiProvider.ts",
+      "blob": "5077938bf3b7e71c3f9de5489f4bcd51e815434a"
+    },
+    {
+      "file": "convex/lib/aiUsage.ts",
+      "blob": "6727dd761fbe5cc67770c1cc314690115f6ce8e0"
+    },
+    {
+      "file": "convex/lib/apiKeyAuth.ts",
+      "blob": "e9b88036fd4ee63faba7a70655885146af255d74"
+    },
+    {
+      "file": "convex/lib/apiKeys.ts",
+      "blob": "e37bae7929a164aa537d030636c92f5d6e2998cf"
+    },
+    {
+      "file": "convex/lib/assignmentValidation.ts",
+      "blob": "aedfbba1c7089f969c82700d70c0025285f77d56"
+    },
+    {
+      "file": "convex/lib/audit.ts",
+      "blob": "9fec46e33ddf57961f4d0fbe2bd1ba82251c2b70"
+    },
+    {
+      "file": "convex/lib/auth.ts",
+      "blob": "95818921e741f74cc8878f01ca42c07b73327dde"
+    },
+    {
+      "file": "convex/lib/batchAssign.ts",
+      "blob": "a0fbd6c37b4b311048a540dcb62299029b0cd9b0"
+    },
+    {
+      "file": "convex/lib/billing.ts",
+      "blob": "145587ca1c6b42c6891c5d6f810eb5d4f999af36"
+    },
+    {
+      "file": "convex/lib/boxWeight.ts",
+      "blob": "4adf0673215f114e4959c7a37aca7abf77fbdd3b"
+    },
+    {
+      "file": "convex/lib/claimCenter.ts",
+      "blob": "b9247154aa06ab94c392ed55719b630eb87ace2d"
+    },
+    {
+      "file": "convex/lib/claimPacket.ts",
+      "blob": "95ba701870553464be8fb715dcf781b78ecb69e2"
+    },
+    {
+      "file": "convex/lib/clerk.ts",
+      "blob": "13199366cae6a7cdb91775a77769d6e120c9f0ae"
+    },
+    {
+      "file": "convex/lib/demoSeed.ts",
+      "blob": "9af3b39240e22c179bb8b7b14be80acf9dfb78e8"
+    },
+    {
+      "file": "convex/lib/dispositionPipelines.ts",
+      "blob": "0bb34a55caf3f6fb8fda67b75d95f641dac29186"
+    },
+    {
+      "file": "convex/lib/documentation.ts",
+      "blob": "6bed9a1e7559283c752ab4a830f61cb463ea3e79"
+    },
+    {
+      "file": "convex/lib/employerPacket.ts",
+      "blob": "f8b93350864a8c53494eccb63988e3bc6444e469"
+    },
+    {
+      "file": "convex/lib/estimateEngine.ts",
+      "blob": "8ace584de8ae5fa200e0d47a9b7f5c4e35627c5e"
+    },
+    {
+      "file": "convex/lib/evidenceDensity.ts",
+      "blob": "716e737f628194bd11e52bfb3f7fdaddc104c69f"
+    },
+    {
+      "file": "convex/lib/exportRows.ts",
+      "blob": "be53f9c14c1bf05a27490f7d20021e70599bb613"
+    },
+    {
+      "file": "convex/lib/featureFlags.ts",
+      "blob": "a22c52dbba0e70ec875122c7ea5aff387266ae41"
+    },
+    {
+      "file": "convex/lib/hardDelete.ts",
+      "blob": "8ee9350ae5c81f5a07d6118cf8b79c0e687f8ab6"
+    },
+    {
+      "file": "convex/lib/householdInvitations.ts",
+      "blob": "04e9d1c4d24f9b6788b4bdb02241c7809290f035"
+    },
+    {
+      "file": "convex/lib/householdMembers.ts",
+      "blob": "f64deb76cba8acf308ba7e1a7d056cd28c2794b6"
+    },
+    {
+      "file": "convex/lib/imageDerivatives.ts",
+      "blob": "ae2540b7a73f04936bcd46e4afb37bf0531f1e8b"
+    },
+    {
+      "file": "convex/lib/ingestionQueue.ts",
+      "blob": "757de99a22815fd1388fd21cab025f5c9d30fcb0"
+    },
+    {
+      "file": "convex/lib/inventoryDuplicates.ts",
+      "blob": "0025fc792473afa0132ab603d86f3c9645842675"
+    },
+    {
+      "file": "convex/lib/mcpClientIdentity.ts",
+      "blob": "821c4b10223bb1f065d4c75c8dbf90b2357acc55"
+    },
+    {
+      "file": "convex/lib/mcpEvidenceMedia.ts",
+      "blob": "15691a993c013199fd5d8746829490d15fb75d15"
+    },
+    {
+      "file": "convex/lib/mcpGrantAccess.ts",
+      "blob": "49d38524cda265a809e91ed54714341184b9dd77"
+    },
+    {
+      "file": "convex/lib/mcpIdentity.ts",
+      "blob": "dad40b90003dcb6e2a23dddf31af16165379a89d"
+    },
+    {
+      "file": "convex/lib/mcpLegacyGrantGate.ts",
+      "blob": "df9f3be96305c7757d5b68a56ec083685bdad4ea"
+    },
+    {
+      "file": "convex/lib/mcpMediaIngress.ts",
+      "blob": "fe64dc0c438297ffe062e05ce232a22c70ba543e"
+    },
+    {
+      "file": "convex/lib/mediaStorage.ts",
+      "blob": "bb6363154fcb5e888cb8233362760dc02dc1e2a3"
+    },
+    {
+      "file": "convex/lib/moveAccess.ts",
+      "blob": "41d17d9c14cb4bd2de91d7b2eb50d0a58e94e064"
+    },
+    {
+      "file": "convex/lib/moveDayChecklist.ts",
+      "blob": "e1a8dafbe6712236e43e5d41d8194cc1669a5c93"
+    },
+    {
+      "file": "convex/lib/moveFields.ts",
+      "blob": "5af808de0706ddcab3261f0fd99a3d49ee22d6f5"
+    },
+    {
+      "file": "convex/lib/moveParticipantClaim.ts",
+      "blob": "203b3a5fcfdfe1de86cb31206d07b3ddfacf1e8a"
+    },
+    {
+      "file": "convex/lib/moveParticipantWrite.ts",
+      "blob": "c54c9b0005e212e8f3c3832a01996f3fe9643a10"
+    },
+    {
+      "file": "convex/lib/moveQuestionDocuments.ts",
+      "blob": "6b15f2729980911b16260a6dce0df7fb00bd89bc"
+    },
+    {
+      "file": "convex/lib/moveQuestions.ts",
+      "blob": "20dfa73e92aeb4c61939577130c4dbca29ac5f75"
+    },
+    {
+      "file": "convex/lib/moverPacket.ts",
+      "blob": "c3039093402608ca734e7d033997cc9f3492e61a"
+    },
+    {
+      "file": "convex/lib/observability.ts",
+      "blob": "cad41d300cc8e3ec6c83d11ec6d5a6160483e678"
+    },
+    {
+      "file": "convex/lib/packingDebt.ts",
+      "blob": "3b6882845cfd95ff3982efe9df83cdf01bb9683c"
+    },
+    {
+      "file": "convex/lib/participants.ts",
+      "blob": "ffd499d5f718979ec3af0910ef8d3b3c26ea1126"
+    },
+    {
+      "file": "convex/lib/pcsPacket.ts",
+      "blob": "b88e9e2dfa8dc237883978bc85eb417e880eb58e"
+    },
+    {
+      "file": "convex/lib/permissions.ts",
+      "blob": "25446104ee8cf2e5643ad6c177554b6f059d4368"
+    },
+    {
+      "file": "convex/lib/photoCleanup.ts",
+      "blob": "417bffd43c402fdd42eefa76631252882378c2d9"
+    },
+    {
+      "file": "convex/lib/photoDelivery.ts",
+      "blob": "38653a4a4f5fe0ac7bdca255384605af17662d88"
+    },
+    {
+      "file": "convex/lib/photoIntake.ts",
+      "blob": "bed1873f4297d840c52d3c23972749c6840a9dfe"
+    },
+    {
+      "file": "convex/lib/photoVisibility.ts",
+      "blob": "f0c81bed1ab79af9f1acb59ca6f80c1853524faa"
+    },
+    {
+      "file": "convex/lib/planValidators.ts",
+      "blob": "0071c336d96ea665ec8b6c30b6dcca5e407ec9ea"
+    },
+    {
+      "file": "convex/lib/planningDefaults.ts",
+      "blob": "0dc5df2756f2778dfd8f5f968f98fead2e50a3e6"
+    },
+    {
+      "file": "convex/lib/planningSuggestions.ts",
+      "blob": "5348fa62e63895a10ad529e5546095f4366248e7"
+    },
+    {
+      "file": "convex/lib/publicPackets.ts",
+      "blob": "be8d5c865da6a50bef5689822e4a3867d747b652"
+    },
+    {
+      "file": "convex/lib/publicPlanView.ts",
+      "blob": "e80ae53687ff3241af3665c425e6d770d193b6ef"
+    },
+    {
+      "file": "convex/lib/publicShareComments.ts",
+      "blob": "d1ba9b09d239b09e43d201db2b4c416478d880e9"
+    },
+    {
+      "file": "convex/lib/publicShareStatus.ts",
+      "blob": "14fb429bc6d9fc74c62af78c01ba70023fc42749"
+    },
+    {
+      "file": "convex/lib/queue.ts",
+      "blob": "edc10f543ae94fac557bcefe4ec38eb5cd92121f"
+    },
+    {
+      "file": "convex/lib/queueAccess.ts",
+      "blob": "2a99fda1a2c5aba153642d16809aefdd589de978"
+    },
+    {
+      "file": "convex/lib/queuePhotoAttach.ts",
+      "blob": "fc1047d31fb86b548ec65cd5b760a4a2018fad7c"
+    },
+    {
+      "file": "convex/lib/queueService.ts",
+      "blob": "d76bb7cb89eda88eea083c1f0ed8dc25223db612"
+    },
+    {
+      "file": "convex/lib/restApi.ts",
+      "blob": "4b06e54a0aa2de26ebae048461a9cea493ce1a52"
+    },
+    {
+      "file": "convex/lib/restUploadBody.ts",
+      "blob": "1a6d0102bbb2f0d2ad2131428b61b9ebea4e36aa"
+    },
+    {
+      "file": "convex/lib/roles.ts",
+      "blob": "4d84ead6978d52fd785b27b5cb47b63112f75b2e"
+    },
+    {
+      "file": "convex/lib/shareLinks.ts",
+      "blob": "86695aa7a2669cedec650412ac979a8e8ab80234"
+    },
+    {
+      "file": "convex/lib/subManifest.ts",
+      "blob": "d25551f89916e348db4dc39871f0d9e0773489d6"
+    },
+    {
+      "file": "convex/lib/textIntakeParser.ts",
+      "blob": "3c83c7cabf3eca05042f528bd23286bb2fed8b1c"
+    },
+    {
+      "file": "convex/lib/transportPresets.ts",
+      "blob": "b8be149bad5c741bb9274a5e5ec2656bd8adfb77"
+    },
+    {
+      "file": "convex/mcp.ts",
+      "blob": "f23aebb0a687b0d2f9444ef5c7ab5cf94ad9c1de"
+    },
+    {
+      "file": "convex/mcpArchive.ts",
+      "blob": "622e1ca6ca8e719311eef10c9307909262a23349"
+    },
+    {
+      "file": "convex/mcpClientMetadata.ts",
+      "blob": "810768c1c2ca4e27a863cf1674f6a7713a3d577e"
+    },
+    {
+      "file": "convex/mcpPlanning.ts",
+      "blob": "438160eff2467d58ea6842d1dcdd45376a12440c"
+    },
+    {
+      "file": "convex/mcpQueueWork.ts",
+      "blob": "958113c979340760ac0fb3ebfb2a2168e9919240"
+    },
+    {
+      "file": "convex/mcpSetup.ts",
+      "blob": "9ca69252cba2d6bd71a1733457fc62ce735ce21d"
+    },
+    {
+      "file": "convex/mcpTools.ts",
+      "blob": "594da7db4cbdaab79a67318e9022e3e599c4664e"
+    },
+    {
+      "file": "convex/mcpToolsCanonicalQueue.ts",
+      "blob": "e46a296076dc958a8b85e344546b71102571a512"
+    },
+    {
+      "file": "convex/mcpToolsImages.ts",
+      "blob": "8c2509b578959cbecb9c2d5da089e8d30dae3e54"
+    },
+    {
+      "file": "convex/mcpToolsQueue.ts",
+      "blob": "f611d45471e7dc923b32828bf341b3d17de20df8"
+    },
+    {
+      "file": "convex/mcpToolsSetup.ts",
+      "blob": "d7c7f9e22f1430f6b12f91f7c26c87fe697f25c0"
+    },
+    {
+      "file": "convex/mcpToolsWrite.ts",
+      "blob": "4fa9ed784f93b8eb0e3e809965de2c5a8c15808c"
+    },
+    {
+      "file": "convex/movableUnits.ts",
+      "blob": "ca4f92d64cc6185343a8791f7b23c6aefe9f19ff"
+    },
+    {
+      "file": "convex/moveParticipants.ts",
+      "blob": "1eabbe54d300791d3ebaf660a7068e3f21b2f86a"
+    },
+    {
+      "file": "convex/movePeople.ts",
+      "blob": "c92bdc270897d3263620ee65912d4be519324ac7"
+    },
+    {
+      "file": "convex/movePlanningDefaults.ts",
+      "blob": "d9c85cfaaeae25aab2f7000cab11fa6cfc95d9c2"
+    },
+    {
+      "file": "convex/moveQuestions.ts",
+      "blob": "f5e42ccd44a17960905adf7d3213fc8616714c88"
+    },
+    {
+      "file": "convex/moveSpaces.ts",
+      "blob": "f00aeb324bd2cbe1e5020188bcf1cf683485c503"
+    },
+    {
+      "file": "convex/moverPackets.ts",
+      "blob": "f2981e5244d79cac33f612ea7364bbd0a15c0784"
+    },
+    {
+      "file": "convex/moves.ts",
+      "blob": "ce9a60284bd7fc9fa5d238ea3a2a1ff1fe5be1ab"
+    },
+    {
+      "file": "convex/observability.ts",
+      "blob": "c8886b8f5b4caec886bba8545051d385fa55576a"
+    },
+    {
+      "file": "convex/packingDebt.ts",
+      "blob": "1740555c28dccdf847db68f010663bbdedffb851"
+    },
+    {
+      "file": "convex/pcsPackets.ts",
+      "blob": "41e4348a638683e6cd11657510470c8bfd174282"
+    },
+    {
+      "file": "convex/photos.ts",
+      "blob": "cc632f22fc5f6883c249b3b7e016998c0d97c6c7"
+    },
+    {
+      "file": "convex/planOps.ts",
+      "blob": "a277dd302fd1544fe22519524fd24ac3fcb9a6f1"
+    },
+    {
+      "file": "convex/plannedItems.ts",
+      "blob": "2662e0d939836d3d578abef975d1e38832058936"
+    },
+    {
+      "file": "convex/publicPackets.ts",
+      "blob": "278899ceee416858685101b3d3efdb48bf8bf534"
+    },
+    {
+      "file": "convex/queue.ts",
+      "blob": "b5887c17aaeb8d61a7caf06bf9ad4ba3c8df6b60"
+    },
+    {
+      "file": "convex/rest/documentationProfiles.ts",
+      "blob": "680f3c4fde8a2f30b93a7ddf9ad86cdff3b57244"
+    },
+    {
+      "file": "convex/restApi.ts",
+      "blob": "23b22b4e99349d5cb9d226202760602eacc0c01b"
+    },
+    {
+      "file": "convex/restApiActions.ts",
+      "blob": "46704597d195f8f3e3ea064f344285dd1d5952ec"
+    },
+    {
+      "file": "convex/saleListings.ts",
+      "blob": "6869abc724fbc9160e8a518435104c91d9e8e443"
+    },
+    {
+      "file": "convex/schema.ts",
+      "blob": "6bfb46a5488615868f92c434f0830374e66ceffa"
+    },
+    {
+      "file": "convex/seed.ts",
+      "blob": "0ae239fcd1d0ec29976681a2e0b9186ccddd60dd"
+    },
+    {
+      "file": "convex/shareLinks.ts",
+      "blob": "da570cdb47db0a3552d739607ceb06b831639728"
+    },
+    {
+      "file": "convex/subManifests.ts",
+      "blob": "dd83f4bde112e3ce1b83a1d06abc0e026bf59b33"
+    },
+    {
+      "file": "convex/testSupport.ts",
+      "blob": "539844f4f844c33a6d7b81f80776f9e852082268"
+    },
+    {
+      "file": "convex/transportResources.ts",
+      "blob": "a5a77c3f158d0d67985fc3a1ff40a41897438d02"
+    },
+    {
+      "file": "convex/transportTrips.ts",
+      "blob": "3045829f30b14ed0985166751dd81f14b57b32ea"
+    },
+    {
+      "file": "convex/transportZones.ts",
+      "blob": "d3a5c1e2c381b16c944e2d08d5ff4557b3105fc7"
+    },
+    {
+      "file": "convex/userReconcile.ts",
+      "blob": "6fa122f867051c4b48ffae1255b160bf4fa4715a"
+    },
+    {
+      "file": "convex/users.ts",
+      "blob": "71e9d595c80a08a9edb7fffab6e467dafd612c6c"
+    },
+    {
+      "file": "mcp-server/assistwithmoving-api.mjs",
+      "blob": "670ff1da1d9a592d00f8adee29f12724461edf98"
+    },
+    {
+      "file": "mcp-server/assistwithmoving-mcp.mjs",
+      "blob": "1a05eecfb95084506bba564ff55f8fdecb860064"
+    },
+    {
+      "file": "mcp-server/capabilities.mjs",
+      "blob": "bbe0bd03f67e64213e9ca01bd89d5df838a6990d"
+    },
+    {
+      "file": "mcp-server/example-desktop-config.json",
+      "blob": "dcda01de2e7e961e039d87839c9cb44fb72beebd"
+    },
+    {
+      "file": "mcp-server/media-ingress.mjs",
+      "blob": "56c1ae80e4ea71026bc54d6df5ccaa0e3c6cc352"
+    },
+    {
+      "file": "mcp-server/movingmanifest-mcp.mjs",
+      "blob": "2d3ca63dd6224472bd62ff29f54b55132d8a89ac"
+    },
+    {
+      "file": "mcp-server/package-lock.json",
+      "blob": "7659a7d1c976c84520f99663523069d437be2ba0"
+    },
+    {
+      "file": "mcp-server/package.json",
+      "blob": "76eecd50841abb38474fc19629c1a6ad40cab935"
+    },
+    {
+      "file": "src/app/api/csp-report/route.ts",
+      "blob": "0d045683b375b9d912a775d416dc0b865a7c4b3e"
+    },
+    {
+      "file": "src/app/api/mcp/route.ts",
+      "blob": "da8c7ac3e857ae1fc0b680f1a3aa4f0f4b80353b"
+    },
+    {
+      "file": "src/app/api/page.tsx",
+      "blob": "48afe1a9d878df7c64cbe83693fd3aa5926ce86b"
+    },
+    {
+      "file": "src/app/mcp/connect/route.ts",
+      "blob": "1d5925522645b95a81c301719ed81d27bcffeea0"
+    },
+    {
+      "file": "src/app/mcp/route.ts",
+      "blob": "2046c18757101837bcb85ce48ee2ad59ed869386"
+    },
+    {
+      "file": "src/lib/ai-display.ts",
+      "blob": "e28f72ba84190808050b4be1e13716e9d48c8162"
+    },
+    {
+      "file": "src/lib/ai-review-queue.ts",
+      "blob": "4e9319d2c2cd96c228e34da3a20fb6d7ecd6d176"
+    },
+    {
+      "file": "src/lib/api-keys.ts",
+      "blob": "817567105bff5634d12394c24fe7027dca3ab9d7"
+    },
+    {
+      "file": "src/lib/box-label-printing.ts",
+      "blob": "a620f3369e59c847e04e94401f904f702695f6c0"
+    },
+    {
+      "file": "src/lib/box-labels.ts",
+      "blob": "903ab0f388bbba59f3d970e005e414042385fb69"
+    },
+    {
+      "file": "src/lib/box-options.ts",
+      "blob": "81e261b8b53987912d83910390b6d40587f4bc29"
+    },
+    {
+      "file": "src/lib/box-weight.ts",
+      "blob": "1f357651444ddced8738e9df8ca85cf2620420cc"
+    },
+    {
+      "file": "src/lib/bulk-inventory.ts",
+      "blob": "2ed11f719b17b510aa8f28fedec40092d285f534"
+    },
+    {
+      "file": "src/lib/canonical-domain.ts",
+      "blob": "693452b6dff475403f7ed6024bac9246b3b308af"
+    },
+    {
+      "file": "src/lib/claim-packet.ts",
+      "blob": "1a877b7837d8acdda977937e3acd5863a756c3dd"
+    },
+    {
+      "file": "src/lib/csp-report.ts",
+      "blob": "5d01360a3858290df233e1567095591ee7f79d96"
+    },
+    {
+      "file": "src/lib/documentation-packets.ts",
+      "blob": "74b60daf2c80437631d71b52c05aa2a7f799f57a"
+    },
+    {
+      "file": "src/lib/employer-packet.ts",
+      "blob": "b5cea87866c8d763160e8be554dee54d0a2a1af6"
+    },
+    {
+      "file": "src/lib/feature-flags.ts",
+      "blob": "f6f8a277931dc78ac7b7eaada372ac6b1fa46142"
+    },
+    {
+      "file": "src/lib/inventory-detail.ts",
+      "blob": "6ed8a9dd67eb4b45d8d28dc5b43586e3a37fe15c"
+    },
+    {
+      "file": "src/lib/inventory-filters.ts",
+      "blob": "61c37766eb957a1710afd69b1a49f541155b8570"
+    },
+    {
+      "file": "src/lib/inventory-measurements.ts",
+      "blob": "08543ea9963b3f49b04bbeee310f725bb27d35b3"
+    },
+    {
+      "file": "src/lib/inventory-options.ts",
+      "blob": "4e0be09e4a11ee56d83aa989b6d70a629e02e041"
+    },
+    {
+      "file": "src/lib/inventory-sort.ts",
+      "blob": "f2684f5cce3c98d8fc3fcd65a00fc0165f745ba6"
+    },
+    {
+      "file": "src/lib/inventory-types.ts",
+      "blob": "6d227aa7e51abd8b6f1b311fd26e095dc40c53a1"
+    },
+    {
+      "file": "src/lib/launch-readiness.ts",
+      "blob": "ff7595edbca1e9fc4cc44c1d79fcc18ee0f4cd4d"
+    },
+    {
+      "file": "src/lib/load-locks.ts",
+      "blob": "7f0c617ec2eac61ad9b7eb45702875a6ac5bf012"
+    },
+    {
+      "file": "src/lib/load-plan-packet.ts",
+      "blob": "6d1a03ba830af6326242fc91d4b89b2f17c4788c"
+    },
+    {
+      "file": "src/lib/localLiveAuth.ts",
+      "blob": "469921589ae844e48f4804d841dd01cc1638a1b2"
+    },
+    {
+      "file": "src/lib/mcp-input-limits.ts",
+      "blob": "8cb7488b1b1a5c4135651cd51b32e1cc47883f79"
+    },
+    {
+      "file": "src/lib/mcp-oauth.ts",
+      "blob": "288654a66f81a91b3288431b5095523f5d5ae507"
+    },
+    {
+      "file": "src/lib/mcp-request-auth.ts",
+      "blob": "aa8ce26e1774f1597b4bccf4bc7f5574ba7b6009"
+    },
+    {
+      "file": "src/lib/media-upload.ts",
+      "blob": "e6a9a1813fad5ccd00698177f6aa0a84456ba2ca"
+    },
+    {
+      "file": "src/lib/movable-unit-intake.ts",
+      "blob": "08a49392345b11cb357ee8822ef63deaed453348"
+    },
+    {
+      "file": "src/lib/movable-units.ts",
+      "blob": "1d4a1df57ffbe04f82ca8080e55c94a030919742"
+    },
+    {
+      "file": "src/lib/move-day.ts",
+      "blob": "fe5da9d93848b253b2164b206da8b6c414ee4145"
+    },
+    {
+      "file": "src/lib/move-links.ts",
+      "blob": "047d27bbdda393ce3aa0cc5474a781323f680454"
+    },
+    {
+      "file": "src/lib/move-presets.ts",
+      "blob": "c685412a0594c65b5991426c5624fb3a6f71614d"
+    },
+    {
+      "file": "src/lib/move-timing.ts",
+      "blob": "c3a0630d1c2238d8201c52dc5b6fd4d3d1131c62"
+    },
+    {
+      "file": "src/lib/mover-packet.ts",
+      "blob": "dd54f2370de82321a495440e92fc2e87fd74b2a8"
+    },
+    {
+      "file": "src/lib/mutation-error.ts",
+      "blob": "098f49935db29a8b12ad8c1eb6087e30bfd09ae1"
+    },
+    {
+      "file": "src/lib/pcs-packet.ts",
+      "blob": "4b2dfe5e62bedc966f90b87d907ecbbb61319966"
+    },
+    {
+      "file": "src/lib/photo-review-filters.ts",
+      "blob": "5e50158ae347978b7f2c31bbc2c503e859d78ddd"
+    },
+    {
+      "file": "src/lib/photo-upload.ts",
+      "blob": "b410d98819d572cad0e5ced74e1cfee4a0d08074"
+    },
+    {
+      "file": "src/lib/plan-describe.ts",
+      "blob": "ad105f7743009219633bdb8eb7f2c9b99e09d648"
+    },
+    {
+      "file": "src/lib/plan-geometry/fit.ts",
+      "blob": "16ffc5aeddcaaa166f973987d133432ad2e3ce29"
+    },
+    {
+      "file": "src/lib/plan-geometry/index.ts",
+      "blob": "f39c30760039a4a52d76460f91b348e499508e66"
+    },
+    {
+      "file": "src/lib/plan-geometry/naming.ts",
+      "blob": "b901194b2ddf571cacfca46441ebaec6c4458347"
+    },
+    {
+      "file": "src/lib/plan-geometry/underlay.ts",
+      "blob": "047ba1e8a4864ea6084c81e6ba67f9cd8204423e"
+    },
+    {
+      "file": "src/lib/plan-geometry/units.ts",
+      "blob": "b445cb9763440c152150fa4d7fdbd1796688973b"
+    },
+    {
+      "file": "src/lib/plan-ops.ts",
+      "blob": "e2a19a1e4a4b456eda725d18f13cce890eb5dd3e"
+    },
+    {
+      "file": "src/lib/plan-placements.ts",
+      "blob": "e124d97c84650f6047f4e337a7230ffe01f255e7"
+    },
+    {
+      "file": "src/lib/plan-proposals.ts",
+      "blob": "1b2a7e20c28fc86a4331b42f206adb0a4476db02"
+    },
+    {
+      "file": "src/lib/plan-public.ts",
+      "blob": "b21fa5071e643880625397c6a0ed1c62d096d122"
+    },
+    {
+      "file": "src/lib/plan-templates.ts",
+      "blob": "d42496236afa2d4ec385e0f4d844a955466abd98"
+    },
+    {
+      "file": "src/lib/product.ts",
+      "blob": "69351ecbe7cf240de927680a6122cdf5d385e6d6"
+    },
+    {
+      "file": "src/lib/queue-owner-scope.ts",
+      "blob": "7b0c16f12fe8100a0484ba66e1cc1a64e2329674"
+    },
+    {
+      "file": "src/lib/release-note-contract.ts",
+      "blob": "1d9cdfe312b628f76baf2512d137abc129c37d7b"
+    },
+    {
+      "file": "src/lib/release-notes.ts",
+      "blob": "d5cedf44e4e61e0c268a0de1b5d45926e15feb70"
+    },
+    {
+      "file": "src/lib/runtime-env.ts",
+      "blob": "220c8adf7675055f96bf8acffa48ce7c352565ae"
+    },
+    {
+      "file": "src/lib/security-headers.ts",
+      "blob": "4e80132f7df93845a3f17eec77563f90e0718e66"
+    },
+    {
+      "file": "src/lib/settings-posture.ts",
+      "blob": "4b9527b06c772ab131b15343acfdfc40d2ad8e06"
+    },
+    {
+      "file": "src/lib/share-links.ts",
+      "blob": "e51aca49adb92f166a0fff307141c67dbb0306b1"
+    },
+    {
+      "file": "src/lib/space-kinds.ts",
+      "blob": "055c0ca33ae3624d78e031c8ce4dddd2faf15c75"
+    },
+    {
+      "file": "src/lib/space-organizer.ts",
+      "blob": "de87992414a4703f94eeba3b95da8129cb225e90"
+    },
+    {
+      "file": "src/lib/sub-manifest.ts",
+      "blob": "8e46edcdf0e520c764ade1ec6361a74a2c90a29c"
+    },
+    {
+      "file": "src/lib/support.ts",
+      "blob": "bf52c866ef99e4112e2a24b8a6171bda69d109cb"
+    },
+    {
+      "file": "src/lib/toast-undo.ts",
+      "blob": "6be947d8a12423569df16d338e3afb5afd4e1737"
+    },
+    {
+      "file": "src/lib/toast.ts",
+      "blob": "bc7efebec948126e0bbcc5ec5cc636c597a49529"
+    },
+    {
+      "file": "src/lib/transport-presets.ts",
+      "blob": "8b8a737091f197d20dcbf0716fe971fbed81a23d"
+    },
+    {
+      "file": "src/lib/use-media-query.ts",
+      "blob": "35177fe5bea72e5d4d1396cdb5a5772f6170644c"
+    },
+    {
+      "file": "src/lib/utils.ts",
+      "blob": "bd0c391ddd1088e9067844c48835bf4abcd61783"
+    },
+    {
+      "file": "src/lib/workspace-nav-items.ts",
+      "blob": "6bc6d1a76bbd08602471d67d59cd53cb1c5b0f99"
+    },
+    {
+      "file": "src/lib/workspace-nav.ts",
+      "blob": "625eb3255843d701d6c46acbef2138120292370e"
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+# Raw command captures stay local. Commit concise check results instead.
+*.log
