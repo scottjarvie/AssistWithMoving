@@ -73,6 +73,7 @@ type GrantRow = {
   grantId: Id<"aiGrants">;
   label: string;
   status: "active" | "expired" | "revoked";
+  clientId: string | null;
   scopes: string[];
   scopeChoice?: "full" | "chosen";
   moveScope: "allMoves" | "selectedMoves";
@@ -236,6 +237,7 @@ export function AiConnectionManager() {
   const updateLimits = useMutation(api.aiGrants.updateLimits);
 
   const [label, setLabel] = useState("");
+  const [reconnectGrantId, setReconnectGrantId] = useState<Id<"aiGrants"> | null>(null);
   const [moveScope, setMoveScope] = useState<"allMoves" | "selectedMoves">(
     "allMoves",
   );
@@ -263,6 +265,7 @@ export function AiConnectionManager() {
     selectedScopes.includes(info.scope),
   );
   const grants = grantsResult?.grants ?? [];
+  const reconnectable = grants.filter(grant => grant.clientId && grant.status !== "active");
   const activity = activityResult?.activity ?? [];
   const manualBrief = buildManualQueueBrief(moves[0]?.title ?? null);
 
@@ -290,6 +293,7 @@ export function AiConnectionManager() {
       await approveGrant({
         ...consent,
         ...(grantsResult?.historyFingerprint ? { expectedHistoryFingerprint: grantsResult.historyFingerprint } : {}),
+        ...(reconnectGrantId ? { reconnectGrantId } : {}),
         scopeIntent: boundaryScopes.every(info => selectedScopes.includes(info.scope)) ? "full" : "chosen",
         expiryIntent: expiresInDays === 0 ? "none" : "chosen",
         householdId,
@@ -301,9 +305,12 @@ export function AiConnectionManager() {
         note: note.trim() ? note.trim() : undefined,
       });
       setMessage(
-        "Approved. Nothing is connected until an AI signs in with this grant — sign in from your AI using the endpoint above.",
+        reconnectGrantId
+          ? "Reconnected with the permissions and end date you approved. Retry from your AI."
+          : "Approved. Nothing is connected until an AI signs in with this grant — sign in from your AI using the endpoint above.",
       );
       setLabel("");
+      setReconnectGrantId(null);
       setSelectedScopes(null);
       setExpiresInDays(0);
       setSelectedMoveIds([]);
@@ -348,6 +355,7 @@ export function AiConnectionManager() {
   const canApprove =
     canWriteConsent &&
     Boolean(householdId) &&
+    (!reconnectGrantId || Boolean(grantsResult?.historyFingerprint)) &&
     label.trim().length > 0 &&
     selectedScopes.length > 0 &&
     (moveScope === "allMoves" || selectedMoveIds.length > 0) &&
@@ -456,6 +464,25 @@ export function AiConnectionManager() {
           <Skeleton className="mt-4 h-64 w-full" />
         ) : canWriteConsent ? (
           <div className="mt-4 space-y-5">
+            {reconnectable.length > 0 ? (
+              <div className="space-y-1.5">
+                <label htmlFor="ai-grant-reconnect" className="text-sm font-medium">Connection</label>
+                <select
+                  id="ai-grant-reconnect"
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={reconnectGrantId ?? ""}
+                  onChange={(event) => {
+                    const id = event.target.value as Id<"aiGrants">;
+                    setReconnectGrantId(id || null);
+                    setLabel(reconnectable.find(grant => grant.grantId === id)?.label ?? "");
+                  }}
+                >
+                  <option value="">New connection</option>
+                  {reconnectable.map(grant => <option key={grant.grantId} value={grant.grantId}>Reconnect {grant.label}</option>)}
+                </select>
+                {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client's previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
+              </div>
+            ) : null}
             {households && households.length > 1 ? (
               <div className="space-y-1.5">
                 <label
@@ -679,8 +706,10 @@ export function AiConnectionManager() {
                     ))}
                   </ul>
                   <p className="text-muted-foreground">
-                    Nothing happens until an AI signs in as you using the
-                    endpoint above. You can revoke this at any time and the next
+                    {reconnectGrantId
+                      ? "Approving restores this AI client's access immediately with these choices."
+                      : "Nothing happens until an AI signs in as you using the endpoint above."}{" "}
+                    You can revoke this at any time and the next
                     call is refused.
                   </p>
                 </div>

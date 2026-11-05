@@ -236,8 +236,14 @@ async function governingGrants(
   const rows = looksLikeClientIdMetadataDocument(key)
     ? (await grantHistory(ctx, ownerUserId)).filter(row => row.clientId !== undefined && sameOAuthClientHistory(row.clientId, clientId))
     : (await Promise.all(clientAliases(clientId).map(alias => grantHistory(ctx, ownerUserId, alias)))).flat();
+  // Only explicit person reapproval can supersede this client's prior alias
+  // decisions. Pin exact revisions instead of clock order: any later edit or
+  // refusal increments its revision and must govern again, even in the same ms.
+  const superseded = new Set(rows.flatMap(row => row.reconnectsClientHistory ?? [])
+    .map(row => `${row.grantId}:${row.version}`));
   const decisions = new Map<string, Doc<"aiGrants">>();
   for (const row of rows) {
+    if (superseded.has(`${row._id}:${row.version}`)) continue;
     const previous = decisions.get(row.clientId!);
     if (!previous || compareDecisions(row, previous, now) > 0) decisions.set(row.clientId!, row);
   }
@@ -695,6 +701,7 @@ export const approve = mutation({
     householdId: v.id("households"),
     label: v.string(),
     expectedHistoryFingerprint: v.optional(v.string()),
+    reconnectGrantId: v.optional(v.id("aiGrants")),
     scopes: v.optional(v.array(movingGrantScope)),
     moveScope: v.optional(v.union(v.literal("allMoves"), v.literal("selectedMoves"))),
     moveIds: v.optional(v.array(v.id("moves"))),
@@ -715,9 +722,24 @@ export const approve = mutation({
     }
 
     const history = await grantHistory(ctx, user._id);
-    if (history.some(row => !row.clientId && !grantIsActive(row, Date.now())) && args.expectedHistoryFingerprint !== historyFingerprint(history)) {
+    if ((args.reconnectGrantId || history.some(row => !row.clientId && !grantIsActive(row, Date.now()))) && args.expectedHistoryFingerprint !== historyFingerprint(history)) {
       throw new ConvexError("AI connection history changed. Reload Settings → AI connections and review the current refusal before approving another connection.");
     }
+    const reconnect = args.reconnectGrantId ? history.find(row => row._id === args.reconnectGrantId) : undefined;
+    if (args.reconnectGrantId && !reconnect?.clientId) {
+      throw new ConvexError("Choose one of your previously connected AI clients to reconnect.");
+    }
+    if (reconnect?.clientId) {
+      const current = (await governingGrants(ctx, user._id, reconnect.clientId, Date.now()))[0];
+      if (!current || grantIsActive(current, Date.now())) {
+        throw new ConvexError("This client already has active access. Change its limits instead.");
+      }
+    }
+    const clientHistory = reconnect?.clientId
+      ? history.filter(row => row.clientId && sameOAuthClientHistory(row.clientId, reconnect.clientId!))
+      : [];
+    const reconnectsClientHistory = clientHistory.map(row => ({ grantId: row._id, version: row.version }));
+    const now = Date.now();
     const label = args.label.trim();
     if (!label || label.length > 80) {
       throw new ConvexError("Give this connection a short name you'll recognise.");
@@ -726,12 +748,11 @@ export const approve = mutation({
     if (args.scopeIntent === "preserve") throw new ConvexError("Choose permissions for this new connection.");
     const scopeIntent = args.scopeIntent ?? (args.scopes ? "chosen" : "full");
     const scopes = explicitScopes(args.scopes ?? [...movingScopes], scopeIntent);
-    const expiresAt = explicitExpiry(args.expiryIntent ?? (args.expiresInDays === undefined ? "none" : "chosen"), args.expiresInDays, Date.now());
+    const expiresAt = explicitExpiry(args.expiryIntent ?? (args.expiresInDays === undefined ? "none" : "chosen"), args.expiresInDays, now);
 
     const moveScope = args.moveScope ?? (args.moveIds === undefined ? "allMoves" : "selectedMoves");
     const moveIds = await validateGrantMoves(ctx, { householdId: args.householdId }, moveScope, args.moveIds);
 
-    const now = Date.now();
     const existing = await ctx.db
       .query("aiGrants")
       .withIndex("by_owner_status_updated", (q) =>
@@ -748,6 +769,7 @@ export const approve = mutation({
       ownerUserId: user._id,
       householdId: args.householdId,
       label,
+      ...(reconnect ? { clientId: reconnect.clientId, reconnectsClientHistory } : {}),
       scopes,
       scopeChoice: scopeIntent,
       expiryChoice: expiresAt === undefined ? "none" : "chosen",
@@ -774,7 +796,7 @@ export const approve = mutation({
           scopes.length === 1 ? "operation" : "operations"
         } on ${
           moveScope === "allMoves" ? "all your moves" : `${moveIds?.length} selected`
-        }. Nothing is connected until an AI signs in with it.`,
+        }. ${reconnect ? "You explicitly reconnected this verified AI client, replacing its prior limits and refusal." : "Nothing is connected until an AI signs in with it."}`,
       });
     }
     await recordAuditEvent(ctx, {
@@ -785,7 +807,7 @@ export const approve = mutation({
       action: "ai_grant.approved",
       objectTable: "aiGrants",
       objectId: grantId,
-      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null },
+      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null, ...(reconnect ? { reconnectGrantId: reconnect._id, clientId: reconnect.clientId, reconnectsClientHistory } : {}) },
     });
     return { grantId };
   },

@@ -2289,6 +2289,13 @@ choose fewer permissions, add/change/remove an end date, or revoke the connectio
 Scope reductions write `scopeChoice: "chosen"`; all permissions on writes `"full"`.
 Explicit durations from older frontends are treated as person choices too.
 
+To reconnect a revoked or expired OAuth client, select it under **Connection**
+in the approval form, review the new permissions and end date, then approve.
+An unrelated new approval never overrides a client's refusal. Reconnect requires
+current person consent and the loaded history fingerprint; it binds a new grant
+to that client's existing verified identity on both OAuth doors. The exact prior
+grant revisions stay stored and audited. Later edits or revocations still apply.
+
 Only explicitly full grants follow future scopes. Legacy/unmarked and chosen
 scope arrays and every stored end date remain exact, including automatic old
 durations. No migration, lift, backfill or production record write is performed.
