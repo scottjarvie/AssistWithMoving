@@ -96,7 +96,7 @@ type GrantRow = {
   revokedReason: string | null;
   note: string | null;
   version: number;
-  effectiveAuthority?: { status: "active" | "expired" | "revoked"; scopes: string[] } | null;
+  effectiveAuthority?: { status: "active" | "expired" | "revoked"; scopes: string[]; moveScope: "allMoves" | "selectedMoves"; moveIds?: string[]; expiresAt?: number | null } | null;
 };
 
 type GrantsResult = {
@@ -901,7 +901,7 @@ export function AiConnectionManager() {
                   </div>
                   <div>
                     <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Moves
+                      Saved moves
                     </dt>
                     <dd className="break-words">
                       {grant.moveScope === "allMoves"
@@ -919,7 +919,7 @@ export function AiConnectionManager() {
                   </div>
                   <div>
                     <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Expires
+                      Saved end date
                     </dt>
                     <dd>{formatDay(grant.expiresAt)}</dd>
                   </div>
@@ -966,6 +966,18 @@ export function AiConnectionManager() {
                     ))}
                   </ul>
                   <p className="mt-2 text-sm text-muted-foreground">{grant.effectiveAuthority ? `Resolved connection permissions (${grant.effectiveAuthority.status}): ${grant.effectiveAuthority.scopes.map(scope => boundaryScopes.find(info => info.scope === scope)?.label ?? scope).join(", ") || "None"}.` : "Resolved connection permissions are unavailable for an unbound approval or incomplete history. Reconnect explicitly to establish a current decision."}</p>
+                  {grant.effectiveAuthority ? (
+                    <dl className="mt-2 space-y-2 text-sm">
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-muted-foreground">Effective moves</dt>
+                        <dd className="break-words">{grant.effectiveAuthority.moveScope === "allMoves" ? "All your moves" : (grant.effectiveAuthority.moveIds ?? []).map(id => moveTitleById.get(String(id)) ?? "One selected move").join(", ") || "No moves"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-muted-foreground">Effective end date</dt>
+                        <dd>{formatDay(grant.effectiveAuthority.expiresAt ?? null)}</dd>
+                      </div>
+                    </dl>
+                  ) : null}
                 </div>
 
                 {grant.status !== "revoked" && canWriteConsent ? (

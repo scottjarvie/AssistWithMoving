@@ -2451,3 +2451,11 @@ move context for callers with `moves/read`; it is credential-only when that
 scope is absent. Credential status and expiry are included in either case.
 API-key self-reduction receipts preserve before and after scopes, move limit,
 expiry, status and version privately and atomically, including pause and revoke.
+
+Administrative audit and observability summaries use the same shared privacy
+projection; detailed connection receipts remain available only to their owner.
+Settings distinguishes saved grant choices from the resolved alias scopes,
+selected moves and earliest end date. Current move eligibility rejects either
+archive marker. When widening a grant after it narrowed itself to another
+accessible household's move, the owner must still have access to that retained
+move; its original household is not treated as the move's household.

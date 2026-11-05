@@ -1898,7 +1898,7 @@ it("keeps detailed API-key receipts private and redacts historical shared receip
   expect((await t.run(ctx => ctx.db.get(historical)))?.actorApiKeyId).toBe(apiKeyId);
 });
 
-for (const operation of ["recovery", "widening"] as const) it.each(["household", "move"])("refuses archived %s at " + operation + " submission", async archived => {
+for (const operation of ["recovery", "widening"] as const) it.each(["household", "move", "moveMarker"])("refuses archived %s at " + operation + " submission", async archived => {
   const t = convexTest(schema, modules);
   const { householdId, userId } = await seedOwner(t);
   const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
@@ -1911,7 +1911,7 @@ for (const operation of ["recovery", "widening"] as const) it.each(["household",
   expect((await owner.query(api.aiGrants.listMoveChoices, { householdId })).moves.map(row => row.moveId)).toContain(moveId);
   await t.run(async ctx => {
     if (archived === "household") await ctx.db.patch(householdId, { archivedAt: Date.now() });
-    else await ctx.db.patch(moveId, { status: "archived" });
+    else await ctx.db.patch(moveId, archived === "moveMarker" ? { status: "planning", archivedAt: Date.now() } : { status: "archived" });
   });
   const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
   if (operation === "recovery") await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Stale recovery", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint, moveScope: "selectedMoves", moveIds: [moveId] })).rejects.toThrow(/available/);
@@ -2033,4 +2033,78 @@ it.each(["pause", "revoke"] as const)("preserves API-key limits before narrowing
     expect(row.moveId).toBeUndefined();
   }
   expect((await owner.query(api.aiGrants.listReceipts, {})).page.some(row => row._id === last._id)).toBe(true);
+});
+
+it("keeps connection receipts private through app-admin audit and observability readers", async () => {
+  const t = convexTest(schema, modules);
+  const { userId, householdId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  await t.run(ctx => ctx.db.insert("users", { clerkUserId: "other-app-admin", name: "Other administrator", appRole: "admin", status: "active", createdAt: Date.now(), updatedAt: Date.now(), lastSeenAt: Date.now() }));
+  const admin = t.withIdentity({ subject: "other-app-admin", sid: "sess_other_admin" });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "private-admin-client" });
+  const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  const reduced = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "private-admin-client", expectedVersion: 1, scopes: ["moving.context.read"] });
+  await revokeOwner(owner, { grantId: grant._id, expectedVersion: 2, reason: "PRIVATE owner reason" });
+  const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Private key" });
+  const keyReceipt = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: [] });
+  const result = await admin.mutation(api.admin.getUser, { userId });
+  const status = await admin.mutation(api.observability.status, {});
+  expect(result?.recentAudit.length).toBeGreaterThan(0);
+  expect(status.recentEvents.length).toBeGreaterThan(0);
+  for (const output of [result?.recentAudit, status.recentEvents, status.reviewQueue]) {
+    for (const privateValue of [grant._id, apiKeyId, "PRIVATE owner reason", "private-admin-client", '"before"', '"after"']) expect(JSON.stringify(output)).not.toContain(privateValue);
+  }
+  const source = await t.run(ctx => ctx.db.get(reduced.receipt as Id<"auditLogs">));
+  expect(source?.metadata?.before).toBeDefined();
+  expect((await t.run(ctx => ctx.db.get(keyReceipt.receipt)))?.metadata?.after).toBeDefined();
+  expect((await owner.query(api.aiGrants.listReceipts, {})).page.some(row => row.metadata?.reason === "PRIVATE owner reason")).toBe(true);
+});
+
+it("lets the person widen expiry after a cross-household self-reduction and rechecks retained move access", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId: firstHousehold, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const { moveId, membershipId } = await t.run(async ctx => {
+    const now = Date.now();
+    const householdId = await ctx.db.insert("households", { name: "Second household", ownerUserId: userId, createdByUserId: userId, createdAt: now, updatedAt: now });
+    const membershipId = await ctx.db.insert("householdMemberships", { householdId, userId, role: "owner", status: "active", apiAccessStatus: "enabled", createdAt: now, updatedAt: now });
+    const moveId = await ctx.db.insert("moves", { householdId, title: "Second-household move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+    return { moveId, membershipId };
+  });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "cross-household-client" });
+  const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  expect(grant.householdId).toBe(firstHousehold);
+  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "cross-household-client", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: Date.now() + 600000 });
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: grant._id, expectedVersion: 2, expiryIntent: "none", expiresInDays: null });
+  const widened = (await t.run(ctx => ctx.db.get(grant._id)))!;
+  expect(widened).toMatchObject({ version: 3, moveScope: "selectedMoves", moveIds: [moveId] });
+  expect(widened.expiresAt).toBeUndefined();
+  await t.run(ctx => ctx.db.patch(membershipId, { status: "disabled" }));
+  await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: grant._id, expectedVersion: 3, scopeIntent: "full", scopes: [...movingScopes] })).rejects.toThrow();
+  expect(await t.run(ctx => ctx.db.get(grant._id))).toEqual(widened);
+});
+
+it("refuses participant recovery witnesses marked archived even when their status is planning", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "archived-witness-client" });
+  const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  await revokeOwner(owner, { grantId: grant._id, expectedVersion: 1 });
+  const moveId = await t.run(async ctx => {
+    const now = Date.now();
+    const membership = (await ctx.db.query("householdMemberships").first())!;
+    await ctx.db.patch(membership._id, { status: "disabled" });
+    const moveId = await ctx.db.insert("moves", { householdId, title: "Archived witness", type: "local", status: "planning", archivedAt: now, unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+    await ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "member", accessKind: "moveOnly", participantType: "helper", status: "active", apiAccessStatus: "enabled", invitedByUserId: userId, createdAt: now, updatedAt: now });
+    return moveId;
+  });
+  expect((await owner.query(api.aiGrants.listRecoveryHouseholds, {})).households).toEqual([]);
+  expect((await owner.query(api.aiGrants.listMoveChoices, { householdId })).moves).toEqual([]);
+  const loaded = await owner.query(api.aiGrants.listMine, {});
+  const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+  for (const extra of [{}, { eligibilityMoveId: moveId }, { moveScope: "selectedMoves" as const, moveIds: [moveId] }]) {
+    await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Stale archived witness", reconnectGrantId: grant._id, expectedHistoryFingerprint: loaded.historyFingerprint, ...extra })).rejects.toThrow();
+  }
+  expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
 });
