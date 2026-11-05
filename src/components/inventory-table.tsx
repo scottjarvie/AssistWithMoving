@@ -922,6 +922,7 @@ export function InventoryTable({
               value={row.original.status}
               options={itemStatusOptions}
               ariaLabel={`Status for ${row.original.name}`}
+              className={row.original.status === "missing" || row.original.status === "damaged" ? "border-destructive/50 bg-destructive/10 text-destructive" : undefined}
               renderLabel={enumDisplayLabel}
               onValueChange={(status) =>
                 void patchItem(row.original, { status })

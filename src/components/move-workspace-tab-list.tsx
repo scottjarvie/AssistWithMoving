@@ -7,6 +7,7 @@ import { TabsList, TabsTrigger, useTabsSelection } from "@/components/ui/tabs";
 import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { revealHorizontalItem } from "@/lib/reveal-horizontal-item";
 import { cn } from "@/lib/utils";
 
 type MoveWorkspaceTab = {
@@ -44,20 +45,22 @@ export function MoveWorkspaceTabList({
   sticky?: boolean | "below-operations" | "within-panel";
   className?: string;
 }) {
-  const selectTab = useTabsSelection();
-  const activeTab = tabs.find((tab) => tab.value === activeValue);
+  const selection = useTabsSelection();
+  const selectedValue = selection?.value ?? activeValue;
+  const activeTab = tabs.find((tab) => tab.value === selectedValue);
+  const strip = useRef<HTMLDivElement>(null);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
   const contentsTarget = useRef<string | null>(null);
   const [contentsOpen, setContentsOpen] = useState(false);
   useEffect(() => {
-    if (activeValue) triggers.current.get(activeValue)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [activeValue]);
+    if (selectedValue) revealHorizontalItem(strip.current, triggers.current.get(selectedValue));
+  }, [selectedValue]);
 
   return (
     <>
     <div className={cn(sticky ? `sticky ${sticky === "within-panel" ? "top-0" : "top-(--workspace-navigation-offset)"} z-10 bg-background pb-2 ${sticky === "below-operations" ? "sm:top-[calc(var(--workspace-navigation-offset,4rem)+2.75rem)]" : ""}` : undefined, className)} data-moving-sections>
       <div className="flex min-w-0 items-start gap-2 border-b border-border bg-background py-1">
-        <div className="moving-section-strip min-w-0 flex-1 overflow-x-auto pb-1">
+        <div ref={strip} className="moving-section-strip min-w-0 flex-1 overflow-x-auto pb-1">
         <TabsList variant="line" className="h-11! min-w-max justify-start sm:h-9!" aria-label={ariaLabel}>
           {tabs.map((tab) => {
             const hasCount = tab.count !== undefined;
@@ -79,7 +82,7 @@ export function MoveWorkspaceTabList({
                 {hasCount ? (
                   <Badge
                     variant={
-                      activeValue === tab.value ? "secondary" : "outline"
+                      selectedValue === tab.value ? "secondary" : "outline"
                     }
                     className="h-5 min-w-5 px-1"
                   >
@@ -99,11 +102,11 @@ export function MoveWorkspaceTabList({
           </PopoverTrigger>
           <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))]" onCloseAutoFocus={event => {
             const target = contentsTarget.current;
-            if (target) { event.preventDefault(); const trigger = triggers.current.get(target); trigger?.focus(); trigger?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); contentsTarget.current = null; }
+            if (target) { event.preventDefault(); const trigger = triggers.current.get(target); trigger?.focus({ preventScroll: true }); revealHorizontalItem(strip.current, trigger); contentsTarget.current = null; }
           }}>
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Contents</p>
             <div aria-label={`${ariaLabel} contents`} className="grid grid-cols-2 gap-1">
-              {tabs.map(tab => <Button key={tab.value} type="button" variant={activeValue === tab.value ? "secondary" : "ghost"} className="min-h-11 justify-start whitespace-normal text-left" aria-label={`${tab.label}${tab.count !== undefined ? `: ${tab.countLabel ?? tab.count}` : ""}`} aria-pressed={activeValue === tab.value} onClick={() => { contentsTarget.current = tab.value; selectTab?.(tab.value); setContentsOpen(false); }}>
+              {tabs.map(tab => <Button key={tab.value} type="button" variant={selectedValue === tab.value ? "secondary" : "ghost"} className="min-h-11 justify-start whitespace-normal text-left" aria-label={`${tab.label}${tab.count !== undefined ? `: ${tab.countLabel ?? tab.count}` : ""}`} aria-pressed={selectedValue === tab.value} onClick={() => { contentsTarget.current = tab.value; selection?.select(tab.value); setContentsOpen(false); }}>
                 <MovingSymbol name={tab.icon ?? sectionIcon(tab.value)} className="size-4 shrink-0" />
                 <span>{tab.label}{tab.count !== undefined ? <span className="ml-2 font-mono text-xs text-muted-foreground">{tab.count}</span> : null}</span>
               </Button>)}

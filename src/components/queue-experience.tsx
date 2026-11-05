@@ -1,24 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import {
-  ArrowRight,
-  Bot,
-  Check,
-  ChevronDown,
-  CircleDot,
-  ClipboardList,
-  Clock3,
-  History,
-  LoaderCircle,
-  MessageCircleQuestion,
-  PackageOpen,
-  Route,
-  Send,
-  ShieldCheck,
-  X,
-} from "lucide-react";
+import { useId, useState } from "react";
+import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,7 +72,7 @@ const statePresentation: Record<
     shortDescription: string;
     emptyTitle: string;
     emptyBody: string;
-    icon: typeof Clock3;
+    icon: MovingSymbolName;
     markerClass: string;
     panelClass: string;
   }
@@ -98,36 +82,36 @@ const statePresentation: Record<
     shortDescription: "A fact, file, or decision is blocking the handoff.",
     emptyTitle: "Nothing needs you",
     emptyBody: "When your AI needs one exact answer, it will wait here.",
-    icon: MessageCircleQuestion,
-    markerClass: "bg-orange-500",
-    panelClass: "border-orange-500/35 bg-orange-500/5",
+    icon: "question",
+    markerClass: "bg-warning",
+    panelClass: "border-warning/35 bg-warning/5",
   },
   working: {
     label: "Working",
     shortDescription: "Your chosen AI has claimed the handoff.",
     emptyTitle: "Nothing is being worked",
     emptyBody: "A handoff appears here only after an AI claims it.",
-    icon: LoaderCircle,
-    markerClass: "bg-sky-600",
-    panelClass: "border-sky-600/30 bg-sky-600/5",
+    icon: "ai",
+    markerClass: "bg-evidence",
+    panelClass: "border-evidence/30 bg-evidence/5",
   },
   waitingForAi: {
     label: "Waiting for your AI",
     shortDescription: "Saved and ready; no AI is running yet.",
     emptyTitle: "No handoffs are waiting",
     emptyBody: "Leave a route note when you want your chosen AI to pick up work.",
-    icon: Clock3,
-    markerClass: "bg-amber-500",
-    panelClass: "border-amber-500/35 bg-amber-500/5",
+    icon: "calendar",
+    markerClass: "bg-warning",
+    panelClass: "border-warning/35 bg-warning/5",
   },
   done: {
     label: "Done",
     shortDescription: "A result or terminal outcome is recorded.",
     emptyTitle: "No completed handoffs yet",
     emptyBody: "Finished work remains readable as part of the move record.",
-    icon: Check,
-    markerClass: "bg-emerald-700",
-    panelClass: "border-emerald-700/25 bg-emerald-700/5",
+    icon: "check",
+    markerClass: "bg-success",
+    panelClass: "border-success/25 bg-success/5",
   },
 };
 
@@ -177,9 +161,9 @@ function QueueConnectionNote({
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           {hasKey ? (
-            <ShieldCheck className="size-5" aria-hidden="true" />
+            <MovingSymbol name="shield" className="size-5" aria-hidden="true" />
           ) : (
-            <Bot className="size-5" aria-hidden="true" />
+            <MovingSymbol name="ai" className="size-5" aria-hidden="true" />
           )}
         </span>
         <div className="min-w-0">
@@ -201,7 +185,7 @@ function QueueConnectionNote({
             <details className="group mt-1 text-sm">
               <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 font-medium text-foreground [&::-webkit-details-marker]:hidden">
                 How Queue access works
-                <ChevronDown
+                <MovingSymbol name="chevron"
                   className="size-4 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
                   aria-hidden="true"
                 />
@@ -215,7 +199,7 @@ function QueueConnectionNote({
           )}
         </div>
       </div>
-      <Button asChild variant="outline" size="touch" className="self-start sm:self-center">
+      <Button asChild variant="outline" size="sm" className="min-h-11 self-start sm:min-h-8 sm:self-center">
         <Link href="/settings/ai">Manage AI access</Link>
       </Button>
     </div>
@@ -225,12 +209,14 @@ function QueueConnectionNote({
 function QueueItemCard({
   item,
   onOpen,
+  response, onResponseChange, onProvideInput, busy,
 }: {
   item: QueueDeskItem;
   onOpen: (item: QueueDeskItem) => void;
+  response: string; onResponseChange: (value: string) => void; onProvideInput: () => void; busy: boolean;
 }) {
+  const answerId = useId();
   const presentation = statePresentation[item.state];
-  const Icon = presentation.icon;
   const primaryDetail =
     item.state === "needsYou"
       ? item.requiredAction
@@ -241,10 +227,11 @@ function QueueItemCard({
           : item.resultSummary;
 
   return (
+    <article className="overflow-hidden rounded-md border border-border bg-card">
     <button
       type="button"
       onClick={() => onOpen(item)}
-      className="group relative w-full overflow-hidden rounded-xl border border-border bg-card p-4 text-left shadow-[0_1px_0_color-mix(in_oklch,var(--foreground),transparent_94%)] transition hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transform-none motion-reduce:transition-none"
+      className="group relative w-full overflow-hidden bg-card p-3 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transform-none motion-reduce:transition-none"
     >
       <span
         className={cn("absolute inset-y-0 left-0 w-1", presentation.markerClass)}
@@ -257,7 +244,7 @@ function QueueItemCard({
             presentation.panelClass,
           )}
         >
-          <Icon
+          <MovingSymbol name={presentation.icon}
             className={cn("size-4", item.state === "working" && "animate-spin motion-reduce:animate-none")}
             aria-hidden="true"
           />
@@ -282,7 +269,7 @@ function QueueItemCard({
             </p>
           ) : null}
           {item.state === "working" && item.claimLabel ? (
-            <p className="mt-2 text-xs font-medium text-sky-700 dark:text-sky-300">
+            <p className="mt-2 text-xs font-medium text-evidence">
               Claimed by {item.claimLabel}
             </p>
           ) : null}
@@ -293,12 +280,17 @@ function QueueItemCard({
             </p>
           ) : null}
         </div>
-        <ArrowRight
+        <MovingSymbol name="arrow"
           className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none"
           aria-hidden="true"
         />
       </div>
     </button>
+    {item.state === "needsYou" && item.source === "handoff" ? <form className="space-y-2 border-t border-border px-3 py-2" onSubmit={event => { event.preventDefault(); onProvideInput(); }}>
+      <label htmlFor={answerId} className="text-xs font-medium">Your answer for {item.directive}</label>
+      <div className="flex items-end gap-2"><Textarea id={answerId} value={response} onChange={event => onResponseChange(event.target.value)} maxLength={4000} className="min-h-11 flex-1" placeholder="The smallest answer needed" disabled={busy} /><Button type="submit" variant="outline" size="sm" className="min-h-11 shrink-0 sm:min-h-8" disabled={busy || !response.trim()}><MovingSymbol name={busy ? "reset" : "arrow"} className={busy ? "animate-spin" : undefined} />Send answer</Button></div>
+    </form> : null}
+    </article>
   );
 }
 
@@ -351,14 +343,7 @@ function QueueDetailSheet({
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-6">
-          {item.summary ? (
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Context
-              </p>
-              <p className="mt-2 leading-6">{item.summary}</p>
-            </section>
-          ) : null}
+
 
           {item.state === "needsYou" ? (
             <section className={cn("rounded-xl border p-4", presentation.panelClass)}>
@@ -382,7 +367,7 @@ function QueueDetailSheet({
                     onClick={onProvideInput}
                     disabled={busy || !response.trim()}
                   >
-                    {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
+                    {busy ? <MovingSymbol name="reset" className="animate-spin" aria-hidden="true" /> : <MovingSymbol name="arrow" aria-hidden="true" />}
                     Send answer
                   </Button>
                 </div>
@@ -430,12 +415,21 @@ function QueueDetailSheet({
                 <ul className="mt-3 space-y-2">
                   {item.resultRefs.map((ref, index) => (
                     <li key={`${ref.type ?? "result"}:${ref.id ?? index}`} className="flex items-center gap-2 text-sm">
-                      <PackageOpen className="size-4 text-primary" aria-hidden="true" />
+                      <MovingSymbol name="box" className="size-4 text-primary" aria-hidden="true" />
                       {ref.label ?? ref.type ?? "Move record"}
                     </li>
                   ))}
                 </ul>
               ) : null}
+            </section>
+          ) : null}
+
+          {item.summary ? (
+            <section>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Context
+              </p>
+              <p className="mt-2 leading-6">{item.summary}</p>
             </section>
           ) : null}
 
@@ -455,7 +449,7 @@ function QueueDetailSheet({
                       key={`${ref.type ?? "result"}:${ref.id ?? index}`}
                       className="flex items-center gap-2 text-sm"
                     >
-                      <PackageOpen className="size-4 text-primary" aria-hidden="true" />
+                      <MovingSymbol name="box" className="size-4 text-primary" aria-hidden="true" />
                       {ref.label ?? ref.type ?? "Move record"}
                     </li>
                   ))}
@@ -485,7 +479,7 @@ function QueueDetailSheet({
 
           <section>
             <div className="flex items-center gap-2">
-              <History className="size-4 text-muted-foreground" aria-hidden="true" />
+              <MovingSymbol name="entry" className="size-4 text-muted-foreground" aria-hidden="true" />
               <h3 className="font-semibold">Activity</h3>
             </div>
             {item.source === "capture" ? (
@@ -509,7 +503,7 @@ function QueueDetailSheet({
                 <ol className="space-y-3 border-l border-border pl-4">
                   {activities.map((activity) => (
                     <li key={activity.id} className="relative">
-                      <CircleDot className="absolute -left-[1.35rem] top-0.5 size-3.5 bg-popover text-primary" aria-hidden="true" />
+                      <MovingSymbol name="entry" className="absolute -left-[1.35rem] top-0.5 size-3.5 bg-popover text-primary" aria-hidden="true" />
                       <div className="flex flex-wrap items-baseline gap-x-2">
                         <p className="text-sm font-medium">{activityTypeLabel(activity.type)}</p>
                         <time className="text-xs text-muted-foreground">{formatWhen(activity.createdAt)}</time>
@@ -538,7 +532,7 @@ function QueueDetailSheet({
           {item.source === "handoff" && item.state !== "done" ? (
             <section className="border-t pt-4">
               <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy} className="text-destructive">
-                <X aria-hidden="true" />
+                <MovingSymbol name="close" aria-hidden="true" />
                 Cancel handoff
               </Button>
               <p className="mt-2 text-xs text-muted-foreground">
@@ -611,7 +605,9 @@ export function QueueDesk({
     source: QueueDeskItem["source"];
     id: string;
   } | null>(null);
-  const [response, setResponse] = useState("");
+  const [responses, setResponses] = useState<Record<string, string>>({});
+  const responseKey = (item: QueueDeskItem) => `${item.source}:${item.id}`;
+  const changeResponse = (item: QueueDeskItem, value: string) => setResponses(current => ({ ...current, [responseKey(item)]: value }));
   const [busy, setBusy] = useState(false);
 
   function selectState(state: QueueState) {
@@ -638,17 +634,20 @@ export function QueueDesk({
     }
   }
 
-  async function provideInput() {
-    if (!selectedItem || !response.trim() || busy) return;
+  async function answerItem(item: QueueDeskItem, response: string) {
+    if (item.source !== "handoff" || item.state !== "needsYou" || !response.trim() || busy) return;
     setBusy(true);
-    const saved = await onProvideInput(selectedItem, response.trim());
-    setBusy(false);
-    if (saved) {
-      setResponse("");
-      setSelectedItemKey(null);
-      onSelectItem(null);
-      selectState("waitingForAi");
-    }
+    try {
+      const saved = await onProvideInput(item, response.trim());
+      if (saved) {
+        changeResponse(item, "");
+        if (selectedItemKey?.source === item.source && selectedItemKey.id === item.id) {
+          setSelectedItemKey(null);
+          onSelectItem(null);
+        }
+        selectState("waitingForAi");
+      }
+    } finally { setBusy(false); }
   }
 
   async function cancel() {
@@ -670,7 +669,7 @@ export function QueueDesk({
         <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div>
             <div className="flex items-center gap-2 text-primary">
-              <Route className="size-4" aria-hidden="true" />
+              <MovingSymbol name="route" className="size-4" aria-hidden="true" />
               <p className="text-xs font-semibold uppercase tracking-[0.18em]">Leave a route note</p>
             </div>
             <label htmlFor="queue-directive" className="mt-2 block text-lg font-semibold">
@@ -693,10 +692,10 @@ export function QueueDesk({
             <Button
               onClick={createDirective}
               disabled={!canCreateDirective || busy || !directive.trim()}
-              size="touch"
-              className="w-full"
+              size="sm"
+              className="min-h-11 sm:min-h-8"
             >
-              {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ClipboardList aria-hidden="true" />}
+              {busy ? <MovingSymbol name="reset" className="animate-spin" aria-hidden="true" /> : <MovingSymbol name="queue" aria-hidden="true" />}
               Save handoff
             </Button>
             <p className="text-xs leading-5 text-muted-foreground">
@@ -716,7 +715,6 @@ export function QueueDesk({
         <nav aria-label="Queue states" className="grid grid-cols-2 gap-2 lg:sticky lg:top-4 lg:grid-cols-1">
           {stateOrder.map((state) => {
             const stateMeta = statePresentation[state];
-            const Icon = stateMeta.icon;
             const active = activeState === state;
             return (
               <button
@@ -731,7 +729,7 @@ export function QueueDesk({
               >
                 <span className={cn("absolute inset-y-0 left-0 w-1", stateMeta.markerClass)} aria-hidden="true" />
                 <div className="flex items-center gap-2 pl-1">
-                  <Icon className={cn("size-4 shrink-0", state === "working" && active && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
+                  <MovingSymbol name={stateMeta.icon} className={cn("size-4 shrink-0", state === "working" && active && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
                   <span className="min-w-0 flex-1 text-sm font-semibold">{stateMeta.label}</span>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
                     {active ? visibleItems.length : "—"}
@@ -781,8 +779,11 @@ export function QueueDesk({
                 <QueueItemCard
                   key={`${item.source}:${item.id}`}
                   item={item}
+                  response={responses[responseKey(item)] ?? ""}
+                  onResponseChange={value => changeResponse(item, value)}
+                  onProvideInput={() => void answerItem(item, responses[responseKey(item)] ?? "")}
+                  busy={busy}
                   onOpen={(nextItem) => {
-                    setResponse("");
                     setSelectedItemKey({
                       source: nextItem.source,
                       id: nextItem.id,
@@ -795,7 +796,7 @@ export function QueueDesk({
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-muted/25 px-5 py-12 text-center">
               <span className="mx-auto flex size-11 items-center justify-center rounded-xl border border-border bg-background text-primary">
-                <PackageOpen className="size-5" aria-hidden="true" />
+                <MovingSymbol name="box" className="size-5" aria-hidden="true" />
               </span>
               <h3 className="mt-3 font-semibold">{statePresentation[activeState].emptyTitle}</h3>
               <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">{statePresentation[activeState].emptyBody}</p>
@@ -825,15 +826,14 @@ export function QueueDesk({
         activitiesLoading={activitiesLoading}
         hasMoreActivities={hasMoreActivities}
         onLoadMoreActivities={onLoadMoreActivities}
-        response={response}
-        onResponseChange={setResponse}
-        onProvideInput={provideInput}
+        response={selectedItem ? responses[responseKey(selectedItem)] ?? "" : ""}
+        onResponseChange={value => { if (selectedItem) changeResponse(selectedItem, value); }}
+        onProvideInput={() => { if (selectedItem) void answerItem(selectedItem, responses[responseKey(selectedItem)] ?? ""); }}
         onCancel={cancel}
         busy={busy}
         captureWorkspacePath={captureWorkspacePath}
         savedWorkPath={savedWorkPath}
         onClose={() => {
-          setResponse("");
           setSelectedItemKey(null);
           onSelectItem(null);
         }}

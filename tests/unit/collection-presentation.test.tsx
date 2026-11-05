@@ -9,7 +9,7 @@ type Entry = { id: string; name: string; room: string };
 const entries: Entry[] = [{ id: "synthetic-1", name: "[synthetic] Lamp", room: "Den" }, { id: "synthetic-2", name: "[synthetic] Box", room: "Garage" }, { id: "synthetic-3", name: "[synthetic] Desk", room: "Den" }];
 const columns: ColumnDef<Entry, unknown>[] = [
   { accessorKey: "name", meta: { label: "Name", mobile: "primary" }, header: ({ column }) => <DataTableColumnHeader column={column} label="Name" /> },
-  { accessorKey: "room", meta: { label: "Room", mobile: "primary", groupable: true }, header: ({ column }) => <DataTableColumnHeader column={column} label="Room" /> },
+  { accessorKey: "room", meta: { label: "Room", description: "The recorded room for this synthetic entry.", mobile: "primary", groupable: true }, header: ({ column }) => <DataTableColumnHeader column={column} label="Room" /> },
 ];
 let fixtureKey = 0;
 function Collection({ onOpen }: { onOpen?: (row: Entry) => void }) {
@@ -31,9 +31,12 @@ describe("collection presentations share one record model", () => {
     await user.click(screen.getByRole("button", { name: "Collection options" }));
     const sheet = screen.getByRole("dialog", { name: "Collection options" });
     const phoneViews = within(sheet).getByRole("group", { name: "Phone record view" });
+    expect(within(sheet).getByRole("checkbox", { name: "Name" })).toBeInTheDocument();
+    expect(within(sheet).getByRole("checkbox", { name: /Room/ })).toBeInTheDocument();
+    expect(within(sheet).getByText("The recorded room for this synthetic entry.")).toBeInTheDocument();
     await user.click(within(phoneViews).getByRole("button", { name: "Grid" }));
     await user.click(within(sheet).getByRole("button", { name: "Comfortable" }));
-    await user.click(within(sheet).getByRole("checkbox", { name: "Room" }));
+    await user.click(within(sheet).getByRole("checkbox", { name: /Room/ }));
     await user.click(within(sheet).getByRole("button", { name: "Show records" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Search synthetic records")).toBe(query);
@@ -45,7 +48,7 @@ describe("collection presentations share one record model", () => {
     const reopened = screen.getByRole("dialog", { name: "Collection options" });
     expect(within(reopened).getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
     expect(within(reopened).getByRole("button", { name: "Comfortable" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(reopened).getByRole("checkbox", { name: "Room" })).not.toBeChecked();
+    expect(within(reopened).getByRole("checkbox", { name: /Room/ })).not.toBeChecked();
   });
 
   it("starts with Table and preserves selection and search through List and Grid", async () => {
@@ -101,7 +104,7 @@ describe("collection presentations share one record model", () => {
     expect(screen.getByRole("button", { name: "Density: comfortable" })).toBeInTheDocument();
     expect(screen.getByLabelText("Search synthetic records")).toBe(query);
     fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("checkbox", { name: "Room" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("checkbox", { name: /Room/ }));
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("button", { name: "Sort by Room" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "List" }));

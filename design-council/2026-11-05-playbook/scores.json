@@ -783,6 +783,144 @@
       "filesChanged": false,
       "differentModelReview": true,
       "reviewRecord": "reviews/07-V-opus.md"
+    },
+    {
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "Codex gpt-6.1-sol high",
+      "blindLabel": "W",
+      "evidenceType": "SOURCE_ONLY",
+      "base": "e39a165b7a5dba04dad3caa0026a1dcbd6bad251",
+      "head": "82bf06a211486f81f749dfeab195c452ab4ebe55",
+      "branch": "design/assistwithmoving-council-2026-11-05",
+      "cleanTreeStart": true,
+      "cleanTreeEnd": true,
+      "sourceRubric": {
+        "scale": "0?10; higher is stronger source support, not runtime acceptance",
+        "preservation": 8,
+        "stateAndFocus": 8,
+        "semanticStructure": 8,
+        "testCoverage": 7,
+        "evidenceTooling": 6,
+        "overallSource": 7.4,
+        "runtime": null,
+        "responsiveRendering": null,
+        "print": null,
+        "taste": null
+      },
+      "blockers": [
+        "Closed-Options List queries block the phone capture sequence",
+        "Reader navigation assertion permits a false positive",
+        "Capture preflight does not reject mismatched bundle and candidate heads"
+      ],
+      "disposition": "Request evidence-tool corrections; withhold acceptance",
+      "limits": [
+        "No TypeScript, tests, lint, build, browser or fixture execution performed",
+        "Reported syntax and diff checks were not independently rerun",
+        "Existing PNGs were not used for current visual claims",
+        "Fresh captures remain blocked by host coordination, not passed",
+        "Same-model review does not satisfy the different-model review gate",
+        "Many page families and spatial/load/move-day studies remain unfinished",
+        "Authenticated-shell, full-check and print proof remain outstanding",
+        "No whole-site acceptance; Scott overrides and Opus retains final AI taste judgment once visual evidence exists"
+      ],
+      "filesChanged": false,
+      "exactHead": "82bf06a211486f81f749dfeab195c452ab4ebe55",
+      "differentModelReview": false,
+      "reviewRecord": "reviews/08-W-sol.md"
+    },
+    {
+      "authorModel": "codex gpt-6.1-sol high",
+      "reviewerModel": "claude-opus-5-5",
+      "blindLabel": "W",
+      "head": "82bf06a211486f81f749dfeab195c452ab4ebe55",
+      "base": "e39a165b7a5dba04dad3caa0026a1dcbd6bad251",
+      "evidenceType": "source-only",
+      "sourceRubric": {
+        "preservation": 8.5,
+        "correctness": 7.5,
+        "accessibilitySemantics": 7.5,
+        "testMeaningfulness": 6.5,
+        "evidenceIntegrity": 6.5,
+        "scopeDiscipline": 8.5,
+        "overall": 7.5
+      },
+      "runtime": null,
+      "responsive": null,
+      "print": null,
+      "taste": null,
+      "blockers": [],
+      "preCaptureRequired": [
+        "Capture runner must assert provenance.sourceHead===runnerHead, a clean src/convex/tools tree, and hash the bundle (capture-offline-components.mjs:18-21)"
+      ],
+      "findings": [
+        {
+          "rank": 1,
+          "severity": "medium",
+          "file": "design-council/tools/capture-offline-components.mjs",
+          "line": 18,
+          "summary": "Bundle and runner head are not cross-checked; a capture can be paired with a stale bundle"
+        },
+        {
+          "rank": 2,
+          "severity": "medium",
+          "file": "src/components/collection-view-tabs.tsx",
+          "line": 108,
+          "summary": "Phone strip shows one view at a time but only reveals the selected view after the chooser closes"
+        },
+        {
+          "rank": 3,
+          "severity": "medium-low",
+          "file": "src/components/move-workspace-tab-list.tsx",
+          "line": 53,
+          "summary": "scrollIntoView on mount and on value change can scroll the whole page vertically"
+        },
+        {
+          "rank": 4,
+          "severity": "low-medium",
+          "file": "tests/unit/moving-section-contents.test.tsx",
+          "line": 17,
+          "summary": "No controlled or nested Tabs test; phone Options test cannot prove CSS breakpoint switching"
+        },
+        {
+          "rank": 5,
+          "severity": "low",
+          "file": "design-council/tools/capture-offline-components.mjs",
+          "line": 140,
+          "summary": "Reader probes do not assert route counts, uniqueness, sticky Contents or visual placement"
+        },
+        {
+          "rank": 6,
+          "severity": "low",
+          "file": "src/components/ui/tabs.tsx",
+          "line": 22,
+          "summary": "select is not memoized; stale localValue on controlled-to-uncontrolled switch"
+        },
+        {
+          "rank": 7,
+          "severity": "low",
+          "file": "src/components/public-page-chrome.tsx",
+          "line": 146,
+          "summary": "Doubled top border; Contents targets without headings have no accessible name"
+        },
+        {
+          "rank": 8,
+          "severity": "info",
+          "file": "src/components/inventory-table.tsx",
+          "line": 920,
+          "summary": "Status colour semantics dropped from the status cell"
+        }
+      ],
+      "limits": [
+        "No TypeScript, lint, tests, build or browser run at this head",
+        "Existing PNGs ignored; they show older source",
+        "New tests and capture runner are unexecuted",
+        "Authenticated shell, print, spatial/load/move-day families and whole-site acceptance not covered",
+        "Scott overrides; Opus is final tastemaker once visual evidence exists"
+      ],
+      "filesChanged": false,
+      "exactHead": "82bf06a211486f81f749dfeab195c452ab4ebe55",
+      "differentModelReview": true,
+      "reviewRecord": "reviews/08-W-opus.md"
     }
   ],
   "scottPicks": []

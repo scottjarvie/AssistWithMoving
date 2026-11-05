@@ -6,7 +6,7 @@ import { Tabs as TabsPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
-const TabsSelectionContext = React.createContext<((value: string) => void) | null>(null)
+const TabsSelectionContext = React.createContext<{ value: string; select: (value: string) => void } | null>(null)
 
 export function useTabsSelection() { return React.useContext(TabsSelectionContext) }
 
@@ -19,13 +19,14 @@ function Tabs({
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
   const [localValue, setLocalValue] = React.useState(defaultValue ?? "")
-  function select(next: string) {
+  const select = React.useCallback((next: string) => {
     if (next === (value ?? localValue)) return
     if (value === undefined) setLocalValue(next)
     onValueChange?.(next)
-  }
+  }, [value, localValue, onValueChange])
+  const selection = React.useMemo(() => ({ value: value ?? localValue, select }), [value, localValue, select])
   return (
-    <TabsSelectionContext.Provider value={select}>
+    <TabsSelectionContext.Provider value={selection}>
     <TabsPrimitive.Root
       value={value ?? localValue}
       onValueChange={select}

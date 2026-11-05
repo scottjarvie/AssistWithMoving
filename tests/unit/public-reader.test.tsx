@@ -27,6 +27,7 @@ describe("public field guide", () => {
       const section = document.getElementById(link.getAttribute("href")!.slice(1));
       expect(section?.tagName).toBe("SECTION");
       expect(section?.closest("article")).not.toBeNull();
+      expect(section).toHaveAccessibleName(link.textContent!);
     }
   });
   it("links every reading section and retains nested content, actions and the workflow explanation", () => {

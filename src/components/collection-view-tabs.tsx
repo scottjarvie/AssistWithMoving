@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { revealHorizontalItem } from "@/lib/reveal-horizontal-item";
 import { MovingSymbol } from "@/components/moving-symbol";
 
 type SavedView<T> = { id: string; label: string; snapshot: T };
@@ -81,6 +82,7 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
   const [chooserOpen, setChooserOpen] = useState(false);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
+  const strip = useRef<HTMLDivElement>(null);
   const saveButton = useRef<HTMLButtonElement>(null);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
   const chooserTarget = useRef<string | null>(null);
@@ -93,11 +95,14 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
   const baseline = selected && selection && selected.id === selection.id && selected.id.startsWith("built-in:") ? selection.snapshot : selected?.snapshot;
   const edited = Boolean(selected && signature(baseline) !== signature(snapshot));
   const isSaved = selected?.id.startsWith("saved:") ?? false;
+  useEffect(() => {
+    if (selected?.id) revealHorizontalItem(strip.current, triggers.current.get(selected.id));
+  }, [selected?.id, selected?.label, edited]);
   function selectView(view: SavedView<T>) { setSelection(view); onApply(view.snapshot); setMessage(""); }
   function report(persisted: boolean, action: string) { setMessage(persisted ? `${action} on this browser.` : `${action} for this session; browser storage is unavailable.`); }
   return <div className="space-y-2">
     <div className="flex min-w-0 items-start gap-2 border-b border-border pb-2">
-    <div role="group" aria-label="Inventory views" className="moving-view-strip min-w-0 flex-1 overflow-x-auto sm:overflow-visible">
+    <div ref={strip} role="group" aria-label="Inventory views" className="moving-view-strip min-w-0 flex-1 overflow-x-auto sm:overflow-visible">
       <div className="moving-view-items">{allViews.map(view => <Button key={view.id} ref={element => { if (element) triggers.current.set(view.id, element); else triggers.current.delete(view.id); }} type="button" size="sm" variant={selected?.id === view.id ? "secondary" : "ghost"} className="h-auto min-h-11 min-w-0 shrink-0 whitespace-normal break-words py-1.5 text-left sm:min-h-8 sm:max-w-full" title={view.description ?? "Saved on this browser"} aria-pressed={selected?.id === view.id} onClick={() => selectView(view)}>
         {view.label}{selected?.id === view.id && edited ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-accent" /><span className="sr-only">modified</span></> : null}{typeof view.count === "number" ? <span className="font-mono text-xs text-muted-foreground">{view.count}</span> : null}
       </Button>)}</div>
@@ -105,7 +110,7 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
     <Popover open={chooserOpen} onOpenChange={setChooserOpen}><PopoverTrigger asChild><Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0 sm:hidden" aria-label={`All ${allViews.length} views`}><MovingSymbol name="contents" className="size-4" />Views</Button></PopoverTrigger>
       <PopoverContent align="end" className="max-h-96 w-[min(24rem,calc(100vw-2rem))] overflow-y-auto" onCloseAutoFocus={event => {
         const id = chooserTarget.current;
-        if (id) { event.preventDefault(); const trigger = triggers.current.get(id); trigger?.focus(); trigger?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); chooserTarget.current = null; }
+        if (id) { event.preventDefault(); const trigger = triggers.current.get(id); trigger?.focus({ preventScroll: true }); revealHorizontalItem(strip.current, trigger); chooserTarget.current = null; }
       }}><p className="mb-2 text-xs font-medium text-muted-foreground">All {allViews.length} views</p><div className="grid grid-cols-2 gap-1">{allViews.map(view => <Button key={view.id} type="button" variant={selected?.id === view.id ? "secondary" : "ghost"} className="min-h-11 min-w-0 justify-start whitespace-normal break-words text-left" onClick={() => { chooserTarget.current = view.id; selectView(view); setChooserOpen(false); }}>{view.label}</Button>)}</div></PopoverContent>
     </Popover>
     </div>

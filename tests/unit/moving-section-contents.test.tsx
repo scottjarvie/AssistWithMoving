@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 
@@ -14,6 +14,30 @@ function Sections() {
 }
 
 describe("section contents fallback", () => {
+  it("requests a controlled change and respects the owner's refusal", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    render(<Tabs value="first" onValueChange={onValueChange} activationMode="manual"><MoveWorkspaceTabList tabs={[{ value: "first", label: "First" }, { value: "second", label: "Second" }]} /><TabsContent value="first">First panel</TabsContent><TabsContent value="second">Second panel</TabsContent></Tabs>);
+    await user.click(screen.getByRole("button", { name: "All 2 sections" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Second" }));
+    expect(onValueChange).toHaveBeenCalledWith("second");
+    expect(screen.getByRole("tab", { name: "First" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("First panel");
+    await user.click(screen.getByRole("button", { name: "All 2 sections" }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "First" })).toHaveAttribute("aria-pressed", "true");
+  });
+  it("isolates nested selections and reports the uncontrolled selected section", async () => {
+    const user = userEvent.setup();
+    render(<Tabs defaultValue="outer-first"><MoveWorkspaceTabList ariaLabel="Outer sections" tabs={[{ value: "outer-first", label: "Outer first" }, { value: "outer-second", label: "Outer second" }]} /><TabsContent value="outer-first"><Tabs defaultValue="inner-first" activationMode="manual"><MoveWorkspaceTabList ariaLabel="Inner sections" tabs={[{ value: "inner-first", label: "Inner first", description: "Inner first explanation" }, { value: "inner-second", label: "Inner second", description: "Inner second explanation" }, { value: "inner-third", label: "Inner third" }]} /><TabsContent value="inner-first">First inner panel</TabsContent><TabsContent value="inner-second">Second inner panel</TabsContent></Tabs></TabsContent><TabsContent value="outer-second">Second outer panel</TabsContent></Tabs>);
+    await user.click(screen.getByRole("button", { name: "All 3 sections" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Inner second" }));
+    expect(screen.getByRole("tab", { name: "Outer first" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Inner second" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Inner second explanation")).toBeVisible();
+    expect(screen.queryByText("Inner first explanation")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "All 3 sections" }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Inner second" })).toHaveAttribute("aria-pressed", "true");
+  });
   it("selects an uncontrolled destination explicitly even with manual tab activation", async () => {
     const user = userEvent.setup();
     render(<Tabs defaultValue="first" activationMode="manual"><MoveWorkspaceTabList tabs={[{ value: "first", label: "First" }, { value: "second", label: "Second" }]} /><TabsContent value="first">First panel</TabsContent><TabsContent value="second">Second panel</TabsContent></Tabs>);

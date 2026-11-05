@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) ? Candidate V: both judges withhold visual acceptance; phone controls, reader navigation, Close and evidence corrections are in source, awaiting coordinated checks and fresh captures.
+[Open newest-first gallery](gallery.html) ? W corrections + initial Queue row answers pass TypeScript, 13 suites/158 tests and focused lint; fresh captures remain held for explicit SITE clearance.
 
 # Moving design council status
 

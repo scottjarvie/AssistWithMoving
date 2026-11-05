@@ -94,6 +94,44 @@ function renderDesk(
 }
 
 describe("QueueDesk", () => {
+  it("answers the exact canonical handoff in its row without opening a sheet", async () => {
+    const user = userEvent.setup();
+    const item = queueItem("needsYou", { id: "synthetic-question", directive: "[synthetic] Choose the receiving room", version: 7 });
+    const onProvideInput = vi.fn().mockResolvedValue(true);
+    const onSelectItem = vi.fn();
+    renderDesk({ items: [item], onProvideInput, onSelectItem });
+    await user.type(screen.getByLabelText("Your answer for [synthetic] Choose the receiving room"), "  Synthetic study  ");
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+    expect(onProvideInput).toHaveBeenCalledWith(item, "Synthetic study");
+    expect(onSelectItem).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the same unsent answer across the row, sheet and state navigation", async () => {
+    const user = userEvent.setup();
+    renderDesk();
+    const answerName = "Your answer for needsYou route note";
+    await user.type(screen.getByLabelText(answerName), "Synthetic unfinished answer");
+    await user.click(screen.getByRole("button", { name: /needsYou route note/i }));
+    expect(screen.getByLabelText("Your answer")).toHaveValue("Synthetic unfinished answer");
+    await user.type(screen.getByLabelText("Your answer"), " from sheet");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByLabelText(answerName)).toHaveValue("Synthetic unfinished answer from sheet");
+    await user.click(screen.getByRole("button", { name: /Working/ }));
+    await user.click(screen.getByRole("button", { name: /Needs You/ }));
+    expect(screen.getByLabelText(answerName)).toHaveValue("Synthetic unfinished answer from sheet");
+  });
+
+  it("keeps a rejected answer draft and never offers a canonical answer for capture adapters", async () => {
+    const user = userEvent.setup();
+    const onProvideInput = vi.fn().mockResolvedValue(false);
+    renderDesk({ items: [queueItem("needsYou"), queueItem("needsYou", { id: "synthetic-capture", source: "capture", directive: "[synthetic] Capture review" })], onProvideInput });
+    expect(screen.queryByLabelText("Your answer for [synthetic] Capture review")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Your answer for needsYou route note"), "Synthetic retained input");
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+    expect(screen.getByLabelText("Your answer for needsYou route note")).toHaveValue("Synthetic retained input");
+    expect(screen.getByRole("button", { name: "Send answer" })).toBeEnabled();
+  });
   it("uses exactly the four person-facing Queue states", () => {
     renderDesk();
 

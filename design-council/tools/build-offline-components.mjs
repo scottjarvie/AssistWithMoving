@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { build } from "esbuild";
 import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
@@ -40,7 +41,9 @@ const { css } = await postcss([tailwind({ base: repo })]).process(fs.readFileSyn
 const fontRoot = path.join(repo, "node_modules/next/dist/next-devtools/server/font");
 const fonts = [["CouncilGeist", "geist-latin.woff2"], ["CouncilMono", "geist-mono-latin.woff2"]].map(([name, file]) => `@font-face{font-family:${name};src:url(data:font/woff2;base64,${fs.readFileSync(path.join(fontRoot,file)).toString("base64")}) format("woff2");font-style:normal;font-weight:100 900;font-display:block}`).join("");
 const provenance = { sourceHead, sourceDirty, generatedAt: new Date().toISOString(), rendering: "Client-rendered actual components; fictional query/auth/navigation boundary; app CSS; no authenticated shell or live data; all fixture writes refused; links show local destination notices", typography: "Latin Geist and Geist Mono bundled with Next devtools, not the app next/font build or its fallback metrics", explicitlyEmptyQueries: ["photos.listForMove", "photos.listForItem", "apiKeys.listForHousehold", "movePeople.listForMove", "moveSpaces.listForMove", "transportResources.listForMoveWithZones"], fixtureLayout: "The offline fixture has no authenticated header. Its workspace navigation offset is zero; public pages render their actual header. Fragment links stay local; all outside destinations are blocked.", runtimeDiagnostics: "Capture must record __fixtureUnknownQueries, __fixtureWritesBlocked and __fixtureNavigationAttempts; unknown queries are not accepted evidence" };
-fs.writeFileSync(path.join(output, "provenance.json"), JSON.stringify(provenance, null, 2)+"\n");
+
 const client = fs.readFileSync(path.join(output, "components.js"), "utf8").replace(/<\/script/gi, "<\\/script");
 fs.writeFileSync(path.join(output, "index.html"), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'"><title>Moving offline component evidence</title><style>${css}${fonts}:root{--font-geist-sans:CouncilGeist;--font-geist-mono:CouncilMono;--workspace-navigation-offset:0px}html,body{margin:0;min-height:100%;background:var(--background);color:var(--foreground)}</style><script>document.documentElement.classList.toggle("dark",new URLSearchParams(location.search).get("theme")==="dark");window.__fixtureWritesBlocked=0;window.__fixtureUnknownQueries=[];window.__fixtureNavigationAttempts=[];</script></head><body><div id="root"></div><script>${client}</script></body></html>`);
+provenance.artifactHashes = Object.fromEntries(["index.html", "components.js"].map(file => [file, createHash("sha256").update(fs.readFileSync(path.join(output, file))).digest("hex")]));
+fs.writeFileSync(path.join(output, "provenance.json"), JSON.stringify(provenance, null, 2)+"\n");
 console.log(JSON.stringify({ output, ...provenance }));

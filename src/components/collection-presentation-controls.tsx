@@ -65,11 +65,11 @@ export function CollectionPresentationControls<TData>({ table, preferences, onCh
       </Popover> : null}
       <Sheet><SheetTrigger asChild><Button type="button" size="sm" variant="ghost" className="min-h-11 md:hidden" aria-label="Collection options"><MovingSymbol name={preferences.view} className="size-4" />Options</Button></SheetTrigger>
         <SheetContent className="collection-controls flex flex-col data-[side=right]:w-full data-[side=right]:sm:max-w-md">
-          <SheetHeader><SheetTitle>Collection options</SheetTitle><SheetDescription>Change presentation, density and columns. Search, filters, sorting and selection stay in place.</SheetDescription></SheetHeader>
+          <SheetHeader><SheetTitle>Collection options</SheetTitle><SheetDescription>Choose your view, density and table columns.</SheetDescription></SheetHeader>
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4">
             <fieldset><legend className="mb-2 text-sm font-medium">Presentation</legend><div role="group" aria-label="Phone record view" className="flex gap-1">{viewButtons()}</div></fieldset>
             <fieldset><legend className="mb-2 text-sm font-medium">Density</legend><div className="flex gap-1">{(["compact", "comfortable"] as const).map(density => <Button key={density} type="button" size="sm" variant={preferences.density === density ? "secondary" : "ghost"} className="min-h-11" aria-pressed={preferences.density === density} onClick={() => onChange({ density })}>{density === "compact" ? "Compact" : "Comfortable"}</Button>)}</div></fieldset>
-            {showColumns ? <fieldset><legend className="text-sm font-medium">Columns</legend>{columnChoices()}</fieldset> : null}
+            {showColumns ? <fieldset><legend className="text-sm font-medium">Table columns</legend>{columnChoices()}</fieldset> : null}
           </div>
           <SheetFooter><SheetClose asChild><Button type="button" size="sm" className="min-h-11">Show records</Button></SheetClose></SheetFooter>
         </SheetContent>
