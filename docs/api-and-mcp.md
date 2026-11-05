@@ -2307,7 +2307,12 @@ the loaded owner-management revision are required, and the original selected
 record is preserved in private owner history before reuse. The paginated
 `aiGrants.listSourceHistory` query returns complete originals only to the signed-in
 person owner, without requiring household admin permission. Household audit
-contains the approval summary, never the private source document. Only that client's indexed
+contains the approval summary, never client identity, superseded source IDs or
+revisions, or the private source document. Owner settings and activity queries
+also require a person session; OAuth callers cannot read sibling connections.
+Move-only participants can select a revoked or expired client in Settings and
+explicitly reconnect using verified current participation, even without a
+household membership. Existing role and move ceilings still apply. Only that client's indexed
 recovered decision becomes authoritative; other incomplete histories stay
 closed. Recovered revisions are negative and decrease on edits and reconnects;
 clients must echo the exact version they receive. Positive legacy versions can

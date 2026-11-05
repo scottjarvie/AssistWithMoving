@@ -630,6 +630,7 @@ export const describeBoundary = query({
 export const listMine = query({
   args: { cursor: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const now = Date.now();
     const page = await ctx.db
@@ -673,6 +674,7 @@ export const listSourceHistory = query({
 export const listActivity = query({
   args: { grantId: v.optional(v.id("aiGrants")), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
     const limit = Math.min(Math.max(Math.trunc(args.limit ?? 25), 1), MAX_ACTIVITY_ROWS);
     const rows = args.grantId
@@ -752,6 +754,27 @@ async function requireConnectionCapacity(ctx: MutationCtx, ownerUserId: Id<"user
   }
 }
 
+/** Membership or an independently verified current move-only participation. */
+async function requireGrantEligibility(ctx: MutationCtx, user: Doc<"users">, householdId: Id<"households">, allowParticipant: boolean) {
+  if (user.status !== "active") throw new ConvexError("An active profile is required to increase access.");
+  const membership = await ctx.db.query("householdMemberships")
+    .withIndex("by_household_user", q => q.eq("householdId", householdId).eq("userId", user._id)).unique();
+  if (membership?.status === "active") return "member" as const;
+  if (allowParticipant) {
+    const participants = await ctx.db.query("moveParticipants")
+      .withIndex("by_user_status", q => q.eq("userId", user._id).eq("status", "active"))
+      .take(MAX_GRANT_HISTORY + 1);
+    for (const participant of participants) {
+      if (participant.householdId !== householdId || participant.accessKind !== "moveOnly") continue;
+      const move = await ctx.db.get(participant.moveId);
+      if (!move || move.status === "archived") continue;
+      await resolveMoveAccess(ctx, user._id, householdId, participant.moveId);
+      return "participant" as const;
+    }
+  }
+  throw new ConvexError("You are not an active member or move participant of that household.");
+}
+
 export const approve = mutation({
   args: {
     ...consentArgs,
@@ -769,15 +792,7 @@ export const approve = mutation({
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
-    const membership = await ctx.db
-      .query("householdMemberships")
-      .withIndex("by_household_user", (q) =>
-        q.eq("householdId", args.householdId).eq("userId", user._id),
-      )
-      .unique();
-    if (!membership || membership.status !== "active") {
-      throw new ConvexError("You are not an active member of that household.");
-    }
+    const eligibility = await requireGrantEligibility(ctx, user, args.householdId, args.reconnectGrantId !== undefined);
 
     const history = await ctx.db.query("aiGrants").withIndex("by_owner_client_status", q => q.eq("ownerUserId", user._id)).take(MAX_GRANT_HISTORY + 1);
     const overflow = history.length > MAX_GRANT_HISTORY;
@@ -824,7 +839,7 @@ export const approve = mutation({
     const expiresAt = explicitExpiry(args.expiryIntent ?? (args.expiresInDays === undefined ? "none" : "chosen"), args.expiresInDays, now);
 
     const moveScope = args.moveScope ?? (args.moveIds === undefined ? "allMoves" : "selectedMoves");
-    const moveIds = await validateGrantMoves(ctx, { householdId: args.householdId }, moveScope, args.moveIds);
+    const moveIds = await validateGrantMoves(ctx, eligibility === "participant" ? { userId: user._id } : { householdId: args.householdId }, moveScope, args.moveIds);
 
     await requireConnectionCapacity(ctx, user._id, now);
 
@@ -881,7 +896,7 @@ export const approve = mutation({
       action: "ai_grant.approved",
       objectTable: "aiGrants",
       objectId: grantId,
-      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null, ...(reconnect ? { reconnectGrantId: reconnect._id, clientId: reconnect.clientId, reconnectsClientHistory } : {}) },
+      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null, reconnected: Boolean(reconnect) },
     });
     return { grantId };
   },
@@ -952,23 +967,9 @@ export const updateLimits = mutation({
     const extendsExpiry = currentExpiry !== undefined && (nextExpiry === undefined || nextExpiry > currentExpiry);
     const restores = !grantIsActive(grant, now) && (nextExpiry === undefined || nextExpiry > now);
     if (widensScopes || widensMoves || extendsExpiry || restores) {
-      if (user.status !== "active") throw new ConvexError("An active profile is required to increase access.");
-      const membership = await ctx.db.query("householdMemberships")
-        .withIndex("by_household_user", q => q.eq("householdId", grant.householdId).eq("userId", user._id)).unique();
-      if (membership?.status !== "active") {
-        // Keep the supported move-only participant door, with current access.
-        if (moveScope === "selectedMoves") {
-          await validateGrantMoves(ctx, { userId: user._id }, moveScope, moveIds);
-        } else {
-          const participants = await ctx.db.query("moveParticipants")
-            .withIndex("by_user_status", q => q.eq("userId", user._id).eq("status", "active"))
-            .take(MAX_GRANT_HISTORY + 1);
-          const participant = participants.find(row => row.householdId === grant.householdId && row.accessKind === "moveOnly");
-          if (!participant) throw new ConvexError("You are not an active member of that household.");
-          await validateGrantMoves(ctx, { userId: user._id }, "selectedMoves", [participant.moveId]);
-        }
-      } else if (moveScope === "selectedMoves") {
-        await validateGrantMoves(ctx, { householdId: grant.householdId }, moveScope, moveIds);
+      const eligibility = await requireGrantEligibility(ctx, user, grant.householdId, true);
+      if (moveScope === "selectedMoves") {
+        await validateGrantMoves(ctx, eligibility === "participant" ? { userId: user._id } : { householdId: grant.householdId }, moveScope, moveIds);
       }
       if (restores) await requireConnectionCapacity(ctx, user._id, now);
     }
@@ -1045,7 +1046,7 @@ export const revoke = mutation({
       action: "ai_grant.revoked",
       objectTable: "aiGrants",
       objectId: grant._id,
-      metadata: { reason, recoveredGrantId: recovered?._id ?? null },
+      metadata: { reason },
     });
     return { grantId: grant._id, alreadyRevoked: false };
   },
@@ -1086,7 +1087,7 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
   });
   await advanceHistory(ctx, user._id);
   await appendGrantActivity(ctx, grant, { type: input.action === "revoke" ? "revoked" : "approved", outcome: "recorded", clientId, message: `This AI reduced its own access (version ${version}).` });
-  const receipt = await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, clientId, action: input.action ?? "narrow", previousVersion: grant.version, previousScopes: effectiveScopes(grant), scopes: reduced.scopes ?? effectiveScopes(grant), moveIds: reduced.moveIds ?? grant.moveIds ?? null, expiresAt: reduced.expiresAt ?? effectiveExpiry(grant) ?? null } });
+  const receipt = await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, action: input.action ?? "narrow" } });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
 }
 export const reduceConnection = internalMutation({ args: { subject: v.string(), clientId: v.string(), ...reductionArgs }, handler: (ctx, { subject, clientId, ...input }) => reduceOwnConnection(ctx, subject, clientId, input) });

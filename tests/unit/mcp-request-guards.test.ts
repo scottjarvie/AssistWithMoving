@@ -494,9 +494,16 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
     req.headers.set("mcp-method", "tools/list");
     return req;
   }
-  for (const firstDoor of ["canonical", "persisted"]) {
-    it(`reconnects a revoked client only after explicit person approval, first ${firstDoor}`, async () => {
+  for (const participantOnly of [false, true]) for (const firstDoor of ["canonical", "persisted"]) {
+    it(`reconnects a revoked client only after explicit person approval, first ${firstDoor}, participantOnly=${participantOnly}`, async () => {
       const f = await fixture(false);
+      if (participantOnly) await f.t.run(async ctx => {
+        const member = (await ctx.db.query("householdMemberships").first())!;
+        await ctx.db.patch(member._id, { status: "disabled" });
+        const now = Date.now();
+        const moveId = await ctx.db.insert("moves", { householdId: f.householdId, title: "Participant door proof", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: member.userId, createdAt: now, updatedAt: now });
+        await ctx.db.insert("moveParticipants", { householdId: f.householdId, moveId, userId: member.userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: now, updatedAt: now });
+      });
       const ctx = {
         runQuery: (ref: any, args: any) => f.t.query(ref, args),
         runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
@@ -514,7 +521,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       if (firstDoor === "canonical") await canonical(); else expect((await persisted()).allowed).toBe(true);
       const original = (await f.snapshot()).grants[0];
       await f.owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: original.version });
-      await f.owner.mutation(api.aiGrants.approve, { ...consent, householdId: f.householdId, label: "Unrelated connection" });
+      if (!participantOnly) await f.owner.mutation(api.aiGrants.approve, { ...consent, householdId: f.householdId, label: "Unrelated connection" });
       expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
       expect((await persisted()).allowed).toBe(false);
       const before = await f.snapshot();
