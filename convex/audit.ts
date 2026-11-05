@@ -10,8 +10,8 @@ import {
 
 /** Preserve old source rows, while hiding prior private grant details too. */
 function householdReceipt(entry: Doc<"auditLogs">): Doc<"auditLogs"> {
-  return entry.objectTable === "aiGrants" || entry.action.startsWith("ai_grant.")
-    ? { ...entry, action: "ai_connection.changed", objectTable: undefined, objectId: undefined, metadata: undefined }
+  return entry.objectTable === "aiGrants" || entry.objectTable === "apiKeys" || entry.action.startsWith("ai_grant.") || entry.action.startsWith("api_key.")
+    ? { ...entry, action: entry.category === "apiKey" ? "api_connection.changed" : "ai_connection.changed", actorApiKeyId: undefined, objectTable: undefined, objectId: undefined, metadata: undefined }
     : entry;
 }
 

@@ -191,6 +191,7 @@ function GrantMovePicker({ grant }: { grant: GrantRow }) {
   return <fieldset disabled={choices.result === undefined} className="space-y-2 rounded border border-border p-3">
     <legend>Moves this connection may access</legend>
     <input type="hidden" name="movesChanged" value={changed ? "yes" : "no"} />
+    <input type="hidden" name="eligibilityMoveId" value={choices.result?.moves[0]?.moveId ?? grant.moveIds[0] ?? ""} />
     {selected.map(id => <input key={id} type="hidden" name="moveIds" value={id} />)}
     <label className="block"><input type="radio" name="moveScope" value="allMoves" checked={moveScope === "allMoves"} onChange={() => { setMoveScope("allMoves"); setChanged(true); }} /> All my moves, including future moves</label>
     <label className="block"><input type="radio" name="moveScope" value="selectedMoves" checked={moveScope === "selectedMoves"} onChange={() => { setMoveScope("selectedMoves"); setChanged(true); }} /> Only the moves checked below</label>
@@ -274,10 +275,12 @@ export function AiConnectionManager() {
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const [recoveryHouseholdCursor, setRecoveryHouseholdCursor] = useState<string | undefined>();
+  const [recoveryWitness, setRecoveryWitness] = useState<{ householdId: Id<"households">; moveId: Id<"moves"> } | null>(null);
   const recoveryHouseholds = useQuery(api.aiGrants.listRecoveryHouseholds,
     ready && reconnectGrantId ? (recoveryHouseholdCursor ? { cursor: recoveryHouseholdCursor } : {}) : "skip") as FunctionReturnType<typeof api.aiGrants.listRecoveryHouseholds> | undefined;
   const householdId =
     selectedHouseholdId ?? reconnectTarget?.householdId ?? households?.[0]?.household._id ?? null;
+  const eligibilityMoveId = recoveryWitness?.householdId === householdId ? recoveryWitness.moveId : recoveryHouseholds?.households.find(entry => entry.householdId === householdId)?.moveId;
   const approvalHouseholds = (households ?? []).map(entry => ({ id: entry.household._id, name: entry.household.name }));
   if (reconnectTarget) for (const entry of recoveryHouseholds?.households ?? []) {
     if (!approvalHouseholds.some(choice => choice.id === entry.householdId)) approvalHouseholds.push({ id: entry.householdId, name: entry.label });
@@ -354,6 +357,7 @@ export function AiConnectionManager() {
         ...consent,
         ...(grantsResult?.historyFingerprint ? { expectedHistoryFingerprint: grantsResult.historyFingerprint } : {}),
         ...(reconnectGrantId ? { reconnectGrantId } : {}),
+        ...(reconnectGrantId && eligibilityMoveId ? { eligibilityMoveId } : {}),
         ...(reconnectGrantId && grantsResult?.historyOverflow ? { expectedRecoveryFingerprint: grantsResult.recoveryFingerprint } : {}),
         scopeIntent: boundaryScopes.every(info => selectedScopes.includes(info.scope)) ? "full" : "chosen",
         expiryIntent: expiresInDays === 0 ? "none" : "chosen",
@@ -547,6 +551,8 @@ export function AiConnectionManager() {
                     setSelectedMoveIds([]);
                     setMoveScope("allMoves");
                     setSelectedHouseholdId(null);
+                    setRecoveryWitness(null);
+                    setRecoveryHouseholdCursor(undefined);
                     setReconnectGrantId(id || null);
                     setLabel(reconnectable.find(grant => grant.grantId === id)?.label ?? "");
                   }}
@@ -574,6 +580,8 @@ export function AiConnectionManager() {
                     setSelectedMoveIds([]);
                     setMoveScope("allMoves");
                     setSelectedHouseholdId(event.target.value as Id<"households">);
+                    const choice = recoveryHouseholds?.households.find(entry => entry.householdId === event.target.value);
+                    setRecoveryWitness(choice ? { householdId: choice.householdId, moveId: choice.moveId } : null);
                   }}
                 >
                   {approvalHouseholds.map((entry) => (
@@ -589,8 +597,8 @@ export function AiConnectionManager() {
             ) : null}
 
             {reconnectGrantId ? <div className="flex flex-wrap gap-2">
-              {recoveryHouseholds?.nextCursor ? <Button type="button" variant="outline" onClick={() => setRecoveryHouseholdCursor(recoveryHouseholds.nextCursor!)}>More recovery households</Button> : null}
-              {recoveryHouseholdCursor ? <Button type="button" variant="outline" onClick={() => setRecoveryHouseholdCursor(undefined)}>First recovery households</Button> : null}
+              {recoveryHouseholds?.nextCursor ? <Button type="button" variant="outline" onClick={() => { if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(recoveryHouseholds.nextCursor!); }}>More recovery households</Button> : null}
+              {recoveryHouseholdCursor ? <Button type="button" variant="outline" onClick={() => { if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(undefined); }}>First recovery households</Button> : null}
             </div> : null}
             <div className="flex flex-wrap gap-2">
               {memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); memberChoices.next(householdId); }}>More member households</Button> : null}
@@ -979,6 +987,7 @@ export function AiConnectionManager() {
                         );
                         await updateLimits({
                           ...consent,
+                          ...(data.get("eligibilityMoveId") ? { eligibilityMoveId: data.get("eligibilityMoveId") as Id<"moves"> } : {}),
                           scopeIntent: data.get("scopeIntent") as "preserve" | "full" | "chosen",
                           grantId: grant.grantId, expectedVersion: grant.version,
                           scopes: data.getAll("scopes") as GrantScope[],

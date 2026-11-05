@@ -180,7 +180,7 @@ vi.mock("convex/react", () => ({
       case apiMock.aiGrants.listMoveChoices:
         return connectionData.moveChoicesPaging ? { moves: (args as { cursor?: string })?.cursor ? [{ ...connectionData.stats.moves[0], moveId: "move_456", title: "Later move" }] : connectionData.stats.moves, nextCursor: (args as { cursor?: string })?.cursor ? null : "later-moves" } : connectionData.stats;
       case apiMock.aiGrants.listRecoveryHouseholds:
-        return connectionData.participantRecovery ? { households: [{ householdId: (args as { cursor?: string })?.cursor ? "participant_later" : "participant_current", label: (args as { cursor?: string })?.cursor ? "Move: Later participant move" : "Move: Current participant move" }], nextCursor: (args as { cursor?: string })?.cursor ? null : "later-households" } : { households: [], nextCursor: null };
+        return connectionData.participantRecovery ? { households: [{ householdId: (args as { cursor?: string })?.cursor ? "participant_later" : "participant_current", label: (args as { cursor?: string })?.cursor ? "Move: Later participant move" : "Move: Current participant move", moveId: (args as { cursor?: string })?.cursor ? "move_witness_later" : "move_witness_current" }], nextCursor: (args as { cursor?: string })?.cursor ? null : "later-households" } : { households: [], nextCursor: null };
       case apiMock.apiKeys.listForHousehold:
         return connectionData.keys;
       default:
@@ -369,7 +369,7 @@ describe("AiConnectionManager", () => {
       await user.click(screen.getByRole("button", { name: "First recovery households" }));
       expect(household).toHaveValue("participant_later");
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
-      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_later", reconnectGrantId: "ai_grant_123" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_later", reconnectGrantId: "ai_grant_123", eligibilityMoveId: "move_witness_later" }));
     } finally { connectionData.grants.grants = original; connectionData.households = households; connectionData.participantRecovery = false; }
   });
 

@@ -2352,6 +2352,14 @@ event. Reads of older shared grant audit rows hide their private identifiers,
 limits and reasons while retaining the original stored source. Scope-free
 API-key context discovery returns credential settings, without household or
 move data; `moves/read` is required to include that context.
+
+API-key lifecycle and reduction receipts use the same private owner receipt
+boundary; shared events omit the key ID and limit history, including on reads
+of older source rows. A failure writing either receipt rolls back the entire
+reduction. Recovery and widening recheck that the household and selected moves
+are still active. Participant choices carry an eligible move ID, validated
+directly against current access when submitted, so later pages work without an
+unbounded participation scan. The move ID is an eligibility hint, never authority.
 Move-only participants can select a revoked or expired client in Settings and
 explicitly reconnect using verified current participation, even without a
 household membership. Selecting a reconnect uses that connection?s household,
