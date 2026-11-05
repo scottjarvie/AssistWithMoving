@@ -282,19 +282,20 @@ export function AiConnectionManager() {
   const [recoveryWitness, setRecoveryWitness] = useState<{ householdId: Id<"households">; moveId: Id<"moves"> } | null>(null);
   const recoveryHouseholds = useQuery(api.aiGrants.listRecoveryHouseholds,
     ready && reconnectGrantId ? (recoveryHouseholdCursor ? { cursor: recoveryHouseholdCursor } : {}) : "skip") as FunctionReturnType<typeof api.aiGrants.listRecoveryHouseholds> | undefined;
-  const householdId =
-    selectedHouseholdId ?? reconnectTarget?.householdId ?? households?.[0]?.household._id ?? null;
-  const eligibilityMoveId = recoveryHouseholds?.households.find(entry => entry.householdId === householdId)?.moveId ?? (recoveryWitness?.householdId === householdId ? recoveryWitness.moveId : undefined);
   const approvalHouseholds = (households ?? []).map(entry => ({ id: entry.household._id, name: entry.household.name }));
   if (reconnectTarget) for (const entry of recoveryHouseholds?.households ?? []) {
     if (!approvalHouseholds.some(choice => choice.id === entry.householdId)) approvalHouseholds.push({ id: entry.householdId, name: entry.label });
   }
-  if (reconnectTarget && !approvalHouseholds.some(entry => entry.id === reconnectTarget.householdId)) {
-    approvalHouseholds.unshift({ id: reconnectTarget.householdId, name: "Previous connection household" });
-  }
-  if (reconnectTarget && selectedHouseholdId && !approvalHouseholds.some(entry => entry.id === selectedHouseholdId)) {
+  if (reconnectTarget && selectedHouseholdId && recoveryWitness?.householdId === selectedHouseholdId && !approvalHouseholds.some(entry => entry.id === selectedHouseholdId)) {
     approvalHouseholds.push({ id: selectedHouseholdId, name: "Selected move household" });
   }
+  // Historical ownership is context, not current eligibility. Only query
+  // choices (or a deliberately retained paged choice) can be selected.
+  const householdId =
+    (selectedHouseholdId && approvalHouseholds.some(entry => entry.id === selectedHouseholdId) ? selectedHouseholdId : null) ??
+    (reconnectTarget && approvalHouseholds.some(entry => entry.id === reconnectTarget.householdId) ? reconnectTarget.householdId : null) ??
+    approvalHouseholds[0]?.id ?? null;
+  const eligibilityMoveId = recoveryHouseholds?.households.find(entry => entry.householdId === householdId)?.moveId ?? (recoveryWitness?.householdId === householdId ? recoveryWitness.moveId : undefined);
   const canReadApprovalHousehold = households?.some(entry => entry.household._id === householdId) ?? false;
 
   const moveChoices = useConnectionMoveChoices(ready ? householdId : null);
@@ -566,9 +567,10 @@ export function AiConnectionManager() {
                 </select>
                 {reconnectGrantId && !canReadApprovalHousehold ? <p className="text-xs text-muted-foreground">Your AI can use only moves you currently have access to as a participant. Reconnecting does not give household access.</p> : null}
                 {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client&apos;s previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
+                {reconnectTarget && !approvalHouseholds.some(entry => entry.id === reconnectTarget.householdId) ? <p className="text-xs text-muted-foreground">The previous household is not among your current choices. Choose a household you can access now; the original connection record stays in your history.</p> : null}
               </div>
             ) : null}
-            {approvalHouseholds.length > 1 ? (
+            {approvalHouseholds.length > 1 || reconnectGrantId ? (
               <div className="space-y-1.5">
                 <label
                   htmlFor="ai-grant-household"
@@ -588,6 +590,7 @@ export function AiConnectionManager() {
                     setRecoveryWitness(choice ? { householdId: choice.householdId, moveId: choice.moveId } : null);
                   }}
                 >
+                  {approvalHouseholds.length === 0 ? <option value="">No eligible household on this page</option> : null}
                   {approvalHouseholds.map((entry) => (
                     <option
                       key={entry.id}
@@ -987,7 +990,7 @@ export function AiConnectionManager() {
                 {grant.status !== "revoked" && canWriteConsent ? (
                   <details className="mt-3 text-sm">
                     <summary className="cursor-pointer">Change moves, permissions or end date</summary>
-                    <form key={`${grant.version}-${grantsResult?.catalogFingerprint}`} className="mt-3 space-y-2" onSubmit={async (event) => {
+                    <form key={`${grant.version}-${grantsResult?.catalogFingerprint}-${grantsResult?.recoveryFingerprint}`} className="mt-3 space-y-2" onSubmit={async (event) => {
                       event.preventDefault();
                       if (!canWriteConsent) return;
                       const data = new FormData(event.currentTarget);
@@ -1006,6 +1009,7 @@ export function AiConnectionManager() {
                           ...(data.get("eligibilityMoveId") ? { eligibilityMoveId: data.get("eligibilityMoveId") as Id<"moves"> } : {}),
                           scopeIntent: data.get("scopeIntent") as "preserve" | "full" | "chosen",
                           grantId: grant.grantId, expectedVersion: grant.version,
+                          expectedRecoveryFingerprint: grantsResult!.recoveryFingerprint,
                           scopes: data.getAll("scopes") as GrantScope[],
                           ...(editsMoves ? { moveScope, ...(moveScope === "selectedMoves" ? { moveIds } : {}) } : {}),
                           ...(days === "keep" ? {} : { expiryIntent: days === "0" ? "none" as const : "chosen" as const, expiresInDays: days === "0" ? null : Number(days) }),
