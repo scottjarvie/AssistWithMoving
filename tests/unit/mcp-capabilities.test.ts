@@ -709,8 +709,8 @@ describe("Assist With Moving MCP capability discovery", () => {
       canonicalToolNames().length,
     );
     expect(
-      legacyToolNames.filter((name) => canonicalToolNames().includes(name) && name !== "reduce_connection"),
-    ).toEqual([]);
+      legacyToolNames.filter((name) => canonicalToolNames().includes(name)),
+    ).toEqual(["describe_connection", "reduce_connection"]);
   });
 
   it("exports stable summary metadata for non-MCP callers", () => {

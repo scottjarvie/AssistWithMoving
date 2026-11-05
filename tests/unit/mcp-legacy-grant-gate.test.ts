@@ -69,7 +69,7 @@ describe("legacy gateway catalog", () => {
     expect(
       Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).length +
         LEGACY_GATEWAY_NEVER_PERMITTED_TOOLS.length,
-    ).toBe(30);
+    ).toBe(31);
   });
 });
 
