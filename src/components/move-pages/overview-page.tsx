@@ -63,7 +63,7 @@ export function MoveOverviewPage() {
         description="What still needs a decision, who is involved, and the defaults that steer packing, packets, and AI suggestions."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList tabs={overviewTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky tabs={overviewTabs} activeValue={activeTab} />
 
         <TabsContent value="results">
           <MovePlanningResultsPanel householdId={householdId} moveId={moveId} />

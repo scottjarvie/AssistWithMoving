@@ -135,7 +135,7 @@ export function SpacesWorkspacePage() {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList tabs={spaceTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky tabs={spaceTabs} activeValue={activeTab} />
 
         <TabsContent value="spaces">
           <Card id="spaces">

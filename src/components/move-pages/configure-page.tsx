@@ -125,7 +125,7 @@ export function MoveConfigurePage() {
       <MoveOperationsNav />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList tabs={tabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky tabs={tabs} activeValue={activeTab} />
 
         <TabsContent value="start">
           <div className="grid gap-4 xl:grid-cols-2">

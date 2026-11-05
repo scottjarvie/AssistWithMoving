@@ -53,7 +53,7 @@ export function LoadPlanWorkspacePage() {
       <MoveOperationsNav />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList tabs={loadPlanTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky tabs={loadPlanTabs} activeValue={activeTab} />
 
         <TabsContent value="board">
           <LoadPlannerBoard householdId={householdId} moveId={moveId} />

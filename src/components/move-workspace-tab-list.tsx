@@ -1,7 +1,12 @@
 "use client";
 
+import { useRef, useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type MoveWorkspaceTab = {
   value: string;
@@ -9,29 +14,48 @@ type MoveWorkspaceTab = {
   description?: string;
   count?: number | string;
   countLabel?: string;
+  icon?: MovingSymbolName;
 };
+
+function sectionIcon(value: string): MovingSymbolName {
+  if (/transport|load|trip|resource/.test(value)) return "truck";
+  if (/start|end|space|layout|board/.test(value)) return "plan";
+  if (/people|household|participant|contact/.test(value)) return "people";
+  if (/queue|review|job/.test(value)) return "queue";
+  if (/ai|suggest/.test(value)) return "ai";
+  if (/item|box|unit|inventory/.test(value)) return "box";
+  if (/default|detail|config/.test(value)) return "settings";
+  return "note";
+}
 
 export function MoveWorkspaceTabList({
   tabs,
   activeValue,
   ariaLabel = "Workspace task views",
+  sticky = false,
 }: {
   tabs: MoveWorkspaceTab[];
   activeValue?: string;
   ariaLabel?: string;
+  sticky?: boolean;
 }) {
   const activeTab = tabs.find((tab) => tab.value === activeValue);
+  const triggers = useRef(new Map<string, HTMLButtonElement>());
+  const contentsTarget = useRef<string | null>(null);
+  const [contentsOpen, setContentsOpen] = useState(false);
 
   return (
-    <div className="space-y-2">
-      <div className="overflow-x-auto pb-1">
-        <TabsList className="min-w-max" aria-label={ariaLabel}>
+    <div className={sticky ? "sticky top-[calc(var(--workspace-navigation-offset,4rem)+3.25rem)] z-10 space-y-2 bg-background pb-2 sm:top-[calc(var(--workspace-navigation-offset,4rem)+2.75rem)]" : "space-y-2"} data-moving-sections>
+      <div className="flex min-w-0 items-start gap-2 border-b border-border bg-background py-1">
+        <div className="moving-section-strip min-w-0 flex-1 overflow-x-auto pb-1">
+        <TabsList variant="line" className="h-11! min-w-max justify-start sm:h-9!" aria-label={ariaLabel}>
           {tabs.map((tab) => {
             const hasCount = tab.count !== undefined;
             return (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
+                ref={element => { if (element) triggers.current.set(tab.value, element); else triggers.current.delete(tab.value); }}
                 className={hasCount ? "gap-2" : undefined}
                 aria-label={
                   hasCount
@@ -39,6 +63,7 @@ export function MoveWorkspaceTabList({
                     : undefined
                 }
               >
+                <MovingSymbol name={tab.icon ?? sectionIcon(tab.value)} className="size-4 shrink-0" />
                 {tab.label}
                 {hasCount ? (
                   <Badge
@@ -54,6 +79,26 @@ export function MoveWorkspaceTabList({
             );
           })}
         </TabsList>
+        </div>
+        <Popover open={contentsOpen} onOpenChange={setContentsOpen}>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0 sm:min-h-9" aria-label={`All ${tabs.length} sections`}>
+              <MovingSymbol name="contents" className="size-3.5" />All {tabs.length}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))]" onCloseAutoFocus={event => {
+            const target = contentsTarget.current;
+            if (target) { event.preventDefault(); triggers.current.get(target)?.focus(); contentsTarget.current = null; }
+          }}>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Contents</p>
+            <div aria-label={`${ariaLabel} contents`} className="grid grid-cols-2 gap-1">
+              {tabs.map(tab => <Button key={tab.value} type="button" variant={activeValue === tab.value ? "secondary" : "ghost"} className="min-h-11 justify-start whitespace-normal text-left" aria-label={`${tab.label}${tab.count !== undefined ? `: ${tab.countLabel ?? tab.count}` : ""}`} aria-pressed={activeValue === tab.value} onClick={() => { contentsTarget.current = tab.value; setContentsOpen(false); }}>
+                <MovingSymbol name={tab.icon ?? sectionIcon(tab.value)} className="size-4 shrink-0" />
+                <span>{tab.label}{tab.count !== undefined ? <span className="ml-2 font-mono text-xs text-muted-foreground">{tab.count}</span> : null}</span>
+              </Button>)}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
       {activeTab?.description ? (
         <p className="text-sm text-muted-foreground">{activeTab.description}</p>

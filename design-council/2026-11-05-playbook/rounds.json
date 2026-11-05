@@ -1,0 +1,10 @@
+{
+  "rounds": [{
+    "id": "01-foundations",
+    "createdAt": "2026-11-05T11:00:00Z",
+    "kind": "foundation",
+    "title": "01 · Shared foundations",
+    "status": "Source implementation · rendered page review pending",
+    "description": "Kraft light/dark roles, approved branding, Codex-written image slots, display preferences, pinned section chooser and phone contents. These are actual SVG components rendered into this sampler; they are not screenshots of an authenticated page."
+  }]
+}

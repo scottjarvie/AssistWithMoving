@@ -5,6 +5,8 @@ import Script from "next/script";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { InstallPrompt } from "@/components/install-prompt";
 import { Toaster } from "@/components/ui/sonner";
+import { DisplayPreferenceManager } from "@/components/display-preferences";
+import { displayPreferencesBootstrap } from "@/lib/display-preferences";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -121,9 +123,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head><script dangerouslySetInnerHTML={{ __html: displayPreferencesBootstrap }} /></head>
       <body className="min-h-full bg-background text-foreground">
+        <DisplayPreferenceManager />
         {process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_LOCAL_DEVELOPMENT_MODE ? <aside className="sticky top-0 z-50 border-b border-border bg-muted px-3 py-2 text-center text-sm text-foreground" data-local-data-mode={process.env.NEXT_PUBLIC_LOCAL_DEVELOPMENT_MODE}>{process.env.NEXT_PUBLIC_LOCAL_DEVELOPMENT_MODE === "live" ? "Local site · Live data · Changes affect your real account." : "Development data · Changes stay here."}</aside> : null}
         {process.env.NODE_ENV === "development" ? (
           <Script

@@ -60,7 +60,7 @@ export function AiReviewWorkspacePage() {
       <MoveOperationsNav />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList tabs={aiReviewTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky tabs={aiReviewTabs} activeValue={activeTab} />
 
         <TabsContent value="queue">
           <AiReviewQueue householdId={householdId} moveId={moveId} />

@@ -28,6 +28,7 @@ vi.mock("@/components/move-workspace-header", () => ({
 }));
 vi.mock("@/components/move-operations-nav", () => ({
   MoveOperationsNav: () => <div>nav</div>,
+  MoveContents: () => null,
 }));
 
 vi.mock("convex/react", () => ({

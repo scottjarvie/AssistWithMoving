@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { BrandMark } from "@/components/brand-mark";
+import { DisplayPreferences } from "@/components/display-preferences";
 import { PublicMobileNav } from "@/components/public-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -152,6 +153,7 @@ export function PublicHeader() {
         ))}
       </nav>
       <div className="flex items-center gap-2">
+        <DisplayPreferences />
         <Button asChild size="touch" className="hidden lg:inline-flex">
           <Link href="/sign-in">
             Sign in

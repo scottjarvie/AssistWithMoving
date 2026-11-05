@@ -79,6 +79,7 @@ export function InventoryWorkspacePage() {
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <MoveWorkspaceTabList
+          sticky
           tabs={inventoryWorkspaceTabs}
           activeValue={activeTab}
           ariaLabel="Inventory workspace tasks"

@@ -58,7 +58,7 @@ export function PacketsWorkspacePage() {
       <MoveOperationsNav />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList tabs={packetTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky tabs={packetTabs} activeValue={activeTab} />
 
         <TabsContent value="builder">
           {documentationPacketsEnabled ? (

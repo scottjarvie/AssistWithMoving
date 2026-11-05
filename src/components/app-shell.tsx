@@ -6,6 +6,7 @@ import { MobileCaptureAction } from "@/components/mobile-capture-action";
 import { MoveSwitcher } from "@/components/move-switcher";
 import { ShellSectionEyebrow } from "@/components/shell-section-eyebrow";
 import { WorkspaceNav } from "@/components/workspace-nav";
+import { DisplayPreferences } from "@/components/display-preferences";
 
 // Consistent frame at every size: a sticky top bar (brand, section, move
 // switcher, account) plus the same destinations — Moves, Units, Items, Spaces,
@@ -30,7 +31,7 @@ export function AppShell({
         Skip to main content
       </a>
 
-      <header className="sticky top-0 z-30 border-b border-border bg-background/88 backdrop-blur">
+      <header className="workspace-header sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex h-16 w-full items-center justify-between gap-2 px-4 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <Link
@@ -46,14 +47,19 @@ export function AppShell({
             {workspaceEnabled ? <MoveSwitcher /> : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <DisplayPreferences includeNavigation />
             {workspaceEnabled ? <AccountMenu /> : null}
           </div>
         </div>
       </header>
 
+      <div className="workspace-top-navigation sticky top-16 z-20 hidden h-12 items-center border-b border-border bg-sidebar px-6">
+        <WorkspaceNav variant="top" />
+      </div>
+
       {/* Desktop left sidebar — fixed below the header, hidden on phone/tablet. */}
       <aside
-        className={`fixed bottom-0 left-0 top-16 z-20 hidden flex-col border-r border-border bg-background px-3 py-4 lg:flex ${SIDEBAR_WIDTH}`}
+        className={`workspace-side-navigation fixed bottom-0 left-0 top-16 z-20 hidden flex-col border-r border-border bg-sidebar px-3 py-4 lg:flex ${SIDEBAR_WIDTH}`}
       >
         <WorkspaceNav variant="sidebar" />
         <div className="mt-auto">
@@ -65,7 +71,7 @@ export function AppShell({
         id="main-content"
         tabIndex={-1}
         aria-label="Workspace content"
-        className="overflow-x-clip pb-[calc(3.75rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-56"
+        className="workspace-main overflow-x-clip pb-[calc(3.75rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-56"
       >
         <div className="mx-auto max-w-5xl">{children}</div>
       </main>

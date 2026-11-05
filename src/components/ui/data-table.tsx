@@ -47,6 +47,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { MoveIllustration } from "@/components/moving-symbol"
 
 // ---------------------------------------------------------------------------
 // ColumnMeta + visual conventions
@@ -112,6 +113,7 @@ export function EmptyState({
         className
       )}
     >
+      <MoveIllustration kind="box" className="mb-1 h-20 w-36" />
       <p className="text-sm font-medium">{title}</p>
       {description ? (
         <p className="max-w-md text-sm text-muted-foreground">{description}</p>

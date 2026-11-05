@@ -22,7 +22,8 @@ import {
 
 import { api } from "../../../convex/_generated/api";
 import { FirstMoveJourney } from "@/components/first-move-journey";
-import { MoveOperationsNav } from "@/components/move-operations-nav";
+import { MoveOperationsNav, MoveContents } from "@/components/move-operations-nav";
+import { MoveIllustration } from "@/components/moving-symbol";
 import { MoveWorkspaceHeader } from "@/components/move-workspace-header";
 import { useMoveWorkspace } from "@/components/move-workspace-context";
 import { Badge } from "@/components/ui/badge";
@@ -206,6 +207,10 @@ export function MoveSummaryPage() {
 
       <MoveOperationsNav />
 
+      <div className="moving-image-slot overflow-hidden rounded-md border border-border">
+        <MoveIllustration className="mx-auto h-32 w-auto sm:h-40" />
+      </div>
+
       {/* The answer first: stage and when, in plain words (MOVE wakeup). */}
       {stage ? (
         <section
@@ -294,6 +299,8 @@ export function MoveSummaryPage() {
           </Button>
         </div>
       ) : null}
+
+      {moveId ? <MoveContents moveId={moveId} /> : null}
 
       {/* The first-move guide stays one tap away; it opens by itself only
           while the move has nothing set up yet. */}

@@ -26,7 +26,7 @@ const navIcons = {
 export function WorkspaceNav({
   variant = "sidebar",
 }: {
-  variant?: "sidebar" | "mobile";
+  variant?: "sidebar" | "mobile" | "top";
 }) {
   const pathname = usePathname();
   const mobile = variant === "mobile";
@@ -34,7 +34,7 @@ export function WorkspaceNav({
   return (
     <nav
       aria-label="Primary"
-      className={cn(mobile ? "grid grow grid-cols-5" : "space-y-1")}
+      className={cn(mobile ? "grid grow grid-cols-5" : variant === "top" ? "flex items-center gap-1" : "space-y-1")}
     >
       {globalNavItems.map((item) => {
         const Icon = navIcons[item.iconKey];

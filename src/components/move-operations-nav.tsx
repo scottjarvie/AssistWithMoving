@@ -2,23 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ClipboardCheck,
-  Inbox,
-  LayoutDashboard,
-  PencilRuler,
-  Truck,
-  CalendarClock,
-  Settings2,
-} from "lucide-react";
 
 import { useOptionalMoveWorkspace } from "@/components/move-workspace-context";
 import { cn } from "@/lib/utils";
+import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type OperationLink = {
   segment: string | null; // null = the move config page (index)
   label: string;
-  icon: typeof Truck;
   group: "config" | "operations";
 };
 
@@ -28,29 +21,41 @@ type OperationLink = {
 // "Queue" slot replaced the confusing "AI Review" tab (MOVE-311); secondary
 // surfaces such as AI Review and Overview stay as contextual page links.
 const OPERATION_LINKS: OperationLink[] = [
-  { segment: null, label: "Summary", icon: LayoutDashboard, group: "config" },
-  { segment: "configure", label: "Configure", icon: Settings2, group: "config" },
-  { segment: "load-plan", label: "Load Plan", icon: Truck, group: "operations" },
-  { segment: "plan", label: "Plan", icon: PencilRuler, group: "operations" },
+  { segment: null, label: "Summary", group: "config" },
+  { segment: "configure", label: "Configure", group: "config" },
+  { segment: "load-plan", label: "Load Plan", group: "operations" },
+  { segment: "plan", label: "Plan", group: "operations" },
   {
     segment: "move-day",
     label: "Move Day",
-    icon: CalendarClock,
     group: "operations",
   },
   {
     segment: "packets",
     label: "Packets",
-    icon: ClipboardCheck,
     group: "operations",
   },
   {
     segment: "queue",
     label: "Queue",
-    icon: Inbox,
     group: "operations",
   },
 ];
+
+const operationSymbols: Record<string, MovingSymbolName> = { Summary: "note", Configure: "settings", "Load Plan": "truck", Plan: "plan", "Move Day": "calendar", Packets: "source", Queue: "queue" };
+const operationDescriptions: Record<string, string> = { Summary: "The move at a glance", Configure: "Places, people and details", "Load Plan": "Fit units into transport", Plan: "Arrange belongings in rooms", "Move Day": "Check each handoff", Packets: "Evidence and documents", Queue: "Work with your AI" };
+
+export function MoveContents({ moveId }: { moveId: string }) {
+  return <section aria-label="Move contents" className="lg:hidden">
+    <h2 className="mb-3 text-sm font-semibold">Contents</h2>
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-y border-border py-2">
+      {OPERATION_LINKS.map(link => <Link key={link.label} href={`/app/moves/${encodeURIComponent(moveId)}${link.segment ? `/${link.segment}` : ""}`} className="flex min-h-11 items-center gap-2 py-2 text-sm">
+        <MovingSymbol name={operationSymbols[link.label]} className="size-4 shrink-0 text-primary" />
+        <span><span className="block font-medium">{link.label}</span><span className="block text-xs text-muted-foreground">{operationDescriptions[link.label]}</span></span>
+      </Link>)}
+    </div>
+  </section>;
+}
 
 export function MoveOperationsNav() {
   const workspace = useOptionalMoveWorkspace();
@@ -61,8 +66,6 @@ export function MoveOperationsNav() {
   }
 
   const base = `/app/moves/${moveId}`;
-  const operations = OPERATION_LINKS.filter((l) => l.group === "operations");
-  const configLinks = OPERATION_LINKS.filter((l) => l.group === "config");
 
   const isActive = (segment: string | null) => {
     if (segment === null) {
@@ -75,20 +78,19 @@ export function MoveOperationsNav() {
   const renderLink = (link: OperationLink) => {
     const href = link.segment === null ? base : `${base}/${link.segment}`;
     const active = isActive(link.segment);
-    const Icon = link.icon;
     return (
       <Link
         key={link.label}
         href={href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+          "inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2.5 text-sm font-medium transition-colors sm:min-h-9",
           active
             ? "bg-sidebar-accent text-sidebar-accent-foreground"
             : "text-muted-foreground hover:bg-muted hover:text-foreground",
         )}
       >
-        <Icon className="size-4" aria-hidden="true" />
+        <MovingSymbol name={operationSymbols[link.label]} className="size-4" />
         {link.label}
       </Link>
     );
@@ -97,14 +99,19 @@ export function MoveOperationsNav() {
   return (
     <nav
       aria-label="Move operations"
-      className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card/40 p-1.5"
+      className="moving-operation-strip sticky top-(--workspace-navigation-offset) z-20 flex min-w-0 items-start gap-2 border-y border-border bg-background py-1"
     >
-      {configLinks.map(renderLink)}
-      <span className="mx-1 hidden h-5 w-px bg-border sm:inline-block" aria-hidden="true" />
-      <span className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Operations
-      </span>
-      {operations.map(renderLink)}
+      <div className="moving-section-strip flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        {OPERATION_LINKS.map(renderLink)}
+      </div>
+      <Popover>
+        <PopoverTrigger asChild><Button type="button" variant="outline" className="min-h-11 shrink-0 sm:min-h-9" aria-label={`All ${OPERATION_LINKS.length} move sections`}>
+          <MovingSymbol name="contents" className="size-4" />All {OPERATION_LINKS.length}
+        </Button></PopoverTrigger>
+        <PopoverContent align="end" className="grid w-[min(22rem,calc(100vw-2rem))] grid-cols-2 gap-1 p-2">
+          {OPERATION_LINKS.map(renderLink)}
+        </PopoverContent>
+      </Popover>
     </nav>
   );
 }

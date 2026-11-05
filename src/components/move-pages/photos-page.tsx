@@ -58,7 +58,7 @@ export function PhotosWorkspacePage() {
         description="Photo evidence for items, boxes, and rooms — originals stay private, and claim-readiness is scored as you go."
       />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList tabs={photoTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky tabs={photoTabs} activeValue={activeTab} />
 
         <TabsContent value="review">
           <PhotoReviewWorkspace householdId={householdId} moveId={moveId} />
