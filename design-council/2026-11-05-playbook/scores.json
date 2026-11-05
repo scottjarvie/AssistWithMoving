@@ -594,6 +594,92 @@
       "wholeSiteTaste": null,
       "differentModelReview": true,
       "reviewRecord": "reviews/05-T-opus.md"
+    },
+    {
+      "exactHead": "5da80247cd768f745b838584098d9e11c54cb772",
+      "implementationBase": "a7185089b824024195caa537683449bc8d59933e",
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "Codex gpt-6.1-sol high",
+      "blindLabel": "U",
+      "evidenceType": "source-only",
+      "headVerifiedAtStartAndEnd": true,
+      "filesChanged": false,
+      "differentModelReview": false,
+      "sourceRubric": {
+        "scale": "0-10; reviewer-defined source assessment only",
+        "permissionAndCapabilityTruth": 9,
+        "actionFieldAndDraftRetention": 9,
+        "collectionViewState": 9,
+        "accessibilityAndFocusStructure": 7,
+        "measurementAndHistoryState": 9,
+        "offlineEvidenceBoundary": 7
+      },
+      "overallSourceScore": 8.3,
+      "disposition": "revise",
+      "blockers": [
+        "U1: reveal reviewed connection details within the viewport",
+        "U2: prevent navigation outside the offline fixture"
+      ],
+      "backendSchemaAccessChanges": false,
+      "validation": {
+        "testsBuildNextBrowserRunByReviewer": false,
+        "reportedAffectedChecks": "passed",
+        "reportedFullSuite": "not green",
+        "harnessBuiltOrCaptured": false
+      },
+      "visualLimits": {
+        "renderedPolish": null,
+        "responsiveRendering": null,
+        "renderedAccessibility": null,
+        "authenticatedShell": null,
+        "print": null,
+        "wholeSiteTaste": null,
+        "aestheticApproval": null,
+        "previousHomeScreenshotsUsed": false
+      },
+      "authority": "Scott overrides; Opus is final AI tastemaker once visual evidence exists.",
+      "reviewRecord": "reviews/06-U-sol.md"
+    },
+    {
+      "exactHead": "5da80247cd768f745b838584098d9e11c54cb772",
+      "implementationBase": "a7185089b824024195caa537683449bc8d59933e",
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "claude-opus-5-5",
+      "blindLabel": "U",
+      "evidenceType": "source-only",
+      "sourceRubric": {
+        "correctness": 8,
+        "capabilityRetention": 9.5,
+        "truthfulCapabilities": 8.5,
+        "accessibilityFocusSemantics": 6.5,
+        "phoneStructureSource": 7.5,
+        "confirmationSemantics": 7,
+        "collectionViewsCrudFallbackBaseline": 8.5,
+        "offlineEvidenceBoundary": 8,
+        "testCoverage": 8
+      },
+      "overallSourceScore": 7.9,
+      "disposition": "approve-with-fixes (source only)",
+      "blockers": [],
+      "shouldFixBeforeCapture": [
+        "Review focus uses preventScroll on details rendered below the matrix (ai-connection-manager.tsx:245)",
+        "Revoke moves focus directly to the irreversible confirm button (ai-connection-manager.tsx:248, :873)"
+      ],
+      "lowFindings": 9,
+      "backendSchemaAccessChanged": false,
+      "filesChanged": false,
+      "visual": {
+        "renderedPolish": null,
+        "responsiveRendering": null,
+        "authenticatedShell": null,
+        "print": null,
+        "wholeSiteTaste": null,
+        "darkMode": null,
+        "note": "Harness not built or captured; no aesthetic approval from unrendered source. Scott overrides; Opus is final AI tastemaker once visual evidence exists."
+      },
+      "checksRerun": false,
+      "differentModelReview": true,
+      "reviewRecord": "reviews/06-U-opus.md"
     }
   ],
   "scottPicks": []

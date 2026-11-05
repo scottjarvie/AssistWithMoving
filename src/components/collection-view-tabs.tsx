@@ -116,7 +116,7 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
       {isSaved && selected ? <><Button type="button" size="sm" variant="ghost" onClick={() => { setName(selected.label); setNaming("rename"); }}>Rename view</Button><Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(true)}>Delete view</Button></> : null}
       <span>Named views stay on this browser.</span>
     </div>
-    {message ? <p role="status" className="text-xs text-muted-foreground">{message}</p> : null}
+    <p role="status" aria-live="polite" aria-atomic="true" className={message ? "text-xs text-muted-foreground" : "sr-only"}>{message}</p>
     <Dialog open={naming !== null} onOpenChange={open => { if (!open) setNaming(null); }}><DialogContent className="collection-controls p-4 sm:max-w-md" onCloseAutoFocus={event => { event.preventDefault(); saveButton.current?.focus(); }}>
       <form onSubmit={event => {
         event.preventDefault();

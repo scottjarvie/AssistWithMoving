@@ -159,7 +159,7 @@ function ProvenanceCard({
   onConfirm?: () => void;
 }) {
   return (
-    <div className="rounded-md border border-border p-3">
+    <div role="group" aria-label={`${title} measurement source`} className="rounded-md border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">{title}</p>
         <Badge
@@ -317,14 +317,6 @@ export function ItemDetailSheet({
   const [heightIn, setHeightIn] = useState(
     formatOptionalNumber(item?.dimensionsIn?.heightIn)
   );
-  const [dimensionsConfidence, setDimensionsConfidence] = useState<
-    InventoryItem["dimensionsConfidence"]
-  >(
-    itemDimensionsConfidenceForRead({
-      dimensionsIn: item?.dimensionsIn,
-      dimensionsConfidence: item?.dimensionsConfidence,
-    }) ?? "none",
-  );
   const [estimatedWeightLowLb, setEstimatedWeightLowLb] = useState(
     formatOptionalNumber(item?.estimatedWeightLowLb)
   );
@@ -343,12 +335,6 @@ export function ItemDetailSheet({
   const [estimatedPackedVolumeCuFt, setEstimatedPackedVolumeCuFt] = useState(
     formatOptionalNumber(item?.estimatedPackedVolumeCuFt)
   );
-  const [weightConfidence, setWeightConfidence] = useState<
-    InventoryItem["weightConfidence"]
-  >(item?.weightConfidence ?? "none");
-  const [volumeConfidence, setVolumeConfidence] = useState<
-    InventoryItem["volumeConfidence"]
-  >(item?.volumeConfidence ?? "none");
   // "This is an estimate" toggles — one per measurement. Checked ⇒ the value is a
   // guess (stored as confidence "estimated") and the estimate extras (weight
   // range / packed volume) show; unchecked ⇒ a real measurement ("manual").
@@ -655,7 +641,6 @@ export function ItemDetailSheet({
     setter: (nextValue: string) => void,
   ) {
     setter(value);
-    setDimensionsConfidence("manual");
   }
 
   function updateWeightEstimateInput(
@@ -663,12 +648,10 @@ export function ItemDetailSheet({
     setter: (nextValue: string) => void,
   ) {
     setter(value);
-    setWeightConfidence("manual");
   }
 
   function updateActualWeightInput(value: string) {
     setActualWeightLb(value);
-    setWeightConfidence("actual");
   }
 
   function updateVolumeInput(
@@ -676,7 +659,6 @@ export function ItemDetailSheet({
     setter: (nextValue: string) => void,
   ) {
     setter(value);
-    setVolumeConfidence("manual");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1447,7 +1429,6 @@ export function ItemDetailSheet({
                     checked={weightIsEstimate}
                     onChange={(checked) => {
                       setWeightIsEstimate(checked);
-                      setWeightConfidence(checked ? "low" : "actual");
                     }}
                   />
                   {weightIsEstimate ? (
@@ -1517,7 +1498,6 @@ export function ItemDetailSheet({
                     checked={dimensionsAreEstimate}
                     onChange={(checked) => {
                       setDimensionsAreEstimate(checked);
-                      setDimensionsConfidence(checked ? "low" : "actual");
                     }}
                   />
                 </div>
@@ -1542,7 +1522,6 @@ export function ItemDetailSheet({
                     checked={volumeIsEstimate}
                     onChange={(checked) => {
                       setVolumeIsEstimate(checked);
-                      setVolumeConfidence(checked ? "low" : "actual");
                     }}
                   />
                   {volumeIsEstimate ? (
@@ -1605,19 +1584,19 @@ export function ItemDetailSheet({
                     <ProvenanceCard
                       title="Dimensions"
                       entry={item.measurementProvenance?.dimensions}
-                      fallbackConfidence={dimensionsConfidence}
+                      fallbackConfidence={itemDimensionsConfidenceForRead(item)}
                       onConfirm={() => void handleConfirmMeasurement("dimensions")}
                     />
                     <ProvenanceCard
                       title="Weight"
                       entry={item.measurementProvenance?.weight}
-                      fallbackConfidence={weightConfidence}
+                      fallbackConfidence={item.weightConfidence}
                       onConfirm={() => void handleConfirmMeasurement("weight")}
                     />
                     <ProvenanceCard
                       title="Volume"
                       entry={item.measurementProvenance?.volume}
-                      fallbackConfidence={volumeConfidence}
+                      fallbackConfidence={item.volumeConfidence}
                       onConfirm={() => void handleConfirmMeasurement("volume")}
                     />
                   </div>

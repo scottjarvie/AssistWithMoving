@@ -450,6 +450,10 @@ describe("ItemDetailSheet task tabs", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(label), { target: { value: original } });
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    const measurement = confidence === "dimensionsConfidence" ? "Dimensions" : confidence === "weightConfidence" ? "Weight" : "Volume";
+    await userEvent.click(screen.getByRole("tab", { name: "Advanced" }));
+    expect(within(screen.getByRole("group", { name: `${measurement} measurement source` })).getByText(confidence === "dimensionsConfidence" ? "actual" : "low")).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "Measurements" }));
     const estimate = screen.getAllByLabelText(estimateLabel)[estimateIndex];
     fireEvent.click(estimate);
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();

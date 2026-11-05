@@ -235,13 +235,19 @@ describe("AiConnectionManager", () => {
       screen.getByRole("button", { name: "Revoke My AI on the laptop" }),
     );
     expect(connectionData.revoke).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Yes, revoke it" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Keep it" })).toHaveFocus();
     expect(
       screen.getByText(/The next call from this AI is refused immediately/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/the record of what it did, stays readable/),
     ).toBeInTheDocument();
+
+    // A second Enter activates the safe default, never the destructive action.
+    await user.keyboard("{Enter}");
+    expect(connectionData.revoke).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Yes, revoke it" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Revoke My AI on the laptop" }));
 
     await user.click(screen.getByRole("button", { name: "Yes, revoke it" }));
     expect(connectionData.revoke).toHaveBeenCalledWith({
@@ -250,7 +256,7 @@ describe("AiConnectionManager", () => {
     });
   });
 
-  it("treats the reported client name as a label rather than a verified claim", () => {
+  it("treats the reported client name as a label rather than a verified claim", async () => {
     render(<AiConnectionManager />);
     fireEvent.click(screen.getByRole("button", { name: "Review My AI on the laptop" }));
 
@@ -259,11 +265,16 @@ describe("AiConnectionManager", () => {
       screen.getByText(/has not verified it/),
     ).toBeInTheDocument();
     expect(screen.getByText("Dynamic registration")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "My AI on the laptop" })).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Review My AI on the laptop" }));
+    expect(screen.queryByRole("heading", { name: "My AI on the laptop" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review My AI on the laptop" })).toHaveFocus();
   });
 
   it("shows refusals clearly in recent activity", async () => {
     render(<AiConnectionManager />);
-    await userEvent.click(screen.getByRole("tab", { name: /^Activity:/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Recent refused request/ }));
+    expect(screen.getByRole("tab", { name: /^Activity:/ })).toHaveFocus();
 
     expect(screen.getByText("Refused")).toBeVisible();
     expect(

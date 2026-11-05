@@ -224,7 +224,7 @@ export function AiConnectionManager() {
   const manualBrief = buildManualQueueBrief(moves[0]?.title ?? null);
   const recentRefusals = new Set(activity.filter(row => row.outcome === "refused").map(row => String(row.grantId)));
   const sections = [
-    { value: "connections", label: "Connections", icon: "ai" as const, count: grantsResult ? grants.length : undefined },
+    { value: "connections", label: "Connections", icon: "ai" as const, count: grantsResult ? grants.length : undefined, countLabel: grants.length >= 40 ? `${grants.length} latest loaded connections; history may contain more` : undefined },
     { value: "approve", label: "Approve", icon: "person" as const },
     { value: "activity", label: "Activity", icon: "note" as const, count: activityResult ? activity.length : undefined, countLabel: `${activity.length} latest loaded entries` },
     { value: "setup", label: "Setup", icon: "settings" as const },
@@ -242,10 +242,14 @@ export function AiConnectionManager() {
     setReviewingGrantId(null); setConfirmingRevokeId(null); button?.focus();
   }
   useEffect(() => {
-    if (reviewingGrantId) document.getElementById(`${detailsPrefix}-${reviewingGrantId}-heading`)?.focus({ preventScroll: true });
+    if (reviewingGrantId) {
+      const heading = document.getElementById(`${detailsPrefix}-${reviewingGrantId}-heading`);
+      heading?.focus();
+      heading?.scrollIntoView?.({ block: "start", behavior: "instant" });
+    }
   }, [reviewingGrantId, detailsPrefix]);
   useEffect(() => {
-    if (confirmingRevokeId) document.getElementById(`${detailsPrefix}-${confirmingRevokeId}-confirm`)?.focus();
+    if (confirmingRevokeId) document.getElementById(`${detailsPrefix}-${confirmingRevokeId}-keep`)?.focus();
     else if (cancelledRevoke.current) {
       document.getElementById(`${detailsPrefix}-${cancelledRevoke.current}-revoke`)?.focus();
       cancelledRevoke.current = null;
@@ -360,15 +364,15 @@ export function AiConnectionManager() {
   }
 
   return (
-    <div ref={sectionTabs} className="space-y-4 [&_button]:min-h-11 sm:[&_button]:min-h-8">
-      {message ? (
+    <div ref={sectionTabs} className="space-y-4 [&_button]:min-h-11 lg:[&_button]:min-h-8">
         <p
           role="status"
-          className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm leading-6"
+          aria-live="polite"
+          aria-atomic="true"
+          className={message ? "rounded-md border border-primary/30 bg-primary/5 p-3 text-sm leading-6" : "sr-only"}
         >
           {message}
         </p>
-      ) : null}
 
       <Tabs value={activeSection} onValueChange={setActiveSection} className="gap-4">
       <MoveWorkspaceTabList sticky tabs={sections} activeValue={activeSection} ariaLabel="AI connection sections" />
@@ -387,9 +391,9 @@ export function AiConnectionManager() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">Partial</Badge>
-              <h3 id="ai-endpoint-heading" className="text-lg font-semibold">
+              <h2 id="ai-endpoint-heading" className="text-lg font-semibold">
                 Let the AI you already use work on your move
-              </h3>
+              </h2>
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               You point your AI at one address, sign in as yourself, and then
@@ -430,9 +434,9 @@ export function AiConnectionManager() {
         aria-labelledby="ai-approve-heading"
         className="rounded-lg border border-border bg-card p-4 sm:p-5"
       >
-        <h3 id="ai-approve-heading" className="text-lg font-semibold">
+        <h2 id="ai-approve-heading" className="text-lg font-semibold">
           Approve a connection
-        </h3>
+        </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Choose the smallest authority that lets the work happen. You can
           approve a second, narrower connection later instead of widening this
@@ -623,9 +627,9 @@ export function AiConnectionManager() {
               className="rounded-md border border-primary/30 bg-primary/5 p-3"
               aria-live="polite"
             >
-              <h4 className="text-sm font-semibold">
+              <h3 className="text-sm font-semibold">
                 What you are about to approve
-              </h4>
+              </h3>
               {selectedScopes.length === 0 ? (
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   Nothing yet. Pick at least one thing above and this summary
@@ -702,13 +706,14 @@ export function AiConnectionManager() {
         className="space-y-3"
       >
         <div>
-          <h3 id="ai-connections-heading" className="text-lg font-semibold">
+          <h2 id="ai-connections-heading" className="text-lg font-semibold">
             Your AI connections
-          </h3>
+          </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             These are grants you approved for an AI signing in as you. They are
             not people in your household, not share links, and not API keys.
           </p>
+          {grants.length >= 40 ? <p className="mt-1 text-xs text-muted-foreground">Showing the latest {grants.length} loaded connections. Older connection history may exist.</p> : null}
           <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => openSection("approve")}><MovingSymbol name="add" className="size-4" />Approve a connection</Button><Button type="button" variant="ghost" size="sm" onClick={() => openSection("setup")}><MovingSymbol name="settings" className="size-4" />Connection setup</Button></div>
         </div>
         {grantsResult === undefined ? (
@@ -720,7 +725,7 @@ export function AiConnectionManager() {
           </p>
         ) : (
           <>
-          <AiPermissionsMatrix grants={grants} abilities={boundaryScopes} recentRefusals={recentRefusals} reviewingId={reviewingGrantId} detailsPrefix={detailsPrefix} onReview={id => { setConfirmingRevokeId(null); setReviewingGrantId(id); }} onRevoke={id => { setReviewingGrantId(id); setConfirmingRevokeId(id); }} />
+          <AiPermissionsMatrix grants={grants} abilities={boundaryScopes} recentRefusals={recentRefusals} reviewingId={reviewingGrantId} detailsPrefix={detailsPrefix} onOpenActivity={() => openSection("activity")} onReview={id => { if (reviewingGrantId === id) closeGrantReview(); else { setConfirmingRevokeId(null); setReviewingGrantId(id); } }} onRevoke={id => { setReviewingGrantId(id); setConfirmingRevokeId(id); }} />
           <ul className="space-y-3">
             {grants.map((grant) => (
               <li
@@ -730,9 +735,9 @@ export function AiConnectionManager() {
                 className="rounded-lg border border-border bg-card p-4"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <h4 id={`${detailsPrefix}-${grant.grantId}-heading`} tabIndex={-1} className="text-base font-semibold break-words focus-visible:outline-2 focus-visible:outline-ring">
+                  <h3 id={`${detailsPrefix}-${grant.grantId}-heading`} tabIndex={-1} className="scroll-mt-[calc(var(--workspace-navigation-offset,0px)+6rem)] text-base font-semibold break-words focus-visible:outline-2 focus-visible:outline-ring">
                     {grant.label}
-                  </h4>
+                  </h3>
                   <Badge
                     variant={
                       grant.status === "active"
@@ -882,6 +887,7 @@ export function AiConnectionManager() {
                           type="button"
                           size="sm"
                           variant="outline"
+                          id={`${detailsPrefix}-${grant.grantId}-keep`}
                           onClick={() => { cancelledRevoke.current = String(grant.grantId); setConfirmingRevokeId(null); }}
                         >
                           Keep it
@@ -908,7 +914,7 @@ export function AiConnectionManager() {
           </ul>
           </>
         )}
-        <nav aria-label="AI settings contents" className="border-t border-border pt-3 md:hidden"><h4 className="mb-2 text-sm font-semibold">Contents</h4><div className="grid grid-cols-2 gap-1">{sections.map(section => <Button key={section.value} type="button" variant="ghost" size="sm" className="justify-start whitespace-normal text-left" onClick={() => openSection(section.value)}><MovingSymbol name={section.icon} className="size-4" />{section.label}</Button>)}</div></nav>
+        <nav aria-label="AI settings contents" className="border-t border-border pt-3 md:hidden"><h3 className="mb-2 text-sm font-semibold">Contents</h3><div className="grid grid-cols-2 gap-1">{sections.map(section => <Button key={section.value} type="button" variant="ghost" size="sm" className="justify-start whitespace-normal text-left" onClick={() => openSection(section.value)}><MovingSymbol name={section.icon} className="size-4" />{section.label}</Button>)}</div></nav>
       </section>
       </TabsContent>
       <TabsContent value="activity" forceMount hidden={activeSection !== "activity"}>
@@ -918,13 +924,13 @@ export function AiConnectionManager() {
       {/* ---------------------------------------------------------------- */}
       <section aria-labelledby="ai-activity-heading" className="space-y-3">
         <div>
-          <h3
+          <h2
             id="ai-activity-heading"
             className="flex items-center gap-2 text-lg font-semibold"
           >
             <MovingSymbol name="note" className="size-4 text-primary" />
             Recent activity
-          </h3>
+          </h2>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             What was used, and what was refused. A refusal is the boundary
             working — it means an AI asked for something you never approved.
@@ -988,13 +994,13 @@ export function AiConnectionManager() {
         aria-labelledby="ai-never-heading"
         className="rounded-lg border border-border bg-card p-4 sm:p-5"
       >
-        <h3
+        <h2
           id="ai-never-heading"
           className="flex items-center gap-2 text-lg font-semibold"
         >
           <MovingSymbol name="source" className="size-4 text-primary" />
           What no connection can ever reach
-        </h3>
+        </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           These limits are not settings. There is no checkbox that turns them
           on, for any AI, on any connection.
@@ -1004,7 +1010,7 @@ export function AiConnectionManager() {
         ) : (
           <div className="mt-4 grid gap-5 lg:grid-cols-2">
             <div>
-              <h4 className="text-sm font-semibold">Never shown</h4>
+              <h3 className="text-sm font-semibold">Never shown</h3>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
                 {grantsResult.neverExposed.map((entry) => (
                   <li key={entry}>{entry}</li>
@@ -1012,10 +1018,10 @@ export function AiConnectionManager() {
               </ul>
             </div>
             <div>
-              <h4 className="flex items-center gap-2 text-sm font-semibold">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
                 <MovingSymbol name="person" className="size-4" />
                 Never permitted
-              </h4>
+              </h3>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
                 {grantsResult.neverPermitted.map((entry) => (
                   <li key={entry}>{entry}</li>
@@ -1024,7 +1030,7 @@ export function AiConnectionManager() {
             </div>
           </div>
         )}
-        <div className="mt-5 border-t border-border pt-4"><h4 className="text-sm font-semibold">Actions for a signed-in person</h4><table className="mt-2 w-full text-left text-sm"><thead><tr className="border-b border-border text-xs text-muted-foreground"><th scope="col" className="py-2 font-medium">Action</th><th scope="col" className="py-2 font-medium">Your control</th></tr></thead><tbody>
+        <div className="mt-5 border-t border-border pt-4"><h3 className="text-sm font-semibold">Actions for a signed-in person</h3><table className="mt-2 w-full text-left text-sm"><thead><tr className="border-b border-border text-xs text-muted-foreground"><th scope="col" className="py-2 font-medium">Action</th><th scope="col" className="py-2 font-medium">Your control</th></tr></thead><tbody>
           <tr className="border-b border-border"><th scope="row" className="py-2 pr-3 font-normal">Approve a new grant</th><td className="py-2"><Button type="button" variant="link" size="sm" onClick={() => openSection("approve")}>Choose moves and abilities</Button></td></tr>
           <tr className="border-b border-border"><th scope="row" className="py-2 pr-3 font-normal">Revoke an active grant</th><td className="py-2"><Button type="button" variant="link" size="sm" onClick={() => openSection("connections")}>Review connections</Button></td></tr>
           <tr><th scope="row" className="py-2 pr-3 font-normal">Manage separate API keys</th><td className="py-2"><Button type="button" variant="link" size="sm" onClick={() => openSection("keys")}>Open API keys</Button></td></tr>
@@ -1040,9 +1046,9 @@ export function AiConnectionManager() {
         aria-labelledby="ai-manual-heading"
         className="rounded-lg border border-border bg-card p-4 sm:p-5"
       >
-        <h3 id="ai-manual-heading" className="text-lg font-semibold">
+        <h2 id="ai-manual-heading" className="text-lg font-semibold">
           No connection? Hand the work over by hand
-        </h3>
+        </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           If your AI cannot connect — or you would rather it did not — copy this
           brief into any AI chat. It gets the work done and hands you back one
@@ -1069,10 +1075,10 @@ export function AiConnectionManager() {
       {/* 7. API keys — a different door, kept secondary and separate.      */}
       {/* ---------------------------------------------------------------- */}
       <section aria-labelledby="ai-keys-heading" className="rounded-lg border border-border bg-card p-4 sm:p-5">
-        <h3 id="ai-keys-heading" className="flex min-h-9 items-center gap-2 font-medium">
+        <h2 id="ai-keys-heading" className="flex min-h-9 items-center gap-2 font-medium">
           <MovingSymbol name="source" className="size-4 text-primary" />
           Separate: API keys for tools that cannot sign in
-        </h3>
+        </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           An API key is a different door from the grants in Connections. A key is
           a pasted secret with its own separate permissions; a connection grant

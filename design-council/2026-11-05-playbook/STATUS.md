@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Home has a bounded council pass; T corrections and the AI matrix pass TypeScript, 59 affected tests and focused lint; rendered/council review remains pending.
+[Open newest-first gallery](gallery.html) · U source reviews recorded (Sol 8.3 / Opus 7.9); focus and offline-boundary fixes await checks and the next rendered gallery round.
 
 # Moving design council status
 

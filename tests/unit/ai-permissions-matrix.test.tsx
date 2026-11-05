@@ -11,7 +11,7 @@ function grant(status: GrantRow["status"]): GrantRow {
 describe("AI permissions matrix", () => {
   it("distinguishes current authority from expired/revoked approvals and unapproved abilities", () => {
     const onReview = vi.fn(), onRevoke = vi.fn();
-    render(<AiPermissionsMatrix abilities={abilities} grants={[grant("active"), grant("expired"), grant("revoked")]} recentRefusals={new Set(["synthetic-active"])} onReview={onReview} onRevoke={onRevoke} detailsPrefix="synthetic-details" reviewingId={null} />);
+    render(<AiPermissionsMatrix abilities={abilities} grants={[grant("active"), grant("expired"), grant("revoked")]} recentRefusals={new Set(["synthetic-active"])} onReview={onReview} onRevoke={onRevoke} onOpenActivity={vi.fn()} detailsPrefix="synthetic-details" reviewingId={null} />);
     const active = screen.getByRole("row", { name: /Synthetic active connection/ });
     expect(within(active).getByText("Approved")).toBeInTheDocument();
     expect(within(active).getByText("Not approved")).toBeInTheDocument();
