@@ -47,8 +47,9 @@ node_version=$(node -v 2>/dev/null) || {
 # Always rebuild from the lockfile, including on resume. A manifest stamp cannot
 # prove that installed packages are intact or that patch-package inputs match.
 # npm ci removes old success stamps with the dependency tree, and lifecycle
-# scripts apply the current patches. Never write cache evidence after a failure.
-NODE_ENV=development npm ci --include=dev --ignore-scripts=false --no-audit --no-fund >> "$log" 2>&1
+# scripts apply the current patches. CI makes patch-package propagate patch
+# failures instead of its default local success exit. Never cache a failure.
+CI=true NODE_ENV=development npm ci --include=dev --ignore-scripts=false --no-audit --no-fund >> "$log" 2>&1
 status=$?
 
 # Stdout goes into Claude's context; keep each summary or warning to one line.

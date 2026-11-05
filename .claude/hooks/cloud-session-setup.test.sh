@@ -22,6 +22,7 @@ cat > "$work/old/bin/npm" <<'MOCK'
 #!/bin/sh
 printf '%s %s\n' "$(node -v)" "$*" >> "$MOCK_WORK/installs"
 [ "$NODE_ENV" = development ] || exit 2
+[ "$CI" = true ] || exit 2
 [ "$*" = 'ci --include=dev --ignore-scripts=false --no-audit --no-fund' ] || exit 2
 # Model tree replacement and postinstall. Failure deliberately leaves stale
 # evidence and damages a package, so rollback tests cannot pass by cache reuse.
