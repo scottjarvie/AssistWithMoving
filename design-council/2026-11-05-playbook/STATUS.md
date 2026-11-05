@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Shared foundation implemented; source checks and exact-head council review in progress; every-page implementation continues.
+[Open newest-first gallery](gallery.html) · Shared foundation source checks pass; exact-head council review pending; every-page implementation continues.
 
 # Moving design council status
 

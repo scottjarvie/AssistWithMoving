@@ -3,7 +3,9 @@
 Scope: shared appearance/navigation, semantic tokens, original SVG symbols/image slots, approved brand mark, section fallback and phone Contents. This is the first implementation tranche; it is not an every-page completion claim.
 
 - Full lint passed, with the same existing image-worker warning as baseline.
+- Gallery generator lint passed separately after it was added.
 - Typecheck passed.
+- Calculated WCAG contrast for foreground, muted text, primary text, accent text, evidence, success and warning against their semantic backgrounds: every tested pair exceeds 4.5:1 in both themes (light minimum 5.22:1, dark minimum 8.37:1). This checks solid token colors, not every composited/tinted surface or final browser rendering.
 - Targeted component run: 40 tests passed after preference and navigation fixes; one new section-contents test still exposed Radix activation behavior. That issue was then fixed and its focused recheck passed. Together the checks cover the six affected suites (41 tests); this is not a new full-suite pass.
 - The new preference tests exercise device-following appearance, user override, independent navigation choice, live storage events, denied storage writes, and unchanged identity/value of an unfinished Queue input.
 - The new contents test chooses an off-strip section through `All N`, verifies the selected panel, closes the chooser and checks for duplicate element IDs. Selection focuses the real tab after closing rather than dispatching a synthetic click that Radix ignores.
