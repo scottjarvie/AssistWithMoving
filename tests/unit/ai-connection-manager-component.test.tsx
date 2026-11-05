@@ -70,7 +70,7 @@ const connectionData = vi.hoisted(() => ({
         status: "active" as "active" | "expired" | "revoked",
         clientId: "verified-client" as string | null,
         scopes: ["moving.context.read"],
-        moveScope: "selectedMoves" as const,
+        moveScope: "selectedMoves" as "selectedMoves" | "allMoves",
         moveIds: ["move_123"],
         observedClientName: "Some AI Client",
         registrationMethodLabel: "Dynamic registration",
@@ -309,6 +309,8 @@ describe("AiConnectionManager", () => {
 
   it("allows a participant-only person to select moves for existing limits", async () => {
     const households = connectionData.households;
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], moveScope: "allMoves", moveIds: [] }];
     connectionData.households = [];
     try {
       const user = userEvent.setup();
@@ -319,7 +321,7 @@ describe("AiConnectionManager", () => {
       await user.click(within(form).getByRole("checkbox", { name: "Utah to Virginia" }));
       await user.click(within(form).getByRole("button", { name: "Save limits" }));
       expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ moveScope: "selectedMoves", moveIds: ["move_123"] }));
-    } finally { connectionData.households = households; }
+    } finally { connectionData.households = households; connectionData.grants.grants = original; }
   });
 
   it("blocks another new row at history capacity while allowing explicit reconnect", async () => {
@@ -622,7 +624,6 @@ it("preserves selected move limits across pages", async () => {
     await user.click(screen.getByText("Change moves, permissions or end date"));
     const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
     await user.click(within(form).getByRole("radio", { name: "Only the moves checked below" }));
-    await user.click(within(form).getByRole("checkbox", { name: "Utah to Virginia" }));
     await user.click(within(form).getByRole("button", { name: "More move choices" }));
     await user.click(within(form).getByRole("checkbox", { name: "Later move" }));
     await user.click(within(form).getByRole("button", { name: "Save limits" }));
