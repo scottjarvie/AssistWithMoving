@@ -530,6 +530,7 @@ describe("AiConnectionManager", () => {
     expect(connectionData.revoke).toHaveBeenCalledWith({
       grantId: "ai_grant_123",
       expectedVersion: 3,
+      expectedRecoveryFingerprint: "current-recovery",
     });
   });
 

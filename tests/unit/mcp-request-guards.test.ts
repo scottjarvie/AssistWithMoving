@@ -30,6 +30,11 @@ import { getFunctionName } from "convex/server";
 import { movingScopes } from "../../convex/lib/aiGrants";
 import { clearClientMetadataCache } from "../../convex/lib/mcpClientIdentity";
 
+async function revokeOwner(owner: any, args: any) {
+  const loaded = await owner.query(api.aiGrants.listMine, {});
+  return owner.mutation(api.aiGrants.revoke, { ...args, expectedRecoveryFingerprint: loaded.recoveryFingerprint });
+}
+
 const verifyMock = vi.fn();
 
 vi.mock("jose", async (importOriginal) => {
@@ -521,7 +526,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       const persisted = () => createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: clientId } }, toolName: "list_moves", mode: "list" } as any);
       if (firstDoor === "canonical") await canonical(); else expect((await persisted()).allowed).toBe(true);
       const original = (await f.snapshot()).grants[0];
-      await f.owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: original.version });
+      await revokeOwner(f.owner, { grantId: original._id, expectedVersion: original.version });
       if (!participantOnly) await f.owner.mutation(api.aiGrants.approve, { ...consent, householdId: f.householdId, label: "Unrelated connection" });
       expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
       expect((await persisted()).allowed).toBe(false);
@@ -545,7 +550,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
         caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: original.version, action: "revoke",
       })).rejects.toThrow(/changed/);
       expect(await f.snapshot()).toEqual(beforeDelayed);
-      await f.owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: reconnected.version });
+      await revokeOwner(f.owner, { grantId, expectedVersion: reconnected.version });
       expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
       expect((await persisted()).allowed).toBe(false);
       await f.t.run(async ctx => {
@@ -621,7 +626,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
         expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
         expect((await persisted(normalized)).allowed).toBe(false);
         const row = (await f.snapshot()).grants[0];
-        await f.owner.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: row.version });
+        await revokeOwner(f.owner, { grantId: row._id, expectedVersion: row.version });
         const revoked = await f.snapshot();
         await canonical(normalized);
         expect((await persisted()).allowed).toBe(false);
@@ -645,7 +650,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
           runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
           runAction: async () => {
             if (restriction === "revoke-during-metadata") {
-              await f.owner.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: row.version });
+              await revokeOwner(f.owner, { grantId: row._id, expectedVersion: row.version });
               expected = await f.snapshot();
             }
             return JSON.stringify({ client_id: restriction === "invalid-metadata" ? "https://unrelated.example/" : normalized, redirect_uris: ["https://client.example/callback"] });
@@ -788,7 +793,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
           // this request is waiting on the required metadata document.
           await f.t.mutation(internal.aiGrants.touchLegacyConnection, { subject: SUBJECT, clientId: `legacy:${clientId}` });
           const row = (await f.snapshot()).grants[0];
-          await f.owner.mutation(api.aiGrants.revoke, { grantId: row._id, expectedVersion: row.version });
+          await revokeOwner(f.owner, { grantId: row._id, expectedVersion: row.version });
           refusedSnapshot = await f.snapshot();
           return valid;
         },
@@ -811,7 +816,7 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
       runAction: async () => {
         const rows = (await f.snapshot()).grants;
         const latest = rows[rows.length - 1];
-        await f.owner.mutation(api.aiGrants.revoke, { grantId: latest._id, expectedVersion: latest.version });
+        await revokeOwner(f.owner, { grantId: latest._id, expectedVersion: latest.version });
         afterRefusal = await f.snapshot();
         return valid;
       },
