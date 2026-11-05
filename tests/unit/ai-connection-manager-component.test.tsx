@@ -145,6 +145,7 @@ const connectionData = vi.hoisted(() => ({
   },
   keys: [] as unknown[],
   participantRecovery: false,
+  participantSameHousehold: false,
   memberPaging: false,
 }));
 
@@ -180,7 +181,7 @@ vi.mock("convex/react", () => ({
       case apiMock.aiGrants.listMoveChoices:
         return connectionData.moveChoicesPaging ? { moves: (args as { cursor?: string })?.cursor ? [{ ...connectionData.stats.moves[0], moveId: "move_456", title: "Later move" }] : connectionData.stats.moves, nextCursor: (args as { cursor?: string })?.cursor ? null : "later-moves" } : connectionData.stats;
       case apiMock.aiGrants.listRecoveryHouseholds:
-        return connectionData.participantRecovery ? { households: [{ householdId: (args as { cursor?: string })?.cursor ? "participant_later" : "participant_current", label: (args as { cursor?: string })?.cursor ? "Move: Later participant move" : "Move: Current participant move", moveId: (args as { cursor?: string })?.cursor ? "move_witness_later" : "move_witness_current" }], nextCursor: (args as { cursor?: string })?.cursor ? null : "later-households" } : { households: [], nextCursor: null };
+        return connectionData.participantRecovery ? { households: [{ householdId: (args as { cursor?: string })?.cursor && !connectionData.participantSameHousehold ? "participant_later" : "participant_current", label: (args as { cursor?: string })?.cursor ? "Move: Later participant move" : "Move: Current participant move", moveId: (args as { cursor?: string })?.cursor ? "move_witness_later" : "move_witness_current" }], nextCursor: (args as { cursor?: string })?.cursor ? null : "later-households" } : { households: [], nextCursor: null };
       case apiMock.apiKeys.listForHousehold:
         return connectionData.keys;
       default:
@@ -371,6 +372,24 @@ describe("AiConnectionManager", () => {
       await user.click(screen.getByRole("button", { name: "Approve this connection" }));
       expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_later", reconnectGrantId: "ai_grant_123", eligibilityMoveId: "move_witness_later" }));
     } finally { connectionData.grants.grants = original; connectionData.households = households; connectionData.participantRecovery = false; }
+  });
+
+  it("uses a refreshed eligible move for the same selected household on a later page", async () => {
+    const original = connectionData.grants.grants;
+    const households = connectionData.households;
+    connectionData.households = [];
+    connectionData.participantRecovery = true;
+    connectionData.participantSameHousehold = true;
+    connectionData.grants.grants = [{ ...original[0], status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      await user.selectOptions(screen.getByLabelText("Household", { selector: "#ai-grant-household" }), "participant_current");
+      await user.click(screen.getByRole("button", { name: "More recovery households" }));
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "participant_current", eligibilityMoveId: "move_witness_later" }));
+    } finally { connectionData.grants.grants = original; connectionData.households = households; connectionData.participantRecovery = false; connectionData.participantSameHousehold = false; }
   });
 
   it("allows a participant-only person to select moves for existing limits", async () => {
