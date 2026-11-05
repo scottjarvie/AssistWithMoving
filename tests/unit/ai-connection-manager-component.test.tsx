@@ -72,6 +72,7 @@ const connectionData = vi.hoisted(() => ({
         status: "active" as "active" | "expired" | "revoked",
         clientId: "verified-client" as string | null,
         scopes: ["moving.context.read"],
+        effectiveAuthority: { status: "active" as const, scopes: ["moving.context.read"] },
         moveScope: "selectedMoves" as "selectedMoves" | "allMoves",
         moveIds: ["move_123"],
         observedClientName: "Some AI Client",
@@ -661,6 +662,41 @@ it("shows frozen historical consent separately from current permission wording",
     render(<AiConnectionManager />);
     expect(screen.getByText("Saved old approval wording.")).toBeInTheDocument();
     expect(screen.getByText(/Saved original consent terms/)).toBeInTheDocument();
-    expect(screen.getByText(/Current effective permissions: Read the move context you choose/)).toBeInTheDocument();
+    expect(screen.getByText(/Resolved connection permissions \(active\): Read the move context you choose/)).toBeInTheDocument();
+  } finally { connectionData.grants.grants = original; }
+});
+
+
+it.each(["household", "reconnect"])("clears selected moves when the approval %s changes", async kind => {
+  const households = connectionData.households;
+  const original = connectionData.grants.grants;
+  connectionData.grants.consentPolicyVersion = GRANT_CONSENT_POLICY;
+  connectionData.grants.catalogFingerprint = grantCatalogFingerprint();
+  connectionData.households = [...households, { ...households[0], household: { _id: "household_other" as Id<"households">, name: "Another household" } }];
+  connectionData.grants.grants = [...original, { ...original[0], grantId: "other_grant" as Id<"aiGrants">, householdId: "household_other" as Id<"households">, status: "revoked", label: "Other client" }];
+  try {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.type(screen.getByLabelText("Name this connection"), "Scope change");
+    const moves = screen.getByRole("group", { name: "Which moves" });
+    await user.click(within(moves).getByRole("radio", { name: /Only the moves I pick/ }));
+    await user.click(within(moves).getByRole("checkbox", { name: "Utah to Virginia" }));
+    if (kind === "household") await user.selectOptions(screen.getByLabelText("Household", { selector: "#ai-grant-household" }), "household_other");
+    else await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "other_grant");
+    expect(within(moves).getByRole("radio", { name: /All my moves/ })).toBeChecked();
+    await user.click(within(moves).getByRole("radio", { name: /Only the moves I pick/ }));
+    expect(within(moves).getByRole("checkbox", { name: "Utah to Virginia" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Approve this connection" })).toBeDisabled();
+  } finally { connectionData.households = households; connectionData.grants.grants = original; }
+});
+
+it("labels resolved alias authority separately from the saved full row", () => {
+  const original = connectionData.grants.grants;
+  connectionData.grants.grants = [{ ...original[0], scopes: ["moving.context.read", "moving.work.write"], effectiveAuthority: { status: "active", scopes: ["moving.context.read"] } }];
+  try {
+    render(<AiConnectionManager />);
+    const authority = screen.getByText(/Resolved connection permissions/);
+    expect(authority).toHaveTextContent("Read the move context you choose");
+    expect(authority).not.toHaveTextContent("Save the work you asked for");
   } finally { connectionData.grants.grants = original; }
 });

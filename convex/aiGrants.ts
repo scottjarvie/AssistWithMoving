@@ -231,6 +231,19 @@ function intersectAliasGrants(rows: Doc<"aiGrants">[], now: number): Doc<"aiGran
   };
 }
 
+function resolveAliasRows(rows: Doc<"aiGrants">[], now: number) {
+  const superseded = new Set(rows.flatMap(row => row.reconnectsClientHistory ?? [])
+    .map(row => `${row.grantId}:${row.version}`));
+  const decisions = new Map<string, Doc<"aiGrants">>();
+  for (const row of rows) {
+    if (superseded.has(`${row._id}:${row.version}`)) continue;
+    const previous = decisions.get(row.clientId!);
+    if (!previous || compareDecisions(row, previous, now) > 0) decisions.set(row.clientId!, row);
+  }
+  const bound = [...decisions.values()];
+  return bound.length ? intersectAliasGrants(bound, now) : undefined;
+}
+
 async function governingGrants(
   ctx: QueryCtx | MutationCtx, ownerUserId: Id<"users">,
   clientId: string | undefined, now: number,
@@ -259,16 +272,8 @@ async function governingGrants(
   // Only explicit person reapproval can supersede this client's prior alias
   // decisions. Pin exact revisions instead of clock order: any later edit or
   // refusal increments its revision and must govern again, even in the same ms.
-  const superseded = new Set(rows.flatMap(row => row.reconnectsClientHistory ?? [])
-    .map(row => `${row.grantId}:${row.version}`));
-  const decisions = new Map<string, Doc<"aiGrants">>();
-  for (const row of rows) {
-    if (superseded.has(`${row._id}:${row.version}`)) continue;
-    const previous = decisions.get(row.clientId!);
-    if (!previous || compareDecisions(row, previous, now) > 0) decisions.set(row.clientId!, row);
-  }
-  const bound = [...decisions.values()];
-  if (bound.length) return [intersectAliasGrants(bound, now)];
+  const authority = resolveAliasRows(rows, now);
+  if (authority) return [authority];
   const unbound = await ctx.db.query("aiGrants")
     .withIndex("by_owner_client_status", q => q.eq("ownerUserId", ownerUserId).eq("clientId", undefined))
     .take(MAX_GRANT_HISTORY + 1);
@@ -402,6 +407,10 @@ export const touchLegacyConnection = internalMutation({
       };
     }
 
+    // Product policy: first verified contact without a stored decision gets
+    // full entitled access/no expiry, including previously issued valid tokens.
+    // This creates a new connection; it never lifts a saved choice or refusal.
+    // Manual approval, widening and reconnect still require current consent.
     // Never bound to this client. Honour the per-account connection cap, and
     // say what actually happened rather than claiming a revocation.
     const allActive = await activeGrantsForUser(ctx, user._id, undefined, now);
@@ -641,8 +650,22 @@ export const listMine = query({
     const rows = page.page;
     const history = await ctx.db.query("aiGrants")
       .withIndex("by_owner_updated", q => q.eq("ownerUserId", user._id)).order("desc").take(MAX_GRANT_HISTORY + 1);
-    const resolved = rows;
-    const grants = resolved.map((row) => shapeGrant(row, now));
+    const authorityByClient = new Map<string, Promise<Doc<"aiGrants"> | undefined>>();
+    const grants = await Promise.all(rows.map(async row => {
+      let authority: Doc<"aiGrants"> | undefined;
+      if (row.clientId) {
+        const clientId = row.clientId;
+        const key = oauthClientHistoryKey(clientId);
+        if (!authorityByClient.has(key)) authorityByClient.set(key, (async () => {
+          if (history.length > MAX_GRANT_HISTORY) return (await recoveredGrant(ctx, user._id, clientId)) ?? undefined;
+          const related = history.filter(previous => previous.clientId && sameOAuthClientHistory(previous.clientId, clientId));
+          return related.find(previous => previous.recoveredClientKey === key) ?? resolveAliasRows(related, now);
+        })());
+        authority = await authorityByClient.get(key);
+      }
+      const current = authority ? shapeGrant(authority, now) : undefined;
+      return { ...shapeGrant(row, now), effectiveAuthority: current ? { status: current.status, scopes: current.status === "active" ? current.scopes : [], moveScope: current.moveScope, moveIds: current.moveIds, expiresAt: current.expiresAt, version: current.version } : null };
+    }));
     return {
       ...describeGrantBoundary(),
       // Settings must remain readable even for preexisting oversized histories.
@@ -1024,7 +1047,7 @@ export const updateLimits = mutation({
 export const revoke = mutation({
   args: {
     grantId: v.id("aiGrants"),
-    expectedVersion: v.optional(v.number()),
+    expectedVersion: v.number(),
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1034,7 +1057,7 @@ export const revoke = mutation({
     if (!grant || grant.ownerUserId !== user._id) {
       throw new ConvexError("That AI connection is not available.");
     }
-    if (args.expectedVersion !== undefined && grant.version !== args.expectedVersion) {
+    if (grant.version !== args.expectedVersion) {
       throw new ConvexError("This connection changed. Reload and try again.");
     }
     if (grant.status === "revoked") return { grantId: grant._id, alreadyRevoked: true };

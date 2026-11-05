@@ -95,6 +95,7 @@ type GrantRow = {
   revokedReason: string | null;
   note: string | null;
   version: number;
+  effectiveAuthority?: { status: "active" | "expired" | "revoked"; scopes: string[] } | null;
 };
 
 type GrantsResult = {
@@ -521,6 +522,8 @@ export function AiConnectionManager() {
                   value={reconnectGrantId ?? ""}
                   onChange={(event) => {
                     const id = event.target.value as Id<"aiGrants">;
+                    setSelectedMoveIds([]);
+                    setMoveScope("allMoves");
                     setReconnectGrantId(id || null);
                     setLabel(reconnectable.find(grant => grant.grantId === id)?.label ?? "");
                   }}
@@ -544,11 +547,11 @@ export function AiConnectionManager() {
                   id="ai-grant-household"
                   className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={householdId ?? ""}
-                  onChange={(event) =>
-                    setSelectedHouseholdId(
-                      event.target.value as Id<"households">,
-                    )
-                  }
+                  onChange={(event) => {
+                    setSelectedMoveIds([]);
+                    setMoveScope("allMoves");
+                    setSelectedHouseholdId(event.target.value as Id<"households">);
+                  }}
                 >
                   {households.map((entry) => (
                     <option
@@ -802,8 +805,8 @@ export function AiConnectionManager() {
             not people in your household, not share links, and not API keys.
           </p>
           <div className="mt-2 flex gap-2">
-            {historyCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(undefined); setReconnectGrantId(null); setLabel(""); }}>Recent connections</Button> : null}
-            {grantsResult?.nextCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(grantsResult.nextCursor!); setReconnectGrantId(null); setLabel(""); }}>Older connections</Button> : null}
+            {historyCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(undefined); setReconnectGrantId(null); setSelectedMoveIds([]); setMoveScope("allMoves"); setLabel(""); }}>Recent connections</Button> : null}
+            {grantsResult?.nextCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(grantsResult.nextCursor!); setReconnectGrantId(null); setSelectedMoveIds([]); setMoveScope("allMoves"); setLabel(""); }}>Older connections</Button> : null}
           </div>
         </div>
         {grantsResult === undefined ? (
@@ -922,7 +925,7 @@ export function AiConnectionManager() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-2 text-sm text-muted-foreground">Current effective permissions: {grant.scopes.map(scope => boundaryScopes.find(info => info.scope === scope)?.label ?? scope).join(", ") || "None"}.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{grant.effectiveAuthority ? `Resolved connection permissions (${grant.effectiveAuthority.status}): ${grant.effectiveAuthority.scopes.map(scope => boundaryScopes.find(info => info.scope === scope)?.label ?? scope).join(", ") || "None"}.` : "Resolved connection permissions are unavailable for an unbound approval or incomplete history. Reconnect explicitly to establish a current decision."}</p>
                 </div>
 
                 {grant.status !== "revoked" && canWriteConsent ? (

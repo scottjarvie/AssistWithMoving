@@ -2281,9 +2281,20 @@ under a new path such as `/api/v2`. Additive response fields may be added within
 
 ### AI connection defaults (23 October 2026)
 
+Product policy applies at the first verified contact with no saved connection
+decision, including a valid OAuth credential issued before this deployment.
+Token age does not add a separate approval gate. This never lifts any existing
+scope/expiry choice or refusal; manual widening and reconnect require current
+person consent.
+
 New OAuth connections on both `/mcp` and `/mcp/connect` create a full-access
 product grant with no end date. `scopeChoice: "full"` follows the current scope
 catalog, including future additions; it is not a frozen copy of scopes at sign-in.
+Settings show the resolved alias-intersected connection authority separately
+from saved row choices and historical consent. Incomplete history has no claimed
+effective authority until explicit recovery. Every owner revoke requires the
+loaded generation-safe version; legacy ID-only revokes fail closed.
+
 Settings at `https://movingmanifest.com/settings/ai` let the owner deliberately
 choose fewer permissions, add/change/remove an end date, or revoke the connection.
 Scope reductions write `scopeChoice: "chosen"`; all permissions on writes `"full"`.
