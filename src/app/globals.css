@@ -161,7 +161,38 @@
   html[data-navigation="top"] .workspace-main { padding-left: 0; }
 }
 
-.moving-section-strip { scroll-padding-inline: 0.5rem; }
+.moving-section-strip {
+  container: moving-sections / inline-size;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0;
+  scrollbar-width: thin;
+}
+/* Whole resting tabs: each viewport contains an integer number of slots.
+   Swiping still reaches every section; All remains outside the strip. */
+.moving-section-strip [data-slot="tabs-list"] {
+  --moving-visible-tabs: 1;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100cqw - (var(--moving-visible-tabs) - 1) * 4px) / var(--moving-visible-tabs));
+  width: max-content;
+  min-width: 0;
+  padding: 0;
+  gap: 4px;
+}
+.moving-section-strip [data-slot="tabs-trigger"] {
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+  padding-inline: 4px;
+  font-size: 0.8125rem;
+  scroll-snap-align: start;
+}
+@container moving-sections (min-width: 352px) { .moving-section-strip [data-slot="tabs-list"] { --moving-visible-tabs: 2; } }
+@container moving-sections (min-width: 528px) { .moving-section-strip [data-slot="tabs-list"] { --moving-visible-tabs: 3; } }
+@container moving-sections (min-width: 704px) { .moving-section-strip [data-slot="tabs-list"] { --moving-visible-tabs: 4; } }
+@container moving-sections (min-width: 880px) { .moving-section-strip [data-slot="tabs-list"] { --moving-visible-tabs: 5; } }
+@container moving-sections (min-width: 1056px) { .moving-section-strip [data-slot="tabs-list"] { --moving-visible-tabs: 6; } }
+@container moving-sections (min-width: 1232px) { .moving-section-strip [data-slot="tabs-list"] { --moving-visible-tabs: 7; } }
 .moving-reading-column { max-width: 72ch; }
 .moving-tray { border-top: 2px solid var(--primary); }
 .moving-image-slot { background: var(--muted); color: var(--primary); }
@@ -197,4 +228,13 @@
 ::selection {
   background: color-mix(in oklch, var(--primary), transparent 55%);
   color: var(--foreground);
+}
+
+/* Phone view pills rest on a complete label; the named Views chooser lists all. */
+.moving-view-strip { container: moving-views / inline-size; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+.moving-view-items { display: grid; grid-auto-flow: column; grid-auto-columns: 100cqw; gap: 4px; width: max-content; }
+.moving-view-items > button { width: 100%; scroll-snap-align: start; }
+@media (min-width: 640px) {
+  .moving-view-items { display: flex; flex-wrap: wrap; width: auto; gap: 4px; }
+  .moving-view-items > button { width: auto; }
 }

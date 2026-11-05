@@ -117,6 +117,8 @@ function dispositionLabel(disposition: InventoryItem["disposition"]) {
   return dispositionDisplayLabel(disposition);
 }
 
+function enumDisplayLabel(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
+
 // Project an item onto the shared sort shape. Weight/volume are totalled across
 // quantity to match how the other inventory surfaces sort.
 function itemToSortable(item: InventoryItem): SortableEntry {
@@ -312,11 +314,13 @@ function indicatorBadges(item: InventoryItem): IndicatorBadgeModel[] {
 function InventoryIndicators({
   item,
   visibleLimit = 2,
+  includeReview = true,
 }: {
   item: InventoryItem;
   visibleLimit?: number;
+  includeReview?: boolean;
 }) {
-  const badges = indicatorBadges(item);
+  const badges = indicatorBadges(item).filter(badge => includeReview || badge.label !== "review");
   const visibleBadges = badges.slice(0, visibleLimit);
   const hiddenCount = Math.max(badges.length - visibleBadges.length, 0);
 
@@ -648,9 +652,9 @@ export function InventoryTable({
       { id: "room", label: "Room", values: item => [item.room] },
       { id: "category", label: "Category", values: item => [item.category] },
       { id: "owner", label: "Owner / contact", values: item => [item.ownerPersonId], labelValue: value => owners.get(value) ?? "Owner not available", missingLabel: "Unassigned" },
-      { id: "status", label: "Status", values: item => [item.status] },
+      { id: "status", label: "Status", values: item => [item.status], labelValue: enumDisplayLabel },
       { id: "disposition", label: "Disposition", values: item => [item.disposition], labelValue: dispositionDisplayLabel },
-      { id: "condition", label: "Condition", values: item => [item.condition] },
+      { id: "condition", label: "Condition", values: item => [item.condition], labelValue: enumDisplayLabel },
       { id: "review", label: "Review", values: item => [item.needsReview ? "Needs review" : "No review flag"] },
       { id: "value", label: "High value", values: item => [item.highValue ? "High value" : "Not flagged high value"] },
       { id: "photo", label: "Photos", values: item => [(item.signals?.photoCount ?? 0) > 0 ? "Has photos" : "No photos"] },
@@ -904,26 +908,25 @@ export function InventoryTable({
         meta: {
           groupable: true,
           groupOrder: itemStatusOptions,
+          groupLabel: value => enumDisplayLabel(String(value)),
           label: "Status",
           mobile: "primary",
-          headClassName: "w-36",
+          headClassName: "w-28",
           editable: true,
         },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Status" />
         ),
         cell: ({ row }) => (
-          <div className="flex flex-col gap-1">
-            <StatusBadge status={row.original.status} />
             <InlineSelectCell
               value={row.original.status}
               options={itemStatusOptions}
               ariaLabel={`Status for ${row.original.name}`}
+              renderLabel={enumDisplayLabel}
               onValueChange={(status) =>
                 void patchItem(row.original, { status })
               }
             />
-          </div>
         ),
       },
       {
@@ -934,15 +937,13 @@ export function InventoryTable({
           groupOrder: itemDispositionOptions,
           label: "Disposition",
           mobile: "primary",
-          headClassName: "w-36",
+          headClassName: "w-32",
           editable: true,
         },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Disposition" />
         ),
         cell: ({ row }) => (
-          <div className="flex flex-col gap-1">
-            <DispositionBadge disposition={row.original.disposition} />
             <InlineSelectCell
               value={row.original.disposition}
               options={itemDispositionOptions}
@@ -952,7 +953,6 @@ export function InventoryTable({
               }
               renderLabel={dispositionLabel}
             />
-          </div>
         ),
       },
       {
@@ -960,14 +960,14 @@ export function InventoryTable({
         meta: {
           label: "Indicators",
           mobile: "primary",
-          headClassName: "min-w-[14rem] w-[16rem]",
-          cellClassName: "max-w-[18rem] whitespace-normal",
+          headClassName: "min-w-[8rem] w-[12rem]",
+          cellClassName: "max-w-[12rem] whitespace-normal",
           description:
             "Compact flags for evidence, boxes, load, value, and review.",
         },
         header: "Indicators",
         enableSorting: false,
-        cell: ({ row }) => <InventoryIndicators item={row.original} />,
+        cell: ({ row, table }) => <InventoryIndicators item={row.original} includeReview={!table.getColumn("review")?.getIsVisible()} />,
       },
       {
         accessorKey: "room",
@@ -975,7 +975,7 @@ export function InventoryTable({
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Room" />
         ),
-        cell: ({ row }) => row.original.room ?? "unassigned",
+        cell: ({ row }) => row.original.room ?? "Unassigned",
       },
       {
         accessorKey: "category",
@@ -983,7 +983,7 @@ export function InventoryTable({
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Category" />
         ),
-        cell: ({ row }) => row.original.category ?? "uncategorized",
+        cell: ({ row }) => row.original.category ?? "Uncategorized",
       },
       {
         id: "ownerContact",
@@ -1015,11 +1015,11 @@ export function InventoryTable({
       },
       {
         accessorKey: "condition",
-        meta: { label: "Condition", mobile: "expansion", groupable: true },
+        meta: { label: "Condition", mobile: "expansion", groupable: true, groupLabel: value => enumDisplayLabel(String(value)) },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Condition" />
         ),
-        cell: ({ row }) => row.original.condition,
+        cell: ({ row }) => enumDisplayLabel(row.original.condition),
       },
       {
         id: "confidence",
@@ -1044,7 +1044,7 @@ export function InventoryTable({
           groupable: true,
           label: "Review",
           mobile: "hidden",
-          headClassName: "w-32",
+          headClassName: "min-w-24 w-24",
           description: "Marks records that need another look.",
           editable: true,
         },
@@ -1055,7 +1055,7 @@ export function InventoryTable({
           <InlineCheckboxCell
             checked={row.original.needsReview}
             ariaLabel={`Needs review for ${row.original.name}`}
-            label="needs review"
+            label="Review"
             onCheckedChange={(checked) =>
               void patchItem(row.original, { needsReview: checked })
             }
@@ -1172,7 +1172,7 @@ export function InventoryTable({
               <div
                 role="group"
                 aria-label="Disposition filter"
-                className="flex gap-2 overflow-x-auto rounded-md border border-border bg-background p-2"
+                className="flex flex-wrap gap-1 rounded-md border border-border bg-background p-1"
               >
                 {dispositionGroupChips.map((chip) => {
                   const active = dispositionGroup === chip.key;
@@ -1180,7 +1180,7 @@ export function InventoryTable({
                     <button
                       key={chip.key}
                       type="button"
-                      className={`flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                      className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors md:min-h-8 ${
                         active
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-background hover:bg-muted"
@@ -1229,36 +1229,7 @@ export function InventoryTable({
                     {selectedCount ? ` · ${selectedCount} selected` : ""}
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {hasActiveBrowseFilters ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={clearBrowseFilters}
-                    >
-                      <MovingSymbol name="reset" />
-                      Clear filters
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setActiveTaskTab("bulk")}
-                  >
-                    <MovingSymbol name="contents" />
-                    Bulk paste
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setActiveTaskTab("add")}
-                  >
-                    <MovingSymbol name="add" />
-                    Add item
-                  </Button>
-                </div>
+
               </div>
 
               <DataTable

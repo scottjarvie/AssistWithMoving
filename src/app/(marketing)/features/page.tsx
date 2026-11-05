@@ -58,10 +58,10 @@ export default function FeaturesPage() {
       title="Everything needed to turn a move into a usable record."
       description="Assist With Moving combines inventory, boxes, photos, load planning, privacy, packet exports, and AI-assisted review in one workspace."
     >
-      <PublicBand>
+      <PublicBand label="Workspace features" id="guide-features-workspace-features">
         <FeatureGrid cards={featureCards} />
       </PublicBand>
-      <PublicBand>
+      <PublicBand label="Moving workflows" id="guide-features-moving-workflows">
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
             <h2 className="text-2xl font-semibold tracking-normal">

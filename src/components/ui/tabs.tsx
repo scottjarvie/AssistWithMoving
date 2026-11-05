@@ -6,13 +6,29 @@ import { Tabs as TabsPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+const TabsSelectionContext = React.createContext<((value: string) => void) | null>(null)
+
+export function useTabsSelection() { return React.useContext(TabsSelectionContext) }
+
 function Tabs({
   className,
   orientation = "horizontal",
+  value,
+  defaultValue,
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
+  const [localValue, setLocalValue] = React.useState(defaultValue ?? "")
+  function select(next: string) {
+    if (next === (value ?? localValue)) return
+    if (value === undefined) setLocalValue(next)
+    onValueChange?.(next)
+  }
   return (
+    <TabsSelectionContext.Provider value={select}>
     <TabsPrimitive.Root
+      value={value ?? localValue}
+      onValueChange={select}
       data-slot="tabs"
       data-orientation={orientation}
       className={cn(
@@ -21,6 +37,7 @@ function Tabs({
       )}
       {...props}
     />
+    </TabsSelectionContext.Provider>
   )
 }
 

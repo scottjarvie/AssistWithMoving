@@ -45,14 +45,14 @@ export default function AboutPage() {
       title="A move generates chaos. Assist With Moving turns it into one record you can trust."
       description="Assist With Moving is a system of record for moves: inventory, box manifests, photo evidence, load plans, and scoped documentation packets. It exists so the details of a move are captured once and stay usable for everyone who needs them."
     >
-      <PublicBand>
+      <PublicBand label="What we believe" id="guide-about-what-we-believe">
         <h2 className="mb-6 text-2xl font-semibold tracking-normal">
           What we believe
         </h2>
         <FeatureGrid cards={principleCards} />
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Project status" id="guide-about-project-status">
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
             <h2 className="text-2xl font-semibold tracking-normal">
@@ -81,7 +81,7 @@ export default function AboutPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Who is behind Moving" id="guide-about-who-is-behind-moving">
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
             <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-normal">

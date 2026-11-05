@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsList, TabsTrigger, useTabsSelection } from "@/components/ui/tabs";
 import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,10 +44,14 @@ export function MoveWorkspaceTabList({
   sticky?: boolean | "below-operations" | "within-panel";
   className?: string;
 }) {
+  const selectTab = useTabsSelection();
   const activeTab = tabs.find((tab) => tab.value === activeValue);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
   const contentsTarget = useRef<string | null>(null);
   const [contentsOpen, setContentsOpen] = useState(false);
+  useEffect(() => {
+    if (activeValue) triggers.current.get(activeValue)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeValue]);
 
   return (
     <>
@@ -95,11 +99,11 @@ export function MoveWorkspaceTabList({
           </PopoverTrigger>
           <PopoverContent align="end" className="w-[min(24rem,calc(100vw-2rem))]" onCloseAutoFocus={event => {
             const target = contentsTarget.current;
-            if (target) { event.preventDefault(); triggers.current.get(target)?.focus(); contentsTarget.current = null; }
+            if (target) { event.preventDefault(); const trigger = triggers.current.get(target); trigger?.focus(); trigger?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); contentsTarget.current = null; }
           }}>
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Contents</p>
             <div aria-label={`${ariaLabel} contents`} className="grid grid-cols-2 gap-1">
-              {tabs.map(tab => <Button key={tab.value} type="button" variant={activeValue === tab.value ? "secondary" : "ghost"} className="min-h-11 justify-start whitespace-normal text-left" aria-label={`${tab.label}${tab.count !== undefined ? `: ${tab.countLabel ?? tab.count}` : ""}`} aria-pressed={activeValue === tab.value} onClick={() => { contentsTarget.current = tab.value; setContentsOpen(false); }}>
+              {tabs.map(tab => <Button key={tab.value} type="button" variant={activeValue === tab.value ? "secondary" : "ghost"} className="min-h-11 justify-start whitespace-normal text-left" aria-label={`${tab.label}${tab.count !== undefined ? `: ${tab.countLabel ?? tab.count}` : ""}`} aria-pressed={activeValue === tab.value} onClick={() => { contentsTarget.current = tab.value; selectTab?.(tab.value); setContentsOpen(false); }}>
                 <MovingSymbol name={tab.icon ?? sectionIcon(tab.value)} className="size-4 shrink-0" />
                 <span>{tab.label}{tab.count !== undefined ? <span className="ml-2 font-mono text-xs text-muted-foreground">{tab.count}</span> : null}</span>
               </Button>)}

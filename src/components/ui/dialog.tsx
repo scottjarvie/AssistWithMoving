@@ -5,7 +5,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { XIcon } from "lucide-react"
+import { MovingSymbol } from "@/components/moving-symbol"
 
 // A centered modal on desktop and a full-screen sheet on mobile — the
 // replacement for the old right-side slide-out. Kept separate from Sheet (which
@@ -78,10 +78,10 @@ function DialogContent({
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className="absolute right-3 top-3"
+              className="absolute right-3 top-3 z-20 size-11 bg-popover md:size-7"
               size="icon-sm"
             >
-              <XIcon />
+              <MovingSymbol name="close" />
               <span className="sr-only">Close</span>
             </Button>
           </DialogPrimitive.Close>

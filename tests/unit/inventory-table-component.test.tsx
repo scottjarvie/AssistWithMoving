@@ -160,12 +160,12 @@ describe("InventoryTable", () => {
       within(facetGroup).getByRole("button", { name: /All/ }),
     ).toHaveAttribute("aria-pressed", "true");
 
-    // Shortcuts + the one count line, beside the records.
+    // Intake stays one named section away; no duplicate action row.
     expect(
-      screen.getByRole("button", { name: "Add item" }),
+      screen.getByRole("tab", { name: "Add" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Bulk paste" }),
+      screen.getByRole("tab", { name: "Bulk paste" }),
     ).toBeInTheDocument();
 
     // Find/filter controls.
@@ -194,7 +194,7 @@ describe("InventoryTable", () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
-  it("uses browse action shortcuts to switch into intake workflows", async () => {
+  it("uses the named task tabs to reach both intake workflows", async () => {
     const user = userEvent.setup();
 
     render(
@@ -204,7 +204,7 @@ describe("InventoryTable", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Add item" }));
+    await user.click(screen.getByRole("tab", { name: "Add" }));
 
     expect(screen.getByRole("tab", { name: "Add" })).toHaveAttribute(
       "data-state",
@@ -213,7 +213,7 @@ describe("InventoryTable", () => {
     expect(screen.getByLabelText("New item name")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Browse: 1 record" }));
-    await user.click(screen.getByRole("button", { name: "Bulk paste" }));
+    await user.click(screen.getByRole("tab", { name: "Bulk paste" }));
 
     expect(screen.getByRole("tab", { name: "Bulk paste" })).toHaveAttribute(
       "data-state",

@@ -31,7 +31,7 @@ const termsCards = [
   {
     title: "Launch-stage terms",
     copy: "This page is product-facing terms scaffolding and should be replaced or reviewed before broad commercial launch.",
-    icon: "warning" as const,
+    icon: "note" as const,
   },
 ];
 
@@ -42,10 +42,10 @@ export default function TermsPage() {
       title="Use Assist With Moving as an organizing system, not an official authority."
       description="Assist With Moving helps structure move data, evidence, exports, and AI-assisted planning. It does not replace official guidance, legal advice, mover requirements, employer policy, or insurance decisions."
     >
-      <PublicBand>
+      <PublicBand label="Your responsibilities" id="guide-terms-your-responsibilities">
         <FeatureGrid cards={termsCards} />
       </PublicBand>
-      <PublicBand>
+      <PublicBand label="Practical terms" id="guide-terms-practical-terms">
         <div className="max-w-4xl space-y-5 text-sm leading-7 text-muted-foreground">
           <h2 className="text-2xl font-semibold tracking-normal text-foreground">
             Practical terms for launch

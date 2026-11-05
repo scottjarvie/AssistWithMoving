@@ -194,7 +194,7 @@ export default function AiAssistantPage() {
       }}
       visual={<AssistantVisual />}
     >
-      <PublicBand>
+      <PublicBand label="Start with the move" id="guide-ai-start-with-the-move">
         <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
           <div>
             <Badge variant="secondary">First step</Badge>
@@ -229,7 +229,7 @@ export default function AiAssistantPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Connection principles" id="guide-ai-connection-principles">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {quickCapabilities.map((card) => (
             <div key={card.title} className="rounded-md border border-border p-4">
@@ -245,7 +245,7 @@ export default function AiAssistantPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Five approvals" id="guide-ai-five-approvals">
         <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
           <div>
             <Badge variant="secondary">What you approve</Badge>
@@ -278,7 +278,7 @@ export default function AiAssistantPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Current and partial support" id="guide-ai-current-and-partial-support">
         <div className="grid gap-6 lg:grid-cols-[0.72fr_1.28fr]">
           <div>
             <Badge variant="secondary">Connection truth</Badge>
@@ -308,7 +308,7 @@ export default function AiAssistantPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Connection doors" id="guide-ai-connection-doors">
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <Badge variant="secondary">Four doors</Badge>
@@ -338,7 +338,7 @@ export default function AiAssistantPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="The work loop" id="guide-ai-the-work-loop">
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <Badge variant="secondary">What happens next</Badge>
@@ -361,7 +361,7 @@ export default function AiAssistantPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Start or continue" id="guide-ai-start-or-continue">
         <div className="grid gap-3 lg:grid-cols-3">
           <ExpandableSection title="Examples of what your AI can do">
             <ul className="space-y-2">

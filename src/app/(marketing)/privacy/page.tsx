@@ -43,10 +43,10 @@ export default function PrivacyPage() {
       title="Moving records can be sensitive. The product treats them that way."
       description="A move inventory can contain addresses, dates, room layouts, valuables, documents, serial numbers, and family photos. Assist With Moving is designed around scoped access and private originals."
     >
-      <PublicBand>
+      <PublicBand label="Privacy defaults" id="guide-privacy-privacy-defaults">
         <FeatureGrid cards={privacyCards} />
       </PublicBand>
-      <PublicBand>
+      <PublicBand label="Privacy posture and requests" id="guide-privacy-privacy-posture-and-requests">
         <div className="max-w-4xl space-y-5 text-sm leading-7 text-muted-foreground">
           <h2 className="text-2xl font-semibold tracking-normal text-foreground">
             Privacy posture

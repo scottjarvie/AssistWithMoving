@@ -224,7 +224,7 @@ export function AiConnectionManager() {
   const manualBrief = buildManualQueueBrief(moves[0]?.title ?? null);
   const recentRefusals = new Set(activity.filter(row => row.outcome === "refused").map(row => String(row.grantId)));
   const sections = [
-    { value: "connections", label: "Connections", icon: "ai" as const, count: grantsResult ? grants.length : undefined, countLabel: grants.length >= 40 ? `${grants.length} latest loaded connections; history may contain more` : undefined },
+    { value: "connections", label: "Connections", icon: "ai" as const, count: grantsResult ? grants.length : undefined, countLabel: `${grants.length} loaded connections` },
     { value: "approve", label: "Approve", icon: "person" as const },
     { value: "activity", label: "Activity", icon: "note" as const, count: activityResult ? activity.length : undefined, countLabel: `${activity.length} latest loaded entries` },
     { value: "setup", label: "Setup", icon: "settings" as const },
@@ -713,7 +713,7 @@ export function AiConnectionManager() {
             These are grants you approved for an AI signing in as you. They are
             not people in your household, not share links, and not API keys.
           </p>
-          {grants.length >= 40 ? <p className="mt-1 text-xs text-muted-foreground">Showing the latest {grants.length} loaded connections. Older connection history may exist.</p> : null}
+          <p className="mt-1 text-xs text-muted-foreground">Counts describe loaded connection records.</p>
           <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => openSection("approve")}><MovingSymbol name="add" className="size-4" />Approve a connection</Button><Button type="button" variant="ghost" size="sm" onClick={() => openSection("setup")}><MovingSymbol name="settings" className="size-4" />Connection setup</Button></div>
         </div>
         {grantsResult === undefined ? (

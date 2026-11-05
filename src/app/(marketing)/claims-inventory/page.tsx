@@ -26,7 +26,7 @@ const claimCards = [
   {
     title: "Claim packet export",
     copy: "Generate a focused packet with item details, evidence metadata, values, condition, status, and clear disclaimers.",
-    icon: "warning" as const,
+    icon: "contents" as const,
   },
   {
     title: "Private originals",
@@ -42,10 +42,10 @@ export default function ClaimsInventoryPage() {
       title="A claim-ready record built as a side effect of being organized."
       description="Assist With Moving helps you preserve item details, photos, condition notes, values, serial numbers, and packet exports without turning the move into a separate paperwork project."
     >
-      <PublicBand>
+      <PublicBand label="Claims evidence tools" id="guide-claims-inventory-claims-evidence-tools">
         <FeatureGrid cards={claimCards} />
       </PublicBand>
-      <PublicBand>
+      <PublicBand label="Evidence and approval" id="guide-claims-inventory-evidence-and-approval">
         <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
           <div>
             <h2 className="text-2xl font-semibold tracking-normal">

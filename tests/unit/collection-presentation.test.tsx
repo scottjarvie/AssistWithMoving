@@ -20,6 +20,34 @@ function Collection({ onOpen }: { onOpen?: (row: Entry) => void }) {
 describe("collection presentations share one record model", () => {
   beforeEach(() => { fixtureKey += 1; Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200, writable: true }); });
 
+  it("applies phone Options without losing search, selection, grouping or the query node", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390, writable: true });
+    render(<Collection />);
+    const query = screen.getByLabelText("Search synthetic records");
+    await user.click(screen.getAllByRole("checkbox", { name: "Select row" })[0]);
+    await user.type(query, "Lamp");
+    await user.selectOptions(screen.getByLabelText("Group records by"), "room");
+    await user.click(screen.getByRole("button", { name: "Collection options" }));
+    const sheet = screen.getByRole("dialog", { name: "Collection options" });
+    const phoneViews = within(sheet).getByRole("group", { name: "Phone record view" });
+    await user.click(within(phoneViews).getByRole("button", { name: "Grid" }));
+    await user.click(within(sheet).getByRole("button", { name: "Comfortable" }));
+    await user.click(within(sheet).getByRole("checkbox", { name: "Room" }));
+    await user.click(within(sheet).getByRole("button", { name: "Show records" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Search synthetic records")).toBe(query);
+    expect(query).toHaveValue("Lamp");
+    expect(screen.getByLabelText("Group records by")).toHaveValue("room");
+    expect(screen.getByRole("checkbox", { name: "Select row" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Apply selected 1" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Collection options" }));
+    const reopened = screen.getByRole("dialog", { name: "Collection options" });
+    expect(within(reopened).getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(reopened).getByRole("button", { name: "Comfortable" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(reopened).getByRole("checkbox", { name: "Room" })).not.toBeChecked();
+  });
+
   it("starts with Table and preserves selection and search through List and Grid", async () => {
     const user = userEvent.setup();
     render(<Collection />);

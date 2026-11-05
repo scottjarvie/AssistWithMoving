@@ -165,7 +165,7 @@ export default function FaqPage() {
       primaryAction={{ href: "/features", label: "See the features" }}
       secondaryAction={{ href: "/ai", label: "How AI assistants help" }}
     >
-      <PublicBand>
+      <PublicBand label="The short version" id="guide-faq-the-short-version">
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           <div>
             <h2 className="text-2xl font-semibold tracking-normal">
@@ -205,7 +205,7 @@ export default function FaqPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Questions and next steps" id="guide-faq-questions-and-next-steps">
         <div className="rounded-md border border-primary/25 bg-primary/5 p-5">
           <div className="flex items-center gap-2 text-sm font-medium">
             <MovingSymbol name="shield" className="size-4 text-primary" aria-hidden="true" />

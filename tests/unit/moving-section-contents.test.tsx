@@ -14,6 +14,15 @@ function Sections() {
 }
 
 describe("section contents fallback", () => {
+  it("selects an uncontrolled destination explicitly even with manual tab activation", async () => {
+    const user = userEvent.setup();
+    render(<Tabs defaultValue="first" activationMode="manual"><MoveWorkspaceTabList tabs={[{ value: "first", label: "First" }, { value: "second", label: "Second" }]} /><TabsContent value="first">First panel</TabsContent><TabsContent value="second">Second panel</TabsContent></Tabs>);
+    await user.click(screen.getByRole("button", { name: "All 2 sections" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Second" }));
+    await waitFor(() => expect(screen.getByRole("tabpanel")).toHaveTextContent("Second panel"));
+    expect(screen.getByRole("tab", { name: "Second" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Second" })).toHaveAttribute("aria-selected", "true");
+  });
   it("keeps section meaning exact and the explanatory prose outside sticky chrome", () => {
     render(<Tabs defaultValue="details"><MoveWorkspaceTabList sticky="below-operations" activeValue="details" tabs={[
       { value: "details", label: "Details", description: "Actual move facts" },

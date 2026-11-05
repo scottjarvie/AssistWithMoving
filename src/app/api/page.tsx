@@ -39,7 +39,7 @@ const apiCards = [
   {
     title: "Layout and load planning",
     copy: "Fetch agent context, planned items, floor plans, resources, zones, capacity reports, and move-day checklists.",
-    icon: "reset" as const,
+    icon: "plan" as const,
   },
   {
     title: "Scoped access",
@@ -71,11 +71,11 @@ export default function ApiPage() {
       description="The Assist With Moving API lets trusted tools create moves, add inventory, upload evidence, prepare sale listings, plan loads, and export documentation. Public docs are readable before login; private data requires a user-created API key."
       visual={<ApiVisual />}
     >
-      <PublicBand>
+      <PublicBand label="API capabilities" id="guide-api-api-capabilities">
         <FeatureGrid cards={apiCards} />
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Context and batch writes" id="guide-api-context-and-batch-writes">
         <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr]">
           <div>
             <Badge variant="secondary">Base URL</Badge>
@@ -114,7 +114,7 @@ export default function ApiPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="AI helper scopes" id="guide-api-ai-helper-scopes">
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <h2 className="text-2xl font-semibold tracking-normal">

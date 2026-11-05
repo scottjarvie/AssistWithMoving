@@ -88,9 +88,9 @@ export function PublicPageChrome({
   const sections: Array<{ id: string; label: string }> = [];
   const readingContent = Children.map(children, child => {
     if (!isValidElement(child) || child.type !== PublicBand) return child;
-    const band = child as ReactElement<{ children?: ReactNode; id?: string; reader?: boolean }>;
+    const band = child as ReactElement<{ children?: ReactNode; id?: string; label?: string; reader?: boolean }>;
     const id = band.props.id ?? `guide-section-${sections.length + 1}`;
-    const label = firstHeading(band.props.children) ?? (sections.length === 0 ? "At a glance" : `Guide section ${sections.length + 1}`);
+    const label = band.props.label ?? firstHeading(band.props.children) ?? `Guide section ${sections.length + 1}`;
     sections.push({ id, label });
     return cloneElement(band, { id, reader: true });
   });
@@ -140,15 +140,15 @@ export function PublicPageChrome({
         </div>
       </section>
       <div className="mx-auto grid w-full max-w-7xl gap-x-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_17rem] lg:px-8">
-        <article className="min-w-0 [&_p]:max-w-[75ch]">{readingContent}</article>
-        <aside aria-label="Guide context" className="order-first min-w-0 border-b border-border py-5 lg:order-last lg:border-b-0 lg:border-l lg:pl-5">
-          {sections.length ? <nav aria-label="On this page" className="mb-4"><h2 className="text-sm font-semibold">Contents</h2><ol className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 lg:grid-cols-1">{sections.map(section => <li key={section.id}><a href={`#${section.id}`} className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring lg:min-h-8"><MovingSymbol name="arrow" className="size-3 shrink-0" />{section.label}</a></li>)}</ol></nav> : null}
+          {sections.length ? <nav aria-label="On this page" className="border-b border-border py-5 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1 lg:self-start"><h2 className="text-sm font-semibold">Contents</h2><ol className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 lg:grid-cols-1">{sections.map(section => <li key={section.id}><a href={`#${section.id}`} className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring lg:min-h-8"><MovingSymbol name="arrow" className="size-3 shrink-0" />{section.label}</a></li>)}</ol></nav> : null}
+        <article className="min-w-0 lg:col-start-1 lg:row-start-1 [&_p]:max-w-[75ch]">{readingContent}</article>
+        <aside aria-label="Guide context" className="grid min-w-0 gap-6 border-t border-border py-5 lg:col-span-2 lg:row-start-2 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <div className="space-y-3 border-t border-border pt-4">
             <div className="hidden lg:block"><MoveIllustration kind="route" decorative className="h-24 w-full" /></div>
-            <h2 className="text-sm font-semibold">About this guide</h2>
-            <dl className="space-y-2 text-xs leading-5"><div><dt className="text-muted-foreground">Published by</dt><dd>{product.name}</dd></div><div><dt className="text-muted-foreground">Guide</dt><dd>{eyebrow}</dd></div></dl>
+            <h2 className="text-sm font-semibold">Guide context</h2>
+            <p className="text-xs leading-5 text-muted-foreground">First-party product guidance. Send questions and corrections to the <a href={supportDeskUrl("home")} className="underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">{supportDesk.name}</a>.</p>
           </div>
-          <div className="mt-4 min-w-0">{visual ?? <details><summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring"><MovingSymbol name="route" className="size-4" />How Moving works</summary><div className="mt-2"><HowItWorksPanel /></div></details>}</div>
+          <div className="min-w-0 max-w-2xl">{visual ?? <details><summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring"><MovingSymbol name="route" className="size-4" />How Moving works</summary><div className="mt-2"><HowItWorksPanel /></div></details>}</div>
         </aside>
       </div>
       <PublicFooter />
@@ -241,7 +241,7 @@ export function FeatureGrid({ cards }: { cards: PublicFeatureCard[] }) {
   );
 }
 
-export function PublicBand({ children, id, reader = false }: { children: React.ReactNode; id?: string; reader?: boolean }) {
+export function PublicBand({ children, id, reader = false }: { children: React.ReactNode; id?: string; label?: string; reader?: boolean }) {
   return (
     <section id={id} className="scroll-mt-6 border-b border-border">
       <div className={reader ? "min-w-0 py-6 sm:py-8" : "mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8"}>
@@ -259,12 +259,12 @@ const howItWorksSteps: {
   copy: string;
 }[] = [
   {
-    icon: "box" as const,
+    icon: "route" as const,
     label: "Start with the move",
     copy: "Capture where, when, why, and the decisions that shape everything else.",
   },
   {
-    icon: "box" as const,
+    icon: "plan" as const,
     label: "Build the living plan",
     copy: "Keep questions, handoffs, timing, and next decisions together as plans change.",
   },

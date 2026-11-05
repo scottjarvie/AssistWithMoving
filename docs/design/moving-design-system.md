@@ -51,3 +51,7 @@ Print remains a document surface: preserve QR codes, labels, fields and paginati
 ## Verification
 
 Check both themes, 320/390px phones and desktop, keyboard/tap navigation, every section reachable without sideways scrolling, storage failure, same-tab/system preference changes, and unfinished draft/upload preservation. Every code change receives exact-head different-model review. See run evidence for results; design intent is not proof.
+
+### Council V correction pass (2026-11-05, verification pending)
+
+Phone collections keep search and Filter plus Group, Sort and Options. Options contains presentation, density and all column controls; it changes the same mounted record model. Full view names and all disposition groups remain reachable without sideways-only discovery. Section choosers change tab state explicitly and hand focus to the selected tab. Whole-width snap slots reserve complete one-line section labels; compiled-CSS verification is required. Public reader Contents comes before the article in document order, with explicit route-owned labels and stable anchors; context and the original visual follow the article. Desktop Contents remains sticky. These source corrections are not visual acceptance.

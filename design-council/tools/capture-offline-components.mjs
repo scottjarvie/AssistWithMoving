@@ -3,6 +3,8 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chromium } from "@playwright/test";
 
 // Fallback only after shared preview rejected file:// as unsupported.
@@ -10,10 +12,13 @@ import { chromium } from "@playwright/test";
 os.setPriority(0, os.constants.priority.PRIORITY_BELOW_NORMAL);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const fixture = path.join(repo, "output/moving-council");
-const output = path.join(repo, "design-council/2026-11-05-playbook/captures/04-components");
+const output = path.join(repo, "design-council/2026-11-05-playbook/captures/06-pattern-fixes");
 fs.mkdirSync(output, { recursive: true });
 const source = JSON.parse(fs.readFileSync(path.join(fixture, "provenance.json"), "utf8"));
-const evidence = { ...source, capturedAt: new Date().toISOString(), screenshots: [], probes: [], diagnostics: [], networkAttempts: [], errors: [] };
+const runnerHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+const runnerDirty = Boolean(execFileSync("git", ["status", "--porcelain", "--", "design-council/tools"], { cwd: repo, encoding: "utf8" }).trim());
+const runnerSha256 = createHash("sha256").update(fs.readFileSync(fileURLToPath(import.meta.url))).digest("hex");
+const evidence = { ...source, runnerHead, runnerDirty, runnerSha256, limitations: ["Offline actual-component rendering, not an authenticated app-shell or Next hydration proof", "Next-devtools Latin Geist fonts, not the app next/font metrics", "Synthetic records only; no backend writes or account access"], capturedAt: new Date().toISOString(), screenshots: [], probes: [], diagnostics: [], networkAttempts: [], errors: [] };
 const browser = await chromium.launch({ channel: "msedge", headless: true });
 let sequence = 0;
 async function capture(page, name, fullPage = false) {
@@ -35,7 +40,8 @@ async function visit(surface, width, theme, run) {
     const url = pathToFileURL(path.join(fixture, "index.html"));
     url.search = new URLSearchParams({ surface, theme }).toString();
     await page.goto(url.href);
-    await page.getByRole("heading", { name: surface === "inventory" ? "Inventory" : "AI connections", exact: true }).waitFor();
+    if (surface.startsWith("reader:")) await page.getByRole("navigation", { name: "On this page" }).waitFor();
+    else await page.getByRole("heading", { name: surface === "inventory" ? "Inventory" : "AI connections", exact: true }).waitFor();
     await page.evaluate(() => document.fonts.ready);
     await run(page);
     const diagnostics = await page.evaluate(() => ({ unknownQueries: window.__fixtureUnknownQueries, writesBlocked: window.__fixtureWritesBlocked, navigationAttempts: window.__fixtureNavigationAttempts }));
@@ -92,12 +98,21 @@ try {
     await capture(page, "inventory-desktop-light");
     await page.getByText("[synthetic] Workshop table", { exact: true }).click();
     await page.getByRole("dialog", { name: "[synthetic] Workshop table", exact: true }).waitFor();
+    const close = page.getByRole("dialog", { name: "[synthetic] Workshop table", exact: true }).getByRole("button", { name: "Close", exact: true });
+    assert.equal(await close.evaluate(element => { const rect = element.getBoundingClientRect(); return element.contains(document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)); }), true, "Desktop Close must be unobscured");
     await capture(page, "item-desktop-light");
+    await close.click();
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    evidence.probes.push("Desktop Item Close is unobscured and closes to the collection");
   });
   await visit("inventory", 390, "dark", async page => {
     assert.equal(await page.getByRole("button", { name: "List", exact: true }).getAttribute("aria-pressed"), "true");
     await capture(page, "inventory-phone-dark");
-    await page.getByRole("button", { name: "Grid", exact: true }).click();
+    await page.getByRole("button", { name: "Collection options", exact: true }).click();
+    const options = page.getByRole("dialog", { name: "Collection options", exact: true });
+    await capture(page, "inventory-options-phone-dark");
+    await options.getByRole("button", { name: "Grid", exact: true }).click();
+    await options.getByRole("button", { name: "Show records", exact: true }).click();
     await page.getByRole("button", { name: "Discard", exact: true }).waitFor();
     await capture(page, "inventory-grid-phone-dark");
     await page.getByRole("button", { name: "Discard", exact: true }).click();
@@ -116,6 +131,29 @@ try {
     assert.equal(await page.getByLabel("Name", { exact: true }).inputValue(), "Synthetic unfinished rename");
     evidence.probes.push("Item draft survives Record and Details without saving");
   });
+  for (const route of ["about", "ai", "claims-inventory", "faq", "features", "mcp/guide", "pcs-moving", "privacy", "terms", "api"]) {
+    for (const [width, theme] of [[1440, "light"], [390, "dark"]]) {
+      await visit(`reader:${route}`, width, theme, async page => {
+        const contents = page.getByRole("navigation", { name: "On this page" });
+        const links = contents.getByRole("link");
+        const labels = await links.allTextContents();
+        assert.ok(labels.length > 1 && labels.every(label => !/Guide section \d|At a glance/.test(label)), "Real reader destinations must be descriptive");
+        const order = await page.evaluate(() => {
+          const nav = document.querySelector('nav[aria-label="On this page"]');
+          const article = document.querySelector("article");
+          const aside = document.querySelector('aside[aria-label="Guide context"]');
+          return Boolean(nav && article && aside && (nav.compareDocumentPosition(article)&Node.DOCUMENT_POSITION_FOLLOWING) && (article.compareDocumentPosition(aside)&Node.DOCUMENT_POSITION_FOLLOWING));
+        });
+        assert.ok(order, "Reader DOM order: Contents, article, context");
+        await capture(page, `reader-${route.replaceAll("/", "-")}-${width}-${theme}`, true);
+        const destination = await links.last().getAttribute("href");
+        await links.last().click();
+        const bounds = await page.locator(destination).boundingBox();
+        assert.ok(bounds && bounds.y >= -1 && bounds.y < 1000, "Contents must bring its section into view");
+        evidence.probes.push(`Reader ${route} at ${width}: explicit Contents, document order and local anchor navigation`);
+      });
+    }
+  }
   assert.deepEqual(evidence.errors, [], "Browser console/page errors");
   assert.deepEqual(evidence.networkAttempts, [], "No HTTP navigation or network requests");
   evidence.result = "passed";

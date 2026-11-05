@@ -64,7 +64,7 @@ export function RecordEvidenceStream({ entries, prefix, focusEntryId, atLimit, o
     </div> : null}
 
     <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-2"><h3 className="text-sm font-semibold">Evidence history</h3><span className="font-mono text-xs text-muted-foreground">{entries === undefined ? "Loading" : `${ordered.length} loaded ${ordered.length === 1 ? "entry" : "entries"}`}</span></div>
-    {kinds.length > 1 ? <div role="group" aria-label="History kinds" className="flex flex-wrap gap-1">
+    {kinds.length ? <div role="group" aria-label="History kinds" className="flex flex-wrap gap-1">
       {["all", ...kinds].map(value => <Button key={value} type="button" variant={kind === value ? "secondary" : "ghost"} size="sm" aria-pressed={kind === value} onClick={() => { setKind(value); setShowAll(false); }}>
         <MovingSymbol name={categorySymbols[value] ?? "note"} className="size-3.5" />{value === "all" ? "All kinds" : readable(value)}
       </Button>)}
@@ -75,9 +75,9 @@ export function RecordEvidenceStream({ entries, prefix, focusEntryId, atLimit, o
         return <li key={entry.id} id={historyEntryId(prefix, entry.id)} tabIndex={-1} className="scroll-mt-16 py-3 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
           <div className="flex items-start gap-2.5"><MovingSymbol name={categorySymbols[entry.category] ?? "note"} className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><p className="text-sm font-medium capitalize">{readable(entry.action)}</p><time dateTime={new Date(entry.createdAt).toISOString()} className="font-mono text-xs text-muted-foreground">{new Date(entry.createdAt).toLocaleString()}</time></div>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"><p className="text-sm font-medium capitalize">{readable(entry.action)}</p><time dateTime={new Date(entry.createdAt).toISOString()} className="font-mono text-xs text-muted-foreground">{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(entry.createdAt)}</time></div>
               <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="sm" className={`mt-1 h-7 gap-1 px-1.5 text-xs ${entry.actorType === "agent" ? "bg-accent/10 text-accent" : entry.actorType === "user" ? "bg-primary/10 text-primary" : "text-muted-foreground"}`} aria-label={`Entry author: ${author.label}`} title={author.detail}><MovingSymbol name={author.symbol} className="size-3.5" />{author.label}</Button></PopoverTrigger>
-                <PopoverContent align="start" className="text-sm"><p>{author.detail}</p><p className="mt-2 text-xs text-muted-foreground">Original event: {entry.action}</p></PopoverContent>
+                <PopoverContent align="start" className="text-sm"><p>{author.detail}</p><p className="mt-2 text-xs text-muted-foreground">Original event: {entry.action}</p><p className="mt-2 break-words font-mono text-xs text-muted-foreground">Recorded: {new Date(entry.createdAt).toISOString()}</p></PopoverContent>
               </Popover>
               {entry.summary ? <p className="mt-2 whitespace-pre-wrap break-words text-sm">{entry.summary}</p> : null}
               {entry.changedKeys?.length ? <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">Recorded fields: {entry.changedKeys.map(readable).join(", ")}</p> : null}

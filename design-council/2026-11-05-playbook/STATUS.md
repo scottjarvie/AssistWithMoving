@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Round 05: ten offline captures and seven bounded probes; approval-panel screenshot needs a timing recheck; public reader source passes TypeScript and probes; council review pending.
+[Open newest-first gallery](gallery.html) ? Candidate V: both judges withhold visual acceptance; phone controls, reader navigation, Close and evidence corrections are in source, awaiting coordinated checks and fresh captures.
 
 # Moving design council status
 

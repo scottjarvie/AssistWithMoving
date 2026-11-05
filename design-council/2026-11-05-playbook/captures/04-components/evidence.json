@@ -49,7 +49,9 @@
         "height": 1000
       },
       "fullPage": false,
-      "pageOverflow": false
+      "pageOverflow": false,
+      "actualSurface": "Setup",
+      "acceptedAsApprovalForm": false
     },
     {
       "name": "inventory-desktop-light",
@@ -110,7 +112,7 @@
     "Review opens, focuses and scrolls details into the viewport",
     "Review toggles closed; refused-request mark opens Activity",
     "Revoke focuses Keep it; repeated Enter cancels without a write",
-    "Approval draft survives sections and pinned chooser",
+    "Approval draft value retained across sections; chooser selection and visible approval panel UNVERIFIED",
     "API docs navigation is blocked with a local destination notice",
     "Phone opens List; presentation-only edit marks modified and Discard restores List",
     "Item draft survives Record and Details without saving"
@@ -154,5 +156,13 @@
   "networkAttempts": [],
   "errors": [],
   "result": "passed",
-  "sequence": 1
+  "sequence": 1,
+  "runnerHead": "7d1bc78e60eb5ec86efdc0c473891042e599ca51",
+  "runnerPatch": "The producing runner changed only the Advanced API settings summary selector after that commit; selected/visible Approve assertions were added later and were NOT run for this evidence.",
+  "limitations": [
+    "ai-phone-approval-dark shows Setup. The original probe proves stored draft value only; visible Approve selection, chooser activation and approval-form rendering were not asserted.",
+    "Offline synthetic components, not authenticated shell or live data.",
+    "Latin Next-devtools fonts, not app next/font metrics.",
+    "Inventory/Item viewport captures do not show every scrolled field."
+  ]
 }

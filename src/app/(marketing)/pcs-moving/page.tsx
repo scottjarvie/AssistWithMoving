@@ -42,10 +42,10 @@ export default function PcsMovingPage() {
       title="PCS move planning without pretending policy is static."
       description="Assist With Moving treats PCS as a first-class workflow: configurable official fields, personal-transport lists, HHG/PPM planning, and careful documentation language."
     >
-      <PublicBand>
+      <PublicBand label="PCS moving tools" id="guide-pcs-moving-pcs-moving-tools">
         <FeatureGrid cards={pcsCards} />
       </PublicBand>
-      <PublicBand>
+      <PublicBand label="PCS workflows" id="guide-pcs-moving-pcs-workflows">
         <div className="grid gap-6 lg:grid-cols-3">
           {[
             ["Do not let movers touch", "Documents, medication, cameras, drives, jewelry, and irreplaceable records can stay visible as owner-carry work."],

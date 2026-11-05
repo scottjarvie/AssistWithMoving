@@ -31,7 +31,7 @@ const mcpCards = [
   {
     title: "Canonical door first",
     copy: "Connect to https://movingmanifest.com/mcp and sign in — no key to copy. The API-key door at https://movingmanifest.com/api/mcp is a separate surface with a separate catalog for headless or non-OAuth tools.",
-    icon: "system" as const,
+    icon: "entry" as const,
   },
   {
     title: "Capability discovery",
@@ -168,11 +168,11 @@ export default function McpPage() {
       }}
       visual={<McpVisual />}
     >
-      <PublicBand>
+      <PublicBand label="Connection basics" id="guide-mcp-guide-connection-basics">
         <FeatureGrid cards={mcpCards} />
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Connect and approve" id="guide-mcp-guide-connect-and-approve">
         <div className="grid gap-5 rounded-md border border-primary/25 bg-primary/5 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="min-w-0">
             <Badge variant="secondary">Hosted connection</Badge>
@@ -199,7 +199,7 @@ export default function McpPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Compatible clients" id="guide-mcp-guide-compatible-clients">
         <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr]">
           <div>
             <Badge variant="secondary">Remote server</Badge>
@@ -242,7 +242,7 @@ export default function McpPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="First call and recovery" id="guide-mcp-guide-first-call-and-recovery">
         <div className="grid gap-8 lg:grid-cols-[0.75fr_1.25fr]">
           <div className="min-w-0">
             <Badge variant="secondary">Working the connection</Badge>
@@ -275,7 +275,7 @@ export default function McpPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Canonical tools" id="guide-mcp-guide-canonical-tools">
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <Badge variant="secondary">Tool surfaces</Badge>
@@ -329,7 +329,7 @@ export default function McpPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Other connection doors" id="guide-mcp-guide-other-connection-doors">
         <div className="grid gap-6 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
             <Badge variant="secondary">Four doors</Badge>
@@ -358,7 +358,7 @@ export default function McpPage() {
         </div>
       </PublicBand>
 
-      <PublicBand>
+      <PublicBand label="Related guides and handoffs" id="guide-mcp-guide-related-guides-and-handoffs">
         <div className="grid gap-4 lg:grid-cols-3">
           <section className="rounded-md border border-border p-4">
             <Badge variant="outline">Partial</Badge>

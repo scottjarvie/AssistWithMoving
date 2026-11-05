@@ -680,6 +680,109 @@
       "checksRerun": false,
       "differentModelReview": true,
       "reviewRecord": "reviews/06-U-opus.md"
+    },
+    {
+      "exactHead": "e39a165b7a5dba04dad3caa0026a1dcbd6bad251",
+      "base": "5da80247cd768f745b838584098d9e11c54cb772",
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "Codex gpt-6.1-sol high",
+      "differentModelReview": false,
+      "blindLabel": "V",
+      "evidenceType": [
+        "read-only committed-source review",
+        "ten original-resolution client-component PNGs",
+        "fixture provenance and capture metadata",
+        "gallery structure inspection"
+      ],
+      "headVerifiedStart": true,
+      "headVerifiedEnd": true,
+      "treeCleanStart": true,
+      "treeCleanEnd": true,
+      "filesChanged": false,
+      "captureSource": "7d1bc78e60eb5ec86efdc0c473891042e599ca51",
+      "srcAndConvexUnchangedSinceCapture": true,
+      "source": {
+        "retention": 9,
+        "authorityAndSavedStateTruth": 9,
+        "accessibilityAndNavigation": 7,
+        "playbookImplementation": 6.5,
+        "maintainability": 8,
+        "evidenceCoverage": 6.5,
+        "overall": 7.7
+      },
+      "boundedVisualScores": {
+        "AI": {
+          "hierarchy": 8,
+          "phoneDensity": 6.5,
+          "identity": 7.5,
+          "patternFidelity": 7,
+          "overall": 7.3
+        },
+        "Inventory": {
+          "hierarchy": 7,
+          "phoneDensity": 5,
+          "identity": 7,
+          "patternFidelity": 5.5,
+          "overall": 6.1
+        },
+        "Item": {
+          "hierarchy": 8,
+          "phoneDensity": 7,
+          "identity": 7.5,
+          "patternFidelity": 7,
+          "overall": 7.4
+        },
+        "publicReader": null,
+        "approvalForm": null,
+        "authenticatedResponsive": null,
+        "print": null,
+        "wholeSite": null
+      },
+      "limits": [
+        "Approval-labelled PNG shows Setup",
+        "Chooser selection timing remains unverified",
+        "Public reader assessed from source only",
+        "Synthetic data and substituted auth/query/navigation boundaries",
+        "Next-devtools fonts rather than app next/font",
+        "Inventory and Item captures show viewport composition only",
+        "Reported gates not rerun; full suite not green",
+        "No current full-build acceptance",
+        "Other collections, families and explorations unfinished"
+      ],
+      "disposition": "request_changes",
+      "reviewRecord": "reviews/07-V-sol.md"
+    },
+    {
+      "exactHead": "e39a165b7a5dba04dad3caa0026a1dcbd6bad251",
+      "base": "5da80247cd768f745b838584098d9e11c54cb772",
+      "captureSource": "7d1bc78e60eb5ec86efdc0c473891042e599ca51",
+      "srcConvexChangedSinceCapture": false,
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "claude-opus-5-5 (Claude Opus 5.5)",
+      "blindLabel": "V",
+      "evidenceType": "source diff + ten synthetic offline client-component PNGs (Edge/Playwright fallback, devtools Geist)",
+      "sourceScore": 7,
+      "visualScores": {
+        "ai": 6.5,
+        "inventory": 5.5,
+        "item": 7,
+        "publicReader": null,
+        "approvalForm": null,
+        "authenticatedShell": null,
+        "responsiveIntermediate": null,
+        "print": null,
+        "wholeSite": null
+      },
+      "approvalImageTreatedAs": "Setup only",
+      "disposition": "conditional source pass; no visual acceptance",
+      "blockersForVisualAcceptance": [
+        "render ten public reader routes desktop+phone",
+        "rerun corrected runner and capture actual Approve panel",
+        "annotate or regenerate evidence.json with limitations and runner head"
+      ],
+      "filesChanged": false,
+      "differentModelReview": true,
+      "reviewRecord": "reviews/07-V-opus.md"
     }
   ],
   "scottPicks": []

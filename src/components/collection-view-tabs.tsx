@@ -97,10 +97,10 @@ export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply,
   function report(persisted: boolean, action: string) { setMessage(persisted ? `${action} on this browser.` : `${action} for this session; browser storage is unavailable.`); }
   return <div className="space-y-2">
     <div className="flex min-w-0 items-start gap-2 border-b border-border pb-2">
-    <div role="group" aria-label="Inventory views" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:flex-wrap sm:overflow-visible">
-      {allViews.map(view => <Button key={view.id} ref={element => { if (element) triggers.current.set(view.id, element); else triggers.current.delete(view.id); }} type="button" size="sm" variant={selected?.id === view.id ? "secondary" : "ghost"} className="min-h-11 shrink-0 whitespace-nowrap text-left sm:min-h-8 sm:max-w-full sm:whitespace-normal" title={view.description ?? "Saved on this browser"} aria-pressed={selected?.id === view.id} onClick={() => selectView(view)}>
+    <div role="group" aria-label="Inventory views" className="moving-view-strip min-w-0 flex-1 overflow-x-auto sm:overflow-visible">
+      <div className="moving-view-items">{allViews.map(view => <Button key={view.id} ref={element => { if (element) triggers.current.set(view.id, element); else triggers.current.delete(view.id); }} type="button" size="sm" variant={selected?.id === view.id ? "secondary" : "ghost"} className="h-auto min-h-11 min-w-0 shrink-0 whitespace-normal break-words py-1.5 text-left sm:min-h-8 sm:max-w-full" title={view.description ?? "Saved on this browser"} aria-pressed={selected?.id === view.id} onClick={() => selectView(view)}>
         {view.label}{selected?.id === view.id && edited ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-accent" /><span className="sr-only">modified</span></> : null}{typeof view.count === "number" ? <span className="font-mono text-xs text-muted-foreground">{view.count}</span> : null}
-      </Button>)}
+      </Button>)}</div>
     </div>
     <Popover open={chooserOpen} onOpenChange={setChooserOpen}><PopoverTrigger asChild><Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0 sm:hidden" aria-label={`All ${allViews.length} views`}><MovingSymbol name="contents" className="size-4" />Views</Button></PopoverTrigger>
       <PopoverContent align="end" className="max-h-96 w-[min(24rem,calc(100vw-2rem))] overflow-y-auto" onCloseAutoFocus={event => {
