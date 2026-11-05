@@ -1556,7 +1556,8 @@ describe("private owner queries and participant reconnects", () => {
     await expect(oauth.mutation(api.aiGrants.revoke, { grantId: grant._id, expectedVersion: grant.version, expectedRecoveryFingerprint: loaded.recoveryFingerprint })).rejects.toThrow(/settings/);
     await expect(oauth.mutation(api.apiKeys.create, { householdId, name: "Disallowed key" })).rejects.toThrow(/settings/);
     await expect(oauth.query(api.apiKeys.listForHousehold, { householdId })).rejects.toThrow(/settings/);
-    for (const operation of [api.apiKeys.revoke, api.apiKeys.rotate]) await expect(oauth.mutation(operation, { householdId, apiKeyId })).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.apiKeys.revoke, { householdId, apiKeyId, expectedVersion: 1 })).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.apiKeys.rotate, { householdId, apiKeyId })).rejects.toThrow(/settings/);
     expect(await t.run(async ctx => ({ grant: await ctx.db.get(grant._id), key: await ctx.db.get(apiKeyId) }))).toEqual(before);
   });
 
@@ -2107,4 +2108,70 @@ it("refuses participant recovery witnesses marked archived even when their statu
     await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Stale archived witness", reconnectGrantId: grant._id, expectedHistoryFingerprint: loaded.historyFingerprint, ...extra })).rejects.toThrow();
   }
   expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+});
+
+it("keeps canonical scope-free describe_connection credential-only", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const clientId = "canonical-description-client";
+  const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "PRIVATE description move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+  const expiresAt = Date.now() + 600000;
+  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, scopes: [], moveIds: [moveId], expiresAt });
+  const { createMovingServer } = await import("../../convex/httpRoutes/mcp");
+  const { createMcpHandler } = await import("@modelcontextprotocol/server");
+  const ctx = { runQuery: (ref: any, args: any) => t.query(ref, args) } as any;
+  const handler = createMcpHandler(() => createMovingServer(ctx, { subject: SUBJECT, issuer: ISSUER, clientId }, []).server, { legacy: "stateless", responseMode: "json" });
+  try {
+    const method = "tools/call";
+    const response = await handler.fetch(new Request("https://movingmanifest.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28", "mcp-method": method }, body: JSON.stringify({ jsonrpc: "2.0", id: "describe-proof", method, params: { name: "describe_connection", arguments: {}, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "description-proof", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} } } }) }));
+    expect(response.status).toBe(200);
+    const body = await response.json() as any;
+    expect(body.error).toBeUndefined();
+    const description = JSON.parse(body.result.content[0].text);
+    expect(description.connection).toMatchObject({ version: 2, status: "active", scopes: [], moveRestricted: true, expiresAt });
+    for (const value of [moveId, householdId, "PRIVATE", "moveIds", "grantId"]) expect(JSON.stringify(description)).not.toContain(value);
+  } finally { await handler.close(); }
+});
+
+it("uses the actual retained-move household for participant widening without an explicit witness", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "cross-participant-client" });
+  const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  const { moveId, participantId } = await t.run(async ctx => {
+    const now = Date.now();
+    const secondHousehold = await ctx.db.insert("households", { name: "Other participant household", createdByUserId: userId, ownerUserId: userId, createdAt: now, updatedAt: now });
+    const membership = (await ctx.db.query("householdMemberships").first())!;
+    await ctx.db.patch(membership._id, { status: "disabled" });
+    const firstMove = await ctx.db.insert("moves", { householdId, title: "Original participant move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+    const moveId = await ctx.db.insert("moves", { householdId: secondHousehold, title: "Retained participant move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+    await ctx.db.insert("moveParticipants", { householdId, moveId: firstMove, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: now, updatedAt: now });
+    const participantId = await ctx.db.insert("moveParticipants", { householdId: secondHousehold, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: now, updatedAt: now });
+    return { moveId, participantId };
+  });
+  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "cross-participant-client", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: Date.now() + 600000 });
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: grant._id, expectedVersion: 2, expiryIntent: "none", expiresInDays: null });
+  const widened = (await t.run(ctx => ctx.db.get(grant._id)))!;
+  expect(widened).toMatchObject({ version: 3, moveIds: [moveId] });
+  expect(widened.expiresAt).toBeUndefined();
+  await t.run(ctx => ctx.db.patch(participantId, { status: "disabled" }));
+  await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: grant._id, expectedVersion: 3, scopeIntent: "full", scopes: [...movingScopes] })).rejects.toThrow();
+  expect(await t.run(ctx => ctx.db.get(grant._id))).toEqual(widened);
+});
+
+it.each([false, true])("guards person key revocation with its current row revision (legacy=%s)", async legacy => {
+  const t = convexTest(schema, modules);
+  const { householdId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Versioned revoke" });
+  if (legacy) await t.run(ctx => ctx.db.patch(apiKeyId, { version: undefined }));
+  await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: [] });
+  const before = await t.run(async ctx => ({ key: await ctx.db.get(apiKeyId), audits: await ctx.db.query("auditLogs").collect() }));
+  await expect(owner.mutation(api.apiKeys.revoke, { householdId, apiKeyId, expectedVersion: 1 })).rejects.toThrow(/changed/);
+  expect(await t.run(async ctx => ({ key: await ctx.db.get(apiKeyId), audits: await ctx.db.query("auditLogs").collect() }))).toEqual(before);
+  expect(await owner.mutation(api.apiKeys.revoke, { householdId, apiKeyId, expectedVersion: 2 })).toEqual({ version: 3 });
+  expect(await t.run(ctx => ctx.db.get(apiKeyId))).toMatchObject({ status: "revoked", version: 3 });
+  await expect(owner.mutation(api.apiKeys.revoke, { householdId, apiKeyId, expectedVersion: 2 })).rejects.toThrow(/changed/);
 });

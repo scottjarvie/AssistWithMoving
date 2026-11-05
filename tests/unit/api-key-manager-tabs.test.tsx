@@ -55,6 +55,7 @@ const apiKeyManagerData = vi.hoisted(() => ({
   keys: [
     {
       apiKeyId: "api_key_123" as Id<"apiKeys">,
+      version: 1,
       name: "Photo helper key",
       tokenPreview: "mmk_photo...1234",
       scopes: ["moves/read", "inventory/read", "photos/write"] as ApiKeyScope[],
@@ -334,4 +335,13 @@ it("returns from an empty final member page without reloading", async () => {
     await user.click(screen.getByRole("button", { name: "First member households" }));
     expect(screen.getByRole("button", { name: "More member households" })).toBeInTheDocument();
   } finally { apiKeyManagerData.households = original; apiKeyManagerData.memberPaging = false; apiKeyManagerData.memberFinalEmpty = false; }
+});
+
+it("submits the displayed key revision when the person revokes it", async () => {
+  apiKeyManagerData.mutation.mockClear();
+  const user = userEvent.setup();
+  render(<ApiKeyManager enabled />);
+  await user.click(screen.getByRole("tab", { name: "Connections" }));
+  await user.click(screen.getByRole("button", { name: "Revoke Photo helper key" }));
+  expect(apiKeyManagerData.mutation).toHaveBeenCalledWith({ householdId: "household_123", apiKeyId: "api_key_123", expectedVersion: 1 });
 });

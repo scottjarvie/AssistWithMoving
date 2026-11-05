@@ -789,6 +789,24 @@ it("labels resolved alias authority separately from the saved full row", () => {
   } finally { connectionData.grants.grants = original; }
 });
 
+it.each(["archived_move", "cross_household_move"])("can remove the retained %s when it is absent from available choices", async retained => {
+  const original = connectionData.grants.grants;
+  connectionData.grants.consentPolicyVersion = GRANT_CONSENT_POLICY;
+  connectionData.grants.catalogFingerprint = grantCatalogFingerprint();
+  connectionData.updateLimits.mockClear();
+  connectionData.grants.grants = [{ ...original[0], moveScope: "selectedMoves", moveIds: ["move_123", retained] }];
+  try {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    await user.click(screen.getByText("Change moves, permissions or end date"));
+    const form = screen.getByRole("button", { name: "Save limits" }).closest("form")!;
+    await user.click(within(form).getByRole("button", { name: "Remove retained move 1" }));
+    expect(form.querySelector(`input[name="moveIds"][value="${retained}"]`)).toBeNull();
+    await user.click(within(form).getByRole("button", { name: "Save limits" }));
+    expect(connectionData.updateLimits).toHaveBeenCalledWith(expect.objectContaining({ moveScope: "selectedMoves", moveIds: ["move_123"], expectedVersion: 3 }));
+  } finally { connectionData.grants.grants = original; }
+});
+
 it("pages member households without calling the unbounded dashboard query", async () => {
   connectionData.memberPaging = true;
   connectionData.queryCalls.mockClear();

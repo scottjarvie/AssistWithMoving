@@ -48,6 +48,7 @@ import { describeMutationError } from "@/lib/mutation-error";
 
 type ApiKeySummary = {
   apiKeyId: Id<"apiKeys">;
+  version: number;
   name: string;
   moveId?: Id<"moves">;
   tokenPreview: string;
@@ -330,12 +331,12 @@ export function ApiKeyManager({
     }
   }
 
-  async function handleRevokeKey(apiKeyId: Id<"apiKeys">) {
+  async function handleRevokeKey(apiKeyId: Id<"apiKeys">, expectedVersion: number) {
     if (!effectiveHouseholdId) return;
     setBusy(`revoke-${apiKeyId}`);
     setMessage(null);
     try {
-      await revokeKey({ householdId: effectiveHouseholdId, apiKeyId });
+      await revokeKey({ householdId: effectiveHouseholdId, apiKeyId, expectedVersion });
       setMessage("AI connection revoked.");
     } catch (error) {
       setMessage(
@@ -1054,7 +1055,7 @@ function ConnectionRow({
   moveTitleById: Map<Id<"moves">, string>;
   busy: string | null;
   onRotate: (apiKeyId: Id<"apiKeys">) => Promise<void>;
-  onRevoke: (apiKeyId: Id<"apiKeys">) => Promise<void>;
+  onRevoke: (apiKeyId: Id<"apiKeys">, expectedVersion: number) => Promise<void>;
 }) {
   const active = apiKey.status === "active";
   return (
@@ -1109,7 +1110,7 @@ function ConnectionRow({
             variant="outline"
             aria-label={`Revoke ${apiKey.name}`}
             disabled={!active || busy === `revoke-${apiKey.apiKeyId}`}
-            onClick={() => void onRevoke(apiKey.apiKeyId)}
+            onClick={() => void onRevoke(apiKey.apiKeyId, apiKey.version)}
           >
             {busy === `revoke-${apiKey.apiKeyId}` ? (
               <RefreshCw className="animate-spin" aria-hidden="true" />

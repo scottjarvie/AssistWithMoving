@@ -641,7 +641,7 @@ export function createMovingServer(
             ? "Call get_move_brief, then list_queue_work if you hold moving.queue.work."
             : "Ask the person to open Assist With Moving → Settings → AI connections and approve what this AI may do, then reconnect. Signing in proved who they are; it did not decide what you may do.",
         grantManager: "https://movingmanifest.com/settings/ai",
-        connection: await actionCtx.runQuery((internal as any).aiGrants.grantsForPrincipal, { subject: principal.subject, clientId: principal.clientId }),
+        connection: await actionCtx.runQuery(internal.aiGrants.describeConnection, { subject: principal.subject, clientId: principal.clientId }),
       }),
   );
 
