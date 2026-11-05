@@ -716,7 +716,8 @@ describe("explicit owner reconnect", () => {
     expect(restored.expiresAt).toBeUndefined();
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(128);
     const audits = await t.run(ctx => ctx.db.query("auditLogs").collect());
-    expect(audits.find(event => event.metadata?.previousGrant)?.metadata?.previousGrant).toEqual(previous);
+    expect(audits.every(event => event.metadata?.previousGrant === undefined)).toBe(true);
+    expect((await owner.query(api.aiGrants.listSourceHistory, {})).page[0].source).toEqual(previous);
     for (const id of [clientId, `legacy:${clientId}`]) {
       expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(movingScopes);
       await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
@@ -758,7 +759,13 @@ describe("explicit owner reconnect", () => {
     expect(recovered.expiresAt).toBeUndefined();
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(count);
     const audits = await t.run(ctx => ctx.db.query("auditLogs").collect());
-    expect(audits.find(row => row.metadata?.previousGrant)?.metadata?.previousGrant).toEqual(previous);
+    expect(audits.every(row => row.metadata?.previousGrant === undefined)).toBe(true);
+    const archive = await owner.query(api.aiGrants.listSourceHistory, {});
+    expect(archive.page[0].source).toEqual(previous);
+    const other = await t.run(ctx => ctx.db.insert("users", { clerkUserId: "archive-outsider", email: "outsider@example.test", name: "Another person", appRole: "member", status: "active", createdAt: Date.now(), updatedAt: Date.now(), lastSeenAt: Date.now() }));
+    expect(other).toBeTruthy();
+    expect((await t.withIdentity({ subject: "archive-outsider" }).query(api.aiGrants.listSourceHistory, {})).page).toEqual([]);
+    await expect(t.withIdentity({ subject: SUBJECT, client_id: clientId }).query(api.aiGrants.listSourceHistory, {})).rejects.toThrow(/settings/);
     for (const id of [clientId, `legacy:${clientId}`]) {
       expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(movingScopes);
       await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
@@ -1329,4 +1336,85 @@ describe("R1 scope-free API context", () => {
     expect(JSON.stringify((await context()).body)).toContain("PRIVATE move title");
     for (const selected of [false, true]) expect(JSON.stringify(await invokeContext(selected))).toContain("PRIVATE move title");
   });
+});
+
+
+describe("current eligibility and capacity when owner edits restore access", () => {
+  it.each(["none", "chosen"] as const)("refuses expiry-only %s restoration after membership loss, but permits a reduction", async expiryIntent => {
+    const t = convexTest(schema, modules);
+    await seedOwner(t);
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "expired-owner" });
+    const row = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    await t.run(async ctx => {
+      await ctx.db.patch(row._id, { expiresAt: Date.now() - 1000, expiryChoice: "chosen" });
+      const membership = (await ctx.db.query("householdMemberships").first())!;
+      await ctx.db.patch(membership._id, { status: "disabled" });
+    });
+    const owner = t.withIdentity({ subject: SUBJECT });
+    await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, expiryIntent, expiresInDays: expiryIntent === "none" ? null : 7 })).rejects.toThrow(/active member/);
+    expect((await t.run(ctx => ctx.db.get(row._id)))?.version).toBe(1);
+    await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, scopes: ["moving.context.read"], scopeIntent: "chosen" });
+    expect((await t.run(ctx => ctx.db.get(row._id)))?.expiresAt).toBeLessThan(Date.now());
+  });
+
+  it("counts active grants beyond expired rows before restoring, then permits restoration after revocation", async () => {
+    const t = convexTest(schema, modules);
+    await seedOwner(t);
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "restore-cap" });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    const activeIds = await t.run(async ctx => {
+      await ctx.db.patch(original._id, { expiresAt: Date.now() - 1000, expiryChoice: "chosen" });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- historical fixtures omit system fields.
+      const { _id, _creationTime, ...fields } = original;
+      for (let i = 0; i < 20; i++) await ctx.db.insert("aiGrants", { ...fields, clientId: "expired-noise-" + i, expiresAt: Date.now() - 1000, expiryChoice: "chosen" });
+      const ids = [];
+      for (let i = 0; i < 8; i++) ids.push(await ctx.db.insert("aiGrants", { ...fields, clientId: "active-cap-" + i }));
+      return ids;
+    });
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const payload = { ...consent, grantId: original._id, expectedVersion: 1, expiryIntent: "none" as const, expiresInDays: null };
+    await expect(owner.mutation(api.aiGrants.updateLimits, payload)).rejects.toThrow(/8 active/);
+    expect((await t.run(ctx => ctx.db.get(original._id)))?.version).toBe(1);
+    await owner.mutation(api.aiGrants.revoke, { grantId: activeIds[0], expectedVersion: 1 });
+    await owner.mutation(api.aiGrants.updateLimits, payload);
+    expect((await t.run(ctx => ctx.db.get(original._id)))?.expiresAt).toBeUndefined();
+  });
+
+  it("rejects widening scopes or expiry after losing eligibility on a still active connection", async () => {
+    const t = convexTest(schema, modules);
+    await seedOwner(t);
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "widen-ineligible" });
+    const row = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    await t.run(async ctx => {
+      await ctx.db.patch(row._id, { scopes: ["moving.context.read"], scopeChoice: "chosen", expiryChoice: "chosen", expiresAt: Date.now() + 86400000 });
+      const membership = (await ctx.db.query("householdMemberships").first())!;
+      await ctx.db.patch(membership._id, { status: "disabled" });
+    });
+    const owner = t.withIdentity({ subject: SUBJECT });
+    for (const edits of [{ scopes: [...movingScopes], scopeIntent: "full" as const }, { expiresInDays: null, expiryIntent: "none" as const }]) {
+      await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: row._id, expectedVersion: 1, ...edits })).rejects.toThrow(/active member/);
+    }
+  });
+});
+
+
+it("pages private original source history even after the owner loses household administration", async () => {
+  const t = convexTest(schema, modules);
+  const { userId } = await seedOwner(t);
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "private-archive" });
+  const source = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  await t.run(async ctx => {
+    const membership = (await ctx.db.query("householdMemberships").first())!;
+    await ctx.db.patch(membership._id, { status: "disabled" });
+    for (let i = 0; i < 26; i++) await ctx.db.insert("aiGrantSourceHistory", { ownerUserId: userId, grantId: source._id, archivedAt: Date.now() + i, source });
+  });
+  const owner = t.withIdentity({ subject: SUBJECT });
+  const first = await owner.query(api.aiGrants.listSourceHistory, {});
+  expect(first.page).toHaveLength(25);
+  expect(first.isDone).toBe(false);
+  const last = await owner.query(api.aiGrants.listSourceHistory, { cursor: first.continueCursor });
+  expect(last.page).toHaveLength(1);
+  expect(last.isDone).toBe(true);
+  expect(last.page[0].source).toEqual(source);
+  await expect(owner.query(api.audit.listForHousehold, { householdId: source.householdId })).rejects.toThrow();
 });

@@ -2298,13 +2298,16 @@ grant revisions stay stored and audited. Later edits or revocations still apply.
 Reconnect advances the effective connection version beyond the previous
 generation, so an old delayed reduction cannot affect the new approval.
 New rows stop at the bounded history limit. At that limit an explicit reconnect
-reuses the selected record, preserving its full prior snapshot in durable audit
+reuses the selected record, preserving its full prior snapshot in private owner history
 in the same transaction. Oversized existing histories remain viewable and
 revocable in Settings while incomplete-history authorization stays closed.
 Older records can be paged through in Settings. A person can explicitly recover
 a selected verified client even from an oversized history: current consent and
 the loaded owner-management revision are required, and the original selected
-record is preserved in durable audit before reuse. Only that client's indexed
+record is preserved in private owner history before reuse. The paginated
+`aiGrants.listSourceHistory` query returns complete originals only to the signed-in
+person owner, without requiring household admin permission. Household audit
+contains the approval summary, never the private source document. Only that client's indexed
 recovered decision becomes authoritative; other incomplete histories stay
 closed. Recovered revisions are negative and decrease on edits and reconnects;
 clients must echo the exact version they receive. Positive legacy versions can
