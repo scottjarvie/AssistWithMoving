@@ -280,7 +280,7 @@ export function AiConnectionManager() {
     ready && reconnectGrantId ? (recoveryHouseholdCursor ? { cursor: recoveryHouseholdCursor } : {}) : "skip") as FunctionReturnType<typeof api.aiGrants.listRecoveryHouseholds> | undefined;
   const householdId =
     selectedHouseholdId ?? reconnectTarget?.householdId ?? households?.[0]?.household._id ?? null;
-  const eligibilityMoveId = recoveryWitness?.householdId === householdId ? recoveryWitness.moveId : recoveryHouseholds?.households.find(entry => entry.householdId === householdId)?.moveId;
+  const eligibilityMoveId = recoveryHouseholds?.households.find(entry => entry.householdId === householdId)?.moveId ?? (recoveryWitness?.householdId === householdId ? recoveryWitness.moveId : undefined);
   const approvalHouseholds = (households ?? []).map(entry => ({ id: entry.household._id, name: entry.household.name }));
   if (reconnectTarget) for (const entry of recoveryHouseholds?.households ?? []) {
     if (!approvalHouseholds.some(choice => choice.id === entry.householdId)) approvalHouseholds.push({ id: entry.householdId, name: entry.label });
