@@ -2124,7 +2124,7 @@ it("keeps canonical scope-free describe_connection credential-only", async () =>
   const handler = createMcpHandler(() => createMovingServer(ctx, { subject: SUBJECT, issuer: ISSUER, clientId }, []).server, { legacy: "stateless", responseMode: "json" });
   try {
     const method = "tools/call";
-    const response = await handler.fetch(new Request("https://movingmanifest.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28", "mcp-method": method }, body: JSON.stringify({ jsonrpc: "2.0", id: "describe-proof", method, params: { name: "describe_connection", arguments: {}, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "description-proof", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} } } }) }));
+    const response = await handler.fetch(new Request("https://movingmanifest.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28", "mcp-method": method, "mcp-name": "describe_connection" }, body: JSON.stringify({ jsonrpc: "2.0", id: "describe-proof", method, params: { name: "describe_connection", arguments: {}, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "description-proof", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} } } }) }));
     expect(response.status).toBe(200);
     const body = await response.json() as any;
     expect(body.error).toBeUndefined();
