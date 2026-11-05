@@ -658,6 +658,18 @@ export const listMine = query({
   },
 });
 
+/** Complete original records, paged and readable only by their person owner. */
+export const listSourceHistory = query({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
+    const user = await requireCurrentUser(ctx);
+    return ctx.db.query("aiGrantSourceHistory")
+      .withIndex("by_owner_archived", q => q.eq("ownerUserId", user._id))
+      .order("desc").paginate({ numItems: 25, cursor: args.cursor ?? null });
+  },
+});
+
 export const listActivity = query({
   args: { grantId: v.optional(v.id("aiGrants")), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -729,6 +741,16 @@ const consentArgs = {
   scopeIntent: v.optional(v.union(v.literal("full"), v.literal("chosen"), v.literal("preserve"))),
   expiryIntent: v.optional(v.union(v.literal("none"), v.literal("chosen"))),
 };
+
+/** Bound the scan and fail closed if legacy rows prevent a complete count. */
+async function requireConnectionCapacity(ctx: MutationCtx, ownerUserId: Id<"users">, now: number) {
+  const rows = await ctx.db.query("aiGrants")
+    .withIndex("by_owner_status_updated", q => q.eq("ownerUserId", ownerUserId).eq("status", "active"))
+    .take(MAX_GRANT_HISTORY + 1);
+  if (rows.length > MAX_GRANT_HISTORY || rows.filter(row => grantIsActive(row, now)).length >= MAX_ACTIVE_GRANTS) {
+    throw new ConvexError("You already have 8 active AI connections or an incomplete active history. Revoke one first.");
+  }
+}
 
 export const approve = mutation({
   args: {
@@ -804,17 +826,7 @@ export const approve = mutation({
     const moveScope = args.moveScope ?? (args.moveIds === undefined ? "allMoves" : "selectedMoves");
     const moveIds = await validateGrantMoves(ctx, { householdId: args.householdId }, moveScope, args.moveIds);
 
-    const existing = await ctx.db
-      .query("aiGrants")
-      .withIndex("by_owner_status_updated", (q) =>
-        q.eq("ownerUserId", user._id).eq("status", "active"),
-      )
-      .take(MAX_ACTIVE_GRANTS * 2);
-    if (existing.filter((row) => grantIsActive(row, now)).length >= MAX_ACTIVE_GRANTS) {
-      throw new ConvexError(
-        `You already have ${MAX_ACTIVE_GRANTS} active AI connections. Revoke one first.`,
-      );
-    }
+    await requireConnectionCapacity(ctx, user._id, now);
 
     const approval = {
       ownerUserId: user._id,
@@ -839,11 +851,14 @@ export const approve = mutation({
       updatedAt: now,
     };
     // At capacity reconnect the selected row instead of adding row 129.
-    // Preserve its complete prior source record in the same durable audit
-    // transaction. Version and acknowledged alias revisions still advance.
+    // Preserve the complete source privately in the same transaction.
+    // Version and acknowledged alias revisions still advance.
     const reuse = reconnect && history.length >= MAX_GRANT_HISTORY;
     const grantId = reuse ? reconnect._id : await ctx.db.insert("aiGrants", approval);
-    if (reuse) await ctx.db.replace(grantId, approval);
+    if (reuse) {
+      await ctx.db.insert("aiGrantSourceHistory", { ownerUserId: user._id, grantId, archivedAt: now, source: reconnect });
+      await ctx.db.replace(grantId, approval);
+    }
     await advanceHistory(ctx, user._id);
 
     const grant = await ctx.db.get(grantId);
@@ -866,7 +881,7 @@ export const approve = mutation({
       action: "ai_grant.approved",
       objectTable: "aiGrants",
       objectId: grantId,
-      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null, ...(reconnect ? { reconnectGrantId: reconnect._id, clientId: reconnect.clientId, reconnectsClientHistory, ...(reuse ? { previousGrant: reconnect } : {}) } : {}) },
+      metadata: { scopes, moveScope, moveCount: moveIds?.length ?? null, ...(reconnect ? { reconnectGrantId: reconnect._id, clientId: reconnect.clientId, reconnectsClientHistory } : {}) },
     });
     return { grantId };
   },
@@ -927,6 +942,36 @@ export const updateLimits = mutation({
     }
     const editsExpiry = args.expiresInDays !== undefined || args.expiryIntent !== undefined;
     const expiresAt = editsExpiry ? explicitExpiry(args.expiryIntent, args.expiresInDays, now) : undefined;
+    const currentExpiry = effectiveExpiry(grant);
+    const nextExpiry = editsExpiry ? expiresAt : currentExpiry;
+    const currentScopes = effectiveScopes(grant);
+    const widensScopes = (scopes ?? currentScopes).some(scope => !currentScopes.includes(scope)) ||
+      (scopeChoice === "full" && effectiveScopeChoice(grant) !== "full");
+    const widensMoves = editsMoves && grant.moveScope !== "allMoves" &&
+      (moveScope === "allMoves" || (moveIds ?? []).some(id => !grant.moveIds?.includes(id)));
+    const extendsExpiry = currentExpiry !== undefined && (nextExpiry === undefined || nextExpiry > currentExpiry);
+    const restores = !grantIsActive(grant, now) && (nextExpiry === undefined || nextExpiry > now);
+    if (widensScopes || widensMoves || extendsExpiry || restores) {
+      if (user.status !== "active") throw new ConvexError("An active profile is required to increase access.");
+      const membership = await ctx.db.query("householdMemberships")
+        .withIndex("by_household_user", q => q.eq("householdId", grant.householdId).eq("userId", user._id)).unique();
+      if (membership?.status !== "active") {
+        // Keep the supported move-only participant door, with current access.
+        if (moveScope === "selectedMoves") {
+          await validateGrantMoves(ctx, { userId: user._id }, moveScope, moveIds);
+        } else {
+          const participants = await ctx.db.query("moveParticipants")
+            .withIndex("by_user_status", q => q.eq("userId", user._id).eq("status", "active"))
+            .take(MAX_GRANT_HISTORY + 1);
+          const participant = participants.find(row => row.householdId === grant.householdId && row.accessKind === "moveOnly");
+          if (!participant) throw new ConvexError("You are not an active member of that household.");
+          await validateGrantMoves(ctx, { userId: user._id }, "selectedMoves", [participant.moveId]);
+        }
+      } else if (moveScope === "selectedMoves") {
+        await validateGrantMoves(ctx, { householdId: grant.householdId }, moveScope, moveIds);
+      }
+      if (restores) await requireConnectionCapacity(ctx, user._id, now);
+    }
     const resolved = grant;
     const patch = {
       ...(editsMoves ? { moveScope, moveIds } : {}),
