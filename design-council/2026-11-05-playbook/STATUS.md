@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Round 03 adds seven corrected Home/state captures; item dossier and review corrections pass 37 tests and await exact-head council review.
+[Open newest-first gallery](gallery.html) · Both judges pass the bounded Home images; inventory gains real saved views/countable facets, and item corrections await the next exact-head review.
 
 # Moving design council status
 
@@ -21,6 +21,9 @@ Run `2026-11-05-playbook`. Local-only branch `design/assistwithmoving-council-20
 - The combined item/Home/collection pass is verified by 37 tests across five suites, full typecheck and focused source/test/tool lint. Rendered item-dialog and next exact-head different-model review remain pending.
 - Round 03 captures the actual app canvas and committed source, with three of four move records, a long title, 320/390px phones, both themes and empty/loading states. All seven previews reported no console messages. The item dossier still requires its own rendered proof; these images only support Home.
 - The complete three-round, 15-image gallery was previewed and shown inline. Lossless WebP embeds fit the renderer's size limit; all 11 screenshot embeds were decoded and verified pixel-identical to their retained PNG originals. The heavy slot is released; Music has the next claimed interval.
+- Candidate S is recorded at exact head `99d0396`: Sol source 8.3 / Home 8.6, Opus source 7.8 / Home 8.5. Both requested item provenance changes; both passed the bounded Home component. Opus's Home taste verdict is approval within synthetic SSR evidence, with system typography/authenticated interaction still unverified. Item visual and whole-site acceptance remain unverified.
+- Item links now say related history because submitted keys do not establish the origin of a value. Inline transitions are included; unknown origins are explicit. Section actions hand off focus. Further source corrections reserve the close-button area, mark actual unsaved draft differences, announce missing related history, offer a jump after expanded loading, and restore lifecycle-cancel focus.
+- Inventory now exposes all existing built-in states plus real named browser-local views with modified dots, Discard and Save as view. Snapshots preserve queries, facets, sorting/grouping, view/density and columns. A flat + Filter sheet provides counted facets, removable chips and Clear all; rich column descriptions and all original bulk/intake actions remain. Four suites passed 39 tests, TypeScript and focused lint passed. The final item/Home correction pass then passed TypeScript and two suites /16 tests; focused lint passed after escaping one JSX apostrophe without changing rendered text. Collection and item rendering remain pending.
 
 ## Remaining scope
 

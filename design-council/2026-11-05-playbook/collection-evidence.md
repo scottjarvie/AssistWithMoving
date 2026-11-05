@@ -23,4 +23,10 @@ Latest full typecheck and lint both passed (`collection-static-final.log`); lint
 
 ## Remaining collection work
 
-Real saved/built-in view tabs, edited-view controls where storage exists, a complete counted facet picker and removable chips, phone quick-filter sheet/Options, and application across every collection. Existing page-specific filters and bulk actions remain in place meanwhile. The gallery still labels its current visual as a token/SVG sampler.
+Inventory now keeps every existing built-in state as a real named view and adds actual named browser-local snapshots. A modified dot, Discard and Save as view operate on real saved state, not illustrative controls. Snapshots include search, facets, sort, grouping, Table/List/Grid, density and column visibility. They validate on restore and are scoped to the household/move on the current browser. Refused writes keep session memory and say so. No backend or cross-device persistence is claimed.
+
+The + Filter sheet lists flat room, category, owner, status, disposition, condition, review/value flags, photo/evidence, box and load facets. Counts respect search/base view and all other facets; alternatives within one facet combine with OR, different facets with AND. Removable chips retain selected zero-match values after live changes. Search and primary disposition chips can also be cleared individually. All original column controls/descriptions, intake and bulk actions remain, now using the shared Columns control. New filter/search/reset/close icons are Codex SVGs.
+
+The affected pass passed TypeScript, focused lint and four suites /39 tests (`facet-view-checks-final.log`). It includes actual Inventory saved-view restore after unmount/remount, sort/group/density/columns/query restoration, modified/Discard behavior, phone facet counts and continuity, absent/multi-valued facet identity and selected zero-match options. The initial TypeScript check caught a required column metadata field during consolidation; preserving the typed definition and its mobile value corrected it before the passing run.
+
+Phone Options consolidation, rendered Inventory/filter/named-view proof, and application across every other collection remain. The gallery's current page captures prove Home only; source tests do not supply collection visual acceptance.

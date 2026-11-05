@@ -63,7 +63,7 @@ export function RecordEvidenceStream({ entries, prefix, focusEntryId, atLimit, o
       <p className="mt-2 text-xs text-muted-foreground">Current saved text. Authorship is recorded separately in the history below.</p>
     </div> : null}
 
-    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-2"><h3 className="text-sm font-semibold">Evidence history</h3><span className="font-mono text-xs text-muted-foreground">{entries === undefined ? "Loading" : `${ordered.length} loaded entries`}</span></div>
+    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-2"><h3 className="text-sm font-semibold">Evidence history</h3><span className="font-mono text-xs text-muted-foreground">{entries === undefined ? "Loading" : `${ordered.length} loaded ${ordered.length === 1 ? "entry" : "entries"}`}</span></div>
     {kinds.length > 1 ? <div role="group" aria-label="History kinds" className="flex flex-wrap gap-1">
       {["all", ...kinds].map(value => <Button key={value} type="button" variant={kind === value ? "secondary" : "ghost"} size="sm" aria-pressed={kind === value} onClick={() => { setKind(value); setShowAll(false); }}>
         <MovingSymbol name={categorySymbols[value] ?? "note"} className="size-3.5" />{value === "all" ? "All kinds" : readable(value)}
@@ -80,13 +80,13 @@ export function RecordEvidenceStream({ entries, prefix, focusEntryId, atLimit, o
                 <PopoverContent align="start" className="text-sm"><p>{author.detail}</p><p className="mt-2 text-xs text-muted-foreground">Original event: {entry.action}</p></PopoverContent>
               </Popover>
               {entry.summary ? <p className="mt-2 whitespace-pre-wrap break-words text-sm">{entry.summary}</p> : null}
-              {entry.changedKeys?.length ? <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">Changed: {entry.changedKeys.map(readable).join(", ")}</p> : null}
+              {entry.changedKeys?.length ? <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">Recorded fields: {entry.changedKeys.map(readable).join(", ")}</p> : null}
             </div>
           </div>
         </li>;
       })}
     </ol>}
-    {matching.length > shown.length ? <Button type="button" variant="ghost" size="sm" className="h-auto whitespace-normal text-left" onClick={() => setShowAll(true)}>{matching.length - shown.length} earlier loaded entries · Show all loaded</Button> : null}
+    {matching.length > shown.length ? <Button type="button" variant="ghost" size="sm" className="h-auto whitespace-normal text-left" onClick={() => setShowAll(true)}>{matching.length - shown.length} earlier loaded {matching.length - shown.length === 1 ? "entry" : "entries"} · Show all loaded</Button> : null}
     {entries !== undefined && onLoadMore ? <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2"><Button type="button" variant="outline" size="sm" onClick={onLoadMore}>Load up to 50 history entries</Button><span className="text-xs text-muted-foreground">{ordered.length} loaded so far</span></div> : atLimit ? <Badge variant="outline" className="whitespace-normal">Latest 50 entries · older history may exist</Badge> : null}
   </section>;
 }

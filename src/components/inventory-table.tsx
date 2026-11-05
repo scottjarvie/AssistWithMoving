@@ -17,27 +17,18 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table";
 import { useAction, useMutation, useQuery } from "convex/react";
-import {
-  ChevronRight,
-  ClipboardList,
-  Columns3,
-  ImageOff,
-  ListFilter,
-  Package,
-  PackagePlus,
-  PanelRightOpen,
-  RotateCcw,
-  Search,
-  Truck,
-} from "lucide-react";
 
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { BulkInventoryIntake } from "@/components/bulk-inventory-intake";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
-import { MoveIllustration } from "@/components/moving-symbol";
-import type { CollectionView } from "@/components/use-collection-presentation";
+import { MoveIllustration, MovingSymbol } from "@/components/moving-symbol";
+import { CollectionFilterChips, CollectionFilterSheet } from "@/components/collection-filter-sheet";
+import { CollectionViewTabs } from "@/components/collection-view-tabs";
+import { countFacets, matchesFacets, type CollectionFacet, type FacetSelection } from "@/lib/collection-facets";
+import { useCollectionPresentation, type CollectionView } from "@/components/use-collection-presentation";
+import { parseInventoryView, type InventoryViewSnapshot } from "@/lib/inventory-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,7 +40,6 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  type ColumnMeta,
   DataTable,
   DataTableColumnHeader,
   EmptyState,
@@ -74,11 +64,9 @@ import {
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useHashTab } from "@/components/use-hash-tab";
 import {
-  filterInventoryItemsByOwner,
   filterInventoryItems,
   inventorySavedFilters,
   type InventoryFilterKey,
-  type InventoryOwnerFilter,
 } from "@/lib/inventory-filters";
 import {
   itemDispositionOptions,
@@ -421,9 +409,9 @@ function ItemThumbnail({
       ) : (
         <div className="flex size-full items-center justify-center text-muted-foreground">
           {large && !photoId ? <MoveIllustration decorative kind="box" className="size-full" /> : photoId ? (
-            <ImageOff className="size-4" aria-hidden />
+            <MovingSymbol name="camera" className="size-4" />
           ) : (
-            <Package className="size-4" aria-hidden />
+            <MovingSymbol name="box" className="size-4" />
           )}
         </div>
       )}
@@ -503,7 +491,7 @@ function InventoryItemCard({
             Review
           </Badge>
         ) : null}
-        <ChevronRight
+        <MovingSymbol name="arrow"
           className="size-4 shrink-0 text-muted-foreground"
           aria-hidden
         />
@@ -540,7 +528,7 @@ function AssignResourceMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" size="sm" variant="outline" disabled={disabled}>
-          <Truck aria-hidden="true" />
+          <MovingSymbol name="truck" />
           Assign
         </Button>
       </DropdownMenuTrigger>
@@ -592,7 +580,8 @@ export function InventoryTable({
   const [dispositionGroup, setDispositionGroup] =
     useState<DispositionGroup>("all");
   const [savedFilter, setSavedFilter] = useState<InventoryFilterKey>("all");
-  const [ownerFilter, setOwnerFilter] = useState<InventoryOwnerFilter>("all");
+  const [facetSelection, setFacetSelection] = useState<FacetSelection>({});
+  const [presentation, setPresentation] = useCollectionPresentation("items");
   const [newItemName, setNewItemName] = useState("");
   const [newItemRoom, setNewItemRoom] = useState("");
   const [newItemCategory, setNewItemCategory] = useState("");
@@ -665,14 +654,26 @@ export function InventoryTable({
     return items.filter((item) => members.has(item.disposition));
   }, [items, dispositionGroup]);
 
-  const filteredItems = useMemo(
-    () =>
-      filterInventoryItemsByOwner(
-        filterInventoryItems(dispositionFilteredItems, savedFilter, search),
-        ownerFilter,
-      ),
-    [dispositionFilteredItems, ownerFilter, savedFilter, search],
-  );
+  const facetDefinitions = useMemo<CollectionFacet<InventoryItem>[]>(() => {
+    const owners = new Map((items ?? []).filter(item => item.ownerPersonId).map(item => [String(item.ownerPersonId), item.ownerContact ? `${item.ownerContact.name} — ${item.ownerContact.role}` : "Owner not available"]));
+    return [
+      { id: "room", label: "Room", values: item => [item.room] },
+      { id: "category", label: "Category", values: item => [item.category] },
+      { id: "owner", label: "Owner / contact", values: item => [item.ownerPersonId], labelValue: value => owners.get(value) ?? "Owner not available" },
+      { id: "status", label: "Status", values: item => [item.status] },
+      { id: "disposition", label: "Disposition", values: item => [item.disposition], labelValue: dispositionDisplayLabel },
+      { id: "condition", label: "Condition", values: item => [item.condition] },
+      { id: "review", label: "Review", values: item => [item.needsReview ? "Needs review" : "No review flag"] },
+      { id: "value", label: "High value", values: item => [item.highValue ? "High value" : "Not flagged high value"] },
+      { id: "photo", label: "Photos", values: item => [(item.signals?.photoCount ?? 0) > 0 ? "Has photos" : "No photos"] },
+      { id: "evidence", label: "Evidence", values: item => [(item.signals?.evidencePhotoCount ?? 0) > 0 ? "Has evidence photos" : "No evidence photos"] },
+      { id: "box", label: "Box", values: item => [item.signals?.boxCount ? "In a box" : "Not in a box"] },
+      { id: "load", label: "Load", values: item => [item.assignedResourceId || item.signals?.assignmentCount ? "Has load assignment" : "No load assignment"] },
+    ];
+  }, [items]);
+  const viewItems = useMemo(() => filterInventoryItems(dispositionFilteredItems, savedFilter, search), [dispositionFilteredItems, savedFilter, search]);
+  const countedFacets = useMemo(() => countFacets(viewItems, facetDefinitions, facetSelection), [viewItems, facetDefinitions, facetSelection]);
+  const filteredItems = useMemo(() => viewItems.filter(item => matchesFacets(item, facetDefinitions, facetSelection)), [viewItems, facetDefinitions, facetSelection]);
   // Preset order is shared by Table/List/Grid. Header sorts can refine it;
   // changing presentation never resets either sort or the current query.
   const sortedItems = useMemo(() => {
@@ -681,23 +682,6 @@ export function InventoryTable({
       compare(itemToSortable(a), itemToSortable(b)),
     );
   }, [filteredItems, sortField]);
-  const ownerFilterOptions = useMemo(() => {
-    const options = new Map<Id<"movePeople">, { name: string; role: string }>();
-
-    for (const item of items ?? []) {
-      if (item.ownerContact) {
-        options.set(item.ownerContact._id, {
-          name: item.ownerContact.name,
-          role: item.ownerContact.role,
-        });
-      }
-    }
-
-    return Array.from(options.entries()).map(([id, owner]) => ({
-      id,
-      ...owner,
-    }));
-  }, [items]);
   const selectedItem = useMemo(
     () => items?.find((item) => item._id === selectedItemId) ?? null,
     [items, selectedItemId],
@@ -920,7 +904,7 @@ export function InventoryTable({
               setDetailOpen(true);
             }}
           >
-            <PanelRightOpen aria-hidden="true" />
+            <MovingSymbol name="note" />
             Details
           </Button>
         ),
@@ -1096,55 +1080,52 @@ export function InventoryTable({
 
   // The DataTable owns the tanstack instance; the adapter keeps the shared
   // sorting/filter/visibility/selection state and feeds it in controlled.
-  const hideableColumns = useMemo(
-    () =>
-      columns
-        .map((column) => {
-          const id =
-            column.id ??
-            ("accessorKey" in column
-              ? String(column.accessorKey)
-              : undefined);
-          if (!id || column.enableHiding === false) {
-            return null;
-          }
-          return { id, meta: column.meta };
-        })
-        .filter(
-          (entry): entry is { id: string; meta: ColumnMeta | undefined } =>
-            entry !== null,
-        ),
-    [columns],
-  );
+  const presentationColumns = useMemo(() => columns.map(column => {
+    const id = column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "");
+    const next: ColumnDef<InventoryItem, unknown> = { ...column };
+    next.meta = { ...column.meta, mobile: column.meta?.mobile ?? "expansion", label: column.meta?.label ?? columnLabels[id] ?? id, description: column.meta?.description ?? columnDescriptions[id] };
+    return next;
+  }), [columns]);
 
   // Page reset on filter change is handled by the DataTable's tanstack
   // instance (autoResetPageIndex), so the adapter no longer manages it.
   const selectedCount = Object.values(rowSelection).filter(Boolean).length;
   const loadingItems = Boolean(moveId) && faceted === undefined;
   const totalItemCount = items?.length ?? filteredItems.length;
-  const activeSavedFilter = inventorySavedFilters.find(
-    (filter) => filter.key === savedFilter,
-  );
   const activeInventoryTask =
     inventoryTaskTabs.find((task) => task.value === activeTaskTab) ??
     inventoryTaskTabs[0];
   const inventoryTaskCounts: Partial<Record<InventoryTaskTab, number>> = {
     browse: filteredItems.length,
   };
-  const visibleColumnCount = hideableColumns.filter(
-    (column) => columnVisibility[column.id] !== false,
-  ).length;
   const hasActiveBrowseFilters =
     search.trim().length > 0 ||
-    ownerFilter !== "all" ||
+    Object.values(facetSelection).some(values => values.length > 0) ||
     savedFilter !== "all" ||
     dispositionGroup !== "all";
 
   function clearBrowseFilters() {
     setSearch("");
-    setOwnerFilter("all");
+    setFacetSelection({});
+    setColumnFilters([]);
     setSavedFilter("all");
     setDispositionGroup("all");
+  }
+
+  const viewSnapshot: InventoryViewSnapshot = {
+    search, savedFilter, dispositionGroup,
+    facets: Object.fromEntries(Object.entries(facetSelection).filter(([, values]) => values.length).map(([id, values]) => [id, [...values].sort()])),
+    sorting, sortField, columns: columnVisibility, presentation,
+  };
+  const builtInViews = inventorySavedFilters.map(filter => ({
+    id: `built-in:${filter.key}`, label: filter.label, description: filter.description,
+    count: items ? filterInventoryItems(items, filter.key, "").length : undefined,
+    snapshot: { search: "", savedFilter: filter.key, dispositionGroup: "all" as const, facets: {}, sorting: [], sortField: DEFAULT_SORT_FIELD, columns: visibleDefaultColumns, presentation },
+  }));
+  function applyView(view: InventoryViewSnapshot) {
+    setSearch(view.search); setSavedFilter(view.savedFilter); setDispositionGroup(view.dispositionGroup);
+    setFacetSelection(view.facets); setSorting(view.sorting); setSortField(view.sortField);
+    setColumnVisibility(view.columns); setPresentation(view.presentation); setColumnFilters([]);
   }
 
   return (
@@ -1234,155 +1215,22 @@ export function InventoryTable({
                 })}
               </div>
 
-              <section
-                aria-labelledby="inventory-filter-heading"
-                className="rounded-md border border-border bg-muted/20 p-3"
-              >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3
-                      id="inventory-filter-heading"
-                      className="flex items-center gap-2 text-sm font-medium"
-                    >
-                      <ListFilter
-                        className="size-4 text-primary"
-                        aria-hidden="true"
-                      />
-                      Find and filter
-                    </h3>
+              <section aria-labelledby="inventory-filter-heading" className="collection-controls space-y-3">
+                <h3 id="inventory-filter-heading" className="sr-only">Find and filter</h3>
+                <CollectionViewTabs<InventoryViewSnapshot> key={`${householdId}:${moveId}`} storageKey={`assistwithmoving.views.items.${householdId}.${moveId}.v1`} builtIns={builtInViews} snapshot={viewSnapshot} onApply={applyView} parseSnapshot={parseInventoryView} />
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className="relative min-w-40 flex-1">
+                    <MovingSymbol name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input className="h-11 pl-8 md:h-9" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search items, rooms, people, categories" aria-label="Search inventory" />
                   </div>
+                  <CollectionFilterSheet facets={countedFacets} selection={facetSelection} onChange={setFacetSelection} loading={loadingItems} />
                 </div>
-
-                <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
-                  <div className="relative min-w-0">
-                    <Search
-                      className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <Input
-                      className="h-11 pl-8 md:h-9"
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      placeholder="Search items, rooms, people, categories"
-                      aria-label="Search inventory"
-                    />
-                  </div>
-                  <select
-                    className="h-11 rounded-md border border-input bg-background px-2 text-base md:h-9 md:text-sm"
-                    value={ownerFilter}
-                    aria-label="Owner or contact filter"
-                    onChange={(event) =>
-                      setOwnerFilter(event.target.value as InventoryOwnerFilter)
-                    }
-                  >
-                    <option value="all">All owners</option>
-                    <option value="unassigned">Unassigned</option>
-                    {ownerFilterOptions.map((owner) => (
-                      <option key={owner.id} value={owner.id}>
-                        {owner.name} - {owner.role}
-                      </option>
-                    ))}
-                  </select>
-                  <details className="rounded-md border border-border bg-background px-3 py-2">
-                    <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 text-sm font-medium">
-                      <Columns3
-                        className="size-4 text-primary"
-                        aria-hidden="true"
-                      />
-                      Columns
-                      <span className="font-normal text-muted-foreground">
-                        {visibleColumnCount} shown
-                      </span>
-                    </summary>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {hideableColumns.map((column) => {
-                        const visible = columnVisibility[column.id] !== false;
-                        return (
-                          <label
-                            key={column.id}
-                            className="flex items-start gap-2 rounded-md border border-border px-2 py-1.5 text-sm"
-                          >
-                            <Checkbox
-                              className="mt-0.5"
-                              checked={visible}
-                              aria-label={`Toggle ${
-                                column.meta?.label ??
-                                columnLabels[column.id] ??
-                                column.id
-                              } column`}
-                              onCheckedChange={(checked) =>
-                                setColumnVisibility((current) => ({
-                                  ...current,
-                                  [column.id]: checked === true,
-                                }))
-                              }
-                            />
-                            <span>
-                              <span className="block font-medium">
-                                {column.meta?.label ??
-                                  columnLabels[column.id] ??
-                                  column.id}
-                              </span>
-                              {(column.meta?.description ??
-                                columnDescriptions[column.id]) ? (
-                                <span className="block text-xs leading-5 text-muted-foreground">
-                                  {column.meta?.description ??
-                                    columnDescriptions[column.id]}
-                                </span>
-                              ) : null}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </details>
-                </div>
-
-                <details className="mt-2 rounded-md border border-border bg-background px-3 py-2 md:hidden">
-                  <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2 text-sm font-medium">
-                    Saved views
-                    <span className="font-normal text-muted-foreground">
-                      {activeSavedFilter?.label ?? "All inventory"}
-                    </span>
-                  </summary>
-                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                    {inventorySavedFilters.map((filter) => (
-                      <button
-                        key={filter.key}
-                        type="button"
-                        className={`shrink-0 rounded-md border px-3 py-2 text-left text-xs transition-colors ${
-                          savedFilter === filter.key
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background hover:bg-muted"
-                        }`}
-                        title={filter.description}
-                        aria-pressed={savedFilter === filter.key}
-                        onClick={() => setSavedFilter(filter.key)}
-                      >
-                        {filter.label}
-                      </button>
-                    ))}
-                  </div>
-                </details>
-
-                <div className="mt-3 hidden gap-2 md:flex md:flex-wrap">
-                  {inventorySavedFilters.map((filter) => (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      className={`shrink-0 rounded-md border px-3 py-2 text-left text-xs transition-colors ${
-                        savedFilter === filter.key
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background hover:bg-muted"
-                      }`}
-                      title={filter.description}
-                      aria-pressed={savedFilter === filter.key}
-                      onClick={() => setSavedFilter(filter.key)}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
+                {hasActiveBrowseFilters ? <div role="group" aria-label="Active inventory filters" className="flex flex-wrap items-center gap-1">
+                  {search.trim() ? <Button type="button" variant="secondary" size="sm" className="h-auto min-h-9 max-w-full whitespace-normal text-left" aria-label="Remove search filter" onClick={() => setSearch("")}>Search: {search}<MovingSymbol name="close" className="size-3.5 shrink-0" /></Button> : null}
+                  {dispositionGroup !== "all" ? <Button type="button" variant="secondary" size="sm" aria-label="Remove disposition group filter" onClick={() => setDispositionGroup("all")}>Disposition: {dispositionGroupChips.find(chip => chip.key === dispositionGroup)?.label}<MovingSymbol name="close" className="size-3.5" /></Button> : null}
+                  <CollectionFilterChips facets={countedFacets} selection={facetSelection} onChange={setFacetSelection} />
+                  <Button type="button" variant="ghost" size="sm" onClick={clearBrowseFilters}>Clear all</Button>
+                </div> : null}
               </section>
 
               <div className="flex flex-wrap items-end justify-between gap-2">
@@ -1401,7 +1249,7 @@ export function InventoryTable({
                       variant="ghost"
                       onClick={clearBrowseFilters}
                     >
-                      <RotateCcw aria-hidden="true" />
+                      <MovingSymbol name="reset" />
                       Clear filters
                     </Button>
                   ) : null}
@@ -1411,7 +1259,7 @@ export function InventoryTable({
                     variant="outline"
                     onClick={() => setActiveTaskTab("bulk")}
                   >
-                    <ClipboardList aria-hidden="true" />
+                    <MovingSymbol name="contents" />
                     Bulk paste
                   </Button>
                   <Button
@@ -1419,7 +1267,7 @@ export function InventoryTable({
                     size="sm"
                     onClick={() => setActiveTaskTab("add")}
                   >
-                    <PackagePlus aria-hidden="true" />
+                    <MovingSymbol name="add" />
                     Add item
                   </Button>
                 </div>
@@ -1427,7 +1275,7 @@ export function InventoryTable({
 
               <DataTable
                 data={sortedItems}
-                columns={columns}
+                columns={presentationColumns}
                 getRowId={(item) => item._id}
                 onRowOpen={(item) => {
                   setSelectedItemId(item._id);
@@ -1436,7 +1284,6 @@ export function InventoryTable({
                 getRowOpenLabel={(item) => `Open ${item.name} details`}
                 ariaLabel="Inventory records table"
                 preferenceKey="items"
-                showColumnControl={false}
                 sortPresets={{ options: INVENTORY_SORT_OPTIONS, value: sorting.length ? null : sortField, onChange: field => { setSortField(field as SortFieldId); setSorting([]); } }}
                 unfilteredCount={totalItemCount}
                 onClearFilters={clearBrowseFilters}
@@ -1654,7 +1501,7 @@ export function InventoryTable({
                   size="sm"
                   disabled={!moveId || !newItemName.trim() || creating}
                 >
-                  <PackagePlus aria-hidden="true" />
+                  <MovingSymbol name="add" />
                   {creating ? "Adding…" : "Add"}
                 </Button>
               </form>

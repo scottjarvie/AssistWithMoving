@@ -48,7 +48,7 @@ export function HomeLaunchpad() {
       <p className="mt-1 text-sm leading-6 text-muted-foreground">Pick up your move, or jump to boxes, items, and handoffs.</p>
     </header>
 
-    <DeskTray title="Your moves" count={loadingMoves ? undefined : `${activeMoves.length} moves`} footer={<Link href="/app/moves" className={`${linkFocus} inline-flex min-h-9 items-center gap-2 text-evidence hover:underline`}>Open all moves<MovingSymbol name="arrow" className="size-4" /></Link>}>
+    <DeskTray title="Your moves" count={loadingMoves ? undefined : `${activeMoves.length} ${activeMoves.length === 1 ? "move" : "moves"}`} footer={<Link href="/app/moves" className={`${linkFocus} inline-flex min-h-9 items-center gap-2 text-evidence hover:underline`}>Open all moves<MovingSymbol name="arrow" className="size-4" /></Link>}>
       {loadingMoves ? <div aria-label="Loading move shortcuts"><Skeleton className="h-24 w-full rounded-md" /></div> : deskMoves.length ? <ul className="divide-y divide-border">
         {deskMoves.map((move, index) => {
           const route = [move.origin, move.destination].filter(Boolean).join(" → ");

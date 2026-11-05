@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
@@ -19,7 +19,7 @@ import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { ItemHeroImage } from "@/components/item-hero-image";
 import { PhotoPickerDialog } from "@/components/photo-picker-dialog";
 import { Badge } from "@/components/ui/badge";
-import { DispositionBadge, StatusBadge } from "@/components/ui/status-badges";
+import { DispositionBadge, StatusBadge, dispositionDisplayLabel } from "@/components/ui/status-badges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -242,9 +242,12 @@ export function ItemDetailSheet({
   origin = "movable-units",
 }: ItemDetailSheetProps) {
   const recordPrefix = useId();
+  const sectionTabs = useRef<HTMLDivElement>(null);
+  const moreActionsButton = useRef<HTMLButtonElement>(null);
   const [activeTab, setActiveTab] = useState("activity");
   const [historyLimit, setHistoryLimit] = useState(8);
   const [focusedEntry, setFocusedEntry] = useState<{ id: string; request: number } | null>(null);
+  const [requestedFact, setRequestedFact] = useState<{ label: string; keys: string[] } | null>(null);
   const initialWeightIsEstimate =
     isEstimateConfidence(item?.weightConfidence) ||
     Boolean(item?.actualWeightLb == null && item?.estimatedWeightLb != null);
@@ -382,6 +385,11 @@ export function ItemDetailSheet({
   // this item instead of only uploading new ones.
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
 
+  function closeLifecycleConfirmation(kind: "convert" | "remove") {
+    if (kind === "convert") setConfirmConvert(false); else setConfirmRemove(false);
+    moreActionsButton.current?.focus();
+  }
+
   async function handleConvertToBox() {
     if (!householdId || !moveId || !item) return;
     setConverting(true);
@@ -408,7 +416,7 @@ export function ItemDetailSheet({
       setMessage(detail);
       toastError(detail);
       setConverting(false);
-      setConfirmConvert(false);
+      closeLifecycleConfirmation("convert");
     }
   }
 
@@ -426,7 +434,7 @@ export function ItemDetailSheet({
       setMessage(detail);
       toastError(detail);
       setRemoving(false);
-      setConfirmRemove(false);
+      closeLifecycleConfirmation("remove");
     }
   }
 
@@ -556,6 +564,25 @@ export function ItemDetailSheet({
     return null;
   }
   const currentItem = item;
+  const draftComparisons = [
+    [name, item.name ?? ""], [description, item.description ?? ""],
+    [room, item.room ?? ""], [destinationRoom, item.destinationRoom ?? ""],
+    [presentSpaceId, item.currentSpaceId ?? ""], [presentResourceId, item.assignedResourceId ?? ""], [presentZoneId, item.assignedZoneId ?? ""],
+    [category, item.category ?? ""], [subcategory, item.subcategory ?? ""], [ownerPersonId, item.ownerPersonId ?? ""],
+    [status, item.status ?? "active"], [disposition, item.disposition ?? "undecided"], [quantity, formatOptionalNumber(item.quantity ?? 1)],
+    [condition, item.condition ?? "unknown"], [fragility, item.fragility ?? "low"], [stackable, item.stackable ?? true],
+    [hazardousFlag, item.hazardousFlag ?? false], [highValue, item.highValue ?? false], [requiresPersonalTransport, item.requiresPersonalTransport ?? false], [needsReview, item.needsReview ?? false],
+    [valueDollars, formatOptionalCurrencyCents(item.valueCents)], [replacementValueDollars, formatOptionalCurrencyCents(item.replacementValueCents)],
+    [serialNumber, item.serialNumber ?? ""], [modelNumber, item.modelNumber ?? ""],
+    [lengthIn, formatOptionalNumber(item.dimensionsIn?.lengthIn)], [widthIn, formatOptionalNumber(item.dimensionsIn?.widthIn)], [heightIn, formatOptionalNumber(item.dimensionsIn?.heightIn)],
+    [dimensionsConfidence, itemDimensionsConfidenceForRead({ dimensionsIn: item.dimensionsIn, dimensionsConfidence: item.dimensionsConfidence }) ?? "none"],
+    [actualWeightLb, formatOptionalNumber(item.actualWeightLb ?? item.estimatedWeightLb)], [estimatedWeightLowLb, formatOptionalNumber(item.estimatedWeightLowLb)], [estimatedWeightHighLb, formatOptionalNumber(item.estimatedWeightHighLb)],
+    [estimatedVolumeCuFt, formatOptionalNumber(item.estimatedVolumeCuFt)], [estimatedPackedVolumeCuFt, formatOptionalNumber(item.estimatedPackedVolumeCuFt)],
+    [weightConfidence, item.weightConfidence ?? "none"], [volumeConfidence, item.volumeConfidence ?? "none"],
+    [weightIsEstimate, initialWeightIsEstimate], [volumeIsEstimate, initialVolumeIsEstimate], [dimensionsAreEstimate, initialDimensionsAreEstimate],
+    [privateNotes, item.privateNotes ?? ""], [reviewFlags, (item.reviewFlags ?? []).join(", ")], [aiSummary, item.aiSummary ?? ""], [aiTags, (item.aiTags ?? []).join(", ")],
+  ];
+  const hasUnsavedChanges = draftComparisons.some(([draft, saved]) => draft !== saved);
 
   // Origination / Destination are SPACE-only pickers (no transports).
   const spaceNameOptions = physicalSpaceNames(presentSpaces);
@@ -854,11 +881,22 @@ export function ItemDetailSheet({
     disposition === "free" ||
     disposition === "dump";
 
-  const historyEntries: RecordHistoryEntry[] | undefined = activity?.map(entry => ({
-    id: entry._id, action: entry.action, category: entry.category, actorType: entry.actorType, createdAt: entry.createdAt,
-    changedKeys: Array.isArray(entry.metadata?.changedKeys) ? entry.metadata.changedKeys.filter((key: unknown): key is string => typeof key === "string") : undefined,
-    summary: typeof entry.metadata?.statusFrom === "string" && typeof entry.metadata?.statusTo === "string" ? `${entry.metadata.statusFrom} → ${entry.metadata.statusTo}` : undefined,
-  }));
+  const historyEntries: RecordHistoryEntry[] | undefined = activity?.map(entry => {
+    const metadata = entry.metadata;
+    // Some update events record submitted keys, not a before/after diff. They
+    // identify related history, never prove the origin of the current value.
+    const keys: string[] = Array.isArray(metadata?.changedKeys) ? metadata.changedKeys.filter((key: unknown): key is string => typeof key === "string") : [];
+    const transitions = [];
+    if (typeof metadata?.statusFrom === "string" && typeof metadata?.statusTo === "string") {
+      keys.push("status");
+      transitions.push(`Status: ${metadata.statusFrom} → ${metadata.statusTo}`);
+    }
+    if (typeof metadata?.dispositionFrom === "string" && typeof metadata?.dispositionTo === "string") {
+      keys.push("disposition");
+      transitions.push(`Disposition: ${dispositionDisplayLabel(metadata.dispositionFrom)} → ${dispositionDisplayLabel(metadata.dispositionTo)}`);
+    }
+    return { id: entry._id, action: entry.action, category: entry.category, actorType: entry.actorType, createdAt: entry.createdAt, changedKeys: [...new Set(keys)], summary: transitions.join(" · ") || undefined };
+  }).sort((left, right) => right.createdAt - left.createdAt);
   const recordTabs = [
     { value: "activity", label: "Record", icon: "note" as const },
     { value: "details", label: "Details", icon: "settings" as const },
@@ -868,15 +906,25 @@ export function ItemDetailSheet({
     { value: "handling", label: "Handling", icon: "truck" as const },
     { value: "review", label: "Review", icon: "person" as const },
   ];
+  function openSection(value: string) {
+    // The tab strip remains mounted when its panel changes. Hand focus to it
+    // before a Contents/Edit button disappears with the previous panel.
+    const trigger = Array.from(sectionTabs.current?.querySelectorAll<HTMLButtonElement>("[data-moving-section]") ?? []).find(element => element.dataset.movingSection === value);
+    trigger?.focus({ preventScroll: true });
+    trigger?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    setActiveTab(value);
+    if (value !== "activity") { setFocusedEntry(null); setRequestedFact(null); }
+  }
   function openHistory(entryId?: string) {
-    setActiveTab("activity");
+    openSection("activity");
     if (entryId) setFocusedEntry(previous => ({ id: entryId, request: (previous?.request ?? 0) + 1 }));
     else { setHistoryLimit(50); setFocusedEntry(null); }
   }
   function factSource(label: string, keys: string[]) {
     const entry = historyEntries?.find(candidate => candidate.changedKeys?.some(key => keys.includes(key)));
-    return <Button type="button" variant="ghost" size="icon-sm" className="size-7 shrink-0 text-evidence" aria-label={`${label}: ${entry ? "from its entry" : "open loaded history"}`} title={entry ? `From its entry · ${new Date(entry.createdAt).toLocaleString()}` : "No source identified in loaded history; open history"} onClick={() => openHistory(entry?.id)}><MovingSymbol name="source" className="size-3.5" /></Button>;
+    return <Button type="button" variant="ghost" size="icon-sm" className="size-7 shrink-0 text-evidence" aria-label={`${label}: ${entry ? "related history" : "open loaded history"}`} title={entry ? `Related update · ${new Date(entry.createdAt).toLocaleString()} · Current value's origin is not recorded` : "No related update identified in loaded history; open history"} onClick={() => { setRequestedFact({ label, keys }); openHistory(entry?.id); }}><MovingSymbol name="source" className="size-3.5" /></Button>;
   }
+  const requestedEntry = requestedFact ? historyEntries?.find(entry => entry.changedKeys?.some(key => requestedFact.keys.includes(key))) : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -894,15 +942,16 @@ export function ItemDetailSheet({
               <DialogHeader className="min-w-0 p-0">
                 <DialogTitle className="break-words text-lg font-semibold">{item.name}</DialogTitle>
                 <DialogDescription className="mt-1 text-xs">{item.code ? `${item.code} · ` : ""}Last updated {new Date(item.updatedAt).toLocaleDateString()}</DialogDescription>
+                {hasUnsavedChanges ? <Badge variant="outline" className="mt-2 w-fit border-warning text-warning">Unsaved changes</Badge> : null}
                 {item.needsReview ? <Badge variant="destructive" className="mt-2 w-fit">Needs review</Badge> : null}
               </DialogHeader>
               </div>
               <div role="group" aria-label="Item actions" className="flex items-center gap-1">
-                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Edit item details" title="Edit item details" onClick={() => setActiveTab("details")}><MovingSymbol name="settings" className="size-4" /></Button>
-                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Add or choose item photos" title="Add or choose item photos" onClick={() => setActiveTab("evidence")}><MovingSymbol name="camera" className="size-4" /></Button>
-                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Edit saved notes and reasoning" title="Edit saved notes and reasoning" onClick={() => setActiveTab("review")}><MovingSymbol name="note" className="size-4" /></Button>
-                <Button type="button" size="icon-touch" variant="ghost" className="sm:size-8" aria-label="Item connections and handling" title="Item connections and handling" onClick={() => setActiveTab("handling")}><MovingSymbol name="box" className="size-4" /></Button>
-                <Popover open={lifecycleMenuOpen} onOpenChange={setLifecycleMenuOpen}><PopoverTrigger asChild><Button type="button" size="icon-touch" variant="ghost" className="sm:size-8" aria-label="More item actions" title="More item actions"><MovingSymbol name="more" className="size-4" /></Button></PopoverTrigger>
+                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Edit item details" title="Edit item details" onClick={() => openSection("details")}><MovingSymbol name="settings" className="size-4" /></Button>
+                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Add or choose item photos" title="Add or choose item photos" onClick={() => openSection("evidence")}><MovingSymbol name="camera" className="size-4" /></Button>
+                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Edit saved notes and reasoning" title="Edit saved notes and reasoning" onClick={() => openSection("review")}><MovingSymbol name="note" className="size-4" /></Button>
+                <Button type="button" size="icon-touch" variant="ghost" className="sm:size-8" aria-label="Item connections and handling" title="Item connections and handling" onClick={() => openSection("handling")}><MovingSymbol name="truck" className="size-4" /></Button>
+                <Popover open={lifecycleMenuOpen} onOpenChange={setLifecycleMenuOpen}><PopoverTrigger asChild><Button ref={moreActionsButton} type="button" size="icon-touch" variant="ghost" className="sm:size-8" aria-label="More item actions" title="More item actions"><MovingSymbol name="more" className="size-4" /></Button></PopoverTrigger>
                   <PopoverContent align="start" className="space-y-3" onCloseAutoFocus={event => {
                     const target = confirmConvert ? "convert" : confirmRemove ? "remove" : null;
                     if (target) { event.preventDefault(); document.getElementById(`${recordPrefix}-${target}-confirm`)?.focus(); }
@@ -914,7 +963,7 @@ export function ItemDetailSheet({
                 </Popover>
               </div>
               {activeTab === "activity" ? <>
-              <p className="text-xs font-medium text-muted-foreground">Saved facts · source links open their history entries</p>
+              <p className="text-xs font-medium text-muted-foreground">Saved facts · links open related history</p>
               <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 rounded-md border border-border p-2 text-sm">
                 <dt className="text-muted-foreground">Status</dt>
                 <dd className="flex items-center justify-end gap-1"><StatusBadge status={item.status} />{factSource("Status", ["status"])}</dd>
@@ -925,7 +974,8 @@ export function ItemDetailSheet({
                 <dt className="text-muted-foreground">Value</dt>
                 <dd className="flex items-center justify-end gap-1"><span>{item.valueCents != null ? `$${formatOptionalCurrencyCents(item.valueCents)}` : "Not recorded"}</span>{factSource("Value", ["valueCents"])}</dd>
               </dl>
-              </> : <Button type="button" variant="link" size="sm" className="px-0 text-evidence" onClick={() => setActiveTab("activity")}><MovingSymbol name="note" className="size-4" />Back to saved record</Button>}
+              <p className="text-xs text-muted-foreground">History records updates, but does not identify the origin of each current value.</p>
+              </> : <Button type="button" variant="link" size="sm" className="px-0 text-evidence" onClick={() => openSection("activity")}><MovingSymbol name="note" className="size-4" />Back to saved record</Button>}
               {confirmConvert ? (
                 <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
                   <p className="text-muted-foreground">
@@ -947,7 +997,7 @@ export function ItemDetailSheet({
                       size="sm"
                       variant="ghost"
                       disabled={converting}
-                      onClick={() => setConfirmConvert(false)}
+                      onClick={() => closeLifecycleConfirmation("convert")}
                     >
                       Keep as item
                     </Button>
@@ -980,7 +1030,7 @@ export function ItemDetailSheet({
                       size="sm"
                       variant="ghost"
                       disabled={removing}
-                      onClick={() => setConfirmRemove(false)}
+                      onClick={() => closeLifecycleConfirmation("remove")}
                     >
                       Cancel
                     </Button>
@@ -989,9 +1039,9 @@ export function ItemDetailSheet({
               ) : null}
             </aside>
 
-            <div className="md:min-w-0 md:flex-1">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-              <MoveWorkspaceTabList sticky="within-panel" tabs={recordTabs} activeValue={activeTab} ariaLabel="Item sections" />
+            <div ref={sectionTabs} className="md:min-w-0 md:flex-1">
+            <Tabs value={activeTab} onValueChange={value => { setActiveTab(value); setFocusedEntry(null); setRequestedFact(null); }} className="gap-4">
+              <MoveWorkspaceTabList sticky="within-panel" className="md:pr-10" tabs={recordTabs} activeValue={activeTab} ariaLabel="Item sections" />
 
               <TabsContent value="details" className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
@@ -1655,10 +1705,13 @@ export function ItemDetailSheet({
               </TabsContent>
 
               <TabsContent value="activity" className="space-y-3">
-                <RecordEvidenceStream key={`stream-${focusedEntry?.request ?? 0}`} entries={historyEntries} prefix={recordPrefix} focusEntryId={focusedEntry?.id} atLimit={historyLimit === 50 && (historyEntries?.length ?? 0) >= 50} onLoadMore={historyLimit < 50 ? () => setHistoryLimit(50) : undefined} notes={{ description: item.description, reasoning: item.aiSummary, privateNotes: item.privateNotes }} onEditNotes={() => setActiveTab("review")} />
+                {requestedFact ? <div role="status" aria-live="polite" className="border-l-2 border-evidence pl-3 text-sm text-muted-foreground">
+                  {historyEntries === undefined ? `Loading history for ${requestedFact.label.toLowerCase()}.` : requestedEntry ? <><p>Related {requestedFact.label.toLowerCase()} update found. This does not identify the current value&apos;s origin.</p><Button type="button" variant="link" size="sm" className="px-0" onClick={() => openHistory(requestedEntry.id)}>Open related update</Button></> : `No related ${requestedFact.label.toLowerCase()} update identified in the latest ${historyEntries.length} loaded ${historyEntries.length === 1 ? "entry" : "entries"}. The current value's origin is unknown.`}
+                </div> : null}
+                <RecordEvidenceStream key={`stream-${focusedEntry?.request ?? 0}`} entries={historyEntries} prefix={recordPrefix} focusEntryId={focusedEntry?.id} atLimit={historyLimit === 50 && (historyEntries?.length ?? 0) >= 50} onLoadMore={historyLimit < 50 ? () => setHistoryLimit(50) : undefined} notes={{ description: item.description, reasoning: item.aiSummary, privateNotes: item.privateNotes }} onEditNotes={() => openSection("review")} />
                 <nav aria-label="Item contents" className="border-t border-border pt-3 md:hidden">
                   <h3 className="mb-2 text-sm font-medium">Contents</h3>
-                  <div className="grid grid-cols-2 gap-1">{recordTabs.map(tab => <Button key={tab.value} type="button" variant="ghost" className="min-h-11 justify-start whitespace-normal text-left" onClick={() => setActiveTab(tab.value)}><MovingSymbol name={tab.icon} className="size-4" />{tab.label}</Button>)}</div>
+                  <div className="grid grid-cols-2 gap-1">{recordTabs.map(tab => <Button key={tab.value} type="button" variant="ghost" className="min-h-11 justify-start whitespace-normal text-left" onClick={() => openSection(tab.value)}><MovingSymbol name={tab.icon} className="size-4" />{tab.label}</Button>)}</div>
                 </nav>
               </TabsContent>
             </Tabs>
@@ -1669,7 +1722,7 @@ export function ItemDetailSheet({
             <div className="w-full space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MovingSymbol name="note" className="size-4 text-primary" />
-                {message ?? "Detailed edits are saved to the item history."}
+                <span role="status" aria-live="polite">{message ?? (hasUnsavedChanges ? "Unsaved changes · Save item to apply your edits. The Record view shows saved values." : "Detailed edits are saved to the item history.")}</span>
               </div>
               <div className="flex items-center justify-end gap-2">
                 <Button

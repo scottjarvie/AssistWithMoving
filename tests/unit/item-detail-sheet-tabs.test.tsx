@@ -1,12 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 
+type HistoryFixture = { _id: string; action: string; category: string; actorType: "user" | "agent" | "apiKey" | "system" | "webhook"; createdAt: number; metadata?: Record<string, unknown> };
 const sheetData = vi.hoisted(() => ({
-  activity: [] as Array<{ _id: string; action: string; category: string; actorType: "user" | "agent" | "apiKey" | "system" | "webhook"; createdAt: number; metadata?: { changedKeys?: string[] } }>,
+  activity: [] as HistoryFixture[],
+  earlierActivity: undefined as HistoryFixture[] | undefined,
   people: [
     {
       _id: "person_1",
@@ -52,7 +54,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("convex/react", () => ({
   useQuery: vi.fn((query: string, args) => {
     if (args === "skip") return undefined;
-    if (query === "audit.listForObject") return sheetData.activity;
+    if (query === "audit.listForObject") return args.limit === 50 && sheetData.earlierActivity ? sheetData.earlierActivity : sheetData.activity;
     if (query === "movePeople.listForMove") return sheetData.people;
     if (query === "transportResources.listForMoveWithZones")
       return sheetData.transport;
@@ -152,7 +154,7 @@ function renderSheet({
 }
 
 describe("ItemDetailSheet task tabs", () => {
-  beforeEach(() => { sheetData.activity = []; });
+  beforeEach(() => { sheetData.activity = []; sheetData.earlierActivity = undefined; });
   it("opens the saved record and keeps every editor one labelled step away", async () => {
     const user = userEvent.setup();
     renderSheet();
@@ -264,6 +266,10 @@ describe("ItemDetailSheet task tabs", () => {
     );
     // Requires an explicit confirm before it replaces the item.
     expect(sheetData.convert).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Keep as item" }));
+    expect(screen.getByRole("button", { name: "More item actions" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "More item actions" }));
+    await user.click(screen.getByRole("button", { name: /Convert to a box\/tote/ }));
     await user.click(screen.getByRole("button", { name: "Convert to box" }));
 
     await waitFor(() => {
@@ -352,28 +358,83 @@ describe("ItemDetailSheet task tabs", () => {
     expect(patch).not.toHaveProperty("estimatedWeightLb");
   });
 
-  it("opens a saved fact's actual source entry, including an earlier loaded entry", async () => {
+  it("opens related fact history without claiming that submitted keys prove provenance", async () => {
     const user = userEvent.setup();
     sheetData.activity = Array.from({ length: 8 }, (_, index) => ({ _id: `synthetic-history-${index}`, action: index === 7 ? "item.status.changed" : "item.updated", category: "inventory", actorType: index % 2 ? "user" : "apiKey", createdAt: 1000 - index, metadata: { changedKeys: [index === 7 ? "status" : "name"] } }));
     renderSheet();
     expect(screen.queryByText("item status changed")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /3 earlier loaded entries/ })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Status: from its entry" }));
+    await user.click(screen.getByRole("button", { name: "Status: related history" }));
     const source = screen.getByText("item status changed").closest("li");
     expect(source).toHaveFocus();
     expect(screen.queryByRole("button", { name: /3 earlier loaded entries/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Entry author: API key" })).toHaveLength(4);
     expect(screen.queryByRole("button", { name: "Entry author: AI / automation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /from its entry/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Recorded fields: status")).toBeInTheDocument();
+  });
+
+  it("links inline classification after a full save as related history, even without changedKeys", async () => {
+    const user = userEvent.setup();
+    // Deliberately not sorted: use the latest related event, not array order.
+    sheetData.activity = [
+      { _id: "synthetic-save", action: "item.updated", category: "inventory", actorType: "user", createdAt: 1000, metadata: { changedKeys: ["name", "disposition"] } },
+      { _id: "synthetic-classification", action: "item.disposition_set", category: "inventory", actorType: "user", createdAt: 2000, metadata: { dispositionFrom: "mover", dispositionTo: "personalTransport" } },
+    ];
+    renderSheet({ itemOverride: { disposition: "personalTransport" } });
+    await user.click(screen.getByRole("button", { name: "Disposition: related history" }));
+    expect(screen.getByText("item disposition set").closest("li")).toHaveFocus();
+    expect(screen.getByText(/Disposition:.*Personal/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /from its entry/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/does not identify the origin of each current value/)).toBeInTheDocument();
+  });
+
+  it("hands keyboard focus to the destination tab from Contents and Edit notes", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    within(screen.getByRole("navigation", { name: "Item contents" })).getByRole("button", { name: "Measurements" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("tab", { name: "Measurements" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Measurements" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("button", { name: "Back to saved record" }));
+    expect(screen.getByRole("tab", { name: "Record" })).toHaveFocus();
+    screen.getByRole("button", { name: "Edit notes" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("tab", { name: "Review" })).toHaveFocus();
+    expect(screen.getByLabelText("Private notes")).toBeVisible();
+  });
+
+  it("announces missing related history even after requesting the bounded history", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByRole("button", { name: "Status: open loaded history" }));
+    expect(screen.getByText(/No related status update identified in the latest 0 loaded entries/)).toHaveAttribute("role", "status");
+    expect(screen.getByRole("tab", { name: "Record" })).toHaveFocus();
+  });
+
+  it("finds related history returned by the larger query and offers an explicit jump", async () => {
+    const user = userEvent.setup();
+    sheetData.activity = [{ _id: "synthetic-rename", action: "item.updated", category: "inventory", actorType: "user", createdAt: 2000, metadata: { changedKeys: ["name"] } }];
+    sheetData.earlierActivity = [...sheetData.activity, { _id: "synthetic-status", action: "item.status.changed", category: "inventory", actorType: "agent", createdAt: 1000, metadata: { statusFrom: "draft", statusTo: "active" } }];
+    renderSheet();
+    await user.click(screen.getByRole("button", { name: "Status: open loaded history" }));
+    expect(screen.getByText(/Related status update found/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open related update" }));
+    expect(screen.getByText("item status changed").closest("li")).toHaveFocus();
   });
 
   it("retains unsaved fields while moving between the record and its editors", async () => {
     const user = userEvent.setup();
     renderSheet();
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit item details" }));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Synthetic unfinished rename" } });
     await user.click(screen.getByRole("tab", { name: "Record" }));
     expect(screen.getByRole("heading", { name: "Red toolbox" })).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Details" }));
     expect(screen.getByLabelText("Name")).toHaveValue("Synthetic unfinished rename");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Red toolbox" } });
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
   });
 });

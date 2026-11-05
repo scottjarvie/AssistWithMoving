@@ -113,6 +113,7 @@ describe("InventoryTable", () => {
   beforeEach(() => {
     setViewportWidth(1440);
     window.localStorage.removeItem("assistwithmoving.collection.items.v1");
+    window.localStorage.removeItem("assistwithmoving.views.items.household_123.move_123.v1");
     window.history.replaceState(null, "", "/app/moves/move_123/inventory");
     mockItems.rows = [
       inventoryItem("item_1", "Walnut media console", {
@@ -223,6 +224,78 @@ describe("InventoryTable", () => {
         "Garage: two bikes, red toolbox, camping tent",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("keeps counted phone facets through presentation changes and lets each chip be removed", async () => {
+    const user = userEvent.setup();
+    setViewportWidth(390);
+    mockItems.rows = [
+      inventoryItem("synthetic-den-desk", "[synthetic] Desk", { room: "Den", category: "Furniture" }),
+      inventoryItem("synthetic-den-tools", "[synthetic] Den tools", { room: "Den", category: "Tools" }),
+      inventoryItem("synthetic-kitchen-tools", "[synthetic] Kitchen tools", { room: "Kitchen", category: "Tools" }),
+    ];
+    render(<InventoryTable householdId={"household_123" as Id<"households">} moveId={"move_123" as Id<"moves">} />);
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "+ Filter" }));
+    const sheet = screen.getByRole("dialog", { name: "Filter records" });
+    const room = within(sheet).getByRole("group", { name: "Room" });
+    const den = within(room).getByRole("checkbox", { name: /Den/ });
+    expect(den.closest("label")).toHaveTextContent(/Den\s*2/);
+    fireEvent.click(den);
+    const category = within(sheet).getByRole("group", { name: "Category" });
+    const tools = within(category).getByRole("checkbox", { name: /Tools/ });
+    expect(tools.closest("label")).toHaveTextContent(/Tools\s*1/);
+    fireEvent.click(tools);
+    await user.click(within(sheet).getByRole("button", { name: "Show records" }));
+    expect(screen.getByText("1 of 3 records")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    expect(screen.getByRole("button", { name: "Open [synthetic] Den tools" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open [synthetic] Desk" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter Category: Tools" }));
+    expect(screen.getByText("2 of 3 records")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+    expect(screen.getByText("3 of 3 records")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Remove filter/ })).not.toBeInTheDocument();
+  });
+
+  it("saves and restores a real named view after remount, including layout, sort and filters", async () => {
+    const user = userEvent.setup();
+    const rendered = render(<InventoryTable householdId={"household_123" as Id<"households">} moveId={"move_123" as Id<"moves">} />);
+    fireEvent.change(screen.getByLabelText("Search inventory"), { target: { value: "Walnut" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Item" }));
+    fireEvent.change(screen.getByLabelText("Group records by"), { target: { value: "room" } });
+    fireEvent.click(screen.getByRole("button", { name: "Group order: ascending" }));
+    fireEvent.click(screen.getByRole("button", { name: "Density: compact" }));
+    await user.click(screen.getByRole("button", { name: "Choose columns" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("checkbox", { name: "Category" }));
+    await user.keyboard("{Escape}");
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    expect(screen.getByText("All items modified")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save as view" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "View name" }), { target: { value: "Synthetic room view" } });
+    await user.click(screen.getByRole("button", { name: "Save view" }));
+    expect(screen.getByRole("button", { name: "Synthetic room view" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save as view" })).toHaveFocus();
+    const saved = JSON.parse(window.localStorage.getItem("assistwithmoving.views.items.household_123.move_123.v1")!)[0];
+    expect(saved.snapshot).toMatchObject({ search: "Walnut", sorting: [{ id: "name", desc: false }], columns: { category: false }, presentation: { view: "grid", density: "comfortable", groupBy: "room", groupDesc: true } });
+    fireEvent.change(screen.getByLabelText("Search inventory"), { target: { value: "unmatched synthetic query" } });
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByLabelText("Search inventory")).toHaveValue("Walnut");
+    rendered.unmount();
+    render(<InventoryTable householdId={"household_123" as Id<"households">} moveId={"move_123" as Id<"moves">} />);
+    fireEvent.click(screen.getByRole("button", { name: "List" }));
+    fireEvent.change(screen.getByLabelText("Group records by"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Density: comfortable" }));
+    fireEvent.click(screen.getByRole("button", { name: "Synthetic room view" }));
+    expect(screen.getByLabelText("Search inventory")).toHaveValue("Walnut");
+    expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Density: comfortable" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Group records by")).toHaveValue("room");
+    expect(screen.getByRole("button", { name: "Group order: descending" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Table" }));
+    expect(screen.getByRole("button", { name: "Sort by Item" })).toHaveAccessibleDescription(/Ascending; secondary sort, priority 2/);
+    expect(screen.queryByRole("columnheader", { name: "Category" })).not.toBeInTheDocument();
   });
 
   it.each(["Table", "List", "Grid"])("lets an inventory preset regain control after a column sort in %s", async view => {
