@@ -44,6 +44,8 @@ Built-in inventory states retain the person's current presentation, sort and col
 
 AI settings opens with a read-only matrix of the server's connection grants and actual abilities. Expired or revoked approvals retain their history but never imply current authority. Phone rows become connection cards with every ability labelled. Recent refused requests have an attributed, labelled mark. Review opens existing consent, client, usage and expiry details; revocation requires its existing named confirmation. Seven sections retain Setup, Approve, Connections, Activity, Boundaries, API keys and Manual. Their mounted panels preserve unfinished forms. The person-only actions table links to actual controls; the UI never invents an editor that can widen a grant.
 
+Public reading pages use a field-guide frame: calm heading and reading measure, contents links to retained sections, first-party guide context, and a labelled path to the original workflow explanation. Section anchors are additive; nested content, links, code/copy controls and supplied visuals remain. Feature summaries are reading lists. Native fragment navigation needs no page-discovery script. Phone Contents uses two columns; desktop guide context sits beside the reading column. Dates and sources are shown only when actually supplied by the page. Root marketing and focused setup retain their own layouts. Public glyphs use the original Moving SVG set.
+
 Print remains a document surface: preserve QR codes, labels, fields and pagination; no interactive chrome or dark backgrounds on paper.
 
 ## Verification

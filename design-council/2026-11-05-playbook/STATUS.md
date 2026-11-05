@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · U source reviews recorded (Sol 8.3 / Opus 7.9); focus and offline-boundary fixes await checks and the next rendered gallery round.
+[Open newest-first gallery](gallery.html) · Round 05: ten offline captures and seven bounded probes; approval-panel screenshot needs a timing recheck; public reader source passes TypeScript and probes; council review pending.
 
 # Moving design council status
 
@@ -26,6 +26,8 @@ Run `2026-11-05-playbook`. Local-only branch `design/assistwithmoving-council-20
 - Inventory now exposes all existing built-in states plus real named browser-local views with modified dots, Discard and Save as view. Snapshots preserve queries, facets, sorting/grouping, view/density and columns. A flat + Filter sheet provides counted facets, removable chips and Clear all; rich column descriptions and all original bulk/intake actions remain. Four suites passed 39 tests, TypeScript and focused lint passed. The final item/Home correction pass then passed TypeScript and two suites /16 tests; focused lint passed after escaping one JSX apostrophe without changing rendered text. Collection and item rendering remain pending.
 
 ## Remaining scope
+
+Round 05 has ten actual client-component PNGs at source `7d1bc78`, with seven bounded probes and zero runtime errors, network attempts, unknown queries or fixture writes. Lead inspection withholds approval-form rendering because its screenshot still shows Setup; the runner now waits for visible/selected Approve. The full self-contained gallery retains five rounds /26 numbered images, including the failed phone-caption attempt. A six-image latest extract was previewed and shown inline because the full HTML exceeds the renderer's 512,000-character limit. Shared reader source covers ten PublicPageChrome routes and original glyphs on two additional public pages; TypeScript, focused probes and lint passed, but public rendering and whole-site acceptance are pending. All owned processes are closed; Languages has claimed the released host slot. No Scott picks received.
 
 Candidate T is recorded at exact head `a7185089`: Sol 8.4 (changes requested), Opus 8.2 (approve with followups), source only. Stable view baselines, saved-view management/focus, column normalization and measurement reversion are corrected. AI settings now has a server-driven permissions matrix and seven retained sections. TypeScript, seven affected suites /59 tests and focused lint passed after correcting new test interactions/selectors; full-suite/build and rendered/council acceptance remain pending. Moving released its serial check interval with all owned workers exited; no Next/browser started. Offline actual-client-component rendering source is prepared but has not yet been built or captured.
 

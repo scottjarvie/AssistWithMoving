@@ -74,11 +74,13 @@ try {
     await page.getByRole("tab", { name: "Setup", exact: true }).click();
     await page.getByRole("button", { name: "All 7 sections", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Approve", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('[data-moving-section="approve"]')?.getAttribute("aria-selected") === "true");
+    await page.getByLabel("Name this connection").waitFor({ state: "visible" });
     assert.equal(await page.getByLabel("Name this connection").inputValue(), "Synthetic unfinished approval");
     await capture(page, "ai-phone-approval-dark");
     evidence.probes.push("Approval draft survives sections and pinned chooser");
     await page.getByRole("tab", { name: "API keys", exact: true }).click();
-    await page.getByText("Advanced API settings", { exact: true }).click();
+    await page.locator("summary").filter({ hasText: "Advanced API settings" }).click();
     const before = page.url();
     await page.getByRole("link", { name: "API docs", exact: true }).click();
     await page.getByText(/Destination outside this fixture: \/api/).waitFor();

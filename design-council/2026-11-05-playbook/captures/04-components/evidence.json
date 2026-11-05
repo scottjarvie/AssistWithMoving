@@ -1,0 +1,158 @@
+{
+  "sourceHead": "7d1bc78e60eb5ec86efdc0c473891042e599ca51",
+  "sourceDirty": false,
+  "generatedAt": "2026-11-05T14:25:08.378Z",
+  "rendering": "Client-rendered actual components; fictional query/auth/navigation boundary; app CSS; no authenticated shell or live data; all fixture writes refused; links show local destination notices",
+  "typography": "Latin Geist and Geist Mono bundled with Next devtools, not the app next/font build or its fallback metrics",
+  "explicitlyEmptyQueries": [
+    "photos.listForMove",
+    "photos.listForItem",
+    "apiKeys.listForHousehold",
+    "movePeople.listForMove",
+    "moveSpaces.listForMove",
+    "transportResources.listForMoveWithZones"
+  ],
+  "runtimeDiagnostics": "Capture must record __fixtureUnknownQueries, __fixtureWritesBlocked and __fixtureNavigationAttempts; unknown queries are not accepted evidence",
+  "capturedAt": "2026-11-05T14:25:32.866Z",
+  "screenshots": [
+    {
+      "name": "ai-desktop-light",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": true,
+      "pageOverflow": false
+    },
+    {
+      "name": "ai-phone-dark",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "fullPage": true,
+      "pageOverflow": false
+    },
+    {
+      "name": "ai-phone-confirm-dark",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    },
+    {
+      "name": "ai-phone-approval-dark",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    },
+    {
+      "name": "inventory-desktop-light",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    },
+    {
+      "name": "item-desktop-light",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    },
+    {
+      "name": "inventory-phone-dark",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    },
+    {
+      "name": "inventory-grid-phone-dark",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    },
+    {
+      "name": "inventory-filter-phone-dark",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    },
+    {
+      "name": "item-phone-dark",
+      "viewport": {
+        "width": 390,
+        "height": 1000
+      },
+      "fullPage": false,
+      "pageOverflow": false
+    }
+  ],
+  "probes": [
+    "Review opens, focuses and scrolls details into the viewport",
+    "Review toggles closed; refused-request mark opens Activity",
+    "Revoke focuses Keep it; repeated Enter cancels without a write",
+    "Approval draft survives sections and pinned chooser",
+    "API docs navigation is blocked with a local destination notice",
+    "Phone opens List; presentation-only edit marks modified and Discard restores List",
+    "Item draft survives Record and Details without saving"
+  ],
+  "diagnostics": [
+    {
+      "surface": "ai",
+      "width": 1440,
+      "theme": "light",
+      "unknownQueries": [],
+      "writesBlocked": 0,
+      "navigationAttempts": []
+    },
+    {
+      "surface": "ai",
+      "width": 390,
+      "theme": "dark",
+      "unknownQueries": [],
+      "writesBlocked": 0,
+      "navigationAttempts": [
+        "/api"
+      ]
+    },
+    {
+      "surface": "inventory",
+      "width": 1440,
+      "theme": "light",
+      "unknownQueries": [],
+      "writesBlocked": 0,
+      "navigationAttempts": []
+    },
+    {
+      "surface": "inventory",
+      "width": 390,
+      "theme": "dark",
+      "unknownQueries": [],
+      "writesBlocked": 0,
+      "navigationAttempts": []
+    }
+  ],
+  "networkAttempts": [],
+  "errors": [],
+  "result": "passed",
+  "sequence": 1
+}

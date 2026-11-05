@@ -72,6 +72,71 @@
           "caption": "Home · loading · phone · light · synthetic component evidence"
         }
       ]
+    },
+    {
+      "id": "04-client-attempt",
+      "createdAt": "2026-11-05T14:12:00Z",
+      "kind": "screenshots",
+      "title": "04 - First client capture attempt",
+      "status": "Incomplete / rejected evidence",
+      "description": "Historical failed attempt, preserved. Four AI images and four probes preceded a navigation-probe selector failure. Inspection found the phone caption collapsed into a narrow column. The next round corrects it. This is not council acceptance.",
+      "images": [
+        {
+          "path": "captures/04-components-attempt-01/ai-phone-dark.png",
+          "caption": "Historical phone caption defect - corrected in the next round"
+        }
+      ]
+    },
+    {
+      "id": "05-client-components",
+      "createdAt": "2026-11-05T14:25:09Z",
+      "kind": "screenshots",
+      "title": "05 - AI permissions, inventory and item record",
+      "status": "Bounded capture pass / approval-panel timing recheck required",
+      "description": "Actual interactive components, app CSS and Latin Geist from Next devtools, with fictional query/auth/navigation boundaries. Five shipped grant abilities; phone caption correction; safe revoke confirmation; retained drafts and local navigation notice; inventory Table/List/Grid and filter sheet; item dossier/stream. No authenticated shell, live data, final next/font metrics or print proof. All network and mutation attempts were zero. Source 7d1bc78; capture locator correction does not change rendered source. Lead audit: the image named approval still shows Setup; draft data was retained, but visible Approve selection was not asserted. Approval-form rendering is unverified, and the image remains labelled as Setup.",
+      "sourceHead": "7d1bc78e60eb5ec86efdc0c473891042e599ca51",
+      "images": [
+        {
+          "path": "captures/04-components/ai-desktop-light.png",
+          "caption": "ai desktop light - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/ai-phone-dark.png",
+          "caption": "ai phone dark - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/ai-phone-confirm-dark.png",
+          "caption": "ai phone confirm dark - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/ai-phone-approval-dark.png",
+          "caption": "Setup after the draft-retention probe - not accepted as an approval-form image"
+        },
+        {
+          "path": "captures/04-components/inventory-desktop-light.png",
+          "caption": "inventory desktop light - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/inventory-phone-dark.png",
+          "caption": "inventory phone dark - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/inventory-grid-phone-dark.png",
+          "caption": "inventory grid phone dark - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/inventory-filter-phone-dark.png",
+          "caption": "inventory filter phone dark - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/item-desktop-light.png",
+          "caption": "item desktop light - fictional interactive component evidence"
+        },
+        {
+          "path": "captures/04-components/item-phone-dark.png",
+          "caption": "item phone dark - fictional interactive component evidence"
+        }
+      ]
     }
   ]
 }
