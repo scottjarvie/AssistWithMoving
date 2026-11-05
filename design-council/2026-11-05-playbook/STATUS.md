@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) ? Queue collection integrated in source; regression tests written but NOT RUN. One independent source review pending. HOST/SITE NONE; last green full suite remains 61a0d70 (222 files /1,396 tests).
+[Open newest-first gallery](gallery.html) ? Queue collection integrated; X source review requested two fixes, now implemented with written regressions. Current checks/rendering NOT RUN; HOST/SITE NONE. Green 222-file/1,396-test proof remains at 61a0d70.
 
 # Moving design council status
 

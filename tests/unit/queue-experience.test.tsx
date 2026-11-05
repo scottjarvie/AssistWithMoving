@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -403,6 +403,71 @@ describe("QueueDesk", () => {
     await user.click(screen.getByRole("button", { name: "Save handoff" }));
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Search Queue" })).toHaveFocus());
     expect(save).toHaveBeenNthCalledWith(2, "Synthetic direction");
+  });
+
+  it("does not carry a pending save's focus target into the next composer lifetime", async () => {
+    const user = userEvent.setup();
+    let resolveSave!: (saved: boolean) => void;
+    const save = vi.fn(() => new Promise<boolean>(resolve => { resolveSave = resolve; }));
+    renderDesk({ onCreateDirective: save });
+    await user.click(screen.getByRole("button", { name: "Add handoff" }));
+    await user.type(screen.getByLabelText("What should your AI pick up next?"), "Synthetic delayed direction");
+    await user.click(screen.getByRole("button", { name: "Save handoff" }));
+    expect(save).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Keep draft and close" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add handoff" })).toHaveFocus());
+    await act(async () => { resolveSave(true); });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add handoff" }));
+    expect(screen.getByLabelText("What should your AI pick up next?")).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Keep draft and close" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add handoff" })).toHaveFocus());
+  });
+
+  it("does not close a reopened composer when an earlier dismissed save resolves", async () => {
+    const user = userEvent.setup();
+    let resolveSave!: (saved: boolean) => void;
+    renderDesk({ onCreateDirective: () => new Promise<boolean>(resolve => { resolveSave = resolve; }) });
+    await user.click(screen.getByRole("button", { name: "Add handoff" }));
+    await user.type(screen.getByLabelText("What should your AI pick up next?"), "Synthetic earlier save");
+    await user.click(screen.getByRole("button", { name: "Save handoff" }));
+    await user.click(screen.getByRole("button", { name: "Keep draft and close" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add handoff" })).toHaveFocus());
+    await user.click(screen.getByRole("button", { name: "Add handoff" }));
+    await act(async () => { resolveSave(true); });
+    expect(screen.getByRole("dialog", { name: "Add a handoff" })).toBeInTheDocument();
+    expect(screen.getByLabelText("What should your AI pick up next?")).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Keep draft and close" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add handoff" })).toHaveFocus());
+  });
+
+  it("keeps filtered Needs You and All Done emptiness distinct from an empty Queue", async () => {
+    const user = userEvent.setup();
+    renderDesk();
+    await user.type(screen.getByRole("textbox", { name: "Search Queue" }), "synthetic unmatched search");
+    expect(screen.getByRole("heading", { name: "No matching loaded records" })).toBeInTheDocument();
+    expect(screen.queryByText("Nothing needs you")).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("group", { name: "Queue views" })).getByRole("button", { name: "All Done" }));
+    await user.type(screen.getByRole("textbox", { name: "Search Queue" }), "synthetic unmatched outcome");
+    expect(screen.getByRole("heading", { name: "No matching loaded records" })).toBeInTheDocument();
+    expect(screen.queryByText("No completed handoffs yet")).not.toBeInTheDocument();
+  });
+
+  it("does not claim an empty Queue when a retained facet or older pages can exclude work", async () => {
+    const user = userEvent.setup();
+    const { props, rerender } = renderDesk({ items: [queueItem("needsYou"), queueItem("needsYou", { id: "synthetic-filtered-capture", source: "capture" })] });
+    await user.click(screen.getByRole("button", { name: "Add filter" }));
+    const filters = screen.getByRole("dialog", { name: "Filter records" });
+    await user.click(within(within(filters).getByRole("group", { name: "Kind" })).getByRole("checkbox", { name: /^Capture\s*1$/ }));
+    await user.click(within(filters).getByRole("button", { name: "Show records" }));
+    rerender(<QueueDesk {...props} items={[queueItem("needsYou")]} />);
+    expect(screen.getByRole("heading", { name: "No matching loaded records" })).toBeInTheDocument();
+    expect(screen.queryByText("Nothing needs you")).not.toBeInTheDocument();
+    rerender(<QueueDesk {...props} items={[]} hasMoreHandoffs />);
+    expect(screen.getByText(/Older pages may contain more matches/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove filter Kind: Capture" }));
+    expect(screen.getByRole("heading", { name: "No matching loaded records" })).toBeInTheDocument();
+    expect(screen.queryByText("Nothing needs you")).not.toBeInTheDocument();
   });
 
   it("keeps every loaded state and both older-page controls reachable from Everything", async () => {

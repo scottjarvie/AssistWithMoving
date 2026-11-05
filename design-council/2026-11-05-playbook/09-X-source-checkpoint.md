@@ -33,3 +33,7 @@ No TypeScript, Vitest, lint, build, browser, Next, capture, fixture build, insta
 One fresh independent source review is requested for the useful cut after 61a0d70, including c92ea37's previously unwired/shared additions. The reviewer must report actual model, exact head and source-only limits. No repeated same-head review or new taste score is requested. A same-model independent Codex review does not satisfy the final different-model or Opus taste gates.
 
 HOST remains NONE; SITE remains yielded under the existing priority hold. Native verification and new visual evidence require actual admission. The historical gallery is preserved; no fabricated Queue image or new visual round is added. Many other page families, the uncovered spatial/load/move-day studies, full current checks, authenticated/phone/print evidence, different-model acceptance and Scott's picks remain unfinished.
+
+## Independent source result and bounded corrections
+
+X returned changes requested at a8d4cf9: misleading filtered-empty headlines and a pending-save/dismiss/reopen focus race. Both are corrected in source with additional written regressions, not run or re-reviewed. The original exact-head verdict and same-model limits remain in reviews/09-X-sol.md and scores.json; details are in reviews/09-X-fix-record.md. No new review or runtime admission was started.

@@ -591,6 +591,14 @@ export function QueueDesk({
   const addButton = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const savedComposer = useRef(false);
+  const composerLifetime = useRef(0);
+  function changeComposerOpen(open: boolean) {
+    // A dismissed or reopened dialog belongs to a different lifetime than an
+    // outstanding save. Its reply must not close it or leave a stale target.
+    composerLifetime.current += 1;
+    savedComposer.current = false;
+    setComposerOpen(open);
+  }
   function focusSearch() { desk.current?.querySelector<HTMLInputElement>('input[aria-label="Search Queue"]')?.focus(); }
   const [selectedItemKey, setSelectedItemKey] = useState<{
     source: QueueDeskItem["source"];
@@ -615,13 +623,17 @@ export function QueueDesk({
 
   async function createDirective() {
     if (!canCreateDirective || !directive.trim() || busy) return;
+    const submittedDraft = directive;
+    const submittedLifetime = composerLifetime.current;
     setBusy(true);
     try {
-      const saved = await onCreateDirective(directive.trim());
+      const saved = await onCreateDirective(submittedDraft.trim());
       if (saved) {
-        setDirective("");
-        savedComposer.current = true;
-        setComposerOpen(false);
+        setDirective(current => current === submittedDraft ? "" : current);
+        if (composerLifetime.current === submittedLifetime) {
+          savedComposer.current = true;
+          setComposerOpen(false);
+        }
         selectState("waitingForAi");
       }
     } finally { setBusy(false); }
@@ -678,7 +690,7 @@ export function QueueDesk({
               {ownerOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label> : null}
-          <Button ref={addButton} type="button" size="sm" className="min-h-11 md:min-h-8" onClick={() => setComposerOpen(true)}><MovingSymbol name="add" />Add handoff</Button>
+          <Button ref={addButton} type="button" size="sm" className="min-h-11 md:min-h-8" onClick={() => changeComposerOpen(true)}><MovingSymbol name="add" />Add handoff</Button>
         </div>
       </div>
       <QueueCollection key={preferenceScope + "." + ownerScope} items={items} view={activeState} onViewChange={selectState} preferenceScope={preferenceScope + "." + ownerScope} loading={loading} hasMore={hasMoreHandoffs || hasMoreCaptures} onOpen={openItem} renderCard={item => <QueueItemCard item={item} onOpen={openItem} />} />
@@ -686,7 +698,7 @@ export function QueueDesk({
         {hasMoreHandoffs ? <Button variant="outline" size="sm" className="min-h-11 md:min-h-8" onClick={onLoadMoreHandoffs}>Load older handoffs</Button> : null}
         {hasMoreCaptures ? <Button variant="outline" size="sm" className="min-h-11 md:min-h-8" onClick={onLoadMoreCaptures}>Load older captures</Button> : null}
       </div> : null}
-      <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
+      <Dialog open={composerOpen} onOpenChange={changeComposerOpen}>
         <DialogContent className="p-4 sm:max-w-xl [&_button]:min-h-11 md:[&_button]:min-h-8" onCloseAutoFocus={event => {
           event.preventDefault();
           if (savedComposer.current) { savedComposer.current = false; focusSearch(); }
@@ -698,7 +710,7 @@ export function QueueDesk({
               <Textarea id="queue-directive" value={directive} onChange={event => setDirective(event.target.value)} placeholder="Example: Compare the two mover estimates and flag anything that needs my decision." maxLength={4000} className="min-h-28" disabled={!canCreateDirective || busy} />
             </label>
             <p className="text-xs leading-5 text-muted-foreground">{canCreateDirective ? <>Saves to <strong className="font-medium text-foreground">{directiveTargetLabel}</strong> in Waiting for your AI. Nothing runs until an AI claims it.</> : <>Choose one person&apos;s Queue before saving a handoff.</>}</p>
-            <DialogFooter className="p-0"><Button type="button" size="sm" variant="ghost" onClick={() => setComposerOpen(false)}>Keep draft and close</Button><Button type="submit" size="sm" disabled={!canCreateDirective || busy || !directive.trim()}><MovingSymbol name={busy ? "reset" : "queue"} className={busy ? "animate-spin" : undefined} />Save handoff</Button></DialogFooter>
+            <DialogFooter className="p-0"><Button type="button" size="sm" variant="ghost" onClick={() => changeComposerOpen(false)}>Keep draft and close</Button><Button type="submit" size="sm" disabled={!canCreateDirective || busy || !directive.trim()}><MovingSymbol name={busy ? "reset" : "queue"} className={busy ? "animate-spin" : undefined} />Save handoff</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

@@ -921,6 +921,49 @@
       "exactHead": "82bf06a211486f81f749dfeab195c452ab4ebe55",
       "differentModelReview": true,
       "reviewRecord": "reviews/08-W-opus.md"
+    },
+    {
+      "blindLabel": "X",
+      "exactHead": "a8d4cf9780214cc06bca1690dbac7cb4829f9097",
+      "base": "61a0d709234d737c319dbb7f2e824f551929057f",
+      "authorModel": "Codex gpt-6.1-sol, high",
+      "reviewerModel": "Codex gpt-6.1-sol, high",
+      "differentModelReview": false,
+      "evidenceType": "source-only",
+      "rubric": "source-only correctness, preservation, contracts, snapshots, drafts, focus, written regressions",
+      "overallSourceScore": null,
+      "disposition": "changes_requested",
+      "cleanTreeStart": true,
+      "cleanTreeEnd": true,
+      "filesChanged": false,
+      "checksRun": false,
+      "visual": null,
+      "responsive": null,
+      "print": null,
+      "finalTaste": null,
+      "findings": [
+        {
+          "rank": 1,
+          "priority": "P2",
+          "file": "src/components/queue-collection.tsx",
+          "line": 87,
+          "summary": "Filtered results can falsely report an empty Queue"
+        },
+        {
+          "rank": 2,
+          "priority": "P2",
+          "file": "src/components/queue-experience.tsx",
+          "line": 623,
+          "summary": "Closing during a pending save leaves stale focus state"
+        }
+      ],
+      "reviewRecord": "reviews/09-X-sol.md",
+      "limits": [
+        "Independent same-model review; different-model gate remains open",
+        "Written tests unexecuted at reviewed head",
+        "No current-head native checks, capability probes or rendered/print/final taste proof",
+        "Historical 222 files /1,396 tests applies only to 61a0d70"
+      ]
     }
   ],
   "scottPicks": []
