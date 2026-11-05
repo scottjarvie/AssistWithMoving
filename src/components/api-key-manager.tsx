@@ -61,6 +61,7 @@ type HouseholdStats = {
   itemCount: number;
   boxCount: number;
   activeApiKeyCount: number;
+  activeApiKeyCountTruncated?: boolean;
   activeMemberCount: number;
   pendingInvitationCount: number;
 };
@@ -446,7 +447,7 @@ export function ApiKeyManager({
               household.
             </p>
           </div>
-          <Badge variant="outline">{totalActiveKeys} active</Badge>
+          <Badge variant="outline">{totalActiveKeys}{stats?.activeApiKeyCountTruncated ? "+" : ""} active</Badge>
         </div>
 
         {keys === undefined && effectiveHouseholdId ? (
@@ -535,7 +536,7 @@ export function ApiKeyManager({
           <StatusTile
             icon={Activity}
             label="AI connections"
-            value={formatStat(totalActiveKeys)}
+            value={`${formatStat(totalActiveKeys)}${stats?.activeApiKeyCountTruncated ? "+" : ""}`}
             note={
               lastUsedKey
                 ? `Last used ${formatApiKeyDate(lastUsedKey.lastUsedAt)}`

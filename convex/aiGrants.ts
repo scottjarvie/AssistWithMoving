@@ -1126,3 +1126,19 @@ export const reduceLegacyConnection = internalMutation({ args: { caller: mcpCall
   // the same URL relationship as both validated HTTP doors.
   return reduceOwnConnection(ctx, caller.subject, `legacy:${id}`, input);
 } });
+
+/** Credential-only metadata; no domain scope, move content or sibling grants. */
+export const describeLegacyConnection = internalQuery({
+  args: { caller: mcpCallerValidator },
+  handler: async (ctx, { caller }) => {
+    let client: string | undefined;
+    try { client = oauthClientIdFromClaims(caller.claims); }
+    catch { throw new ConvexError("Reconnect with an unambiguous OAuth client identity."); }
+    if (!client) throw new ConvexError("Reconnect with an identified OAuth client.");
+    const user = await ctx.db.query("users").withIndex("by_clerk_user_id", q => q.eq("clerkUserId", caller.subject)).unique();
+    if (!user || user.status !== "active") throw new ConvexError("No active calling profile.");
+    const grant = (await governingGrants(ctx, user._id, "legacy:" + client, Date.now()))[0];
+    const bound = grant?.clientId && sameOAuthClientHistory(grant.clientId, "legacy:" + client) ? grant : undefined;
+    return { version: bound?.version ?? null, status: bound ? (bound.status === "revoked" ? "revoked" : grantIsActive(bound, Date.now()) ? "active" : "expired") : "unconnected", settings: "https://movingmanifest.com/settings/ai" };
+  },
+});

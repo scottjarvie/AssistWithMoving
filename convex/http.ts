@@ -1227,7 +1227,7 @@ export function createLegacyGrantGate(
     // otherwise stamp the activity list with a row per tool per connection.
     // Own reductions append their activity and durable audit atomically in the
     // reduction mutation; a domain-use receipt here would falsely record refusal.
-    if (args.mode === "call" && args.toolName !== "reduce_connection") {
+    if (args.mode === "call" && args.toolName !== "reduce_connection" && args.toolName !== "describe_connection") {
       const record =
         decision.allowed && decision.scope
         ? ctx.runMutation(internalMutations.aiGrants.noteGrantUse, {
