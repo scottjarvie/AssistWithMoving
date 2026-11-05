@@ -312,6 +312,29 @@ describe("AiConnectionManager", () => {
     } finally { connectionData.grants.grants = original; }
   });
 
+  it("lets the person move recovery to an eligible household and clears the prior move choice", async () => {
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], householdId: "inaccessible_previous" as Id<"households">, status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      const household = screen.getByLabelText("Household", { selector: "#ai-grant-household" });
+      expect(household).toHaveValue("inaccessible_previous");
+      const moves = screen.getByRole("group", { name: "Which moves" });
+      await user.click(within(moves).getByRole("radio", { name: /Only the moves I pick/ }));
+      await user.click(within(moves).getByRole("checkbox", { name: "Utah to Virginia" }));
+      await user.selectOptions(household, "household_123");
+      expect(within(moves).getByRole("radio", { name: /All my moves/ })).toBeChecked();
+      await user.click(within(moves).getByRole("radio", { name: /Only the moves I pick/ }));
+      expect(within(moves).getByRole("checkbox", { name: "Utah to Virginia" })).not.toBeChecked();
+      await user.click(within(moves).getByRole("radio", { name: /All my moves/ }));
+      expect(connectionData.queryCalls).toHaveBeenCalledWith(apiMock.aiGrants.listMoveChoices, { householdId: "household_123" });
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({ householdId: "household_123", reconnectGrantId: "ai_grant_123", moveScope: "allMoves", moveIds: undefined }));
+    } finally { connectionData.grants.grants = original; }
+  });
+
   it("allows a participant-only person to select moves for existing limits", async () => {
     const households = connectionData.households;
     const original = connectionData.grants.grants;

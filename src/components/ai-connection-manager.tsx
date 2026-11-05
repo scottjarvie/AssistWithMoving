@@ -267,7 +267,11 @@ export function AiConnectionManager() {
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const householdId =
-    reconnectTarget?.householdId ?? selectedHouseholdId ?? households?.[0]?.household._id ?? null;
+    selectedHouseholdId ?? reconnectTarget?.householdId ?? households?.[0]?.household._id ?? null;
+  const approvalHouseholds = (households ?? []).map(entry => ({ id: entry.household._id, name: entry.household.name }));
+  if (reconnectTarget && !approvalHouseholds.some(entry => entry.id === reconnectTarget.householdId)) {
+    approvalHouseholds.unshift({ id: reconnectTarget.householdId, name: "Previous connection household" });
+  }
   const canReadApprovalHousehold = households?.some(entry => entry.household._id === householdId) ?? false;
 
   const moveChoices = useConnectionMoveChoices(ready ? householdId : null);
@@ -526,6 +530,7 @@ export function AiConnectionManager() {
                     const id = event.target.value as Id<"aiGrants">;
                     setSelectedMoveIds([]);
                     setMoveScope("allMoves");
+                    setSelectedHouseholdId(null);
                     setReconnectGrantId(id || null);
                     setLabel(reconnectable.find(grant => grant.grantId === id)?.label ?? "");
                   }}
@@ -537,7 +542,7 @@ export function AiConnectionManager() {
                 {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client&apos;s previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
               </div>
             ) : null}
-            {!reconnectGrantId && households && households.length > 1 ? (
+            {approvalHouseholds.length > 1 ? (
               <div className="space-y-1.5">
                 <label
                   htmlFor="ai-grant-household"
@@ -555,12 +560,12 @@ export function AiConnectionManager() {
                     setSelectedHouseholdId(event.target.value as Id<"households">);
                   }}
                 >
-                  {households.map((entry) => (
+                  {approvalHouseholds.map((entry) => (
                     <option
-                      key={entry.household._id}
-                      value={entry.household._id}
+                      key={entry.id}
+                      value={entry.id}
                     >
-                      {entry.household.name}
+                      {entry.name}
                     </option>
                   ))}
                 </select>
