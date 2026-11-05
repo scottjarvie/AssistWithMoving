@@ -53,8 +53,8 @@ export function HomeLaunchpad() {
         {deskMoves.map((move, index) => {
           const route = [move.origin, move.destination].filter(Boolean).join(" → ");
           const when = moveWhenLine(move.dateStart, move.dateEnd);
-          return <li key={move._id}><Link href={`/app/moves/${encodeURIComponent(move._id)}`} className={`${linkFocus} group flex min-w-0 items-center gap-3 py-3 first:pt-1 hover:text-primary sm:gap-5`}>
-            <MoveIllustration decorative kind="route" className="h-20 w-28 shrink-0 rounded-sm border border-border bg-background sm:h-24 sm:w-40" />
+          return <li key={move._id}><Link href={`/app/moves/${encodeURIComponent(move._id)}`} className={`${linkFocus} group flex min-w-0 items-start gap-3 py-3 first:pt-1 hover:text-primary sm:gap-5`}>
+            <MoveIllustration decorative kind="route" className="mt-1 h-16 w-20 shrink-0 rounded-sm border border-border bg-background sm:mt-0 sm:h-24 sm:w-40" />
             <div className="min-w-0 flex-1">
               {index === 0 ? <p className="mb-1 text-xs text-muted-foreground">Continue where you left off</p> : null}
               <p className="break-words text-base font-semibold sm:text-lg">{move.title}</p>
