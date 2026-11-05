@@ -20,3 +20,7 @@ Target: unchanged application source at `964eec223b8fb1ec3a3c8ff8926dd4c5806b207
 Raw captures are kept locally as `baseline-{lint,typecheck,test,build}.log` and `baseline-load-planner-recheck.log`, ignored by Git. Update this record with terminal results rather than treating a running check as passed.
 
 Relevant bundled Next.js guidance was consulted under `node_modules/next/dist/docs/01-app/`: layouts/pages, CSS, fonts, and Playwright testing. No application code has been changed.
+
+## Portable fixture correction (verification pending)
+
+The historical baseline failure is retained above. To run the same regular-file and canonical-root security assertions on oldwin without privileged file symlinks, the fixture now creates a directory junction on Windows and a directory symlink elsewhere. It rejects the alias itself and a regular child that resolves outside the allowed root; POSIX also keeps the original direct file-symlink assertion. Fixture setup is inside try/finally and cleanup validates the fresh temp path. Application ingress policy is unchanged. The next focused/full run must verify this fixture; no green check is claimed yet.

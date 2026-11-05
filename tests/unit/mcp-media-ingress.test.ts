@@ -132,19 +132,37 @@ describe("MCP media ingress policy", () => {
   it("allows only regular files whose real path stays inside an allowed root", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "assistwithmoving-roots-"));
     const allowedRoot = path.join(tempDir, "allowed");
-    const outsideFile = path.join(tempDir, "outside.png");
+    const outsideRoot = path.join(tempDir, "outside");
+    const outsideFile = path.join(outsideRoot, "outside.png");
     const insideFile = path.join(allowedRoot, "inside.png");
-    const symlinkPath = path.join(allowedRoot, "escape.png");
-    await mkdir(allowedRoot);
-    await writeFile(insideFile, pngBytes);
-    await writeFile(outsideFile, pngBytes);
-    await symlink(outsideFile, symlinkPath);
+    const aliasPath = path.join(allowedRoot, "escape");
     try {
+      await mkdir(allowedRoot);
+      await mkdir(outsideRoot);
+      await writeFile(insideFile, pngBytes);
+      await writeFile(outsideFile, pngBytes);
+      // A Windows junction needs no elevated file-symlink privilege. Its child
+      // is a regular file lexically inside allowedRoot, but resolves outside it.
+      // POSIX keeps the direct file-symlink case as well as the parent escape.
+      await symlink(outsideRoot, aliasPath, process.platform === "win32" ? "junction" : "dir");
       await expect(readAllowedLocalMedia({ filePath: insideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).resolves.toMatchObject({ bytes: pngBytes });
       await expect(readAllowedLocalMedia({ filePath: outsideFile, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/outside ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS/i);
-      await expect(readAllowedLocalMedia({ filePath: symlinkPath, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/symlinks, devices, directories, and pipes/i);
+      await expect(readAllowedLocalMedia({ filePath: aliasPath, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/symlinks, devices, directories, and pipes/i);
+      await expect(readAllowedLocalMedia({ filePath: path.join(aliasPath, "outside.png"), transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/outside ASSISTWITHMOVING_MCP_ALLOWED_FILE_ROOTS/i);
+      if (process.platform !== "win32") {
+        const fileAlias = path.join(allowedRoot, "escape.png");
+        await symlink(outsideFile, fileAlias, "file");
+        await expect(readAllowedLocalMedia({ filePath: fileAlias, transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/symlinks, devices, directories, and pipes/i);
+      }
       await expect(readAllowedLocalMedia({ filePath: "/dev/zero", transport: "stdio", allowedFileRoots: [allowedRoot] })).rejects.toThrow(/regular file/i);
-    } finally { await rm(tempDir, { recursive: true, force: true }); }
+    } finally {
+      // Only remove the fresh, explicitly named test directory. Node removes
+      // the alias itself rather than recursively traversing its target.
+      const resolvedTemp = path.resolve(tempDir);
+      const relative = path.relative(path.resolve(os.tmpdir()), resolvedTemp);
+      if (!relative || relative.startsWith("..") || path.isAbsolute(relative) || !path.basename(resolvedTemp).startsWith("assistwithmoving-roots-")) throw new Error("Refusing unsafe fixture cleanup");
+      await rm(resolvedTemp, { recursive: true, force: true });
+    }
   });
 
   it.each([
