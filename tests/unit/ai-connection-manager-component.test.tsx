@@ -35,6 +35,7 @@ const connectionData = vi.hoisted(() => ({
     boundaryVersion: "2026-08-16",
     consentPolicyVersion: "",
     catalogFingerprint: "",
+    historyFingerprint: "current-history",
     scopes: [
       {
         scope: "moving.context.read",
@@ -60,7 +61,8 @@ const connectionData = vi.hoisted(() => ({
         grantId: "ai_grant_123" as Id<"aiGrants">,
         householdId: "household_123" as Id<"households">,
         label: "My AI on the laptop",
-        status: "active" as const,
+        status: "active" as "active" | "expired" | "revoked",
+        clientId: "verified-client" as string | null,
         scopes: ["moving.context.read"],
         moveScope: "selectedMoves" as const,
         moveIds: ["move_123"],
@@ -242,6 +244,26 @@ describe("AiConnectionManager", () => {
     const group = screen.getByRole("group", { name: "What this AI may do" });
     for (const checkbox of within(group).getAllByRole("checkbox")) expect(checkbox).toBeChecked();
     expect(screen.getByLabelText("End date", { selector: "#ai-grant-expiry" })).toHaveValue("0");
+  });
+
+  it("requires choosing a revoked client before approving its reconnect", async () => {
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], status: "revoked" }];
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      expect(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" })).toHaveValue("");
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      expect(screen.getByText(/Its refusal stays in place until you approve/)).toBeInTheDocument();
+      expect(connectionData.approve).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({
+        reconnectGrantId: "ai_grant_123", expectedHistoryFingerprint: "current-history",
+        consentPolicyVersion: GRANT_CONSENT_POLICY, catalogFingerprint: grantCatalogFingerprint(),
+        label: "My AI on the laptop", scopeIntent: "full", expiryIntent: "none",
+      }));
+      expect(screen.getByText(/Reconnected with the permissions and end date you approved/)).toBeInTheDocument();
+    } finally { connectionData.grants.grants = original; }
   });
 
   it("submits explicit full access and no end date once the backend advertises support", async () => {

@@ -577,6 +577,108 @@ async function seedDuplicateHistory(t: TestConvex<typeof schema>) {
   });
 }
 
+describe("explicit owner reconnect", () => {
+  it.each([
+    ["reconnect-client", "legacy:reconnect-client"],
+    ["https://CLIENT.example:443/a/../client.json", "legacy:https://client.example/client.json"],
+  ])("replaces only acknowledged revisions across %s and %s", async (first, alias) => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    try {
+      const t = convexTest(schema, modules);
+      const { householdId } = await seedOwner(t);
+      const owner = t.withIdentity({ subject: SUBJECT });
+      await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: first });
+      const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+      const aliasId = await t.run(async ctx => {
+        const { _id: _originalId, _creationTime: _originalTime, ...fields } = original;
+        return ctx.db.insert("aiGrants", { ...fields, clientId: alias });
+      });
+      await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "untouched-sibling" });
+      await owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: 1 });
+      await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Unrelated approval" });
+      const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+      for (const clientId of [first, alias]) {
+        expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
+      }
+      const args = { ...consent, householdId, label: "Reconnect this AI", reconnectGrantId: original._id };
+      for (const expectedHistoryFingerprint of [undefined, "stale"]) {
+        await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint })).rejects.toThrow(/history changed/);
+      }
+      const loaded = await owner.query(api.aiGrants.listMine, {});
+      await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: loaded.historyFingerprint, catalogFingerprint: "old" })).rejects.toThrow(/Reload/);
+      await expect(t.withIdentity({ subject: SUBJECT, client_id: first }).mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: loaded.historyFingerprint })).rejects.toThrow(/settings/);
+      expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+
+      const { grantId } = await owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: loaded.historyFingerprint });
+      const restored = (await t.run(ctx => ctx.db.get(grantId)))!;
+      expect(restored).toMatchObject({ clientId: first, scopeChoice: "full", expiryChoice: "none" });
+      expect(restored.expiresAt).toBeUndefined();
+      expect(restored.reconnectsClientHistory).toEqual(expect.arrayContaining([
+        { grantId: original._id, version: 2 }, { grantId: aliasId, version: 1 },
+      ]));
+      expect(restored.reconnectsClientHistory).toHaveLength(2);
+      for (const previous of before) expect(await t.run(ctx => ctx.db.get(previous._id))).toEqual(previous);
+      for (const clientId of [first, alias]) {
+        expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).scopes).toEqual(movingScopes);
+      }
+      const audit = await t.run(ctx => ctx.db.query("auditLogs").filter(q => q.eq(q.field("objectId"), grantId)).first());
+      expect(audit).toMatchObject({ actorType: "user", action: "ai_grant.approved", metadata: { reconnectGrantId: original._id, reconnectsClientHistory: restored.reconnectsClientHistory } });
+      await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: loaded.historyFingerprint })).rejects.toThrow(/history changed/);
+      const current = await owner.query(api.aiGrants.listMine, {});
+      await expect(owner.mutation(api.aiGrants.approve, { ...args, expectedHistoryFingerprint: current.historyFingerprint })).rejects.toThrow(/already has active/);
+
+      // A later refusal on an acknowledged alias still wins in the SAME ms.
+      await owner.mutation(api.aiGrants.revoke, { grantId: aliasId, expectedVersion: 1 });
+      for (const clientId of [first, alias]) {
+        expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
+      }
+      expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: "untouched-sibling" })).scopes).toEqual(movingScopes);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("reconnects an expired client with the owner's new chosen limits", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "expired-client" });
+    const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+    await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "expired-client", expectedVersion: 1, action: "pause" });
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    const previous = await t.run(ctx => ctx.db.get(original._id));
+    const { grantId } = await owner.mutation(api.aiGrants.approve, {
+      ...consent, householdId, label: "Chosen reconnect", reconnectGrantId: original._id,
+      expectedHistoryFingerprint: loaded.historyFingerprint,
+      scopeIntent: "chosen", scopes: ["moving.context.read"], expiryIntent: "chosen", expiresInDays: 7,
+    });
+    const restored = (await t.run(ctx => ctx.db.get(grantId)))!;
+    expect(restored).toMatchObject({ scopeChoice: "chosen", scopes: ["moving.context.read"], expiryChoice: "chosen" });
+    expect(restored.expiresAt).toBeGreaterThan(Date.now());
+    expect(await t.run(ctx => ctx.db.get(original._id))).toEqual(previous);
+    for (const clientId of ["expired-client", "legacy:expired-client"]) {
+      expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).scopes).toEqual(["moving.context.read"]);
+    }
+  });
+
+  it("refuses foreign and unbound reconnect targets without changing records", async () => {
+    const t = convexTest(schema, modules);
+    const { householdId } = await seedOwner(t);
+    const owner = t.withIdentity({ subject: SUBJECT });
+    const { grantId: unbound } = await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Unbound" });
+    const foreign = await t.run(async ctx => {
+      const row = (await ctx.db.get(unbound))!;
+      const userId = await ctx.db.insert("users", { clerkUserId: "another-owner", email: "other@example.test", name: "Other", appRole: "member", status: "active", createdAt: Date.now(), updatedAt: Date.now(), lastSeenAt: Date.now() });
+      const { _id: _sourceId, _creationTime: _sourceTime, ...fields } = row;
+      return ctx.db.insert("aiGrants", { ...fields, ownerUserId: userId, clientId: "foreign", status: "revoked" });
+    });
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+    for (const reconnectGrantId of [foreign, unbound]) {
+      await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Invalid reconnect", reconnectGrantId, expectedHistoryFingerprint: loaded.historyFingerprint })).rejects.toThrow(/previously connected/);
+    }
+    expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+  });
+});
+
 async function expectDuplicateRefused(t: TestConvex<typeof schema>, block: "revoked" | "expired") {
   expect(await t.mutation(internal.aiGrants.touchLegacyConnection, {
     subject: SUBJECT, clientId: "duplicate-client",

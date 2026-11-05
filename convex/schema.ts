@@ -1531,6 +1531,11 @@ export default defineSchema({
     // No end date by default. Old unmarked dates remain enforced unless proven automatic.
     expiresAt: v.optional(v.number()),
     approvedAt: v.number(),
+    // Exact prior revisions superseded by explicit person-approved reconnect.
+    reconnectsClientHistory: v.optional(v.array(v.object({
+      grantId: v.id("aiGrants"),
+      version: v.number(),
+    }))),
     // Explicit owner limit decisions only; usage must never reorder consent.
     ownerDecisionAt: v.optional(v.number()),
     lastUsedAt: v.optional(v.number()),

@@ -494,6 +494,46 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
     req.headers.set("mcp-method", "tools/list");
     return req;
   }
+  for (const firstDoor of ["canonical", "persisted"]) {
+    it(`reconnects a revoked client only after explicit person approval, first ${firstDoor}`, async () => {
+      const f = await fixture(false);
+      const ctx = {
+        runQuery: (ref: any, args: any) => f.t.query(ref, args),
+        runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
+        runAction: async () => valid,
+      } as any;
+      verifyMock.mockResolvedValue(verifiedToken(clientId));
+      const { createLegacyGrantGate } = await import("../../convex/http");
+      const { handleMcpRequestForTests, STATELESS_MOVING_TOOL_NAMES } = await loadRoute();
+      const canonical = async () => {
+        const response = await handleMcpRequestForTests(ctx, listRequest());
+        expect(response.status).toBe(200);
+        return (await response.json()).result.tools.map((tool: any) => tool.name);
+      };
+      const persisted = () => createLegacyGrantGate(ctx)({} as any, { identity: { subject: SUBJECT, claims: { client_id: clientId } }, toolName: "list_moves", mode: "list" } as any);
+      if (firstDoor === "canonical") await canonical(); else expect((await persisted()).allowed).toBe(true);
+      const original = (await f.snapshot()).grants[0];
+      await f.owner.mutation(api.aiGrants.revoke, { grantId: original._id, expectedVersion: original.version });
+      await f.owner.mutation(api.aiGrants.approve, { ...consent, householdId: f.householdId, label: "Unrelated connection" });
+      expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+      expect((await persisted()).allowed).toBe(false);
+      const before = await f.snapshot();
+      const loaded = await f.owner.query(api.aiGrants.listMine, {});
+      const args = { ...consent, householdId: f.householdId, label: "Owner reconnect", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint };
+      await expect(f.t.withIdentity({ subject: SUBJECT, client_id: clientId }).mutation(api.aiGrants.approve, args)).rejects.toThrow(/settings/);
+      expect(await f.snapshot()).toEqual(before);
+      const { grantId } = await f.owner.mutation(api.aiGrants.approve, args);
+      expect((await canonical()).sort()).toEqual([...STATELESS_MOVING_TOOL_NAMES].sort());
+      expect((await persisted()).allowed).toBe(true);
+      const reconnected = (await f.snapshot()).grants.find(row => row._id === grantId)!;
+      expect(reconnected).toMatchObject({ clientId, scopeChoice: "full", expiryChoice: "none" });
+      expect(reconnected.expiresAt).toBeUndefined();
+      for (const row of before.grants) expect(await f.t.run(ctx => ctx.db.get(row._id))).toEqual(row);
+      await f.owner.mutation(api.aiGrants.revoke, { grantId, expectedVersion: reconnected.version });
+      expect(await canonical()).toEqual(["describe_connection", "reduce_connection"]);
+      expect((await persisted()).allowed).toBe(false);
+    });
+  }
   // Actual HTTP/gateway handlers and direct internal legacy handlers share a
   // real DB. Only token verification and the protected outbound fetch are fake.
   for (const claim of ["https://client.example", "https://CLIENT.example:443", "https://client.example/a/../"]) {
