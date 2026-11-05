@@ -702,6 +702,29 @@ export const listSourceHistory = query({
 });
 
 /** Bounded choices for members and move-only owners; never household-only data. */
+export const listRecoveryHouseholds = query({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
+    const user = await requireCurrentUser(ctx);
+    if (user.status !== "active") throw new ConvexError("An active profile is required to recover a connection.");
+    const page = await ctx.db.query("moveParticipants")
+      .withIndex("by_user_status", q => q.eq("userId", user._id).eq("status", "active"))
+      .paginate({ numItems: 25, cursor: args.cursor ?? null });
+    const households = new Map<Id<"households">, { householdId: Id<"households">; label: string }>();
+    for (const participant of page.page) {
+      if (participant.accessKind !== "moveOnly") continue;
+      const move = await ctx.db.get(participant.moveId);
+      if (!move || move.householdId !== participant.householdId || move.status === "archived") continue;
+      await resolveMoveAccess(ctx, user._id, participant.householdId, move._id);
+      // A participant can see this move title, never the household's profile.
+      households.set(participant.householdId, { householdId: participant.householdId, label: `Move: ${move.title}` });
+    }
+    return { households: [...households.values()], nextCursor: page.isDone ? null : page.continueCursor };
+  },
+});
+
+/** Bounded choices for members and move-only owners; never household-only data. */
 export const listMoveChoices = query({
   args: { householdId: v.id("households"), cursor: v.optional(v.string()) },
   handler: async (ctx, args) => {
