@@ -1,19 +1,11 @@
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
 
 import { internalMutation, query } from "./_generated/server";
-import { recordAuditEvent } from "./lib/audit";
+import { recordAuditEvent, sharedAuditEvent as householdReceipt } from "./lib/audit";
 import {
   requireHouseholdPermission,
   requireMovePermission,
 } from "./lib/permissions";
-
-/** Preserve old source rows, while hiding prior private grant details too. */
-function householdReceipt(entry: Doc<"auditLogs">): Doc<"auditLogs"> {
-  return entry.objectTable === "aiGrants" || entry.objectTable === "apiKeys" || entry.action.startsWith("ai_grant.") || entry.action.startsWith("api_key.")
-    ? { ...entry, action: entry.category === "apiKey" ? "api_connection.changed" : "ai_connection.changed", actorApiKeyId: undefined, objectTable: undefined, objectId: undefined, metadata: undefined }
-    : entry;
-}
 
 export const record = internalMutation({
   args: {

@@ -1200,11 +1200,16 @@ export const cleanupExpiredActivity = internalMutation({
 });
 
 /** Internal transport operation: client identity is injected, never a grant id. */
+function receiptLimits(grant: Doc<"aiGrants">, now: number) {
+  return { version: grant.version, status: grant.status, active: grantIsActive(grant, now), scopes: [...effectiveScopes(grant)], moveScope: grant.moveScope, moveIds: grant.moveIds ?? [], expiresAt: effectiveExpiry(grant) ?? null };
+}
+
 export async function reduceOwnConnection(ctx: MutationCtx, subject: string, clientId: string, input: import("./lib/connectionReduction").Reduction) {
   const user = await ctx.db.query("users").withIndex("by_clerk_user_id", q => q.eq("clerkUserId", subject)).unique();
   if (!user || user.status !== "active" || clientId === UNIDENTIFIED_LEGACY_CLIENT) throw new ConvexError("No active calling connection.");
   const grant = (await governingGrants(ctx, user._id, clientId, Date.now()))[0];
   if (!grant || !grant.clientId || !sameOAuthClientHistory(clientId, grant.clientId)) throw new ConvexError("No bound calling connection. Reconnect first.");
+  const previousLimits = receiptLimits(grant, Date.now());
   const reduced = reducedAccess({ version: grant.version, scopes: effectiveScopes(grant), moveIds: grant.moveScope === "selectedMoves" ? (grant.moveIds ?? []).map(String) : undefined, expiresAt: effectiveExpiry(grant), active: grant.status === "active" }, input);
   const moveIds = reduced.moveIds as Id<"moves">[] | undefined;
   if (moveIds) await validateGrantMoves(ctx, { userId: user._id }, "selectedMoves", moveIds);
@@ -1219,7 +1224,9 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
   });
   await advanceHistory(ctx, user._id);
   await appendGrantActivity(ctx, grant, { type: input.action === "revoke" ? "revoked" : "approved", outcome: "recorded", clientId, message: `This AI reduced its own access (version ${version}).` });
-  const receipt = await recordPrivateGrantAudit(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, action: input.action ?? "narrow" } });
+  const current = (await governingGrants(ctx, user._id, clientId, Date.now()))[0];
+  if (!current) throw new ConvexError("The calling connection changed while reducing access.");
+  const receipt = await recordPrivateGrantAudit(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, action: input.action ?? "narrow", before: previousLimits, after: receiptLimits(current, Date.now()) } });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
 }
 export const reduceConnection = internalMutation({ args: { subject: v.string(), clientId: v.string(), ...reductionArgs }, handler: (ctx, { subject, clientId, ...input }) => reduceOwnConnection(ctx, subject, clientId, input) });

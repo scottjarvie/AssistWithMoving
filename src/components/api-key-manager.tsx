@@ -890,6 +890,7 @@ export function ApiKeyManager({
       </CardHeader>
       <CardContent className="space-y-6">
         {enabled && households?.length === 0 && memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => memberChoices.next(null)}>More member households</Button> : null}
+        {enabled && households?.length === 0 && memberChoices.cursor ? <Button type="button" variant="outline" onClick={() => memberChoices.first(null)}>First member households</Button> : null}
         {!enabled || households === undefined ? (
           <div
             className={

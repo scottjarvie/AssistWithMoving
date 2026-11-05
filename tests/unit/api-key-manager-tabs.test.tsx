@@ -25,6 +25,7 @@ const apiKeyManagerData = vi.hoisted(() => ({
   historyMode: false,
   movePaging: false,
   memberPaging: false,
+  memberFinalEmpty: false,
   queryCalls: vi.fn(),
   households: [
     {
@@ -78,7 +79,7 @@ vi.mock("convex/react", () => ({
       case apiMock.households.listMine:
         return apiKeyManagerData.households;
       case apiMock.aiGrants.listHouseholdChoices:
-        return { households: apiKeyManagerData.memberPaging && args?.cursor ? [{ household: { _id: "member_later", name: "Later member household" }, role: "owner" }] : apiKeyManagerData.households, nextCursor: apiKeyManagerData.memberPaging && !args?.cursor ? "later-members" : null };
+        return { households: apiKeyManagerData.memberPaging && args?.cursor ? (apiKeyManagerData.memberFinalEmpty ? [] : [{ household: { _id: "member_later", name: "Later member household" }, role: "owner" }]) : apiKeyManagerData.households, nextCursor: apiKeyManagerData.memberPaging && !args?.cursor ? "later-members" : null };
       case apiMock.aiGrants.listMoveChoices:
         return { moves: apiKeyManagerData.movePaging && args?.cursor ? [{ ...apiKeyManagerData.stats.moves[0], moveId: "move_later", title: "Later key move" }] : apiKeyManagerData.stats.moves, nextCursor: apiKeyManagerData.movePaging && !args?.cursor ? "later-moves" : null };
       case apiMock.apiKeys.settingsSummary:
@@ -318,4 +319,19 @@ it("can pass an empty filtered membership page to reach a later active household
     expect(screen.getByLabelText("Household")).toHaveValue("member_later");
     expect(screen.getByRole("button", { name: "Create key" })).toBeInTheDocument();
   } finally { apiKeyManagerData.households = original; apiKeyManagerData.memberPaging = false; }
+});
+
+it("returns from an empty final member page without reloading", async () => {
+  const original = apiKeyManagerData.households;
+  apiKeyManagerData.households = [];
+  apiKeyManagerData.memberPaging = true;
+  apiKeyManagerData.memberFinalEmpty = true;
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("button", { name: "More member households" }));
+    expect(screen.queryByRole("button", { name: "More member households" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "First member households" }));
+    expect(screen.getByRole("button", { name: "More member households" })).toBeInTheDocument();
+  } finally { apiKeyManagerData.households = original; apiKeyManagerData.memberPaging = false; apiKeyManagerData.memberFinalEmpty = false; }
 });
