@@ -28,7 +28,7 @@ import { CollectionFilterChips, CollectionFilterSheet } from "@/components/colle
 import { CollectionViewTabs } from "@/components/collection-view-tabs";
 import { countFacets, matchesFacets, type CollectionFacet, type FacetSelection } from "@/lib/collection-facets";
 import { useCollectionPresentation, type CollectionView } from "@/components/use-collection-presentation";
-import { parseInventoryView, type InventoryViewSnapshot } from "@/lib/inventory-views";
+import { inventoryDefaultColumns as visibleDefaultColumns, normalizeInventoryColumns, parseInventoryView, type InventoryViewSnapshot } from "@/lib/inventory-views";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -175,18 +175,6 @@ function formatInventoryTaskCount(task: InventoryTaskTab, count: number) {
   }
   return `${count}`;
 }
-
-const visibleDefaultColumns: VisibilityState = {
-  category: true,
-  room: true,
-  ownerContact: false,
-  condition: false,
-  confidence: false,
-  indicators: true,
-  status: true,
-  disposition: true,
-  review: true,
-};
 
 const columnLabels: Record<string, string> = {
   category: "Category",
@@ -581,7 +569,7 @@ export function InventoryTable({
     useState<DispositionGroup>("all");
   const [savedFilter, setSavedFilter] = useState<InventoryFilterKey>("all");
   const [facetSelection, setFacetSelection] = useState<FacetSelection>({});
-  const [presentation, setPresentation] = useCollectionPresentation("items");
+  const [presentation, setPresentation, presentationReady] = useCollectionPresentation("items");
   const [newItemName, setNewItemName] = useState("");
   const [newItemRoom, setNewItemRoom] = useState("");
   const [newItemCategory, setNewItemCategory] = useState("");
@@ -655,11 +643,11 @@ export function InventoryTable({
   }, [items, dispositionGroup]);
 
   const facetDefinitions = useMemo<CollectionFacet<InventoryItem>[]>(() => {
-    const owners = new Map((items ?? []).filter(item => item.ownerPersonId).map(item => [String(item.ownerPersonId), item.ownerContact ? `${item.ownerContact.name} — ${item.ownerContact.role}` : "Owner not available"]));
+    const owners = new Map((items ?? []).filter(item => item.ownerPersonId).map(item => [String(item.ownerPersonId), item.ownerContact ? `${item.ownerContact.name} — ${item.ownerContact.role}` : `Owner unavailable · includes ${item.name}`]));
     return [
       { id: "room", label: "Room", values: item => [item.room] },
       { id: "category", label: "Category", values: item => [item.category] },
-      { id: "owner", label: "Owner / contact", values: item => [item.ownerPersonId], labelValue: value => owners.get(value) ?? "Owner not available" },
+      { id: "owner", label: "Owner / contact", values: item => [item.ownerPersonId], labelValue: value => owners.get(value) ?? "Owner not available", missingLabel: "Unassigned" },
       { id: "status", label: "Status", values: item => [item.status] },
       { id: "disposition", label: "Disposition", values: item => [item.disposition], labelValue: dispositionDisplayLabel },
       { id: "condition", label: "Condition", values: item => [item.condition] },
@@ -1115,12 +1103,12 @@ export function InventoryTable({
   const viewSnapshot: InventoryViewSnapshot = {
     search, savedFilter, dispositionGroup,
     facets: Object.fromEntries(Object.entries(facetSelection).filter(([, values]) => values.length).map(([id, values]) => [id, [...values].sort()])),
-    sorting, sortField, columns: columnVisibility, presentation,
+    sorting, sortField, columns: normalizeInventoryColumns(columnVisibility), presentation,
   };
   const builtInViews = inventorySavedFilters.map(filter => ({
     id: `built-in:${filter.key}`, label: filter.label, description: filter.description,
     count: items ? filterInventoryItems(items, filter.key, "").length : undefined,
-    snapshot: { search: "", savedFilter: filter.key, dispositionGroup: "all" as const, facets: {}, sorting: [], sortField: DEFAULT_SORT_FIELD, columns: visibleDefaultColumns, presentation },
+    snapshot: { search: "", savedFilter: filter.key, dispositionGroup: "all" as const, facets: {}, sorting, sortField, columns: normalizeInventoryColumns(columnVisibility), presentation },
   }));
   function applyView(view: InventoryViewSnapshot) {
     setSearch(view.search); setSavedFilter(view.savedFilter); setDispositionGroup(view.dispositionGroup);
@@ -1217,7 +1205,7 @@ export function InventoryTable({
 
               <section aria-labelledby="inventory-filter-heading" className="collection-controls space-y-3">
                 <h3 id="inventory-filter-heading" className="sr-only">Find and filter</h3>
-                <CollectionViewTabs<InventoryViewSnapshot> key={`${householdId}:${moveId}`} storageKey={`assistwithmoving.views.items.${householdId}.${moveId}.v1`} builtIns={builtInViews} snapshot={viewSnapshot} onApply={applyView} parseSnapshot={parseInventoryView} />
+                <CollectionViewTabs<InventoryViewSnapshot> key={`${householdId}:${moveId}`} storageKey={`assistwithmoving.views.items.${householdId}.${moveId}.v1`} builtIns={builtInViews} snapshot={viewSnapshot} onApply={applyView} parseSnapshot={parseInventoryView} ready={presentationReady} />
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <div className="relative min-w-40 flex-1">
                     <MovingSymbol name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

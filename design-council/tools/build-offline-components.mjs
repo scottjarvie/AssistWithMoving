@@ -1,0 +1,43 @@
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import { build } from "esbuild";
+import postcss from "postcss";
+import tailwind from "@tailwindcss/postcss";
+
+// A client-rendered, offline fixture: real components, Radix interactions,
+// application CSS and bundled Geist. No Next server, credentials or backend.
+os.setPriority(0, os.constants.priority.PRIORITY_BELOW_NORMAL);
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const output = path.join(repo, "output/moving-council");
+fs.mkdirSync(output, { recursive: true });
+const sourceHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+const sourceDirty = Boolean(execFileSync("git", ["status", "--porcelain", "--", "src", "design-council/tools"], { cwd: repo, encoding: "utf8" }).trim());
+const modules = {
+  "convex/react": `import {fixtureQuery} from ${JSON.stringify(path.join(repo, "design-council/tools/offline-fixture.ts"))}; export const useQuery=fixtureQuery; const refuse=async()=>{window.__fixtureWritesBlocked=(window.__fixtureWritesBlocked??0)+1;throw new Error("Offline fixture: writes are disabled")}; export const useMutation=()=>refuse; export const useAction=()=>refuse;`,
+  "@clerk/nextjs": 'export const useAuth=()=>({isLoaded:true,isSignedIn:true});',
+  "next/link": 'import React from "react"; export default React.forwardRef(function Link({href,children,...props},ref){return <a {...props} ref={ref} href={typeof href==="string"?href:"#"}>{children}</a>});',
+  "next/navigation": 'export const useRouter=()=>({push:()=>{},replace:()=>{},refresh:()=>{}});export const usePathname=()=>"/offline-council";export const useSearchParams=()=>new URLSearchParams(location.search);',
+  "fixture-api": 'export const api=new Proxy({},{get:(_,ns)=>new Proxy({},{get:(_,name)=>`${String(ns)}.${String(name)}`})});',
+};
+await build({
+  absWorkingDir: repo, entryPoints: ["design-council/tools/offline-entry.tsx"], outfile: path.join(output, "components.js"), bundle: true, format: "iife", platform: "browser", minify: true, jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' },
+  plugins: [{ name: "fictional-offline-boundary", setup(context) {
+    context.onResolve({ filter: /./ }, args => {
+      if (modules[args.path]) return { path: args.path, namespace: "fixture" };
+      if (/_generated\/api$/.test(args.path)) return { path: "fixture-api", namespace: "fixture" };
+      return undefined;
+    });
+    context.onLoad({ filter: /./, namespace: "fixture" }, args => ({ contents: modules[args.path], loader: "tsx", resolveDir: repo }));
+  } }],
+});
+const cssPath = path.join(repo, "src/app/globals.css");
+const { css } = await postcss([tailwind({ base: repo })]).process(fs.readFileSync(cssPath, "utf8"), { from: cssPath });
+const fontRoot = path.join(repo, "node_modules/next/dist/next-devtools/server/font");
+const fonts = [["CouncilGeist", "geist-latin.woff2"], ["CouncilMono", "geist-mono-latin.woff2"]].map(([name, file]) => `@font-face{font-family:${name};src:url(data:font/woff2;base64,${fs.readFileSync(path.join(fontRoot,file)).toString("base64")}) format("woff2");font-style:normal;font-weight:100 900;font-display:block}`).join("");
+const provenance = { sourceHead, sourceDirty, generatedAt: new Date().toISOString(), rendering: "Client-rendered actual components; fictional query/auth/navigation boundary; real Geist and app CSS; no authenticated shell or live data; all fixture writes refused" };
+fs.writeFileSync(path.join(output, "provenance.json"), JSON.stringify(provenance, null, 2)+"\n");
+fs.writeFileSync(path.join(output, "index.html"), `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data: blob:; connect-src 'none'"><title>Moving offline component evidence</title><style>${css}${fonts}:root{--font-geist-sans:CouncilGeist;--font-geist-mono:CouncilMono}html,body{margin:0;min-height:100%;background:var(--background);color:var(--foreground)}</style><script>document.documentElement.classList.toggle("dark",new URLSearchParams(location.search).get("theme")==="dark");window.__fixtureWritesBlocked=0;</script></head><body><div id="root"></div><script src="components.js"></script></body></html>`);
+console.log(JSON.stringify({ output, ...provenance }));

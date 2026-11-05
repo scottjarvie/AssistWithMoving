@@ -4,6 +4,8 @@ import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "re
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MovingSymbol } from "@/components/moving-symbol";
 
 type SavedView<T> = { id: string; label: string; snapshot: T };
 type BuiltInView<T> = SavedView<T> & { count?: number; description?: string };
@@ -52,59 +54,92 @@ function useSavedViews<T>(key: string, parseSnapshot: (value: unknown) => T | nu
       });
     } catch { return []; }
   }, [raw, parseSnapshot]);
-  function save(view: SavedView<T>) {
-    const next = JSON.stringify([...views, view]);
+  function write(nextViews: SavedView<T>[]) {
+    const next = JSON.stringify(nextViews);
     memory.set(key, next);
     let persisted = true;
     try { window.localStorage.setItem(key, next); memoryOnly.delete(key); } catch { memoryOnly.add(key); persisted = false; }
     window.dispatchEvent(new CustomEvent(eventName, { detail: key }));
     return persisted;
   }
-  return { views, save };
+  return { views, save: (view: SavedView<T>) => write([...views, view]), update: (view: SavedView<T>) => write(views.map(current => current.id === view.id ? view : current)), remove: (id: string) => write(views.filter(view => view.id !== id)) };
 }
 
 /** Built-ins describe real states. Named views exist only after someone saves one. */
-export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply, parseSnapshot }: {
+export function CollectionViewTabs<T>({ storageKey, builtIns, snapshot, onApply, parseSnapshot, ready = true }: {
   storageKey: string;
   builtIns: BuiltInView<T>[];
   snapshot: T;
   onApply: (value: T) => void;
   parseSnapshot: (value: unknown) => T | null;
+  ready?: boolean;
 }) {
-  const { views, save } = useSavedViews(storageKey, parseSnapshot);
-  const [selectedId, setSelectedId] = useState(builtIns[0]?.id ?? "");
-  const [naming, setNaming] = useState(false);
+  const { views, save, update, remove } = useSavedViews(storageKey, parseSnapshot);
+  const [selection, setSelection] = useState<SavedView<T> | null>(() => ready ? builtIns[0] ?? null : null);
+  const [naming, setNaming] = useState<"save" | "rename" | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const saveButton = useRef<HTMLButtonElement>(null);
+  const triggers = useRef(new Map<string, HTMLButtonElement>());
+  const chooserTarget = useRef<string | null>(null);
   const allViews: BuiltInView<T>[] = [...builtIns, ...views];
-  const selected = allViews.find(view => view.id === selectedId) ?? builtIns[0];
-  const edited = Boolean(selected && signature(selected.snapshot) !== signature(snapshot));
+  // Pick the first baseline only after the actual stored/phone presentation
+  // is available. A guarded adjustment of this component's own state prevents
+  // an intermediate false modified mark; later edits never replace baseline.
+  if (ready && (!selection || !allViews.some(view => view.id === selection.id)) && builtIns[0]) setSelection(builtIns[0]);
+  const selected = allViews.find(view => view.id === selection?.id) ?? builtIns[0];
+  const baseline = selected && selection && selected.id === selection.id && selected.id.startsWith("built-in:") ? selection.snapshot : selected?.snapshot;
+  const edited = Boolean(selected && signature(baseline) !== signature(snapshot));
+  const isSaved = selected?.id.startsWith("saved:") ?? false;
+  function selectView(view: SavedView<T>) { setSelection(view); onApply(view.snapshot); setMessage(""); }
+  function report(persisted: boolean, action: string) { setMessage(persisted ? `${action} on this browser.` : `${action} for this session; browser storage is unavailable.`); }
   return <div className="space-y-2">
-    <div role="group" aria-label="Inventory views" className="flex flex-wrap items-center gap-1 border-b border-border pb-2">
-      {allViews.map(view => <Button key={view.id} type="button" size="sm" variant={selected?.id === view.id ? "secondary" : "ghost"} className="min-h-11 max-w-full whitespace-normal text-left sm:min-h-8" title={view.description ?? "Saved on this browser"} aria-pressed={selected?.id === view.id} onClick={() => { setSelectedId(view.id); onApply(view.snapshot); setMessage(""); }}>
+    <div className="flex min-w-0 items-start gap-2 border-b border-border pb-2">
+    <div role="group" aria-label="Inventory views" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:flex-wrap sm:overflow-visible">
+      {allViews.map(view => <Button key={view.id} ref={element => { if (element) triggers.current.set(view.id, element); else triggers.current.delete(view.id); }} type="button" size="sm" variant={selected?.id === view.id ? "secondary" : "ghost"} className="min-h-11 shrink-0 whitespace-nowrap text-left sm:min-h-8 sm:max-w-full sm:whitespace-normal" title={view.description ?? "Saved on this browser"} aria-pressed={selected?.id === view.id} onClick={() => selectView(view)}>
         {view.label}{selected?.id === view.id && edited ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-accent" /><span className="sr-only">modified</span></> : null}{typeof view.count === "number" ? <span className="font-mono text-xs text-muted-foreground">{view.count}</span> : null}
       </Button>)}
     </div>
+    <Popover open={chooserOpen} onOpenChange={setChooserOpen}><PopoverTrigger asChild><Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0 sm:hidden" aria-label={`All ${allViews.length} views`}><MovingSymbol name="contents" className="size-4" />Views</Button></PopoverTrigger>
+      <PopoverContent align="end" className="max-h-96 w-[min(24rem,calc(100vw-2rem))] overflow-y-auto" onCloseAutoFocus={event => {
+        const id = chooserTarget.current;
+        if (id) { event.preventDefault(); const trigger = triggers.current.get(id); trigger?.focus(); trigger?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); chooserTarget.current = null; }
+      }}><p className="mb-2 text-xs font-medium text-muted-foreground">All {allViews.length} views</p><div className="grid grid-cols-2 gap-1">{allViews.map(view => <Button key={view.id} type="button" variant={selected?.id === view.id ? "secondary" : "ghost"} className="min-h-11 min-w-0 justify-start whitespace-normal break-words text-left" onClick={() => { chooserTarget.current = view.id; selectView(view); setChooserOpen(false); }}>{view.label}</Button>)}</div></PopoverContent>
+    </Popover>
+    </div>
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      {edited && selected ? <><span>{selected.label} modified</span><Button type="button" size="sm" variant="ghost" onClick={() => onApply(selected.snapshot)}>Discard</Button></> : null}
-      <Button ref={saveButton} type="button" variant="ghost" size="sm" onClick={() => { setName(""); setNaming(true); }}>Save as view</Button>
+      {edited && selected && baseline ? <><span>{selected.label} modified</span><Button type="button" size="sm" variant="ghost" onClick={() => { onApply(baseline); saveButton.current?.focus(); }}>Discard</Button></> : null}
+      {edited && isSaved && selected ? <Button type="button" size="sm" variant="ghost" onClick={() => { const next = { ...selected, snapshot }; report(update(next), "View updated"); setSelection(next); saveButton.current?.focus(); }}>Update view</Button> : null}
+      <Button ref={saveButton} type="button" variant="ghost" size="sm" onClick={() => { setName(""); setNaming("save"); }}>Save as view</Button>
+      {isSaved && selected ? <><Button type="button" size="sm" variant="ghost" onClick={() => { setName(selected.label); setNaming("rename"); }}>Rename view</Button><Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(true)}>Delete view</Button></> : null}
       <span>Named views stay on this browser.</span>
     </div>
     {message ? <p role="status" className="text-xs text-muted-foreground">{message}</p> : null}
-    <Dialog open={naming} onOpenChange={setNaming}><DialogContent className="p-4 sm:max-w-md" onCloseAutoFocus={event => { event.preventDefault(); saveButton.current?.focus(); }}>
+    <Dialog open={naming !== null} onOpenChange={open => { if (!open) setNaming(null); }}><DialogContent className="collection-controls p-4 sm:max-w-md" onCloseAutoFocus={event => { event.preventDefault(); saveButton.current?.focus(); }}>
       <form onSubmit={event => {
         event.preventDefault();
         if (!name.trim()) return;
-        const view = { id: `saved:${crypto.randomUUID()}`, label: name.trim(), snapshot };
-        const persisted = save(view);
-        setSelectedId(view.id); setNaming(false);
-        setMessage(persisted ? "View saved on this browser." : "View kept for this session; browser storage is unavailable.");
+        const renaming = naming === "rename" && isSaved && selected;
+        const view = renaming ? { ...selected, label: name.trim() } : { id: `saved:${crypto.randomUUID()}`, label: name.trim(), snapshot };
+        const persisted = renaming ? update(view) : save(view);
+        setSelection(view); setNaming(null);
+        report(persisted, renaming ? "View renamed" : "View saved");
       }}>
-        <DialogHeader className="p-0 pr-8"><DialogTitle>Save this view</DialogTitle><DialogDescription>Keep its search, filters, sorting, grouping, presentation, density and columns on this browser.</DialogDescription></DialogHeader>
+        <DialogHeader className="p-0 pr-8"><DialogTitle>{naming === "rename" ? "Rename this view" : "Save this view"}</DialogTitle><DialogDescription>Keep its search, filters, sorting, grouping, presentation, density and columns on this browser.</DialogDescription></DialogHeader>
         <label className="mt-4 grid gap-2 text-sm font-medium">View name<Input autoFocus maxLength={80} value={name} onChange={event => setName(event.target.value)} required /></label>
-        <DialogFooter className="mt-4 p-0"><Button type="button" size="sm" variant="ghost" onClick={() => setNaming(false)}>Cancel</Button><Button type="submit" size="sm" disabled={!name.trim()}>Save view</Button></DialogFooter>
+        <DialogFooter className="mt-4 p-0"><Button type="button" size="sm" variant="ghost" onClick={() => setNaming(null)}>Cancel</Button><Button type="submit" size="sm" disabled={!name.trim()}>{naming === "rename" ? "Rename view" : "Save view"}</Button></DialogFooter>
       </form>
+    </DialogContent></Dialog>
+    <Dialog open={deleting} onOpenChange={setDeleting}><DialogContent className="collection-controls p-4 sm:max-w-md" onCloseAutoFocus={event => { event.preventDefault(); saveButton.current?.focus(); }}>
+      <DialogHeader className="p-0 pr-8"><DialogTitle>Delete saved view</DialogTitle><DialogDescription>Delete “{selected?.label}” from this browser&apos;s saved views?</DialogDescription></DialogHeader>
+      <DialogFooter className="p-0"><Button type="button" size="sm" variant="ghost" onClick={() => setDeleting(false)}>Keep view</Button><Button type="button" size="sm" variant="destructive" onClick={() => {
+        if (!selected || !isSaved) return;
+        const persisted = remove(selected.id);
+        const first = builtIns[0]; if (first) { setSelection(first); onApply(first.snapshot); }
+        setDeleting(false); report(persisted, "View deleted");
+      }}>Delete this view</Button></DialogFooter>
     </DialogContent></Dialog>
   </div>;
 }

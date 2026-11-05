@@ -437,4 +437,26 @@ describe("ItemDetailSheet task tabs", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Red toolbox" } });
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
   });
+
+  it.each([
+    { label: "Weight (lb)", original: "40", changed: "41", confidence: "weightConfidence", estimateLabel: "I only have an estimate", estimateIndex: 0 },
+    { label: "Length (in)", original: "18", changed: "19", confidence: "dimensionsConfidence", estimateLabel: "These are estimates", estimateIndex: 0 },
+    { label: "Volume (cu ft)", original: "1.2", changed: "1.3", confidence: "volumeConfidence", estimateLabel: "I only have an estimate", estimateIndex: 1 },
+  ])("clears dirty state after $label and its estimate flag are reverted", async ({ label, original, changed, confidence, estimateLabel, estimateIndex }) => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ itemOverride: { estimatedWeightLb: 40, weightConfidence: "low", dimensionsConfidence: "actual", volumeConfidence: "low" }, onSave });
+    await userEvent.click(screen.getByRole("tab", { name: "Measurements" }));
+    fireEvent.change(screen.getByLabelText(label), { target: { value: changed } });
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(label), { target: { value: original } });
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    const estimate = screen.getAllByLabelText(estimateLabel)[estimateIndex];
+    fireEvent.click(estimate);
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    fireEvent.click(estimate);
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save item" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0]).not.toHaveProperty(confidence);
+  });
 });

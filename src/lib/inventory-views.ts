@@ -14,6 +14,13 @@ export type InventoryViewSnapshot = {
   columns: VisibilityState;
   presentation: CollectionPresentation;
 };
+export const inventoryDefaultColumns: VisibilityState = {
+  category: true, room: true, ownerContact: false, condition: false,
+  confidence: false, indicators: true, status: true, disposition: true, review: true,
+};
+export function normalizeInventoryColumns(columns: VisibilityState): VisibilityState {
+  return Object.fromEntries(Object.entries(columns).filter(([id, visible]) => visible !== true || id in inventoryDefaultColumns));
+}
 const facetIds = ["room", "category", "owner", "status", "disposition", "condition", "review", "value", "photo", "evidence", "box", "load"];
 const columnIds = ["name", "details", "status", "disposition", "indicators", "room", "category", "ownerContact", "condition", "confidence", "review"];
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }
@@ -39,7 +46,7 @@ export function parseInventoryView(value: unknown): InventoryViewSnapshot | null
     facets,
     sorting: value.sorting.map(sort => ({ id: sort.id, desc: sort.desc })),
     sortField: value.sortField as SortFieldId,
-    columns: { ...value.columns } as VisibilityState,
+    columns: normalizeInventoryColumns(value.columns as VisibilityState),
     presentation: { view: presentation.view as CollectionPresentation["view"], density: presentation.density as CollectionPresentation["density"], groupBy: presentation.groupBy, groupDesc: presentation.groupDesc },
   };
 }

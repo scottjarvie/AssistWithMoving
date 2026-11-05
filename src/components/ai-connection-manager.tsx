@@ -11,18 +11,14 @@
  */
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionArgs } from "convex/server";
 import { useAuth } from "@clerk/nextjs";
-import {
-  Activity,
-  KeyRound,
-  PlugZap,
-  RefreshCw,
-  ShieldCheck,
-  ShieldX,
-} from "lucide-react";
+import { AiPermissionsMatrix } from "@/components/ai-permissions-matrix";
+import { MovingSymbol } from "@/components/moving-symbol";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -57,7 +53,7 @@ const expiryChoices = [
   { days: 365, label: "1 year" },
 ] as const;
 
-type BoundaryScope = {
+export type BoundaryScope = {
   scope: string;
   label: string;
   grants: string;
@@ -65,7 +61,7 @@ type BoundaryScope = {
   writes: boolean;
 };
 
-type GrantRow = {
+export type GrantRow = {
   grantId: Id<"aiGrants">;
   label: string;
   status: "active" | "expired" | "revoked";
@@ -167,6 +163,11 @@ export function buildManualQueueBrief(moveTitle: string | null) {
 }
 
 export function AiConnectionManager() {
+  const sectionTabs = useRef<HTMLDivElement>(null);
+  const detailsPrefix = useId();
+  const cancelledRevoke = useRef<string | null>(null);
+  const [activeSection, setActiveSection] = useState("connections");
+  const [reviewingGrantId, setReviewingGrantId] = useState<string | null>(null);
   const { isLoaded, isSignedIn } = useAuth();
   const ready = isLoaded && isSignedIn;
 
@@ -221,6 +222,35 @@ export function AiConnectionManager() {
   const grants = grantsResult?.grants ?? [];
   const activity = activityResult?.activity ?? [];
   const manualBrief = buildManualQueueBrief(moves[0]?.title ?? null);
+  const recentRefusals = new Set(activity.filter(row => row.outcome === "refused").map(row => String(row.grantId)));
+  const sections = [
+    { value: "connections", label: "Connections", icon: "ai" as const, count: grantsResult ? grants.length : undefined },
+    { value: "approve", label: "Approve", icon: "person" as const },
+    { value: "activity", label: "Activity", icon: "note" as const, count: activityResult ? activity.length : undefined, countLabel: `${activity.length} latest loaded entries` },
+    { value: "setup", label: "Setup", icon: "settings" as const },
+    { value: "boundaries", label: "Boundaries", icon: "source" as const },
+    { value: "keys", label: "API keys", icon: "source" as const },
+    { value: "manual", label: "Manual", icon: "note" as const },
+  ];
+  function openSection(value: string) {
+    const trigger = Array.from(sectionTabs.current?.querySelectorAll<HTMLButtonElement>("[data-moving-section]") ?? []).find(button => button.dataset.movingSection === value);
+    trigger?.focus({ preventScroll: true }); trigger?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    setActiveSection(value);
+  }
+  function closeGrantReview() {
+    const button = Array.from(sectionTabs.current?.querySelectorAll<HTMLButtonElement>("[data-connection-review]") ?? []).find(element => element.dataset.connectionReview === reviewingGrantId);
+    setReviewingGrantId(null); setConfirmingRevokeId(null); button?.focus();
+  }
+  useEffect(() => {
+    if (reviewingGrantId) document.getElementById(`${detailsPrefix}-${reviewingGrantId}-heading`)?.focus({ preventScroll: true });
+  }, [reviewingGrantId, detailsPrefix]);
+  useEffect(() => {
+    if (confirmingRevokeId) document.getElementById(`${detailsPrefix}-${confirmingRevokeId}-confirm`)?.focus();
+    else if (cancelledRevoke.current) {
+      document.getElementById(`${detailsPrefix}-${cancelledRevoke.current}-revoke`)?.focus();
+      cancelledRevoke.current = null;
+    }
+  }, [confirmingRevokeId, detailsPrefix]);
 
   function toggleScope(scope: string) {
     setSelectedScopes((current) =>
@@ -253,7 +283,7 @@ export function AiConnectionManager() {
         note: note.trim() ? note.trim() : undefined,
       });
       setMessage(
-        "Approved. Nothing is connected until an AI signs in with this grant — sign in from your AI using the endpoint above.",
+        "Approved. Nothing is connected until an AI signs in with this grant — use the endpoint in Setup to sign in from your AI.",
       );
       setLabel("");
       setSelectedScopes([]);
@@ -281,6 +311,7 @@ export function AiConnectionManager() {
         expectedVersion: grant.version,
       });
       setConfirmingRevokeId(null);
+      document.getElementById(`${detailsPrefix}-${grant.grantId}-heading`)?.focus();
       setMessage(
         `Revoked “${grant.label}”. The next call from that AI is refused; everything it already saved stays exactly where it is.`,
       );
@@ -306,7 +337,7 @@ export function AiConnectionManager() {
   if (!isLoaded) {
     return (
       <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
-        <RefreshCw className="mr-2 inline size-4 animate-spin" aria-hidden="true" />
+        <MovingSymbol name="reset" className="mr-2 inline size-4 animate-spin" />
         Checking your signed-in session.
       </div>
     );
@@ -319,7 +350,7 @@ export function AiConnectionManager() {
           Sign in first. Your AI connections belong to your account, so this
           screen only opens for you.
         </p>
-        <Button asChild size="touch" className="mt-3">
+        <Button asChild size="sm" className="mt-3 min-h-11 sm:min-h-8">
           <Link href="/sign-in?redirect_url=/settings/ai">
             Sign in to manage AI connections
           </Link>
@@ -329,7 +360,7 @@ export function AiConnectionManager() {
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={sectionTabs} className="space-y-4 [&_button]:min-h-11 sm:[&_button]:min-h-8">
       {message ? (
         <p
           role="status"
@@ -339,6 +370,9 @@ export function AiConnectionManager() {
         </p>
       ) : null}
 
+      <Tabs value={activeSection} onValueChange={setActiveSection} className="gap-4">
+      <MoveWorkspaceTabList sticky tabs={sections} activeValue={activeSection} ariaLabel="AI connection sections" />
+      <TabsContent value="setup" forceMount hidden={activeSection !== "setup"}>
       {/* ---------------------------------------------------------------- */}
       {/* 1. The endpoint, and an honest label for what it can do today.    */}
       {/* ---------------------------------------------------------------- */}
@@ -348,7 +382,7 @@ export function AiConnectionManager() {
       >
         <div className="flex items-start gap-3">
           <span className="hidden size-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground sm:flex">
-            <PlugZap className="size-5" aria-hidden="true" />
+            <MovingSymbol name="ai" className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -386,6 +420,8 @@ export function AiConnectionManager() {
           </div>
         </div>
       </section>
+      </TabsContent>
+      <TabsContent value="approve" forceMount hidden={activeSection !== "approve"}>
 
       {/* ---------------------------------------------------------------- */}
       {/* 2. Approve a connection.                                          */}
@@ -630,7 +666,7 @@ export function AiConnectionManager() {
                   </ul>
                   <p className="text-muted-foreground">
                     Nothing happens until an AI signs in as you using the
-                    endpoint above. You can revoke this at any time and the next
+                    endpoint in Setup. You can revoke this at any time and the next
                     call is refused.
                   </p>
                 </div>
@@ -646,7 +682,7 @@ export function AiConnectionManager() {
 
             <Button
               type="button"
-              size="touch"
+              size="sm"
               disabled={!canApprove}
               onClick={handleApprove}
             >
@@ -655,6 +691,8 @@ export function AiConnectionManager() {
           </div>
         )}
       </section>
+      </TabsContent>
+      <TabsContent value="connections" forceMount hidden={activeSection !== "connections"}>
 
       {/* ---------------------------------------------------------------- */}
       {/* 3. Existing connections.                                          */}
@@ -671,23 +709,28 @@ export function AiConnectionManager() {
             These are grants you approved for an AI signing in as you. They are
             not people in your household, not share links, and not API keys.
           </p>
+          <div className="mt-3 flex flex-wrap gap-2"><Button type="button" size="sm" onClick={() => openSection("approve")}><MovingSymbol name="add" className="size-4" />Approve a connection</Button><Button type="button" variant="ghost" size="sm" onClick={() => openSection("setup")}><MovingSymbol name="settings" className="size-4" />Connection setup</Button></div>
         </div>
         {grantsResult === undefined ? (
           <Skeleton className="h-40 w-full" />
         ) : grants.length === 0 ? (
           <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-            You have not approved an AI connection yet. Nothing outside this
-            account can reach your moves.
+            You have not approved an AI connection grant yet. API keys and
+            older connections are separate and are not described by this list.
           </p>
         ) : (
+          <>
+          <AiPermissionsMatrix grants={grants} abilities={boundaryScopes} recentRefusals={recentRefusals} reviewingId={reviewingGrantId} detailsPrefix={detailsPrefix} onReview={id => { setConfirmingRevokeId(null); setReviewingGrantId(id); }} onRevoke={id => { setReviewingGrantId(id); setConfirmingRevokeId(id); }} />
           <ul className="space-y-3">
             {grants.map((grant) => (
               <li
                 key={String(grant.grantId)}
+                id={`${detailsPrefix}-${grant.grantId}`}
+                hidden={reviewingGrantId !== String(grant.grantId)}
                 className="rounded-lg border border-border bg-card p-4"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="text-base font-semibold break-words">
+                  <h4 id={`${detailsPrefix}-${grant.grantId}-heading`} tabIndex={-1} className="text-base font-semibold break-words focus-visible:outline-2 focus-visible:outline-ring">
                     {grant.label}
                   </h4>
                   <Badge
@@ -701,6 +744,7 @@ export function AiConnectionManager() {
                   >
                     {statusLabel(grant.status)}
                   </Badge>
+                  <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={closeGrantReview}><MovingSymbol name="close" className="size-4" />Close connection details</Button>
                 </div>
 
                 <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
@@ -787,6 +831,7 @@ export function AiConnectionManager() {
                     ).map((entry) => (
                       <li key={entry.scope}>
                         <span className="font-medium">{entry.label}.</span>{" "}
+                        <span>{entry.grants}</span>{" "}
                         <span className="text-muted-foreground">
                           {entry.doesNotImply}
                         </span>
@@ -823,8 +868,9 @@ export function AiConnectionManager() {
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button
                           type="button"
-                          size="touch"
+                          size="sm"
                           variant="destructive"
+                          id={`${detailsPrefix}-${grant.grantId}-confirm`}
                           disabled={busy === `revoke-${grant.grantId}`}
                           onClick={() => void handleRevoke(grant)}
                         >
@@ -834,9 +880,9 @@ export function AiConnectionManager() {
                         </Button>
                         <Button
                           type="button"
-                          size="touch"
+                          size="sm"
                           variant="outline"
-                          onClick={() => setConfirmingRevokeId(null)}
+                          onClick={() => { cancelledRevoke.current = String(grant.grantId); setConfirmingRevokeId(null); }}
                         >
                           Keep it
                         </Button>
@@ -845,9 +891,10 @@ export function AiConnectionManager() {
                   ) : (
                     <Button
                       type="button"
-                      size="touch"
+                      size="sm"
                       variant="outline"
                       className="mt-4"
+                      id={`${detailsPrefix}-${grant.grantId}-revoke`}
                       onClick={() =>
                         setConfirmingRevokeId(String(grant.grantId))
                       }
@@ -859,8 +906,12 @@ export function AiConnectionManager() {
               </li>
             ))}
           </ul>
+          </>
         )}
+        <nav aria-label="AI settings contents" className="border-t border-border pt-3 md:hidden"><h4 className="mb-2 text-sm font-semibold">Contents</h4><div className="grid grid-cols-2 gap-1">{sections.map(section => <Button key={section.value} type="button" variant="ghost" size="sm" className="justify-start whitespace-normal text-left" onClick={() => openSection(section.value)}><MovingSymbol name={section.icon} className="size-4" />{section.label}</Button>)}</div></nav>
       </section>
+      </TabsContent>
+      <TabsContent value="activity" forceMount hidden={activeSection !== "activity"}>
 
       {/* ---------------------------------------------------------------- */}
       {/* 4. Recent activity, refusals included.                            */}
@@ -871,13 +922,14 @@ export function AiConnectionManager() {
             id="ai-activity-heading"
             className="flex items-center gap-2 text-lg font-semibold"
           >
-            <Activity className="size-4 text-primary" aria-hidden="true" />
+            <MovingSymbol name="note" className="size-4 text-primary" />
             Recent activity
           </h3>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             What was used, and what was refused. A refusal is the boundary
             working — it means an AI asked for something you never approved.
           </p>
+          <p className="mt-2 font-mono text-xs text-muted-foreground">{activityResult ? `${activity.length} latest loaded ${activity.length === 1 ? "entry" : "entries"} · up to 20 account-wide` : "Loading recent activity"}</p>
         </div>
         {activityResult === undefined ? (
           <Skeleton className="h-32 w-full" />
@@ -926,6 +978,8 @@ export function AiConnectionManager() {
           </ul>
         )}
       </section>
+      </TabsContent>
+      <TabsContent value="boundaries" forceMount hidden={activeSection !== "boundaries"}>
 
       {/* ---------------------------------------------------------------- */}
       {/* 5. The ceiling. No grant reaches past this.                       */}
@@ -938,7 +992,7 @@ export function AiConnectionManager() {
           id="ai-never-heading"
           className="flex items-center gap-2 text-lg font-semibold"
         >
-          <ShieldCheck className="size-4 text-primary" aria-hidden="true" />
+          <MovingSymbol name="source" className="size-4 text-primary" />
           What no connection can ever reach
         </h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -959,7 +1013,7 @@ export function AiConnectionManager() {
             </div>
             <div>
               <h4 className="flex items-center gap-2 text-sm font-semibold">
-                <ShieldX className="size-4" aria-hidden="true" />
+                <MovingSymbol name="person" className="size-4" />
                 Never permitted
               </h4>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-muted-foreground">
@@ -970,7 +1024,14 @@ export function AiConnectionManager() {
             </div>
           </div>
         )}
+        <div className="mt-5 border-t border-border pt-4"><h4 className="text-sm font-semibold">Actions for a signed-in person</h4><table className="mt-2 w-full text-left text-sm"><thead><tr className="border-b border-border text-xs text-muted-foreground"><th scope="col" className="py-2 font-medium">Action</th><th scope="col" className="py-2 font-medium">Your control</th></tr></thead><tbody>
+          <tr className="border-b border-border"><th scope="row" className="py-2 pr-3 font-normal">Approve a new grant</th><td className="py-2"><Button type="button" variant="link" size="sm" onClick={() => openSection("approve")}>Choose moves and abilities</Button></td></tr>
+          <tr className="border-b border-border"><th scope="row" className="py-2 pr-3 font-normal">Revoke an active grant</th><td className="py-2"><Button type="button" variant="link" size="sm" onClick={() => openSection("connections")}>Review connections</Button></td></tr>
+          <tr><th scope="row" className="py-2 pr-3 font-normal">Manage separate API keys</th><td className="py-2"><Button type="button" variant="link" size="sm" onClick={() => openSection("keys")}>Open API keys</Button></td></tr>
+        </tbody></table></div>
       </section>
+      </TabsContent>
+      <TabsContent value="manual" forceMount hidden={activeSection !== "manual"}>
 
       {/* ---------------------------------------------------------------- */}
       {/* 6. The manual fallback — a real brief, not a dead end.            */}
@@ -1001,18 +1062,20 @@ export function AiConnectionManager() {
           />
         </div>
       </section>
+      </TabsContent>
+      <TabsContent value="keys" forceMount hidden={activeSection !== "keys"}>
 
       {/* ---------------------------------------------------------------- */}
       {/* 7. API keys — a different door, kept secondary and separate.      */}
       {/* ---------------------------------------------------------------- */}
-      <details className="rounded-lg border border-border bg-card p-4 sm:p-5">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-medium">
-          <KeyRound className="size-4 text-primary" aria-hidden="true" />
+      <section aria-labelledby="ai-keys-heading" className="rounded-lg border border-border bg-card p-4 sm:p-5">
+        <h3 id="ai-keys-heading" className="flex min-h-9 items-center gap-2 font-medium">
+          <MovingSymbol name="source" className="size-4 text-primary" />
           Separate: API keys for tools that cannot sign in
-        </summary>
+        </h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          An API key is a different door from the AI connections above. A key is
-          a pasted secret with its own separate permissions; a connection above
+          An API key is a different door from the grants in Connections. A key is
+          a pasted secret with its own separate permissions; a connection grant
           is an AI signing in as you under a grant you can revoke. Keys are also
           not household people and not share links. Create a key only for a
           local or non-OAuth tool you trust.
@@ -1020,7 +1083,9 @@ export function AiConnectionManager() {
         <div className="mt-4">
           <ApiKeyManager enabled={ready} mode="setup" />
         </div>
-      </details>
+      </section>
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }

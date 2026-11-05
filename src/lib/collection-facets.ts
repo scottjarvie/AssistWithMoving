@@ -4,6 +4,7 @@ export type CollectionFacet<T> = {
   label: string;
   values: (record: T) => readonly (string | undefined | null)[];
   labelValue?: (value: string) => string;
+  missingLabel?: string;
 };
 export type CountedFacet = {
   id: string;
@@ -30,14 +31,14 @@ export function countFacets<T>(records: readonly T[], facets: readonly Collectio
     for (const record of records) for (const id of keys(record, facet)) {
       if (!options.has(id)) {
         const value: string | null = JSON.parse(id);
-        options.set(id, { id, label: value === null ? "Not recorded" : facet.labelValue?.(value) ?? value, count: 0 });
+        options.set(id, { id, label: value === null ? facet.missingLabel ?? "Not recorded" : facet.labelValue?.(value) ?? value, count: 0 });
       }
     }
     // A selected value stays removable if a live update removes its last row.
     for (const id of selection[facet.id] ?? []) if (!options.has(id)) {
       let value: unknown;
       try { value = JSON.parse(id); } catch { value = null; }
-      options.set(id, { id, label: typeof value === "string" ? facet.labelValue?.(value) ?? value : "Not recorded", count: 0 });
+      options.set(id, { id, label: typeof value === "string" ? facet.labelValue?.(value) ?? value : facet.missingLabel ?? "Not recorded", count: 0 });
     }
     for (const record of records) if (matchesFacets(record, facets, selection, facet.id)) {
       for (const id of keys(record, facet)) options.get(id)!.count += 1;

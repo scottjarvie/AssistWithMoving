@@ -18,8 +18,8 @@ export function CollectionFilterSheet({ facets, selection, onChange, loading = f
   }
   return <div className="contents">
     <Sheet>
-      <SheetTrigger asChild><Button type="button" variant="outline" size="sm" className="min-h-11 sm:min-h-9"><MovingSymbol name="filter" className="size-4" />+ Filter{count ? <span className="font-mono text-xs">{count}</span> : null}</Button></SheetTrigger>
-      <SheetContent side="right" className="w-full gap-0 sm:max-w-xl">
+      <SheetTrigger asChild><Button type="button" variant="outline" size="sm" className="min-h-11 sm:min-h-9" aria-label={count ? `Add filter, ${count} selected` : "Add filter"}><MovingSymbol name="add" className="size-4" />Filter{count ? <span className="font-mono text-xs">{count}</span> : null}</Button></SheetTrigger>
+      <SheetContent side="right" className="collection-controls w-full gap-0 sm:max-w-xl">
         <SheetHeader className="border-b border-border pr-12"><SheetTitle>Filter records</SheetTitle><SheetDescription>Counts match the current search and view, with all other filters applied. Choose alternatives within a facet; different facets combine.</SheetDescription></SheetHeader>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
           {loading ? <p role="status">Loading available filters.</p> : facets.map(facet => <fieldset key={facet.id} className="min-w-0">

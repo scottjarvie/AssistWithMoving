@@ -236,7 +236,8 @@ describe("InventoryTable", () => {
     ];
     render(<InventoryTable householdId={"household_123" as Id<"households">} moveId={"move_123" as Id<"moves">} />);
     expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "+ Filter" }));
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add filter" }));
     const sheet = screen.getByRole("dialog", { name: "Filter records" });
     const room = within(sheet).getByRole("group", { name: "Room" });
     const den = within(room).getByRole("checkbox", { name: /Den/ });
@@ -282,6 +283,7 @@ describe("InventoryTable", () => {
     fireEvent.change(screen.getByLabelText("Search inventory"), { target: { value: "unmatched synthetic query" } });
     fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(screen.getByLabelText("Search inventory")).toHaveValue("Walnut");
+    expect(screen.getByRole("button", { name: "Save as view" })).toHaveFocus();
     rendered.unmount();
     render(<InventoryTable householdId={"household_123" as Id<"households">} moveId={"move_123" as Id<"moves">} />);
     fireEvent.click(screen.getByRole("button", { name: "List" }));
@@ -296,6 +298,32 @@ describe("InventoryTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Table" }));
     expect(screen.getByRole("button", { name: "Sort by Item" })).toHaveAccessibleDescription(/Ascending; secondary sort, priority 2/);
     expect(screen.queryByRole("columnheader", { name: "Category" })).not.toBeInTheDocument();
+  });
+
+  it("discards presentation-only edits and treats an explicitly visible default column as unchanged", async () => {
+    const user = userEvent.setup();
+    render(<InventoryTable householdId={"household_123" as Id<"households">} moveId={"move_123" as Id<"moves">} />);
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    expect(screen.getByText("All items modified")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("button", { name: "Table" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Density: compact" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("button", { name: "Density: compact" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Group records by"), { target: { value: "room" } });
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByLabelText("Group records by")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Group records by"), { target: { value: "room" } });
+    fireEvent.click(screen.getByRole("button", { name: /^All items/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Group order: ascending" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("button", { name: "Group order: ascending" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Choose columns" }));
+    const itemColumn = within(screen.getByRole("dialog")).getByRole("checkbox", { name: "Item" });
+    fireEvent.click(itemColumn); fireEvent.click(itemColumn);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
   });
 
   it.each(["Table", "List", "Grid"])("lets an inventory preset regain control after a column sort in %s", async view => {

@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Both judges pass the bounded Home images; inventory gains real saved views/countable facets, and item corrections await the next exact-head review.
+[Open newest-first gallery](gallery.html) · Home has a bounded council pass; T corrections and the AI matrix pass TypeScript, 59 affected tests and focused lint; rendered/council review remains pending.
 
 # Moving design council status
 
@@ -26,6 +26,8 @@ Run `2026-11-05-playbook`. Local-only branch `design/assistwithmoving-council-20
 - Inventory now exposes all existing built-in states plus real named browser-local views with modified dots, Discard and Save as view. Snapshots preserve queries, facets, sorting/grouping, view/density and columns. A flat + Filter sheet provides counted facets, removable chips and Clear all; rich column descriptions and all original bulk/intake actions remain. Four suites passed 39 tests, TypeScript and focused lint passed. The final item/Home correction pass then passed TypeScript and two suites /16 tests; focused lint passed after escaping one JSX apostrophe without changing rendered text. Collection and item rendering remain pending.
 
 ## Remaining scope
+
+Candidate T is recorded at exact head `a7185089`: Sol 8.4 (changes requested), Opus 8.2 (approve with followups), source only. Stable view baselines, saved-view management/focus, column normalization and measurement reversion are corrected. AI settings now has a server-driven permissions matrix and seven retained sections. TypeScript, seven affected suites /59 tests and focused lint passed after correcting new test interactions/selectors; full-suite/build and rendered/council acceptance remain pending. Moving released its serial check interval with all owned workers exited; no Next/browser started. Offline actual-client-component rendering source is prepared but has not yet been built or captured.
 
 Collection controls and all collection pages; dossier/evidence stream records; tray home; Queue list/detail; permissions and data ledgers; admin/instruments; field-guide/print/public/auth pages; three different takes plus “now” for each uncovered spatial/load/move-day family; blind scores, final taste verdict and capability/full-check acceptance. No Scott picks received.
 

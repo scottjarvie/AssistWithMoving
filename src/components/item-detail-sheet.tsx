@@ -575,10 +575,8 @@ export function ItemDetailSheet({
     [valueDollars, formatOptionalCurrencyCents(item.valueCents)], [replacementValueDollars, formatOptionalCurrencyCents(item.replacementValueCents)],
     [serialNumber, item.serialNumber ?? ""], [modelNumber, item.modelNumber ?? ""],
     [lengthIn, formatOptionalNumber(item.dimensionsIn?.lengthIn)], [widthIn, formatOptionalNumber(item.dimensionsIn?.widthIn)], [heightIn, formatOptionalNumber(item.dimensionsIn?.heightIn)],
-    [dimensionsConfidence, itemDimensionsConfidenceForRead({ dimensionsIn: item.dimensionsIn, dimensionsConfidence: item.dimensionsConfidence }) ?? "none"],
     [actualWeightLb, formatOptionalNumber(item.actualWeightLb ?? item.estimatedWeightLb)], [estimatedWeightLowLb, formatOptionalNumber(item.estimatedWeightLowLb)], [estimatedWeightHighLb, formatOptionalNumber(item.estimatedWeightHighLb)],
     [estimatedVolumeCuFt, formatOptionalNumber(item.estimatedVolumeCuFt)], [estimatedPackedVolumeCuFt, formatOptionalNumber(item.estimatedPackedVolumeCuFt)],
-    [weightConfidence, item.weightConfidence ?? "none"], [volumeConfidence, item.volumeConfidence ?? "none"],
     [weightIsEstimate, initialWeightIsEstimate], [volumeIsEstimate, initialVolumeIsEstimate], [dimensionsAreEstimate, initialDimensionsAreEstimate],
     [privateNotes, item.privateNotes ?? ""], [reviewFlags, (item.reviewFlags ?? []).join(", ")], [aiSummary, item.aiSummary ?? ""], [aiTags, (item.aiTags ?? []).join(", ")],
   ];
@@ -1042,6 +1040,9 @@ export function ItemDetailSheet({
             <div ref={sectionTabs} className="md:min-w-0 md:flex-1">
             <Tabs value={activeTab} onValueChange={value => { setActiveTab(value); setFocusedEntry(null); setRequestedFact(null); }} className="gap-4">
               <MoveWorkspaceTabList sticky="within-panel" className="md:pr-10" tabs={recordTabs} activeValue={activeTab} ariaLabel="Item sections" />
+              <div role="status" aria-live="polite" aria-atomic="true" className={requestedFact ? "border-l-2 border-evidence pl-3 text-sm text-muted-foreground" : "sr-only"}>
+                {requestedFact ? historyEntries === undefined ? `Loading history for ${requestedFact.label.toLowerCase()}.` : requestedEntry ? <><p>Related {requestedFact.label.toLowerCase()} update found. This does not identify the current value&apos;s origin.</p><Button type="button" variant="link" size="sm" className="px-0" onClick={() => openHistory(requestedEntry.id)}>Open related update</Button></> : `No related ${requestedFact.label.toLowerCase()} update identified in the latest ${historyEntries.length} loaded ${historyEntries.length === 1 ? "entry" : "entries"}. The current value's origin is unknown.` : null}
+              </div>
 
               <TabsContent value="details" className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
@@ -1705,9 +1706,6 @@ export function ItemDetailSheet({
               </TabsContent>
 
               <TabsContent value="activity" className="space-y-3">
-                {requestedFact ? <div role="status" aria-live="polite" className="border-l-2 border-evidence pl-3 text-sm text-muted-foreground">
-                  {historyEntries === undefined ? `Loading history for ${requestedFact.label.toLowerCase()}.` : requestedEntry ? <><p>Related {requestedFact.label.toLowerCase()} update found. This does not identify the current value&apos;s origin.</p><Button type="button" variant="link" size="sm" className="px-0" onClick={() => openHistory(requestedEntry.id)}>Open related update</Button></> : `No related ${requestedFact.label.toLowerCase()} update identified in the latest ${historyEntries.length} loaded ${historyEntries.length === 1 ? "entry" : "entries"}. The current value's origin is unknown.`}
-                </div> : null}
                 <RecordEvidenceStream key={`stream-${focusedEntry?.request ?? 0}`} entries={historyEntries} prefix={recordPrefix} focusEntryId={focusedEntry?.id} atLimit={historyLimit === 50 && (historyEntries?.length ?? 0) >= 50} onLoadMore={historyLimit < 50 ? () => setHistoryLimit(50) : undefined} notes={{ description: item.description, reasoning: item.aiSummary, privateNotes: item.privateNotes }} onEditNotes={() => openSection("review")} />
                 <nav aria-label="Item contents" className="border-t border-border pt-3 md:hidden">
                   <h3 className="mb-2 text-sm font-medium">Contents</h3>

@@ -62,5 +62,6 @@ export function useCollectionPresentation(id: string, initialView: CollectionVie
   const setPreferences = useCallback((patch: Partial<CollectionPresentation>) => {
     persist(key, { ...preferences, ...patch });
   }, [key, preferences]);
-  return [preferences, setPreferences] as const;
+  const initialized = ["table", "list", "grid"].includes(String(readStored(raw).view));
+  return [preferences, setPreferences, initialized] as const;
 }

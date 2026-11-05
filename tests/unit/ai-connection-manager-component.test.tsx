@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -170,8 +170,9 @@ describe("AiConnectionManager", () => {
     connectionData.revoke.mockResolvedValue({ grantId: "ai_grant_123" });
   });
 
-  it("renders each scope with the server's does-not-imply boundary", () => {
+  it("renders each scope with the server's does-not-imply boundary", async () => {
     render(<AiConnectionManager />);
+    await userEvent.click(screen.getByRole("tab", { name: "Approve" }));
 
     const scopeChoices = screen.getByRole("group", {
       name: "What this AI may do",
@@ -196,6 +197,7 @@ describe("AiConnectionManager", () => {
   it("summarizes the exact approval before the person confirms", async () => {
     const user = userEvent.setup();
     render(<AiConnectionManager />);
+    await user.click(screen.getByRole("tab", { name: "Approve" }));
 
     const approveButton = screen.getByRole("button", {
       name: "Approve this connection",
@@ -230,9 +232,10 @@ describe("AiConnectionManager", () => {
     render(<AiConnectionManager />);
 
     await user.click(
-      screen.getByRole("button", { name: "Revoke this connection" }),
+      screen.getByRole("button", { name: "Revoke My AI on the laptop" }),
     );
     expect(connectionData.revoke).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Yes, revoke it" })).toHaveFocus();
     expect(
       screen.getByText(/The next call from this AI is refused immediately/),
     ).toBeInTheDocument();
@@ -249,6 +252,7 @@ describe("AiConnectionManager", () => {
 
   it("treats the reported client name as a label rather than a verified claim", () => {
     render(<AiConnectionManager />);
+    fireEvent.click(screen.getByRole("button", { name: "Review My AI on the laptop" }));
 
     expect(screen.getByText("Name the AI reported")).toBeInTheDocument();
     expect(
@@ -257,22 +261,25 @@ describe("AiConnectionManager", () => {
     expect(screen.getByText("Dynamic registration")).toBeInTheDocument();
   });
 
-  it("shows refusals clearly in recent activity", () => {
+  it("shows refusals clearly in recent activity", async () => {
     render(<AiConnectionManager />);
+    await userEvent.click(screen.getByRole("tab", { name: /^Activity:/ }));
 
-    expect(screen.getByText("Refused")).toBeInTheDocument();
+    expect(screen.getByText("Refused")).toBeVisible();
     expect(
       screen.getByText("Refused archive_move_records: GRANT_SCOPE_MISSING."),
     ).toBeInTheDocument();
   });
 
-  it("keeps API keys separate from and secondary to AI connections", () => {
+  it("keeps API keys separate from and secondary to AI connections", async () => {
     render(<AiConnectionManager />);
+    await userEvent.click(screen.getByRole("tab", { name: "API keys" }));
 
     const disclosure = screen.getByText(
       "Separate: API keys for tools that cannot sign in",
     );
-    expect(disclosure.closest("details")).not.toBeNull();
+    expect(disclosure.closest("section")).toHaveAttribute("aria-labelledby", "ai-keys-heading");
+    expect(disclosure).toBeVisible();
     expect(
       screen.getByText(/An API key is a different door/),
     ).toBeInTheDocument();
@@ -298,8 +305,9 @@ describe("AiConnectionManager", () => {
     expect(text).toContain("nothing here is listed as supported");
   });
 
-  it("offers a copyable manual Queue brief that is a real handoff", () => {
+  it("offers a copyable manual Queue brief that is a real handoff", async () => {
     render(<AiConnectionManager />);
+    await userEvent.click(screen.getByRole("tab", { name: "Manual" }));
 
     const brief = screen.getByLabelText("Manual Queue brief");
     expect(brief.textContent).toContain("Utah to Virginia");
@@ -317,8 +325,9 @@ describe("AiConnectionManager", () => {
     expect(brief).toContain("Next step");
   });
 
-  it("renders the never lists from the server boundary", () => {
+  it("renders the never lists from the server boundary", async () => {
     render(<AiConnectionManager />);
+    await userEvent.click(screen.getByRole("tab", { name: "Boundaries" }));
 
     expect(
       screen.getByText(
@@ -328,5 +337,22 @@ describe("AiConnectionManager", () => {
     expect(
       screen.getByText("Permanently delete anything, or delete your account."),
     ).toBeInTheDocument();
+  });
+
+  it("opens on real permissions and keeps approval drafts across the pinned chooser", async () => {
+    const user = userEvent.setup();
+    render(<AiConnectionManager />);
+    expect(screen.getByRole("table", { name: "AI connection permissions" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Name this connection" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Approve" }));
+    fireEvent.change(screen.getByLabelText("Name this connection"), { target: { value: "Synthetic bounded approval" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Read the move context/ }));
+    await user.click(screen.getByRole("tab", { name: "Setup" }));
+    await user.click(screen.getByRole("button", { name: "All 7 sections" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Approve" }));
+    expect(screen.getByRole("tab", { name: "Approve" })).toHaveFocus();
+    expect(screen.getByLabelText("Name this connection")).toHaveValue("Synthetic bounded approval");
+    expect(screen.getByRole("checkbox", { name: /Read the move context/ })).toBeChecked();
+    expect(connectionData.approve).not.toHaveBeenCalled();
   });
 });
