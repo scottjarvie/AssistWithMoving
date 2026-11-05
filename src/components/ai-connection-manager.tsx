@@ -992,7 +992,11 @@ export function AiConnectionManager() {
                     <summary className="cursor-pointer">Change moves, permissions or end date</summary>
                     <form key={`${grant.version}-${grantsResult?.catalogFingerprint}-${grantsResult?.recoveryFingerprint}`} className="mt-3 space-y-2" onSubmit={async (event) => {
                       event.preventDefault();
-                      if (!canWriteConsent) return;
+                      const expectedRecoveryFingerprint = grantsResult?.recoveryFingerprint;
+                      if (!canWriteConsent || !expectedRecoveryFingerprint) {
+                        setMessage("Reload AI connections before changing limits.");
+                        return;
+                      }
                       const data = new FormData(event.currentTarget);
                       setBusy(`limits-${grant.grantId}`);
                       try {
@@ -1009,7 +1013,7 @@ export function AiConnectionManager() {
                           ...(data.get("eligibilityMoveId") ? { eligibilityMoveId: data.get("eligibilityMoveId") as Id<"moves"> } : {}),
                           scopeIntent: data.get("scopeIntent") as "preserve" | "full" | "chosen",
                           grantId: grant.grantId, expectedVersion: grant.version,
-                          expectedRecoveryFingerprint: grantsResult!.recoveryFingerprint,
+                          expectedRecoveryFingerprint,
                           scopes: data.getAll("scopes") as GrantScope[],
                           ...(editsMoves ? { moveScope, ...(moveScope === "selectedMoves" ? { moveIds } : {}) } : {}),
                           ...(days === "keep" ? {} : { expiryIntent: days === "0" ? "none" as const : "chosen" as const, expiresInDays: days === "0" ? null : Number(days) }),
