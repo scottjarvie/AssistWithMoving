@@ -1,5 +1,5 @@
+// @vitest-environment node
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
 // Keep the actual configured-command and offline dependency-repair contracts
@@ -8,7 +8,7 @@ it("honors the configured cloud-session hook contracts", () => {
   const result = spawnSync(process.execPath, [
     "--test", ".claude/hooks/cloud-session-setup.contract.mjs",
   ], {
-    cwd: fileURLToPath(new URL("../../", import.meta.url)),
+    cwd: process.cwd(),
     encoding: "utf8",
     timeout: 30_000,
     windowsHide: true,
