@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Shared foundation source checks pass; exact-head council review pending; every-page implementation continues.
+[Open newest-first gallery](gallery.html) · Foundation review fixes and collection presentations pass source checks; exact-head council review is next.
 
 # Moving design council status
 
@@ -11,6 +11,8 @@ Run `2026-11-05-playbook`. Local-only branch `design/assistwithmoving-council-20
 - Shared tab chooser exposes every section without horizontal scrolling; move summary has a domain image slot and phone Contents. Main move task tabs are sticky; nested panels retain their own tab semantics.
 - No backend, auth policy, schema, user records or external publication changed.
 - Typecheck passed. Targeted checks caught and corrected the All-menu tab-activation defect; final source checks and different-model review follow.
+- Both judges requested source changes at `1ec0fdf`; original scores and verdicts are recorded without visual acceptance. All ten source findings were addressed; the affected foundation suites passed 45 tests and typecheck afterward.
+- Collections now offer Table/List/Grid, density, real column controls and grouping/sorting over the existing row model. Inventory and movable-unit Grid use actual photo slots or a decorative domain SVG. The two existing inventory suites and five new collection tests passed; full typecheck and lint passed. The full collection pattern and all remaining pages are not yet accepted.
 
 ## Remaining scope
 

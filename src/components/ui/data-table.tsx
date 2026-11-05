@@ -48,6 +48,8 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { MoveIllustration } from "@/components/moving-symbol"
+import { CollectionPresentationControls } from "@/components/collection-presentation-controls"
+import { useCollectionPresentation, type CollectionView } from "@/components/use-collection-presentation"
 
 // ---------------------------------------------------------------------------
 // ColumnMeta + visual conventions
@@ -113,7 +115,7 @@ export function EmptyState({
         className
       )}
     >
-      <MoveIllustration kind="box" className="mb-1 h-20 w-36" />
+      <MoveIllustration decorative kind="box" className="mb-1 h-20 w-36" />
       <p className="text-sm font-medium">{title}</p>
       {description ? (
         <p className="max-w-md text-sm text-muted-foreground">{description}</p>
@@ -228,10 +230,15 @@ export type DataTableProps<TData> = {
     table: TanstackTable<TData>
     /** Opens the row's detail (same as a desktop row click); undefined when the table has no onRowOpen. */
     onOpen?: () => void
+    view: Exclude<CollectionView, "table">
   }) => React.ReactNode
-  /** Render the mobile card at ALL breakpoints (without mounting the desktop table) —
-   * for compact, tap-to-open list views. Requires renderMobileCard. */
+  /** Legacy initial List preference. All three presentations remain available. */
   cardOnly?: boolean
+  preferenceKey?: string
+  showColumnControl?: boolean
+  /** Loaded accessible records before filters owned by the caller. */
+  unfilteredCount?: number
+  onClearFilters?: () => void
   onRowOpen?: (row: TData) => void
   /** Optional accessible label for an openable row; defaults to "Open row details". */
   getRowOpenLabel?: (row: TData) => string
@@ -300,6 +307,10 @@ export function DataTable<TData>({
   loading = false,
   renderMobileCard,
   cardOnly = false,
+  preferenceKey,
+  showColumnControl = true,
+  unfilteredCount,
+  onClearFilters,
   onRowOpen,
   getRowOpenLabel,
   toolbar,
@@ -308,6 +319,7 @@ export function DataTable<TData>({
   ariaLabel,
   minWidthClassName = "min-w-[980px]",
 }: DataTableProps<TData>) {
+  const [presentation, setPresentation] = useCollectionPresentation(preferenceKey ?? ariaLabel ?? "records", cardOnly ? "list" : "table")
   const [sorting, setSorting] = useControllableState<SortingState>(
     sortingProp,
     onSortingChange,
@@ -367,6 +379,13 @@ export function DataTable<TData>({
     return [selectColumn, ...columns]
   }, [columns, enableRowSelection])
 
+  // Grouping is a leading sort over the same bounded row model. Pagination,
+  // selection and all existing secondary sorts remain owned by this table.
+  const groupBy = resolvedColumns.some(column => (column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "")) === presentation.groupBy) ? presentation.groupBy : ""
+  const tableSorting = React.useMemo<SortingState>(() => groupBy
+    ? [{ id: groupBy, desc: presentation.groupDesc }, ...sorting.filter(sort => sort.id !== groupBy)]
+    : sorting, [groupBy, presentation.groupDesc, sorting])
+
   // TanStack Table intentionally returns mutable table helpers; this is the
   // supported API shape and is isolated to this component.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -375,7 +394,7 @@ export function DataTable<TData>({
     columns: resolvedColumns,
     getRowId,
     state: {
-      sorting,
+      sorting: tableSorting,
       columnFilters,
       columnVisibility,
       rowSelection,
@@ -387,7 +406,15 @@ export function DataTable<TData>({
       },
     },
     enableRowSelection,
-    onSortingChange: setSorting,
+    enableSortingRemoval: false,
+    onSortingChange: update => {
+      const next = typeof update === "function" ? update(tableSorting) : update
+      if (groupBy) {
+        const groupSort = next.find(sort => sort.id === groupBy)
+        if (groupSort && groupSort.desc !== presentation.groupDesc) setPresentation({ groupDesc: groupSort.desc })
+        setSorting(next.filter(sort => sort.id !== groupBy))
+      } else setSorting(next)
+    },
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
@@ -416,6 +443,20 @@ export function DataTable<TData>({
   const selectedRows = selectedRowModel.map((row) => row.original)
   const selectedRowCount = selectedRows.length
   const filteredRowCount = table.getFilteredRowModel().rows.length
+  const groupKey = (row: Row<TData>) => groupBy ? JSON.stringify([typeof row.getValue(groupBy), row.getValue(groupBy) ?? null]) : "all"
+  const groupLabel = (row: Row<TData>) => {
+    const value = groupBy ? row.getValue(groupBy) : null
+    return value === undefined || value === null || value === "" ? "Not recorded" : typeof value === "boolean" ? value ? "Yes" : "No" : String(value)
+  }
+  const groupCounts = new Map<string, number>()
+  if (groupBy) for (const row of table.getFilteredRowModel().rows) groupCounts.set(groupKey(row), (groupCounts.get(groupKey(row)) ?? 0) + 1)
+  const cardGroups = new Map<string, Row<TData>[]>()
+  for (const row of pageRows) {
+    const key = groupKey(row)
+    const members = cardGroups.get(key) ?? []
+    members.push(row)
+    cardGroups.set(key, members)
+  }
 
   if (loading) {
     return <DataTableSkeleton rows={pageSize > 6 ? 6 : pageSize} />
@@ -426,6 +467,10 @@ export function DataTable<TData>({
   return (
     <div className="space-y-2">
       {toolbar}
+      <CollectionPresentationControls table={table} preferences={{ ...presentation, groupBy }} onChange={patch => {
+        setPresentation(patch)
+        if (patch.groupBy !== undefined) table.setPageIndex(0)
+      }} showColumns={showColumnControl} />
 
       {enableRowSelection && batchActions ? (
         <BatchActionToolbar
@@ -442,14 +487,14 @@ export function DataTable<TData>({
 
       {hasRows ? (
         <>
-          {renderMobileCard ? (
-            <div
-              role="list"
-              className={cn("grid gap-2", cardOnly ? "" : "gap-3 md:hidden")}
-            >
-              {pageRows.map((row) => (
-                <React.Fragment key={row.id}>
-                  {renderMobileCard({
+          {presentation.view !== "table" ? (
+            <div className="space-y-4">
+              {[...cardGroups].map(([key, rows]) => <section key={key}>
+                {groupBy ? <h3 className="mb-2 flex items-center gap-2 text-sm font-medium"><span>{table.getColumn(groupBy)?.columnDef.meta?.label ?? groupBy}: {groupLabel(rows[0])}</span><Badge variant="outline">{groupCounts.get(key)} matching</Badge></h3> : null}
+                <div role="list" className={cn("grid", presentation.view === "grid" ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3" : "grid-cols-1", presentation.density === "compact" ? "gap-2" : "gap-4")}>
+              {rows.map((row) => (
+                <div key={row.id} role="listitem">
+                  {renderMobileCard ? renderMobileCard({
                     row: row.original,
                     selected: row.getIsSelected(),
                     onSelectedChange: (checked) => row.toggleSelected(checked),
@@ -457,17 +502,20 @@ export function DataTable<TData>({
                     onOpen: onRowOpen
                       ? () => onRowOpen(row.original)
                       : undefined,
-                  })}
-                </React.Fragment>
+                    view: presentation.view as Exclude<CollectionView, "table">,
+                  }) : <CollectionRowCard row={row} grid={presentation.view === "grid"} onOpen={onRowOpen ? () => onRowOpen(row.original) : undefined} openLabel={getRowOpenLabel?.(row.original)} />}
+                </div>
               ))}
+                </div>
+              </section>)}
             </div>
           ) : null}
 
-          {!cardOnly ? (
+          {presentation.view === "table" ? (
             <div
               className={cn(
                 "overflow-x-auto rounded-md border border-border",
-                renderMobileCard ? "hidden md:block" : "block"
+                "block"
               )}
             >
             <Table aria-label={ariaLabel} className={cn(minWidthClassName)}>
@@ -499,9 +547,11 @@ export function DataTable<TData>({
                 ))}
               </TableHeader>
               <TableBody>
-                {pageRows.map((row) => {
+                {pageRows.map((row, index) => {
                   const openable = Boolean(onRowOpen)
                   return (
+                  <React.Fragment key={row.id}>
+                  {groupBy && (index === 0 || groupKey(pageRows[index - 1]) !== groupKey(row)) ? <TableRow><TableCell colSpan={table.getVisibleLeafColumns().length} className="bg-muted px-2 py-2 text-sm font-medium">{table.getColumn(groupBy)?.columnDef.meta?.label ?? groupBy}: {groupLabel(row)} <Badge variant="outline" className="ml-2">{groupCounts.get(groupKey(row))} matching</Badge></TableCell></TableRow> : null}
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() ? "selected" : undefined}
@@ -542,7 +592,7 @@ export function DataTable<TData>({
                         <TableCell
                           key={cell.id}
                           className={cn(
-                            DATA_TABLE_DENSITY.cell,
+                            presentation.density === "compact" ? DATA_TABLE_DENSITY.cell : "p-3 align-top",
                             meta?.cellClassName,
                             meta?.align === "end" && "text-right"
                           )}
@@ -555,6 +605,7 @@ export function DataTable<TData>({
                       )
                     })}
                   </TableRow>
+                  </React.Fragment>
                   )
                 })}
               </TableBody>
@@ -568,22 +619,42 @@ export function DataTable<TData>({
         )
       )}
 
-      <DataTablePagination table={table} />
+      <DataTablePagination table={table} unfilteredCount={unfilteredCount} onClearFilters={onClearFilters} />
     </div>
   )
 }
 
+function CollectionRowCard<TData>({ row, grid, onOpen, openLabel }: { row: Row<TData>; grid: boolean; onOpen?: () => void; openLabel?: string }) {
+  const cells = row.getVisibleCells()
+  const selectCell = cells.find(cell => cell.column.id === SELECT_COLUMN_ID)
+  return <article className="rounded-md border border-border bg-card p-3">
+    {grid ? <MoveIllustration decorative kind="box" className="mb-3 h-24 w-full border-b border-border" /> : null}
+    <div className="flex items-start justify-between gap-2">
+      {selectCell ? flexRender(selectCell.column.columnDef.cell, selectCell.getContext()) : null}
+      {onOpen ? <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={onOpen} aria-label={openLabel ?? "Open row details"}>Open</Button> : null}
+    </div>
+    <dl className={cn("mt-1 grid gap-x-4 gap-y-2", grid ? "grid-cols-1" : "sm:grid-cols-2")}>
+      {cells.filter(cell => cell.column.id !== SELECT_COLUMN_ID).map(cell => <div key={cell.id} className="min-w-0"><dt className="text-xs text-muted-foreground">{cell.column.columnDef.meta?.label ?? cell.column.id}</dt><dd className="break-words text-sm">{flexRender(cell.column.columnDef.cell, cell.getContext())}</dd></div>)}
+    </dl>
+  </article>
+}
+
 function DataTablePagination<TData>({
   table,
+  unfilteredCount,
+  onClearFilters,
 }: {
   table: TanstackTable<TData>
+  unfilteredCount?: number
+  onClearFilters?: () => void
 }) {
   const pageCount = Math.max(table.getPageCount(), 1)
+  const matching = table.getFilteredRowModel().rows.length
+  const shown = table.getRowModel().rows.length
+  const hidden = Math.max(0, (unfilteredCount ?? table.getPreFilteredRowModel().rows.length) - matching)
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-      <span>
-        Page {table.getState().pagination.pageIndex + 1} of {pageCount}
-      </span>
+      <div><p>{shown} of {matching} matching shown{hidden ? ` · ${hidden} hidden by this view` : ""}{matching > shown ? ` · ${matching - shown} on other pages` : ""}{hidden && (onClearFilters || table.getState().columnFilters.length > 0) ? <Button type="button" variant="link" size="sm" onClick={() => { table.resetColumnFilters(); onClearFilters?.(); table.setPageIndex(0) }}>Show all</Button> : null}</p><p>Page {table.getState().pagination.pageIndex + 1} of {pageCount}</p></div>
       <div className="flex items-center gap-2">
         <Button
           type="button"

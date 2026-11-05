@@ -36,6 +36,8 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { BulkInventoryIntake } from "@/components/bulk-inventory-intake";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { MoveIllustration } from "@/components/moving-symbol";
+import type { CollectionView } from "@/components/use-collection-presentation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -385,10 +387,12 @@ function ItemThumbnail({
   householdId,
   moveId,
   photoId,
+  large = false,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   photoId?: Id<"itemPhotos">;
+  large?: boolean;
 }) {
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
   const [url, setUrl] = useState<string | null>(null);
@@ -409,13 +413,13 @@ function ItemThumbnail({
   }, [getDisplayUrl, householdId, moveId, photoId]);
 
   return (
-    <div className="size-11 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+    <div className={large ? "aspect-[4/3] w-full shrink-0 overflow-hidden rounded-md border border-border bg-muted" : "size-11 shrink-0 overflow-hidden rounded-md border border-border bg-muted"}>
       {photoId && url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt="" className="size-full object-cover" />
       ) : (
         <div className="flex size-full items-center justify-center text-muted-foreground">
-          {photoId ? (
+          {large && !photoId ? <MoveIllustration decorative kind="box" className="size-full" /> : photoId ? (
             <ImageOff className="size-4" aria-hidden />
           ) : (
             <Package className="size-4" aria-hidden />
@@ -438,6 +442,7 @@ function InventoryItemCard({
   photoId,
   householdId,
   moveId,
+  presentation = "list",
 }: {
   item: InventoryItem;
   selected: boolean;
@@ -446,6 +451,7 @@ function InventoryItemCard({
   photoId?: Id<"itemPhotos">;
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
+  presentation?: Exclude<CollectionView, "table">;
 }) {
   function handleCardClick(event: ReactMouseEvent) {
     if (isRowOpenIgnoredTarget(event.target)) return;
@@ -466,10 +472,10 @@ function InventoryItemCard({
       aria-label={`Open ${item.name}`}
       onClick={handleCardClick}
       onKeyDown={handleCardKeyDown}
-      className="flex cursor-pointer items-center gap-2.5 rounded-md border border-border bg-card p-2 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
+      className={`relative flex cursor-pointer gap-2.5 rounded-md border border-border bg-card p-2 transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring ${presentation === "grid" ? "flex-col items-stretch" : "items-center"}`}
     >
       <label
-        className="flex min-h-11 min-w-9 items-center justify-center"
+        className={presentation === "grid" ? "absolute left-3 top-3 z-10 flex min-h-11 min-w-11 items-center justify-center rounded-md border border-border bg-card" : "flex min-h-11 min-w-9 items-center justify-center"}
         aria-label={`Select ${item.name}`}
       >
         <Checkbox
@@ -477,17 +483,17 @@ function InventoryItemCard({
           onCheckedChange={(checked) => onSelectedChange(checked === true)}
         />
       </label>
-      <ItemThumbnail householdId={householdId} moveId={moveId} photoId={photoId} />
+      <ItemThumbnail householdId={householdId} moveId={moveId} photoId={photoId} large={presentation === "grid"} />
       <div className="min-w-0 flex-1">
-        <p className="line-clamp-1 break-words text-sm font-medium leading-snug">
+        <p className={presentation === "grid" ? "break-words text-base font-semibold leading-snug" : "line-clamp-1 break-words text-sm font-medium leading-snug"}>
           {item.name}
         </p>
         {meta ? (
-          <p className="truncate text-xs text-muted-foreground">{meta}</p>
+          <p className={presentation === "grid" ? "mt-1 break-words text-sm text-muted-foreground" : "truncate text-xs text-muted-foreground"} title={meta}>{meta}</p>
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        <div className="hidden flex-col items-end gap-1 xs:flex sm:flex">
+        <div className={presentation === "grid" ? "flex flex-wrap items-center gap-1" : "hidden flex-col items-end gap-1 xs:flex sm:flex"}>
           <StatusBadge status={item.status} />
           <DispositionBadge disposition={item.disposition} />
         </div>
@@ -666,9 +672,8 @@ export function InventoryTable({
       ),
     [dispositionFilteredItems, ownerFilter, savedFilter, search],
   );
-  // Apply the chosen sort preset. cardOnly DataTable shows no header-sort
-  // affordance, so this manual sort is the effective order (tanstack `sorting`
-  // stays empty here).
+  // Preset order is shared by Table/List/Grid. Header sorts can refine it;
+  // changing presentation never resets either sort or the current query.
   const sortedItems = useMemo(() => {
     const compare = compareBy(sortField);
     return [...filteredItems].sort((a, b) =>
@@ -1423,6 +1428,10 @@ export function InventoryTable({
                 }}
                 getRowOpenLabel={(item) => `Open ${item.name} details`}
                 ariaLabel="Inventory records table"
+                preferenceKey="items"
+                showColumnControl={false}
+                unfilteredCount={totalItemCount}
+                onClearFilters={clearBrowseFilters}
                 enableRowSelection
                 loading={Boolean(loadingItems)}
                 sorting={sorting}
@@ -1433,9 +1442,9 @@ export function InventoryTable({
                 onColumnVisibilityChange={setColumnVisibility}
                 rowSelection={rowSelection}
                 onRowSelectionChange={setRowSelection}
-                cardOnly
-                renderMobileCard={({ row, selected, onSelectedChange }) => (
+                renderMobileCard={({ row, selected, onSelectedChange, view }) => (
                   <InventoryItemCard
+                    presentation={view}
                     item={row}
                     selected={selected}
                     onSelectedChange={onSelectedChange}

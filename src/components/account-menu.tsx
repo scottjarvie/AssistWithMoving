@@ -20,7 +20,7 @@ import { useQuery } from "convex/react";
 
 import { api } from "../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
-import { DisplayPreferencePanel } from "@/components/display-preferences";
+import { DisplayPreferenceMenu } from "@/components/display-preferences";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -156,7 +156,7 @@ function EnabledAccountMenu() {
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />
-        <div className="px-2 py-3"><DisplayPreferencePanel includeNavigation /></div>
+        <DisplayPreferenceMenu />
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"

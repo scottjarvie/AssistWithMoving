@@ -46,7 +46,7 @@ const operationSymbols: Record<string, MovingSymbolName> = { Summary: "note", Co
 const operationDescriptions: Record<string, string> = { Summary: "The move at a glance", Configure: "Places, people and details", "Load Plan": "Fit units into transport", Plan: "Arrange belongings in rooms", "Move Day": "Check each handoff", Packets: "Evidence and documents", Queue: "Work with your AI" };
 
 export function MoveContents({ moveId }: { moveId: string }) {
-  return <section aria-label="Move contents" className="lg:hidden">
+  return <section aria-label="Move contents" className="moving-phone-contents lg:hidden">
     <h2 className="mb-3 text-sm font-semibold">Contents</h2>
     <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-y border-border py-2">
       {OPERATION_LINKS.map(link => <Link key={link.label} href={`/app/moves/${encodeURIComponent(moveId)}${link.segment ? `/${link.segment}` : ""}`} className="flex min-h-11 items-center gap-2 py-2 text-sm">
@@ -57,7 +57,7 @@ export function MoveContents({ moveId }: { moveId: string }) {
   </section>;
 }
 
-export function MoveOperationsNav() {
+export function MoveOperationsNav({ stickyOnPhone = true }: { stickyOnPhone?: boolean } = {}) {
   const workspace = useOptionalMoveWorkspace();
   const pathname = usePathname() ?? "";
   const moveId = workspace?.moveId ?? null;
@@ -99,7 +99,7 @@ export function MoveOperationsNav() {
   return (
     <nav
       aria-label="Move operations"
-      className="moving-operation-strip sticky top-(--workspace-navigation-offset) z-20 flex min-w-0 items-start gap-2 border-y border-border bg-background py-1"
+      className={cn("moving-operation-strip top-(--workspace-navigation-offset) z-20 flex min-w-0 items-start gap-2 border-y border-border bg-background py-1 sm:sticky", stickyOnPhone && "sticky")}
     >
       <div className="moving-section-strip flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {OPERATION_LINKS.map(renderLink)}

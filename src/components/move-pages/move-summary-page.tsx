@@ -208,7 +208,7 @@ export function MoveSummaryPage() {
       <MoveOperationsNav />
 
       <div className="moving-image-slot overflow-hidden rounded-md border border-border">
-        <MoveIllustration className="mx-auto h-32 w-auto sm:h-40" />
+        <MoveIllustration decorative className="mx-auto h-32 w-auto sm:h-40" />
       </div>
 
       {/* The answer first: stage and when, in plain words (MOVE wakeup). */}

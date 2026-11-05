@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DisplayPreferenceManager, DisplayPreferencePanel } from "@/components/display-preferences";
+import { DisplayPreferenceMenu } from "@/components/display-preferences";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import userEvent from "@testing-library/user-event";
 import { DISPLAY_PREFERENCES_KEY, parseDisplayPreferences } from "@/lib/display-preferences";
 
 describe("Moving display preferences", () => {
@@ -59,5 +62,36 @@ describe("Moving display preferences", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Light" }));
     await waitFor(() => expect(document.documentElement).not.toHaveClass("dark"));
     denied.mockRestore();
+  });
+
+  it("reaches account appearance controls using menu keyboard navigation", async () => {
+    const user = userEvent.setup();
+    render(<><DisplayPreferenceManager /><DropdownMenu><DropdownMenuTrigger>Account</DropdownMenuTrigger><DropdownMenuContent><DisplayPreferenceMenu /></DropdownMenuContent></DropdownMenu></>);
+    const account = screen.getByRole("button", { name: "Account" });
+    account.focus();
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(screen.getByRole("menuitemradio", { name: "System" })).toHaveFocus());
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
+    expect(screen.getByRole("menuitemradio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("prints with light styling, restores the chosen theme, and updates phone browser chrome", async () => {
+    const meta = document.createElement("meta");
+    meta.name = "theme-color";
+    document.head.append(meta);
+    try {
+      render(<><DisplayPreferenceManager /><DisplayPreferencePanel /></>);
+      fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
+      await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
+      expect(meta.content).toBe("#191814");
+      fireEvent(window, new Event("beforeprint"));
+      expect(document.documentElement).not.toHaveClass("dark");
+      expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
+      fireEvent(window, new Event("afterprint"));
+      expect(document.documentElement).toHaveClass("dark");
+      expect(meta.content).toBe("#191814");
+    } finally { meta.remove(); }
   });
 });

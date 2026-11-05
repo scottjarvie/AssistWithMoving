@@ -57,10 +57,10 @@ export function AiReviewWorkspacePage() {
         title="AI suggestions"
         description="The optional deeper review — approve or reject AI suggestions and run text/photo intake. Day-to-day, your captures live on the move's Queue."
       />
-      <MoveOperationsNav />
+      <MoveOperationsNav stickyOnPhone={false} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList sticky tabs={aiReviewTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky="below-operations" tabs={aiReviewTabs} activeValue={activeTab} />
 
         <TabsContent value="queue">
           <AiReviewQueue householdId={householdId} moveId={moveId} />

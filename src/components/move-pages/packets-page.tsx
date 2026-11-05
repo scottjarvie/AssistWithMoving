@@ -55,10 +55,10 @@ export function PacketsWorkspacePage() {
         title="Packets"
         description="Scoped documentation for each recipient — movers, employers, insurers, and your own full record — with privacy defaults applied."
       />
-      <MoveOperationsNav />
+      <MoveOperationsNav stickyOnPhone={false} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList sticky tabs={packetTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky="below-operations" tabs={packetTabs} activeValue={activeTab} />
 
         <TabsContent value="builder">
           {documentationPacketsEnabled ? (

@@ -17,16 +17,18 @@ type MoveWorkspaceTab = {
   icon?: MovingSymbolName;
 };
 
-function sectionIcon(value: string): MovingSymbolName {
-  if (/transport|load|trip|resource/.test(value)) return "truck";
-  if (/start|end|space|layout|board/.test(value)) return "plan";
-  if (/people|household|participant|contact/.test(value)) return "people";
-  if (/queue|review|job/.test(value)) return "queue";
-  if (/ai|suggest/.test(value)) return "ai";
-  if (/item|box|unit|inventory/.test(value)) return "box";
-  if (/default|detail|config/.test(value)) return "settings";
-  return "note";
-}
+const sectionIcons: Record<string, MovingSymbolName> = {
+  transport: "truck", trips: "truck", resources: "truck", load: "truck",
+  start: "plan", end: "plan", spaces: "plan", layout: "plan", board: "plan",
+  people: "people", household: "people", participants: "people", contacts: "people",
+  queue: "queue", review: "queue", jobs: "queue",
+  ai: "ai", suggestions: "ai", "ai-suggestions": "ai",
+  items: "box", boxes: "box", units: "box", inventory: "box",
+  defaults: "settings", details: "settings", configure: "settings",
+  claims: "source", evidence: "source", coverage: "source",
+  upload: "camera", photos: "camera", overview: "note",
+};
+function sectionIcon(value: string): MovingSymbolName { return sectionIcons[value] ?? "note"; }
 
 export function MoveWorkspaceTabList({
   tabs,
@@ -37,7 +39,7 @@ export function MoveWorkspaceTabList({
   tabs: MoveWorkspaceTab[];
   activeValue?: string;
   ariaLabel?: string;
-  sticky?: boolean;
+  sticky?: boolean | "below-operations";
 }) {
   const activeTab = tabs.find((tab) => tab.value === activeValue);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
@@ -45,7 +47,8 @@ export function MoveWorkspaceTabList({
   const [contentsOpen, setContentsOpen] = useState(false);
 
   return (
-    <div className={sticky ? "sticky top-[calc(var(--workspace-navigation-offset,4rem)+3.25rem)] z-10 space-y-2 bg-background pb-2 sm:top-[calc(var(--workspace-navigation-offset,4rem)+2.75rem)]" : "space-y-2"} data-moving-sections>
+    <>
+    <div className={sticky ? `sticky top-(--workspace-navigation-offset) z-10 bg-background pb-2 ${sticky === "below-operations" ? "sm:top-[calc(var(--workspace-navigation-offset,4rem)+2.75rem)]" : ""}` : undefined} data-moving-sections>
       <div className="flex min-w-0 items-start gap-2 border-b border-border bg-background py-1">
         <div className="moving-section-strip min-w-0 flex-1 overflow-x-auto pb-1">
         <TabsList variant="line" className="h-11! min-w-max justify-start sm:h-9!" aria-label={ariaLabel}>
@@ -100,9 +103,10 @@ export function MoveWorkspaceTabList({
           </PopoverContent>
         </Popover>
       </div>
+    </div>
       {activeTab?.description ? (
         <p className="text-sm text-muted-foreground">{activeTab.description}</p>
       ) : null}
-    </div>
+    </>
   );
 }

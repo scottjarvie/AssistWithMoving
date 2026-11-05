@@ -4,6 +4,7 @@ import { useEffect, useId, useSyncExternalStore } from "react";
 import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { DEFAULT_DISPLAY_PREFERENCES, DISPLAY_PREFERENCES_KEY, parseDisplayPreferences, type DisplayPreferences as Preferences } from "@/lib/display-preferences";
 
 let memory = DEFAULT_DISPLAY_PREFERENCES;
@@ -42,18 +43,57 @@ export function DisplayPreferenceManager() {
   const preferences = usePreferences();
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
+    let printing = false;
     const apply = () => {
-      document.documentElement.classList.toggle("dark", preferences.appearance === "dark" || (preferences.appearance === "system" && media.matches));
-      document.documentElement.dataset.navigation = preferences.navigation;
+      // The hydration snapshot is System/Side; consult the initialized store so
+      // the first effect never overwrites a saved bootstrap choice.
+      const current = snapshot();
+      const dark = !printing && (current.appearance === "dark" || (current.appearance === "system" && media.matches));
+      document.documentElement.classList.toggle("dark", dark);
+      document.documentElement.dataset.navigation = current.navigation;
+      document.querySelectorAll('meta[name="theme-color"]').forEach(meta => meta.setAttribute("content", dark ? "#191814" : "#f6f2e9"));
     };
+    const beforePrint = () => { printing = true; apply(); };
+    const afterPrint = () => { printing = false; apply(); };
     apply();
     media.addEventListener("change", apply);
-    return () => media.removeEventListener("change", apply);
+    window.addEventListener("beforeprint", beforePrint);
+    window.addEventListener("afterprint", afterPrint);
+    return () => {
+      media.removeEventListener("change", apply);
+      window.removeEventListener("beforeprint", beforePrint);
+      window.removeEventListener("afterprint", afterPrint);
+    };
   }, [preferences]);
   return null;
 }
 
 const appearances = [{ value: "system", label: "System", icon: "system" }, { value: "light", label: "Light", icon: "sun" }, { value: "dark", label: "Dark", icon: "moon" }] as const;
+
+// Menu controls participate in Radix's roving focus collection. Native radios
+// belong in the standalone popover; Radix menus intentionally prevent Tab.
+export function DisplayPreferenceMenu() {
+  const preferences = usePreferences();
+  return <>
+    <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+    <DropdownMenuRadioGroup aria-label="Appearance" value={preferences.appearance} onValueChange={value => {
+      if (value === "system" || value === "light" || value === "dark") setPreference({ appearance: value });
+    }}>
+      {appearances.map(option => <DropdownMenuRadioItem key={option.value} value={option.value} onSelect={event => event.preventDefault()} className="min-h-11">
+        <MovingSymbol name={option.icon} className="size-4" />{option.label}
+      </DropdownMenuRadioItem>)}
+    </DropdownMenuRadioGroup>
+    <div className="hidden lg:block">
+      <DropdownMenuLabel>Navigation</DropdownMenuLabel>
+      <DropdownMenuRadioGroup aria-label="Navigation" value={preferences.navigation} onValueChange={value => {
+        if (value === "side" || value === "top") setPreference({ navigation: value });
+      }}>
+        <DropdownMenuRadioItem value="side" className="min-h-11" onSelect={event => event.preventDefault()}>Side</DropdownMenuRadioItem>
+        <DropdownMenuRadioItem value="top" className="min-h-11" onSelect={event => event.preventDefault()}>Top</DropdownMenuRadioItem>
+      </DropdownMenuRadioGroup>
+    </div>
+  </>;
+}
 
 export function DisplayPreferencePanel({ includeNavigation = false }: { includeNavigation?: boolean }) {
   const preferences = usePreferences();

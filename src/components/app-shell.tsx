@@ -55,6 +55,7 @@ export function AppShell({
 
       <div className="workspace-top-navigation sticky top-16 z-20 hidden h-12 items-center border-b border-border bg-sidebar px-6">
         <WorkspaceNav variant="top" />
+        {workspaceEnabled ? <div className="ml-auto w-20 shrink-0"><MobileCaptureAction variant="sidebar" /></div> : null}
       </div>
 
       {/* Desktop left sidebar — fixed below the header, hidden on phone/tablet. */}
@@ -79,7 +80,7 @@ export function AppShell({
       {/* Mobile/tablet bottom bar — hidden on desktop (the sidebar takes over).
           Background spans full width; the 5 tabs + "+" add are centered to a
           comfortable width. WorkspaceNav supplies the <nav> landmark. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      <div className="workspace-mobile-navigation fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-xl items-stretch">
           <WorkspaceNav variant="mobile" />
           {workspaceEnabled ? <MobileCaptureAction /> : null}

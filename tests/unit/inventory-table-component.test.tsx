@@ -111,6 +111,7 @@ import { InventoryTable } from "@/components/inventory-table";
 
 describe("InventoryTable", () => {
   beforeEach(() => {
+    window.localStorage.removeItem("assistwithmoving.collection.items.v1");
     window.history.replaceState(null, "", "/app/moves/move_123/inventory");
     mockItems.rows = [
       inventoryItem("item_1", "Walnut media console", {
@@ -171,21 +172,20 @@ describe("InventoryTable", () => {
     expect(screen.getByLabelText("Search inventory")).toBeInTheDocument();
     expect(screen.getByText("Columns")).toBeInTheDocument();
 
-    // Inventory deliberately uses the compact record cards at every width. The
-    // Sort menu above the records is the only sorting affordance, so a hidden
-    // duplicate desktop table must not remain mounted.
+    // The decided collection pattern opens with one comparison table. List and
+    // Grid remain available without mounting hidden duplicate interaction trees.
     expect(screen.getByText("Inventory records")).toBeInTheDocument();
-    expect(screen.getByRole("list")).toBeInTheDocument();
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Sort by Item" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Sort by Item" }),
+    ).toBeInTheDocument();
 
     // Records now render as compact, tappable rows (the whole row opens the
     // detail sheet, where editing lives). The detail-heavy columns/indicators
     // moved off the row to keep it short.
     expect(
-      screen.getByRole("button", { name: "Open Walnut media console" }),
+      screen.getByRole("button", { name: "Open Walnut media console details" }),
     ).toBeInTheDocument();
     expect(
       screen.getAllByText("Walnut media console").length,
@@ -330,8 +330,8 @@ describe("InventoryTable", () => {
   ])(
     "mounts one paginated interaction tree for 100 marked-synthetic records at %s width",
     (_viewport, width) => {
-      // cardOnly is intentionally viewport-independent. Repeating the lock at
-      // representative widths proves resize never swaps or duplicates trees.
+      // Presentation is a user choice, not a viewport remount. Table opens
+      // first at each width; the person can choose List or Grid explicitly.
       setViewportWidth(width);
       mockItems.rows = Array.from({ length: 100 }, (_, index) =>
         inventoryItem(
@@ -353,8 +353,8 @@ describe("InventoryTable", () => {
         />,
       );
 
-      expect(screen.getAllByRole("list")).toHaveLength(1);
-      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByRole("list")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("table")).toHaveLength(1);
       // Ten mounted rows is the deliberate dense-list performance boundary.
       expect(
         screen.getAllByRole("button", { name: /^Open \[synthetic\]/ }),
@@ -380,6 +380,7 @@ describe("InventoryTable", () => {
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: "List" }));
     const recordList = screen.getByRole("list");
     const firstCard = screen.getByRole("button", {
       name: "Open [synthetic] Continuity item 1",
@@ -421,7 +422,7 @@ describe("InventoryTable", () => {
     );
 
     const card = screen.getByRole("button", {
-      name: "Open Walnut media console",
+      name: "Open Walnut media console details",
     });
     card.focus();
     await user.keyboard("{Enter}");
@@ -452,8 +453,8 @@ describe("InventoryTable", () => {
     );
     const serverHtml = renderToString(inventory);
 
-    expect(serverHtml).toContain('role="list"');
-    expect(serverHtml).not.toContain("<table");
+    expect(serverHtml).not.toContain('role="list"');
+    expect(serverHtml).toContain("<table");
 
     const container = document.createElement("div");
     container.innerHTML = serverHtml;
@@ -464,8 +465,8 @@ describe("InventoryTable", () => {
 
     const hydrated = render(inventory, { container, hydrate: true });
 
-    expect(within(container).getAllByRole("list")).toHaveLength(1);
-    expect(within(container).queryByRole("table")).not.toBeInTheDocument();
+    expect(within(container).getAllByRole("table")).toHaveLength(1);
+    expect(within(container).queryByRole("list")).not.toBeInTheDocument();
     expect(
       consoleError.mock.calls.filter(([message]) =>
         /hydration|did not match|server rendered/i.test(String(message)),

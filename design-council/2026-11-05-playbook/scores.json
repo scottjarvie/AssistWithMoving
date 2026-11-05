@@ -4,6 +4,69 @@
   "assumedTarget": "Each judge overall >= 8/10; zero unresolved preservation, capability, access or accessibility blockers",
   "assumedRoundCap": 3,
   "judges": [{"provider": "codex", "model": "gpt-6.1-sol", "effort": "high"}, {"provider": "claudeAgent", "model": "claude-opus-5-5", "effort": "high", "finalTasteAuthorityAmongAIs": true}],
-  "reviews": [],
+  "reviews": [
+    {
+      "exactHead": "1ec0fdfcf140efa679ef78d2bfb8b9bfdffed5a5",
+      "reviewerModel": "gpt-6.1-sol",
+      "blindLabel": "P",
+      "evidenceType": "source-only",
+      "rubric": {
+        "tokenArchitecture": 8,
+        "preferenceStorageAndSynchronization": 8,
+        "capabilityRetention": 6,
+        "keyboardAccessibility": 6,
+        "sectionNavigationImplementation": 8,
+        "brandAndSvgImplementation": 9,
+        "galleryEvidenceIntegrity": 8,
+        "visualPolish": null,
+        "responsiveRendering": null,
+        "printRendering": null,
+        "finalTaste": null
+      },
+      "overallSourceScore": 7,
+      "visualVerdict": "unverified",
+      "disposition": "request_changes_foundation_only",
+      "authorModel": "gpt-6.1-sol",
+      "crossModelCodeReview": false,
+      "reviewRecord": "reviews/01-P-sol.md"
+    },
+    {
+      "exactHead": "1ec0fdfcf140efa679ef78d2bfb8b9bfdffed5a5",
+      "implementationBase": "53dba5d47d8d700905aecfe1a2e559cb64cb1b73",
+      "reviewerModel": "claude-opus-5-5 (Claude Opus 5.5)",
+      "blindLabel": "P",
+      "evidenceType": "source-only",
+      "rubric": {
+        "capabilityRetention": 6,
+        "playbookSkeletonConformance": 7,
+        "sectionNavigationAndContents": 7,
+        "accessibilityAndFocus": 6,
+        "preferenceStorageAndSSR": 8,
+        "responsivePhoneRisk": 5,
+        "printBehavior": 5,
+        "iconAndMetadataSemantics": 5,
+        "tokenSystemAndDarkModeSafety": 8,
+        "galleryGeneratorAndHtml": 8,
+        "visualHierarchy": null,
+        "brandFlairAndTaste": null,
+        "renderedContrastOnCompositedSurfaces": null,
+        "phoneAndDesktopRenderedLayout": null
+      },
+      "overallSourceScore": 6.5,
+      "visualVerdict": "unverified",
+      "disposition": "changes-requested",
+      "blockingFindings": [
+        "High: Top navigation drops the desktop Add/capture action (app-shell.tsx:56-67)",
+        "Medium: sticky tab offset gap on pages without MoveOperationsNav (move-workspace-tab-list.tsx:48)",
+        "Medium: stacked sticky chrome on phone (move-workspace-tab-list.tsx:48,103; move-operations-nav.tsx:101)",
+        "Medium: false AI/queue/truck section icons from substring regex (move-workspace-tab-list.tsx:20-29)",
+        "Medium: preference radios inside Radix DropdownMenu are keyboard-unreachable (account-menu.tsx:159)"
+      ],
+      "notes": "Bounded foundation tranche only; every-page work intentionally in progress and not judged. No browser, Next, or full-suite checks were run by this reviewer.",
+      "authorModel": "gpt-6.1-sol",
+      "crossModelCodeReview": true,
+      "reviewRecord": "reviews/01-P-opus.md"
+    }
+  ],
   "scottPicks": []
 }

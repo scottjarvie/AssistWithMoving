@@ -14,6 +14,17 @@ function Sections() {
 }
 
 describe("section contents fallback", () => {
+  it("keeps section meaning exact and the explanatory prose outside sticky chrome", () => {
+    render(<Tabs defaultValue="details"><MoveWorkspaceTabList sticky="below-operations" activeValue="details" tabs={[
+      { value: "details", label: "Details", description: "Actual move facts" },
+      { value: "claims", label: "Claims" }, { value: "upload", label: "Add photos" },
+    ]} /></Tabs>);
+    expect(screen.getByRole("tab", { name: "Details" }).querySelector('[data-symbol="settings"]')).not.toBeNull();
+    expect(screen.getByRole("tab", { name: "Claims" }).querySelector('[data-symbol="source"]')).not.toBeNull();
+    expect(screen.getByRole("tab", { name: "Add photos" }).querySelector('[data-symbol="camera"]')).not.toBeNull();
+    expect(document.querySelector('[data-symbol="ai"]')).toBeNull();
+    expect(screen.getByText("Actual move facts").closest("[data-moving-sections]")).toBeNull();
+  });
   it("opens any section without scrolling the tab strip and creates no duplicate tab IDs", async () => {
     const user = userEvent.setup();
     render(<Sections />);

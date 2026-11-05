@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -36,6 +36,12 @@ vi.mock("@/components/workspace-nav", () => ({
 import { AppShell } from "@/components/app-shell";
 
 describe("AppShell responsive workspace header", () => {
+  it("keeps Add available in desktop Top navigation", () => {
+    const { container } = render(<AppShell>Workspace content</AppShell>);
+    const topNavigation = container.querySelector(".workspace-top-navigation");
+    expect(topNavigation).not.toBeNull();
+    expect(within(topNavigation as HTMLElement).getByRole("button", { name: "Add" })).toBeInTheDocument();
+  });
   it("reserves mobile width for the current move without losing the named home link", () => {
     render(<AppShell>Workspace content</AppShell>);
 

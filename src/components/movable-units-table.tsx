@@ -24,6 +24,8 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MoveIllustration } from "@/components/moving-symbol";
+import type { CollectionView } from "@/components/use-collection-presentation";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DataTable,
@@ -824,6 +826,9 @@ export function MovableUnitsTable({
             : `Open ${unit.name} details`
         }
         ariaLabel="Movable units"
+        preferenceKey="movable-units"
+        unfilteredCount={summary.total}
+        onClearFilters={() => { setSearch(""); setStatFilter(null); }}
         enableRowSelection
         loading={loading}
         pageSize={25}
@@ -831,8 +836,9 @@ export function MovableUnitsTable({
         onSortingChange={setSorting}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
-        renderMobileCard={({ row, selected, onSelectedChange, onOpen }) => (
+        renderMobileCard={({ row, selected, onSelectedChange, onOpen, view }) => (
           <MovableUnitCard
+            presentation={view}
             unit={row}
             selected={selected}
             onSelectedChange={onSelectedChange}
@@ -1140,10 +1146,12 @@ function UnitThumbnail({
   householdId,
   moveId,
   photoIds = [],
+  large = false,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   photoIds?: readonly Id<"itemPhotos">[];
+  large?: boolean;
 }) {
   const coverPhotoId = photoIds[0];
   const getDisplayUrl = useAction(api.photos.getDisplayUrl);
@@ -1167,6 +1175,10 @@ function UnitThumbnail({
     };
   }, [getDisplayUrl, householdId, moveId, coverPhotoId]);
 
+  if (!coverPhotoId) return <div aria-hidden="true" className={large ? "aspect-[4/3] w-full overflow-hidden rounded-md border border-border bg-muted" : "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted"}>
+    <MoveIllustration decorative kind="box" className="size-full" />
+  </div>;
+
   return (
     <>
       <button
@@ -1178,7 +1190,7 @@ function UnitThumbnail({
           event.stopPropagation();
           setLightboxOpen(true);
         }}
-        className="size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted disabled:cursor-default"
+        className={large ? "aspect-[4/3] w-full shrink-0 overflow-hidden rounded-md border border-border bg-muted disabled:cursor-default" : "size-10 shrink-0 overflow-hidden rounded-md border border-border bg-muted disabled:cursor-default"}
       >
         {coverPhotoId && url ? (
           // B2/edge delivery URLs are short-lived and provider-controlled, so
@@ -1213,6 +1225,7 @@ function MovableUnitCard({
   householdId,
   moveId,
   photoIds,
+  presentation = "list",
 }: {
   unit: MovableUnit;
   selected: boolean;
@@ -1222,6 +1235,7 @@ function MovableUnitCard({
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   photoIds?: readonly Id<"itemPhotos">[];
+  presentation?: Exclude<CollectionView, "table">;
 }) {
   const followUps = visibleFollowUps(unit);
   const knownFacts = [
@@ -1259,11 +1273,12 @@ function MovableUnitCard({
           "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring",
       )}
     >
-      <div className="flex min-w-0 items-start gap-3">
+      <div className={cn("relative flex min-w-0 items-start gap-3", presentation === "grid" && "flex-col")}>
         <UnitThumbnail
           householdId={householdId}
           moveId={moveId}
           photoIds={photoIds}
+          large={presentation === "grid"}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1280,7 +1295,7 @@ function MovableUnitCard({
         </div>
         {/* Big, comfortable selection target. */}
         <label
-          className="-m-1 flex min-h-11 min-w-11 items-center justify-center p-1"
+          className={presentation === "grid" ? "absolute right-1 top-1 flex min-h-11 min-w-11 items-center justify-center rounded-md border border-border bg-card p-1" : "-m-1 flex min-h-11 min-w-11 items-center justify-center p-1"}
           aria-label={`Select ${unit.name}`}
         >
           <Checkbox

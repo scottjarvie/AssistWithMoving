@@ -50,10 +50,10 @@ export function LoadPlanWorkspacePage() {
         title="Load Plan"
         description="Trucks, trailers, movers, and helpers — what goes in each one, zone by zone, with capacity rollups."
       />
-      <MoveOperationsNav />
+      <MoveOperationsNav stickyOnPhone={false} />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-        <MoveWorkspaceTabList sticky tabs={loadPlanTabs} activeValue={activeTab} />
+        <MoveWorkspaceTabList sticky="below-operations" tabs={loadPlanTabs} activeValue={activeTab} />
 
         <TabsContent value="board">
           <LoadPlannerBoard householdId={householdId} moveId={moveId} />

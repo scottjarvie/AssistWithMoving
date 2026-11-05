@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export type MovingSymbolName = "sun" | "moon" | "system" | "contents" | "box" | "route" | "plan" | "truck" | "calendar" | "queue" | "settings" | "note" | "people" | "source" | "person" | "ai";
+export type MovingSymbolName = "sun" | "moon" | "system" | "contents" | "box" | "route" | "plan" | "truck" | "calendar" | "queue" | "settings" | "note" | "people" | "source" | "person" | "ai" | "camera" | "table" | "list" | "grid" | "sort" | "density" | "columns";
 
 // Drawn for Moving: square-ended labels, a folded box and a routed line.
 // All marks inherit ink from their semantic role; no embedded raster assets.
@@ -15,7 +15,14 @@ const strokes: Record<MovingSymbolName, React.ReactNode> = {
   truck: <><path d="M2 5h12v12H2Zm12 4h4l4 5v3h-8M18 9v5h4" /><circle cx="6" cy="18" r="2" /><circle cx="18" cy="18" r="2" /></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="1" /><path d="M7 3v4m10-4v4M3 10h18m-14 5h3m4 0h3m-10 3h3" /></>,
   queue: <><path d="M4 4h16v16H4ZM4 13h5l2 3h2l2-3h5M8 8h8" /></>,
-  settings: <><path d="M3 6h18M3 12h18M3 18h18" /><rect x="7" y="4" width="3" height="4" fill="var(--background)" /><rect x="15" y="10" width="3" height="4" fill="var(--background)" /><rect x="6" y="16" width="3" height="4" fill="var(--background)" /></>,
+  settings: <><path d="M3 6h18M3 12h18M3 18h18" /><rect x="7" y="4" width="3" height="4" /><rect x="15" y="10" width="3" height="4" /><rect x="6" y="16" width="3" height="4" /></>,
+  camera: <><path d="M3 7h4l2-3h6l2 3h4v14H3Z" /><circle cx="12" cy="13" r="4" /><path d="M18 10h1" /></>,
+  table: <><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 9h18M3 14h18M9 4v16m6-16v16" /></>,
+  list: <><path d="M8 5h13M8 12h13M8 19h13M3 5h1m-1 7h1m-1 7h1" /></>,
+  grid: <><path d="M3 3h7v7H3Zm11 0h7v7h-7ZM3 14h7v7H3Zm11 0h7v7h-7Z" /></>,
+  sort: <><path d="M7 3v18m-4-4 4 4 4-4M14 5h7m-7 6h5m-5 6h3" /></>,
+  density: <><path d="M3 5h18M3 10h18M3 15h18M3 20h18" /></>,
+  columns: <><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M9 4v16m6-16v16" /></>,
   note: <><path d="M5 3h11l4 4v14H5ZM16 3v5h4M8 12h9m-9 4h7" /></>,
   people: <><circle cx="9" cy="7" r="3" /><path d="M3 21v-4a6 6 0 0 1 12 0v4M16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5v2" /></>,
   source: <><path d="M4 4h7v7H4Zm9 9h7v7h-7ZM11 7h6v6M7 11v6h6" /></>,
@@ -24,12 +31,12 @@ const strokes: Record<MovingSymbolName, React.ReactNode> = {
 };
 
 export function MovingSymbol({ name, ...props }: SVGProps<SVGSVGElement> & { name: MovingSymbolName }) {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{strokes[name]}</svg>;
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-symbol={name} {...props}>{strokes[name]}</svg>;
 }
 
-export function MoveIllustration({ kind = "route", className }: { kind?: "route" | "box" | "room" | "truck"; className?: string }) {
+export function MoveIllustration({ kind = "route", className, decorative = false }: { kind?: "route" | "box" | "room" | "truck"; className?: string; decorative?: boolean }) {
   return (
-    <svg viewBox="0 0 280 160" className={className} role="img" aria-label={`${kind === "route" ? "Home-to-home move" : kind === "room" ? "Room plan" : kind === "truck" ? "Moving truck" : "Packing box"} illustration`} fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 280 160" className={className} role={decorative ? undefined : "img"} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : `${kind === "route" ? "Home-to-home move" : kind === "room" ? "Room plan" : kind === "truck" ? "Moving truck" : "Packing box"} illustration`} fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 138h240M20 22h240M30 16v12m220-12v12" stroke="var(--border)" />
       {kind === "route" ? <>
         <path d="M26 90 65 54l39 36M36 82v49h58V82M59 131v-28h16v28" stroke="var(--primary)" />
