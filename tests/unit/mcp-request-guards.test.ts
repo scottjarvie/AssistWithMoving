@@ -509,7 +509,8 @@ describe("R1 metadata validation has no rejected-client database effects", () =>
         runMutation: (ref: any, args: any) => f.t.mutation(ref, args),
         runAction: async () => valid,
       } as any;
-      verifyMock.mockResolvedValue(verifiedToken(clientId));
+      const preexisting = verifiedToken(clientId);
+      verifyMock.mockResolvedValue({ ...preexisting, payload: { ...preexisting.payload, iat: 1, auth_time: 1 } });
       const { createLegacyGrantGate } = await import("../../convex/http");
       const { handleMcpRequestForTests, STATELESS_MOVING_TOOL_NAMES } = await loadRoute();
       const canonical = async () => {
