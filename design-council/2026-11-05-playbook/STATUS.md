@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Round 02 council scores are recorded; item dossier/stream and review corrections are being verified for the next round.
+[Open newest-first gallery](gallery.html) · Round 03 adds seven corrected Home/state captures; item dossier and review corrections pass 37 tests and await exact-head council review.
 
 # Moving design council status
 
@@ -19,6 +19,8 @@ Run `2026-11-05-playbook`. Local-only branch `design/assistwithmoving-council-20
 - Candidate R source scores: Sol 8.4, Opus 8.2; bounded Home image scores: Sol 8.8, Opus 7.9. Reports preserve their different dispositions. Corrections cover accessible sorting/row groups, phone reverse sorts, canonical labels/counts, focus and canvas/provenance. Old images remain historical evidence; corrected state captures are next.
 - Item details now open as a dossier + one history stream, with every previous editor/action retained through compact actions and seven sections. Real fact-source navigation and truthful bounded-history loading are implemented. Verification and different-model review are pending.
 - The combined item/Home/collection pass is verified by 37 tests across five suites, full typecheck and focused source/test/tool lint. Rendered item-dialog and next exact-head different-model review remain pending.
+- Round 03 captures the actual app canvas and committed source, with three of four move records, a long title, 320/390px phones, both themes and empty/loading states. All seven previews reported no console messages. The item dossier still requires its own rendered proof; these images only support Home.
+- The complete three-round, 15-image gallery was previewed and shown inline. Lossless WebP embeds fit the renderer's size limit; all 11 screenshot embeds were decoded and verified pixel-identical to their retained PNG originals. The heavy slot is released; Music has the next claimed interval.
 
 ## Remaining scope
 

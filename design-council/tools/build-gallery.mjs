@@ -2,15 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
+import os from "node:os";
+import sharp from "sharp";
 import ts from "typescript";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+os.setPriority(0, os.constants.priority.PRIORITY_BELOW_NORMAL);
+sharp.concurrency(1);
 const run = path.join(repo, "design-council/2026-11-05-playbook");
 const escape = value => String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const sourceHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
-const sourceDirty = Boolean(execFileSync("git", ["status", "--porcelain", "--", "src"], { cwd: repo, encoding: "utf8" }).trim());
+const sourceDirty = Boolean(execFileSync("git", ["status", "--porcelain", "--", "src", "design-council/tools"], { cwd: repo, encoding: "utf8" }).trim());
 const css = fs.readFileSync(path.join(repo, "src/app/globals.css"), "utf8");
 const light = css.match(/:root\s*\{([\s\S]*?)\}/)?.[1];
 const dark = css.match(/\.dark\s*\{([\s\S]*?)\}/)?.[1];
@@ -26,6 +30,17 @@ finally { fs.unlinkSync(generatedModule); }
 
 const manifest = JSON.parse(fs.readFileSync(path.join(run, "rounds.json"), "utf8"));
 const rounds = [...manifest.rounds].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+// Preserve canonical PNG proof on disk. Lossless WebP embeds reduce the
+// self-contained gallery's transport size without changing decoded pixels.
+const embeddedScreenshots = new Map();
+for (const round of rounds) if (round.kind !== "foundation") for (const item of round.images) {
+  const file = path.resolve(run, item.path);
+  if (!file.startsWith(run + path.sep) || !/\.(png|jpe?g|webp)$/i.test(file)) throw new Error("Gallery screenshots must be raster files inside this run folder.");
+  if (!embeddedScreenshots.has(file)) {
+    const buffer = await sharp(file).webp({ lossless: true, effort: 5 }).toBuffer();
+    embeddedScreenshots.set(file, `data:image/webp;base64,${buffer.toString("base64")}`);
+  }
+}
 let imageNumber = 0;
 const image = (markup, caption, now = false) => `<figure><button class="art" data-image="${++imageNumber}" aria-label="Open image ${imageNumber}: ${escape(caption)}">${markup}</button><figcaption><b>${imageNumber}</b> · ${escape(caption)} ${now ? '<strong class="now">now</strong>' : ""}</figcaption></figure>`;
 const sections = rounds.map(round => {
@@ -34,8 +49,7 @@ const sections = rounds.map(round => {
     : round.images.map(item => {
       const file = path.resolve(run, item.path);
       if (!file.startsWith(run + path.sep) || !/\.(png|jpe?g|webp)$/i.test(file)) throw new Error("Gallery screenshots must be raster files inside this run folder.");
-      const mime = /\.png$/i.test(file) ? "image/png" : /\.webp$/i.test(file) ? "image/webp" : "image/jpeg";
-      return image(`<img src="data:${mime};base64,${fs.readFileSync(file).toString("base64")}" alt="${escape(item.caption)}" />`, item.caption, item.now);
+      return image(`<img src="${embeddedScreenshots.get(file)}" alt="${escape(item.caption)}" />`, item.caption, item.now);
     }).join("");
   return `<section id="${escape(round.id)}"><header><p class="eyebrow">${escape(round.createdAt)} · ${escape(round.status)}</p><h2>${escape(round.title)}</h2><p>${escape(round.description)}</p></header>${round.kind === "foundation" ? '<div class="swatches"><span style="--swatch:var(--background)">Paper</span><span style="--swatch:var(--primary)">Kraft</span><span style="--swatch:var(--accent)">Attention</span><span style="--swatch:var(--evidence)">Evidence</span><span style="--swatch:var(--foreground)">Ink</span></div>' : ""}<div class="pictures">${pictures}</div></section>`;
 }).join("");
@@ -47,4 +61,4 @@ const html = `<!doctype html><html lang="en" data-theme="light"><head><meta char
 const dialog=document.querySelector('dialog'),art=[...document.querySelectorAll('.art')];let current=0;function show(index){current=(index+art.length)%art.length;document.getElementById('lightbox-image').replaceChildren(art[current].firstElementChild.cloneNode(true));document.getElementById('lightbox-caption').textContent=art[current].parentElement.querySelector('figcaption').textContent;}art.forEach((item,index)=>item.addEventListener('click',()=>{show(index);dialog.showModal()}));document.querySelector('.close').addEventListener('click',()=>dialog.close());document.querySelectorAll('[data-step]').forEach(button=>button.addEventListener('click',()=>show(current+Number(button.dataset.step))));dialog.addEventListener('keydown',event=>{if(event.key==='ArrowLeft')show(current-1);if(event.key==='ArrowRight')show(current+1)});document.querySelectorAll('[data-theme-button]').forEach(button=>button.addEventListener('click',()=>{document.documentElement.dataset.theme=button.dataset.themeButton;document.querySelectorAll('[data-theme-button]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)))}));
 </script></body></html>`;
 fs.writeFileSync(path.join(run, "gallery.html"), html);
-console.log(JSON.stringify({ gallery: "design-council/2026-11-05-playbook/gallery.html", images: imageNumber, rounds: rounds.length, sourceHead, sourceDirty, updated }));
+console.log(JSON.stringify({ gallery: "design-council/2026-11-05-playbook/gallery.html", images: imageNumber, rounds: rounds.length, sourceHead, sourceDirty, updated, characters: html.length }));

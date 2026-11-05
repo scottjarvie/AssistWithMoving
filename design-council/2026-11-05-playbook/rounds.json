@@ -33,6 +33,45 @@
           "caption": "Home · phone · dark · synthetic component evidence"
         }
       ]
+    },
+    {
+      "id": "03-home-coverage",
+      "createdAt": "2026-11-05T12:26:29.965Z",
+      "kind": "screenshots",
+      "title": "03 · Home canvas and state coverage",
+      "status": "Committed component captures · council review pending",
+      "description": "Actual Home component, application CSS and canvas. Four synthetic moves with three shown, a selected long title, 1440px desktop and 390/320px phones, light/dark plus phone empty/loading states. All information and image slots remain. No authenticated shell or live interaction; system font fallback. The prior judged round remains below.",
+      "sourceHead": "29bb94ab9b329cb333efecaa7b6376f108aa76d4",
+      "images": [
+        {
+          "path": "captures/03-home-desktop-light.png",
+          "caption": "Home · desktop · light · synthetic component evidence"
+        },
+        {
+          "path": "captures/03-home-phone-light.png",
+          "caption": "Home · phone · light · synthetic component evidence"
+        },
+        {
+          "path": "captures/03-home-desktop-dark.png",
+          "caption": "Home · desktop · dark · synthetic component evidence"
+        },
+        {
+          "path": "captures/03-home-phone-dark.png",
+          "caption": "Home · phone · dark · synthetic component evidence"
+        },
+        {
+          "path": "captures/03-home-phone-320-light.png",
+          "caption": "Home · phone · 320 · light · synthetic component evidence"
+        },
+        {
+          "path": "captures/03-home-empty-phone-light.png",
+          "caption": "Home · empty · phone · light · synthetic component evidence"
+        },
+        {
+          "path": "captures/03-home-loading-phone-light.png",
+          "caption": "Home · loading · phone · light · synthetic component evidence"
+        }
+      ]
     }
   ]
 }
