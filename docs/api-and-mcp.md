@@ -1910,13 +1910,16 @@ next call even while the access token is still cryptographically valid. The
 current boundary version is `GRANT_BOUNDARY_VERSION` in
 `convex/lib/aiGrants.ts`.
 
-Client ID Metadata Documents are retrieved only after an active product grant
-is found. Retrieval runs in a Node-only internal Convex action: every resolved
+Both OAuth doors validate a required Client ID Metadata Document before
+creating or binding a first-contact grant. Retrieval runs in a Node-only
+internal Convex action: every resolved
 address must be public, the HTTPS connection is pinned to a validated address,
 redirects are refused, and DNS, connection and streaming share a five-second
 deadline. The body is capped at 32 KiB while streaming; its self-ID and digest
-checks still apply. Without a grant, `describe_connection` remains available
-without fetching metadata or presenting its registration method as verified.
+checks still apply. Failed validation creates no grant or binding. After
+validation, the mutation rechecks current grant decisions and refusals
+atomically before first-contact issuance or binding; metadata validation does
+not override a person's saved limits or refusal.
 
 Canonical OAuth tool catalog. This is the exact list in
 `STATELESS_MOVING_TOOL_NAMES` (`convex/httpRoutes/mcp.ts`), with the scope each
@@ -2468,3 +2471,11 @@ Participant limit edits resolve an eligibility witness in its actual current
 household. Person API-key revocation requires the displayed `expectedVersion`
 and advances that revision atomically; rotation also advances the revoked
 source row and creates a distinct key ID, never reusing a prior generation.
+
+Reconnect revisions advance beyond every revision discoverable from the
+complete alias history, including decisions superseded by a later historical
+refusal. Clients must treat revisions as opaque numbers and reload connection
+metadata after reconnecting. Incomplete histories or exhausted positive numeric
+precision use indexed disjoint recovery revisions, preserving the replaced
+original source privately. Move choices exclude archived households; an owner
+editing selected moves uses a retained move as the eligibility witness.

@@ -2175,3 +2175,92 @@ it.each([false, true])("guards person key revocation with its current row revisi
   expect(await t.run(ctx => ctx.db.get(apiKeyId))).toMatchObject({ status: "revoked", version: 3 });
   await expect(owner.mutation(api.apiKeys.revoke, { householdId, apiKeyId, expectedVersion: 2 })).rejects.toThrow(/changed/);
 });
+
+it.each([
+  { clientId: "revision-replay", legacy: false, alias: false },
+  { clientId: "revision-replay", legacy: true, alias: false },
+  { clientId: "https://revision.example/client.json", legacy: false, alias: true },
+  { clientId: "https://revision.example/client.json", legacy: true, alias: true },
+])("never reuses a pre-reconnect revision after a fresh historical refusal: %j", async ({ clientId, legacy, alias }) => {
+  const t = convexTest(schema, modules);
+  const { householdId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const storedId = legacy ? "legacy:" + clientId : clientId;
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: storedId });
+  const first = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  await revokeOwner(owner, { grantId: first._id, expectedVersion: 1 });
+  if (alias) await t.run(async ctx => {
+    const row = (await ctx.db.get(first._id))!;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- preserve a complete synthetic alias without system fields.
+    const { _id, _creationTime, ...fields } = row;
+    await ctx.db.insert("aiGrants", { ...fields, clientId: legacy ? clientId : "legacy:" + clientId, version: 9, status: "active", revokedAt: undefined, revokedByUserId: undefined, revokedReason: undefined });
+  });
+  const reconnect = async () => {
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    return owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "New explicit generation", reconnectGrantId: first._id, expectedHistoryFingerprint: loaded.historyFingerprint, expectedRecoveryFingerprint: loaded.recoveryFingerprint });
+  };
+  await reconnect();
+  const description = await t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId });
+  const reduced = legacy
+    ? await t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: description.version!, scopes: ["moving.context.read"] })
+    : await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: description.version!, scopes: ["moving.context.read"] });
+  const delayedVersion = reduced.version;
+  const historical = (await t.run(ctx => ctx.db.get(first._id)))!;
+  await revokeOwner(owner, { grantId: first._id, expectedVersion: historical.version });
+  expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).grants).toEqual([]);
+  const fresh = await reconnect();
+  for (const result of [await t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId }), await t.query(internal.aiGrants.describeLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } } })]) expect(result.version).toBeGreaterThan(delayedVersion);
+  const current = (await t.run(ctx => ctx.db.get(fresh.grantId)))!;
+  expect(current.scopeChoice).toBe("full");
+  expect(current.expiresAt).toBeUndefined();
+  const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: delayedVersion, action: "revoke" })).rejects.toThrow(/changed/);
+  await expect(t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: delayedVersion, action: "revoke" })).rejects.toThrow(/changed/);
+  expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+});
+
+it("uses indexed disjoint revisions if a complete positive history exhausts numeric precision", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const clientId = "precision-recovery-client";
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
+  const first = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  await t.run(ctx => ctx.db.patch(first._id, { status: "revoked", revokedAt: Date.now(), version: Number.MAX_SAFE_INTEGER }));
+  const reconnect = async () => {
+    const loaded = await owner.query(api.aiGrants.listMine, {});
+    return owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Safe numeric recovery", reconnectGrantId: first._id, expectedHistoryFingerprint: loaded.historyFingerprint, expectedRecoveryFingerprint: loaded.recoveryFingerprint });
+  };
+  expect((await reconnect()).grantId).toBe(first._id);
+  expect((await t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId })).version).toBe(-1);
+  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: Number.MAX_SAFE_INTEGER, action: "revoke" })).rejects.toThrow(/changed/);
+  await revokeOwner(owner, { grantId: first._id, expectedVersion: -1 });
+  await reconnect();
+  expect((await t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId })).version).toBe(-3);
+  expect((await t.run(ctx => ctx.db.query("aiGrants").collect()))).toHaveLength(1);
+  const sources = await owner.query(api.aiGrants.listSourceHistory, {});
+  expect(sources.page.some(row => row.source.version === Number.MAX_SAFE_INTEGER)).toBe(true);
+  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: -1, action: "revoke" })).rejects.toThrow(/changed/);
+});
+
+it("hides choices from an archived original household and widens using an eligible retained household", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const retained = await t.run(async ctx => {
+    const now = Date.now();
+    await ctx.db.insert("moves", { householdId, title: "Unarchived move in archived household", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+    const otherHousehold = await ctx.db.insert("households", { name: "Current household", createdByUserId: userId, ownerUserId: userId, createdAt: now, updatedAt: now });
+    await ctx.db.insert("householdMemberships", { householdId: otherHousehold, userId, role: "owner", status: "active", apiAccessStatus: "enabled", createdAt: now, updatedAt: now });
+    return ctx.db.insert("moves", { householdId: otherHousehold, title: "Current retained move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now });
+  });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "archived-original-client" });
+  const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "archived-original-client", expectedVersion: 1, moveIds: [retained], expiresAt: Date.now() + 600000 });
+  await t.run(ctx => ctx.db.patch(householdId, { archivedAt: Date.now() }));
+  expect(await owner.query(api.aiGrants.listMoveChoices, { householdId })).toEqual({ moves: [], nextCursor: null });
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: grant._id, expectedVersion: 2, eligibilityMoveId: retained, expiryIntent: "none", expiresInDays: null });
+  const changed = (await t.run(ctx => ctx.db.get(grant._id)))!;
+  expect(changed.expiresAt).toBeUndefined();
+  expect(changed.moveIds).toEqual([retained]);
+});

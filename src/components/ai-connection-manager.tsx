@@ -191,7 +191,7 @@ function GrantMovePicker({ grant }: { grant: GrantRow }) {
   return <fieldset disabled={choices.result === undefined} className="space-y-2 rounded border border-border p-3">
     <legend>Moves this connection may access</legend>
     <input type="hidden" name="movesChanged" value={changed ? "yes" : "no"} />
-    <input type="hidden" name="eligibilityMoveId" value={choices.result?.moves[0]?.moveId ?? selected[0] ?? ""} />
+    <input type="hidden" name="eligibilityMoveId" value={(moveScope === "selectedMoves" ? selected[0] ?? choices.result?.moves[0]?.moveId : choices.result?.moves[0]?.moveId ?? selected[0]) ?? ""} />
     {selected.map(id => <input key={id} type="hidden" name="moveIds" value={id} />)}
     <label className="block"><input type="radio" name="moveScope" value="allMoves" checked={moveScope === "allMoves"} onChange={() => { setMoveScope("allMoves"); setChanged(true); }} /> All my moves, including future moves</label>
     <label className="block"><input type="radio" name="moveScope" value="selectedMoves" checked={moveScope === "selectedMoves"} onChange={() => { setMoveScope("selectedMoves"); setChanged(true); }} /> Only the moves checked below</label>
