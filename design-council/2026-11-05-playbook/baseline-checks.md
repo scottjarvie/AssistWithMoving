@@ -24,3 +24,5 @@ Relevant bundled Next.js guidance was consulted under `node_modules/next/dist/do
 ## Portable fixture correction (verification pending)
 
 The historical baseline failure is retained above. To run the same regular-file and canonical-root security assertions on oldwin without privileged file symlinks, the fixture now creates a directory junction on Windows and a directory symlink elsewhere. It rejects the alias itself and a regular child that resolves outside the allowed root; POSIX also keeps the original direct file-symlink assertion. Fixture setup is inside try/finally and cleanup validates the fresh temp path. Application ingress policy is unchanged. The next focused/full run must verify this fixture; no green check is claimed yet.
+
+At design checkpoint 61a0d70, the complete single-worker unit run passed 222 files/1,396 tests in 690.80s. Both historical baseline failures are absent in that executed run. This does not retroactively change the baseline result or establish a current production-build/visual pass.

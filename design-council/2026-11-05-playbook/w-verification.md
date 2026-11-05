@@ -11,3 +11,7 @@ Verified application source tree: 16e320bfdb7f1b234d9215d2470105660e17c471. Veri
 - Changed TS/TSX lint passed with no output or warnings. Both offline build/capture scripts passed Node syntax checks.
 
 Local logs: w-typecheck.log, w-focused-tests.log and w-focused-lint.log (ignored by Git). The offline fixture is not rebuilt or captured at this source; current rendered evidence is still historical. Full suite/build, authenticated responsive/print proof and final taste remain outstanding. The HOST interval was released directly to Languages after every owned check worker exited.
+
+## Full unit checkpoint at 61a0d70
+
+The complete unit suite subsequently passed at unchanged commit 61a0d70: 222 files, 1,396 tests, --maxWorkers=1, 690.80 seconds. This is an executed green full unit result, including the Windows canonical-root fixture and the previously timed-out load-planner test. The historical baseline failure remains in baseline-checks.md; no security assertions were skipped or production policy changed. The HOST-only interval was released directly to Music after the process exited. No production build, fresh visual, authenticated/print or whole-site acceptance is implied.
