@@ -306,3 +306,16 @@ it("uses bounded member/key/move queries and preserves a move restriction across
     expect(apiKeyManagerData.queryCalls).toHaveBeenCalledWith(apiMock.apiKeys.settingsSummary, { householdId: "household_123" });
   } finally { apiKeyManagerData.memberPaging = false; apiKeyManagerData.movePaging = false; }
 });
+
+it("can pass an empty filtered membership page to reach a later active household", async () => {
+  const original = apiKeyManagerData.households;
+  apiKeyManagerData.households = [];
+  apiKeyManagerData.memberPaging = true;
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("button", { name: "More member households" }));
+    expect(screen.getByLabelText("Household")).toHaveValue("member_later");
+    expect(screen.getByRole("button", { name: "Create key" })).toBeInTheDocument();
+  } finally { apiKeyManagerData.households = original; apiKeyManagerData.memberPaging = false; }
+});
