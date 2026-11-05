@@ -197,7 +197,7 @@ function GrantMovePicker({ grant }: { grant: GrantRow }) {
     {selected.map(id => <input key={id} type="hidden" name="moveIds" value={id} />)}
     <label className="block"><input type="radio" name="moveScope" value="allMoves" checked={moveScope === "allMoves"} onChange={() => { setMoveScope("allMoves"); setChanged(true); }} /> All my moves, including future moves</label>
     <label className="block"><input type="radio" name="moveScope" value="selectedMoves" checked={moveScope === "selectedMoves"} onChange={() => { setMoveScope("selectedMoves"); setChanged(true); }} /> Only the moves checked below</label>
-    {choices.result === undefined ? <p>Loading moves?</p> : choices.result.moves.map(move => <label key={String(move.moveId)} className="block">
+    {choices.result === undefined ? <p>Loading moves...</p> : choices.result.moves.map(move => <label key={String(move.moveId)} className="block">
       <input type="checkbox" checked={selected.includes(String(move.moveId))} onChange={event => { setSelected(current => event.target.checked ? [...current, String(move.moveId)] : current.filter(id => id !== String(move.moveId))); setChanged(true); }} /> {move.title}
     </label>)}
     {choices.result?.nextCursor ? <Button type="button" variant="outline" onClick={choices.next}>More move choices</Button> : null}

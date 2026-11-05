@@ -284,6 +284,7 @@ export function ApiKeyManager({
     helperPresets.find((preset) => sameScopes(scopes, preset.scopes))?.id ??
     "custom";
   const activeKeys = keys?.filter((key) => key.status === "active") ?? [];
+  const totalActiveKeys = Array.isArray(keysResult) ? activeKeys.length : stats?.activeApiKeyCount ?? activeKeys.length;
   const revokedKeys = keys?.filter((key) => key.status !== "active") ?? [];
   const lastUsedKey = activeKeys
     .filter((key) => typeof key.lastUsedAt === "number")
@@ -445,7 +446,7 @@ export function ApiKeyManager({
               household.
             </p>
           </div>
-          <Badge variant="outline">{stats?.activeApiKeyCount ?? activeKeys.length} active</Badge>
+          <Badge variant="outline">{totalActiveKeys} active</Badge>
         </div>
 
         {keys === undefined && effectiveHouseholdId ? (
@@ -534,7 +535,7 @@ export function ApiKeyManager({
           <StatusTile
             icon={Activity}
             label="AI connections"
-            value={formatStat(stats?.activeApiKeyCount ?? activeKeys.length)}
+            value={formatStat(totalActiveKeys)}
             note={
               lastUsedKey
                 ? `Last used ${formatApiKeyDate(lastUsedKey.lastUsedAt)}`
