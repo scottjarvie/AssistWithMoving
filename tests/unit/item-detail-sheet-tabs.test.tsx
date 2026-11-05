@@ -1,12 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Id } from "../../convex/_generated/dataModel";
 import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 
 const sheetData = vi.hoisted(() => ({
-  activity: [],
+  activity: [] as Array<{ _id: string; action: string; category: string; actorType: "user" | "agent" | "apiKey" | "system" | "webhook"; createdAt: number; metadata?: { changedKeys?: string[] } }>,
   people: [
     {
       _id: "person_1",
@@ -152,14 +152,19 @@ function renderSheet({
 }
 
 describe("ItemDetailSheet task tabs", () => {
-  it("opens on details and keeps evidence, handling, and review work separate", async () => {
+  beforeEach(() => { sheetData.activity = []; });
+  it("opens the saved record and keeps every editor one labelled step away", async () => {
     const user = userEvent.setup();
     renderSheet();
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Record" })).toHaveAttribute(
       "data-state",
       "active"
     );
+    expect(screen.getByLabelText("Item dossier")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Evidence history" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Details" }));
     expect(screen.getByLabelText("Name")).toHaveValue("Red toolbox");
     expect(screen.queryByText("Photo upload control")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Review flags")).not.toBeInTheDocument();
@@ -203,6 +208,7 @@ describe("ItemDetailSheet task tabs", () => {
   it("shows sell pricing + mark-sold for sell, and mark-trashed for dump", async () => {
     const user = userEvent.setup();
     renderSheet();
+    await user.click(screen.getByRole("tab", { name: "Details" }));
     const disposition = screen.getByDisplayValue("mover");
 
     await user.selectOptions(disposition, "sell");
@@ -222,13 +228,15 @@ describe("ItemDetailSheet task tabs", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps transport visible for leaving-inventory items that are still assigned", () => {
+  it("keeps transport visible for leaving-inventory items that are still assigned", async () => {
+    const user = userEvent.setup();
     renderSheet({
       itemOverride: {
         disposition: "sell",
         assignedResourceId: "transport_1" as Id<"transportResources">,
       },
     });
+    await user.click(screen.getByRole("tab", { name: "Details" }));
 
     expect(
       screen.queryByLabelText("Origination space"),
@@ -250,6 +258,7 @@ describe("ItemDetailSheet task tabs", () => {
     sheetData.convert.mockResolvedValue({ boxId: "box_new", code: "B-027" });
     renderSheet();
 
+    await user.click(screen.getByRole("button", { name: "More item actions" }));
     await user.click(
       screen.getByRole("button", { name: /Convert to a box\/tote/ }),
     );
@@ -278,6 +287,7 @@ describe("ItemDetailSheet task tabs", () => {
       onSave,
     });
 
+    await user.click(screen.getByRole("tab", { name: "Details" }));
     await user.clear(screen.getByLabelText("Name"));
     await user.type(screen.getByLabelText("Name"), "Red toolbox updated");
     await user.click(screen.getByRole("button", { name: "Save item" }));
@@ -340,5 +350,30 @@ describe("ItemDetailSheet task tabs", () => {
     expect(patch).not.toHaveProperty("clearActualWeight");
     expect(patch).not.toHaveProperty("actualWeightLb");
     expect(patch).not.toHaveProperty("estimatedWeightLb");
+  });
+
+  it("opens a saved fact's actual source entry, including an earlier loaded entry", async () => {
+    const user = userEvent.setup();
+    sheetData.activity = Array.from({ length: 8 }, (_, index) => ({ _id: `synthetic-history-${index}`, action: index === 7 ? "item.status.changed" : "item.updated", category: "inventory", actorType: index % 2 ? "user" : "apiKey", createdAt: 1000 - index, metadata: { changedKeys: [index === 7 ? "status" : "name"] } }));
+    renderSheet();
+    expect(screen.queryByText("item status changed")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /3 earlier loaded entries/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Status: from its entry" }));
+    const source = screen.getByText("item status changed").closest("li");
+    expect(source).toHaveFocus();
+    expect(screen.queryByRole("button", { name: /3 earlier loaded entries/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Entry author: API key" })).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: "Entry author: AI / automation" })).not.toBeInTheDocument();
+  });
+
+  it("retains unsaved fields while moving between the record and its editors", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await user.click(screen.getByRole("button", { name: "Edit item details" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Synthetic unfinished rename" } });
+    await user.click(screen.getByRole("tab", { name: "Record" }));
+    expect(screen.getByRole("heading", { name: "Red toolbox" })).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("Synthetic unfinished rename");
   });
 });

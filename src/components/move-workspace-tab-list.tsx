@@ -39,7 +39,7 @@ export function MoveWorkspaceTabList({
   tabs: MoveWorkspaceTab[];
   activeValue?: string;
   ariaLabel?: string;
-  sticky?: boolean | "below-operations";
+  sticky?: boolean | "below-operations" | "within-panel";
 }) {
   const activeTab = tabs.find((tab) => tab.value === activeValue);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
@@ -48,7 +48,7 @@ export function MoveWorkspaceTabList({
 
   return (
     <>
-    <div className={sticky ? `sticky top-(--workspace-navigation-offset) z-10 bg-background pb-2 ${sticky === "below-operations" ? "sm:top-[calc(var(--workspace-navigation-offset,4rem)+2.75rem)]" : ""}` : undefined} data-moving-sections>
+    <div className={sticky ? `sticky ${sticky === "within-panel" ? "top-0" : "top-(--workspace-navigation-offset)"} z-10 bg-background pb-2 ${sticky === "below-operations" ? "sm:top-[calc(var(--workspace-navigation-offset,4rem)+2.75rem)]" : ""}` : undefined} data-moving-sections>
       <div className="flex min-w-0 items-start gap-2 border-b border-border bg-background py-1">
         <div className="moving-section-strip min-w-0 flex-1 overflow-x-auto pb-1">
         <TabsList variant="line" className="h-11! min-w-max justify-start sm:h-9!" aria-label={ariaLabel}>

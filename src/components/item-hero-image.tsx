@@ -9,7 +9,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAction, useQuery } from "convex/react";
-import { ImageIcon, ImageOff } from "lucide-react";
+import { MoveIllustration, MovingSymbol } from "@/components/moving-symbol";
+import { cn } from "@/lib/utils";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -22,10 +23,12 @@ export function ItemHeroImage({
   householdId,
   moveId,
   itemId,
+  className,
 }: {
   householdId: Id<"households"> | null;
   moveId: Id<"moves"> | null;
   itemId: Id<"items">;
+  className?: string;
 }) {
   const photos = useQuery(
     api.photos.listForItem,
@@ -38,21 +41,22 @@ export function ItemHeroImage({
     [photos],
   );
   const heroId = photoIds[0] ?? null;
+  const containerClass = cn(CONTAINER_CLASS, className);
 
   if (photos === undefined) {
     return (
-      <div className={`${CONTAINER_CLASS} animate-pulse`} aria-hidden="true" />
+      <div className={`${containerClass} animate-pulse`} aria-hidden="true" />
     );
   }
 
   if (!heroId) {
     return (
       <div
-        className={`${CONTAINER_CLASS} flex flex-col items-center justify-center gap-1.5 text-muted-foreground`}
+        className={`${containerClass} flex flex-col items-center justify-center gap-1.5 text-muted-foreground`}
       >
-        <ImageIcon className="size-7" aria-hidden="true" />
+        <MoveIllustration decorative kind="box" className="max-h-24 w-3/4" />
         <p className="text-xs">No photo yet</p>
-        <p className="px-4 text-center text-[0.68rem] leading-4">
+        <p className="hidden px-4 text-center text-[0.68rem] leading-4 md:block">
           Add one from the Evidence tab.
         </p>
       </div>
@@ -64,7 +68,7 @@ export function ItemHeroImage({
       <button
         type="button"
         onClick={() => setLightboxOpen(true)}
-        className={`${CONTAINER_CLASS} cursor-zoom-in transition-opacity hover:opacity-95`}
+        className={`${containerClass} cursor-zoom-in transition-opacity hover:opacity-95`}
         aria-label={`View item photo${photoIds.length > 1 ? `s (${photoIds.length})` : ""}`}
       >
         {/* keyed per photo so it mounts fresh — no stale-URL reset needed. */}
@@ -125,7 +129,7 @@ function HeroImg({
   if (failed) {
     return (
       <div className="flex size-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
-        <ImageOff className="size-7" aria-hidden="true" />
+        <MovingSymbol name="camera" className="size-7" />
         <p className="text-xs">Couldn&apos;t load the photo</p>
       </div>
     );

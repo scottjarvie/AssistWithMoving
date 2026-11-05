@@ -6,12 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CollectionPresentation, CollectionView } from "@/components/use-collection-presentation";
 
-export function CollectionPresentationControls<TData>({ table, preferences, onChange, showColumns = true, showSort = true }: {
+export type CollectionSortPresets = {
+  options: readonly { id: string; label: string }[];
+  value: string | null;
+  onChange: (value: string) => void;
+};
+
+export function CollectionPresentationControls<TData>({ table, preferences, onChange, showColumns = true, showSort = true, sortPresets }: {
   table: TanstackTable<TData>;
   preferences: CollectionPresentation;
   onChange: (patch: Partial<CollectionPresentation>) => void;
   showColumns?: boolean;
   showSort?: boolean;
+  sortPresets?: CollectionSortPresets;
 }) {
   const columns = table.getAllLeafColumns().filter(column => column.id !== "__select__");
   const groupable = columns.filter(column => column.columnDef.meta?.groupable && column.getCanSort());
@@ -29,12 +36,17 @@ export function CollectionPresentationControls<TData>({ table, preferences, onCh
           {groupable.map(column => <option key={column.id} value={column.id}>{column.columnDef.meta?.label ?? column.id}</option>)}
         </select>
       </label>
+      {preferences.groupBy ? <Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-8" aria-label={`Group order: ${preferences.groupDesc ? "descending" : "ascending"}`} title="Reverse group order" onClick={() => onChange({ groupDesc: !preferences.groupDesc })}><MovingSymbol name="sort" className={`size-4 ${preferences.groupDesc ? "rotate-180" : ""}`} /><span className="sr-only">Reverse groups</span></Button> : null}
       {showSort ? <Popover><PopoverTrigger asChild><Button type="button" variant="ghost" size="sm" className="min-h-11 sm:min-h-8" aria-label="Sort records"><MovingSymbol name="sort" className="size-4" />Sort</Button></PopoverTrigger>
         <PopoverContent align="end" className="max-h-80 w-60 overflow-y-auto p-2">
+          {sortPresets ? <div className="mb-2 border-b border-border pb-2"><p className="px-2 py-1 text-xs text-muted-foreground">{sortPresets.value ? `${preferences.groupBy ? "Within groups" : "Current order"}: ${sortPresets.options.find(option => option.id === sortPresets.value)?.label ?? "Preset"}` : "Custom column order"}</p>
+            {sortPresets.options.map(option => <Button key={option.id} type="button" variant="ghost" className="min-h-11 w-full justify-start whitespace-normal text-left" aria-pressed={sortPresets.value === option.id} onClick={() => sortPresets.onChange(option.id)}>{option.label}</Button>)}
+          </div> : null}
           <p className="px-2 py-1 text-xs text-muted-foreground">Sort by · select again to reverse</p>
           {columns.filter(column => column.getCanSort()).map(column => <Button key={column.id} type="button" variant="ghost" className="min-h-11 w-full justify-between" aria-pressed={Boolean(column.getIsSorted())} aria-label={`${column.columnDef.meta?.label ?? column.id}${column.getIsSorted() ? `: ${column.getIsSorted() === "asc" ? "ascending" : "descending"}` : ": not sorted"}`} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
             {column.columnDef.meta?.label ?? column.id}<span className="font-mono text-xs">{column.getIsSorted() === "asc" ? "↑" : column.getIsSorted() === "desc" ? "↓" : ""}</span>
           </Button>)}
+          {table.getState().sorting.some(sort => sort.id !== preferences.groupBy) ? <Button type="button" variant="ghost" size="sm" className="mt-2 w-full border-t border-border" onClick={() => table.setSorting([])}>Clear column sorting</Button> : null}
         </PopoverContent>
       </Popover> : null}
       <Button type="button" size="sm" variant="ghost" className="min-h-11 sm:min-h-8" aria-label={`Density: ${preferences.density}`} onClick={() => onChange({ density: preferences.density === "compact" ? "comfortable" : "compact" })}>

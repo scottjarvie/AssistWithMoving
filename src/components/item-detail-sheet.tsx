@@ -1,19 +1,12 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import {
-  Boxes,
-  Camera,
-  ClipboardList,
-  Images,
-  Ruler,
-  PackageCheck,
-  Sparkles,
-  Trash2,
-  UserRound,
-} from "lucide-react";
+import { MovingSymbol, type MovingSymbolName } from "@/components/moving-symbol";
+import { MoveWorkspaceTabList } from "@/components/move-workspace-tab-list";
+import { RecordEvidenceStream, type RecordHistoryEntry } from "@/components/record-evidence-stream";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -26,6 +19,7 @@ import { PhotoUploadControl } from "@/components/photo-upload-control";
 import { ItemHeroImage } from "@/components/item-hero-image";
 import { PhotoPickerDialog } from "@/components/photo-picker-dialog";
 import { Badge } from "@/components/ui/badge";
+import { DispositionBadge, StatusBadge } from "@/components/ui/status-badges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -40,8 +34,6 @@ import {
 import {
   Tabs,
   TabsContent,
-  TabsList,
-  TabsTrigger,
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -111,18 +103,18 @@ function FlagField({
 }
 
 function InfoBlock({
-  icon: Icon,
+  icon,
   title,
   value,
 }: {
-  icon: typeof PackageCheck;
+  icon: MovingSymbolName;
   title: string;
   value: string;
 }) {
   return (
     <div className="rounded-md border border-border p-3">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <Icon className="size-4 text-primary" aria-hidden="true" />
+        <MovingSymbol name={icon} className="size-4 text-primary" />
         {title}
       </div>
       <p className="mt-2 text-sm text-muted-foreground">{value}</p>
@@ -249,6 +241,10 @@ export function ItemDetailSheet({
   onSave,
   origin = "movable-units",
 }: ItemDetailSheetProps) {
+  const recordPrefix = useId();
+  const [activeTab, setActiveTab] = useState("activity");
+  const [historyLimit, setHistoryLimit] = useState(8);
+  const [focusedEntry, setFocusedEntry] = useState<{ id: string; request: number } | null>(null);
   const initialWeightIsEstimate =
     isEstimateConfidence(item?.weightConfidence) ||
     Boolean(item?.actualWeightLb == null && item?.estimatedWeightLb != null);
@@ -381,6 +377,7 @@ export function ItemDetailSheet({
   const [confirmConvert, setConfirmConvert] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [lifecycleMenuOpen, setLifecycleMenuOpen] = useState(false);
   // "Choose from existing photos" picker (MOVE-354) — reuse a move photo on
   // this item instead of only uploading new ones.
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
@@ -538,7 +535,7 @@ export function ItemDetailSheet({
           moveId,
           objectTable: "items",
           objectId: item._id,
-          limit: 8,
+          limit: historyLimit,
         }
       : "skip"
   );
@@ -591,13 +588,13 @@ export function ItemDetailSheet({
 
   // A short, read-only label for the rail's key-facts strip — kept visible while
   // the form scrolls (MOVE-357).
-  const presentLocationLabel = presentResourceId
+  const presentLocationLabel = item.assignedResourceId
     ? (presentTransport?.find(
-        (entry) => String(entry.resource._id) === presentResourceId,
+        (entry) => entry.resource._id === item.assignedResourceId,
       )?.resource.name ?? "Transport")
-    : presentSpaceId
+    : item.currentSpaceId
       ? ((presentSpaces ?? []).find(
-          (space) => String(space._id) === presentSpaceId,
+          (space) => space._id === item.currentSpaceId,
         )?.name ?? "Space")
       : "Not set";
 
@@ -857,50 +854,78 @@ export function ItemDetailSheet({
     disposition === "free" ||
     disposition === "dump";
 
+  const historyEntries: RecordHistoryEntry[] | undefined = activity?.map(entry => ({
+    id: entry._id, action: entry.action, category: entry.category, actorType: entry.actorType, createdAt: entry.createdAt,
+    changedKeys: Array.isArray(entry.metadata?.changedKeys) ? entry.metadata.changedKeys.filter((key: unknown): key is string => typeof key === "string") : undefined,
+    summary: typeof entry.metadata?.statusFrom === "string" && typeof entry.metadata?.statusTo === "string" ? `${entry.metadata.statusFrom} → ${entry.metadata.statusTo}` : undefined,
+  }));
+  const recordTabs = [
+    { value: "activity", label: "Record", icon: "note" as const },
+    { value: "details", label: "Details", icon: "settings" as const },
+    { value: "measurements", label: "Measurements", icon: "ruler" as const },
+    { value: "advanced", label: "Advanced", icon: "source" as const },
+    { value: "evidence", label: "Evidence", icon: "camera" as const },
+    { value: "handling", label: "Handling", icon: "truck" as const },
+    { value: "review", label: "Review", icon: "person" as const },
+  ];
+  function openHistory(entryId?: string) {
+    setActiveTab("activity");
+    if (entryId) setFocusedEntry(previous => ({ id: entryId, request: (previous?.request ?? 0) + 1 }));
+    else { setHistoryLimit(50); setFocusedEntry(null); }
+  }
+  function factSource(label: string, keys: string[]) {
+    const entry = historyEntries?.find(candidate => candidate.changedKeys?.some(key => keys.includes(key)));
+    return <Button type="button" variant="ghost" size="icon-sm" className="size-7 shrink-0 text-evidence" aria-label={`${label}: ${entry ? "from its entry" : "open loaded history"}`} title={entry ? `From its entry · ${new Date(entry.createdAt).toLocaleString()}` : "No source identified in loaded history; open history"} onClick={() => openHistory(entry?.id)}><MovingSymbol name="source" className="size-3.5" /></Button>;
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="overflow-y-auto sm:max-w-5xl">
         <form className="flex min-h-full flex-col" onSubmit={handleSubmit}>
-          <DialogHeader className="pr-12">
-            <div className="flex flex-wrap items-center gap-2">
-              <DialogTitle>{item.name}</DialogTitle>
-              <Badge variant={item.needsReview ? "destructive" : "secondary"}>
-                {item.needsReview ? "review" : item.status}
-              </Badge>
-              <Badge variant="outline">{item.disposition}</Badge>
-            </div>
-            <DialogDescription>
-              {item.code ? `${item.code} · ` : ""}Last updated{" "}
-              {new Date(item.updatedAt).toLocaleDateString()}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-1 flex-col gap-4 px-4 pb-4 md:flex-row md:gap-6">
-            {/* Left rail — hero + the facts that should stay visible while the
-                form scrolls + the convert-to-box lifecycle. Pinned on desktop
-                across every tab (MOVE-357). */}
-            <aside className="space-y-3 md:sticky md:top-2 md:h-fit md:w-2/5 md:max-w-[20rem] md:shrink-0">
+          <div className="flex flex-1 flex-col gap-4 p-4 md:flex-row md:gap-6">
+            <aside aria-label="Item dossier" className="space-y-3 md:sticky md:top-4 md:h-fit md:w-2/5 md:max-w-[20rem] md:shrink-0">
+              <div className="flex items-start gap-3 pr-8 md:flex-col md:gap-3 md:pr-0">
               <ItemHeroImage
                 householdId={householdId}
                 moveId={moveId}
                 itemId={item._id}
+                className="max-md:mx-0 max-md:w-28 max-md:shrink-0"
               />
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 rounded-md border border-border p-3 text-sm">
+              <DialogHeader className="min-w-0 p-0">
+                <DialogTitle className="break-words text-lg font-semibold">{item.name}</DialogTitle>
+                <DialogDescription className="mt-1 text-xs">{item.code ? `${item.code} · ` : ""}Last updated {new Date(item.updatedAt).toLocaleDateString()}</DialogDescription>
+                {item.needsReview ? <Badge variant="destructive" className="mt-2 w-fit">Needs review</Badge> : null}
+              </DialogHeader>
+              </div>
+              <div role="group" aria-label="Item actions" className="flex items-center gap-1">
+                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Edit item details" title="Edit item details" onClick={() => setActiveTab("details")}><MovingSymbol name="settings" className="size-4" /></Button>
+                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Add or choose item photos" title="Add or choose item photos" onClick={() => setActiveTab("evidence")}><MovingSymbol name="camera" className="size-4" /></Button>
+                <Button type="button" size="icon-touch" variant="outline" className="sm:size-8" aria-label="Edit saved notes and reasoning" title="Edit saved notes and reasoning" onClick={() => setActiveTab("review")}><MovingSymbol name="note" className="size-4" /></Button>
+                <Button type="button" size="icon-touch" variant="ghost" className="sm:size-8" aria-label="Item connections and handling" title="Item connections and handling" onClick={() => setActiveTab("handling")}><MovingSymbol name="box" className="size-4" /></Button>
+                <Popover open={lifecycleMenuOpen} onOpenChange={setLifecycleMenuOpen}><PopoverTrigger asChild><Button type="button" size="icon-touch" variant="ghost" className="sm:size-8" aria-label="More item actions" title="More item actions"><MovingSymbol name="more" className="size-4" /></Button></PopoverTrigger>
+                  <PopoverContent align="start" className="space-y-3" onCloseAutoFocus={event => {
+                    const target = confirmConvert ? "convert" : confirmRemove ? "remove" : null;
+                    if (target) { event.preventDefault(); document.getElementById(`${recordPrefix}-${target}-confirm`)?.focus(); }
+                  }}>
+                    <p className="text-sm font-semibold">Item lifecycle</p>
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setConfirmConvert(true); setLifecycleMenuOpen(false); }} disabled={converting}><MovingSymbol name="box" className="size-4" />Convert to a box/tote</Button>
+                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => { setConfirmRemove(true); setLifecycleMenuOpen(false); }} disabled={removing}><MovingSymbol name="trash" className="size-4" />Remove item</Button>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              {activeTab === "activity" ? <>
+              <p className="text-xs font-medium text-muted-foreground">Saved facts · source links open their history entries</p>
+              <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1 rounded-md border border-border p-2 text-sm">
                 <dt className="text-muted-foreground">Status</dt>
-                <dd className="text-right font-medium capitalize">{status}</dd>
+                <dd className="flex items-center justify-end gap-1"><StatusBadge status={item.status} />{factSource("Status", ["status"])}</dd>
                 <dt className="text-muted-foreground">Disposition</dt>
-                <dd className="text-right font-medium capitalize">
-                  {disposition}
-                </dd>
+                <dd className="flex items-center justify-end gap-1"><DispositionBadge disposition={item.disposition} />{factSource("Disposition", ["disposition"])}</dd>
                 <dt className="text-muted-foreground">Present</dt>
-                <dd className="text-right font-medium">
-                  {presentLocationLabel}
-                </dd>
+                <dd className="flex min-w-0 items-center justify-end gap-1"><span className="break-words text-right">{presentLocationLabel}</span>{factSource("Present location", ["currentSpaceId", "assignedResourceId", "assignedZoneId"])}</dd>
                 <dt className="text-muted-foreground">Value</dt>
-                <dd className="text-right font-medium">
-                  {valueDollars ? `$${valueDollars}` : "—"}
-                </dd>
+                <dd className="flex items-center justify-end gap-1"><span>{item.valueCents != null ? `$${formatOptionalCurrencyCents(item.valueCents)}` : "Not recorded"}</span>{factSource("Value", ["valueCents"])}</dd>
               </dl>
+              </> : <Button type="button" variant="link" size="sm" className="px-0 text-evidence" onClick={() => setActiveTab("activity")}><MovingSymbol name="note" className="size-4" />Back to saved record</Button>}
               {confirmConvert ? (
                 <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-sm">
                   <p className="text-muted-foreground">
@@ -911,6 +936,7 @@ export function ItemDetailSheet({
                     <Button
                       type="button"
                       size="sm"
+                      id={`${recordPrefix}-convert-confirm`}
                       disabled={converting}
                       onClick={() => void handleConvertToBox()}
                     >
@@ -927,19 +953,7 @@ export function ItemDetailSheet({
                     </Button>
                   </div>
                 </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => setConfirmConvert(true)}
-                  disabled={converting}
-                >
-                  <Boxes className="size-4" aria-hidden="true" />
-                  Convert to a box/tote
-                </Button>
-              )}
+              ) : null}
 
               {confirmRemove ? (
                 <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
@@ -955,6 +969,7 @@ export function ItemDetailSheet({
                       type="button"
                       size="sm"
                       variant="destructive"
+                      id={`${recordPrefix}-remove-confirm`}
                       disabled={removing}
                       onClick={() => void handleRemoveItem()}
                     >
@@ -971,35 +986,12 @@ export function ItemDetailSheet({
                     </Button>
                   </div>
                 </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-destructive hover:text-destructive"
-                  onClick={() => setConfirmRemove(true)}
-                  disabled={removing}
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                  Remove item
-                </Button>
-              )}
+              ) : null}
             </aside>
 
             <div className="md:min-w-0 md:flex-1">
-            <Tabs defaultValue="details" className="gap-4">
-              {/* On a phone six tabs can't share one 32px row — a 3-col grid
-                  with real height beats a clipped flex-wrap. Releases the
-                  primitive's h-8 cap with h-auto and gives each tab a 36px target. */}
-              <TabsList className="grid h-auto w-full grid-cols-3 gap-1 [&>*]:min-h-9 sm:flex sm:flex-wrap sm:justify-start">
-                <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="measurements">Measurements</TabsTrigger>
-                <TabsTrigger value="advanced">Advanced</TabsTrigger>
-                <TabsTrigger value="evidence">Evidence</TabsTrigger>
-                <TabsTrigger value="handling">Handling</TabsTrigger>
-                <TabsTrigger value="review">Review</TabsTrigger>
-                <TabsTrigger value="activity">Activity</TabsTrigger>
-              </TabsList>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
+              <MoveWorkspaceTabList sticky="within-panel" tabs={recordTabs} activeValue={activeTab} ariaLabel="Item sections" />
 
               <TabsContent value="details" className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
@@ -1327,12 +1319,12 @@ export function ItemDetailSheet({
               <TabsContent value="evidence" className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-2">
                   <InfoBlock
-                    icon={Camera}
+                    icon="camera"
                     title="Attached photos"
                     value={photoSummary}
                   />
                   <InfoBlock
-                    icon={PackageCheck}
+                    icon="source"
                     title="Evidence target"
                     value={
                       item.room ? `Item evidence in ${item.room}` : "Item evidence"
@@ -1355,7 +1347,7 @@ export function ItemDetailSheet({
                     size="sm"
                     onClick={() => setPhotoPickerOpen(true)}
                   >
-                    <Images className="size-4" aria-hidden="true" />
+                    <MovingSymbol name="camera" className="size-4" />
                     Choose from existing photos
                   </Button>
                   <PhotoPickerDialog
@@ -1555,7 +1547,7 @@ export function ItemDetailSheet({
 
                 <div className="rounded-md border border-border p-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <Ruler className="size-4 text-primary" aria-hidden="true" />
+                    <MovingSymbol name="ruler" className="size-4 text-primary" />
                     Measurement source
                   </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -1584,17 +1576,17 @@ export function ItemDetailSheet({
               <TabsContent value="handling" className="space-y-4">
                 <div className="grid gap-3 lg:grid-cols-4">
                   <InfoBlock
-                    icon={UserRound}
+                    icon="person"
                     title="Owner"
                     value={ownerSummary}
                   />
                   <InfoBlock
-                    icon={Boxes}
+                    icon="box"
                     title="Box membership"
                     value={boxSummary}
                   />
                   <InfoBlock
-                    icon={PackageCheck}
+                    icon="truck"
                     title="Transport assignment"
                     value={assignmentSummary}
                   />
@@ -1663,44 +1655,11 @@ export function ItemDetailSheet({
               </TabsContent>
 
               <TabsContent value="activity" className="space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <ClipboardList
-                    className="size-4 text-primary"
-                    aria-hidden="true"
-                  />
-                  Item activity
-                </div>
-                {activity === undefined ? (
-                  <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
-                    Loading activity.
-                  </div>
-                ) : activity.length ? (
-                  <div className="space-y-2">
-                    {activity.map((entry) => (
-                      <div
-                        key={entry._id}
-                        className="rounded-md border border-border p-3"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="font-medium">{entry.action}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(entry.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {entry.actorType}
-                          {entry.metadata?.changedKeys
-                            ? ` - ${String(entry.metadata.changedKeys)}`
-                            : ""}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
-                    No item activity yet.
-                  </div>
-                )}
+                <RecordEvidenceStream key={`stream-${focusedEntry?.request ?? 0}`} entries={historyEntries} prefix={recordPrefix} focusEntryId={focusedEntry?.id} atLimit={historyLimit === 50 && (historyEntries?.length ?? 0) >= 50} onLoadMore={historyLimit < 50 ? () => setHistoryLimit(50) : undefined} notes={{ description: item.description, reasoning: item.aiSummary, privateNotes: item.privateNotes }} onEditNotes={() => setActiveTab("review")} />
+                <nav aria-label="Item contents" className="border-t border-border pt-3 md:hidden">
+                  <h3 className="mb-2 text-sm font-medium">Contents</h3>
+                  <div className="grid grid-cols-2 gap-1">{recordTabs.map(tab => <Button key={tab.value} type="button" variant="ghost" className="min-h-11 justify-start whitespace-normal text-left" onClick={() => setActiveTab(tab.value)}><MovingSymbol name={tab.icon} className="size-4" />{tab.label}</Button>)}</div>
+                </nav>
               </TabsContent>
             </Tabs>
             </div>
@@ -1709,18 +1668,19 @@ export function ItemDetailSheet({
           <DialogFooter className="border-t border-border p-4">
             <div className="w-full space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Sparkles className="size-4 text-primary" aria-hidden="true" />
+                <MovingSymbol name="note" className="size-4 text-primary" />
                 {message ?? "Detailed edits are saved to the item history."}
               </div>
               <div className="flex items-center justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => onOpenChange(false)}
                 >
                   Close
                 </Button>
-                <Button type="submit" disabled={saving || !name.trim()}>
+                <Button type="submit" size="sm" disabled={saving || !name.trim()}>
                   {saving ? "Saving" : "Save item"}
                 </Button>
               </div>

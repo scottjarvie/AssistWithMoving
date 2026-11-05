@@ -68,6 +68,7 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   DispositionBadge,
+  dispositionDisplayLabel,
   StatusBadge,
 } from "@/components/ui/status-badges";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -87,11 +88,11 @@ import type { InventoryItem, InventoryItemPatch } from "@/lib/inventory-types";
 import {
   compareBy,
   DEFAULT_SORT_FIELD,
+  INVENTORY_SORT_OPTIONS,
   type SortableEntry,
   type SortFieldId,
 } from "@/lib/inventory-sort";
 import { calculateMovableUnitVolumeCuFt } from "@/lib/movable-units";
-import { SortMenu } from "@/components/inventory-sort-menu";
 import { toastSaved, toastError } from "@/lib/toast";
 
 type InventoryTaskTab = "browse" | "add" | "bulk";
@@ -125,7 +126,7 @@ const dispositionGroupChips: Array<{
 
 // Stored enum stays `dump`; only the visible label maps to "Trash".
 function dispositionLabel(disposition: InventoryItem["disposition"]) {
-  return disposition === "dump" ? "Trash" : disposition;
+  return dispositionDisplayLabel(disposition);
 }
 
 // Project an item onto the shared sort shape. Weight/volume are totalled across
@@ -930,6 +931,7 @@ export function InventoryTable({
         accessorKey: "status",
         meta: {
           groupable: true,
+          groupOrder: itemStatusOptions,
           label: "Status",
           mobile: "primary",
           headClassName: "w-36",
@@ -956,6 +958,8 @@ export function InventoryTable({
         accessorKey: "disposition",
         meta: {
           groupable: true,
+          groupLabel: value => dispositionDisplayLabel(String(value)),
+          groupOrder: itemDispositionOptions,
           label: "Disposition",
           mobile: "primary",
           headClassName: "w-36",
@@ -1418,7 +1422,6 @@ export function InventoryTable({
                     <PackagePlus aria-hidden="true" />
                     Add item
                   </Button>
-                  <SortMenu value={sortField} onChange={field => { setSortField(field); setSorting([]); }} />
                 </div>
               </div>
 
@@ -1434,7 +1437,7 @@ export function InventoryTable({
                 ariaLabel="Inventory records table"
                 preferenceKey="items"
                 showColumnControl={false}
-                showSortControl={false}
+                sortPresets={{ options: INVENTORY_SORT_OPTIONS, value: sorting.length ? null : sortField, onChange: field => { setSortField(field as SortFieldId); setSorting([]); } }}
                 unfilteredCount={totalItemCount}
                 onClearFilters={clearBrowseFilters}
                 enableRowSelection

@@ -1,12 +1,15 @@
 import type { SVGProps } from "react";
 
-export type MovingSymbolName = "sun" | "moon" | "system" | "contents" | "box" | "route" | "plan" | "truck" | "calendar" | "queue" | "settings" | "note" | "people" | "source" | "person" | "ai" | "camera" | "table" | "list" | "grid" | "sort" | "density" | "columns" | "arrow" | "add";
+export type MovingSymbolName = "sun" | "moon" | "system" | "contents" | "box" | "route" | "plan" | "truck" | "calendar" | "queue" | "settings" | "note" | "people" | "source" | "person" | "ai" | "camera" | "table" | "list" | "grid" | "sort" | "density" | "columns" | "arrow" | "add" | "more" | "trash" | "ruler";
 
 // Drawn for Moving: square-ended labels, a folded box and a routed line.
 // All marks inherit ink from their semantic role; no embedded raster assets.
 const strokes: Record<MovingSymbolName, React.ReactNode> = {
   arrow: <path d="M4 12h16m-6-6 6 6-6 6" />,
   add: <path d="M12 4v16M4 12h16" />,
+  more: <><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></>,
+  trash: <><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7" /></>,
+  ruler: <><path d="m3 16 13-13 5 5L8 21ZM7 12l2 2m2-6 2 2m2-6 2 2" /></>,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></>,
   moon: <path d="M19.5 14.4A8 8 0 0 1 9.6 4.5 8.1 8.1 0 1 0 19.5 14.4Z" />,
   system: <><rect x="3" y="4" width="18" height="13" rx="1" /><path d="M8 21h8m-4-4v4M3 13h18" /></>,

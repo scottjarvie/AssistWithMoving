@@ -52,7 +52,7 @@ describe("HomeLaunchpad", () => {
     state.workspace = { activeMoves: moves, selectedMove: moves[1], loadingMoves: false };
     render(<HomeLaunchpad />);
 
-    expect(screen.getByRole("region", { name: "Your moves" })).toHaveTextContent("4 active");
+    expect(screen.getByRole("region", { name: "Your moves" })).toHaveTextContent("4 moves");
     expect(screen.getByRole("link", { name: /Summer/ })).toHaveAttribute("href", "/app/moves/move_1");
     expect(screen.getByRole("link", { name: /Open all moves/ })).toHaveAttribute("href", "/app/moves");
     expect(screen.queryByRole("link", { name: /Winter/ })).not.toBeInTheDocument();

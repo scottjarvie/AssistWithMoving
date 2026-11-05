@@ -56,7 +56,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AssignmentBadge } from "@/components/ui/status-badges";
+import { AssignmentBadge, assignmentDisplayLabel } from "@/components/ui/status-badges";
 import { ItemDetailSheet } from "@/components/item-detail-sheet";
 import { PhotoLightbox } from "@/components/photo-lightbox";
 import { buildBoxLookupPath } from "@/lib/box-labels";
@@ -64,10 +64,10 @@ import { toastSaved, toastError } from "@/lib/toast";
 import {
   compareBy,
   DEFAULT_SORT_FIELD,
+  INVENTORY_SORT_OPTIONS,
   type SortableEntry,
   type SortFieldId,
 } from "@/lib/inventory-sort";
-import { SortMenu } from "@/components/inventory-sort-menu";
 import { useScrollRestoration } from "@/components/use-scroll-restoration";
 import {
   buildMovableUnits,
@@ -671,7 +671,7 @@ export function MovableUnitsTable({
       {
         id: "load",
         accessorFn: (unit) => unit.assignmentState,
-        meta: { label: "Load", mobile: "primary", headClassName: "w-40", groupable: true },
+        meta: { label: "Load", mobile: "primary", headClassName: "w-40", groupable: true, groupLabel: value => assignmentDisplayLabel(String(value)), groupOrder: ["unassigned", "assigned", "owner"] },
         header: ({ column }) => (
           <DataTableColumnHeader column={column} label="Load" />
         ),
@@ -775,14 +775,6 @@ export function MovableUnitsTable({
               Clear filter
             </Button>
           ) : null}
-          <SortMenu
-            value={sortField}
-            onChange={(field) => {
-              setSortField(field);
-              // Clear any column-header sort so the chosen preset is what shows.
-              setSorting([]);
-            }}
-          />
           <Button
             type="button"
             size="sm"
@@ -828,7 +820,7 @@ export function MovableUnitsTable({
         }
         ariaLabel="Movable units"
         preferenceKey="movable-units"
-        showSortControl={false}
+        sortPresets={{ options: INVENTORY_SORT_OPTIONS, value: sorting.length ? null : sortField, onChange: field => { setSortField(field as SortFieldId); setSorting([]); } }}
         unfilteredCount={summary.total}
         onClearFilters={() => { setSearch(""); setStatFilter(null); }}
         enableRowSelection

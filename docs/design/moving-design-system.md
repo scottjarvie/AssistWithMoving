@@ -36,6 +36,8 @@ Without a saved presentation, phones choose List on their first client visit, de
 
 Home is a desk of labelled folder trays, with loaded move records and domain image slots first, a compact library, then AI setup. Every count says what it counts. Unsupported activity/connection/Queue totals are omitted rather than guessed. The overview shows the top few real move records with one named path to the entire collection.
 
+The item record opens on a dossier and one dated evidence/history stream. Compact actions and a pinned section chooser reach existing editors. Saved facts appear on the reading view; editor fields replace that summary while editing. Source links require an actual matching history entry, and unknown provenance is labelled. History counts describe loaded records and respect the existing bounded query. Author marks distinguish people, agents, API keys, routine work and integrations; unknown identity is never guessed to be You or a named AI. Phone keeps a compact photo/identity card, then the stream, with two-column Contents after the overview.
+
 Print remains a document surface: preserve QR codes, labels, fields and pagination; no interactive chrome or dark backgrounds on paper.
 
 ## Verification

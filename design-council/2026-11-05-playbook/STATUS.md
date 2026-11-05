@@ -1,4 +1,4 @@
-[Open newest-first gallery](gallery.html) · Round 02 adds four synthetic Home captures; code checks pass and exact-head source/image council review is next.
+[Open newest-first gallery](gallery.html) · Round 02 council scores are recorded; item dossier/stream and review corrections are being verified for the next round.
 
 # Moving design council status
 
@@ -16,6 +16,9 @@ Run `2026-11-05-playbook`. Local-only branch `design/assistwithmoving-council-20
 - Candidate Q received source scores 8 (Sol) and 7.3 (Opus), both changes requested. Preset-sort recovery, first-visit phone List and complete normalized grouping have been corrected; two affected suites passed 22 tests, typecheck and focused lint passed. Original verdicts remain recorded.
 - Home now uses three labelled desk trays with real loaded data and all previous destinations/guidance. Three Home tests, typecheck and focused lint passed. Offline actual-component samples use synthetic data and label their limitations; rendered review is pending.
 - Round 02 now shows Home at 1440px and 390px in both themes, generated from the actual component/CSS with synthetic data. Four captures and the updated gallery preview reported no console messages; the gallery was shown inline. Authenticated chrome, live interaction and final typography remain unverified.
+- Candidate R source scores: Sol 8.4, Opus 8.2; bounded Home image scores: Sol 8.8, Opus 7.9. Reports preserve their different dispositions. Corrections cover accessible sorting/row groups, phone reverse sorts, canonical labels/counts, focus and canvas/provenance. Old images remain historical evidence; corrected state captures are next.
+- Item details now open as a dossier + one history stream, with every previous editor/action retained through compact actions and seven sections. Real fact-source navigation and truthful bounded-history loading are implemented. Verification and different-model review are pending.
+- The combined item/Home/collection pass is verified by 37 tests across five suites, full typecheck and focused source/test/tool lint. Rendered item-dialog and next exact-head different-model review remain pending.
 
 ## Remaining scope
 

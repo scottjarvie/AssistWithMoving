@@ -13,8 +13,8 @@
       "createdAt": "2026-11-05T11:56:21.884Z",
       "kind": "screenshots",
       "title": "02 · Home desk",
-      "status": "Synthetic component captures · council review pending",
-      "description": "Actual HomeLaunchpad and application CSS, with synthetic data. Desktop 1440px and phone 390px; light and dark. No authenticated shell or live data; system font fallback. This decided Home pattern has no A/B exploration. Whole-page interaction and final taste remain pending.",
+      "status": "Judged synthetic component · corrections recorded",
+      "description": "Actual HomeLaunchpad and application CSS, with synthetic data. Desktop 1440px and phone 390px; light and dark. Historical round: transparent samples used the host canvas; corrected canvas/state captures follow in the next round. No authenticated shell or live data; system font fallback. This decided Home pattern has no A/B exploration. Whole-page interaction and final taste remain pending.",
       "images": [
         {
           "path": "captures/home-desktop-light.png",

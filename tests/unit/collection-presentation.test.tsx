@@ -48,6 +48,8 @@ describe("collection presentations share one record model", () => {
     render(<Collection />);
     await user.click(screen.getByRole("button", { name: "Sort by Name" }));
     await user.selectOptions(screen.getByLabelText("Group records by"), "room");
+    expect(screen.getByRole("button", { name: "Sort by Name" })).toHaveAccessibleDescription(/Ascending; secondary sort, priority 2/);
+    expect(screen.getByRole("button", { name: "Sort by Room" }).closest("th")).toHaveAttribute("aria-sort", "ascending");
     let rows = within(screen.getByRole("table")).getAllByRole("row");
     expect(rows[1]).toHaveTextContent("Room: Den");
     expect(rows[1]).toHaveTextContent("2 matching");
@@ -88,18 +90,21 @@ describe("collection presentations share one record model", () => {
     render(<DataTable data={mixed} columns={mixedColumns} getRowId={row => row.id} preferenceKey={`mixed-${fixtureKey}`} pageSize={5} />);
     fireEvent.change(screen.getByLabelText("Group records by"), { target: { value: "room" } });
     let headings = screen.getByRole("table").querySelectorAll('th[scope="rowgroup"]');
-    expect(headings).toHaveLength(2);
-    expect(headings[0]).toHaveTextContent("Not recorded");
-    expect(headings[0]).toHaveTextContent("4 matching");
-    expect(headings[1]).toHaveTextContent("8 matching");
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    headings = screen.getByRole("table").querySelectorAll('th[scope="rowgroup"]');
     expect(headings).toHaveLength(1);
     expect(headings[0]).toHaveTextContent("8 matching");
+    fireEvent.click(screen.getByRole("button", { name: "Group order: ascending" }));
+    expect(screen.getByRole("table")).not.toHaveTextContent("Not recorded");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    headings = screen.getByRole("table").querySelectorAll('th[scope="rowgroup"]');
+    expect(headings).toHaveLength(2);
+    expect(headings[0]).toHaveTextContent("8 matching");
+    expect(headings[1]).toHaveTextContent("Not recorded");
+    expect(headings[1]).toHaveTextContent("4 matching");
+    expect(screen.getByRole("table").querySelectorAll("tbody")).toHaveLength(2);
     for (const view of ["List", "Grid"]) {
       fireEvent.click(screen.getByRole("button", { name: view }));
-      expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1);
-      expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent("8 matching");
+      expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(2);
+      expect(screen.getAllByRole("heading", { level: 3 })[0]).toHaveTextContent("8 matching");
       expect(screen.getAllByRole("listitem")).toHaveLength(5);
     }
   });
@@ -117,6 +122,25 @@ describe("collection presentations share one record model", () => {
     expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Table" }));
     expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("keeps reverse column sorting and group direction available in phone List and Grid", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390, writable: true });
+    render(<Collection />);
+    await user.selectOptions(screen.getByLabelText("Group records by"), "room");
+    await user.click(screen.getByRole("button", { name: "Group order: ascending" }));
+    expect(screen.getAllByRole("heading", { level: 3 })[0]).toHaveTextContent("Garage");
+    await user.click(screen.getByRole("button", { name: "Sort records" }));
+    await user.click(screen.getByRole("button", { name: "Name: not sorted" }));
+    await user.click(screen.getByRole("button", { name: "Name: ascending" }));
+    expect(screen.getByRole("button", { name: "Name: descending" })).toHaveAttribute("aria-pressed", "true");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Group order: descending" }));
+    for (const view of ["List", "Grid"]) {
+      fireEvent.click(screen.getByRole("button", { name: view }));
+      expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("[synthetic] Lamp");
+    }
   });
 
   it("does not open a record when a nested checkbox is activated", () => {

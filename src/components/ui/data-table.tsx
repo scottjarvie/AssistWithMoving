@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { MoveIllustration } from "@/components/moving-symbol"
-import { CollectionPresentationControls } from "@/components/collection-presentation-controls"
+import { CollectionPresentationControls, type CollectionSortPresets } from "@/components/collection-presentation-controls"
 import { useCollectionPresentation, type CollectionView } from "@/components/use-collection-presentation"
 
 // ---------------------------------------------------------------------------
@@ -73,6 +73,7 @@ export type ColumnMeta = {
   editable?: boolean
   groupable?: boolean
   groupLabel?: (value: unknown) => string
+  groupOrder?: readonly unknown[]
 }
 
 declare module "@tanstack/react-table" {
@@ -87,6 +88,7 @@ declare module "@tanstack/react-table" {
     editable?: boolean
     groupable?: boolean
     groupLabel?: (value: unknown) => string
+    groupOrder?: readonly unknown[]
   }
 }
 
@@ -160,6 +162,7 @@ export function DataTableColumnHeader<TData, TValue>({
   column: Column<TData, TValue>
   label: string
 }) {
+  const sortDescriptionId = React.useId()
   if (!column.getCanSort()) {
     return <span>{label}</span>
   }
@@ -174,8 +177,10 @@ export function DataTableColumnHeader<TData, TValue>({
       className="inline-flex h-8 items-center gap-1 rounded-md px-1 text-left text-xs font-medium uppercase tracking-wide hover:bg-muted"
       onClick={column.getToggleSortingHandler()}
       aria-label={`Sort by ${label}`}
+      aria-describedby={sortDescriptionId}
     >
       <span>{label}</span>
+      <span id={sortDescriptionId} className="sr-only">{sorted ? `${sorted === "asc" ? "Ascending" : "Descending"}; ${column.getSortIndex() === 0 ? "primary" : "secondary"} sort, priority ${column.getSortIndex() + 1}` : "Not sorted"}. Select to change direction.</span>
       <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
     </button>
   )
@@ -241,6 +246,7 @@ export type DataTableProps<TData> = {
   preferenceKey?: string
   showColumnControl?: boolean
   showSortControl?: boolean
+  sortPresets?: CollectionSortPresets
   /** Loaded accessible records before filters owned by the caller. */
   unfilteredCount?: number
   onClearFilters?: () => void
@@ -300,9 +306,17 @@ function normalizedGroupKey(value: unknown): string {
   return `${typeof value}:${String(value).normalize("NFKC").trim().toLowerCase()}`
 }
 
-function compareGroups(left: unknown, right: unknown): number {
+function compareGroups(left: unknown, right: unknown, order?: readonly unknown[], descending = false): number {
   const a = normalizedGroupKey(left), b = normalizedGroupKey(right)
   if (a === b) return 0
+  // TanStack reverses the comparator for descending. Compensate only for
+  // absent values so Not recorded stays last in either direction.
+  if (a === "empty" || b === "empty") return (a === "empty" ? 1 : -1) * (descending ? -1 : 1)
+  if (order) {
+    const index = (key: string) => { const found = order.findIndex(value => normalizedGroupKey(value) === key); return found < 0 ? order.length : found }
+    const difference = index(a) - index(b)
+    if (difference) return difference
+  }
   if (typeof left === "number" && typeof right === "number" && Number.isFinite(left) && Number.isFinite(right)) return left - right
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "variant" }) || (a < b ? -1 : 1)
 }
@@ -327,6 +341,7 @@ export function DataTable<TData>({
   preferenceKey,
   showColumnControl = true,
   showSortControl = true,
+  sortPresets,
   unfilteredCount,
   onClearFilters,
   onRowOpen,
@@ -403,8 +418,8 @@ export function DataTable<TData>({
   const groupBy = resolvedColumns.some(column => column.meta?.groupable && column.enableSorting !== false && (column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "")) === presentation.groupBy) ? presentation.groupBy : ""
   const groupedColumns = React.useMemo(() => resolvedColumns.map(column =>
     groupBy && (column.id ?? ("accessorKey" in column ? String(column.accessorKey) : "")) === groupBy
-      ? { ...column, sortUndefined: false as const, sortingFn: (left: Row<TData>, right: Row<TData>, id: string) => compareGroups(left.getValue(id), right.getValue(id)) }
-      : column), [groupBy, resolvedColumns])
+      ? { ...column, sortUndefined: false as const, sortingFn: (left: Row<TData>, right: Row<TData>, id: string) => compareGroups(left.getValue(id), right.getValue(id), column.meta?.groupOrder, presentation.groupDesc) }
+      : column), [groupBy, presentation.groupDesc, resolvedColumns])
   const tableSorting = React.useMemo<SortingState>(() => groupBy
     ? [{ id: groupBy, desc: presentation.groupDesc }, ...sorting.filter(sort => sort.id !== groupBy)]
     : sorting, [groupBy, presentation.groupDesc, sorting])
@@ -496,7 +511,7 @@ export function DataTable<TData>({
       <CollectionPresentationControls table={table} preferences={{ ...presentation, groupBy }} onChange={patch => {
         setPresentation(patch)
         if (patch.groupBy !== undefined) table.setPageIndex(0)
-      }} showColumns={showColumnControl} showSort={showSortControl} />
+      }} showColumns={showColumnControl} showSort={showSortControl} sortPresets={sortPresets} />
 
       {enableRowSelection && batchActions ? (
         <BatchActionToolbar
@@ -553,6 +568,7 @@ export function DataTable<TData>({
                       return (
                         <TableHead
                           key={header.id}
+                          aria-sort={header.column.getIsSorted() && header.column.getSortIndex() === 0 ? header.column.getIsSorted() === "asc" ? "ascending" : "descending" : undefined}
                           className={cn(
                             DATA_TABLE_DENSITY.head,
                             meta?.headClassName ??
@@ -572,12 +588,12 @@ export function DataTable<TData>({
                   </TableRow>
                 ))}
               </TableHeader>
-              <TableBody>
-                {pageRows.map((row, index) => {
+              {[...cardGroups].map(([key, rows]) => <TableBody key={key}>
+                {rows.map((row, index) => {
                   const openable = Boolean(onRowOpen)
                   return (
                   <React.Fragment key={row.id}>
-                  {groupBy && (index === 0 || groupKey(pageRows[index - 1]) !== groupKey(row)) ? <TableRow><TableHead scope="rowgroup" colSpan={table.getVisibleLeafColumns().length} className="bg-muted px-2 py-2 text-sm font-medium text-foreground">{table.getColumn(groupBy)?.columnDef.meta?.label ?? groupBy}: {groupLabel(row)} <Badge variant="outline" className="ml-2">{groupCounts.get(groupKey(row))} matching</Badge></TableHead></TableRow> : null}
+                  {groupBy && index === 0 ? <TableRow><TableHead scope="rowgroup" colSpan={table.getVisibleLeafColumns().length} className="bg-muted px-2 py-2 text-sm font-medium text-foreground">{table.getColumn(groupBy)?.columnDef.meta?.label ?? groupBy}: {groupLabel(row)} <Badge variant="outline" className="ml-2">{groupCounts.get(groupKey(row))} matching</Badge></TableHead></TableRow> : null}
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() ? "selected" : undefined}
@@ -634,7 +650,7 @@ export function DataTable<TData>({
                   </React.Fragment>
                   )
                 })}
-              </TableBody>
+              </TableBody>)}
               </Table>
             </div>
           ) : null}
@@ -680,7 +696,7 @@ function DataTablePagination<TData>({
   const hidden = Math.max(0, (unfilteredCount ?? table.getPreFilteredRowModel().rows.length) - matching)
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-      <div><p>{shown} of {matching} matching shown{hidden ? ` · ${hidden} hidden by this view` : ""}{matching > shown ? ` · ${matching - shown} on other pages` : ""}{hidden && (onClearFilters || table.getState().columnFilters.length > 0) ? <Button type="button" variant="link" size="sm" onClick={() => { table.resetColumnFilters(); onClearFilters?.(); table.setPageIndex(0) }}>Show all</Button> : null}</p><p>Page {table.getState().pagination.pageIndex + 1} of {pageCount}</p></div>
+      <div><p>{shown} of {matching} matching shown{hidden ? ` · ${hidden} hidden by this view` : ""}{matching > shown ? ` · ${matching - shown} on other pages` : ""}{hidden && (onClearFilters || table.getState().columnFilters.length > 0) ? <Button type="button" variant="link" size="sm" className="collection-controls" onClick={() => { table.resetColumnFilters(); onClearFilters?.(); table.setPageIndex(0) }}>Show all</Button> : null}</p><p>Page {table.getState().pagination.pageIndex + 1} of {pageCount}</p></div>
       <div className="collection-controls flex items-center gap-2">
         <Button
           type="button"

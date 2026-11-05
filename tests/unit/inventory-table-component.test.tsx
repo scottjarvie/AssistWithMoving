@@ -236,10 +236,11 @@ describe("InventoryTable", () => {
     fireEvent.click(screen.getByRole("button", { name: view }));
     const recordButtons = () => screen.getAllByRole("button", { name: /^Open \[synthetic\]/ });
     expect(recordButtons()[0]).toHaveAccessibleName(/A light/);
-    await user.click(screen.getByRole("button", { name: /Added/ }));
-    await user.click(screen.getByRole("menuitem", { name: /^Weight/ }));
+    await user.click(screen.getByRole("button", { name: "Sort records" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Weight/ }));
+    await user.keyboard("{Escape}");
     expect(recordButtons()[0]).toHaveAccessibleName(/Z heavy/);
-    expect(screen.queryByRole("button", { name: "Sort records" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Sort records" })).toHaveLength(1);
   });
 
   it("opens on browsing items and keeps add/import workflows separate", async () => {

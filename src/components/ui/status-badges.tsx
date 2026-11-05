@@ -101,6 +101,10 @@ const dispositionDisplay: Record<string, DispositionDisplay> = {
   },
 }
 
+export function dispositionDisplayLabel(value: string) {
+  return dispositionDisplay[value]?.label ?? value
+}
+
 export function DispositionBadge({
   disposition,
   className,
@@ -125,6 +129,10 @@ export function DispositionBadge({
 
 export type AssignmentState = "assigned" | "unassigned" | "owner"
 
+export function assignmentDisplayLabel(state: string) {
+  return state === "assigned" ? "Assigned" : state === "owner" ? "Personal" : state === "unassigned" ? "Needs load" : state
+}
+
 const assignmentTones: Record<AssignmentState, Tone> = {
   assigned: { variant: "default" },
   unassigned: destructiveSoftTone,
@@ -141,12 +149,7 @@ export function AssignmentBadge({
   label?: string
 } & Omit<React.ComponentProps<typeof Badge>, "variant" | "children">) {
   const tone = assignmentTones[state] ?? { variant: "outline" }
-  const fallback =
-    state === "assigned"
-      ? "Assigned"
-      : state === "owner"
-        ? "Personal"
-        : "Needs load"
+  const fallback = assignmentDisplayLabel(state)
   return (
     <ToneBadge tone={tone} className={className} {...props}>
       {label ?? fallback}

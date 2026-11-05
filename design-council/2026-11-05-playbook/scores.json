@@ -206,6 +206,112 @@
       ],
       "crossModelCodeReview": true,
       "reviewRecord": "reviews/02-Q-opus.md"
+    },
+    {
+      "exactHead": "682decc12ece3865809b80fb36cd692fdae49706",
+      "observedHead": "682decc12ece3865809b80fb36cd692fdae49706",
+      "implementationBase": "3e845357ed5bb6789063efb2d3167020865e7f8b",
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "Codex gpt-6.1-sol high",
+      "blindLabel": "R",
+      "evidenceType": "source-and-synthetic-component-images",
+      "sourceRubric": {
+        "scale": "0–10, equally weighted; scoped source assessment",
+        "capabilityPreservationAndTruth": 9.5,
+        "collectionOrderingAndControls": 9,
+        "responsiveStructureAndPreferences": 9,
+        "accessibility": 7,
+        "printControlCoverage": 8,
+        "evidenceCorrectnessAndProvenance": 8
+      },
+      "overallSourceScore": 8.4,
+      "homeComponentVisualRubric": {
+        "scale": "0–10, equally weighted; four supplied component images only",
+        "decidedTrayCompositionAndHierarchy": 9,
+        "observedDesktopAndPhoneLayout": 8.8,
+        "imageSlotsAndDomainSymbols": 8.6,
+        "observedContentLegibility": 8.8,
+        "applicationCanvasPaletteFidelity": null,
+        "finalTypography": null
+      },
+      "homeComponentVisualScore": 8.8,
+      "homeComponentTasteVerdict": "Bounded approval of the decided Home composition. Refresh canvas-correct captures before palette acceptance. Opus remains the final AI tastemaker; Scott overrides.",
+      "disposition": "request-changes",
+      "blockingFindings": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "wholeAuthenticatedResponsiveRendering": null,
+      "fullPrintRendering": null,
+      "finalTaste": null,
+      "evidenceLimitations": [
+        "Synthetic SSR Home component with application CSS; no authenticated shell, live data or interactive hydration.",
+        "Only 1440x743 desktop and 390x1008 phone images were inspected, in light and dark.",
+        "Images show one loaded synthetic move; empty, loading, multi-move and 320px rendering remain unverified.",
+        "System font fallback prevents final typography acceptance; transparent canvas overrides prevent application-background acceptance.",
+        "Source provenance matches the reviewed application tree; later commits changed generator/evidence only.",
+        "Checks were not rerun. Reported focused checks do not establish a green full suite; two baseline failures remain recorded.",
+        "Reviewer uses the same model as the author; this does not supply different-model approval.",
+        "Remaining collection facets/saved views, page families and spatial/load/move-day explorations remain outside this tranche."
+      ],
+      "filesChanged": false,
+      "crossModelCodeReview": false,
+      "reviewRecord": "reviews/03-R-sol.md"
+    },
+    {
+      "exactHead": "682decc12ece3865809b80fb36cd692fdae49706",
+      "observedHead": "682decc12ece3865809b80fb36cd692fdae49706",
+      "implementationBase": "3e845357ed5bb6789063efb2d3167020865e7f8b",
+      "authorModel": "Codex gpt-6.1-sol high",
+      "reviewerModel": "claude-opus-5-5",
+      "blindLabel": "R",
+      "evidenceType": "source-and-synthetic-component-images",
+      "sourceRubric": {
+        "capabilityPreservation": 8,
+        "truthfulCounts": 8,
+        "responsiveStructure": 8.5,
+        "controlsAndAccessibility": 7.5,
+        "collectionCorrectness": 8.5,
+        "evidenceHonesty": 8.5
+      },
+      "overallSourceScore": 8.2,
+      "homeComponentVisualRubric": {
+        "playbookHomeFit": 7.5,
+        "hierarchyAndScanning": 8,
+        "calmDensity": 8,
+        "lightDarkParity": 8.5,
+        "phoneLayout": 8,
+        "movingFlair": 7.5
+      },
+      "homeComponentVisualScore": 7.9,
+      "homeComponentTasteVerdict": "Coherent, restrained kraft folder-tray desk that fits the decided §3.5 skeleton within the data Home can load today; slightly sparse and launchpad-like; 'Library' naming is a flair question for Opus/Scott. Bounded to synthetic single-move SSR component images.",
+      "disposition": "approve-with-non-blocking-changes",
+      "blockingFindings": [],
+      "nonBlockingFindings": [
+        "Medium: generic Sort hidden removes reverse/group-direction sorting in List/Grid (phone default) for Items and Movable units",
+        "Medium: group headings show raw stored values (personalTransport, owner, unassigned) and order alphabetically; groupLabel hook unused",
+        "Medium: Home 'N active' counts every non-archived move, including planning and completed",
+        "Low: preset SortMenu keeps showing the old preset after a header sort overrides it",
+        "Low: scope=rowgroup group headings inside a single tbody",
+        "Low: Home links lack an explicit focus-visible style",
+        "Low: sample builder dirty check ignores the generator; relative dates; single-move fixture",
+        "Low/taste: 'Library' tray label and its nav-link count"
+      ],
+      "authenticatedResponsiveRendering": null,
+      "fullPrintRendering": null,
+      "finalTaste": null,
+      "evidenceLimitations": [
+        "Source review plus four static synthetic SSR images of the HomeLaunchpad component only; no authenticated app shell, live data, hydration or interaction",
+        "Fixture has one move: the three-row overview, long titles, empty state and loading state are not visually evidenced",
+        "System font fallback, so final typography is unverified",
+        "Collection changes reviewed in source only; no rendered collection, phone list or print evidence",
+        "No tests run by this reviewer; relied on the reported 22 collection tests, 3 Home tests and typecheck; the full suite still has two recorded failures",
+        "Remaining page families, facets and saved views, and spatial/load/move-day explorations are out of this tranche; no global completion claimed"
+      ],
+      "filesChanged": [],
+      "crossModelCodeReview": true,
+      "reviewRecord": "reviews/03-R-opus.md"
     }
   ],
   "scottPicks": []
