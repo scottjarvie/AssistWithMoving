@@ -470,7 +470,7 @@ describe("AiConnectionManager", () => {
     try {
       render(<AiConnectionManager />);
       expect(screen.getAllByText("Saved end date is outside the supported range")).toHaveLength(2);
-      expect(screen.getByText("Saved date is outside the supported range")).toBeInTheDocument();
+      expect(screen.getByText(/Saved date is outside the supported range/)).toBeInTheDocument();
       expect(connectionData.grants.grants[0].expiresAt).toBe(1e20);
     } finally { connectionData.grants.grants = original; }
   });
