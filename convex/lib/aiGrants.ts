@@ -12,6 +12,7 @@
  * chosen grant; full-access grants follow the current catalog.
  */
 import { ConvexError } from "convex/values";
+import { isSupportedConnectionExpiry } from "./connectionReduction";
 
 /**
  * Bumped whenever the consent text, scope meanings, or ceiling lists change.
@@ -85,7 +86,9 @@ export function chosenExpiry(days: number | undefined, now: number) {
   if (!Number.isFinite(days) || days < 1 || !Number.isInteger(days)) {
     throw new ConvexError("Choose a whole number of days of at least 1.");
   }
-  return now + days * 86_400_000;
+  const expiresAt = now + days * 86_400_000;
+  if (!isSupportedConnectionExpiry(expiresAt)) throw new ConvexError("Choose an end date within the supported date range.");
+  return expiresAt;
 }
 
 export type MovingScope = (typeof movingScopes)[number];

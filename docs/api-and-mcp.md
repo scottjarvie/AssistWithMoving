@@ -2311,6 +2311,11 @@ rather than preserved active rows from prior approvals. Original records stay
 intact. Oversized incomplete histories retain conservative bounded admission.
 Recovery offers currently eligible household choices only; an archived previous
 household remains historical context and cannot become the default target.
+Recovery paging retains the effective household and its eligibility witness,
+including when the person accepts the automatic default or reaches an empty
+final page. Explicit expiry choices and self-reductions must produce a supported
+date before any write. Settings preserves unsupported historical values and
+shows a date warning instead of crashing or describing them as unlimited.
 
 Settings at `https://movingmanifest.com/settings/ai` let the owner deliberately
 choose fewer permissions, add/change/remove an end date, or revoke the connection.

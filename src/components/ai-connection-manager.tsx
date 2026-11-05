@@ -131,6 +131,7 @@ type MoveSummary = { moveId: Id<"moves">; title: string; status: string };
 
 function formatMoment(value: number | null | undefined) {
   if (typeof value !== "number") return "Never";
+  if (!Number.isFinite(new Date(value).getTime())) return "Saved date is outside the supported range";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -139,6 +140,7 @@ function formatMoment(value: number | null | undefined) {
 
 function formatDay(value: number | null | undefined) {
   if (typeof value !== "number") return "No end date";
+  if (!Number.isFinite(new Date(value).getTime())) return "Saved end date is outside the supported range";
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(value);
 }
 
@@ -604,8 +606,8 @@ export function AiConnectionManager() {
             ) : null}
 
             {reconnectGrantId ? <div className="flex flex-wrap gap-2">
-              {recoveryHouseholds?.nextCursor ? <Button type="button" variant="outline" onClick={() => { if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(recoveryHouseholds.nextCursor!); }}>More recovery households</Button> : null}
-              {recoveryHouseholdCursor ? <Button type="button" variant="outline" onClick={() => { if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(undefined); }}>First recovery households</Button> : null}
+              {recoveryHouseholds?.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(recoveryHouseholds.nextCursor!); }}>More recovery households</Button> : null}
+              {recoveryHouseholdCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(undefined); }}>First recovery households</Button> : null}
             </div> : null}
             <div className="flex flex-wrap gap-2">
               {memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); memberChoices.next(householdId); }}>More member households</Button> : null}

@@ -16,7 +16,7 @@ import {
   readActiveApiKeyCount,
 } from "./lib/apiKeys";
 import { requirePersonConnectionManagement } from "./lib/personConnectionManagement";
-import { reductionArgs, reducedAccess, type Reduction } from "./lib/connectionReduction";
+import { isSupportedConnectionExpiry, reductionArgs, reducedAccess, type Reduction } from "./lib/connectionReduction";
 import { requireHouseholdPermission } from "./lib/permissions";
 
 // Default cap on active connections (API keys) per household, so the "active
@@ -366,8 +366,8 @@ function normalizeKeyName(name: string) {
 
 function normalizeExpiration(expiresAt: number | undefined) {
   if (expiresAt === undefined) return undefined;
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    throw new ConvexError("Expiration must be in the future.");
+  if (!isSupportedConnectionExpiry(expiresAt) || expiresAt <= Date.now()) {
+    throw new ConvexError("Expiration must be a supported date in the future.");
   }
   return expiresAt;
 }

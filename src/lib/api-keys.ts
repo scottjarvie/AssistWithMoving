@@ -21,6 +21,7 @@ export function apiKeyStatusLabel(status: string) {
 
 export function formatApiKeyDate(timestamp: number | undefined) {
   if (typeof timestamp !== "number") return "Never";
+  if (!Number.isFinite(new Date(timestamp).getTime())) return "Saved date is outside the supported range";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
