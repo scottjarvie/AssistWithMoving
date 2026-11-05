@@ -35,7 +35,8 @@ const connectionData = vi.hoisted(() => ({
     boundaryVersion: "2026-08-16",
     consentPolicyVersion: "",
     catalogFingerprint: "",
-    historyFingerprint: "current-history",
+    historyFingerprint: "current-history" as string | undefined,
+    recoveryFingerprint: "current-recovery",
     historyAtCapacity: false,
     historyOverflow: false,
     scopes: [
@@ -285,6 +286,29 @@ describe("AiConnectionManager", () => {
     } finally {
       connectionData.grants.grants = original;
       connectionData.grants.historyAtCapacity = false;
+    }
+  });
+
+  it("permits explicit overflow recovery with the loaded management revision", async () => {
+    const original = connectionData.grants.grants;
+    connectionData.grants.grants = [{ ...original[0], status: "revoked" }];
+    connectionData.grants.historyAtCapacity = true;
+    connectionData.grants.historyOverflow = true;
+    connectionData.grants.historyFingerprint = undefined;
+    try {
+      const user = userEvent.setup();
+      render(<AiConnectionManager />);
+      await user.selectOptions(screen.getByLabelText("Connection", { selector: "#ai-grant-reconnect" }), "ai_grant_123");
+      expect(screen.getByRole("button", { name: "Approve this connection" })).toBeEnabled();
+      await user.click(screen.getByRole("button", { name: "Approve this connection" }));
+      expect(connectionData.approve).toHaveBeenCalledWith(expect.objectContaining({
+        reconnectGrantId: "ai_grant_123", expectedRecoveryFingerprint: "current-recovery", scopeIntent: "full", expiryIntent: "none",
+      }));
+    } finally {
+      connectionData.grants.grants = original;
+      connectionData.grants.historyAtCapacity = false;
+      connectionData.grants.historyOverflow = false;
+      connectionData.grants.historyFingerprint = "current-history";
     }
   });
 
