@@ -769,11 +769,12 @@ it("pages member households without calling the unbounded dashboard query", asyn
   try {
     const user = userEvent.setup();
     render(<AiConnectionManager />);
-    await user.click(screen.getByRole("button", { name: "More member households" }));
+    const approval = within(screen.getByRole("heading", { name: "Approve a connection" }).closest("section")!);
+    await user.click(approval.getByRole("button", { name: "More member households" }));
     const household = screen.getByLabelText("Household", { selector: "#ai-grant-household" });
     expect(household).toHaveValue("household_123");
     await user.selectOptions(household, "member_later");
-    await user.click(screen.getByRole("button", { name: "First member households" }));
+    await user.click(approval.getByRole("button", { name: "First member households" }));
     expect(household).toHaveValue("member_later");
     expect(connectionData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.listMine, expect.anything());
   } finally { connectionData.memberPaging = false; }

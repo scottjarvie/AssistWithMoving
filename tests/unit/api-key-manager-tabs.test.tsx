@@ -289,7 +289,6 @@ it("uses bounded member/key/move queries and preserves a move restriction across
   try {
     const user = userEvent.setup();
     render(<ApiKeyManager enabled />);
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
     const move = screen.getByLabelText("Where can it work?");
     await user.selectOptions(move, "move_123");
     await user.click(screen.getByRole("button", { name: "More key move choices" }));
