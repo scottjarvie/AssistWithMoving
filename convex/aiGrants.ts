@@ -714,7 +714,7 @@ export const listReceipts = query({
     const user = await requireCurrentUser(ctx);
     const page = await ctx.db.query("auditLogs").withIndex("by_actor_user_time", q => q.eq("actorUserId", user._id))
       .order("desc").paginate({ numItems: 25, cursor: args.cursor ?? null });
-    return { ...page, page: page.page.filter(row => row.objectTable === "aiGrants") };
+    return { ...page, page: page.page.filter(row => row.objectTable === "aiGrants" || row.objectTable === "apiKeys") };
   },
 });
 
@@ -746,14 +746,16 @@ export const listRecoveryHouseholds = query({
     const page = await ctx.db.query("moveParticipants")
       .withIndex("by_user_status", q => q.eq("userId", user._id).eq("status", "active"))
       .paginate({ numItems: 25, cursor: args.cursor ?? null });
-    const households = new Map<Id<"households">, { householdId: Id<"households">; label: string }>();
+    const households = new Map<Id<"households">, { householdId: Id<"households">; label: string; moveId: Id<"moves"> }>();
     for (const participant of page.page) {
       if (participant.accessKind !== "moveOnly") continue;
       const move = await ctx.db.get(participant.moveId);
       if (!move || move.householdId !== participant.householdId || move.status === "archived") continue;
+      const household = await ctx.db.get(participant.householdId);
+      if (!household || household.archivedAt !== undefined) continue;
       await resolveMoveAccess(ctx, user._id, participant.householdId, move._id);
       // A participant can see this move title, never the household's profile.
-      households.set(participant.householdId, { householdId: participant.householdId, label: `Move: ${move.title}` });
+      households.set(participant.householdId, { householdId: participant.householdId, label: `Move: ${move.title}`, moveId: move._id });
     }
     return { households: [...households.values()], nextCursor: page.isDone ? null : page.continueCursor };
   },
@@ -837,13 +839,14 @@ async function validateGrantMoves(
       }
       for (const moveId of requested) {
         const move = await ctx.db.get(moveId);
-        if (!move || ("householdId" in access && move.householdId !== access.householdId)) {
+        if (!move || move.status === "archived" || ("householdId" in access && move.householdId !== access.householdId)) {
           throw new ConvexError("That move is not available in this household.");
         }
+        const household = await ctx.db.get(move.householdId);
+        if (!household || household.archivedAt !== undefined) throw new ConvexError("That active household is not available.");
         if ("userId" in access) {
           // All-moves grants span every current membership and move-only
           // participation, rather than just the household where they began.
-          if (move.status === "archived") throw new ConvexError("That active move is not available.");
           await resolveMoveAccess(ctx, access.userId, move.householdId, moveId);
         }
       }
@@ -871,12 +874,19 @@ async function requireConnectionCapacity(ctx: MutationCtx, ownerUserId: Id<"user
 }
 
 /** Membership or an independently verified current move-only participation. */
-async function requireGrantEligibility(ctx: MutationCtx, user: Doc<"users">, householdId: Id<"households">, allowParticipant: boolean) {
+async function requireGrantEligibility(ctx: MutationCtx, user: Doc<"users">, householdId: Id<"households">, allowParticipant: boolean, eligibilityMoveId?: Id<"moves">) {
   if (user.status !== "active") throw new ConvexError("An active profile is required to increase access.");
+  const household = await ctx.db.get(householdId);
+  if (!household || household.archivedAt !== undefined) throw new ConvexError("That active household is not available.");
   const membership = await ctx.db.query("householdMemberships")
     .withIndex("by_household_user", q => q.eq("householdId", householdId).eq("userId", user._id)).unique();
   if (membership?.status === "active") return "member" as const;
   if (allowParticipant) {
+    if (eligibilityMoveId) {
+      const access = await resolveMoveAccess(ctx, user._id, householdId, eligibilityMoveId);
+      if (access.move.status === "archived" || access.accessKind !== "moveOnly") throw new ConvexError("That active participant move is not available.");
+      return "participant" as const;
+    }
     const participants = await ctx.db.query("moveParticipants")
       .withIndex("by_user_household_status", q => q.eq("userId", user._id).eq("householdId", householdId).eq("status", "active"))
       .take(MAX_GRANT_HISTORY + 1);
@@ -894,6 +904,7 @@ async function requireGrantEligibility(ctx: MutationCtx, user: Doc<"users">, hou
 export const approve = mutation({
   args: {
     ...consentArgs,
+    eligibilityMoveId: v.optional(v.id("moves")),
     householdId: v.id("households"),
     label: v.string(),
     expectedHistoryFingerprint: v.optional(v.string()),
@@ -908,7 +919,7 @@ export const approve = mutation({
   handler: async (ctx, args) => {
     await requirePersonConnectionManagement(ctx);
     const user = await requireCurrentUser(ctx);
-    const eligibility = await requireGrantEligibility(ctx, user, args.householdId, args.reconnectGrantId !== undefined);
+    const eligibility = await requireGrantEligibility(ctx, user, args.householdId, args.reconnectGrantId !== undefined, args.eligibilityMoveId ?? args.moveIds?.[0]);
 
     const history = await ctx.db.query("aiGrants").withIndex("by_owner_client_status", q => q.eq("ownerUserId", user._id)).take(MAX_GRANT_HISTORY + 1);
     const overflow = history.length > MAX_GRANT_HISTORY;
@@ -1022,6 +1033,7 @@ export const approve = mutation({
 export const updateLimits = mutation({
   args: {
     ...consentArgs,
+    eligibilityMoveId: v.optional(v.id("moves")),
     grantId: v.id("aiGrants"), expectedVersion: v.number(),
     scopes: v.optional(v.array(movingGrantScope)),
     moveScope: v.optional(v.union(v.literal("allMoves"), v.literal("selectedMoves"))),
@@ -1045,7 +1057,7 @@ export const updateLimits = mutation({
     let moveIds = grant.moveIds;
     if (editsMoves) {
       requireCurrentConsent(args.consentPolicyVersion, args.catalogFingerprint);
-      const eligibility = await requireGrantEligibility(ctx, user, grant.householdId, true);
+      const eligibility = await requireGrantEligibility(ctx, user, grant.householdId, true, args.eligibilityMoveId ?? args.moveIds?.[0] ?? grant.moveIds?.[0]);
       moveIds = await validateGrantMoves(ctx, eligibility === "participant" ? { userId: user._id } : { householdId: grant.householdId }, moveScope, args.moveIds ?? grant.moveIds);
     }
     const now = Date.now();
@@ -1081,7 +1093,7 @@ export const updateLimits = mutation({
     const extendsExpiry = currentExpiry !== undefined && (nextExpiry === undefined || nextExpiry > currentExpiry);
     const restores = !grantIsActive(grant, now) && (nextExpiry === undefined || nextExpiry > now);
     if (widensScopes || widensMoves || extendsExpiry || restores) {
-      const eligibility = await requireGrantEligibility(ctx, user, grant.householdId, true);
+      const eligibility = await requireGrantEligibility(ctx, user, grant.householdId, true, args.eligibilityMoveId ?? moveIds?.[0]);
       if (moveScope === "selectedMoves") {
         await validateGrantMoves(ctx, eligibility === "participant" ? { userId: user._id } : { householdId: grant.householdId }, moveScope, moveIds);
       }

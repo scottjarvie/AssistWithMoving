@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
-import { recordAuditEvent } from "./lib/audit";
+import { recordAuditEvent, type AuditEventInput } from "./lib/audit";
 import { assertHouseholdEntitlement } from "./lib/billing";
 import {
   apiKeyScopes,
@@ -23,6 +23,12 @@ import { requireHouseholdPermission } from "./lib/permissions";
 // connections" count stays legible to a non-technical user (MOVE-279). Revoke
 // one to free a slot.
 const MAX_ACTIVE_API_KEYS = 3;
+
+async function recordPrivateKeyAudit(ctx: MutationCtx, input: AuditEventInput) {
+  const receipt = await recordAuditEvent(ctx, { ...input, householdId: undefined, moveId: undefined });
+  await recordAuditEvent(ctx, { householdId: input.householdId, moveId: input.moveId, actorType: input.actorType, actorUserId: input.actorUserId, category: "apiKey", action: "api_connection.changed" });
+  return receipt;
+}
 
 export const settingsSummary = query({
   args: { householdId: v.id("households") },
@@ -157,7 +163,7 @@ export const create = mutation({
       updatedAt: now,
     });
 
-    await recordAuditEvent(ctx, {
+    await recordPrivateKeyAudit(ctx, {
       householdId: args.householdId,
       moveId: args.moveId,
       actorType: "user",
@@ -203,7 +209,7 @@ export const revoke = mutation({
       updatedAt: now,
     });
 
-    await recordAuditEvent(ctx, {
+    await recordPrivateKeyAudit(ctx, {
       householdId: args.householdId,
       moveId: key.moveId,
       actorType: "user",
@@ -285,7 +291,7 @@ export async function rotateApiKeyForUser(
       updatedAt: now,
     });
 
-    await recordAuditEvent(ctx, {
+    await recordPrivateKeyAudit(ctx, {
       householdId: args.householdId,
       moveId: key.moveId,
       actorType: "user",
@@ -375,7 +381,7 @@ export async function reduceOwnApiKey(ctx: MutationCtx, apiKeyId: Id<"apiKeys">,
     ...(input.action === "revoke" ? { status: "revoked" as const, revokedAt: Date.now() } : {}),
     version, updatedAt: Date.now(),
   });
-  const receipt = await recordAuditEvent(ctx, { householdId: key.householdId, moveId: key.moveId, actorType: "apiKey", actorApiKeyId: key._id, actorUserId: key.createdByUserId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: key._id, metadata: { version, action: input.action ?? "narrow", previousVersion: key.version ?? 1, previousScopes: effectiveApiKeyScopes(key), scopes: reduced.scopes ?? effectiveApiKeyScopes(key), moveId: moveId ?? key.moveId ?? null, expiresAt: reduced.expiresAt ?? key.expiresAt ?? null } });
+  const receipt = await recordPrivateKeyAudit(ctx, { householdId: key.householdId, moveId: key.moveId, actorType: "apiKey", actorApiKeyId: key._id, actorUserId: key.createdByUserId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: key._id, metadata: { version, action: input.action ?? "narrow", previousVersion: key.version ?? 1, previousScopes: effectiveApiKeyScopes(key), scopes: reduced.scopes ?? effectiveApiKeyScopes(key), moveId: moveId ?? key.moveId ?? null, expiresAt: reduced.expiresAt ?? key.expiresAt ?? null } });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
 }
 

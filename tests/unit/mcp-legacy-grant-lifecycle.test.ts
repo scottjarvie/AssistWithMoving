@@ -1773,7 +1773,7 @@ it("ignores long expired-key history while enforcing both permanent and future-e
 });
 
 
-it("rolls back the API-key patch if its receipt write fails inside REST reduction", async () => {
+it.each(["api_key.self_reduced", "api_connection.changed"])("rolls back the API-key patch if %s receipt write fails inside REST reduction", async failedAction => {
   const t = convexTest(schema, modules);
   const { householdId, userId } = await seedOwner(t);
   const { generateApiKeySecret, hashApiKey, apiKeyPrefix } = await import("../../convex/lib/apiKeys");
@@ -1785,7 +1785,7 @@ it("rolls back the API-key patch if its receipt write fails inside REST reductio
   const auditModule = await import("../../convex/lib/audit");
   const actual = auditModule.recordAuditEvent;
   const receiptSpy = vi.spyOn(auditModule, "recordAuditEvent").mockImplementation(async (ctx, input) => {
-    if (input.action === "api_key.self_reduced") throw new Error("synthetic receipt failure");
+    if (input.action === failedAction) throw new Error("synthetic receipt failure");
     return actual(ctx, input);
   });
   try {
@@ -1797,7 +1797,7 @@ it("rolls back the API-key patch if its receipt write fails inside REST reductio
   const response = await request();
   expect(response.status).toBe(200);
   expect((await t.run(ctx => ctx.db.get(keyId)))?.version).toBe(2);
-  expect((await t.run(ctx => ctx.db.query("auditLogs").collect()))).toEqual([expect.objectContaining({ action: "api_key.self_reduced", metadata: expect.objectContaining({ version: 2 }) })]);
+  expect((await t.run(ctx => ctx.db.query("auditLogs").collect()))).toEqual(expect.arrayContaining([expect.objectContaining({ action: "api_key.self_reduced", metadata: expect.objectContaining({ version: 2 }) }), expect.objectContaining({ action: "api_connection.changed" })]));
 });
 
 it.each(["opaque-description", "https://description.example/client.json"])("describes only the calling legacy credential %s without context scope or unrestricted moves", async clientId => {
@@ -1860,4 +1860,83 @@ it.each(["display-client", "https://display.example/client.json"])("reports inte
   for (const id of [clientId, "legacy:" + clientId]) expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(["moving.context.read"]);
   await revokeOwner(owner, { grantId: aliasId, expectedVersion: 2 });
   for (const row of (await owner.query(api.aiGrants.listMine, {})).grants) expect(row.effectiveAuthority).toMatchObject({ status: "revoked", scopes: [] });
+});
+
+it("keeps detailed API-key receipts private and redacts historical shared receipts", async () => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Private key receipt" });
+  const receipt = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: [] });
+  const stored = await t.run(ctx => ctx.db.get(receipt.receipt));
+  expect(stored).toMatchObject({ objectId: apiKeyId, actorUserId: userId, metadata: { version: 2, scopes: [] } });
+  expect(stored?.householdId).toBeUndefined();
+  expect(stored?.moveId).toBeUndefined();
+  const historical = await t.run(async ctx => {
+    const now = Date.now();
+    const admin = await ctx.db.insert("users", { clerkUserId: "key-audit-admin", name: "Audit administrator", appRole: "member", status: "active", createdAt: now, updatedAt: now, lastSeenAt: now });
+    await ctx.db.insert("householdMemberships", { householdId, userId: admin, role: "admin", status: "active", apiAccessStatus: "enabled", createdAt: now, updatedAt: now });
+    return ctx.db.insert("auditLogs", { householdId, actorType: "apiKey", actorApiKeyId: apiKeyId, actorUserId: userId, category: "apiKey", action: "api_key.self_reduced", objectTable: "apiKeys", objectId: apiKeyId, metadata: { previousScopes: ["PRIVATE prior scope"], expiresAt: 123, version: 1 }, createdAt: now });
+  });
+  const admin = t.withIdentity({ subject: "key-audit-admin", sid: "sess_admin_fixture" });
+  const shared = await admin.query(api.audit.listForHousehold, { householdId });
+  expect(shared.length).toBeGreaterThan(0);
+  for (const value of [apiKeyId, "PRIVATE", "previousScopes", "expiresAt", "version"]) expect(JSON.stringify(shared)).not.toContain(value);
+  expect((await owner.query(api.aiGrants.listReceipts, {})).page.some(row => row._id === receipt.receipt)).toBe(true);
+  expect((await admin.query(api.aiGrants.listReceipts, {})).page).toEqual([]);
+  expect((await t.run(ctx => ctx.db.get(historical)))?.actorApiKeyId).toBe(apiKeyId);
+});
+
+for (const operation of ["recovery", "widening"] as const) it.each(["household", "move"])("refuses archived %s at " + operation + " submission", async archived => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "Loaded eligible move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "archive-checked-client" });
+  const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  if (operation === "recovery") await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
+  else await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: original._id, expectedVersion: 1, scopes: ["moving.context.read"], scopeIntent: "chosen" });
+  const loaded = await owner.query(api.aiGrants.listMine, {});
+  expect((await owner.query(api.aiGrants.listMoveChoices, { householdId })).moves.map(row => row.moveId)).toContain(moveId);
+  await t.run(async ctx => {
+    if (archived === "household") await ctx.db.patch(householdId, { archivedAt: Date.now() });
+    else await ctx.db.patch(moveId, { status: "archived" });
+  });
+  const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
+  if (operation === "recovery") await expect(owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Stale recovery", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint, moveScope: "selectedMoves", moveIds: [moveId] })).rejects.toThrow(/available/);
+  else await expect(owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId: original._id, expectedVersion: 2, scopeIntent: "full", scopes: [...movingScopes], moveScope: "selectedMoves", moveIds: [moveId] })).rejects.toThrow(/available/);
+  expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
+});
+
+it.each(["allMoves", "selectedMoves"] as const)("recovers a later eligible participation with %s through a direct checked move", async moveScope => {
+  const t = convexTest(schema, modules);
+  const { householdId, userId } = await seedOwner(t);
+  const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
+  await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "late-participant-client" });
+  const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
+  await revokeOwner(owner, { grantId: original._id, expectedVersion: 1 });
+  const eligible = await t.run(async ctx => {
+    const membership = (await ctx.db.query("householdMemberships").first())!;
+    await ctx.db.patch(membership._id, { status: "disabled" });
+    for (let i = 0; i < 130; i++) {
+      const moveId = await ctx.db.insert("moves", { householdId, title: "Archived participation", type: "local", status: "archived", unitSystem: "imperial", createdByUserId: userId, createdAt: i, updatedAt: i });
+      await ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: i, updatedAt: i });
+    }
+    const moveId = await ctx.db.insert("moves", { householdId, title: "Later eligible move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() });
+    const participantId = await ctx.db.insert("moveParticipants", { householdId, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: Date.now(), updatedAt: Date.now() });
+    return { moveId, participantId };
+  });
+  let page = await owner.query(api.aiGrants.listRecoveryHouseholds, {});
+  for (let i = 0; i < 6 && page.nextCursor; i++) page = await owner.query(api.aiGrants.listRecoveryHouseholds, { cursor: page.nextCursor });
+  expect(page.households).toEqual([{ householdId, label: "Move: Later eligible move", moveId: eligible.moveId }]);
+  const loaded = await owner.query(api.aiGrants.listMine, {});
+  const args = { ...consent, householdId, label: "Later participant recovery", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint, moveScope, ...(moveScope === "selectedMoves" ? { moveIds: [eligible.moveId] } : { eligibilityMoveId: eligible.moveId }) };
+  await t.run(ctx => ctx.db.patch(eligible.participantId, { status: "disabled" }));
+  await expect(owner.mutation(api.aiGrants.approve, args)).rejects.toThrow();
+  await t.run(ctx => ctx.db.patch(eligible.participantId, { status: "active" }));
+  const { grantId } = await owner.mutation(api.aiGrants.approve, args);
+  expect(await t.run(ctx => ctx.db.get(grantId))).toMatchObject({ scopeChoice: "full", expiryChoice: "none", moveScope });
+  const stored = (await t.run(ctx => ctx.db.get(grantId)))!;
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: stored.version, eligibilityMoveId: eligible.moveId, scopeIntent: "chosen", scopes: ["moving.context.read"] });
+  await owner.mutation(api.aiGrants.updateLimits, { ...consent, grantId, expectedVersion: stored.version + 1, eligibilityMoveId: eligible.moveId, scopeIntent: "full", scopes: [...movingScopes] });
 });
