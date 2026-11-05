@@ -11,16 +11,20 @@ const apiMock = vi.hoisted(() => ({
     summaryStats: "households.summaryStats",
   },
   apiKeys: {
+    settingsSummary: "apiKeys.settingsSummary",
     listForHousehold: "apiKeys.listForHousehold",
     create: "apiKeys.create",
     revoke: "apiKeys.revoke",
     rotate: "apiKeys.rotate",
   },
+  aiGrants: { listHouseholdChoices: "aiGrants.listHouseholdChoices", listMoveChoices: "aiGrants.listMoveChoices" },
 }));
 
 const apiKeyManagerData = vi.hoisted(() => ({
   mutation: vi.fn(),
   historyMode: false,
+  movePaging: false,
+  memberPaging: false,
   queryCalls: vi.fn(),
   households: [
     {
@@ -73,6 +77,12 @@ vi.mock("convex/react", () => ({
     switch (query) {
       case apiMock.households.listMine:
         return apiKeyManagerData.households;
+      case apiMock.aiGrants.listHouseholdChoices:
+        return { households: apiKeyManagerData.memberPaging && args?.cursor ? [{ household: { _id: "member_later", name: "Later member household" }, role: "owner" }] : apiKeyManagerData.households, nextCursor: apiKeyManagerData.memberPaging && !args?.cursor ? "later-members" : null };
+      case apiMock.aiGrants.listMoveChoices:
+        return { moves: apiKeyManagerData.movePaging && args?.cursor ? [{ ...apiKeyManagerData.stats.moves[0], moveId: "move_later", title: "Later key move" }] : apiKeyManagerData.stats.moves, nextCursor: apiKeyManagerData.movePaging && !args?.cursor ? "later-moves" : null };
+      case apiMock.apiKeys.settingsSummary:
+        return apiKeyManagerData.stats;
       case apiMock.households.summaryStats:
         return apiKeyManagerData.stats;
       case apiMock.apiKeys.listForHousehold:
@@ -155,12 +165,12 @@ describe("ApiKeyManager task tabs", () => {
 
     expect(
       screen.getByText(
-        "Check household, move, item, member, and AI connection counts before changing access.",
+        "Review the selected household, available moves, and AI connections before changing access.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Simple setup for an AI assistant")).toBeInTheDocument();
-    expect(screen.getByText("Households")).toBeInTheDocument();
-    expect(screen.getByText("Items")).toBeInTheDocument();
+    expect(screen.getByText("Households on this page")).toBeInTheDocument();
+    expect(screen.getByText("Moves on this page")).toBeInTheDocument();
     expect(screen.queryByText("Photo helper key")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Advanced" }));
@@ -270,4 +280,30 @@ it("pages older API keys and returns to recent keys", async () => {
     await user.click(screen.getByRole("button", { name: "Recent API keys" }));
     expect(screen.getByText("Photo helper key")).toBeInTheDocument();
   } finally { apiKeyManagerData.historyMode = false; }
+});
+
+it("uses bounded member/key/move queries and preserves a move restriction across pages", async () => {
+  apiKeyManagerData.memberPaging = true;
+  apiKeyManagerData.movePaging = true;
+  apiKeyManagerData.queryCalls.mockClear();
+  try {
+    const user = userEvent.setup();
+    render(<ApiKeyManager enabled />);
+    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+    const move = screen.getByLabelText("Where can it work?");
+    await user.selectOptions(move, "move_123");
+    await user.click(screen.getByRole("button", { name: "More key move choices" }));
+    expect(move).toHaveValue("move_123");
+    await user.selectOptions(move, "move_later");
+    await user.click(screen.getByRole("button", { name: "First key move choices" }));
+    expect(move).toHaveValue("move_later");
+    await user.click(screen.getByRole("button", { name: "More member households" }));
+    const household = screen.getByLabelText("Household");
+    expect(household).toHaveValue("household_123");
+    await user.selectOptions(household, "member_later");
+    expect(move).toHaveValue("all");
+    expect(apiKeyManagerData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.listMine, expect.anything());
+    expect(apiKeyManagerData.queryCalls).not.toHaveBeenCalledWith(apiMock.households.summaryStats, expect.anything());
+    expect(apiKeyManagerData.queryCalls).toHaveBeenCalledWith(apiMock.apiKeys.settingsSummary, { householdId: "household_123" });
+  } finally { apiKeyManagerData.memberPaging = false; apiKeyManagerData.movePaging = false; }
 });

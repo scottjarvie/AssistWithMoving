@@ -22,7 +22,7 @@ import {
 } from "./_generated/server";
 import { requireCurrentUser } from "./lib/auth";
 import { resolveMoveAccess } from "./lib/moveAccess";
-import { recordAuditEvent } from "./lib/audit";
+import { recordAuditEvent, type AuditEventInput } from "./lib/audit";
 import {
   GRANT_BOUNDARY_VERSION,
   movingScopes,
@@ -63,6 +63,12 @@ import {
 const MAX_ACTIVE_GRANTS = 8;
 const MAX_ACTIVITY_ROWS = 50;
 const ACTIVITY_TTL_MS = 90 * 24 * 60 * 60 * 1_000;
+/** Detailed grant receipts belong to the person, outside household indexes. */
+async function recordPrivateGrantAudit(ctx: MutationCtx, input: AuditEventInput) {
+  const receipt = await recordAuditEvent(ctx, { ...input, householdId: undefined, moveId: undefined });
+  await recordAuditEvent(ctx, { householdId: input.householdId, actorType: input.actorType, actorUserId: input.actorUserId, category: "ai", action: "ai_connection.changed" });
+  return receipt;
+}
 function grantIsActive(grant: Doc<"aiGrants">, now: number) {
   if (grant.status !== "active") return false;
   const expiry = effectiveExpiry(grant);
@@ -490,7 +496,7 @@ export const touchLegacyConnection = internalMutation({
         )} — on all your moves, with no end date. Change or revoke this any time on this page.`,
       });
     }
-    await recordAuditEvent(ctx, {
+    await recordPrivateGrantAudit(ctx, {
       householdId,
       actorType: "user",
       actorUserId: user._id,
@@ -698,6 +704,35 @@ export const listSourceHistory = query({
     return ctx.db.query("aiGrantSourceHistory")
       .withIndex("by_owner_archived", q => q.eq("ownerUserId", user._id))
       .order("desc").paginate({ numItems: 25, cursor: args.cursor ?? null });
+  },
+});
+
+export const listReceipts = query({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
+    const user = await requireCurrentUser(ctx);
+    const page = await ctx.db.query("auditLogs").withIndex("by_actor_user_time", q => q.eq("actorUserId", user._id))
+      .order("desc").paginate({ numItems: 25, cursor: args.cursor ?? null });
+    return { ...page, page: page.page.filter(row => row.objectTable === "aiGrants") };
+  },
+});
+
+/** Settings never depends on the unbounded household dashboard query. */
+export const listHouseholdChoices = query({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requirePersonConnectionManagement(ctx);
+    const user = await requireCurrentUser(ctx);
+    const page = await ctx.db.query("householdMemberships")
+      .withIndex("by_user_status", q => q.eq("userId", user._id).eq("status", "active"))
+      .paginate({ numItems: 25, cursor: args.cursor ?? null });
+    const households = [];
+    for (const membership of page.page) {
+      const household = await ctx.db.get(membership.householdId);
+      if (household && household.archivedAt === undefined) households.push({ household: { _id: household._id, name: household.name }, role: membership.role });
+    }
+    return { households, nextCursor: page.isDone ? null : page.continueCursor };
   },
 });
 
@@ -969,7 +1004,7 @@ export const approve = mutation({
         }. ${reconnect ? "You explicitly reconnected this verified AI client, replacing its prior limits and refusal." : "Nothing is connected until an AI signs in with it."}`,
       });
     }
-    await recordAuditEvent(ctx, {
+    await recordPrivateGrantAudit(ctx, {
       householdId: args.householdId,
       actorType: "user",
       actorUserId: user._id,
@@ -1069,7 +1104,7 @@ export const updateLimits = mutation({
     await ctx.db.patch(grant._id, patch);
     await advanceHistory(ctx, user._id);
     await appendGrantActivity(ctx, grant, { type: "approved", outcome: "recorded", message: "You changed this connection’s limits. Your chosen moves, scopes and end date are preserved." });
-    await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "user", actorUserId: user._id, category: "ai", action: "ai_grant.limits_changed", objectTable: "aiGrants", objectId: grant._id, metadata: { scopeChoice: patch.scopeChoice ?? null, expiryChoice: patch.expiryChoice ?? null, moveScope, moveCount: moveIds?.length ?? null } });
+    await recordPrivateGrantAudit(ctx, { householdId: grant.householdId, actorType: "user", actorUserId: user._id, category: "ai", action: "ai_grant.limits_changed", objectTable: "aiGrants", objectId: grant._id, metadata: { scopeChoice: patch.scopeChoice ?? null, expiryChoice: patch.expiryChoice ?? null, moveScope, moveCount: moveIds?.length ?? null } });
     return { grantId: grant._id };
   },
 });
@@ -1123,7 +1158,7 @@ export const revoke = mutation({
       outcome: "recorded",
       message: `You revoked “${grant.label}”. The next call from this AI will be refused.`,
     });
-    await recordAuditEvent(ctx, {
+    await recordPrivateGrantAudit(ctx, {
       householdId: grant.householdId,
       actorType: "user",
       actorUserId: user._id,
@@ -1172,7 +1207,7 @@ export async function reduceOwnConnection(ctx: MutationCtx, subject: string, cli
   });
   await advanceHistory(ctx, user._id);
   await appendGrantActivity(ctx, grant, { type: input.action === "revoke" ? "revoked" : "approved", outcome: "recorded", clientId, message: `This AI reduced its own access (version ${version}).` });
-  const receipt = await recordAuditEvent(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, action: input.action ?? "narrow" } });
+  const receipt = await recordPrivateGrantAudit(ctx, { householdId: grant.householdId, actorType: "agent", actorUserId: user._id, category: "ai", action: "ai_grant.self_reduced", objectTable: "aiGrants", objectId: grant._id, metadata: { version, action: input.action ?? "narrow" } });
   return { version, receipt, settings: "https://movingmanifest.com/settings/ai" };
 }
 export const reduceConnection = internalMutation({ args: { subject: v.string(), clientId: v.string(), ...reductionArgs }, handler: (ctx, { subject, clientId, ...input }) => reduceOwnConnection(ctx, subject, clientId, input) });

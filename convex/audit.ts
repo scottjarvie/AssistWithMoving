@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 
 import { internalMutation, query } from "./_generated/server";
 import { recordAuditEvent } from "./lib/audit";
@@ -6,6 +7,13 @@ import {
   requireHouseholdPermission,
   requireMovePermission,
 } from "./lib/permissions";
+
+/** Preserve old source rows, while hiding prior private grant details too. */
+function householdReceipt(entry: Doc<"auditLogs">): Doc<"auditLogs"> {
+  return entry.objectTable === "aiGrants" || entry.action.startsWith("ai_grant.")
+    ? { ...entry, action: "ai_connection.changed", objectTable: undefined, objectId: undefined, metadata: undefined }
+    : entry;
+}
 
 export const record = internalMutation({
   args: {
@@ -53,13 +61,14 @@ export const listForHousehold = query({
   handler: async (ctx, args) => {
     await requireHouseholdPermission(ctx, args.householdId, "admin:read");
 
-    return await ctx.db
+    const rows = await ctx.db
       .query("auditLogs")
       .withIndex("by_household_time", (q) =>
         q.eq("householdId", args.householdId)
       )
       .order("desc")
-      .take(args.limit ?? 50);
+      .take(Math.min(Math.max(Math.trunc(args.limit ?? 50), 1), 200));
+    return rows.map(householdReceipt);
   },
 });
 
@@ -101,7 +110,7 @@ export const listForMove = query({
     }
 
     return await Promise.all(
-      entries.map(async (entry) => ({
+      entries.map(householdReceipt).map(async (entry) => ({
         _id: entry._id,
         action: entry.action,
         category: entry.category,
@@ -146,6 +155,6 @@ export const listForObject = query({
     return entries.filter(
       (entry) =>
         entry.householdId === args.householdId && entry.moveId === args.moveId
-    );
+    ).map(householdReceipt);
   },
 });

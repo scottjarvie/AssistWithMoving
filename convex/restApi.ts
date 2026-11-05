@@ -1533,7 +1533,7 @@ async function routeMe(
   auth: Awaited<ReturnType<typeof authenticateApiKey>>
 ) {
   const [household, restrictedMove] = await Promise.all([
-    ctx.db.get(auth.householdId),
+    auth.scopes.includes("moves/read") ? ctx.db.get(auth.householdId) : Promise.resolve(null),
     auth.moveId && auth.scopes.includes("moves/read") ? ctx.db.get(auth.moveId) : Promise.resolve(null),
   ]);
   return restOk({
@@ -1544,7 +1544,7 @@ async function routeMe(
             name: household.name,
             slug: household.slug,
           }
-        : { householdId: auth.householdId },
+        : null,
       apiKey: {
         apiKeyId: auth.apiKeyId,
         version: auth.version,

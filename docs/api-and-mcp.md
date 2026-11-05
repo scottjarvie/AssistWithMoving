@@ -2339,6 +2339,19 @@ Recovery household choices also include current move-only participation, in
 25-record pages. Labels expose only an accessible move's title; household
 profiles and unrelated moves stay private. Current participation is checked
 again when the person submits recovery.
+
+Member household choices and move choices in both connection managers are also
+paged. API-key Settings reads a bounded key-only summary, independently of the
+household's inventory, members, invitations and boxes. A move restriction stays
+selected across pages and resets when the person changes households.
+
+Detailed grant approval, edit, revocation and reduction receipts are durable
+owner-private audit records, readable in Settings under Private connection
+receipts. Shared household audit contains only a generic connection-change
+event. Reads of older shared grant audit rows hide their private identifiers,
+limits and reasons while retaining the original stored source. Scope-free
+API-key context discovery returns credential settings, without household or
+move data; `moves/read` is required to include that context.
 Move-only participants can select a revoked or expired client in Settings and
 explicitly reconnect using verified current participation, even without a
 household membership. Selecting a reconnect uses that connection?s household,

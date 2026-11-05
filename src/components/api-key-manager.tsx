@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useMemberHouseholdChoices } from "./connection-household-choices";
 import {
   Activity,
   Bot,
@@ -12,7 +13,6 @@ import {
   FileImage,
   Home,
   KeyRound,
-  Package,
   RefreshCw,
   RotateCw,
   Settings2,
@@ -45,26 +45,6 @@ import {
   type ApiKeyScope,
 } from "@/lib/api-keys";
 import { describeMutationError } from "@/lib/mutation-error";
-
-type HouseholdEntry = {
-  household: {
-    _id: Id<"households">;
-    name: string;
-  };
-  role: string;
-};
-
-type HouseholdStats = {
-  moves: MoveSummary[];
-  moveCount: number;
-  archivedMoveCount: number;
-  itemCount: number;
-  boxCount: number;
-  activeApiKeyCount: number;
-  activeApiKeyCountTruncated?: boolean;
-  activeMemberCount: number;
-  pendingInvitationCount: number;
-};
 
 type ApiKeySummary = {
   apiKeyId: Id<"apiKeys">;
@@ -180,7 +160,7 @@ const aiConnectionTasks = [
     value: "overview",
     label: "Overview",
     description:
-      "Check household, move, item, member, and AI connection counts before changing access.",
+      "Review the selected household, available moves, and AI connections before changing access.",
   },
   {
     value: "advanced",
@@ -224,17 +204,19 @@ export function ApiKeyManager({
   mode?: "settings" | "setup";
 }) {
   const setupMode = mode === "setup";
-  const households = useQuery(api.households.listMine, enabled ? {} : "skip") as
-    | HouseholdEntry[]
-    | undefined;
+  const memberChoices = useMemberHouseholdChoices(enabled);
+  const households = memberChoices.households;
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
   const effectiveHouseholdId =
     selectedHouseholdId ?? households?.[0]?.household._id ?? null;
   const stats = useQuery(
-    api.households.summaryStats,
+    api.apiKeys.settingsSummary,
     effectiveHouseholdId ? { householdId: effectiveHouseholdId } : "skip",
-  ) as HouseholdStats | undefined;
+  ) as { activeApiKeyCount: number; activeApiKeyCountTruncated?: boolean } | undefined;
+  const [movePage, setMovePage] = useState<{ householdId: Id<"households">; cursor: string } | null>(null);
+  const moveCursor = movePage?.householdId === effectiveHouseholdId ? movePage.cursor : undefined;
+  const moveChoices = useQuery(api.aiGrants.listMoveChoices, effectiveHouseholdId ? { householdId: effectiveHouseholdId, ...(moveCursor ? { cursor: moveCursor } : {}) } : "skip") as { moves: MoveSummary[]; nextCursor?: string | null } | undefined;
   const [historyPage, setHistoryPage] = useState<{ householdId: Id<"households">; cursor: string } | null>(null);
   const historyCursor = historyPage?.householdId === effectiveHouseholdId ? historyPage.cursor : undefined;
   const keysResult = useQuery(
@@ -269,18 +251,14 @@ export function ApiKeyManager({
   );
   const selectedHousehold = selectedHouseholdEntry?.household;
   const activeMoves = useMemo(
-    () => stats?.moves ?? [],
-    [stats],
+    () => moveChoices?.moves ?? [],
+    [moveChoices],
   );
   const moveTitleById = useMemo(
     () => new Map(activeMoves.map((move) => [move.moveId, move.title])),
     [activeMoves],
   );
-  const moveRestrictionId =
-    selectedMoveRestrictionId !== "all" &&
-    activeMoves.some((move) => move.moveId === selectedMoveRestrictionId)
-      ? selectedMoveRestrictionId
-      : "all";
+  const moveRestrictionId = selectedMoveRestrictionId;
   const selectedPresetId =
     helperPresets.find((preset) => sameScopes(scopes, preset.scopes))?.id ??
     "custom";
@@ -505,7 +483,7 @@ export function ApiKeyManager({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatusTile
             icon={Home}
-            label="Households"
+            label="Households on this page"
             value={formatStat(households?.length)}
             note={
               selectedHousehold
@@ -515,23 +493,9 @@ export function ApiKeyManager({
           />
           <StatusTile
             icon={Truck}
-            label="Moves"
-            value={formatStat(stats?.moveCount ?? activeMoves.length)}
-            note={
-              stats?.archivedMoveCount
-                ? `${stats.archivedMoveCount} archived`
-                : "Active move workspaces"
-            }
-          />
-          <StatusTile
-            icon={Package}
-            label="Items"
-            value={formatStat(stats?.itemCount)}
-            note={
-              stats
-                ? `${formatStat(stats.boxCount)} boxes tracked`
-                : "Inventory count"
-            }
+            label="Moves on this page"
+            value={formatStat(activeMoves.length)}
+            note="Use the move picker to see more choices"
           />
           <StatusTile
             icon={Activity}
@@ -570,10 +534,7 @@ export function ApiKeyManager({
                   People
                 </p>
                 <p className="mt-1 text-sm">
-                  {formatStat(stats?.activeMemberCount)} active
-                  {stats?.pendingInvitationCount
-                    ? `, ${stats.pendingInvitationCount} invited`
-                    : ""}
+                  Manage household people from the move workspace.
                 </p>
               </div>
               <Users className="size-5 text-primary" aria-hidden="true" />
@@ -763,6 +724,10 @@ export function ApiKeyManager({
                 </option>
               ))}
             </select>
+            <div className="flex flex-wrap gap-2">
+              {memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(effectiveHouseholdId); memberChoices.next(effectiveHouseholdId); }}>More member households</Button> : null}
+              {memberChoices.cursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(effectiveHouseholdId); memberChoices.first(effectiveHouseholdId); }}>First member households</Button> : null}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -778,15 +743,20 @@ export function ApiKeyManager({
                   event.target.value as Id<"moves"> | "all",
                 )
               }
-              disabled={!effectiveHouseholdId || stats === undefined}
+              disabled={!effectiveHouseholdId || moveChoices === undefined}
             >
               <option value="all">All moves in this household</option>
+              {moveRestrictionId !== "all" && !activeMoves.some(move => move.moveId === moveRestrictionId) ? <option value={moveRestrictionId}>Selected move</option> : null}
               {activeMoves.map((move) => (
                 <option key={move.moveId} value={move.moveId}>
                   {move.title}
                 </option>
               ))}
             </select>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {moveChoices?.nextCursor && effectiveHouseholdId ? <Button type="button" variant="outline" onClick={() => setMovePage({ householdId: effectiveHouseholdId, cursor: moveChoices.nextCursor! })}>More key move choices</Button> : null}
+              {moveCursor ? <Button type="button" variant="outline" onClick={() => setMovePage(null)}>First key move choices</Button> : null}
+            </div>
             <p className="text-xs text-muted-foreground">
               {moveRestrictionId === "all"
                 ? "Good for trusted setup work across the household."
