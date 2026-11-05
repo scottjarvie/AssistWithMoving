@@ -590,6 +590,7 @@ describe("explicit owner reconnect", () => {
       await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: first });
       const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
       const aliasId = await t.run(async ctx => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- copy stored fields without Convex document metadata.
         const { _id: _originalId, _creationTime: _originalTime, ...fields } = original;
         return ctx.db.insert("aiGrants", { ...fields, clientId: alias });
       });
@@ -667,6 +668,7 @@ describe("explicit owner reconnect", () => {
     const foreign = await t.run(async ctx => {
       const row = (await ctx.db.get(unbound))!;
       const userId = await ctx.db.insert("users", { clerkUserId: "another-owner", email: "other@example.test", name: "Other", appRole: "member", status: "active", createdAt: Date.now(), updatedAt: Date.now(), lastSeenAt: Date.now() });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- copy stored fields without Convex document metadata.
       const { _id: _sourceId, _creationTime: _sourceTime, ...fields } = row;
       return ctx.db.insert("aiGrants", { ...fields, ownerUserId: userId, clientId: "foreign", status: "revoked" });
     });

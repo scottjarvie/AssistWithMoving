@@ -480,7 +480,7 @@ export function AiConnectionManager() {
                   <option value="">New connection</option>
                   {reconnectable.map(grant => <option key={grant.grantId} value={grant.grantId}>Reconnect {grant.label}</option>)}
                 </select>
-                {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client's previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
+                {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client&apos;s previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
               </div>
             ) : null}
             {households && households.length > 1 ? (
