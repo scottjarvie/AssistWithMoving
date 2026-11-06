@@ -13,8 +13,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import type { FunctionArgs } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { useAuth } from "@clerk/nextjs";
+import { useMemberHouseholdChoices } from "./connection-household-choices";
 import {
   Activity,
   KeyRound,
@@ -35,11 +36,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { describeMutationError } from "@/lib/mutation-error";
 
+import { GRANT_CONSENT_POLICY, grantCatalogFingerprint } from "../../convex/lib/aiGrants";
+
 export const MCP_ENDPOINT = "https://movingmanifest.com/mcp";
 
 /** The scope literals the mutation accepts, taken from the shipped contract. */
 type ApproveArgs = FunctionArgs<typeof api.aiGrants.approve>;
-type GrantScope = ApproveArgs["scopes"][number];
+type GrantScope = NonNullable<ApproveArgs["scopes"]>[number];
 
 /**
  * The connection requirement, stated as a capability rather than a product
@@ -50,6 +53,7 @@ const CLIENT_REQUIREMENT =
   "Any AI that speaks remote Streamable HTTP MCP with compatible OAuth can use this endpoint. We have not yet finished a full connect-to-revoke run with a named AI product, so nothing here is listed as supported.";
 
 const expiryChoices = [
+  { days: 0, label: "No end date" },
   { days: 7, label: "7 days" },
   { days: 30, label: "30 days" },
   { days: 90, label: "90 days" },
@@ -66,10 +70,13 @@ type BoundaryScope = {
 };
 
 type GrantRow = {
+  householdId: Id<"households">;
   grantId: Id<"aiGrants">;
   label: string;
   status: "active" | "expired" | "revoked";
+  clientId: string | null;
   scopes: string[];
+  scopeChoice?: "full" | "chosen";
   moveScope: "allMoves" | "selectedMoves";
   moveIds: string[];
   observedClientName: string | null;
@@ -89,10 +96,18 @@ type GrantRow = {
   revokedReason: string | null;
   note: string | null;
   version: number;
+  effectiveAuthority?: { status: "active" | "expired" | "revoked"; scopes: string[]; moveScope: "allMoves" | "selectedMoves"; moveIds?: string[]; expiresAt?: number | null } | null;
 };
 
 type GrantsResult = {
   boundaryVersion: string;
+  consentPolicyVersion?: string;
+  catalogFingerprint?: string;
+  historyAtCapacity?: boolean;
+  historyOverflow?: boolean;
+  historyFingerprint?: string;
+  recoveryFingerprint?: string;
+  nextCursor?: string | null;
   scopes: BoundaryScope[];
   neverExposed: string[];
   neverPermitted: string[];
@@ -112,15 +127,11 @@ type ActivityRow = {
   createdAt: number;
 };
 
-type HouseholdEntry = {
-  household: { _id: Id<"households">; name: string };
-  role: string;
-};
-
 type MoveSummary = { moveId: Id<"moves">; title: string; status: string };
 
 function formatMoment(value: number | null | undefined) {
   if (typeof value !== "number") return "Never";
+  if (!Number.isFinite(new Date(value).getTime())) return "Saved date is outside the supported range";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -128,7 +139,8 @@ function formatMoment(value: number | null | undefined) {
 }
 
 function formatDay(value: number | null | undefined) {
-  if (typeof value !== "number") return "No expiry recorded";
+  if (typeof value !== "number") return "No end date";
+  if (!Number.isFinite(new Date(value).getTime())) return "Saved end date is outside the supported range";
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(value);
 }
 
@@ -166,42 +178,142 @@ export function buildManualQueueBrief(moveTitle: string | null) {
   ].join("\n");
 }
 
+function useConnectionMoveChoices(householdId: Id<"households"> | null) {
+  const [page, setPage] = useState<{ householdId: Id<"households">; cursor: string } | null>(null);
+  const cursor = page?.householdId === householdId ? page.cursor : undefined;
+  const result = useQuery(api.aiGrants.listMoveChoices, householdId ? { householdId, ...(cursor ? { cursor } : {}) } : "skip") as { moves: MoveSummary[]; nextCursor?: string | null } | undefined;
+  return { result, cursor, next: () => { if (householdId && result?.nextCursor) setPage({ householdId, cursor: result.nextCursor }); }, first: () => setPage(null) };
+}
+
+function GrantMovePicker({ grant }: { grant: GrantRow }) {
+  const choices = useConnectionMoveChoices(grant.householdId);
+  const [changed, setChanged] = useState(false);
+  const [moveScope, setMoveScope] = useState(grant.moveScope);
+  const [selected, setSelected] = useState(grant.moveIds);
+  return <fieldset disabled={choices.result === undefined} className="space-y-2 rounded border border-border p-3">
+    <legend>Moves this connection may access</legend>
+    <input type="hidden" name="movesChanged" value={changed ? "yes" : "no"} />
+    <input type="hidden" name="eligibilityMoveId" value={(moveScope === "selectedMoves" ? selected[0] ?? choices.result?.moves[0]?.moveId : choices.result?.moves[0]?.moveId ?? selected[0]) ?? ""} />
+    {selected.map(id => <input key={id} type="hidden" name="moveIds" value={id} />)}
+    <label className="block"><input type="radio" name="moveScope" value="allMoves" checked={moveScope === "allMoves"} onChange={() => { setMoveScope("allMoves"); setChanged(true); }} /> All my moves, including future moves</label>
+    <label className="block"><input type="radio" name="moveScope" value="selectedMoves" checked={moveScope === "selectedMoves"} onChange={() => { setMoveScope("selectedMoves"); setChanged(true); }} /> Only the moves checked below</label>
+    {moveScope === "selectedMoves" ? selected.filter(id => !choices.result?.moves.some(move => String(move.moveId) === id)).map((id, index) => <div key={id} className="space-y-1 rounded border border-border p-2">
+      <p>Selected move {index + 1} is not on this page. It may be on another page, in another household, or no longer available.</p>
+      <Button type="button" variant="outline" onClick={() => { setSelected(current => current.filter(selectedId => selectedId !== id)); setChanged(true); }}>Remove retained move {index + 1}</Button>
+    </div>) : null}
+    {choices.result === undefined ? <p>Loading moves...</p> : choices.result.moves.map(move => <label key={String(move.moveId)} className="block">
+      <input type="checkbox" checked={selected.includes(String(move.moveId))} onChange={event => { setSelected(current => event.target.checked ? [...current, String(move.moveId)] : current.filter(id => id !== String(move.moveId))); setChanged(true); }} /> {move.title}
+    </label>)}
+    {choices.result?.nextCursor ? <Button type="button" variant="outline" onClick={choices.next}>More move choices</Button> : null}
+    {choices.cursor ? <Button type="button" variant="outline" onClick={choices.first}>First move choices</Button> : null}
+    <p className="text-xs text-muted-foreground">Selecting moves changes this existing connection. Its other limits stay in place.</p>
+  </fieldset>;
+}
+
+function GrantPermissionPicker({ grant, scopes }: { grant: GrantRow; scopes: BoundaryScope[] }) {
+  const [intent, setIntent] = useState<"preserve" | "full" | "chosen">("preserve");
+  const [selected, setSelected] = useState(grant.scopes);
+  return <fieldset>
+    <input type="hidden" name="scopeIntent" value={intent} />
+    {scopes.map(info => <label key={info.scope} className="flex gap-2">
+      <input type="checkbox" name="scopes" value={info.scope} checked={selected.includes(info.scope)} onChange={event => {
+        const next = event.target.checked ? [...selected, info.scope] : selected.filter(scope => scope !== info.scope);
+        setSelected(next);
+        setIntent(scopes.every(scope => next.includes(scope.scope)) ? "full" : "chosen");
+      }} />
+      {info.label}
+    </label>)}
+  </fieldset>;
+}
+
+function OriginalConnectionHistory({ ready }: { ready: boolean }) {
+  const [opened, setOpened] = useState(false);
+  const [cursor, setCursor] = useState<string | undefined>();
+  const history = useQuery(api.aiGrants.listSourceHistory, ready && opened ? (cursor ? { cursor } : {}) : "skip") as FunctionReturnType<typeof api.aiGrants.listSourceHistory> | undefined;
+  return <details className="rounded-lg border border-border p-4" onToggle={event => setOpened(event.currentTarget.open)}>
+    <summary className="cursor-pointer font-medium">Original connection records</summary>
+    <p className="mt-2 text-sm text-muted-foreground">Saved approvals from before a connection was reconnected at its history limit. These originals belong only to you.</p>
+    {opened && history === undefined ? <p>Loading original records...</p> : null}
+    {history?.page.length === 0 ? <p className="mt-3 text-sm">No archived originals yet.</p> : null}
+    <div className="mt-3 space-y-3">{history?.page.map(row => <article key={row._id} className="rounded border border-border p-3 text-sm">
+      <p className="font-medium">{row.source.label}</p>
+      <p>Saved {formatMoment(row.archivedAt)}. Original version {row.source.version}.</p>
+      <ul>{row.source.consentSnapshot.map(entry => <li key={entry.scope}><strong>{entry.label}.</strong> {entry.grants} {entry.doesNotImply}</li>)}</ul>
+      <details className="mt-2"><summary className="cursor-pointer">Complete saved record</summary><pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(row.source, null, 2)}</pre></details>
+    </article>)}</div>
+    <div className="mt-3 flex flex-wrap gap-2">
+      {history && !history.isDone ? <Button type="button" variant="outline" onClick={() => setCursor(history.continueCursor)}>Older original records</Button> : null}
+      {cursor ? <Button type="button" variant="outline" onClick={() => setCursor(undefined)}>Recent original records</Button> : null}
+    </div>
+  </details>;
+}
+
+function PrivateConnectionReceipts({ ready }: { ready: boolean }) {
+  const [opened, setOpened] = useState(false);
+  const [cursor, setCursor] = useState<string | undefined>();
+  const receipts = useQuery(api.aiGrants.listReceipts, ready && opened ? (cursor ? { cursor } : {}) : "skip");
+  return <details className="rounded-lg border border-border p-4" onToggle={event => setOpened(event.currentTarget.open)}>
+    <summary className="cursor-pointer font-medium">Private connection receipts</summary>
+    <p className="mt-2 text-sm">Detailed connection decisions belong only to you.</p>
+    {receipts?.page.map(row => <details key={row._id} className="mt-3 text-sm"><summary>{row.action} — {formatMoment(row.createdAt)}</summary><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(row, null, 2)}</pre></details>)}
+    {receipts && !receipts.isDone ? <Button variant="outline" onClick={() => setCursor(receipts.continueCursor)}>Older private receipts</Button> : null}
+    {cursor ? <Button variant="outline" onClick={() => setCursor(undefined)}>Recent private receipts</Button> : null}
+  </details>;
+}
+
 export function AiConnectionManager() {
   const { isLoaded, isSignedIn } = useAuth();
   const ready = isLoaded && isSignedIn;
+  const [historyCursor, setHistoryCursor] = useState<string | undefined>();
 
-  const grantsResult = useQuery(api.aiGrants.listMine, ready ? {} : "skip") as
+  const grantsResult = useQuery(api.aiGrants.listMine, ready ? (historyCursor ? { cursor: historyCursor } : {}) : "skip") as
     | GrantsResult
     | undefined;
   const activityResult = useQuery(
     api.aiGrants.listActivity,
     ready ? { limit: 20 } : "skip",
   ) as { activity: ActivityRow[] } | undefined;
-  const households = useQuery(
-    api.households.listMine,
-    ready ? {} : "skip",
-  ) as HouseholdEntry[] | undefined;
+  const memberChoices = useMemberHouseholdChoices(ready);
+  const households = memberChoices.households;
 
+  const [reconnectGrantId, setReconnectGrantId] = useState<Id<"aiGrants"> | null>(null);
+  const reconnectTarget = grantsResult?.grants.find(grant => grant.grantId === reconnectGrantId);
   const [selectedHouseholdId, setSelectedHouseholdId] =
     useState<Id<"households"> | null>(null);
+  const [recoveryHouseholdCursor, setRecoveryHouseholdCursor] = useState<string | undefined>();
+  const [recoveryWitness, setRecoveryWitness] = useState<{ householdId: Id<"households">; moveId: Id<"moves"> } | null>(null);
+  const recoveryHouseholds = useQuery(api.aiGrants.listRecoveryHouseholds,
+    ready && reconnectGrantId ? (recoveryHouseholdCursor ? { cursor: recoveryHouseholdCursor } : {}) : "skip") as FunctionReturnType<typeof api.aiGrants.listRecoveryHouseholds> | undefined;
+  const approvalHouseholds = (households ?? []).map(entry => ({ id: entry.household._id, name: entry.household.name }));
+  if (reconnectTarget) for (const entry of recoveryHouseholds?.households ?? []) {
+    if (!approvalHouseholds.some(choice => choice.id === entry.householdId)) approvalHouseholds.push({ id: entry.householdId, name: entry.label });
+  }
+  if (reconnectTarget && selectedHouseholdId && recoveryWitness?.householdId === selectedHouseholdId && !approvalHouseholds.some(entry => entry.id === selectedHouseholdId)) {
+    approvalHouseholds.push({ id: selectedHouseholdId, name: "Selected move household" });
+  }
+  // Historical ownership is context, not current eligibility. Only query
+  // choices (or a deliberately retained paged choice) can be selected.
   const householdId =
-    selectedHouseholdId ?? households?.[0]?.household._id ?? null;
+    (selectedHouseholdId && approvalHouseholds.some(entry => entry.id === selectedHouseholdId) ? selectedHouseholdId : null) ??
+    (reconnectTarget && approvalHouseholds.some(entry => entry.id === reconnectTarget.householdId) ? reconnectTarget.householdId : null) ??
+    approvalHouseholds[0]?.id ?? null;
+  const eligibilityMoveId = recoveryHouseholds?.households.find(entry => entry.householdId === householdId)?.moveId ?? (recoveryWitness?.householdId === householdId ? recoveryWitness.moveId : undefined);
+  const canReadApprovalHousehold = households?.some(entry => entry.household._id === householdId) ?? false;
 
-  const stats = useQuery(
-    api.households.summaryStats,
-    ready && householdId ? { householdId } : "skip",
-  ) as { moves: MoveSummary[] } | undefined;
+  const moveChoices = useConnectionMoveChoices(ready ? householdId : null);
+  const stats = moveChoices.result;
 
   const approveGrant = useMutation(api.aiGrants.approve);
   const revokeGrant = useMutation(api.aiGrants.revoke);
+  const updateLimits = useMutation(api.aiGrants.updateLimits);
 
   const [label, setLabel] = useState("");
   const [moveScope, setMoveScope] = useState<"allMoves" | "selectedMoves">(
     "allMoves",
   );
   const [selectedMoveIds, setSelectedMoveIds] = useState<Id<"moves">[]>([]);
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-  const [expiresInDays, setExpiresInDays] = useState<number>(90);
+  const [scopeSelection, setSelectedScopes] = useState<string[] | null>(null);
+  const [expiresInDays, setExpiresInDays] = useState<number>(0);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -215,18 +327,23 @@ export function AiConnectionManager() {
     [moves],
   );
   const boundaryScopes = grantsResult?.scopes ?? [];
+  const canWriteConsent = grantsResult?.consentPolicyVersion === GRANT_CONSENT_POLICY &&
+    grantsResult?.catalogFingerprint === grantCatalogFingerprint();
+  const consent = { consentPolicyVersion: grantsResult?.consentPolicyVersion, catalogFingerprint: grantsResult?.catalogFingerprint };
+  const selectedScopes = scopeSelection ?? boundaryScopes.map((info) => info.scope);
   const chosenScopeInfos = boundaryScopes.filter((info) =>
     selectedScopes.includes(info.scope),
   );
   const grants = grantsResult?.grants ?? [];
+  const reconnectable = grants.filter(grant => grant.clientId && grant.status !== "active");
   const activity = activityResult?.activity ?? [];
   const manualBrief = buildManualQueueBrief(moves[0]?.title ?? null);
 
   function toggleScope(scope: string) {
-    setSelectedScopes((current) =>
-      current.includes(scope)
-        ? current.filter((entry) => entry !== scope)
-        : [...current, scope],
+    setSelectedScopes(
+      selectedScopes.includes(scope)
+        ? selectedScopes.filter((entry) => entry !== scope)
+        : [...selectedScopes, scope],
     );
   }
 
@@ -239,24 +356,35 @@ export function AiConnectionManager() {
   }
 
   async function handleApprove() {
-    if (!householdId) return;
+    if (!householdId || !canWriteConsent) return;
     setBusy("approve");
     setMessage(null);
     try {
       await approveGrant({
+        ...consent,
+        ...(grantsResult?.historyFingerprint ? { expectedHistoryFingerprint: grantsResult.historyFingerprint } : {}),
+        ...(reconnectGrantId ? { reconnectGrantId } : {}),
+        ...(reconnectGrantId && eligibilityMoveId ? { eligibilityMoveId } : {}),
+        ...(reconnectGrantId && grantsResult?.historyOverflow ? { expectedRecoveryFingerprint: grantsResult.recoveryFingerprint } : {}),
+        scopeIntent: boundaryScopes.every(info => selectedScopes.includes(info.scope)) ? "full" : "chosen",
+        expiryIntent: expiresInDays === 0 ? "none" : "chosen",
         householdId,
         label: label.trim(),
         scopes: selectedScopes as GrantScope[],
         moveScope,
         moveIds: moveScope === "selectedMoves" ? selectedMoveIds : undefined,
-        expiresInDays,
+        expiresInDays: expiresInDays || undefined,
         note: note.trim() ? note.trim() : undefined,
       });
       setMessage(
-        "Approved. Nothing is connected until an AI signs in with this grant — sign in from your AI using the endpoint above.",
+        reconnectGrantId
+          ? "Reconnected with the permissions and end date you approved. Retry from your AI."
+          : "Approved. Nothing is connected until an AI signs in with this grant — sign in from your AI using the endpoint above.",
       );
       setLabel("");
-      setSelectedScopes([]);
+      setReconnectGrantId(null);
+      setSelectedScopes(null);
+      setExpiresInDays(0);
       setSelectedMoveIds([]);
       setMoveScope("allMoves");
       setNote("");
@@ -273,12 +401,14 @@ export function AiConnectionManager() {
   }
 
   async function handleRevoke(grant: GrantRow) {
+    if (!grantsResult?.recoveryFingerprint) { setMessage("Reload Settings before revoking this connection."); return; }
     setBusy(`revoke-${grant.grantId}`);
     setMessage(null);
     try {
       await revokeGrant({
         grantId: grant.grantId,
         expectedVersion: grant.version,
+        expectedRecoveryFingerprint: grantsResult.recoveryFingerprint,
       });
       setConfirmingRevokeId(null);
       setMessage(
@@ -297,7 +427,10 @@ export function AiConnectionManager() {
   }
 
   const canApprove =
+    canWriteConsent &&
     Boolean(householdId) &&
+    (!grantsResult?.historyAtCapacity || Boolean(reconnectGrantId)) &&
+    (!reconnectGrantId || Boolean(grantsResult?.historyFingerprint || (grantsResult?.historyOverflow && grantsResult.recoveryFingerprint))) &&
     label.trim().length > 0 &&
     selectedScopes.length > 0 &&
     (moveScope === "allMoves" || selectedMoveIds.length > 0) &&
@@ -358,10 +491,9 @@ export function AiConnectionManager() {
               </h3>
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              You point your AI at one address, sign in as yourself, and then
-              approve a grant below that decides what it may actually do.
-              Signing in only proves who you are. The grant decides the rest,
-              and you can take it back at any time.
+              {canWriteConsent
+                ? "You point your AI at one address, sign in as yourself, and then get full access with no end date by default. You can choose fewer permissions or an end date here, or revoke access at any time."
+                : "You point your AI at one address and sign in as yourself. Review your existing connections below. Updated permission controls will be available when this app and its backend support the same consent policy."}
             </p>
             <div className="mt-4 flex flex-col gap-2 rounded-md border border-border bg-background/70 p-3 sm:flex-row sm:items-center sm:justify-between">
               <code className="min-w-0 break-all text-xs sm:text-sm">
@@ -398,16 +530,49 @@ export function AiConnectionManager() {
           Approve a connection
         </h3>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Choose the smallest authority that lets the work happen. You can
-          approve a second, narrower connection later instead of widening this
-          one.
+          {canWriteConsent
+            ? "Full access includes every current and future tool scope. Limits are optional: turn off permissions or choose an end date if you want them."
+            : "Connection approvals and limit edits are read-only until the app and backend support the same permission catalog. Reload after the update is available."}
         </p>
+        {grantsResult?.historyAtCapacity ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {grantsResult.historyOverflow
+              ? "Connection history exceeds the safe approval limit. You can explicitly reconnect a listed client with new choices, or review older connections below. Earlier records stay saved."
+              : "Connection history is full. Reconnect an existing client below or change its current limits. Earlier records stay saved."}
+          </p>
+        ) : null}
 
         {grantsResult === undefined ? (
           <Skeleton className="mt-4 h-64 w-full" />
-        ) : (
+        ) : canWriteConsent ? (
           <div className="mt-4 space-y-5">
-            {households && households.length > 1 ? (
+            {reconnectable.length > 0 ? (
+              <div className="space-y-1.5">
+                <label htmlFor="ai-grant-reconnect" className="text-sm font-medium">Connection</label>
+                <select
+                  id="ai-grant-reconnect"
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={reconnectGrantId ?? ""}
+                  onChange={(event) => {
+                    const id = event.target.value as Id<"aiGrants">;
+                    setSelectedMoveIds([]);
+                    setMoveScope("allMoves");
+                    setSelectedHouseholdId(null);
+                    setRecoveryWitness(null);
+                    setRecoveryHouseholdCursor(undefined);
+                    setReconnectGrantId(id || null);
+                    setLabel(reconnectable.find(grant => grant.grantId === id)?.label ?? "");
+                  }}
+                >
+                  <option value="">New connection</option>
+                  {reconnectable.map(grant => <option key={grant.grantId} value={grant.grantId}>Reconnect {grant.label}</option>)}
+                </select>
+                {reconnectGrantId && !canReadApprovalHousehold ? <p className="text-xs text-muted-foreground">Your AI can use only moves you currently have access to as a participant. Reconnecting does not give household access.</p> : null}
+                {reconnectGrantId ? <p className="text-xs text-muted-foreground">This replaces that AI client&apos;s previous limits with the permissions and end date shown below. Its refusal stays in place until you approve.</p> : null}
+                {reconnectTarget && !approvalHouseholds.some(entry => entry.id === reconnectTarget.householdId) ? <p className="text-xs text-muted-foreground">The previous household is not among your current choices. Choose a household you can access now; the original connection record stays in your history.</p> : null}
+              </div>
+            ) : null}
+            {approvalHouseholds.length > 1 || reconnectGrantId ? (
               <div className="space-y-1.5">
                 <label
                   htmlFor="ai-grant-household"
@@ -419,23 +584,35 @@ export function AiConnectionManager() {
                   id="ai-grant-household"
                   className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={householdId ?? ""}
-                  onChange={(event) =>
-                    setSelectedHouseholdId(
-                      event.target.value as Id<"households">,
-                    )
-                  }
+                  onChange={(event) => {
+                    setSelectedMoveIds([]);
+                    setMoveScope("allMoves");
+                    setSelectedHouseholdId(event.target.value as Id<"households">);
+                    const choice = recoveryHouseholds?.households.find(entry => entry.householdId === event.target.value);
+                    setRecoveryWitness(choice ? { householdId: choice.householdId, moveId: choice.moveId } : null);
+                  }}
                 >
-                  {households.map((entry) => (
+                  {approvalHouseholds.length === 0 ? <option value="">No eligible household on this page</option> : null}
+                  {approvalHouseholds.map((entry) => (
                     <option
-                      key={entry.household._id}
-                      value={entry.household._id}
+                      key={entry.id}
+                      value={entry.id}
                     >
-                      {entry.household.name}
+                      {entry.name}
                     </option>
                   ))}
                 </select>
               </div>
             ) : null}
+
+            {reconnectGrantId ? <div className="flex flex-wrap gap-2">
+              {recoveryHouseholds?.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(recoveryHouseholds.nextCursor!); }}>More recovery households</Button> : null}
+              {recoveryHouseholdCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); if (householdId && eligibilityMoveId) setRecoveryWitness({ householdId, moveId: eligibilityMoveId }); setRecoveryHouseholdCursor(undefined); }}>First recovery households</Button> : null}
+            </div> : null}
+            <div className="flex flex-wrap gap-2">
+              {memberChoices.nextCursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); memberChoices.next(householdId); }}>More member households</Button> : null}
+              {memberChoices.cursor ? <Button type="button" variant="outline" onClick={() => { setSelectedHouseholdId(householdId); memberChoices.first(householdId); }}>First member households</Button> : null}
+            </div>
 
             <div className="space-y-1.5">
               <label htmlFor="ai-grant-label" className="text-sm font-medium">
@@ -490,7 +667,7 @@ export function AiConnectionManager() {
                 <div className="space-y-2 rounded-md border border-border p-3">
                   {moves.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No active moves in this household yet.
+                      No available moves on this page.
                     </p>
                   ) : (
                     moves.map((move) => (
@@ -512,6 +689,8 @@ export function AiConnectionManager() {
                   )}
                 </div>
               ) : null}
+              {moveChoices.result?.nextCursor ? <Button type="button" variant="outline" onClick={moveChoices.next}>More move choices</Button> : null}
+              {moveChoices.cursor ? <Button type="button" variant="outline" onClick={moveChoices.first}>First move choices</Button> : null}
             </fieldset>
 
             <fieldset className="space-y-2">
@@ -552,7 +731,7 @@ export function AiConnectionManager() {
 
             <div className="space-y-1.5">
               <label htmlFor="ai-grant-expiry" className="text-sm font-medium">
-                Expires after
+                End date
               </label>
               <select
                 id="ai-grant-expiry"
@@ -568,6 +747,7 @@ export function AiConnectionManager() {
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-muted-foreground">An end date you pick is saved as your choice and is never removed automatically.</p>
             </div>
 
             <div className="space-y-1.5">
@@ -612,7 +792,7 @@ export function AiConnectionManager() {
                             )
                             .join(", ")
                         : "no move yet — pick one"}
-                    , for{" "}
+                    , {expiresInDays ? "for " : "with "}
                     {expiryChoices.find(
                       (choice) => choice.days === expiresInDays,
                     )?.label ?? `${expiresInDays} days`}
@@ -629,8 +809,10 @@ export function AiConnectionManager() {
                     ))}
                   </ul>
                   <p className="text-muted-foreground">
-                    Nothing happens until an AI signs in as you using the
-                    endpoint above. You can revoke this at any time and the next
+                    {reconnectGrantId
+                      ? "Approving restores this AI client's access immediately with these choices."
+                      : "Nothing happens until an AI signs in as you using the endpoint above."}{" "}
+                    You can revoke this at any time and the next
                     call is refused.
                   </p>
                 </div>
@@ -653,7 +835,7 @@ export function AiConnectionManager() {
               {busy === "approve" ? "Approving…" : "Approve this connection"}
             </Button>
           </div>
-        )}
+        ) : null}
       </section>
 
       {/* ---------------------------------------------------------------- */}
@@ -671,6 +853,10 @@ export function AiConnectionManager() {
             These are grants you approved for an AI signing in as you. They are
             not people in your household, not share links, and not API keys.
           </p>
+          <div className="mt-2 flex gap-2">
+            {historyCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(undefined); setReconnectGrantId(null); setSelectedMoveIds([]); setMoveScope("allMoves"); setLabel(""); }}>Recent connections</Button> : null}
+            {grantsResult?.nextCursor ? <Button variant="outline" onClick={() => { setHistoryCursor(grantsResult.nextCursor!); setReconnectGrantId(null); setSelectedMoveIds([]); setMoveScope("allMoves"); setLabel(""); }}>Older connections</Button> : null}
+          </div>
         </div>
         {grantsResult === undefined ? (
           <Skeleton className="h-40 w-full" />
@@ -724,7 +910,7 @@ export function AiConnectionManager() {
                   </div>
                   <div>
                     <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Moves
+                      Saved moves
                     </dt>
                     <dd className="break-words">
                       {grant.moveScope === "allMoves"
@@ -742,7 +928,7 @@ export function AiConnectionManager() {
                   </div>
                   <div>
                     <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Expires
+                      Saved end date
                     </dt>
                     <dd>{formatDay(grant.expiresAt)}</dd>
                   </div>
@@ -779,21 +965,79 @@ export function AiConnectionManager() {
                     What you approved
                   </p>
                   <ul className="mt-1 space-y-1 text-sm leading-6">
-                    {(grant.consentSnapshot.length
-                      ? grant.consentSnapshot
-                      : boundaryScopes.filter((info) =>
-                          grant.scopes.includes(info.scope),
-                        )
-                    ).map((entry) => (
+                    {grant.consentSnapshot.map((entry) => (
                       <li key={entry.scope}>
                         <span className="font-medium">{entry.label}.</span>{" "}
                         <span className="text-muted-foreground">
-                          {entry.doesNotImply}
+                          {entry.grants} {entry.doesNotImply}
                         </span>
                       </li>
                     ))}
                   </ul>
+                  <p className="mt-2 text-sm text-muted-foreground">{grant.effectiveAuthority ? `Resolved connection permissions (${grant.effectiveAuthority.status}): ${grant.effectiveAuthority.scopes.map(scope => boundaryScopes.find(info => info.scope === scope)?.label ?? scope).join(", ") || "None"}.` : "Resolved connection permissions are unavailable for an unbound approval or incomplete history. Reconnect explicitly to establish a current decision."}</p>
+                  {grant.effectiveAuthority ? (
+                    <dl className="mt-2 space-y-2 text-sm">
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-muted-foreground">Effective moves</dt>
+                        <dd className="break-words">{grant.effectiveAuthority.moveScope === "allMoves" ? "All your moves" : (grant.effectiveAuthority.moveIds ?? []).map(id => moveTitleById.get(String(id)) ?? "One selected move").join(", ") || "No moves"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-muted-foreground">Effective end date</dt>
+                        <dd>{formatDay(grant.effectiveAuthority.expiresAt ?? null)}</dd>
+                      </div>
+                    </dl>
+                  ) : null}
                 </div>
+
+                {grant.status !== "revoked" && canWriteConsent ? (
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer">Change moves, permissions or end date</summary>
+                    <form key={`${grant.version}-${grantsResult?.catalogFingerprint}-${grantsResult?.recoveryFingerprint}`} className="mt-3 space-y-2" onSubmit={async (event) => {
+                      event.preventDefault();
+                      const expectedRecoveryFingerprint = grantsResult?.recoveryFingerprint;
+                      if (!canWriteConsent || !expectedRecoveryFingerprint) {
+                        setMessage("Reload AI connections before changing limits.");
+                        return;
+                      }
+                      const data = new FormData(event.currentTarget);
+                      setBusy(`limits-${grant.grantId}`);
+                      try {
+                        const days = String(data.get("days"));
+                        const moveScope = data.get("moveScope") as "allMoves" | "selectedMoves" | null;
+                        const moveIds = data.getAll("moveIds") as Id<"moves">[];
+                        const editsMoves = data.get("movesChanged") === "yes" && moveScope !== null && (
+                          moveScope !== grant.moveScope || (moveScope === "selectedMoves" && (
+                            moveIds.length !== grant.moveIds.length || moveIds.some(id => !grant.moveIds.includes(id))
+                          ))
+                        );
+                        await updateLimits({
+                          ...consent,
+                          ...(data.get("eligibilityMoveId") ? { eligibilityMoveId: data.get("eligibilityMoveId") as Id<"moves"> } : {}),
+                          scopeIntent: data.get("scopeIntent") as "preserve" | "full" | "chosen",
+                          grantId: grant.grantId, expectedVersion: grant.version,
+                          expectedRecoveryFingerprint,
+                          scopes: data.getAll("scopes") as GrantScope[],
+                          ...(editsMoves ? { moveScope, ...(moveScope === "selectedMoves" ? { moveIds } : {}) } : {}),
+                          ...(days === "keep" ? {} : { expiryIntent: days === "0" ? "none" as const : "chosen" as const, expiresInDays: days === "0" ? null : Number(days) }),
+                        });
+                        setMessage("Connection limits saved. An end date you pick is preserved as your choice.");
+                      } catch (error) {
+                        setMessage(describeMutationError(error, "Couldn't save connection limits."));
+                      } finally { setBusy(null); }
+                    }}>
+                      <GrantMovePicker grant={grant} />
+                      <GrantPermissionPicker grant={grant} scopes={boundaryScopes} />
+                      <label className="block">End date
+                        <select name="days" defaultValue="keep" className="ml-2 rounded border border-input bg-background p-2">
+                          <option value="keep">Keep current end date</option>
+                          {expiryChoices.map((choice) => <option key={choice.days} value={choice.days}>{choice.days === 0 ? "Remove end date" : choice.label}</option>)}
+                        </select>
+                      </label>
+                      <p className="text-xs text-muted-foreground">All permissions on includes future scopes. Turn any off to keep exactly your choices.</p>
+                      <Button type="submit" disabled={busy === `limits-${grant.grantId}`}>Save limits</Button>
+                    </form>
+                  </details>
+                ) : null}
 
                 {grant.note ? (
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -1005,6 +1249,9 @@ export function AiConnectionManager() {
       {/* ---------------------------------------------------------------- */}
       {/* 7. API keys — a different door, kept secondary and separate.      */}
       {/* ---------------------------------------------------------------- */}
+      <OriginalConnectionHistory ready={ready} />
+      <PrivateConnectionReceipts ready={ready} />
+
       <details className="rounded-lg border border-border bg-card p-4 sm:p-5">
         <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-medium">
           <KeyRound className="size-4 text-primary" aria-hidden="true" />

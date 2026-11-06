@@ -23,6 +23,11 @@ import {
 } from "@/lib/api-keys";
 
 describe("api key primitives", () => {
+  it("keeps unsupported historical dates readable without rewriting them as no expiry", () => {
+    expect(formatApiKeyDate(1e20)).toBe("Saved date is outside the supported range");
+    expect(formatApiKeyDate(-1e20)).toBe("Saved date is outside the supported range");
+    expect(formatApiKeyDate(undefined)).toBe("Never");
+  });
   it("generates previewable keys with lookup prefixes", () => {
     const rawKey = generateApiKeySecret();
     const lookupPrefix = rawKey.slice("mmk_".length, "mmk_".length + 14);

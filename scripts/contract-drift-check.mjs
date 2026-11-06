@@ -7,6 +7,7 @@ const mcpServerPath = "mcp-server/assistwithmoving-mcp.mjs";
 
 const restRouteManifest = [
   route("GET", "/me"),
+  route("POST", "/me/access"),
   route("GET", "/households/{householdId}/members"),
   route("POST", "/households/{householdId}/members"),
   route("GET", "/moves"),
@@ -37,6 +38,7 @@ const restRouteManifest = [
 
 const mcpRequiredRouteKeys = new Set([
   "GET /me",
+  "POST /me/access",
   "GET /households/{householdId}/members",
   "POST /households/{householdId}/members",
   "GET /moves",

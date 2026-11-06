@@ -73,7 +73,7 @@ a capability is missing). Three code surfaces serve four public doors: `/mcp`,
 1. **Canonical stateless OAuth** — `convex/httpRoutes/mcp.ts` +
    `convex/mcpPlanning.ts` + `convex/mcpQueueWork.ts`, served at
    `movingmanifest.com/mcp`. Its catalog is the exact
-   `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — fifteen
+   `STATELESS_MOVING_TOOL_NAMES` array in `convex/httpRoutes/mcp.ts` — sixteen
    workflow-level tools covering a durable move brief, bounded
    search/read/media, move context, inventory, planning records,
    complete-result saves, the full Queue loop (list, claim, release, ask the
@@ -82,7 +82,7 @@ a capability is missing). Three code surfaces serve four public doors: `/mcp`,
    a connection is only shown what the person approved. Never retype this count;
    `tests/unit/mcp-doc-tool-catalog.test.ts` derives it from source.
 2. **Legacy persisted OAuth** — `convex/mcp.ts` + `convex/mcpTools*.ts`, served
-   at `movingmanifest.com/mcp/connect`. It preserves the older 29-tool catalog
+   at `movingmanifest.com/mcp/connect`. It preserves the original 29-tool catalog plus own-access reduction (30 tools total)
    for already-connected clients.
 3. **API-key HTTP/stdio** — `src/app/api/mcp/route.ts` and `mcp-server/`, using
    an `mmk_` key against REST. This is the granular automation surface. It has
