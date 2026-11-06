@@ -195,7 +195,7 @@ describe("canonical MCP tool catalog cannot drift from documentation", () => {
     // Every tool except the always-available one carries a scope, and the scope
     // map introduces no tool the transport does not serve.
     const scoped = expected.filter((name) => name in scopes);
-    expect(scoped.length).toBe(expected.length - 1);
+    expect(scoped.length).toBe(expected.length - 2);
     for (const name of Object.keys(scopes)) {
       expect(expected, `${name} is scoped but not in the catalog`).toContain(name);
     }

@@ -1,5 +1,5 @@
 import type { Doc } from "../_generated/dataModel";
-import { redactAuditMetadata } from "./audit";
+import { redactAuditMetadata, sharedAuditEvent } from "./audit";
 
 export function clampLimit(value: number | undefined, fallback = 20, max = 50) {
   if (!Number.isFinite(value)) {
@@ -88,6 +88,7 @@ export function safeMoveSummary(move: Doc<"moves">) {
 }
 
 export function safeAuditSummary(entry: Doc<"auditLogs">) {
+  entry = sharedAuditEvent(entry);
   return {
     id: entry._id,
     householdId: entry.householdId,

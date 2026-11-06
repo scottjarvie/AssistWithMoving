@@ -801,6 +801,61 @@ const exportJobType = v.union(
   v.literal("floorPlan")
 );
 
+// Shared validator keeps immutable owner history identical to the original source.
+const aiGrantFields = {
+    ownerUserId: v.id("users"),
+    householdId: v.id("households"),
+    // What the person called this connection, for their own screen.
+    label: v.string(),
+    // The OAuth client this grant is bound to. Absent means the person approved
+    // the grant before any client connected; the first matching client claims it.
+    clientId: v.optional(v.string()),
+    registrationMethod: v.optional(mcpClientRegistrationMethod),
+    // SHA-256 of the Client ID Metadata Document, so a swapped document shows up.
+    clientMetadataDigest: v.optional(v.string()),
+    // What the client called itself. A label for the person, never authority.
+    observedClientName: v.optional(v.string()),
+    scopes: v.array(movingGrantScope),
+    scopeChoice: v.optional(v.union(v.literal("full"), v.literal("chosen"))),
+    expiryChoice: v.optional(v.union(v.literal("none"), v.literal("chosen"), v.literal("automatic"))),
+    moveScope: v.union(v.literal("allMoves"), v.literal("selectedMoves")),
+    moveIds: v.optional(v.array(v.id("moves"))),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    // The text the person actually approved, frozen at approval time. Rendering
+    // today's wording for an old grant would quietly rewrite what they agreed to.
+    consentBoundaryVersion: v.string(),
+    consentSnapshot: v.array(
+      v.object({
+        scope: v.string(),
+        label: v.string(),
+        grants: v.string(),
+        doesNotImply: v.string(),
+      }),
+    ),
+    // No end date by default. Old unmarked dates remain enforced unless proven automatic.
+    expiresAt: v.optional(v.number()),
+    approvedAt: v.number(),
+    // Exact prior revisions superseded by explicit person-approved reconnect.
+    reconnectsClientHistory: v.optional(v.array(v.object({
+      grantId: v.id("aiGrants"),
+      version: v.number(),
+    }))),
+    // Written only by explicit owner recovery; canonical verified OAuth key.
+    recoveredClientKey: v.optional(v.string()),
+    // Explicit owner limit decisions only; usage must never reorder consent.
+    ownerDecisionAt: v.optional(v.number()),
+    lastUsedAt: v.optional(v.number()),
+    lastToolName: v.optional(v.string()),
+    useCount: v.number(),
+    revokedAt: v.optional(v.number()),
+    revokedByUserId: v.optional(v.id("users")),
+    revokedReason: v.optional(v.string()),
+    note: v.optional(v.string()),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+};
+
 export default defineSchema({
   users: defineTable({
     clerkUserId: v.string(),
@@ -810,6 +865,7 @@ export default defineSchema({
     appRole,
     status: v.union(v.literal("active"), v.literal("disabled")),
     defaultHouseholdId: v.optional(v.id("households")),
+    aiGrantHistoryVersion: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSeenAt: v.number(),
@@ -1029,6 +1085,7 @@ export default defineSchema({
     .index("by_move_email", ["moveId", "invitedEmail"])
     .index("by_email_status", ["invitedEmail", "status"])
     .index("by_user_status", ["userId", "status"])
+    .index("by_user_household_status", ["userId", "householdId", "status"])
     .index("by_household_move", ["householdId", "moveId"]),
 
   documentationProfiles: defineTable({
@@ -1091,6 +1148,8 @@ export default defineSchema({
     tokenPreview: v.string(),
     secretHash: v.string(),
     scopes: v.array(apiKeyScope),
+    scopeChoice: v.optional(v.union(v.literal("full"), v.literal("chosen"))),
+    version: v.optional(v.number()),
     status: apiKeyStatus,
     expiresAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
@@ -1113,7 +1172,9 @@ export default defineSchema({
     .index("by_move_status", ["moveId", "status"])
     .index("by_created_by", ["createdByUserId"])
     .index("by_household_creator", ["householdId", "createdByUserId", "status"])
-    .index("by_expires", ["expiresAt"]),
+    .index("by_expires", ["expiresAt"])
+    .index("by_household_created", ["householdId", "createdAt"])
+    .index("by_household_status_expiry", ["householdId", "status", "expiresAt"]),
 
   apiIdempotencyKeys: defineTable({
     householdId: v.id("households"),
@@ -1496,52 +1557,20 @@ export default defineSchema({
    * A grant is per OAuth client, so revoking one connected AI does not disturb
    * another. It is never a credential — there is nothing here to connect with.
    */
-  aiGrants: defineTable({
-    ownerUserId: v.id("users"),
-    householdId: v.id("households"),
-    // What the person called this connection, for their own screen.
-    label: v.string(),
-    // The OAuth client this grant is bound to. Absent means the person approved
-    // the grant before any client connected; the first matching client claims it.
-    clientId: v.optional(v.string()),
-    registrationMethod: v.optional(mcpClientRegistrationMethod),
-    // SHA-256 of the Client ID Metadata Document, so a swapped document shows up.
-    clientMetadataDigest: v.optional(v.string()),
-    // What the client called itself. A label for the person, never authority.
-    observedClientName: v.optional(v.string()),
-    scopes: v.array(movingGrantScope),
-    moveScope: v.union(v.literal("allMoves"), v.literal("selectedMoves")),
-    moveIds: v.optional(v.array(v.id("moves"))),
-    status: v.union(v.literal("active"), v.literal("revoked")),
-    // The text the person actually approved, frozen at approval time. Rendering
-    // today's wording for an old grant would quietly rewrite what they agreed to.
-    consentBoundaryVersion: v.string(),
-    consentSnapshot: v.array(
-      v.object({
-        scope: v.string(),
-        label: v.string(),
-        grants: v.string(),
-        doesNotImply: v.string(),
-      }),
-    ),
-    // A grant that never ends is one nobody remembers agreeing to.
-    expiresAt: v.optional(v.number()),
-    approvedAt: v.number(),
-    lastUsedAt: v.optional(v.number()),
-    lastToolName: v.optional(v.string()),
-    useCount: v.number(),
-    revokedAt: v.optional(v.number()),
-    revokedByUserId: v.optional(v.id("users")),
-    revokedReason: v.optional(v.string()),
-    note: v.optional(v.string()),
-    version: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
+  aiGrants: defineTable(aiGrantFields)
     .index("by_owner_status_updated", ["ownerUserId", "status", "updatedAt"])
     .index("by_owner_updated", ["ownerUserId", "updatedAt"])
     .index("by_owner_client_status", ["ownerUserId", "clientId", "status"])
+    .index("by_owner_recovered_client", ["ownerUserId", "recoveredClientKey"])
     .index("by_household_updated", ["householdId", "updatedAt"]),
+
+  // Immutable source snapshots are private to their owner, never household audit.
+  aiGrantSourceHistory: defineTable({
+    ownerUserId: v.id("users"),
+    grantId: v.id("aiGrants"),
+    archivedAt: v.number(),
+    source: v.object({ ...aiGrantFields, _id: v.id("aiGrants"), _creationTime: v.number() }),
+  }).index("by_owner_archived", ["ownerUserId", "archivedAt"]),
 
   // Append-only, owner-readable history for one grant: approvals, uses,
   // refusals, and revocation. Revoking future access must never erase the
