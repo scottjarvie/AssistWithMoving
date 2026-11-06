@@ -2,7 +2,7 @@
 
 Canonical MCP endpoint: https://movingmanifest.com/mcp
 Authentication: OAuth browser sign-in with the person's Assist With Moving account
-Authority: a product grant the person approves inside Assist With Moving
+Authority: connecting creates a full-access product grant with no end date by default
 Human setup: https://movingmanifest.com/ai/start
 Human support: https://assistwithlife.com/support?v=1&source=assist-with-moving
   (the central Assist With Life support desk — the only support path). Check
@@ -24,12 +24,12 @@ lifecycle against it, and the provider-side metadata-document configuration is
 not yet in place. Requirement, not endorsement: any AI that speaks remote
 Streamable HTTP MCP with compatible OAuth may attempt this connection.
 
-Signing in is not permission:
+Connecting grants full access with no end date by default:
 
 - OAuth proves who is calling. It does not decide what may be done.
 - A separate product grant decides the moves, the data, and the operations.
-- Until the person approves a grant, tools/list returns only
-  describe_connection. Nothing else exists to call.
+- Connecting creates a full-access grant, including future scopes. Fewer
+  permissions or an end date apply only when the person chooses them in settings.
 - Call describe_connection first when no other tools appear. It reports the
   granted scopes, what this connection can never do, and the exact sentence to
   tell the person.
@@ -43,7 +43,7 @@ looks like a metadata document but fails validation is refused outright, never
 downgraded to the fallback. The registration method is recorded as a fact, never
 treated as a claim about which product is calling.
 
-Where the person approves it: https://movingmanifest.com/settings/ai — the
+Where the person reviews, narrows, or revokes it: https://movingmanifest.com/settings/ai — the
 canonical grant screen, and the same URL describe_connection reports as its
 grantManager. It is where they choose the moves and the operations, see the
 consent summary, review active connections with their registration method and
@@ -54,6 +54,7 @@ Exact canonical tools (tools/list never contains anything outside this list,
 and shows only the ones the person's grant covers):
 
 - describe_connection — no scope; always available
+- reduce_connection — no scope; reduce only the verified calling connection with expectedVersion, durable audit receipt and version. Only the person in Settings can widen or restore access.
 - get_move_brief — moving.context.read
 - search_move_records — moving.context.read
 - get_move_records — moving.context.read
@@ -126,7 +127,7 @@ Four doors exist and they are not equivalent. Only the first is this guide's
 subject:
 
 1. https://movingmanifest.com/mcp — canonical. OAuth sign-in plus a product
-   grant. The 15 tools listed above.
+   grant. The 16 tools listed above.
 2. https://movingmanifest.com/mcp/connect — legacy compatibility for clients
    that connected through the older persisted OAuth gateway. A different and
    larger catalog, governed by that older gateway rather than by product
@@ -144,3 +145,11 @@ No connection at all: the person can still hand work over manually. They open
 the Queue item in Assist With Moving, copy its bounded brief into any AI, and
 paste the result back into the same Queue item. The handoff completes without
 MCP, OAuth, or a key.
+
+AI connection limits: https://movingmanifest.com/settings/ai
+Connections do not expire by default. You may choose fewer permissions or an end
+date, change or remove that date later, and revoke access at any time. A date you
+choose is recorded as your choice and never removed automatically. Legacy grants
+with uncertain scope or expiry history keep their recorded limits.
+
+New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Existing chosen and legacy limits remain exact. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.

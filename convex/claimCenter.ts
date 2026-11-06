@@ -4,6 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { summarizeClaimCenter } from "./lib/claimCenter";
 import { requireMovePermission } from "./lib/permissions";
+import { sharedAuditEvent } from "./lib/audit";
 
 export const summaryForMove = query({
   args: {
@@ -63,6 +64,7 @@ export const summaryForMove = query({
         })),
       auditEvents: auditEvents
         .filter((event) => event.householdId === args.householdId)
+        .map(sharedAuditEvent)
         .map((event) => ({
           eventId: String(event._id),
           action: event.action,

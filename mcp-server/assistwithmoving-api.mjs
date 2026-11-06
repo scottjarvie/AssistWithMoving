@@ -293,6 +293,14 @@ export function toolErrorResult(error) {
   };
 }
 
+export async function reduceConnection(config, input) {
+  return await assistWithMovingRequest(config, {
+    path: "/me/access",
+    method: "POST",
+    body: input,
+  });
+}
+
 export async function getApiContext(config) {
   return await assistWithMovingRequest(config, {
     path: "/me",

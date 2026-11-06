@@ -50,7 +50,7 @@ function grant(
 }
 
 /** Every scoped tool, but never the media tools while Q9 could reshape them. */
-const SCOPED_TOOLS = Object.keys(LEGACY_GATEWAY_TOOL_SCOPES);
+const SCOPED_TOOLS = Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).filter(name => name !== "describe_connection");
 
 describe("legacy gateway catalog", () => {
   it("has an authority decision for every tool the gateway registers", () => {
@@ -65,11 +65,11 @@ describe("legacy gateway catalog", () => {
   });
 
   it("covers the whole live surface rather than a sample of it", () => {
-    expect(registeredNames.length).toBe(29);
+    expect(registeredNames.length).toBe(31);
     expect(
       Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).length +
         LEGACY_GATEWAY_NEVER_PERMITTED_TOOLS.length,
-    ).toBe(29);
+    ).toBe(31);
   });
 });
 
@@ -248,7 +248,7 @@ describe("listing is a question, calling is an act", () => {
   });
 });
 
-describe("signing in is the approval, but not for everything", () => {
+describe("signing in grants every scope by default", () => {
   it("hands over reading, evidence, writing and queue work", () => {
     for (const name of SCOPED_TOOLS) {
       const scope = legacyScopeForTool(name);
@@ -265,8 +265,8 @@ describe("signing in is the approval, but not for everything", () => {
     }
   });
 
-  it("does not hand over the destructive verb", () => {
-    expect(LEGACY_AUTO_GRANT_SCOPES).not.toContain("moving.archive");
+  it("includes reversible archive by default", () => {
+    expect(LEGACY_AUTO_GRANT_SCOPES).toContain("moving.archive");
     expect(
       decideLegacyGatewayAccess({
         toolName: "archive_item",
@@ -274,7 +274,7 @@ describe("signing in is the approval, but not for everything", () => {
         moveId: "move_a",
         mode: "call",
       }).allowed,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("keeps the raised list separate rather than derived by subtraction", () => {
@@ -401,4 +401,12 @@ describe("refusals name the actor who can lift them", () => {
       }
     }
   });
+});
+
+
+it("allows only credential description independently of scopes and selected moves", () => {
+  for (const grants of [[], [grant([], { moveScope: "selectedMoves", moveIds: ["move-a"] })]]) {
+    expect(decideLegacyGatewayAccess({ toolName: "describe_connection", grants, mode: "call" }).allowed).toBe(true);
+    expect(decideLegacyGatewayAccess({ toolName: "get_agent_context", grants, mode: "call" }).allowed).toBe(false);
+  }
 });
