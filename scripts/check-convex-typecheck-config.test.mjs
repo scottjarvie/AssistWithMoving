@@ -58,6 +58,7 @@ test("the project backend config retains strictness, aliases and Convex compiler
   assert.equal(parsed.options.noEmit, true);
   assert.equal(parsed.options.forceConsistentCasingInFileNames, true);
   assert.equal(parsed.options.isolatedModules, true);
+  assert.ok(parsed.options.lib.includes("lib.dom.iterable.d.ts"));
   assert.ok(parsed.fileNames.some((file) => file.endsWith("/schema.ts") || file.endsWith("\\schema.ts")));
   assert.ok(parsed.fileNames.every((file) => !/\.(test|spec)\.[^/\\]+$/.test(file)));
 });
