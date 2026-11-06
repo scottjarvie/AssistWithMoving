@@ -1,3 +1,4 @@
+import connectionPolicy from "../../shared/ai-connection-policy.json";
 /**
  * Stateless dual-era remote MCP endpoint and Moving-native workflow tools.
  *
@@ -318,6 +319,7 @@ async function verifyOAuth(
       extra: {
         issuer: issuer.toString().replace(/\/$/, ""),
         subject,
+        clientName: typeof result.payload.client_name === "string" ? result.payload.client_name : undefined,
       },
     };
   } catch (error) {
@@ -540,15 +542,16 @@ export function createMovingServer(
   actionCtx: ActionCtx,
   principal: VerifiedPrincipal,
   grantedScopes: readonly MovingScope[] = movingScopes,
+  connectionState?: { status: string; changedAt?: number | null; expiresAt?: number | null },
 ) {
   const granted = new Set<MovingScope>(grantedScopes);
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     {
       maxToolInputElements: MAX_MCP_TOOL_INPUT_ELEMENTS,
-      instructions: [
+      instructions: [connectionPolicy.instructions,
         granted.size === 0
-          ? "This sign-in has no active Assist With Moving grant, so only connection description and reduction are listed. The person opens Settings → AI connections in Assist With Moving and approves what this AI may do, then you reconnect."
+          ? `Connection state: ${connectionState?.status ?? "limited"}; changed ${connectionState?.changedAt ?? "date unavailable"}; end date ${connectionState?.expiresAt ?? "none"}. Only the person can restore it at https://movingmanifest.com/settings/ai. describe_connection remains available.`
           : `This connection holds ${[...granted].join(", ")}. Only tools inside those are listed.`,
         "New connections default to all entitled current and future scopes, all owned moves, and no end date. Use reduce_connection to narrow only your own access; only the person in Settings can widen or restore it.",
         "Call get_move_brief first and use only returned move and record IDs.",
@@ -639,7 +642,7 @@ export function createMovingServer(
         next:
           granted.size > 0
             ? "Call get_move_brief, then list_queue_work if you hold moving.queue.work."
-            : "Ask the person to open Assist With Moving → Settings → AI connections and approve what this AI may do, then reconnect. Signing in proved who they are; it did not decide what you may do.",
+            : "Ask the person to open Assist With Moving → Settings → AI connections and approve what this AI may do, only the person can restore access on the website. Signing in starts full access; any saved limits remain in force.",
         grantManager: "https://movingmanifest.com/settings/ai",
         connection: await actionCtx.runQuery(internal.aiGrants.describeConnection, { subject: principal.subject, clientId: principal.clientId }),
       }),
@@ -648,7 +651,7 @@ export function createMovingServer(
   server.registerTool("reduce_connection", {
     title: "Reduce this connection's access",
     description: "Reduce only this calling connection. Narrow scopes or moveIds, add/shorten expiresAt, pause, or revoke. Only the person in Settings can increase or restore access.",
-    inputSchema: z.object({ expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() }).strict(),
+    inputSchema: z.object({ opId: z.string(), expectedVersion: z.number().int(), scopes: z.array(z.string()).optional(), moveIds: z.array(z.string()).optional(), expiresAt: z.number().nullable().optional(), action: z.string().optional() }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
   }, async input => {
     try { return toolResult(await actionCtx.runMutation((internal as any).aiGrants.reduceConnection, { ...input, subject: principal.subject, clientId: principal.clientId })); }
@@ -1265,8 +1268,10 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       },
     );
   }
-  const declaredClientName =
-    request.headers.get("mcp-client-name")?.slice(0, 160) || undefined;
+  const initialization = await request.clone().json().catch(() => null);
+  const initializeName = initialization?.method === "initialize" ? initialization.params?.clientInfo?.name : undefined;
+  const registeredName = auth.extra?.clientName;
+  const declaredClientName = typeof registeredName === "string" ? registeredName.slice(0, 160) : typeof initializeName === "string" ? initializeName.slice(0, 160) : undefined;
 
   // Metadata-document first, dynamic registration as the labelled fallback.
   // A client id that claims to be a metadata document and fails to validate is
@@ -1277,6 +1282,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
     "clientId" | "clientName" | "registrationMethod" | "metadataDigest"
   >;
   let grantedScopes: MovingScope[] = [];
+  let connectionState: { status: string; changedAt?: number | null; expiresAt?: number | null } | undefined;
   try {
     // Validate required client metadata before any issuance or binding. The
     // mutation below re-reads current history atomically after network I/O.
@@ -1289,16 +1295,18 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
     });
     const clientId = identity.clientId;
     try {
-      await actionCtx.runMutation((internal as any).aiGrants.touchLegacyConnection, {
+      const connected = await actionCtx.runMutation((internal as any).aiGrants.touchLegacyConnection, {
         subject, clientId, clientName: identity.clientName ?? declaredClientName,
       });
       const access = (await actionCtx.runQuery(
         (internal as any).aiGrants.grantsForPrincipal,
         { subject, clientId },
-      )) as { scopes: MovingScope[] };
+      )) as { scopes: MovingScope[]; connectionState?: { status: string; changedAt?: number | null; expiresAt?: number | null } };
       grantedScopes = access.scopes ?? [];
+      connectionState = access.connectionState ?? (connected?.block ? { status: connected.block } : undefined);
     } catch (error) {
       console.error("[MCP] Could not read product grants", error);
+      connectionState = { status: "lookup-unavailable" };
     }
   } catch (error) {
     if (error instanceof ClientIdentityError) {
@@ -1334,6 +1342,7 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
           metadataDigest: identity.metadataDigest,
         },
         grantedScopes,
+        connectionState,
       ).server,
     {
       legacy: "stateless",
@@ -1342,7 +1351,21 @@ async function handleMcp(actionCtx: ActionCtx, request: Request) {
       onerror: (error) => console.error("[MCP] Protocol error", error),
     },
   );
-  return await handler.fetch(request, { authInfo: auth });
+  const envelope = await request.clone().json().catch(() => null);
+  const response = await handler.fetch(request, { authInfo: auth });
+  const power = envelope?.method === "tools/call" && typeof envelope.params?.name === "string" ? scopeForTool(envelope.params.name) : null;
+  // Filtered tools remain discoverable through describe_connection. A client
+  // with a cached catalogue must receive the real missing-power recovery,
+  // rather than the SDK's generic unknown-tool error.
+  if (power && !grantedScopes.includes(power) && response.headers.get("content-type")?.includes("application/json")) {
+    const reply = await response.clone().json().catch(() => null);
+    if (reply?.error) {
+      reply.error.message = `Missing power ${power}. Only the person can restore it at https://movingmanifest.com/settings/ai.`;
+      reply.error.data = { missingPower: power, reason: connectionState?.status ?? "power removed", settings: "https://movingmanifest.com/settings/ai" };
+      return new Response(JSON.stringify(reply), { status: response.status, headers: response.headers });
+    }
+  }
+  return response;
 }
 
 /**

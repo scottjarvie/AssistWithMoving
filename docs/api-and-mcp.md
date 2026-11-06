@@ -53,8 +53,8 @@ API keys can include these scopes:
 | `plans/write` | Apply Layout Studio op batches and create pending plan proposals. |
 | `photos/write` | Start/finalize photo upload sessions and attach/update photo metadata. |
 | `exports/read` | List profiles, exports, share-link metadata, and read unexpired export artifacts. |
-| `exports/create` | Create export jobs and create/revoke documentation share links. |
-| `members/manage` | List household members and add or invite collaborators by email. |
+| `exports/create` | Create export jobs and revoke existing share links; new links stay website-only. |
+| `members/manage` | Read existing household members; invitations stay website-only. |
 
 Keys may also be restricted to a single move. A move-restricted key should use
 move-scoped endpoints such as `/moves/{moveId}/exports/{exportJobId}`.
@@ -220,7 +220,7 @@ end date), scopes and whether it is move-restricted. With `moves/read`, it also
 includes the authorized household id/name and restricted move when applicable.
 Without that scope it returns credential metadata only, without household or
 move identifiers or content. This endpoint does not return the raw key or
-secret hash. Revoked or expired keys are refused by authentication.
+secret hash. Paused, revoked and expired keys can still inspect this credential metadata; domain calls remain refused.
 
 ## Queue handoffs
 
@@ -286,39 +286,8 @@ curl https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
   -H "Authorization: Bearer mmk_replace_with_a_members_manage_key"
 ```
 
-Add or invite a collaborator by email:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/households/HOUSEHOLD_ID/members \
-  -H "Authorization: Bearer mmk_replace_with_a_members_manage_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: add-spouse-001" \
-  -d '{ "email": "person@example.com", "role": "editor" }'
-```
-
-Member management requires `members/manage` and a household-scoped key. The
-target email can be added before the person has an account. If the email is not
-registered yet, Assist With Moving stores a pending invitation and activates
-household access when that person signs in with the same email. Owner access
-cannot be granted through the API.
-
-Expected write responses:
-
-| Status | Meaning |
-| --- | --- |
-| `201` | Existing Assist With Moving user was added as an active household member. |
-| `202` | Pending invitation was created for an email without an account yet. |
-| `200` | Existing member/invitation was updated or refreshed. |
-
-Supported roles:
-
-| Role | Use |
-| --- | --- |
-| `admin` | Trusted household administrator who can manage members/settings/keys. |
-| `editor` | Full move and inventory editing helper. |
-| `packer` | Packing-focused collaborator. |
-| `viewer` | Read-focused collaborator. |
-| `guest` | Minimal household access. |
+Invitations are website-only. POST /households/{id}/members is refused for
+all API keys. The person invites people on the signed-in website.
 
 List moves:
 
@@ -1766,46 +1735,8 @@ curl https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
   -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key"
 ```
 
-Create a documentation share link:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
-  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: share-link-001" \
-  -d '{
-    "documentationProfileId": "DOCUMENTATION_PROFILE_ID",
-    "scope": "profile",
-    "label": "PCS packet for transportation office",
-    "role": "guest",
-    "allowedActions": ["view", "download"],
-    "expiresAt": 1780876800000
-  }'
-```
-
-The create response includes the raw `token` and `/share/{token}` URL once.
-List responses only include safe metadata such as `shareLinkId`, `tokenPreview`,
-status, scope, allowed actions, expiration, and access counts.
-
-Create a move-scoped plan share link:
-
-```bash
-curl -X POST https://movingmanifest.com/api/v1/moves/MOVE_ID/share-links \
-  -H "Authorization: Bearer mmk_replace_with_a_scoped_api_key" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: plan-share-link-001" \
-  -d '{
-    "scope": "move",
-    "label": "Unload plan for crew",
-    "role": "guest",
-    "allowedActions": ["viewPlan"],
-    "expiresAt": 1780876800000
-  }'
-```
-
-`viewPlan` exposes the public read-only Layout Studio plan surface. The public
-payload hides blueprint underlays, values/prices, private notes, raw storage
-metadata, and free-text plan annotations.
+New share links are website-only. POST /moves/{id}/share-links is refused for
+all API keys. Existing link metadata and revocation remain available.
 
 List recent public-recipient comments for all share links on a move:
 
@@ -2207,7 +2138,7 @@ names, and known launch blockers.
 | `download_export` | Return an unexpired export artifact as text. |
 | `list_share_links` | List safe share-link metadata. |
 | `list_share_link_comments` | List public-recipient comments for a move or one share link without returning raw share tokens. |
-| `create_share_link` | Create a scoped documentation share link, with `dryRun` support. |
+| `create_share_link` | Website-only; refuses all API-key calls. |
 | `revoke_share_link` | Revoke a documentation share link, with `dryRun` support. |
 
 Canonical Queue tools (`list_queue_items`, `get_queue_item`,
@@ -2403,20 +2334,18 @@ domain scopes and move restrictions; use it before `reduce_connection`. Positive
 never match a recovered generation. Later revocation of a historical alias also
 stops its recovered client; older alias forms cannot edit the new decision.
 
-Only explicitly full grants follow future scopes. Legacy/unmarked and chosen
-scope arrays and every stored end date remain exact, including automatic old
-durations. No migration, lift, backfill or production record write is performed.
-New API keys likewise default to the full API catalog and no end date; explicit
-scope arrays remain chosen unless the person selects full. API-key exports and
-members capabilities retain their existing ceiling; canonical OAuth does not
-inherit those capabilities.
+Connections receive future powers except those explicitly removed. Old held
+lists derive removed powers against a frozen historical baseline. Proven
+system-issued old defaults are lifted at check time, without a data migration.
+Person-set and AI-set limits remain exact. API keys cannot create invitations
+or new share links, regardless of scope.
 
 All four doors offer `reduce_connection`. OAuth takes the calling client's
 current `expectedVersion` from `describe_connection` on either OAuth door. API-key HTTP/stdio use
-`get_api_context` and `POST /api/v1/me/access`. Inputs are `scopes`, `moveIds`,
+`get_api_context` and `POST /api/v1/me/access`. Inputs require `opId` and the current revision, with optional `scopes`, `moveIds`,
 `expiresAt` and `action` (`narrow`, `pause`, `revoke`). Omitted fields preserve
 limits; null expiry, additions, reactivation and extension are refused with a
-Settings link. Pause ends access immediately; only the person can restore it.
+Settings link. Pause records pausedAt separately from the end date and stops access immediately; only the person can restore it.
 The change, version and durable audit receipt commit atomically. API-key REST
 reductions execute in a Convex subtransaction, so a receipt failure rolls back
 the key change before the facade maps the failure to an HTTP response. A caller cannot
@@ -2493,3 +2422,23 @@ metadata after reconnecting. Incomplete histories or exhausted positive numeric
 precision use indexed disjoint recovery revisions, preserving the replaced
 original source privately. Move choices exclude archived households; an owner
 editing selected moves uses a retained move as the eligibility witness.
+
+## AWL-0015 approved connection standard (2026-11-06)
+
+`shared/ai-connection-policy.json` owns the common policy text used by MCP
+connect instructions and public guides. Run `node scripts/build-ai-access.mjs`
+to refresh the policy prefix and the API tool-to-power catalogue derived from
+handlers and backend route requirements; `--check` verifies them.
+
+`connectionSettings.list/change` are person-session-only website controls for
+OAuth and API keys. Revoked Restore preserves prior powers and end date; Resume
+clears only pause; Restore full powers explicitly widens scopes. Every change
+is revision-checked and writes private before/after history in aiConnectionChanges.
+This table is append-only and has no automatic expiry. Self-reductions require
+an opId and replay the original receipt without applying twice.
+
+When a new OAuth client id reports the same AI name, the new row inherits the
+narrowest governing limits for that name. Reported names can only narrow.
+Legacy auto issuance is established by its original connected-by-signing-in
+receipt or automatic expiry marker, and only untouched active version-1 grants
+are lifted. No stored legacy grant is rewritten merely by checking it.

@@ -52,14 +52,14 @@ it.each([1e20, -1e20])("refuses unrenderable expiry %s on both OAuth doors and A
   const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Supported expiry key" });
   const snapshot = () => t.run(async ctx => ({ grants: await ctx.db.query("aiGrants").collect(), keys: await ctx.db.query("apiKeys").collect(), audits: await ctx.db.query("auditLogs").collect() }));
   const before = await snapshot();
-  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, expiresAt })).rejects.toThrow();
-  await expect(t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: 1, expiresAt })).rejects.toThrow();
-  await expect(t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, expiresAt })).rejects.toThrow();
+  await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-1", subject: SUBJECT, clientId, expectedVersion: 1, expiresAt })).rejects.toThrow();
+  await expect(t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-2", caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: 1, expiresAt })).rejects.toThrow();
+  await expect(t.mutation(internal.apiKeys.reduceCallingKey, { opId: "test-mcp-legacy-grant-lifecycle.test-3", apiKeyId, expectedVersion: 1, expiresAt })).rejects.toThrow();
   await expect(owner.mutation(api.apiKeys.create, { householdId, name: "Invalid owner expiry", expiresAt })).rejects.toThrow(/supported date/);
   expect(await snapshot()).toEqual(before);
   const validExpiry = Date.now() + 60_000;
-  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, expiresAt: validExpiry });
-  await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, expiresAt: validExpiry });
+  await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-4", subject: SUBJECT, clientId, expectedVersion: 1, expiresAt: validExpiry });
+  await t.mutation(internal.apiKeys.reduceCallingKey, { opId: "test-mcp-legacy-grant-lifecycle.test-5", apiKeyId, expectedVersion: 1, expiresAt: validExpiry });
   expect((await snapshot()).grants[0].expiresAt).toBe(validExpiry);
   expect((await t.run(ctx => ctx.db.get(apiKeyId)))?.expiresAt).toBe(validExpiry);
 });
@@ -268,7 +268,7 @@ describe("participant settings and cross-household self-reduction", () => {
     const principal = { issuer: ISSUER, subject: SUBJECT, clientId: "own" };
     const before = await t.query(internal.mcpPlanning.getMoveBrief, { principal });
     expect(before.moves?.map(move => move.moveId)).toContain(moveId);
-    const receipt = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "own", expectedVersion: 1, moveIds: [moveId] });
+    const receipt = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-6", subject: SUBJECT, clientId: "own", expectedVersion: 1, moveIds: [moveId] });
     expect(receipt.version).toBe(2);
     expect(await t.run(ctx => ctx.db.query("aiGrants").first())).toMatchObject({ moveScope: "selectedMoves", moveIds: [moveId] });
     await expect(t.query(internal.mcpPlanning.getMoveBrief, { principal, moveId })).resolves.toBeTruthy();
@@ -287,7 +287,7 @@ describe("participant settings and cross-household self-reduction", () => {
       activity: await ctx.db.query("aiGrantActivities").collect(), audit: await ctx.db.query("auditLogs").collect(),
     }));
     const before = await snapshot();
-    await expect(t.mutation(grants.reduceConnection, {
+    await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-7",
       subject: SUBJECT, clientId: "own", expectedVersion: 1, moveIds: [moveId, otherMoveId],
     })).rejects.toThrow();
     expect(await snapshot()).toEqual(before);
@@ -454,16 +454,16 @@ describe("full access and optional end dates", () => {
     expect(() => chosenExpiry(NaN, 100)).toThrow();
   });
 
-  it("includes future scopes only for full connections", () => {
+  it("includes future scopes except powers explicitly removed", () => {
     const catalog = movingScopes as unknown as string[];
     const frozen = [...movingScopes];
     catalog.push("moving.future.test");
     try {
       expect(effectiveScopes({ scopes: frozen, scopeChoice: "full" })).toContain("moving.future.test");
-      expect(effectiveScopes({ scopes: frozen, scopeChoice: "chosen" })).not.toContain("moving.future.test");
-      expect(effectiveScopes({ scopes: frozen })).not.toContain("moving.future.test");
+      expect(effectiveScopes({ scopes: frozen, scopeChoice: "chosen" })).toContain("moving.future.test");
+      expect(effectiveScopes({ scopes: frozen })).toContain("moving.future.test");
       const base = { scopes: frozen, status: "active" as const, moveScope: "allMoves" as const, moveIds: [] };
-      expect(findPermittingGrant([{ ...base, scopeChoice: "chosen" }], "moving.future.test" as any, undefined, Date.now())).toBeNull();
+      expect(findPermittingGrant([{ ...base, scopeChoice: "chosen" }], "moving.future.test" as any, undefined, Date.now())).not.toBeNull();
       expect(findPermittingGrant([{ ...base, scopeChoice: "full" }], "moving.future.test" as any, undefined, Date.now())).not.toBeNull();
     } finally { catalog.pop(); }
   });
@@ -661,7 +661,7 @@ describe("explicit settings consent protocol", () => {
     try {
       await expect(updateOwner(owner, { ...consent, grantId, expectedVersion: 3, scopes: frozen, scopeIntent: "full" })).rejects.toThrow(/Reload/);
       const row = (await t.run(ctx => ctx.db.get(grantId)))!;
-      expect(effectiveScopes(row)).toEqual(frozen);
+      expect(effectiveScopes(row)).toEqual([...frozen, "moving.future.test"]);
       // After reviewing the new catalog the person can deliberately restore full.
       // The synthetic scope bypasses schema validation here by exercising the pure resolver.
       const { explicitScopes } = await import("../../convex/lib/aiGrants");
@@ -810,7 +810,7 @@ describe("explicit owner reconnect", () => {
       for (const clientId of [first, alias]) {
         expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).scopes).toEqual(movingScopes);
         // Versions 1 and 3 were observable before this reconnect (two aliases).
-        for (const expectedVersion of [1, 3]) await expect(t.mutation(grants.reduceConnection, {
+        for (const expectedVersion of [1, 3]) await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-8",
           subject: SUBJECT, clientId, expectedVersion, action: "revoke",
         })).rejects.toThrow(/changed/);
       }
@@ -835,7 +835,7 @@ describe("explicit owner reconnect", () => {
     const { householdId } = await seedOwner(t);
     await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "expired-client" });
     const original = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
-    await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "expired-client", expectedVersion: 1, action: "pause" });
+    await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-9", subject: SUBJECT, clientId: "expired-client", expectedVersion: 1, action: "pause" });
     const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
     const loaded = await owner.query(api.aiGrants.listMine, {});
     const previous = await t.run(ctx => ctx.db.get(original._id));
@@ -911,7 +911,7 @@ describe("explicit owner reconnect", () => {
     expect((await owner.query(api.aiGrants.listSourceHistory, {})).page[0].source).toEqual(previous);
     for (const id of [clientId, `legacy:${clientId}`]) {
       expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(movingScopes);
-      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
+      await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-10", subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
     }
     expect((await owner.query(api.aiGrants.listMine, {})).grants).toHaveLength(128);
     await revokeOwner(owner, { grantId, expectedVersion: restored.version });
@@ -963,7 +963,7 @@ describe("explicit owner reconnect", () => {
     await expect(t.withIdentity({ subject: SUBJECT, client_id: clientId }).query(api.aiGrants.listSourceHistory, {})).rejects.toThrow(/settings/);
     for (const id of [clientId, `legacy:${clientId}`]) {
       expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: id })).scopes).toEqual(movingScopes);
-      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
+      await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-11", subject: SUBJECT, clientId: id, expectedVersion: 1, action: "revoke" })).rejects.toThrow(/changed/);
     }
     await expect(owner.mutation(api.aiGrants.approve, args)).rejects.toThrow(/history changed/);
     await updateOwner(owner, { ...consent, grantId, expectedVersion: -1, scopes: ["moving.context.read"], scopeIntent: "chosen" });
@@ -976,8 +976,8 @@ describe("explicit owner reconnect", () => {
     await owner.mutation(api.aiGrants.approve, { ...args, expectedRecoveryFingerprint: current.recoveryFingerprint });
     const newest = (await t.run(ctx => ctx.db.get(grantId)))!;
     expect(newest.version).toBe(-4);
-    await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: -1, action: "revoke" })).rejects.toThrow(/changed/);
-    expect((await t.mutation(grants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: -4, scopes: ["moving.context.read"] })).version).toBe(-5);
+    await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-12", subject: SUBJECT, clientId, expectedVersion: -1, action: "revoke" })).rejects.toThrow(/changed/);
+    expect((await t.mutation(grants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-13", caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: -4, scopes: ["moving.context.read"] })).version).toBe(-5);
     expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).scopes).toEqual(["moving.context.read"]);
   });
 });
@@ -1202,18 +1202,18 @@ describe("FAD own-connection authority", () => {
     const now = Date.now();
     const move = (title: string) => t.run(ctx => ctx.db.insert("moves", { householdId, title, type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: now, updatedAt: now }));
     const a = await move("A"), b = await move("B");
-    const receipt = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "own", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [a], expiresAt: now + 10_000 });
+    const receipt = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-14", subject: SUBJECT, clientId: "own", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [a], expiresAt: now + 10_000 });
     expect(receipt.version).toBe(2);
     expect(await t.run(ctx => ctx.db.get(receipt.receipt))).toMatchObject({ action: "ai_grant.self_reduced", actorType: "agent", metadata: { version: 2 } });
     const own = (await t.run(ctx => ctx.db.query("aiGrants").collect())).find(row => row.clientId === "own")!;
     expect(await t.run(ctx => ctx.db.query("aiGrantActivities").withIndex("by_grant_created", q => q.eq("grantId", own._id)).collect())).toEqual(expect.arrayContaining([expect.objectContaining({ message: expect.stringContaining("version 2") })]));
     for (const input of [{ scopes: [...movingScopes] }, { moveIds: [a, b] }, { expiresAt: null }, { expiresAt: now + 20_000 }, { action: "reactivate" }, { action: "rotate" }]) {
-      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "own", expectedVersion: 2, ...input })).rejects.toThrow(/Settings|settings/);
+      await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-15", subject: SUBJECT, clientId: "own", expectedVersion: 2, ...input })).rejects.toThrow(/Settings|settings/);
       expect(await t.run(ctx => ctx.db.get(own._id))).toEqual(own);
     }
-    await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "own", expectedVersion: 1, scopes: [] })).rejects.toThrow(/changed/);
-    await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "own", expectedVersion: 2, action: "pause" });
-    await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "own", expectedVersion: 3, action: "reactivate" })).rejects.toThrow(/settings/);
+    await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-16", subject: SUBJECT, clientId: "own", expectedVersion: 1, scopes: [] })).rejects.toThrow(/changed/);
+    await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-17", subject: SUBJECT, clientId: "own", expectedVersion: 2, action: "pause" });
+    await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-18", subject: SUBJECT, clientId: "own", expectedVersion: 3, action: "reactivate" })).rejects.toThrow(/settings/);
     expect(await t.run(ctx => ctx.db.get(sibling!._id))).toEqual(sibling);
   });
 
@@ -1257,7 +1257,7 @@ describe("FAD own-connection authority", () => {
     const raw = generateApiKeySecret();
     const secretHash = await hashApiKey(raw);
     const keyId = await t.run(ctx => ctx.db.insert("apiKeys", { householdId, name: "Synthetic", prefix: apiKeyPrefix(raw), tokenPreview: "synthetic", secretHash, scopes: [...apiKeyScopes], scopeChoice: "full", status: "active", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
-    const request = (body: unknown) => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: `Bearer ${raw}`, body });
+    const request = (body: unknown) => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: `Bearer ${raw}`, body: { opId: `rest-${JSON.stringify(body).length}-${(body as any).expectedVersion}-${(body as any).action ?? "narrow"}`, ...(body as object) } });
     const narrowed = await request({ expectedVersion: 1, scopes: ["moves/read"], expiresAt: Date.now() + 100_000 });
     expect(narrowed.status).toBe(200);
     const changed = (await t.run(ctx => ctx.db.get(keyId)))!;
@@ -1279,12 +1279,12 @@ it("persisted OAuth reduction derives its client from gateway-injected identity"
   await seedOwner(t);
   for (const clientId of ["legacy:caller", "legacy:sibling"]) await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
   const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
-  const result = await t.mutation(grants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: "caller" } }, expectedVersion: 1, scopes: ["moving.context.read"] });
+  const result = await t.mutation(grants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-19", caller: { subject: SUBJECT, claims: { client_id: "caller" } }, expectedVersion: 1, scopes: ["moving.context.read"] });
   expect(result.version).toBe(2);
   const after = await t.run(ctx => ctx.db.query("aiGrants").collect());
   expect(after.find(row => row.clientId === "legacy:sibling")).toEqual(before.find(row => row.clientId === "legacy:sibling"));
-  await expect(t.mutation(grants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: "caller" } }, expectedVersion: 2, scopes: [...movingScopes] })).rejects.toThrow(/settings/);
-  const revoked = await t.mutation(grants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: "caller" } }, expectedVersion: 2, action: "revoke" });
+  await expect(t.mutation(grants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-20", caller: { subject: SUBJECT, claims: { client_id: "caller" } }, expectedVersion: 2, scopes: [...movingScopes] })).rejects.toThrow(/settings/);
+  const revoked = await t.mutation(grants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-21", caller: { subject: SUBJECT, claims: { client_id: "caller" } }, expectedVersion: 2, action: "revoke" });
   expect(await t.run(ctx => ctx.db.get(revoked.receipt))).toMatchObject({ action: "ai_grant.self_reduced", metadata: { version: 3 } });
   expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "legacy:caller" })).block).toBe("revoked");
 });
@@ -1323,17 +1323,17 @@ describe.each([
       await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: first });
       const stored = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
       const date = Date.now() + 100_000;
-      const receipt = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: aliases.find(id => id !== first)!, expectedVersion: 1, scopes: ["moving.context.read"], expiresAt: date });
+      const receipt = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-22", subject: SUBJECT, clientId: aliases.find(id => id !== first)!, expectedVersion: 1, scopes: ["moving.context.read"], expiresAt: date });
       expect(receipt.version).toBe(2);
       for (const clientId of aliases) {
         expect((await access(t, clientId)).grants).toEqual([expect.objectContaining({ grantId: stored._id, version: 2, scopes: ["moving.context.read"], expiresAt: date })]);
         await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
       }
       expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toHaveLength(1);
-      await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: first, expectedVersion: 2, action: "pause" });
+      await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-23", subject: SUBJECT, clientId: first, expectedVersion: 2, action: "pause" });
       for (const clientId of aliases) {
         expect((await access(t, clientId)).scopes).toEqual([]);
-        expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("expired");
+        expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("paused");
       }
       await revokeOwner(t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" }), { grantId: stored._id, expectedVersion: 3 });
       for (const clientId of aliases) expect((await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId })).block).toBe("revoked");
@@ -1359,18 +1359,18 @@ describe.each([
       expect(result.grants).toEqual([expect.objectContaining({ scopes: ["moving.context.read"], version: 2, moveIds: [a], expiresAt: date, scopeChoice: "chosen" })]);
       await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
       expect(await t.run(ctx => hasQueueWorkGrant(ctx, { issuer: ISSUER, subject: SUBJECT, clientId }, a))).toBe(false);
-      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 2, scopes: ["moving.queue.work"] })).rejects.toThrow(/settings/);
+      await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-24", subject: SUBJECT, clientId, expectedVersion: 2, scopes: ["moving.queue.work"] })).rejects.toThrow(/settings/);
     }
     expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
     // Only a loaded person edit may widen each existing alias. Neither alias
     // can hide the other's remaining restriction.
     for (const row of before) await updateOwner(t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" }), { ...consent, grantId: row._id, expectedVersion: 1, scopes: [...movingScopes], scopeIntent: "full", moveScope: "allMoves", expiresInDays: null, expiryIntent: "none" });
     for (const clientId of aliases) expect((await access(t, clientId)).grants).toEqual([expect.objectContaining({ scopes: [...movingScopes], expiresAt: null, version: 4, moveScope: "allMoves" })]);
-    const narrowed = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: aliases[1], expectedVersion: 4, scopes: [] });
+    const narrowed = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-25", subject: SUBJECT, clientId: aliases[1], expectedVersion: 4, scopes: [] });
     expect(narrowed.version).toBe(5);
     for (const clientId of aliases) {
       expect((await access(t, clientId)).scopes).toEqual([]);
-      await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, scopes: [] })).rejects.toThrow(/changed/);
+      await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-26", subject: SUBJECT, clientId, expectedVersion: 4, scopes: [] })).rejects.toThrow(/changed/);
     }
   });
 
@@ -1406,7 +1406,7 @@ describe.each([
     await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "sibling" });
     const sibling = (await t.run(ctx => ctx.db.query("aiGrants").collect())).find(row => row.clientId === "sibling")!;
     await Promise.all([
-      t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: aliases[0], expectedVersion: 1, action: "revoke" }),
+      t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-27", subject: SUBJECT, clientId: aliases[0], expectedVersion: 1, action: "revoke" }),
       t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: aliases[1] }),
     ]);
     for (const clientId of aliases) expect((await access(t, clientId)).grants).toEqual([]);
@@ -1446,8 +1446,8 @@ describe("normalized URL histories preserve all governing stored decisions", () 
           expect(result.grants).toEqual([expect.objectContaining({ scopes: ["moving.context.read"], moveIds: [a], expiresAt: expiry, version: 4 })]);
           expect(touched.block).toBeUndefined();
           await expect(t.run(ctx => hasQueueWorkGrant(ctx, { subject: SUBJECT, issuer: ISSUER, clientId }, b))).resolves.toBe(false);
-          await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, moveIds: [b] })).rejects.toThrow(/settings/);
-          await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, expiresAt: expiry + 1 })).rejects.toThrow(/settings/);
+          await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-28", subject: SUBJECT, clientId, expectedVersion: 4, moveIds: [b] })).rejects.toThrow(/settings/);
+          await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-29", subject: SUBJECT, clientId, expectedVersion: 4, expiresAt: expiry + 1 })).rejects.toThrow(/settings/);
         } else {
           expect(result.grants).toEqual([]);
           expect(touched.block).toBe(refusal === "revoked" ? "revoked" : "expired");
@@ -1455,10 +1455,10 @@ describe("normalized URL histories preserve all governing stored decisions", () 
       }
       expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
       if (refusal === "limits") {
-        await t.mutation(grants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: aliases[0] } }, expectedVersion: 4, scopes: [], expiresAt: expiry - 1 });
+        await t.mutation(grants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-30", caller: { subject: SUBJECT, claims: { client_id: aliases[0] } }, expectedVersion: 4, scopes: [], expiresAt: expiry - 1 });
         for (const clientId of aliases) {
           expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId })).grants).toEqual([expect.objectContaining({ scopes: [], version: 5, expiresAt: expiry - 1 })]);
-          await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 4, scopes: [] })).rejects.toThrow(/changed/);
+          await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-31", subject: SUBJECT, clientId, expectedVersion: 4, scopes: [] })).rejects.toThrow(/changed/);
         }
       }
     });
@@ -1472,7 +1472,7 @@ describe("normalized URL histories preserve all governing stored decisions", () 
     }
     const rows = await t.run(ctx => ctx.db.query("aiGrants").collect());
     expect(rows).toHaveLength(5);
-    await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "https://CLIENT.example:443/path", expectedVersion: 1, action: "revoke" });
+    await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-32", subject: SUBJECT, clientId: "https://CLIENT.example:443/path", expectedVersion: 1, action: "revoke" });
     for (const row of rows.filter(row => row.clientId !== "https://client.example/path")) {
       expect(await t.run(ctx => ctx.db.get(row._id))).toEqual(row);
       expect((await t.query(grants.grantsForPrincipal, { subject: SUBJECT, clientId: row.clientId })).grants).toHaveLength(1);
@@ -1502,7 +1502,7 @@ describe("R1 scope-free API context", () => {
     const keyId = await t.run(ctx => ctx.db.insert("apiKeys", { householdId, name: "Synthetic context", prefix: apiKeyPrefix(raw), tokenPreview: "synthetic", secretHash, moveId, scopes: ["moves/read", "inventory/read"], expiresAt, status: "active", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
     const context = () => t.mutation(internal.restApi.handle, { method: "GET", path: "me", query: {}, authorization: `Bearer ${raw}` });
     const readMove = () => t.mutation(internal.restApi.handle, { method: "GET", path: `moves/${moveId}`, query: {}, authorization: `Bearer ${raw}` });
-    const reduce = (version: number, scopes: string[]) => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: `Bearer ${raw}`, body: { expectedVersion: version, scopes } });
+    const reduce = (version: number, scopes: string[]) => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: `Bearer ${raw}`, body: { opId: `rest-direct-${version}`, expectedVersion: version, scopes } });
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
       const path = new URL(url).pathname.replace("/api/v1/", "");
       const result = await t.mutation(internal.restApi.handle, { method: "GET", path, query: {}, authorization: (init.headers as Record<string, string>).authorization });
@@ -1662,7 +1662,7 @@ describe("private owner queries and participant reconnects", () => {
     await expect(oauth.mutation(api.apiKeys.create, { householdId, name: "Disallowed key" })).rejects.toThrow(/settings/);
     await expect(oauth.query(api.apiKeys.listForHousehold, { householdId })).rejects.toThrow(/settings/);
     await expect(oauth.mutation(api.apiKeys.revoke, { householdId, apiKeyId, expectedVersion: 1 })).rejects.toThrow(/settings/);
-    await expect(oauth.mutation(api.apiKeys.rotate, { householdId, apiKeyId })).rejects.toThrow(/settings/);
+    await expect(oauth.mutation(api.apiKeys.rotate, { householdId, apiKeyId, expectedVersion: 1 })).rejects.toThrow(/settings/);
     expect(await t.run(async ctx => ({ grant: await ctx.db.get(grant._id), key: await ctx.db.get(apiKeyId) }))).toEqual(before);
   });
 
@@ -1758,7 +1758,7 @@ describe("private owner queries and participant reconnects", () => {
     const { grantId } = await owner.mutation(api.aiGrants.approve, { ...consent, householdId, label: "Private reconnect", reconnectGrantId: original._id, expectedHistoryFingerprint: loaded.historyFingerprint });
     const current = (await t.run(ctx => ctx.db.get(grantId)))!;
     await updateOwner(owner, { ...consent, grantId, expectedVersion: current.version, scopeIntent: "chosen", scopes: ["moving.context.read"] });
-    const reduction = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: current.version + 1, scopes: [] });
+    const reduction = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-33", subject: SUBJECT, clientId, expectedVersion: current.version + 1, scopes: [] });
     await revokeOwner(owner, { grantId, expectedVersion: reduction.version, reason: "PRIVATE reason" });
     const historicalReceipt = await t.run(ctx => ctx.db.insert("auditLogs", { householdId, actorType: "user", actorUserId: original.ownerUserId, category: "ai", action: "ai_grant.revoked", objectTable: "aiGrants", objectId: original._id, metadata: { reason: "PRIVATE historical reason" }, createdAt: Date.now() }));
     const audit = await t.withIdentity({ subject: "separate-admin" }).query(api.audit.listForHousehold, { householdId });
@@ -1897,7 +1897,7 @@ it.each(["api_key.self_reduced", "api_connection.changed"])("rolls back the API-
   const raw = generateApiKeySecret();
   const secretHash = await hashApiKey(raw);
   const keyId = await t.run(ctx => ctx.db.insert("apiKeys", { householdId, name: "Rollback fixture", prefix: apiKeyPrefix(raw), tokenPreview: "synthetic", secretHash, scopes: ["moves/read"], scopeChoice: "chosen", status: "active", version: 1, createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
-  const request = () => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: "Bearer " + raw, body: { expectedVersion: 1, scopes: [] } });
+  const request = () => t.mutation(internal.restApi.handle, { method: "POST", path: "me/access", query: {}, authorization: "Bearer " + raw, body: { opId: "rest-direct-limit", expectedVersion: 1, scopes: [] } });
   const before = await t.run(ctx => ctx.db.get(keyId));
   const auditModule = await import("../../convex/lib/audit");
   const actual = auditModule.recordAuditEvent;
@@ -1934,13 +1934,13 @@ it.each(["opaque-description", "https://description.example/client.json"])("desc
   expect((await gate("get_agent_context")).allowed).toBe(false);
   expect((await gate("describe_connection")).allowed).toBe(true);
   const description = await t.query(internal.aiGrants.describeLegacyConnection, { caller });
-  expect(description).toEqual({ version: 2, status: "active", settings: "https://movingmanifest.com/settings/ai" });
+  expect(description).toMatchObject({ version: 2, status: "active", settings: "https://movingmanifest.com/settings/ai" });
   expect(JSON.stringify(description)).not.toContain("PRIVATE");
-  await t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: description.version!, scopes: [] });
+  await t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-34", caller, expectedVersion: description.version!, scopes: [] });
   const empty = await t.query(internal.aiGrants.describeLegacyConnection, { caller });
   expect(empty.version).toBe(3);
   expect((await gate("describe_connection")).allowed).toBe(true);
-  await t.mutation(internal.aiGrants.reduceLegacyConnection, { caller, expectedVersion: empty.version!, action: "revoke" });
+  await t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-35", caller, expectedVersion: empty.version!, action: "revoke" });
   expect(await t.run(ctx => ctx.db.get(sibling._id))).toEqual(sibling);
   expect((await t.query(internal.aiGrants.describeLegacyConnection, { caller })).status).toBe("revoked");
 });
@@ -1984,7 +1984,7 @@ it("keeps detailed API-key receipts private and redacts historical shared receip
   const { householdId, userId } = await seedOwner(t);
   const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
   const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Private key receipt" });
-  const receipt = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: [] });
+  const receipt = await t.mutation(internal.apiKeys.reduceCallingKey, { opId: "test-mcp-legacy-grant-lifecycle.test-36", apiKeyId, expectedVersion: 1, scopes: [] });
   const stored = await t.run(ctx => ctx.db.get(receipt.receipt));
   expect(stored).toMatchObject({ objectId: apiKeyId, actorUserId: userId, metadata: { version: 2, scopes: [] } });
   expect(stored?.householdId).toBeUndefined();
@@ -2108,10 +2108,10 @@ it("preserves before and after authority in durable private grant reduction rece
   const clientId = "receipt-history-client";
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
   const expiry = Date.now() + 600000;
-  const reduced = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: expiry });
+  const reduced = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-37", subject: SUBJECT, clientId, expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: expiry });
   const first = await t.run(ctx => ctx.db.get(reduced.receipt as Id<"auditLogs">));
   expect(first?.metadata).toMatchObject({ before: { version: 1, active: true, scopes: [...movingScopes], moveScope: "allMoves", moveIds: [], expiresAt: null }, after: { version: 2, active: true, scopes: ["moving.context.read"], moveScope: "selectedMoves", moveIds: [moveId], expiresAt: expiry } });
-  const revoked = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 2, action: "revoke" });
+  const revoked = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-38", subject: SUBJECT, clientId, expectedVersion: 2, action: "revoke" });
   const last = await t.run(ctx => ctx.db.get(revoked.receipt as Id<"auditLogs">));
   expect(last?.metadata).toMatchObject({ before: first?.metadata?.after, after: { version: 3, status: "revoked", active: false, moveIds: [moveId], scopes: ["moving.context.read"], expiresAt: expiry } });
   expect(first?.householdId).toBeUndefined();
@@ -2126,14 +2126,14 @@ it.each(["pause", "revoke"] as const)("preserves API-key limits before narrowing
   const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Key limit receipt" });
   const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "Key receipt move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
   const expiresAt = Date.now() + 600000;
-  const firstResult = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: ["moves/read"], moveIds: [moveId], expiresAt });
+  const firstResult = await t.mutation(internal.apiKeys.reduceCallingKey, { opId: "test-mcp-legacy-grant-lifecycle.test-39", apiKeyId, expectedVersion: 1, scopes: ["moves/read"], moveIds: [moveId], expiresAt });
   const first = (await t.run(ctx => ctx.db.get(firstResult.receipt)))!;
   const { apiKeyScopes } = await import("../../convex/lib/apiKeys");
   expect(first.metadata).toMatchObject({ before: { version: 1, status: "active", active: true, scopes: [...apiKeyScopes], moveId: null, expiresAt: null }, after: { version: 2, status: "active", active: true, scopes: ["moves/read"], moveId, expiresAt } });
-  const lastResult = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 2, action });
+  const lastResult = await t.mutation(internal.apiKeys.reduceCallingKey, { opId: "test-mcp-legacy-grant-lifecycle.test-40", apiKeyId, expectedVersion: 2, action });
   const last = (await t.run(ctx => ctx.db.get(lastResult.receipt)))!;
-  expect(last.metadata).toMatchObject({ before: first.metadata?.after, after: { version: 3, status: action === "pause" ? "expired" : "revoked", active: false, scopes: ["moves/read"], moveId, expiresAt: action === "pause" ? expect.any(Number) : expiresAt } });
-  if (action === "pause") expect(last.metadata?.after.expiresAt).toBeLessThanOrEqual(Date.now());
+  expect(last.metadata).toMatchObject({ before: first.metadata?.after, after: { version: 3, status: action === "pause" ? "paused" : "revoked", active: false, scopes: ["moves/read"], moveId, expiresAt } });
+  if (action === "pause") expect(last.metadata?.after.pausedAt).toBeLessThanOrEqual(Date.now());
   for (const row of [first, last]) {
     expect(row.householdId).toBeUndefined();
     expect(row.moveId).toBeUndefined();
@@ -2149,10 +2149,10 @@ it("keeps connection receipts private through app-admin audit and observability 
   const admin = t.withIdentity({ subject: "other-app-admin", sid: "sess_other_admin" });
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "private-admin-client" });
   const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
-  const reduced = await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "private-admin-client", expectedVersion: 1, scopes: ["moving.context.read"] });
+  const reduced = await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-41", subject: SUBJECT, clientId: "private-admin-client", expectedVersion: 1, scopes: ["moving.context.read"] });
   await revokeOwner(owner, { grantId: grant._id, expectedVersion: 2, reason: "PRIVATE owner reason" });
   const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Private key" });
-  const keyReceipt = await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: [] });
+  const keyReceipt = await t.mutation(internal.apiKeys.reduceCallingKey, { opId: "test-mcp-legacy-grant-lifecycle.test-42", apiKeyId, expectedVersion: 1, scopes: [] });
   const result = await admin.mutation(api.admin.getUser, { userId });
   const status = await admin.mutation(api.observability.status, {});
   expect(result?.recentAudit.length).toBeGreaterThan(0);
@@ -2180,7 +2180,7 @@ it("lets the person widen expiry after a cross-household self-reduction and rech
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "cross-household-client" });
   const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
   expect(grant.householdId).toBe(firstHousehold);
-  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "cross-household-client", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: Date.now() + 600000 });
+  await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-43", subject: SUBJECT, clientId: "cross-household-client", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: Date.now() + 600000 });
   await updateOwner(owner, { ...consent, grantId: grant._id, expectedVersion: 2, expiryIntent: "none", expiresInDays: null });
   const widened = (await t.run(ctx => ctx.db.get(grant._id)))!;
   expect(widened).toMatchObject({ version: 3, moveScope: "selectedMoves", moveIds: [moveId] });
@@ -2222,7 +2222,7 @@ it("keeps canonical scope-free describe_connection credential-only", async () =>
   const moveId = await t.run(ctx => ctx.db.insert("moves", { householdId, title: "PRIVATE description move", type: "local", status: "planning", unitSystem: "imperial", createdByUserId: userId, createdAt: Date.now(), updatedAt: Date.now() }));
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId });
   const expiresAt = Date.now() + 600000;
-  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: 1, scopes: [], moveIds: [moveId], expiresAt });
+  await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-44", subject: SUBJECT, clientId, expectedVersion: 1, scopes: [], moveIds: [moveId], expiresAt });
   const { createMovingServer } = await import("../../convex/httpRoutes/mcp");
   const { createMcpHandler } = await import("@modelcontextprotocol/server");
   const ctx = { runQuery: (ref: any, args: any) => t.query(ref, args) } as any;
@@ -2256,7 +2256,7 @@ it("uses the actual retained-move household for participant widening without an 
     const participantId = await ctx.db.insert("moveParticipants", { householdId: secondHousehold, moveId, userId, role: "viewer", accessKind: "moveOnly", participantType: "helper", status: "active", createdAt: now, updatedAt: now });
     return { moveId, participantId };
   });
-  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "cross-participant-client", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: Date.now() + 600000 });
+  await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-45", subject: SUBJECT, clientId: "cross-participant-client", expectedVersion: 1, scopes: ["moving.context.read"], moveIds: [moveId], expiresAt: Date.now() + 600000 });
   await updateOwner(owner, { ...consent, grantId: grant._id, expectedVersion: 2, expiryIntent: "none", expiresInDays: null });
   const widened = (await t.run(ctx => ctx.db.get(grant._id)))!;
   expect(widened).toMatchObject({ version: 3, moveIds: [moveId] });
@@ -2272,7 +2272,7 @@ it.each([false, true])("guards person key revocation with its current row revisi
   const owner = t.withIdentity({ subject: SUBJECT, sid: "sess_owner_fixture" });
   const { apiKeyId } = await owner.mutation(api.apiKeys.create, { householdId, name: "Versioned revoke" });
   if (legacy) await t.run(ctx => ctx.db.patch(apiKeyId, { version: undefined }));
-  await t.mutation(internal.apiKeys.reduceCallingKey, { apiKeyId, expectedVersion: 1, scopes: [] });
+  await t.mutation(internal.apiKeys.reduceCallingKey, { opId: "test-mcp-legacy-grant-lifecycle.test-46", apiKeyId, expectedVersion: 1, scopes: [] });
   const before = await t.run(async ctx => ({ key: await ctx.db.get(apiKeyId), audits: await ctx.db.query("auditLogs").collect() }));
   await expect(owner.mutation(api.apiKeys.revoke, { householdId, apiKeyId, expectedVersion: 1 })).rejects.toThrow(/changed/);
   expect(await t.run(async ctx => ({ key: await ctx.db.get(apiKeyId), audits: await ctx.db.query("auditLogs").collect() }))).toEqual(before);
@@ -2307,8 +2307,8 @@ it.each([
   await reconnect();
   const description = await t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId });
   const reduced = legacy
-    ? await t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: description.version!, scopes: ["moving.context.read"] })
-    : await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: description.version!, scopes: ["moving.context.read"] });
+    ? await t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-47", caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: description.version!, scopes: ["moving.context.read"] })
+    : await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-48", subject: SUBJECT, clientId, expectedVersion: description.version!, scopes: ["moving.context.read"] });
   const delayedVersion = reduced.version;
   const historical = (await t.run(ctx => ctx.db.get(first._id)))!;
   await revokeOwner(owner, { grantId: first._id, expectedVersion: historical.version });
@@ -2319,8 +2319,8 @@ it.each([
   expect(current.scopeChoice).toBe("full");
   expect(current.expiresAt).toBeUndefined();
   const before = await t.run(ctx => ctx.db.query("aiGrants").collect());
-  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: delayedVersion, action: "revoke" })).rejects.toThrow(/changed/);
-  await expect(t.mutation(internal.aiGrants.reduceLegacyConnection, { caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: delayedVersion, action: "revoke" })).rejects.toThrow(/changed/);
+  await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-49", subject: SUBJECT, clientId, expectedVersion: delayedVersion, action: "revoke" })).rejects.toThrow(/changed/);
+  await expect(t.mutation(internal.aiGrants.reduceLegacyConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-50", caller: { subject: SUBJECT, claims: { client_id: clientId } }, expectedVersion: delayedVersion, action: "revoke" })).rejects.toThrow(/changed/);
   expect(await t.run(ctx => ctx.db.query("aiGrants").collect())).toEqual(before);
 });
 
@@ -2338,14 +2338,14 @@ it("uses indexed disjoint revisions if a complete positive history exhausts nume
   };
   expect((await reconnect()).grantId).toBe(first._id);
   expect((await t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId })).version).toBe(-1);
-  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: Number.MAX_SAFE_INTEGER, action: "revoke" })).rejects.toThrow(/changed/);
+  await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-51", subject: SUBJECT, clientId, expectedVersion: Number.MAX_SAFE_INTEGER, action: "revoke" })).rejects.toThrow(/changed/);
   await revokeOwner(owner, { grantId: first._id, expectedVersion: -1 });
   await reconnect();
   expect((await t.query(internal.aiGrants.describeConnection, { subject: SUBJECT, clientId })).version).toBe(-3);
   expect((await t.run(ctx => ctx.db.query("aiGrants").collect()))).toHaveLength(1);
   const sources = await owner.query(api.aiGrants.listSourceHistory, {});
   expect(sources.page.some(row => row.source.version === Number.MAX_SAFE_INTEGER)).toBe(true);
-  await expect(t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId, expectedVersion: -1, action: "revoke" })).rejects.toThrow(/changed/);
+  await expect(t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-52", subject: SUBJECT, clientId, expectedVersion: -1, action: "revoke" })).rejects.toThrow(/changed/);
 });
 
 it("hides choices from an archived original household and widens using an eligible retained household", async () => {
@@ -2361,7 +2361,7 @@ it("hides choices from an archived original household and widens using an eligib
   });
   await t.mutation(grants.touchLegacyConnection, { subject: SUBJECT, clientId: "archived-original-client" });
   const grant = (await t.run(ctx => ctx.db.query("aiGrants").first()))!;
-  await t.mutation(grants.reduceConnection, { subject: SUBJECT, clientId: "archived-original-client", expectedVersion: 1, moveIds: [retained], expiresAt: Date.now() + 600000 });
+  await t.mutation(grants.reduceConnection, { opId: "test-mcp-legacy-grant-lifecycle.test-53", subject: SUBJECT, clientId: "archived-original-client", expectedVersion: 1, moveIds: [retained], expiresAt: Date.now() + 600000 });
   await t.run(ctx => ctx.db.patch(householdId, { archivedAt: Date.now() }));
   expect(await owner.query(api.aiGrants.listMoveChoices, { householdId })).toEqual({ moves: [], nextCursor: null });
   await updateOwner(owner, { ...consent, grantId: grant._id, expectedVersion: 2, eligibilityMoveId: retained, expiryIntent: "none", expiresInDays: null });

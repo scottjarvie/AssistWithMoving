@@ -1,3 +1,5 @@
+New AI connections get full access to all current and future tools, including private records and media, with no end date. Call describe_connection (or get_api_context for API keys) to inspect the actual state, reason, end date and revision. Use reduce_connection with opId and expectedVersion to remove powers, shorten an end date, pause or revoke only your own connection. You can never widen or restore access. Only the person can restore it at https://movingmanifest.com/settings/ai. Reconnecting never removes a limit. Archive and restore are allowed; permanent deletion, purge, invitations, new share links, publishing and spending money are website-only.
+
 # Assist With Moving AI Assistant Guide
 
 Assist With Moving is a durable household move-planning workspace. It keeps the
@@ -120,9 +122,8 @@ the same move, they need household membership.
 Current flow:
 
 1. The owner creates the household/move.
-2. An owner/admin adds or invites the spouse by email from Settings, or an assistant uses
-   `POST /api/v1/households/{householdId}/members` with a key that has
-   `members/manage`.
+2. An owner/admin adds or invites the spouse by email from Settings on the website.
+   API keys cannot create invitations or new share links.
 3. If the spouse does not have an account yet, Assist With Moving keeps a pending
    invitation for that email.
 4. The spouse creates their own Assist With Moving account with that email and then
@@ -523,4 +524,4 @@ date, change or remove that date later, and revoke access at any time. A date yo
 choose is recorded as your choice and never removed automatically. Legacy grants
 with uncertain scope or expiry history keep their recorded limits.
 
-New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Existing chosen and legacy limits remain exact. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.
+New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Person-set and AI-set limits remain exact; proven old automatic defaults are lifted when checked. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.

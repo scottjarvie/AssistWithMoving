@@ -64,14 +64,14 @@ export const LEGACY_FULL_SCOPE_BASELINE = [
   "moving.queue.work", "moving.archive",
 ] as const;
 
-type ScopeGrant = { scopes: readonly string[]; scopeChoice?: "full" | "chosen" };
+type ScopeGrant = { scopes: readonly string[]; scopeChoice?: "full" | "chosen"; withheldScopes?: readonly string[] };
 export function effectiveScopeChoice(grant: ScopeGrant): "full" | "chosen" {
-  return grant.scopeChoice ?? "chosen";
+  return grant.withheldScopes !== undefined ? (grant.withheldScopes.length ? "chosen" : "full") : grant.scopeChoice ?? "chosen";
 }
 
 /** Full connections include future catalog additions; chosen ones never widen. */
 export function effectiveScopes(grant: ScopeGrant): readonly string[] {
-  return effectiveScopeChoice(grant) === "full" ? movingScopes : grant.scopes;
+  return movingScopes.filter(scope => !(grant.withheldScopes ?? (grant.scopeChoice === "full" ? [] : LEGACY_FULL_SCOPE_BASELINE.filter(scope => !grant.scopes.includes(scope)))).includes(scope));
 }
 
 export function effectiveExpiry(grant: {
@@ -229,7 +229,7 @@ export const GRANT_ERRORS = {
     code: "GRANT_REVOKED",
     message: "That grant was revoked in Assist With Moving.",
     recovery:
-      "Ask the person who owns this move to approve a new grant, then reconnect.",
+      "Ask the person who owns this move to approve a new grant, only the person can restore access on the website.",
   },
   expired: {
     code: "GRANT_EXPIRED",
@@ -273,6 +273,8 @@ export type GrantDecisionInput = {
   moveScope: "allMoves" | "selectedMoves";
   moveIds: readonly string[];
   status: "active" | "revoked";
+  pausedAt?: number;
+  withheldScopes?: readonly string[];
   expiresAt?: number;
 };
 
@@ -292,7 +294,7 @@ export function findPermittingGrant<T extends GrantDecisionInput>(
   now: number,
 ): T | null {
   for (const grant of grants) {
-    if (grant.status !== "active") continue;
+    if (grant.status !== "active" || grant.pausedAt !== undefined) continue;
     const expiry = effectiveExpiry(grant);
     if (expiry !== undefined && expiry <= now) continue;
     if (!effectiveScopes(grant).includes(scope)) continue;

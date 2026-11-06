@@ -10,7 +10,7 @@ export const apiKeyScopeOptions = [
   ["photos/write", "Upload photos"],
   ["exports/read", "Read exports"],
   ["exports/create", "Create exports"],
-  ["members/manage", "Manage members"],
+  ["members/manage", "Read household members"],
 ] as const;
 
 export type ApiKeyScope = (typeof apiKeyScopeOptions)[number][0];

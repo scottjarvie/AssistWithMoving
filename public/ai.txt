@@ -1,3 +1,5 @@
+New AI connections get full access to all current and future tools, including private records and media, with no end date. Call describe_connection (or get_api_context for API keys) to inspect the actual state, reason, end date and revision. Use reduce_connection with opId and expectedVersion to remove powers, shorten an end date, pause or revoke only your own connection. You can never widen or restore access. Only the person can restore it at https://movingmanifest.com/settings/ai. Reconnecting never removes a limit. Archive and restore are allowed; permanent deletion, purge, invitations, new share links, publishing and spending money are website-only.
+
 # Assist With Moving agent guide
 
 Canonical MCP endpoint: https://movingmanifest.com/mcp
@@ -29,7 +31,7 @@ Connecting grants full access with no end date by default:
 - OAuth proves who is calling. It does not decide what may be done.
 - A separate product grant decides the moves, the data, and the operations.
 - Connecting creates a full-access grant, including future scopes. Fewer
-  permissions or an end date apply only when the person chooses them in settings.
+  permissions or an end date apply when the person or this AI narrows the connection.
 - Call describe_connection first when no other tools appear. It reports the
   granted scopes, what this connection can never do, and the exact sentence to
   tell the person.
@@ -152,4 +154,4 @@ date, change or remove that date later, and revoke access at any time. A date yo
 choose is recorded as your choice and never removed automatically. Legacy grants
 with uncertain scope or expiry history keep their recorded limits.
 
-New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Existing chosen and legacy limits remain exact. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.
+New API-key connections also default to all entitled current/future scopes, all owned moves and no end date. Person-set and AI-set limits remain exact; proven old automatic defaults are lifted when checked. All doors provide reduce_connection for own access only; scope/entity additions, reactivation, expiry removal or extension require the person in https://movingmanifest.com/settings/ai.

@@ -1,3 +1,5 @@
+import apiToolAccess from "../shared/api-tool-access.json";
+import { apiKeyScopes } from "./lib/apiKeys";
 import { anyApi, type FunctionReference } from "convex/server";
 import { v } from "convex/values";
 
@@ -301,6 +303,7 @@ export const handle = internalMutation({
         rawKey,
         requiredScopes: selfReduction || selfContext ? [] : requiredScopes,
         recordUse: !selfReduction,
+        inspectConnection: selfContext || selfReduction,
         moveId,
         action,
         allowRestrictedKeyWithoutMoveId:
@@ -319,7 +322,7 @@ export const handle = internalMutation({
 
       if (selfReduction) {
         const body = args.body;
-        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(name => !["expectedVersion", "scopes", "moveIds", "expiresAt", "action"].includes(name)) || typeof body.expectedVersion !== "number" || (body.scopes !== undefined && (!Array.isArray(body.scopes) || body.scopes.some((s: unknown) => typeof s !== "string"))) || (body.moveIds !== undefined && (!Array.isArray(body.moveIds) || body.moveIds.some((s: unknown) => typeof s !== "string"))) || (body.expiresAt !== undefined && body.expiresAt !== null && typeof body.expiresAt !== "number") || (body.action !== undefined && typeof body.action !== "string")) throw new Error(SETTINGS_REFUSAL);
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(name => !["opId", "expectedVersion", "scopes", "moveIds", "expiresAt", "action"].includes(name)) || typeof body.expectedVersion !== "number" || (body.scopes !== undefined && (!Array.isArray(body.scopes) || body.scopes.some((s: unknown) => typeof s !== "string"))) || (body.moveIds !== undefined && (!Array.isArray(body.moveIds) || body.moveIds.some((s: unknown) => typeof s !== "string"))) || (body.expiresAt !== undefined && body.expiresAt !== null && typeof body.expiresAt !== "number") || (body.action !== undefined && typeof body.action !== "string")) throw new Error(SETTINGS_REFUSAL);
         return withRestRateLimitHeaders(restOk({ data: await ctx.runMutation(internalFunctions.apiKeys.reduceCallingKey, { ...body, apiKeyId: auth.apiKeyId }) }), rateLimit);
       }
       const response = await withIdempotency(ctx, args, auth, async () =>
@@ -1549,6 +1552,10 @@ async function routeMe(
         apiKeyId: auth.apiKeyId,
         version: auth.version,
         status: auth.status,
+        pausedAt: auth.pausedAt ?? null,
+        settings: "https://movingmanifest.com/settings/ai",
+        tools: Object.entries(apiToolAccess).filter(([, tool]) => !tool.websiteOnly && (tool.scopes.length === 0 || (auth.status === "active" && tool.scopes.every(scope => auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([name]) => name),
+        heldBack: Object.entries(apiToolAccess).filter(([, tool]) => tool.websiteOnly || (tool.scopes.length > 0 && (auth.status !== "active" || tool.scopes.some(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number]))))).map(([tool, access]) => ({ tool, missingPower: access.websiteOnly ? "website-only" : access.scopes.filter(scope => !auth.scopes.includes(scope as typeof apiKeyScopes[number])).join(", ") || access.scopes.join(", "), reason: access.websiteOnly ? "Invitations and new share links stay website-only" : auth.status === "active" ? "Power removed" : auth.status })),
         expiresAt: auth.expiresAt ?? null,
         scopes: auth.scopes,
         moveRestricted: Boolean(auth.moveId),

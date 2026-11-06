@@ -21,6 +21,7 @@ export async function authenticateApiKey(
     action,
     allowRestrictedKeyWithoutMoveId = false,
     recordUse = true,
+    inspectConnection = false,
   }: {
     rawKey: string;
     requiredScopes: ApiKeyScope[];
@@ -29,6 +30,7 @@ export async function authenticateApiKey(
     action: string;
     allowRestrictedKeyWithoutMoveId?: boolean;
     recordUse?: boolean;
+    inspectConnection?: boolean;
   }
 ) {
   const prefix = apiKeyPrefix(rawKey);
@@ -47,14 +49,17 @@ export async function authenticateApiKey(
   if (!hashMatches) {
     throw new Error("Invalid API key.");
   }
+  if (/^POST .*\/households\/[^/]+\/members$/.test(action) || /^POST .*\/share-links$/.test(action)) throw new Error("Invitations and new share links are website-only. The person must open https://movingmanifest.com/settings/ai; an API key cannot authorize these actions.");
   const scopes = effectiveApiKeyScopes(key);
   const effectiveMoveId =
     allowRestrictedKeyWithoutMoveId && !moveId ? key.moveId : moveId;
-  if (key.status !== "active") {
-    throw new Error("API key is revoked or inactive.");
+  let state: string = key.status === "revoked" ? "revoked" : key.pausedAt !== undefined ? "paused" : key.expiresAt !== undefined && key.expiresAt <= Date.now() ? "expired" : "active";
+  if (!inspectConnection && key.pausedAt !== undefined) throw new Error("Connection paused. Only the person can restore it at https://movingmanifest.com/settings/ai.");
+  if (!inspectConnection && key.status !== "active") {
+    throw new Error("API key is revoked or inactive. Only the person can restore it at https://movingmanifest.com/settings/ai.");
   }
-  if (key.expiresAt !== undefined && key.expiresAt <= Date.now()) {
-    throw new Error("API key is expired.");
+  if (!inspectConnection && key.expiresAt !== undefined && key.expiresAt <= Date.now()) {
+    throw new Error("API key is expired. Only the person can restore it at https://movingmanifest.com/settings/ai.");
   }
   if (householdId && key.householdId !== householdId) {
     throw new Error("API key is not scoped to this household.");
@@ -72,11 +77,11 @@ export async function authenticateApiKey(
     throw new Error(
       `API key is missing required scope${
         missingScopes.length === 1 ? "" : "s"
-      }: ${missingScopes.join(", ")}. The person can change access at https://movingmanifest.com/settings/ai.`,
+      }: ${missingScopes.join(", ")}. Only the person can restore it at https://movingmanifest.com/settings/ai.`,
     );
   }
   if (
-    !validateApiKeyRecord({
+    !inspectConnection && !validateApiKeyRecord({
       record: {
         status: key.status,
         scopes,
@@ -102,38 +107,24 @@ export async function authenticateApiKey(
       q.eq("householdId", key.householdId).eq("userId", key.createdByUserId),
     )
     .unique();
-  if (creatorMembership && creatorMembership.status !== "active") {
-    throw new Error("The API key creator no longer has active household access.");
-  }
-  if (!key.moveId && !creatorMembership) {
-    throw new Error("The API key creator no longer has active household access.");
-  }
-  if (creatorMembership?.apiAccessStatus === "disabled") {
-    throw new Error(
-      "Agent access for this connection has been turned off by an owner.",
-    );
-  }
-
-  // Compute the key creator's effective visibility so REST item reads redact the
-  // same sensitive fields (values, serials) the web/gateway do. Defense-in-depth:
-  // today all keys are admin-created (api_keys:manage → admin) so this resolves
-  // to full visibility, but if key creation is ever opened below admin (e.g. a
-  // move-only participant connecting their own agent), the wall already holds.
+  if (!inspectConnection && ((creatorMembership && creatorMembership.status !== "active") || (!key.moveId && !creatorMembership))) throw new Error("The API key creator no longer has active household access. Only the person can restore it at https://movingmanifest.com/settings/ai.");
+  const creator = await ctx.db.get(key.createdByUserId);
+  const missingMembership = (creatorMembership && creatorMembership.status !== "active") || (!key.moveId && !creatorMembership);
+  const disabled = creator?.status !== "active" || missingMembership || creatorMembership?.apiAccessStatus === "disabled";
+  if (disabled && !inspectConnection) throw new Error("Agent access for this connection has been turned off by an owner. Only the person can restore it at https://movingmanifest.com/settings/ai.");
   let effectiveRole: HouseholdRole = creatorMembership?.role ?? "guest";
-  if (key.moveId) {
-    const moveAccess = await resolveMoveAccess(
-      ctx,
-      key.createdByUserId,
-      key.householdId,
-      key.moveId,
-    );
-    if (agentAccessDisabled(moveAccess)) {
-      throw new Error(
-        "Agent access for this connection has been turned off by an owner.",
-      );
+  let inspectBlocked = Boolean(disabled);
+  if (key.moveId && !inspectBlocked) {
+    try {
+      const moveAccess = await resolveMoveAccess(ctx, key.createdByUserId, key.householdId, key.moveId);
+      if (agentAccessDisabled(moveAccess)) throw new Error("Agent access for this connection has been turned off by an owner.");
+      effectiveRole = moveAccess.role;
+    } catch (error) {
+      if (!inspectConnection) throw error;
+      inspectBlocked = true;
     }
-    effectiveRole = moveAccess.role;
   }
+  if (inspectBlocked && state === "active") state = "blocked";
   const visibility = visibilityForHouseholdRole(effectiveRole);
 
   const now = Date.now();
@@ -150,7 +141,8 @@ export async function authenticateApiKey(
       scopes,
     },
     version: key.version ?? 1,
-    status: key.status,
+    status: state,
+    pausedAt: key.pausedAt,
     expiresAt: key.expiresAt,
     apiKeyId: key._id,
     apiKeyName: key.name,
@@ -158,7 +150,7 @@ export async function authenticateApiKey(
     createdByUserId: key.createdByUserId,
     householdId: key.householdId,
     moveId: key.moveId,
-    scopes,
+    scopes: state === "active" ? scopes : [],
     effectiveRole,
     visibility,
   };

@@ -50,7 +50,7 @@ function grant(
 }
 
 /** Every scoped tool, but never the media tools while Q9 could reshape them. */
-const SCOPED_TOOLS = Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).filter(name => name !== "describe_connection");
+const SCOPED_TOOLS = Object.keys(LEGACY_GATEWAY_TOOL_SCOPES).filter(name => !["describe_connection", "reduce_connection"].includes(name));
 
 describe("legacy gateway catalog", () => {
   it("has an authority decision for every tool the gateway registers", () => {
@@ -327,7 +327,7 @@ describe("Q8 and Q9 are one-line rulings, wired both ways", () => {
 });
 
 describe("refusals name the actor who can lift them", () => {
-  it("tells a revoked connection to reconnect, never that it cannot", () => {
+  it("tells a revoked connection only the person can restore it", () => {
     const decision = decideLegacyGatewayAccess({
       toolName: "list_items",
       grants: [],
@@ -335,7 +335,8 @@ describe("refusals name the actor who can lift them", () => {
       block: "revoked",
     });
     expect(decision.allowed).toBe(false);
-    expect(decision.reason).toMatch(/reconnect/i);
+    expect(decision.reason).toMatch(/only the person/i);
+    expect(decision.reason).not.toMatch(/reconnect/i);
     expect(decision.reason).toContain("/settings/ai");
     expect(decision.reason).not.toMatch(/\bcannot\b/i);
   });

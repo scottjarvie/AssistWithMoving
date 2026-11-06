@@ -10,7 +10,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { activeGrantsForUser } from "../aiGrants";
-import { effectiveScopeChoice, effectiveScopes, effectiveExpiry, findPermittingGrant, grantError, type MovingScope } from "./aiGrants";
+import { effectiveScopeChoice, effectiveScopes, effectiveExpiry, findPermittingGrant, type MovingScope } from "./aiGrants";
 import { requireMoveForSubject, requireUserBySubject } from "./mcpIdentity";
 
 export const MCP_ERROR_MARKER = "MCP_MOVING_ERROR:";
@@ -101,7 +101,7 @@ export async function requireMcpGrant(
   const user = await requireMcpUser(ctx, principal);
   const now = Date.now();
   const grants = await activeGrantsForUser(ctx, user._id, principal.clientId, now);
-  if (grants.length === 0) grantError("noGrant");
+  if (grants.length === 0) mcpError("GRANT_REQUIRED", `Missing power ${scope}: this connection is stopped or limited.`, "Only the person can restore it at https://movingmanifest.com/settings/ai.");
   const permitting = findPermittingGrant(
     grants.map((grant) => ({
       doc: grant,
@@ -118,7 +118,7 @@ export async function requireMcpGrant(
   );
   if (!permitting) {
     const holdsScope = grants.some((grant) => effectiveScopes(grant).includes(scope));
-    grantError(holdsScope ? "outOfMoveScope" : "outOfScope");
+    mcpError(holdsScope ? "GRANT_MOVE_MISSING" : "GRANT_SCOPE_MISSING", `Missing power ${scope}${holdsScope ? " for this move" : ""}.`, "Only the person can restore it at https://movingmanifest.com/settings/ai.");
   }
   return { user, grant: permitting.doc };
 }

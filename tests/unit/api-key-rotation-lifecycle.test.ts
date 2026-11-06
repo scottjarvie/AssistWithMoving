@@ -128,7 +128,7 @@ describe("API-key last-use receipts", () => {
     return {
       rawKey,
       patch,
-      ctx: { db: { query, patch } } as unknown as MutationCtx,
+      ctx: { db: { query, patch, get: vi.fn().mockResolvedValue({ status: "active" }) } } as unknown as MutationCtx,
     };
   }
 
@@ -211,7 +211,7 @@ describe("API-key last-use receipts", () => {
         unique: vi.fn().mockResolvedValue(table === "apiKeys" ? key : null),
       })),
     }));
-    const get = vi.fn().mockResolvedValue({ _id: moveId, householdId });
+    const get = vi.fn().mockImplementation(id => Promise.resolve(id === actorUserId ? { _id: actorUserId, status: "active" } : { _id: moveId, householdId }));
     const ctx = { db: { query, get, patch } } as unknown as MutationCtx;
     await expect(
       authenticateApiKey(ctx, {
